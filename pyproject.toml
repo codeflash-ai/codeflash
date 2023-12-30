@@ -1,0 +1,83 @@
+[tool.poetry]
+name = "codeflash"
+version = "0.0.0" # Determined by poetry-dynamic-versioning during `poetry build`
+description = "A Code Performance Optimization Library"
+authors = ["afik.cohen <afik@codeflash.ai>", "Saurabh Misra <saurabh@codeflash.ai>"]
+readme = "README.md"
+packages = [
+    { include = "codeflash" },
+]
+
+[tool.poetry.dependencies]
+python = ">=3.8"
+unidiff = "^0.7.5"
+pytest = "^7.3.1"
+gitpython = "^3.1.31"
+libcst = "^1.1.0"
+jedi = "^0.19.0"
+tiktoken = "^0.5.1"
+timeout-decorator = "^0.5.0"
+pytest-timeout = "^2.1.0"
+astunparse-fixed = { version = "^1.7.0", optional = true, python = ">=3.8.0,<3.9" }
+tomli = { version = "^2.0.1", optional = true, python = "<3.11" } # TODO remove
+tomlkit = "^0.12.3"
+unittest-xml-reporting = "^3.2.0"
+junitparser = "^3.1.0"
+pydantic = "^2.5.2"
+black = "^23.3.0"
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+ipython = "^8.12.0"
+mypy = "^1.6.1"
+
+[tool.mypy]
+warn_return_any = true
+plugins = [
+    "pydantic.mypy"
+]
+follow_imports = "silent"
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_any_generics = true
+check_untyped_defs = true
+no_implicit_reexport = true
+# for strict mypy: (this is the tricky one :-))
+disallow_untyped_defs = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[build-system]
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+build-backend = "poetry_dynamic_versioning.backend"
+
+[tool.poetry-dynamic-versioning]
+enable = true
+style = "pep440"
+vcs = "git"
+
+[tool.poetry-dynamic-versioning.files."codeflash/version.py"]
+persistent-substitution = true
+initial-content = """
+  # These version placeholders will be replaced by poetry-dynamic-versioning during `poetry build`.
+  __version__ = "0.0.0"
+  __version_tuple__ = (0, 0, 0)
+"""
+
+[tool.poetry.scripts]
+codeflash = "codeflash.main:main"
+
+[tool.codeflash]
+root = "."
+test-root = "tests"
+test-framework = "pytest"
+ignore-paths = ["code_to_optimize/"]
