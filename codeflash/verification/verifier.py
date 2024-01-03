@@ -1,6 +1,7 @@
 import ast
 import logging
 
+from codeflash.api.aiservice import generate_regression_tests
 from codeflash.code_utils.ast_unparser import ast_unparse
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -9,8 +10,6 @@ from codeflash.instrumentation.instrument_new_tests import inject_logging_code
 from codeflash.optimization.function_context import Source
 from codeflash.verification.verification_utils import ModifyInspiredTests
 from codeflash.verification.verification_utils import delete_multiple_if_name_main
-
-from cli.codeflash.api.aiservice import generate_regression_tests
 
 
 def generate_tests(

@@ -6,7 +6,7 @@ logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 from typing import List, Optional
 
 from codeflash.api import cfapi
-from cli.codeflash.api.aiservice import optimize_python_code
+from codeflash.api.aiservice import optimize_python_code
 from codeflash.cli.cmd_init import init_codeflash
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.config_consts import (
