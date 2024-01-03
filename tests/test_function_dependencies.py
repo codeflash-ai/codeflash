@@ -19,7 +19,10 @@ def test_simple_dependencies():
         str(file_path.parent.resolve()),
     )
     assert len(dependent_functions) == 1
-    assert dependent_functions[0].definition.full_name == "test_function_dependencies.calculate_something"
+    assert (
+        dependent_functions[0].definition.full_name
+        == "test_function_dependencies.calculate_something"
+    )
 
 
 def global_dependency_1(num):

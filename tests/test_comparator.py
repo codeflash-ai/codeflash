@@ -1,6 +1,7 @@
 import datetime
 
 import pytest
+
 from codeflash.verification.comparator import comparator
 from codeflash.verification.equivalence import compare_results
 from codeflash.verification.test_results import (
@@ -194,7 +195,6 @@ def test_custom_object():
     c = TestClass3(5)
     assert not comparator(a, b)
     assert comparator(b, c)
-
 
 
 def test_compare_results_fn():

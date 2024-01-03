@@ -90,7 +90,6 @@ def comparator(orig: Any, new: Any) -> bool:
     if isinstance(orig, (datetime.datetime, datetime.date, datetime.timedelta)):
         return orig == new
 
-
     # If the object passed has a user defined __eq__ method, use that
     # This could fail if the user defined __eq__ is defined with cython
     try:
