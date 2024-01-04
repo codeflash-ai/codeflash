@@ -10,7 +10,7 @@ from unidiff import PatchSet
 def get_git_diff(
     repo_directory: str = os.getcwd(), uncommitted_changes: bool = False
 ) -> dict[str, list[int]]:
-    repository = git.Repo(repo_directory)
+    repository = git.Repo(repo_directory, search_parent_directories=True)
     commit = repository.head.commit
     if uncommitted_changes:
         uni_diff_text = repository.git.diff(
