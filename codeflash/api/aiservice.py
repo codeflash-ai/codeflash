@@ -5,6 +5,7 @@ import requests
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 
 AI_SERVICE_BASE_URL = "https://app.codeflash.ai"
+# AI_SERVICE_BASE_URL = "http://localhost:8000/"
 
 AI_SERVICE_HEADERS = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
 
