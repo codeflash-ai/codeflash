@@ -4,10 +4,11 @@ import subprocess
 
 import click
 import tomlkit
+from git import Repo
+
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_github_secrets_page_url
 from codeflash.version import __version__ as version
-from git import Repo
 
 CODEFLASH_POETRY_DEPENDENCY_VERSION = {
     "url": "https://www.dropbox.com/scl/fi/hslqspzk8r4v1wdima8u5/codeflash-0.4.1-py3-none-any.whl?rlkey=vcnk99vynz84uqombnujzhjec&dl=1"

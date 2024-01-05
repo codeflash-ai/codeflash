@@ -1,3 +1,4 @@
+import logging
 import os
 import pickle
 import sqlite3
@@ -6,10 +7,11 @@ import time
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
+from codeflash.validation.validation_utils import get_test_file_path
+
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.tracing.replay_test import create_trace_replay_test
-from codeflash.validation.validation_utils import get_test_file_path
 
 
 class Tracer:
@@ -82,7 +84,7 @@ class Tracer:
         with open(test_file_path, "w") as file:
             file.write(replay_test)
 
-        print(
+        logging.info(
             f"CodeFlash: Function Traced successfully and replay test created! Path - {test_file_path}"
         )
 

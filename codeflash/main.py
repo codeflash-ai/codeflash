@@ -2,7 +2,7 @@ import concurrent.futures
 import logging
 import sys
 
-logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s", stream=sys.stdout)
 from typing import List, Optional
 
 from codeflash.api import cfapi

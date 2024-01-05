@@ -5,11 +5,12 @@ from _ast import ClassDef, FunctionDef, AsyncFunctionDef
 from typing import Dict, Optional, List, Tuple, Union
 
 import libcst as cst
+from libcst import CSTNode
+from pydantic.dataclasses import dataclass
+
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
 from codeflash.code_utils.git_utils import get_git_diff
 from codeflash.verification.verification_utils import TestConfig
-from libcst import CSTNode
-from pydantic.dataclasses import dataclass
 
 
 class ReturnStatementVisitor(cst.CSTVisitor):
@@ -170,7 +171,7 @@ def find_all_functions_in_file(file_path: str) -> Dict[str, List[FunctionToOptim
         try:
             ast_module = ast.parse(f.read())
         except Exception as e:
-            print(e)
+            logging.error(e)
             return functions
         function_name_visitor = FunctionWithReturnStatement(file_path)
         function_name_visitor.visit(ast_module)

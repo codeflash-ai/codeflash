@@ -1,14 +1,16 @@
 import ast
+import logging
 import os
 from typing import List
 
 import jedi
 import tiktoken
+from jedi.api.classes import Name
+from pydantic.dataclasses import dataclass
+
 from codeflash.code_utils.code_extractor import get_code_no_skeleton, get_code
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from jedi.api.classes import Name
-from pydantic.dataclasses import dataclass
 
 
 def belongs_to_class(name: Name, class_name: str) -> bool:
@@ -179,7 +181,7 @@ def get_constrained_function_context_and_dependent_functions(
     ]
     context_list = []
     context_len = len(code_to_optimize_tokens)
-    print(
+    logging.debug(
         "ORIGINAL CODE TOKENS LENGTH:",
         context_len,
         "ALL DEPENDENCIES TOKENS LENGTH:",
@@ -191,5 +193,5 @@ def get_constrained_function_context_and_dependent_functions(
             context_len += source_len
         else:
             break
-    print("FINAL OPTIMIZATION CONTEXT TOKENS LENGTH:", context_len)
+    logging.debug("FINAL OPTIMIZATION CONTEXT TOKENS LENGTH:", context_len)
     return "\n".join(context_list) + "\n" + code_to_optimize, dependent_functions

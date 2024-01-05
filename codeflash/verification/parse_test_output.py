@@ -7,6 +7,8 @@ import subprocess
 from collections import defaultdict
 from typing import Optional
 
+from junitparser.xunit2 import JUnitXml
+
 from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
     get_run_tmp_file,
@@ -18,7 +20,6 @@ from codeflash.verification.test_results import (
     InvocationId,
 )
 from codeflash.verification.verification_utils import TestConfig
-from junitparser.xunit2 import JUnitXml
 
 
 def parse_test_return_values_bin(
@@ -26,7 +27,7 @@ def parse_test_return_values_bin(
 ) -> TestResults:
     test_results = TestResults()
     if not os.path.exists(file_location):
-        print(f"File {file_location} doesn't exist.")
+        logging.error(f"File {file_location} doesn't exist.")
         return test_results
     with open(file_location, "rb") as file:
         while file:
@@ -74,7 +75,7 @@ def parse_sqlite_test_results(
 ):
     test_results = TestResults()
     if not os.path.exists(sqlite_file_path):
-        print(f"File {sqlite_file_path} doesn't exist.")
+        logging.error(f"File {sqlite_file_path} doesn't exist.")
         return test_results
     db = sqlite3.connect(sqlite_file_path)
     cur = db.cursor()

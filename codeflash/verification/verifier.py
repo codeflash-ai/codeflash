@@ -27,7 +27,7 @@ def generate_tests(
 
         module = importlib.import_module(module_path)
         generated_test_source = module.CACHED_TESTS
-        print(f"Using cached tests from {module_path}.CACHED_TESTS")
+        logging.info(f"Using cached tests from {module_path}.CACHED_TESTS")
     else:
         generated_test_source = generate_regression_tests(
             source_code_being_tested=source_code_being_tested,

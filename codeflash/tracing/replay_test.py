@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 import textwrap
 from collections import defaultdict
@@ -25,18 +26,18 @@ def get_next_arg_and_return(
         if event_type == "call":
             matched_arg_return[frame_address].append(val[7])
             if len(matched_arg_return[frame_address]) > 1:
-                print(
-                    f"WARN: Pre-existing call to the function {function_name} with same frame address."
+                logging.warning(
+                    f"Pre-existing call to the function {function_name} with same frame address."
                 )
         elif event_type == "return":
             matched_arg_return[frame_address].append(val[6])
             arg_return_length = len(matched_arg_return[frame_address])
             if arg_return_length > 2:
-                print(
-                    f"WARN: Pre-existing return to the function {function_name} with same frame address."
+                logging.warning(
+                    f"Pre-existing return to the function {function_name} with same frame address."
                 )
             elif arg_return_length == 1:
-                print(f"WARN: No call before return for {function_name}!")
+                logging.warning(f"No call before return for {function_name}!")
             elif arg_return_length == 2:
                 yield matched_arg_return[frame_address]
                 counts += 1

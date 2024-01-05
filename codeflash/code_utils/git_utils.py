@@ -1,3 +1,4 @@
+import logging
 import os
 from io import StringIO
 from typing import Optional
@@ -29,7 +30,7 @@ def get_git_diff(
         file_path: str = patched_file.path  # file name
         if not file_path.endswith(".py"):
             continue
-        print("file name :" + file_path)
+        logging.debug("file name :" + file_path)
         add_line_no: list[int] = [
             line.target_line_no
             for hunk in patched_file
@@ -37,7 +38,7 @@ def get_git_diff(
             if line.is_added and line.value.strip() != ""
         ]  # the row number of deleted lines
 
-        print("added lines : " + str(add_line_no))
+        logging.debug("added lines : " + str(add_line_no))
         del_line_no: list[int] = [
             line.source_line_no
             for hunk in patched_file
@@ -45,7 +46,7 @@ def get_git_diff(
             if line.is_removed and line.value.strip() != ""
         ]  # the row number of added liens
 
-        print("deleted lines : " + str(del_line_no))
+        logging.debug("deleted lines : " + str(del_line_no))
 
         change_list[file_path] = add_line_no
     return change_list

@@ -1,4 +1,5 @@
 import datetime
+import logging
 import math
 from typing import Any
 
@@ -99,5 +100,5 @@ def comparator(orig: Any, new: Any) -> bool:
         pass
 
     # TODO : Add other types here
-    print("Unknown comparator input type: ", type(orig))
+    logging.warning("Unknown comparator input type: ", type(orig))
     return True

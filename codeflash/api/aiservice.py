@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict, List, Tuple, Optional, Union
 
 import requests
@@ -53,7 +54,7 @@ def optimize_python_code(
         optimizations = response.json()
         return [(opt["source_code"], opt["explanation"]) for opt in optimizations]
     else:
-        print(f"Error: {response.status_code} {response.text}")
+        logging.error(f"Error: {response.status_code} {response.text}")
         return [(None, None)]
 
 
@@ -85,5 +86,5 @@ def generate_regression_tests(
     if response.status_code == 200:
         return response.json()["code"]
     else:
-        print(f"Error: {response.status_code} {response.text}")
+        logging.error(f"Error: {response.status_code} {response.text}")
         return None

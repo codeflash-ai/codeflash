@@ -119,7 +119,7 @@ def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     for _test_suite in tests._tests:
         for test_suite_2 in _test_suite._tests:
             if not hasattr(test_suite_2, "_tests"):
-                print("Didn't find tests for ", test_suite_2)
+                logging.warning("Didn't find tests for ", test_suite_2)
                 continue
             for test in test_suite_2._tests:
                 test_function, test_module, test_suite_name = (
@@ -192,7 +192,7 @@ def process_test_files(
                         follow_builtin_imports=False,
                     )
                 except Exception as e:
-                    print(str(e))
+                    logging.error(str(e))
                     continue
                 if definition and definition[0].type == "function":
                     definition_path = str(definition[0].module_path)
