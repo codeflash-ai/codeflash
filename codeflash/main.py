@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from codeflash.api import cfapi
 from codeflash.api.aiservice import optimize_python_code
-from codeflash.cli.cmd_init import init_codeflash
+from codeflash.cli_cmds.cmd_init import init_codeflash
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.config_consts import (
     MAX_TEST_RUN_ITERATIONS,
