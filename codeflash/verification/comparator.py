@@ -100,5 +100,5 @@ def comparator(orig: Any, new: Any) -> bool:
         pass
 
     # TODO : Add other types here
-    logging.warning("Unknown comparator input type: ", type(orig))
+    logging.warning(f"Unknown comparator input type: {type(orig)}")
     return True
