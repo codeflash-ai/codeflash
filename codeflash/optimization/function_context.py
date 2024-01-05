@@ -181,12 +181,8 @@ def get_constrained_function_context_and_dependent_functions(
     ]
     context_list = []
     context_len = len(code_to_optimize_tokens)
-    logging.debug(
-        "ORIGINAL CODE TOKENS LENGTH:",
-        context_len,
-        "ALL DEPENDENCIES TOKENS LENGTH:",
-        sum(dependent_functions_tokens),
-    )
+    logging.debug(f"ORIGINAL CODE TOKENS LENGTH: {context_len}")
+    logging.debug(f"ALL DEPENDENCIES TOKENS LENGTH: {sum(dependent_functions_tokens)}")
     for function_source, source_len in zip(dependent_functions_sources, dependent_functions_tokens):
         if context_len + source_len <= max_tokens:
             context_list.append(function_source)
