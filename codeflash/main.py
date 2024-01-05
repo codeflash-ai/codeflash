@@ -191,6 +191,7 @@ class Optimizer:
                 logging.info("No functions found to optimize. Exiting...")
                 return
             function_to_tests: dict[str, list[TestsInFile]] = discover_unit_tests(self.test_cfg)
+            logging.info(f"Found {len(function_to_tests.values())} existing unit tests.")
             for path in file_to_funcs_to_optimize:
                 logging.info(f"Examining file {path} ...")
                 # TODO: Sequence the functions one goes through intelligently. If we are optimizing f(g(x)), then we might want to first
@@ -547,13 +548,24 @@ class Optimizer:
                                 f.write(explanation_final)
                                 f.write("\n---------\n")
 
-                        subprocess.run(["black", path], stdout=subprocess.PIPE)
+                        logging.info("Formatting code with black... ")
+                        result = subprocess.run(
+                            ["black", path], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                        )
+                        if result.returncode == 0:
+                            logging.info("OK")
+                        else:
+                            logging.error("Failed to format")
                         test_files_to_preserve.add(generated_tests_path)
+
+                        logging.info(
+                            f"⚡️ Optimization successful! 📄 {function_name} in {path} 📈 {speedup * 100:.2f}% ({speedup:.2f}x) faster"
+                        )
 
                         pr: Optional[int] = env_utils.get_pr_number()
 
                         if pr is not None:
-                            logging.info(f"Suggesting changes to PR #{pr}")
+                            logging.info(f"Suggesting changes to PR #{pr} ...")
 
                             owner, repo = get_repo_owner_and_name()
                             cfapi.suggest_changes(
@@ -581,7 +593,7 @@ class Optimizer:
                         if os.path.exists(generated_tests_path):
                             os.remove(generated_tests_path)
             if not self.found_atleast_one_optimization:
-                logging.info(f"No optimizations found.")
+                logging.info(f"❌ No optimizations found.")
 
         finally:
             # TODO: Also revert the file/function being optimized if the process did not succeed

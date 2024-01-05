@@ -1,6 +1,5 @@
+from code_to_optimize.bubble_sort_dep1_helper import dep1_comparer
 from code_to_optimize.bubble_sort_dep2_swap import dep2_swap
-
-from cli.code_to_optimize.bubble_sort_dep1_helper import dep1_comparer
 
 
 def sorter_deps(arr):

@@ -1,6 +1,6 @@
 from typing import Optional, List, Tuple
 
-from cli.code_to_optimize.math_utils import cosine_similarity_top_k, Matrix
+from code_to_optimize.math_utils import cosine_similarity_top_k, Matrix
 
 
 def use_cosine_similarity(

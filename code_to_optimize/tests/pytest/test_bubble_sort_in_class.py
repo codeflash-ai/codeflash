@@ -1,4 +1,4 @@
-from cli.code_to_optimize.bubble_sort import sorter
+from code_to_optimize.bubble_sort import sorter
 
 
 class TestSorter:

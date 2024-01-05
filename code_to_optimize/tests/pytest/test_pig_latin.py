@@ -1,6 +1,6 @@
 import pickle
 
-from cli.code_to_optimize.pig_latin import pig_latin
+from code_to_optimize.pig_latin import pig_latin
 
 
 def log_test_values(values, test_name):
