@@ -574,8 +574,8 @@ class Optimizer:
                                 pr_number=pr,
                                 file_changes={
                                     path: FileDiffContent(
-                                        old_content=original_code, new_content=new_code
-                                    ).model_dump_json()
+                                        oldContent=original_code, newContent=new_code
+                                    ).model_dump(mode="json")
                                 },
                                 pr_comment=PrComment(
                                     optimization_explanation=best_optimization[1],

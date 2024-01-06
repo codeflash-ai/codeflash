@@ -31,5 +31,5 @@ class PrComment:
 
 
 class FileDiffContent(BaseModel):
-    old_content: str
-    new_content: str
+    oldContent: str
+    newContent: str
