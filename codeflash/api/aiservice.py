@@ -1,7 +1,6 @@
 import logging
-from typing import Any, Dict, List, Tuple, Optional, Union
-
 import requests
+from typing import Any, Dict, List, Tuple, Optional, Union
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 
@@ -12,7 +11,10 @@ AI_SERVICE_HEADERS = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
 
 
 def make_ai_service_request(
-    endpoint: str, method: str = "POST", payload: Optional[Dict[str, Any]] = None
+    endpoint: str,
+    method: str = "POST",
+    payload: Optional[Dict[str, Any]] = None,
+    timeout: float = None,
 ) -> requests.Response:
     """
     Make an API request to the given endpoint on the AI service.
@@ -27,9 +29,9 @@ def make_ai_service_request(
     """
     url = f"{AI_SERVICE_BASE_URL}/ai{endpoint}"
     if method.upper() == "POST":
-        response = requests.post(url, json=payload, headers=AI_SERVICE_HEADERS)
+        response = requests.post(url, json=payload, headers=AI_SERVICE_HEADERS, timeout=timeout)
     else:
-        response = requests.get(url, headers=AI_SERVICE_HEADERS)
+        response = requests.get(url, headers=AI_SERVICE_HEADERS, timeout=timeout)
     # response.raise_for_status()  # Will raise an HTTPError if the HTTP request returned an unsuccessful status code
     return response
 
@@ -48,7 +50,7 @@ def optimize_python_code(
     - List[Tuple[str, str]]: A list of tuples where the first element is the optimized code and the second is the explanation.
     """
     data = {"source_code": source_code, "num_variants": num_variants}
-    response = make_ai_service_request("/optimize", payload=data)
+    response = make_ai_service_request("/optimize", payload=data, timeout=600)
 
     if response.status_code == 200:
         optimizations = response.json()
@@ -81,7 +83,8 @@ def generate_regression_tests(
         "function_name": function_name,
         "test_framework": test_framework,
     }
-    response = make_ai_service_request("/testgen", payload=data)
+    response = make_ai_service_request("/testgen", payload=data, timeout=600)
+    # the timeout should be the same as the timeout for the AI service backend
 
     if response.status_code == 200:
         return response.json()["code"]
