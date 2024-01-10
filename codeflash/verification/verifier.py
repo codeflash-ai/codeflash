@@ -2,14 +2,10 @@ import ast
 import logging
 
 from codeflash.api.aiservice import generate_regression_tests
-from codeflash.code_utils.ast_unparser import ast_unparse
-from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.instrumentation.instrument_new_tests import InjectPerfAndLogging
-from codeflash.instrumentation.instrument_new_tests import inject_logging_code
-from codeflash.optimization.function_context import Source
 from codeflash.verification.verification_utils import ModifyInspiredTests
 from codeflash.verification.verification_utils import delete_multiple_if_name_main
+from injectperf.ast_unparser import ast_unparse
 
 
 def generate_tests(
@@ -45,44 +41,6 @@ def generate_tests(
     )
 
     return unified_test_source
-
-
-def instrument_test_source(
-    test_source: str,
-    function: FunctionToOptimize,
-    function_dependencies: list[Source],
-    module_path: str,
-    test_module_path: str,
-    test_framework: str,
-    test_timeout: int,
-) -> str:
-    module_node = ast.parse(test_source)
-    auxiliary_function_names = [definition.full_name for definition in function_dependencies]
-    new_module_node = InjectPerfAndLogging(
-        function,
-        auxiliary_function_names=auxiliary_function_names,
-        test_module_path=test_module_path,
-        test_framework=test_framework,
-        test_timeout=test_timeout,
-    ).visit(module_node)
-    new_imports = [
-        ast.Import(names=[ast.alias(name="time")]),
-        ast.Import(names=[ast.alias(name="gc")]),
-        # This adds the function to the namespace
-        ast.ImportFrom(
-            module=module_path,
-            names=[ast.alias(name=function.top_level_parent_name)],
-            col_offset=0,
-            lineno=1,
-            level=0,
-        ),
-    ]
-    if test_framework == "unittest":
-        new_imports += [ast.Import(names=[ast.alias(name="timeout_decorator")])]
-    new_module_node.body = new_imports + new_module_node.body
-    new_tests = ast_unparse(new_module_node)
-    modified_new_tests = inject_logging_code(new_tests, tmp_dir=get_run_tmp_file(""))
-    return modified_new_tests
 
 
 def merge_unit_tests(unit_test_source: str, inspired_unit_tests: str, test_framework: str) -> str:

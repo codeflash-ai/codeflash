@@ -63,7 +63,11 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
     def visit_FunctionDef(self, node: FunctionDef):
         # Check if the function has a return statement and add it to the list
         if function_has_return_statement(node):
-            self.functions.append(FunctionToOptimize(node.name, self.file_path, self.ast_path[:]))
+            self.functions.append(
+                FunctionToOptimize(
+                    function_name=node.name, file_path=self.file_path, parents=self.ast_path[:]
+                )
+            )
         # Continue visiting the body of the function to find nested functions
         self.generic_visit(node)
 
@@ -89,9 +93,9 @@ class FunctionToOptimize:
     starting_line: Optional[int] = None
     ending_line: Optional[int] = None
 
-    # For "BubbleSort.sorter", returns "BubbleSort"
-    # For "sorter", returns "sorter"
-    # TODO does not support nested classes or functions
+    # # For "BubbleSort.sorter", returns "BubbleSort"
+    # # For "sorter", returns "sorter"
+    # # TODO does not support nested classes or functions
     @property
     def top_level_parent_name(self) -> str:
         if self.parents:

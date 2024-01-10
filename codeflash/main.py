@@ -3,7 +3,7 @@ import logging
 import sys
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s", stream=sys.stdout)
-from typing import List, Optional
+from typing import Optional
 
 from codeflash.api import cfapi
 from codeflash.api.aiservice import optimize_python_code
@@ -39,7 +39,7 @@ from codeflash.discovery.functions_to_optimize import (
     get_functions_to_optimize_by_file,
     FunctionToOptimize,
 )
-from codeflash.instrumentation.instrument_existing_tests import inject_profiling_into_existing_test
+from injectperf.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.optimization.function_context import (
     get_constrained_function_context_and_dependent_functions,
     Source,
@@ -57,7 +57,8 @@ from codeflash.verification.verification_utils import (
     get_test_file_path,
     TestConfig,
 )
-from codeflash.verification.verifier import generate_tests, instrument_test_source
+from codeflash.verification.verifier import generate_tests
+from codeflash.api.aiservice import inject_perf_api_call
 
 
 def parse_args() -> Namespace:
@@ -637,25 +638,31 @@ class Optimizer:
         self,
         new_tests: str,
         function_to_optimize: FunctionToOptimize,
-        function_dependencies: List[Source],
+        function_dependencies: list[Source],
         module_path: str,
     ) -> str | None:
-        instrumented_tests_path = get_test_file_path(
-            self.args.test_root, function_to_optimize.function_name, 0
-        )
-        test_module_path = module_name_from_file_path(instrumented_tests_path, self.args.root)
-
-        logging.info(f"Instrumenting test source for {function_to_optimize.function_name}")
-
-        instrumented_tests = instrument_test_source(
-            new_tests,
-            function_to_optimize,
-            function_dependencies,
-            module_path,
-            test_module_path,
-            self.args.test_framework,
-            test_timeout=INDIVIDUAL_TEST_TIMEOUT,
-        )
+        try:
+            response = inject_perf_api_call(
+                test_source=new_tests,
+                function_to_optimize=function_to_optimize,
+                function_dependencies=function_dependencies,
+                module_path=module_path,
+                test_module_path=module_name_from_file_path(
+                    get_test_file_path(self.args.test_root, function_to_optimize.function_name, 0),
+                    self.args.root,
+                ),
+                test_framework=self.args.test_framework,
+                test_timeout=INDIVIDUAL_TEST_TIMEOUT,
+            )
+            instrumented_tests = response["instrumented_code"]
+            instrumented_tests_path = get_test_file_path(
+                self.args.test_root, function_to_optimize.function_name, 0
+            )
+        except Exception as e:
+            logging.error(
+                f"Failed to instrument tests for {function_to_optimize.function_name}: {e}"
+            )
+            return None
 
         if new_tests is None:
             logging.error(
