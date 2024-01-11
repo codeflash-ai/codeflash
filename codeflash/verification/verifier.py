@@ -2,8 +2,9 @@ import ast
 import logging
 from typing import Tuple, Optional
 
-from code_utils.code_utils import module_name_from_file_path
 from codeflash.api.aiservice import generate_regression_tests
+from codeflash.code_utils.ast_unparser import ast_unparse
+from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.verification.verification_utils import (
     ModifyInspiredTests,
@@ -11,7 +12,6 @@ from codeflash.verification.verification_utils import (
     TestConfig,
 )
 from codeflash.verification.verification_utils import delete_multiple_if_name_main
-from injectperf.ast_unparser import ast_unparse
 
 
 def generate_tests(
