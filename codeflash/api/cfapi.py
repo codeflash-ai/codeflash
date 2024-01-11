@@ -1,6 +1,5 @@
-from typing import Optional, Dict, Any
-
 import requests
+from typing import Optional, Dict, Any
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.github.PrComment import PrComment
@@ -47,4 +46,22 @@ def suggest_changes(
         "generatedTests": generated_tests,
     }
     response = make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
+    return response.ok
+
+
+def create_new_pr(
+    owner: str,
+    repo: str,
+    file_changes: dict[str, dict[str, str]],
+    pr_comment: PrComment,
+    generated_tests: str,
+) -> bool:
+    payload = {
+        "owner": owner,
+        "repo": repo,
+        "diffContents": file_changes,
+        "prCommentFields": pr_comment.to_json(),
+        "generatedTests": generated_tests,
+    }
+    response = make_cfapi_request(endpoint="/open-new-pr", method="POST", payload=payload)
     return response.ok
