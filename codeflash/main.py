@@ -2,7 +2,7 @@ import concurrent.futures
 import logging
 import sys
 
-from code_utils.instrument_existing_tests import inject_profiling_into_existing_test
+from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s", stream=sys.stdout)
 from typing import Optional, Tuple
