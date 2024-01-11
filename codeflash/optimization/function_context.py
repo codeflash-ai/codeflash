@@ -6,6 +6,7 @@ from typing import List
 import jedi
 import tiktoken
 from jedi.api.classes import Name
+from pydantic import RootModel
 from pydantic.dataclasses import dataclass
 
 from codeflash.code_utils.code_extractor import get_code_no_skeleton, get_code
@@ -40,6 +41,11 @@ class Source:
     full_name: str
     definition: Name
     source_code: str
+
+
+@dataclass(frozen=True)
+class SourceList(RootModel):
+    root: list[Source]
 
 
 def get_type_annotation_context(
