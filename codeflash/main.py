@@ -2,6 +2,8 @@ import concurrent.futures
 import logging
 import sys
 
+from code_utils.instrument_existing_tests import inject_profiling_into_existing_test
+
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s", stream=sys.stdout)
 from typing import Optional, Tuple
 
@@ -39,7 +41,6 @@ from codeflash.discovery.functions_to_optimize import (
     get_functions_to_optimize_by_file,
     FunctionToOptimize,
 )
-from injectperf.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.optimization.function_context import (
     get_constrained_function_context_and_dependent_functions,
 )
