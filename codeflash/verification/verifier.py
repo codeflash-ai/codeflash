@@ -1,23 +1,31 @@
 import ast
 import logging
+from typing import Tuple, Optional
 
+from code_utils.code_utils import module_name_from_file_path
 from codeflash.api.aiservice import generate_regression_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.verification.verification_utils import ModifyInspiredTests
+from codeflash.verification.verification_utils import (
+    ModifyInspiredTests,
+    get_test_file_path,
+    TestConfig,
+)
 from codeflash.verification.verification_utils import delete_multiple_if_name_main
 from injectperf.ast_unparser import ast_unparse
 
 
 def generate_tests(
     source_code_being_tested: str,
-    function: FunctionToOptimize,
+    function_to_optimize: FunctionToOptimize,
+    dependent_function_names: list[str],
     module_path: str,
-    test_framework: str,
+    test_cfg: TestConfig,
+    test_timeout: int,
     use_cached_tests: bool,
-) -> str | None:
+) -> Optional[Tuple[str, str]]:
     # TODO: Sometimes this recreates the original Class definition. This overrides and messes up the original
     #  class import. Remove the recreation of the class definition
-    logging.info(f"Generating new tests for function {function.function_name} ...")
+    logging.info(f"Generating new tests for function {function_to_optimize.function_name} ...")
     if use_cached_tests:
         import importlib
 
@@ -25,22 +33,33 @@ def generate_tests(
         generated_test_source = module.CACHED_TESTS
         logging.info(f"Using cached tests from {module_path}.CACHED_TESTS")
     else:
-        generated_test_source = generate_regression_tests(
-            source_code_being_tested=source_code_being_tested,
-            function_name=function.function_name,
-            test_framework=test_framework,
+        test_module_path = module_name_from_file_path(
+            get_test_file_path(test_cfg.test_root, function_to_optimize.function_name, 0),
+            test_cfg.project_root_path,
         )
-        if generated_test_source is None:
-            logging.error("Test generation failed. Skipping test generation.")
-            return None  # TODO: if we're generating inspired unit tests, don't return here yet
-
+        response = generate_regression_tests(
+            source_code_being_tested=source_code_being_tested,
+            function_to_optimize=function_to_optimize,
+            dependent_function_names=dependent_function_names,
+            module_path=module_path,
+            test_module_path=test_module_path,
+            test_framework=test_cfg.test_framework,
+            test_timeout=test_timeout,
+        )
+        if response and isinstance(response, tuple) and len(response) == 2:
+            generated_test_source, instrumented_test_source = response
+        else:
+            logging.error(
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}"
+            )
+            return None
     inspired_unit_tests = ""
 
-    unified_test_source = merge_unit_tests(
-        generated_test_source, inspired_unit_tests, test_framework
+    merged_test_source = merge_unit_tests(
+        generated_test_source, inspired_unit_tests, test_cfg.test_framework
     )
 
-    return unified_test_source
+    return generated_test_source, merged_test_source
 
 
 def merge_unit_tests(unit_test_source: str, inspired_unit_tests: str, test_framework: str) -> str:

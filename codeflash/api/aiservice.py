@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Tuple, Optional, Union
+from typing import Any, Dict, List, Tuple, Optional
 
 import requests
 from pydantic import RootModel
@@ -62,32 +62,48 @@ def optimize_python_code(
 
 
 def generate_regression_tests(
-    source_code_being_tested: str, function_name: str, test_framework: str
-) -> Union[str, None]:
+    source_code_being_tested: str,
+    function_to_optimize: FunctionToOptimize,
+    dependent_function_names: list[str],
+    module_path: str,
+    test_module_path: str,
+    test_framework: str,
+    test_timeout: int,
+) -> Optional[Tuple[str, str]]:
     """
     Generate regression tests for the given function by making a request to the Django endpoint.
 
     Parameters:
     - source_code_being_tested (str): The source code of the function being tested.
-    - function_name (str): The name of the function being tested.
+    - function_to_optimize (FunctionToOptimize): The function to optimize.
+    - dependent_function_names (list[Source]): List of dependent function names.
+    - module_path (str): The module path where the function is located.
+    - test_module_path (str): The module path for the test code.
     - test_framework (str): The test framework to use, e.g., "pytest".
+    - test_timeout (int): The timeout for each test in seconds.
 
     Returns:
-    - str | None: The generated regression tests.
+    - Dict[str, str] | None: The generated regression tests and instrumented tests, or None if an error occurred.
     """
     assert test_framework in [
         "pytest",
         "unittest",
-    ], f"Invalid test framework, got {test_framework} but expected 'pytest' or 'unittest' "
+    ], f"Invalid test framework, got {test_framework} but expected 'pytest' or 'unittest'"
     data = {
         "source_code_being_tested": source_code_being_tested,
-        "function_name": function_name,
+        "function_to_optimize": RootModel[FunctionToOptimize](function_to_optimize).model_dump(
+            mode="json"
+        ),
+        "dependent_function_names": dependent_function_names,
+        "module_path": module_path,
+        "test_module_path": test_module_path,
         "test_framework": test_framework,
+        "test_timeout": test_timeout,
     }
     response = make_ai_service_request("/testgen", payload=data)
 
     if response.status_code == 200:
-        return response.json()["code"]
+        return response.json()["generated_tests"], response.json()["instrumented_tests"]
     else:
         logging.error(f"Error: {response.status_code} {response.text}")
         return None
