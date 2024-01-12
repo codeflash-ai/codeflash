@@ -18,11 +18,11 @@ CODEFLASH_POETRY_DEPENDENCY_VERSION = {
 def init_codeflash():
     click.echo(
         "\n"
-        "  _____        __    ______         __ \n"
-        " / ___/__  ___/ /__ / __/ /__ ____ / / \n"
-        "/ /__/ _ \/ _  / -_) _// / _ `(_-</ _ \\\n"
-        "\___/\___/\_,_/\__/_/ /_/\_,_/___/_//_/\n"
-        f"                                        v{version}\n"
+        r"              __    _____         __ " + "\n"
+        r" _______  ___/ /__ / _/ /__ ____ / / " + "\n"
+        r"/ __/ _ \/ _  / -_) _/ / _ `(_-</ _ \ " + "\n"
+        r"\__/\___/\_,_/\__/_//_/\_,_/___/_//_/" + "\n"
+        f"{('v'+version).rjust(46)}\n"
         "                          https://codeflash.ai\n"
         "\n"
         "⚡️ Welcome to CodeFlash! Let's get you set up.\n"
@@ -184,8 +184,8 @@ def prompt_api_key() -> bool:
     if existing_api_key:
         display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
         use_existing_key = click.prompt(
-            f"Found a CODEFLASH_API_KEY in your environment [{display_key}]!\n"
-            f"Press enter to keep using it, or any other key to change it",
+            f"I found a CODEFLASH_API_KEY in your environment [{display_key}]!\n"
+            f"Press enter to use this key, or any other key to change it",
             default="",
             show_default=False,
         )

@@ -57,13 +57,16 @@ line-length = 100
 target-version = ['py311']
 
 [build-system]
-requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.2.0,<2.0.0"]
 build-backend = "poetry_dynamic_versioning.backend"
 
 [tool.poetry-dynamic-versioning]
 enable = true
 style = "pep440"
 vcs = "git"
+
+[tool.poetry-dynamic-versioning.substitution]
+files = ["codeflash/version.py"]
 
 [tool.poetry-dynamic-versioning.files."codeflash/version.py"]
 persistent-substitution = true
