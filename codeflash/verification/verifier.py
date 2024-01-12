@@ -31,6 +31,7 @@ def generate_tests(
 
         module = importlib.import_module(module_path)
         generated_test_source = module.CACHED_TESTS
+        instrumented_test_source = module.CACHED_TESTS
         logging.info(f"Using cached tests from {module_path}.CACHED_TESTS")
     else:
         test_module_path = module_name_from_file_path(
@@ -53,13 +54,15 @@ def generate_tests(
                 f"Failed to generate and instrument tests for {function_to_optimize.function_name}"
             )
             return None
-    inspired_unit_tests = ""
 
-    merged_test_source = merge_unit_tests(
-        generated_test_source, inspired_unit_tests, test_cfg.test_framework
-    )
+    # TODO: Add support for inspired tests
+    # inspired_unit_tests = ""
 
-    return generated_test_source, merged_test_source
+    # merged_test_source = merge_unit_tests(
+    #     instrumented_test_source, inspired_unit_tests, test_cfg.test_framework
+    # )
+
+    return generated_test_source, instrumented_test_source
 
 
 def merge_unit_tests(unit_test_source: str, inspired_unit_tests: str, test_framework: str) -> str:
