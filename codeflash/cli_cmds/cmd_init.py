@@ -10,9 +10,7 @@ from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_github_secrets_page_url
 from codeflash.version import __version__ as version
 
-CODEFLASH_POETRY_DEPENDENCY_VERSION = {
-    "url": "https://www.dropbox.com/scl/fi/hslqspzk8r4v1wdima8u5/codeflash-0.4.1-py3-none-any.whl?rlkey=vcnk99vynz84uqombnujzhjec&dl=1"
-}
+CODEFLASH_POETRY_DEPENDENCY_VERSION = f"^{version}"
 
 
 def init_codeflash():
@@ -101,7 +99,9 @@ def prompt_github_action(setup_info: dict[str, str]):
             os.makedirs(workflows_path, exist_ok=True)
             from importlib.resources import read_text
 
-            optimize_yml_content = read_text("codeflash.cli.workflows", "codeflash-optimize.yaml")
+            optimize_yml_content = read_text(
+                "codeflash.cli_cmds.workflows", "codeflash-optimize.yaml"
+            )
             with open(optimize_yml_path, "w") as optimize_yml_file:
                 optimize_yml_file.write(optimize_yml_content)
             click.echo(f"✅ Created {optimize_yml_path}")
