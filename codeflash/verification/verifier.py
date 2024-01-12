@@ -4,6 +4,7 @@ from typing import Tuple, Optional
 
 from codeflash.api.aiservice import generate_regression_tests
 from codeflash.code_utils.ast_unparser import ast_unparse
+from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.verification.verification_utils import (
@@ -49,6 +50,9 @@ def generate_tests(
         )
         if response and isinstance(response, tuple) and len(response) == 2:
             generated_test_source, instrumented_test_source = response
+            instrumented_test_source = instrumented_test_source.replace(
+                "{codeflash_run_tmp_dir_client_side}", get_run_tmp_file("")
+            )
         else:
             logging.error(
                 f"Failed to generate and instrument tests for {function_to_optimize.function_name}"
