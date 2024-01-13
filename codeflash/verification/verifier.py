@@ -4,6 +4,7 @@ from typing import Tuple, Optional
 
 from codeflash.api.aiservice import generate_regression_tests
 from codeflash.code_utils.ast_unparser import ast_unparse
+from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.verification.verification_utils import (
@@ -31,6 +32,7 @@ def generate_tests(
 
         module = importlib.import_module(module_path)
         generated_test_source = module.CACHED_TESTS
+        instrumented_test_source = module.CACHED_TESTS
         logging.info(f"Using cached tests from {module_path}.CACHED_TESTS")
     else:
         test_module_path = module_name_from_file_path(
@@ -48,18 +50,23 @@ def generate_tests(
         )
         if response and isinstance(response, tuple) and len(response) == 2:
             generated_test_source, instrumented_test_source = response
+            instrumented_test_source = instrumented_test_source.replace(
+                "{codeflash_run_tmp_dir_client_side}", get_run_tmp_file("")
+            )
         else:
             logging.error(
                 f"Failed to generate and instrument tests for {function_to_optimize.function_name}"
             )
             return None
-    inspired_unit_tests = ""
 
-    merged_test_source = merge_unit_tests(
-        generated_test_source, inspired_unit_tests, test_cfg.test_framework
-    )
+    # TODO: Add support for inspired tests
+    # inspired_unit_tests = ""
 
-    return generated_test_source, merged_test_source
+    # merged_test_source = merge_unit_tests(
+    #     instrumented_test_source, inspired_unit_tests, test_cfg.test_framework
+    # )
+
+    return generated_test_source, instrumented_test_source
 
 
 def merge_unit_tests(unit_test_source: str, inspired_unit_tests: str, test_framework: str) -> str:

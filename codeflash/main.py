@@ -570,7 +570,7 @@ class Optimizer:
                             logging.info(f"Suggesting changes to PR #{pr} ...")
 
                             owner, repo = get_repo_owner_and_name()
-                            cfapi.suggest_changes(
+                            response = cfapi.suggest_changes(
                                 owner=owner,
                                 repo=repo,
                                 pr_number=pr,
@@ -590,6 +590,14 @@ class Optimizer:
                                 ),
                                 generated_tests=generated_test_source,
                             )
+
+                            if response.ok:
+                                logging.info("OK")
+                            else:
+                                logging.error(
+                                    f"Optimization was successful, but I failed to suggest changes to PR #{pr}."
+                                    f" Response from server was: {response.text}"
+                                )
                     else:
                         # Delete it here to not cause a lot of clutter if we are optimizing with --all option
                         if os.path.exists(generated_tests_path):

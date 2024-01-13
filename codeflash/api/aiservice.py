@@ -1,13 +1,10 @@
 import logging
-from typing import Any, Dict, List, Tuple, Optional
-
 import requests
 from pydantic import RootModel
-from typing import Any, Dict, List, Tuple, Optional, Union
+from typing import Any, Dict, List, Tuple, Optional
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.optimization.function_context import Source
 
 AI_SERVICE_BASE_URL = "https://app.codeflash.ai"
 # AI_SERVICE_BASE_URL = "http://localhost:8000/"
@@ -107,49 +104,9 @@ def generate_regression_tests(
     response = make_ai_service_request("/testgen", payload=data, timeout=600)
     # the timeout should be the same as the timeout for the AI service backend
 
+    response_json = response.json()
     if response.status_code == 200:
-        return response.json()["generated_tests"], response.json()["instrumented_tests"]
+        return response_json["generated_tests"], response_json["instrumented_tests"]
     else:
         logging.error(f"Error: {response.status_code} {response.text}")
         return None
-
-
-def inject_perf_api_call(
-    test_source: str,
-    function_to_optimize: FunctionToOptimize,
-    function_dependencies: list[Source],
-    module_path: str,
-    test_module_path: str,
-    test_framework: str,
-    test_timeout: int,
-) -> dict:
-    """
-    Call the injectperf API to instrument the test source with performance measurement code.
-
-    Parameters:
-    - test_source (str): The source code of the tests to be instrumented.
-    - function_to_optimize: The function to be optimized
-    - function_dependencies (List[dict]): A list of function dependencies, each represented as a dictionary.
-    - module_path (str): The module path where the function is located.
-    - test_module_path (str): The module path for the test code.
-    - test_framework (str): The test framework being used (e.g., "pytest", "unittest").
-    - test_timeout (int): The timeout for each test in seconds.
-
-    Returns:
-    - dict: The response from the API containing the instrumented test source.
-    """
-    data = {
-        "test_source": test_source,
-        "function": RootModel[FunctionToOptimize](function_to_optimize).model_dump(mode="json"),
-        "function_dependencies": function_dependencies,
-        "module_path": module_path,
-        "test_module_path": test_module_path,
-        "test_framework": test_framework,
-        "test_timeout": test_timeout,
-    }
-    response = make_ai_service_request("/injectperf", payload=data)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        logging.error(f"Error: {response.status_code} {response.text}")
-        response.raise_for_status()
