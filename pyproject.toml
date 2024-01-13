@@ -2,7 +2,8 @@
 name = "codeflash"
 version = "0.0.0" # Determined by poetry-dynamic-versioning during `poetry build`
 description = "A Code Performance Optimization Library"
-authors = ["afik.cohen <afik@codeflash.ai>", "Saurabh Misra <saurabh@codeflash.ai>"]
+authors = ["CodeFlash Inc. <contact@codeflash.ai>"]
+homepage = "https://codeflash.ai"
 readme = "README.md"
 packages = [
     { include = "codeflash" },
