@@ -6,6 +6,7 @@ import click
 import tomlkit
 from git import Repo
 
+from cli_cmds.cli import CODEFLASH_LOGO
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_github_secrets_page_url
 from codeflash.version import __version__ as version
@@ -14,17 +15,8 @@ CODEFLASH_POETRY_DEPENDENCY_VERSION = f"^{version}"
 
 
 def init_codeflash():
-    click.echo(
-        "\n"
-        r"              __    _____         __ " + "\n"
-        r" _______  ___/ /__ / _/ /__ ____ / / " + "\n"
-        r"/ __/ _ \/ _  / -_) _/ / _ `(_-</ _ \ " + "\n"
-        r"\__/\___/\_,_/\__/_//_/\_,_/___/_//_/" + "\n"
-        f"{('v'+version).rjust(46)}\n"
-        "                          https://codeflash.ai\n"
-        "\n"
-        "⚡️ Welcome to CodeFlash! Let's get you set up.\n"
-    )
+    click.echo(CODEFLASH_LOGO)
+    click.echo("⚡️ Welcome to CodeFlash! Let's get you set up.\n")
 
     prompt_api_key()
 

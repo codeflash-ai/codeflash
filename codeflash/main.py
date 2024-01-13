@@ -2,6 +2,7 @@ import concurrent.futures
 import logging
 import sys
 
+from cli_cmds.cli import CODEFLASH_LOGO
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s", stream=sys.stdout)
@@ -166,7 +167,8 @@ class Optimizer:
         )
 
     def run(self):
-        logging.info("RUNNING THE OPTIMIZER")
+        logging.info(CODEFLASH_LOGO)
+        logging.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
             return
 
