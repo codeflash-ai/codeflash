@@ -2,7 +2,8 @@
 name = "codeflash"
 version = "0.0.0" # Determined by poetry-dynamic-versioning during `poetry build`
 description = "A Code Performance Optimization Library"
-authors = ["afik.cohen <afik@codeflash.ai>", "Saurabh Misra <saurabh@codeflash.ai>"]
+authors = ["CodeFlash Inc. <contact@codeflash.ai>"]
+homepage = "https://codeflash.ai"
 readme = "README.md"
 packages = [
     { include = "codeflash" },
@@ -57,13 +58,19 @@ line-length = 100
 target-version = ['py311']
 
 [build-system]
-requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.2.0,<2.0.0"]
 build-backend = "poetry_dynamic_versioning.backend"
+
+[tool.poetry.build]
+script = "codeflash/update_license_version.py"
 
 [tool.poetry-dynamic-versioning]
 enable = true
 style = "pep440"
 vcs = "git"
+
+[tool.poetry-dynamic-versioning.substitution]
+files = ["codeflash/version.py"]
 
 [tool.poetry-dynamic-versioning.files."codeflash/version.py"]
 persistent-substitution = true

@@ -7,8 +7,8 @@ def get_codeflash_api_key() -> Optional[str]:
     api_key = os.environ.get("CODEFLASH_API_KEY")
     if not api_key:
         raise EnvironmentError(
-            "CodeFlash API key not found in your environment."
-            + "You can generate one at https://app.codeflash.ai/app/apikeys,"
+            "CodeFlash API key not found in your environment.\n"
+            + "You can generate one at https://app.codeflash.ai/app/apikeys,\n"
             + "then set it as a CODEFLASH_API_KEY environment variable."
         )
     return api_key
@@ -19,8 +19,8 @@ def ensure_codeflash_api_key() -> bool:
         get_codeflash_api_key()
     except EnvironmentError as e:
         logging.error(
-            "CodeFlash API key not found in your environment."
-            + "You can generate one at https://app.codeflash.ai/app/apikeys,"
+            "CodeFlash API key not found in your environment.\n"
+            + "You can generate one at https://app.codeflash.ai/app/apikeys,\n"
             + "then set it as a CODEFLASH_API_KEY environment variable."
         )
         return False

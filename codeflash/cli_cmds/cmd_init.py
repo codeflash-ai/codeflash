@@ -10,19 +10,17 @@ from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_github_secrets_page_url
 from codeflash.version import __version__ as version
 
-CODEFLASH_POETRY_DEPENDENCY_VERSION = {
-    "url": "https://www.dropbox.com/scl/fi/hslqspzk8r4v1wdima8u5/codeflash-0.4.1-py3-none-any.whl?rlkey=vcnk99vynz84uqombnujzhjec&dl=1"
-}
+CODEFLASH_POETRY_DEPENDENCY_VERSION = f"^{version}"
 
 
 def init_codeflash():
     click.echo(
         "\n"
-        "  _____        __    ______         __ \n"
-        " / ___/__  ___/ /__ / __/ /__ ____ / / \n"
-        "/ /__/ _ \/ _  / -_) _// / _ `(_-</ _ \\\n"
-        "\___/\___/\_,_/\__/_/ /_/\_,_/___/_//_/\n"
-        f"                                        v{version}\n"
+        r"              __    _____         __ " + "\n"
+        r" _______  ___/ /__ / _/ /__ ____ / / " + "\n"
+        r"/ __/ _ \/ _  / -_) _/ / _ `(_-</ _ \ " + "\n"
+        r"\__/\___/\_,_/\__/_//_/\_,_/___/_//_/" + "\n"
+        f"{('v'+version).rjust(46)}\n"
         "                          https://codeflash.ai\n"
         "\n"
         "⚡️ Welcome to CodeFlash! Let's get you set up.\n"
@@ -101,7 +99,9 @@ def prompt_github_action(setup_info: dict[str, str]):
             os.makedirs(workflows_path, exist_ok=True)
             from importlib.resources import read_text
 
-            optimize_yml_content = read_text("codeflash.cli.workflows", "codeflash-optimize.yaml")
+            optimize_yml_content = read_text(
+                "codeflash.cli_cmds.workflows", "codeflash-optimize.yaml"
+            )
             with open(optimize_yml_path, "w") as optimize_yml_file:
                 optimize_yml_file.write(optimize_yml_content)
             click.echo(f"✅ Created {optimize_yml_path}")
@@ -184,8 +184,8 @@ def prompt_api_key() -> bool:
     if existing_api_key:
         display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
         use_existing_key = click.prompt(
-            f"Found a CODEFLASH_API_KEY in your environment [{display_key}]!\n"
-            f"Press enter to keep using it, or any other key to change it",
+            f"I found a CODEFLASH_API_KEY in your environment [{display_key}]!\n"
+            f"Press enter to use this key, or any other key to change it",
             default="",
             show_default=False,
         )

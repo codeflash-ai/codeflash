@@ -1,5 +1,7 @@
-import requests
 from typing import Optional, Dict, Any
+
+import requests
+from requests import Response
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.github.PrComment import PrComment
@@ -25,7 +27,6 @@ def make_cfapi_request(
         response = requests.post(url, json=payload, headers=CFAPI_HEADERS)
     else:
         response = requests.get(url, headers=CFAPI_HEADERS)
-    response.raise_for_status()  # Will raise an HTTPError if the HTTP request returned an unsuccessful status code
     return response
 
 
@@ -36,7 +37,7 @@ def suggest_changes(
     file_changes: dict[str, dict[str, str]],
     pr_comment: PrComment,
     generated_tests: str,
-) -> bool:
+) -> Response:
     payload = {
         "owner": owner,
         "repo": repo,
@@ -46,7 +47,7 @@ def suggest_changes(
         "generatedTests": generated_tests,
     }
     response = make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
-    return response.ok
+    return response
 
 
 def create_new_pr(

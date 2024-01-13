@@ -2,8 +2,10 @@ import concurrent.futures
 import logging
 import sys
 
+from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
+
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s", stream=sys.stdout)
-from typing import List, Optional
+from typing import Optional, Tuple
 
 from codeflash.api import cfapi
 from codeflash.api.aiservice import optimize_python_code
@@ -39,10 +41,8 @@ from codeflash.discovery.functions_to_optimize import (
     get_functions_to_optimize_by_file,
     FunctionToOptimize,
 )
-from codeflash.instrumentation.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.optimization.function_context import (
     get_constrained_function_context_and_dependent_functions,
-    Source,
 )
 from codeflash.verification.equivalence import compare_results
 from codeflash.verification.parse_test_output import (
@@ -57,7 +57,7 @@ from codeflash.verification.verification_utils import (
     get_test_file_path,
     TestConfig,
 )
-from codeflash.verification.verifier import generate_tests, instrument_test_source
+from codeflash.verification.verifier import generate_tests
 
 
 def parse_args() -> Namespace:
@@ -219,7 +219,7 @@ class Optimizer:
 
                     (
                         code_to_optimize_with_dependents,
-                        function_dependencies,
+                        dependent_functions,
                     ) = get_constrained_function_context_and_dependent_functions(
                         function_to_optimize,
                         self.args.root,
@@ -258,12 +258,11 @@ class Optimizer:
                     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
                         # Newly generated tests (not instrumented yet)
                         future_tests = executor.submit(
-                            generate_tests,
+                            self.generate_and_instrument_tests,
                             code_to_optimize_with_dependents,
                             function_to_optimize,
+                            [definition.full_name for definition in dependent_functions],
                             module_path,
-                            self.args.test_framework,
-                            self.args.use_cached_tests,
                         )
                         future_optimization = executor.submit(
                             optimize_python_code,
@@ -271,23 +270,25 @@ class Optimizer:
                             N_CANDIDATES,
                         )
 
-                        generated_tests = future_tests.result()
+                        future_tests_result = future_tests.result()
                         optimizations = future_optimization.result()
-                    if generated_tests is None:
+                    if (
+                        future_tests_result
+                        and isinstance(future_tests_result, tuple)
+                        and len(future_tests_result) == 2
+                    ):
+                        generated_test_source, instrumented_test_source = future_tests_result
+                    else:
                         logging.error(
                             "/!\\ NO TESTS GENERATED for %s", function_to_optimize.function_name
                         )
                         continue
 
-                    generated_tests_path = self.instrument_and_write_tests(
-                        generated_tests,
-                        function_to_optimize,
-                        function_dependencies,
-                        module_path,
+                    generated_tests_path = get_test_file_path(
+                        self.args.test_root, function_to_optimize.function_name, 0
                     )
-
-                    if generated_tests_path is None:
-                        continue
+                    with open(generated_tests_path, "w") as file:
+                        file.write(instrumented_test_source)
 
                     test_files_created.add(generated_tests_path)
                     original_runtime = None
@@ -386,7 +387,8 @@ class Optimizer:
                             os.remove(get_run_tmp_file(f"test_return_values_{j}.bin"))
                         if os.path.exists(get_run_tmp_file(f"test_return_values_{j}.sqlite")):
                             os.remove(get_run_tmp_file(f"test_return_values_{j}.sqlite"))
-                        logging.info(f"optimized_candidate {optimized_code}")
+                        logging.info(f"Optimized Candidate:")
+                        logging.info(optimized_code)
                         try:
                             new_code = replace_function_in_file(
                                 path,
@@ -573,7 +575,7 @@ class Optimizer:
                             logging.info(f"Suggesting changes to PR #{pr} ...")
 
                             owner, repo = get_repo_owner_and_name()
-                            cfapi.suggest_changes(
+                            response = cfapi.suggest_changes(
                                 owner=owner,
                                 repo=repo,
                                 pr_number=pr,
@@ -591,12 +593,12 @@ class Optimizer:
                                     speedup=speedup,
                                     winning_test_results=winning_test_results,
                                 ),
-                                generated_tests=generated_tests,
+                                generated_tests=generated_test_source,
                             )
                         elif self.args.all:
                             logging.info("Creating a new PR with the optimized code...")
                             owner, repo = get_repo_owner_and_name()
-                            cfapi.create_new_pr(
+                            response = cfapi.create_new_pr(
                                 owner=owner,
                                 repo=repo,
                                 file_changes={
@@ -613,7 +615,14 @@ class Optimizer:
                                     speedup=speedup,
                                     winning_test_results=winning_test_results,
                                 ),
-                                generated_tests=generated_tests,
+                                generated_tests=generated_test_source,
+                            )
+                        if response.ok:
+                            logging.info("OK")
+                        else:
+                            logging.error(
+                                f"Optimization was successful, but I failed to suggest changes to PR #{pr}."
+                                f" Response from server was: {response.text}"
                             )
 
                     else:
@@ -661,38 +670,31 @@ class Optimizer:
         )
         return unittest_results
 
-    def instrument_and_write_tests(
+    def generate_and_instrument_tests(
         self,
-        new_tests: str,
+        source_code_being_tested: str,
         function_to_optimize: FunctionToOptimize,
-        function_dependencies: List[Source],
+        dependent_function_names: list[str],
         module_path: str,
-    ) -> str | None:
-        instrumented_tests_path = get_test_file_path(
-            self.args.test_root, function_to_optimize.function_name, 0
-        )
-        test_module_path = module_name_from_file_path(instrumented_tests_path, self.args.root)
-
-        logging.info(f"Instrumenting test source for {function_to_optimize.function_name}")
-
-        instrumented_tests = instrument_test_source(
-            new_tests,
-            function_to_optimize,
-            function_dependencies,
-            module_path,
-            test_module_path,
-            self.args.test_framework,
+    ) -> Tuple[str, str] | None:
+        response = generate_tests(
+            source_code_being_tested=source_code_being_tested,
+            function_to_optimize=function_to_optimize,
+            dependent_function_names=dependent_function_names,
+            module_path=module_path,
+            test_cfg=self.test_cfg,
             test_timeout=INDIVIDUAL_TEST_TIMEOUT,
+            use_cached_tests=self.args.use_cached_tests,
         )
-
-        if new_tests is None:
+        if response is None:
             logging.error(
-                "/!\\ Failed to instrument tests for %s", function_to_optimize.function_name
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}"
             )
             return None
-        with open(instrumented_tests_path, "w") as file:
-            file.write(instrumented_tests)
-        return instrumented_tests_path
+
+        generated_test_source, instrumented_test_source = response
+
+        return generated_test_source, instrumented_test_source
 
 
 def main():
