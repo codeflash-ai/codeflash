@@ -2,7 +2,7 @@ import concurrent.futures
 import logging
 import sys
 
-from cli_cmds.cli import CODEFLASH_LOGO
+from codeflash.cli_cmds.cli import CODEFLASH_LOGO
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s", stream=sys.stdout)
