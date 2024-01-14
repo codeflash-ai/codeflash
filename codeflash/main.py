@@ -6,7 +6,7 @@ from codeflash.cli_cmds.cli import CODEFLASH_LOGO
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s", stream=sys.stdout)
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 from codeflash.api import cfapi
 from codeflash.api.aiservice import optimize_python_code
@@ -651,7 +651,7 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         dependent_function_names: list[str],
         module_path: str,
-    ) -> Tuple[str, str] | None:
+    ) -> Union[Tuple[str, str], None]:
         response = generate_tests(
             source_code_being_tested=source_code_being_tested,
             function_to_optimize=function_to_optimize,

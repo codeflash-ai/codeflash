@@ -10,7 +10,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.8"
+python = ">=3.9"
 unidiff = "^0.7.5"
 pytest = "^7.3.1"
 gitpython = "^3.1.31"

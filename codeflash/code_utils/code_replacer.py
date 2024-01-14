@@ -1,7 +1,6 @@
-from typing import List, Union, Optional
-
 import libcst as cst
 from libcst import SimpleStatementLine, FunctionDef
+from typing import List, Union, Optional
 
 
 class OptimFunctionCollector(cst.CSTVisitor):
@@ -12,7 +11,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
         if preexisting_functions is None:
             preexisting_functions = []
         self.function_name = function_name
-        self.optim_body: FunctionDef | None = None
+        self.optim_body: Union[FunctionDef, None] = None
         self.optim_new_class_functions = []
         self.optim_new_functions = []
         self.optim_imports = []
