@@ -14,7 +14,7 @@ class PrComment:
     speedup: float
     winning_test_results: TestResults
 
-    def to_json(self) -> dict[str, str | dict[str, dict[str, int]]]:
+    def to_json(self) -> dict[str, Union[str, dict[str, dict[str, int]]]]:
         return {
             "optimization_explanation": self.optimization_explanation,
             "best_runtime": f"{(self.best_runtime / 1000):.2f}",

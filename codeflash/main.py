@@ -641,7 +641,7 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         dependent_function_names: list[str],
         module_path: str,
-    ) -> Tuple[str, str] | None:
+    ) -> Union[Tuple[str, str], None]:
         response = generate_tests(
             source_code_being_tested=source_code_being_tested,
             function_to_optimize=function_to_optimize,

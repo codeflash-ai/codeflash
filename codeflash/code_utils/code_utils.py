@@ -34,7 +34,7 @@ def get_imports_from_file(
     file_path: Optional[str] = None,
     file_string: Optional[str] = None,
     file_ast: Optional[ast.AST] = None,
-) -> List[ast.Import | ast.ImportFrom]:
+) -> List[Union[ast.Import, ast.ImportFrom]]:
     assert (
         sum([file_path is not None, file_string is not None, file_ast is not None]) == 1
     ), "Must provide exactly one of file_path, file_string, or file_ast"

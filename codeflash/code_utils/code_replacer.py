@@ -12,7 +12,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
         if preexisting_functions is None:
             preexisting_functions = []
         self.function_name = function_name
-        self.optim_body: FunctionDef | None = None
+        self.optim_body: Union[FunctionDef, None]s = None
         self.optim_new_class_functions = []
         self.optim_new_functions = []
         self.optim_imports = []
