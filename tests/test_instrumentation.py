@@ -1,4 +1,5 @@
 import os.path
+import sys
 import tempfile
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
@@ -113,8 +114,14 @@ def test_prepare_image_for_yolo():
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
-    for arg_val_pkl, return_val_pkl in get_next_arg_and_return('/home/saurabh/packagename/traces/first.trace', 3):
-        args = pickle.loads(arg_val_pkl)
+"""
+    if sys.version_info <= (3, 10):
+        expected += """    for (arg_val_pkl, return_val_pkl) in get_next_arg_and_return('/home/saurabh/packagename/traces/first.trace', 3):
+"""
+    else:
+        expected += """    for arg_val_pkl, return_val_pkl in get_next_arg_and_return('/home/saurabh/packagename/traces/first.trace', 3):
+"""
+    expected += """        args = pickle.loads(arg_val_pkl)
         return_val_1 = pickle.loads(return_val_pkl)
         gc.disable()
         counter = time.perf_counter_ns()
