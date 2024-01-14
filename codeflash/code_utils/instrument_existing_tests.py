@@ -1,12 +1,8 @@
 import ast
-import sys
 from _ast import ClassDef
 from typing import Any, Optional
 
 from codeflash.code_utils.code_utils import module_name_from_file_path, get_run_tmp_file
-
-if sys.version_info < (3, 9, 0):
-    from astunparse import unparse as ast_unparse
 
 
 class ReplaceCallNodeWithName(ast.NodeTransformer):
@@ -365,7 +361,4 @@ def inject_profiling_into_existing_test(test_path, function_name, root_path):
     ]
     tree.body = new_imports + tree.body
 
-    if sys.version_info < (3, 9, 0):
-        return ast_unparse(tree)
-    else:
-        return ast.unparse(tree)
+    return ast.unparse(tree)
