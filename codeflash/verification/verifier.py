@@ -3,7 +3,6 @@ import logging
 from typing import Tuple, Optional
 
 from codeflash.api.aiservice import generate_regression_tests
-from codeflash.code_utils.ast_unparser import ast_unparse
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -84,4 +83,4 @@ def merge_unit_tests(unit_test_source: str, inspired_unit_tests: str, test_frame
     unit_test_source_ast.body = import_list + unit_test_source_ast.body
     if test_framework == "unittest":
         unit_test_source_ast = delete_multiple_if_name_main(unit_test_source_ast)
-    return ast_unparse(unit_test_source_ast)
+    return ast.unparse(unit_test_source_ast)

@@ -1,5 +1,4 @@
 import os
-import sys
 
 os.environ["CODEFLASH_API_KEY"] = "test-key"
 from codeflash.verification.verifier import merge_unit_tests
@@ -113,113 +112,7 @@ def test_tsp_negative_coordinates():
     gc.enable()
     _log__test__values(return_value, duration, 'tsp_test_tsp_negative_coordinates__inspired_1')
     """
-    if sys.version_info < (3, 9, 0):
-        expected = """
-import pytest
-import math
-import sys
-import itertools
-import time
-import gc
-from code_to_optimize.tsp import tsp
-import pytest
-import math
-import sys
-import itertools
-
-def distance_between(city1: tuple, city2: tuple) -> float:
-    return math.hypot((city1[0] - city2[0]), (city1[1] - city2[1]))
-
-def test_tsp_decimal_coordinates():
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = tsp([(0.5, 0.5), (1.5, 1.5), (2.5, 2.5)])
-    duration = (time.perf_counter_ns() - counter)
-    gc.enable()
-    _log__test__values(return_value, duration, 'tsp_test_tsp_decimal_coordinates_0')
-
-def test_tsp_large_coordinate_values():
-    cities = [(1000000, 1000000), (2000000, 2000000), (3000000, 3000000)]
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = tsp(cities)
-    duration = (time.perf_counter_ns() - counter)
-    gc.enable()
-    _log__test__values(return_value, duration, 'tsp_test_tsp_large_coordinate_values_1')
-
-def distance_between(city1: tuple, city2: tuple) -> float:
-    return math.hypot((city1[0] - city2[0]), (city1[1] - city2[1]))
-
-def tsp(cities: list[list[int]]):
-    permutations = itertools.permutations(cities)
-    min_distance = sys.maxsize
-    optimal_route = []
-    for permutation in permutations:
-        distance = 0
-        for i in range((len(permutation) - 1)):
-            distance += distance_between(permutation[i], permutation[(i + 1)])
-        distance += distance_between(permutation[(- 1)], permutation[0])
-        if (distance < min_distance):
-            min_distance = distance
-            optimal_route = permutation
-    return (optimal_route, min_distance)
-
-def test_tsp_more_cities__inspired():
-    cities = [[1, 2], [3, 4], [5, 6], [(- 3), 4], [0, 0]]
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = tsp(cities)
-    duration = (time.perf_counter_ns() - counter)
-    gc.enable()
-    _log__test__values(return_value, duration, 'tsp_test_tsp_more_cities__inspired_1')
-
-def test_tsp_three_cities__inspired():
-    cities = [[1, 2], [3, 4], [5, 6]]
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = tsp(cities)
-    duration = (time.perf_counter_ns() - counter)
-    gc.enable()
-    _log__test__values(return_value, duration, 'tsp_test_tsp_three_cities__inspired_1')
-
-def test_tsp_single_city__inspired():
-    cities = [[1, 2]]
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = tsp(cities)
-    duration = (time.perf_counter_ns() - counter)
-    gc.enable()
-    _log__test__values(return_value, duration, 'tsp_test_tsp_single_city__inspired_1')
-
-def test_tsp_empty_cities__inspired():
-    cities = []
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = tsp(cities)
-    duration = (time.perf_counter_ns() - counter)
-    gc.enable()
-    _log__test__values(return_value, duration, 'tsp_test_tsp_empty_cities__inspired_1')
-
-def test_tsp_duplicate_cities__inspired():
-    cities = [[1, 2], [3, 4], [1, 2], [3, 4]]
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = tsp(cities)
-    duration = (time.perf_counter_ns() - counter)
-    gc.enable()
-    _log__test__values(return_value, duration, 'tsp_test_tsp_duplicate_cities__inspired_1')
-
-def test_tsp_negative_coordinates__inspired():
-    cities = [[(- 1), (- 2)], [(- 3), (- 4)], [(- 5), (- 6)]]
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = tsp(cities)
-    duration = (time.perf_counter_ns() - counter)
-    gc.enable()
-    _log__test__values(return_value, duration, 'tsp_test_tsp_negative_coordinates__inspired_1')
-"""
-    else:
-        expected = """import pytest
+    expected = """import pytest
 import math
 import sys
 import itertools
@@ -432,20 +325,12 @@ class TestGetFilteredClusters(unittest.TestCase):
         counter = time.perf_counter_ns()
         return_value = get_filtered_clusters(self.cluster_tree, filters)
 """
-    expected += (
-        """        duration = (time.perf_counter_ns() - counter)\n"""
-        if sys.version_info < (3, 9, 0)
-        else """        duration = time.perf_counter_ns() - counter\n"""
-    )
+    expected += """        duration = time.perf_counter_ns() - counter\n"""
     expected += """        gc.enable()
         _log__test__values(return_value, duration, 'get_filtered_clusters_test_get_filtered_clusters_scenario3_2')
 
 """
-    expected += (
-        """class MockClusterTree():\n"""
-        if sys.version_info < (3, 9, 0)
-        else """class MockClusterTree:\n"""
-    )
+    expected += """class MockClusterTree:\n"""
     expected += """
     def __init__(self, clusters_dict, field_indices, stability_column, ordered_ids):
         self.clusters_dict = clusters_dict
@@ -477,11 +362,7 @@ class TestGetFilteredClustersInspired(unittest.TestCase):
         counter = time.perf_counter_ns()
         return_value = get_filtered_clusters(self.cluster_tree, filters)
 """
-    expected += (
-        """        duration = (time.perf_counter_ns() - counter)\n"""
-        if sys.version_info < (3, 9, 0)
-        else """        duration = time.perf_counter_ns() - counter\n"""
-    )
+    expected += """        duration = time.perf_counter_ns() - counter\n"""
     expected += """        gc.enable()
         _log__test__values(return_value, duration, 'get_filtered_clusters_test_get_filtered_clusters_1')
 
@@ -496,24 +377,12 @@ class TestGetFilteredClustersInspired(unittest.TestCase):
         counter = time.perf_counter_ns()
         return_value = get_filtered_clusters(self.cluster_tree, filters)
 """
-    expected += (
-        """        duration = (time.perf_counter_ns() - counter)\n"""
-        if sys.version_info < (3, 9, 0)
-        else """        duration = time.perf_counter_ns() - counter\n"""
-    )
+    expected += """        duration = time.perf_counter_ns() - counter\n"""
     expected += """        gc.enable()
         _log__test__values(return_value, duration, 'get_filtered_clusters_test_get_filtered_clusters_with_clusters_5')
 """
-    if sys.version_info < (3, 9, 0):
-        expected += """if (__name__ == '__main__'):
-    unittest.main()"""
-    else:
-        expected += """if __name__ == '__main__':
+    expected += """if __name__ == '__main__':
     unittest.main()"""
 
     modified_file = merge_unit_tests(unit_tests, inspired_test, "unittest")
-    if sys.version_info < (3, 9, 0):
-        # assert modified_file.strip("\n") == modified_file
-        assert modified_file.strip("\n") == expected
-    else:
-        assert modified_file == expected
+    assert modified_file == expected
