@@ -1,3 +1,5 @@
+from typing import Union
+
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 

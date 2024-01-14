@@ -2,7 +2,7 @@ import ast
 import os
 import site
 from tempfile import TemporaryDirectory
-from typing import Optional, List
+from typing import Optional, List, Union
 
 
 def module_name_from_file_path(file_path: str, project_root: str) -> str:

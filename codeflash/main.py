@@ -5,7 +5,7 @@ import sys
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s", stream=sys.stdout)
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 from codeflash.api import cfapi
 from codeflash.api.aiservice import optimize_python_code
