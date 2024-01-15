@@ -181,19 +181,18 @@ class Optimizer:
         )
 
         test_files_created = set()
-        test_files_to_preserve = set()
         instrumented_unittests_created = set()
         self.found_atleast_one_optimization = False
 
-        if os.path.exists("/tmp/pr_comment_temp.txt"):
-            os.remove("/tmp/pr_comment_temp.txt")
         function_iterator_count = 0
         try:
             if num_modified_functions == 0:
                 logging.info("No functions found to optimize. Exiting...")
                 return
             function_to_tests: dict[str, list[TestsInFile]] = discover_unit_tests(self.test_cfg)
-            logging.info(f"Found {len(function_to_tests.values())} existing unit tests.")
+            logging.info(
+                f"Discovered {len(function_to_tests.values())} existing unit tests in the project."
+            )
             for path in file_to_funcs_to_optimize:
                 logging.info(f"Examining file {path} ...")
                 # TODO: Sequence the functions one goes through intelligently. If we are optimizing f(g(x)), then we might want to first
@@ -233,6 +232,7 @@ class Optimizer:
                     logging.info("CODE TO OPTIMIZE %s", code_to_optimize_with_dependents)
                     module_path = module_name_from_file_path(path, self.args.root)
                     unique_original_test_files = set()
+                    relevant_test_files_count = 0
 
                     full_module_function_path = module_path + "." + function_name
                     if full_module_function_path not in function_to_tests:
@@ -244,6 +244,7 @@ class Optimizer:
                         for tests_in_file in function_to_tests.get(full_module_function_path):
                             if tests_in_file.test_file in unique_original_test_files:
                                 continue
+                            relevant_test_files_count += 1
                             injected_test = inject_profiling_into_existing_test(
                                 tests_in_file.test_file,
                                 function_name,
@@ -258,6 +259,9 @@ class Optimizer:
                                 f.write(injected_test)
                             instrumented_unittests_created.add(new_test_path)
                             unique_original_test_files.add(tests_in_file.test_file)
+                        logging.info(
+                            f"Discovered {relevant_test_files_count} existing unit test files for {full_module_function_path}"
+                        )
 
                     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
                         # Newly generated tests (not instrumented yet)
@@ -281,7 +285,10 @@ class Optimizer:
                         and isinstance(future_tests_result, tuple)
                         and len(future_tests_result) == 2
                     ):
-                        generated_test_source, instrumented_test_source = future_tests_result
+                        (
+                            generated_original_test_source,
+                            instrumented_test_source,
+                        ) = future_tests_result
                     else:
                         logging.error(
                             "/!\\ NO TESTS GENERATED for %s", function_to_optimize.function_name
@@ -516,7 +523,7 @@ class Optimizer:
                     logging.info(f"BEST OPTIMIZATION {best_optimization}")
                     if best_optimization:
                         self.found_atleast_one_optimization = True
-                        logging.info(f"BEST OPTIMIZED CODE {best_optimization[0]}")
+                        logging.info(f"BEST OPTIMIZED CODE\n{best_optimization[0]}")
                         if not self.args.all:
                             new_code = replace_function_in_file(
                                 path,
@@ -542,9 +549,7 @@ class Optimizer:
                             + "The code has been tested for correctness.\n"
                             + f"Test Results for the best optimized code:- {TestResults.report_to_string(winning_test_results.get_test_pass_fail_report_by_type())}\n"
                         )
-                        with open("/tmp/pr_comment_temp.txt", "a") as f:
-                            f.write(explanation_final)
-                        logging.info(f"EXPLANATION_FINAL {explanation_final}")
+                        logging.info(f"EXPLANATION_FINAL\n{explanation_final}")
                         if self.args.all:
                             with open("optimizations_all.txt", "a") as f:
                                 f.write(best_optimization[0])
@@ -560,7 +565,9 @@ class Optimizer:
                             logging.info("OK")
                         else:
                             logging.error("Failed to format")
-                        test_files_to_preserve.add(generated_tests_path)
+                        logging.info(
+                            f"Optimization was validated for correctness by running the following test - \n{generated_original_test_source}"
+                        )
 
                         logging.info(
                             f"⚡️ Optimization successful! 📄 {function_name} in {path} 📈 {speedup * 100:.2f}% ({speedup:.2f}x) faster"
@@ -590,7 +597,7 @@ class Optimizer:
                                     speedup=speedup,
                                     winning_test_results=winning_test_results,
                                 ),
-                                generated_tests=generated_test_source,
+                                generated_tests=generated_original_test_source,
                             )
 
                             if response.ok:
@@ -600,10 +607,8 @@ class Optimizer:
                                     f"Optimization was successful, but I failed to suggest changes to PR #{pr}."
                                     f" Response from server was: {response.text}"
                                 )
-                    else:
-                        # Delete it here to not cause a lot of clutter if we are optimizing with --all option
-                        if os.path.exists(generated_tests_path):
-                            os.remove(generated_tests_path)
+                    if os.path.exists(generated_tests_path):
+                        os.remove(generated_tests_path)
             if not self.found_atleast_one_optimization:
                 logging.info(f"❌ No optimizations found.")
 
@@ -613,9 +618,8 @@ class Optimizer:
                 if os.path.exists(test_file):
                     os.remove(test_file)
             for test_file in test_files_created:
-                if test_file not in test_files_to_preserve:
-                    if os.path.exists(test_file):
-                        os.remove(test_file)
+                if os.path.exists(test_file):
+                    os.remove(test_file)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
 
@@ -667,9 +671,9 @@ class Optimizer:
             )
             return None
 
-        generated_test_source, instrumented_test_source = response
+        generated_original_test_source, instrumented_test_source = response
 
-        return generated_test_source, instrumented_test_source
+        return generated_original_test_source, instrumented_test_source
 
 
 def main():
