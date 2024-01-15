@@ -191,7 +191,7 @@ class Optimizer:
                 return
             function_to_tests: dict[str, list[TestsInFile]] = discover_unit_tests(self.test_cfg)
             logging.info(
-                f"Discovered {len(function_to_tests.values())} existing unit tests in the project."
+                f"Discovered a total of {len(function_to_tests.values())} existing unit tests in the project."
             )
             for path in file_to_funcs_to_optimize:
                 logging.info(f"Examining file {path} ...")
