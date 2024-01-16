@@ -52,6 +52,7 @@ def optimize_python_code(
     - List[Tuple[str, str]]: A list of tuples where the first element is the optimized code and the second is the explanation.
     """
     data = {"source_code": source_code, "num_variants": num_variants}
+    logging.info(f"Generating Optimizations ...")
     response = make_ai_service_request("/optimize", payload=data, timeout=600)
 
     if response.status_code == 200:

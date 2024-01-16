@@ -176,7 +176,7 @@ def process_test_files(
         for name in all_names:
             if name.full_name is None:
                 continue
-            m = re.search(f"([^.]+)\.{name.name}$", name.full_name)
+            m = re.search(r"([^.]+)\." + f"{name.name}$", name.full_name)
             if not m:
                 continue
             scope = m.group(1)
