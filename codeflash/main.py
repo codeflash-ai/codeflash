@@ -260,7 +260,8 @@ class Optimizer:
                             instrumented_unittests_created.add(new_test_path)
                             unique_original_test_files.add(tests_in_file.test_file)
                         logging.info(
-                            f"Discovered {relevant_test_files_count} existing unit test files for {full_module_function_path}"
+                            f"Discovered {relevant_test_files_count} existing unit test file"
+                            f"{'s' if relevant_test_files_count > 1 else ''} for {full_module_function_path}"
                         )
 
                     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
