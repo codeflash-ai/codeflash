@@ -1,6 +1,8 @@
 import os
 import re
 import subprocess
+import sys
+import time
 
 import click
 import tomlkit
@@ -79,6 +81,10 @@ def run_end_to_end_test(setup_info: dict[str, str]):
         "--root",
         setup_info["project_root"],
     ]
+    animation = "|/-\\"
+    idx = 0
+    sys.stdout.write("Running end-to-end test... ")
+    sys.stdout.flush()
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
@@ -86,22 +92,24 @@ def run_end_to_end_test(setup_info: dict[str, str]):
         text=True,
         cwd=setup_info["project_root"],
     )
-    # Print the output of the subprocess in real-time
-    while True:
-        output = process.stdout.readline()
-        if output == "" and process.poll() is not None:
-            break
-        if output:
-            click.echo(output.strip())
+    while process.poll() is None:
+        sys.stdout.write(animation[idx % len(animation)])
+        sys.stdout.flush()
+        time.sleep(0.1)
+        sys.stdout.write("\b")
+        idx += 1
+
+    sys.stdout.write(" ")  # Clear the last animation character
+    sys.stdout.flush()
     stderr = process.stderr.read()
     if stderr:
         click.echo(stderr.strip())
 
     bubble_sort_path = os.path.join(setup_info["project_root"], "bubble_sort.py")
     if process.returncode == 0:
-        click.echo("✅ End-to-end test passed. CodeFlash has been correctly set up!")
+        click.echo("\n✅ End-to-end test passed. CodeFlash has been correctly set up!")
     else:
-        click.echo("❌ End-to-end test failed. Please check the setup and try again.")
+        click.echo("\n❌ End-to-end test failed. Please check the setup and try again.")
 
     # Delete the bubble_sort.py file after the test
     os.remove(bubble_sort_path)
