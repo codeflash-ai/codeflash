@@ -510,60 +510,62 @@ class Optimizer:
 
                             original_runtime_human = str(original_runtime) + " nanoseconds"
                             if original_runtime / 1000 > 0:
-                                original_runtime = float(original_runtime) / 1000
+                                original_runtime_micro = float(original_runtime) / 1000
                                 original_runtime_human = humanize.precisedelta(
-                                    dt.timedelta(microseconds=original_runtime),
+                                    dt.timedelta(microseconds=original_runtime_micro),
                                     minimum_unit="microseconds",
                                 )
 
                                 units = original_runtime_human.split(" ")[1]
 
                                 if units == "microseconds":
-                                    original_runtime_human = float("%.3g" % original_runtime)
+                                    original_runtime_human = float("%.3g" % original_runtime_micro)
                                 elif units == "milliseconds":
                                     original_runtime_human = float(
-                                        "%.3g" % (original_runtime / 1000)
+                                        "%.3g" % (original_runtime_micro / 1000)
                                     )
                                 elif units == "seconds":
                                     original_runtime_human = float(
-                                        "%.3g" % (original_runtime / (1000**2))
+                                        "%.3g" % (original_runtime_micro / (1000**2))
                                     )
                                 elif units == "minutes":
                                     original_runtime_human = float(
-                                        "%.3g" % (original_runtime / (60 * 1000**2))
+                                        "%.3g" % (original_runtime_micro / (60 * 1000**2))
                                     )
                                 else:  # hours
                                     original_runtime_human = float(
-                                        "%.3g" % (original_runtime / (3600 * 1000**2))
+                                        "%.3g" % (original_runtime_micro / (3600 * 1000**2))
                                     )
 
                                 original_runtime_human = str(original_runtime_human) + " " + units
 
                             new_test_time_human = str(new_test_time) + " nanoseconds"
                             if new_test_time / 1000 > 0:
-                                new_test_time = new_test_time / 1000
+                                new_test_time_micro = new_test_time / 1000
                                 new_test_time_human = humanize.precisedelta(
-                                    dt.timedelta(microseconds=new_test_time),
+                                    dt.timedelta(microseconds=new_test_time_micro),
                                     minimum_unit="microseconds",
                                 )
 
                                 units = new_test_time_human.split(" ")[1]
 
                                 if units == "microseconds":
-                                    new_test_time_human = float("%.3g" % new_test_time)
+                                    new_test_time_human = float("%.3g" % new_test_time_micro)
                                 elif units == "milliseconds":
-                                    new_test_time_human = float("%.3g" % (new_test_time / 1000))
+                                    new_test_time_human = float(
+                                        "%.3g" % (new_test_time_micro / 1000)
+                                    )
                                 elif units == "seconds":
                                     new_test_time_human = float(
-                                        "%.3g" % (new_test_time / (1000**2))
+                                        "%.3g" % (new_test_time_micro / (1000**2))
                                     )
                                 elif units == "minutes":
                                     new_test_time_human = float(
-                                        "%.3g" % (new_test_time / (60 * 1000**2))
+                                        "%.3g" % (new_test_time_micro / (60 * 1000**2))
                                     )
                                 else:  # hours
                                     new_test_time_human = float(
-                                        "%.3g" % (new_test_time / (3600 * 1000**2))
+                                        "%.3g" % (new_test_time_micro / (3600 * 1000**2))
                                     )
 
                                 new_test_time_human = str(new_test_time_human) + " " + units
