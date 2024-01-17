@@ -609,14 +609,23 @@ class Optimizer:
                                 ),
                                 generated_tests=generated_original_test_source,
                             )
+                            if response.ok:
+                                logging.info("OK")
+                            else:
+                                logging.error(
+                                    f"Optimization was successful, but I failed to suggest changes to PR #{pr}."
+                                    f" Response from server was: {response.text}"
+                                )
                         elif self.args.all:
                             logging.info("Creating a new PR with the optimized code...")
                             owner, repo = get_repo_owner_and_name()
-                            response = cfapi.create_new_pr(
+                            relative_path = os.path.relpath(path, self.args.root)
+                            response = cfapi.create_pr(
                                 owner=owner,
                                 repo=repo,
+                                baseBranch="main",
                                 file_changes={
-                                    path: FileDiffContent(
+                                    relative_path: FileDiffContent(
                                         oldContent=original_code, newContent=new_code
                                     ).model_dump(mode="json")
                                 },
@@ -625,20 +634,19 @@ class Optimizer:
                                     best_runtime=best_runtime,
                                     original_runtime=original_runtime,
                                     function_name=function_name,
-                                    file_path=path,
+                                    relative_file_path=relative_path,
                                     speedup=speedup,
                                     winning_test_results=winning_test_results,
                                 ),
-                                generated_tests=generated_test_source,
+                                generated_tests=generated_original_test_source,
                             )
-                        if response.ok:
-                            logging.info("OK")
-                        else:
-                            logging.error(
-                                f"Optimization was successful, but I failed to suggest changes to PR #{pr}."
-                                f" Response from server was: {response.text}"
-                            )
-
+                            if response.ok:
+                                logging.info("OK")
+                            else:
+                                logging.error(
+                                    f"Optimization was successful, but I failed to create a PR with the optimized code."
+                                    f" Response from server was: {response.text}"
+                                )
                     else:
                         # Delete it here to not cause a lot of clutter if we are optimizing with --all option
                         if os.path.exists(generated_tests_path):
