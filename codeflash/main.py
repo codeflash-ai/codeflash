@@ -60,6 +60,9 @@ from codeflash.verification.verification_utils import (
 )
 from codeflash.verification.verifier import generate_tests
 
+import humanize
+import datetime as dt
+
 
 def parse_args() -> Namespace:
     parser = ArgumentParser()
@@ -504,16 +507,78 @@ class Optimizer:
                         if equal_results and times_run > 0:
                             # TODO: Make the runtime more human readable by using humanize
                             new_test_time = min(all_test_times)
+
+                            original_runtime_human = str(original_runtime) + " nanoseconds"
+                            if original_runtime / 1000 > 0:
+                                original_runtime = float(original_runtime) / 1000
+                                original_runtime_human = humanize.precisedelta(
+                                    dt.timedelta(microseconds=original_runtime),
+                                    minimum_unit="microseconds",
+                                )
+
+                                units = original_runtime_human.split(" ")[1]
+
+                                if units == "microseconds":
+                                    original_runtime_human = float("%.3g" % original_runtime)
+                                elif units == "milliseconds":
+                                    original_runtime_human = float(
+                                        "%.3g" % (original_runtime / 1000)
+                                    )
+                                elif units == "seconds":
+                                    original_runtime_human = float(
+                                        "%.3g" % (original_runtime / (1000**2))
+                                    )
+                                elif units == "minutes":
+                                    original_runtime_human = float(
+                                        "%.3g" % (original_runtime / (60 * 1000**2))
+                                    )
+                                else:  # hours
+                                    original_runtime_human = float(
+                                        "%.3g" % (original_runtime / (3600 * 1000**2))
+                                    )
+
+                                original_runtime_human = str(original_runtime_human) + " " + units
+
+                            new_test_time_human = str(new_test_time) + " nanoseconds"
+                            if new_test_time / 1000 > 0:
+                                new_test_time = new_test_time / 1000
+                                new_test_time_human = humanize.precisedelta(
+                                    dt.timedelta(microseconds=new_test_time),
+                                    minimum_unit="microseconds",
+                                )
+
+                                units = new_test_time_human.split(" ")[1]
+
+                                if units == "microseconds":
+                                    new_test_time_human = float("%.3g" % new_test_time)
+                                elif units == "milliseconds":
+                                    new_test_time_human = float("%.3g" % (new_test_time / 1000))
+                                elif units == "seconds":
+                                    new_test_time_human = float(
+                                        "%.3g" % (new_test_time / (1000**2))
+                                    )
+                                elif units == "minutes":
+                                    new_test_time_human = float(
+                                        "%.3g" % (new_test_time / (60 * 1000**2))
+                                    )
+                                else:  # hours
+                                    new_test_time_human = float(
+                                        "%.3g" % (new_test_time / (3600 * 1000**2))
+                                    )
+
+                                new_test_time_human = str(new_test_time_human) + " " + units
+
                             logging.info(
-                                f"NEW CODE RUNTIME OVER {times_run} RUN{'S' if times_run > 1 else ''} = {new_test_time}ns, SPEEDUP RATIO = {((original_runtime - new_test_time) / new_test_time):.3f}"
+                                f"NEW CODE RUNTIME OVER {times_run} RUN{'S' if times_run > 1 else ''} = {new_test_time_human}, SPEEDUP RATIO = {((original_runtime - new_test_time) / new_test_time):.3f}"
                             )
                             if (
                                 ((original_runtime - new_test_time) / new_test_time)
                                 > self.args.minimum_performance_gain
                             ) and new_test_time < best_runtime:
                                 logging.info("THIS IS BETTER!")
+
                                 logging.info(
-                                    f"original_test_time={original_runtime} new_test_time={new_test_time}, FASTER RATIO = {((original_runtime - new_test_time) / new_test_time)}"
+                                    f"original_test_time={original_runtime_human} new_test_time={new_test_time_human}, FASTER RATIO = {((original_runtime - new_test_time) / new_test_time)}"
                                 )
                                 best_optimization = [optimized_code, explanation]
                                 best_runtime = new_test_time
@@ -543,7 +608,7 @@ class Optimizer:
 
                         explanation_final += (
                             f"Function {function_name} in file {path}:\n"
-                            f"Performance went up by {speedup:.2f}x ({speedup * 100:.2f}%). Runtime went down from {(original_runtime / 1000):.2f}μs to {(best_runtime / 1000):.2f}μs \n\n"
+                            f"Performance went up by {speedup:.2f}x ({speedup * 100:.2f}%). Runtime went down from {original_runtime_human} to {new_test_time_human} \n\n"
                             + "Optimization explanation:\n"
                             + best_optimization[1]
                             + " \n\n"
