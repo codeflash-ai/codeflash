@@ -28,6 +28,15 @@ def init_codeflash():
 
     prompt_github_action(setup_info)
 
+    run_tests = click.confirm(
+        "Do you want to run an end-to-end test to ensure everything is set up correctly?",
+        default=True,
+    )
+
+    if run_tests:
+        create_bubble_sort_file(setup_info)
+        run_end_to_end_test(setup_info)
+
     click.echo(
         "\n"
         "⚡️ CodeFlash is now set up! You can now run:\n"
@@ -37,6 +46,66 @@ def init_codeflash():
         "-or-\n"
         "    codeflash --help to see all options"
     )
+
+
+def create_bubble_sort_file(setup_info: dict[str, str]):
+    bubble_sort_content = """def sorter(arr):
+    for i in range(len(arr)):
+        for j in range(len(arr) - 1):
+            if arr[j] > arr[j + 1]:
+                temp = arr[j]
+                arr[j] = arr[j + 1]
+                arr[j + 1] = temp
+    return arr
+"""
+    bubble_sort_path = os.path.join(setup_info["project_root"], "bubble_sort.py")
+    with open(bubble_sort_path, "w") as bubble_sort_file:
+        bubble_sort_file.write(bubble_sort_content)
+    click.echo(f"✅ Created {bubble_sort_path}")
+
+
+def run_end_to_end_test(setup_info: dict[str, str]):
+    test_root = os.path.join(setup_info["project_root"], setup_info["tests_root"])
+    command = [
+        "python",
+        "-m",
+        "codeflash.main",
+        "--file",
+        "bubble_sort.py",
+        "--function",
+        "sorter",
+        "--test-root",
+        test_root,
+        "--root",
+        setup_info["project_root"],
+    ]
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=setup_info["project_root"],
+    )
+    # Print the output of the subprocess in real-time
+    while True:
+        output = process.stdout.readline()
+        if output == "" and process.poll() is not None:
+            break
+        if output:
+            click.echo(output.strip())
+    stderr = process.stderr.read()
+    if stderr:
+        click.echo(stderr.strip())
+
+    bubble_sort_path = os.path.join(setup_info["project_root"], "bubble_sort.py")
+    if process.returncode == 0:
+        click.echo("✅ End-to-end test passed. CodeFlash has been correctly set up!")
+    else:
+        click.echo("❌ End-to-end test failed. Please check the setup and try again.")
+
+    # Delete the bubble_sort.py file after the test
+    os.remove(bubble_sort_path)
+    click.echo(f"🗑️ Deleted {bubble_sort_path}")
 
 
 def collect_setup_info(setup_info: dict[str, str]):
