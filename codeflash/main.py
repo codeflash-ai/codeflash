@@ -531,15 +531,20 @@ class Optimizer:
                     if best_optimization:
                         self.found_atleast_one_optimization = True
                         logging.info(f"BEST OPTIMIZED CODE\n{best_optimization[0]}")
+
+                        new_code = replace_function_in_file(
+                            path,
+                            function_name,
+                            best_optimization[0],
+                            preexisting_functions,
+                            # test_cfg.project_root_path,
+                            # function_dependencies,
+                        )
                         if not self.args.all:
-                            new_code = replace_function_in_file(
-                                path,
-                                function_name,
-                                best_optimization[0],
-                                preexisting_functions,
-                                # test_cfg.project_root_path,
-                                # function_dependencies,
-                            )
+                            # Not writing the optimized code, because optimizing functions in a sequence can lead to
+                            #  a. Error propagation, where error in one function can cause the next optimization to fail
+                            #  b. Performance estimates become unstable, as the runtime of an optimization might be
+                            #     dependent on the runtime of the previous optimization
                             with open(path, "w") as f:
                                 f.write(new_code)
                         # TODO: After doing the best optimization, remove the test cases that errored on the new code, because they might be failing because of syntax errors and such.
@@ -564,12 +569,16 @@ class Optimizer:
                                 f.write(explanation_final)
                                 f.write("\n---------\n")
 
-                        logging.info("Formatting code with black... ")
+                        logging.info("Formatting code with black...")
+                        # black currently does not have a stable public API, so we are using the CLI
+                        # the main problem is custom config parsing https://github.com/psf/black/issues/779
                         result = subprocess.run(
                             ["black", path], stdout=subprocess.PIPE, stderr=subprocess.PIPE
                         )
                         if result.returncode == 0:
                             logging.info("OK")
+                            with open(path, "r") as f:
+                                new_code = f.read()
                         else:
                             logging.error("Failed to format")
                         logging.info(
@@ -606,7 +615,6 @@ class Optimizer:
                                 ),
                                 generated_tests=generated_original_test_source,
                             )
-
                             if response.ok:
                                 logging.info("OK")
                             else:
@@ -614,8 +622,41 @@ class Optimizer:
                                     f"Optimization was successful, but I failed to suggest changes to PR #{pr}."
                                     f" Response from server was: {response.text}"
                                 )
-                    if os.path.exists(generated_tests_path):
-                        os.remove(generated_tests_path)
+                        elif self.args.all:
+                            logging.info("Creating a new PR with the optimized code...")
+                            owner, repo = get_repo_owner_and_name()
+                            relative_path = os.path.relpath(path, self.args.root)
+                            response = cfapi.create_pr(
+                                owner=owner,
+                                repo=repo,
+                                baseBranch="main",
+                                file_changes={
+                                    relative_path: FileDiffContent(
+                                        oldContent=original_code, newContent=new_code
+                                    ).model_dump(mode="json")
+                                },
+                                pr_comment=PrComment(
+                                    optimization_explanation=best_optimization[1],
+                                    best_runtime=best_runtime,
+                                    original_runtime=original_runtime,
+                                    function_name=function_name,
+                                    relative_file_path=relative_path,
+                                    speedup=speedup,
+                                    winning_test_results=winning_test_results,
+                                ),
+                                generated_tests=generated_original_test_source,
+                            )
+                            if response.ok:
+                                logging.info("OK")
+                            else:
+                                logging.error(
+                                    f"Optimization was successful, but I failed to create a PR with the optimized code."
+                                    f" Response from server was: {response.text}"
+                                )
+                    else:
+                        # Delete it here to not cause a lot of clutter if we are optimizing with --all option
+                        if os.path.exists(generated_tests_path):
+                            os.remove(generated_tests_path)
             if not self.found_atleast_one_optimization:
                 logging.info(f"❌ No optimizations found.")
 

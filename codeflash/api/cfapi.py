@@ -6,8 +6,8 @@ from requests import Response
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.github.PrComment import PrComment
 
-CFAPI_BASE_URL = "https://app.codeflash.ai"
-# CFAPI_BASE_URL = "http://localhost:3001"
+# CFAPI_BASE_URL = "https://app.codeflash.ai"
+CFAPI_BASE_URL = "http://localhost:3001"
 
 CFAPI_HEADERS = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
 
@@ -38,6 +38,18 @@ def suggest_changes(
     pr_comment: PrComment,
     generated_tests: str,
 ) -> Response:
+    """
+    Suggest changes to a pull request.
+    Will make a review suggestion when possible;
+    or create a new dependent pull request with the suggested changes.
+    :param owner: The owner of the repository.
+    :param repo: The name of the repository.
+    :param pr_number: The number of the pull request.
+    :param file_changes: A dictionary of file changes.
+    :param pr_comment: The pull request comment object, containing the optimization explanation, best runtime, etc.
+    :param generated_tests: The generated tests.
+    :return: The response object.
+    """
     payload = {
         "owner": owner,
         "repo": repo,
@@ -47,4 +59,34 @@ def suggest_changes(
         "generatedTests": generated_tests,
     }
     response = make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
+    return response
+
+
+def create_pr(
+    owner: str,
+    repo: str,
+    baseBranch: str,
+    file_changes: dict[str, dict[str, str]],
+    pr_comment: PrComment,
+    generated_tests: str,
+) -> Response:
+    """
+    Create a pull request, targeting the specified branch. (usually 'main')
+    :param owner: The owner of the repository.
+    :param repo: The name of the repository.
+    :param targetBranch: The branch to target.
+    :param file_changes: A dictionary of file changes.
+    :param pr_comment: The pull request comment object, containing the optimization explanation, best runtime, etc.
+    :param generated_tests: The generated tests.
+    :return: The response object.
+    """
+    payload = {
+        "owner": owner,
+        "repo": repo,
+        "baseBranch": baseBranch,
+        "diffContents": file_changes,
+        "prCommentFields": pr_comment.to_json(),
+        "generatedTests": generated_tests,
+    }
+    response = make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
     return response
