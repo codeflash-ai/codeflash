@@ -31,7 +31,7 @@ def init_codeflash():
     prompt_github_action(setup_info)
 
     run_tests = click.confirm(
-        "Do you want to run an end-to-end test to ensure everything is set up correctly?",
+        "Do you want to run a sample optimization to ensure everything is set up correctly? This will take about 3 minutes.",
         default=True,
     )
 
@@ -67,19 +67,22 @@ def create_bubble_sort_file(setup_info: dict[str, str]):
 
 
 def run_end_to_end_test(setup_info: dict[str, str]):
-    test_root = os.path.join(setup_info["project_root"], setup_info["tests_root"])
+    toml_path = os.path.join(setup_info["project_root"], "pyproject.toml")
+    with open(toml_path, "r") as pyproject_file:
+        pyproject_data = tomlkit.parse(pyproject_file.read())
+    codeflash_config = pyproject_data.get("tool", {}).get("codeflash", {})
+    test_root = os.path.join(setup_info["project_root"], codeflash_config.get("test-root", ""))
+    project_root = os.path.join(setup_info["project_root"], codeflash_config.get("root", "."))
     command = [
-        "python",
-        "-m",
-        "codeflash.main",
+        "codeflash",
         "--file",
         "bubble_sort.py",
         "--function",
         "sorter",
         "--test-root",
-        test_root,
+        test_root if test_root else setup_info["tests_root"],
         "--root",
-        setup_info["project_root"],
+        project_root if project_root else setup_info["project_root"],
     ]
     animation = "|/-\\"
     idx = 0
