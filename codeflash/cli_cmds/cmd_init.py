@@ -95,7 +95,7 @@ def run_end_to_end_test(setup_info: dict[str, str]):
     while process.poll() is None:
         sys.stdout.write(animation[idx % len(animation)])
         sys.stdout.flush()
-        time.sleep(0.1)
+        time.sleep(0.5)
         sys.stdout.write("\b")
         idx += 1
 
