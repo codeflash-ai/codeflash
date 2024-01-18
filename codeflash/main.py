@@ -29,6 +29,7 @@ from argparse import ArgumentParser, SUPPRESS, Namespace
 
 import libcst as cst
 
+from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.code_utils.code_extractor import get_code
 from codeflash.code_utils.code_replacer import replace_function_in_file
 from codeflash.code_utils.code_utils import (
@@ -504,16 +505,21 @@ class Optimizer:
                         if equal_results and times_run > 0:
                             # TODO: Make the runtime more human readable by using humanize
                             new_test_time = min(all_test_times)
+
+                            original_runtime_human = humanize_runtime(original_runtime)
+                            new_test_time_human = humanize_runtime(new_test_time)
+
                             logging.info(
-                                f"NEW CODE RUNTIME OVER {times_run} RUN{'S' if times_run > 1 else ''} = {new_test_time}ns, SPEEDUP RATIO = {((original_runtime - new_test_time) / new_test_time):.3f}"
+                                f"NEW CODE RUNTIME OVER {times_run} RUN{'S' if times_run > 1 else ''} = {new_test_time_human}, SPEEDUP RATIO = {((original_runtime - new_test_time) / new_test_time):.3f}"
                             )
                             if (
                                 ((original_runtime - new_test_time) / new_test_time)
                                 > self.args.minimum_performance_gain
                             ) and new_test_time < best_runtime:
                                 logging.info("THIS IS BETTER!")
+
                                 logging.info(
-                                    f"original_test_time={original_runtime} new_test_time={new_test_time}, FASTER RATIO = {((original_runtime - new_test_time) / new_test_time)}"
+                                    f"original_test_time={original_runtime_human} new_test_time={new_test_time_human}, FASTER RATIO = {((original_runtime - new_test_time) / new_test_time)}"
                                 )
                                 best_optimization = [optimized_code, explanation]
                                 best_runtime = new_test_time
@@ -548,7 +554,7 @@ class Optimizer:
 
                         explanation_final += (
                             f"Function {function_name} in file {path}:\n"
-                            f"Performance went up by {speedup:.2f}x ({speedup * 100:.2f}%). Runtime went down from {(original_runtime / 1000):.2f}μs to {(best_runtime / 1000):.2f}μs \n\n"
+                            f"Performance went up by {speedup:.2f}x ({speedup * 100:.2f}%). Runtime went down from {original_runtime_human} to {new_test_time_human} \n\n"
                             + "Optimization explanation:\n"
                             + best_optimization[1]
                             + " \n\n"
