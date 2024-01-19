@@ -168,7 +168,7 @@ def get_function_variables_definitions(
     return deduped_sources
 
 
-EXPLAIN_MODEL_max_tokens = 128000  # gpt-4-128k
+EXPLAIN_MODEL_max_tokens = 4096  # 128000  # gpt-4-128k
 
 
 def get_constrained_function_context_and_dependent_functions(
