@@ -215,9 +215,6 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
         pyproject_data.get("tool", {}).get("poetry", {}).get("dependencies", tomlkit.table())
     )
 
-    # Add or update the 'python' and 'codeflash' dependencies
-    poetry_dependencies["codeflash"] = CODEFLASH_POETRY_DEPENDENCY_VERSION
-
     # Update the 'pyproject_data' with the modified dependencies
     if "tool" not in pyproject_data:
         pyproject_data["tool"] = tomlkit.table()
