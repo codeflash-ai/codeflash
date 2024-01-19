@@ -11,9 +11,6 @@ from git import Repo
 from codeflash.cli_cmds.cli import CODEFLASH_LOGO
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_github_secrets_page_url
-from codeflash.version import __version__ as version
-
-CODEFLASH_POETRY_DEPENDENCY_VERSION = f"^{version}"
 
 
 def init_codeflash():
