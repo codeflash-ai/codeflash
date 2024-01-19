@@ -33,7 +33,7 @@ def get_codeflash_org_key() -> Optional[str]:
 
 
 def get_pr_number() -> Optional[int]:
-    pr_number = os.environ.get("PR_NUMBER")
+    pr_number = os.environ.get("CODEFLASH_PR_NUMBER")
     if not pr_number:
         return None
     else:
@@ -43,6 +43,6 @@ def get_pr_number() -> Optional[int]:
 def ensure_pr_number() -> bool:
     if not get_pr_number():
         raise EnvironmentError(
-            f"PR_NUMBER not found in environment variables; make sure the Github Action is setting this so CodeFlash can comment on the right PR"
+            f"CODEFLASH_PR_NUMBER not found in environment variables; make sure the Github Action is setting this so CodeFlash can comment on the right PR"
         )
     return True
