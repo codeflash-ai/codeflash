@@ -20,7 +20,6 @@ from codeflash.code_utils.config_consts import (
 )
 from codeflash.code_utils.git_utils import get_repo_owner_and_name, get_github_secrets_page_url
 from codeflash.github.PrComment import FileDiffContent, PrComment
-from codeflash.verification import EXPLAIN_MODEL
 
 
 import os
@@ -225,10 +224,7 @@ class Optimizer:
                         code_to_optimize_with_dependents,
                         dependent_functions,
                     ) = get_constrained_function_context_and_dependent_functions(
-                        function_to_optimize,
-                        self.args.root,
-                        code_to_optimize,
-                        max_tokens=EXPLAIN_MODEL.max_tokens,
+                        function_to_optimize, self.args.root, code_to_optimize
                     )
                     logging.info("CODE TO OPTIMIZE %s", code_to_optimize_with_dependents)
                     module_path = module_name_from_file_path(path, self.args.root)
@@ -503,7 +499,6 @@ class Optimizer:
                         if os.path.exists(get_run_tmp_file(f"test_return_values_{j}.sqlite")):
                             os.remove(get_run_tmp_file(f"test_return_values_{j}.sqlite"))
                         if equal_results and times_run > 0:
-                            # TODO: Make the runtime more human readable by using humanize
                             new_test_time = min(all_test_times)
 
                             original_runtime_human = humanize_runtime(original_runtime)
@@ -550,7 +545,6 @@ class Optimizer:
                         # TODO: After doing the best optimization, remove the test cases that errored on the new code, because they might be failing because of syntax errors and such.
                         speedup = (original_runtime / best_runtime) - 1
                         # TODO: Sometimes the explanation says something similar to "This is the code that was optimized", remove such parts
-                        # TODO: Use python package humanize to make the runtime more human readable
 
                         explanation_final += (
                             f"Function {function_name} in file {path}:\n"

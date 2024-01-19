@@ -1,6 +1,8 @@
 import os
 import re
 import subprocess
+import sys
+import time
 
 import click
 import tomlkit
@@ -10,9 +12,6 @@ from codeflash.api.cfapi import log_posthog_event
 from codeflash.cli_cmds.cli import CODEFLASH_LOGO
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_github_secrets_page_url
-from codeflash.version import __version__ as version
-
-CODEFLASH_POETRY_DEPENDENCY_VERSION = f"^{version}"
 
 
 def init_codeflash():
@@ -29,6 +28,15 @@ def init_codeflash():
 
     prompt_github_action(setup_info)
 
+    run_tests = click.confirm(
+        "Do you want to run a sample optimization to ensure everything is set up correctly? This will take about 3 minutes.",
+        default=True,
+    )
+
+    if run_tests:
+        create_bubble_sort_file(setup_info)
+        run_end_to_end_test(setup_info)
+
     click.echo(
         "\n"
         "⚡️ CodeFlash is now set up! You can now run:\n"
@@ -40,6 +48,65 @@ def init_codeflash():
     )
 
     log_posthog_event("cli-installation-successful")
+
+
+def create_bubble_sort_file(setup_info: dict[str, str]):
+    bubble_sort_content = """def sorter(arr):
+    for i in range(len(arr)):
+        for j in range(len(arr) - 1):
+            if arr[j] > arr[j + 1]:
+                temp = arr[j]
+                arr[j] = arr[j + 1]
+                arr[j + 1] = temp
+    return arr
+"""
+    bubble_sort_path = os.path.join(setup_info["project_root"], "bubble_sort.py")
+    with open(bubble_sort_path, "w") as bubble_sort_file:
+        bubble_sort_file.write(bubble_sort_content)
+    click.echo(f"✅ Created {bubble_sort_path}")
+
+
+def run_end_to_end_test(setup_info: dict[str, str]):
+    command = [
+        "codeflash",
+        "--file",
+        "bubble_sort.py",
+        "--function",
+        "sorter",
+    ]
+    animation = "|/-\\"
+    idx = 0
+    sys.stdout.write("Running end-to-end test... ")
+    sys.stdout.flush()
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=setup_info["project_root"],
+    )
+    while process.poll() is None:
+        sys.stdout.write(animation[idx % len(animation)])
+        sys.stdout.flush()
+        time.sleep(0.5)
+        sys.stdout.write("\b")
+        idx += 1
+
+    sys.stdout.write(" ")  # Clear the last animation character
+    sys.stdout.flush()
+    stderr = process.stderr.read()
+    if stderr:
+        click.echo(stderr.strip())
+
+    bubble_sort_path = os.path.join(setup_info["project_root"], "bubble_sort.py")
+    if process.returncode == 0:
+        click.echo("\n✅ End-to-end test passed. CodeFlash has been correctly set up!")
+    else:
+        click.echo("\n❌ End-to-end test failed. Please check the setup and try again.")
+
+    # Delete the bubble_sort.py file after the test
+    os.remove(bubble_sort_path)
+    click.echo(f"🗑️ Deleted {bubble_sort_path}")
 
 
 def collect_setup_info(setup_info: dict[str, str]):
@@ -163,9 +230,6 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
     poetry_dependencies = (
         pyproject_data.get("tool", {}).get("poetry", {}).get("dependencies", tomlkit.table())
     )
-
-    # Add or update the 'python' and 'codeflash' dependencies
-    poetry_dependencies["codeflash"] = CODEFLASH_POETRY_DEPENDENCY_VERSION
 
     # Update the 'pyproject_data' with the modified dependencies
     if "tool" not in pyproject_data:
