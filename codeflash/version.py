@@ -1,3 +1,3 @@
 # These version placeholders will be replaced by poetry-dynamic-versioning during `poetry build`.
-__version__ = "0.1.1"
-__version_tuple__ = (0, 1, 1)
+__version__ = "0.1.1.post30.dev0+ae81de0"
+__version_tuple__ = (0, 1, 1, "post30", "dev0", "ae81de0")

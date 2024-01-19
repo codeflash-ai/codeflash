@@ -6,6 +6,7 @@ import click
 import tomlkit
 from git import Repo
 
+from codeflash.api.cfapi import log_posthog_event
 from codeflash.cli_cmds.cli import CODEFLASH_LOGO
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_github_secrets_page_url
@@ -38,14 +39,20 @@ def init_codeflash():
         "    codeflash --help to see all options"
     )
 
+    log_posthog_event("cli-installation-successful")
+
 
 def collect_setup_info(setup_info: dict[str, str]):
     setup_info["project_root"] = click.prompt(
         "What's your project's root directory?", default=f"{os.getcwd()}"
     )
+    log_posthog_event("cli-project-root-provided")
     setup_info["test_framework"] = click.prompt(
         "Which test framework do you use?", default="pytest"
     )  # TODO options pytest/unittest
+    log_posthog_event(
+        "cli-test-framework-provided", {"test_framework": setup_info["test_framework"]}
+    )
     test_subdir = "tests"  # maybe different defaults for pytest vs unittest?
     # TODO discover test dir, if we can't ask for it
     tests_root = click.prompt(
@@ -53,6 +60,7 @@ def collect_setup_info(setup_info: dict[str, str]):
         default=os.path.join(setup_info["project_root"], test_subdir),
     )
     setup_info["tests_root"] = os.path.relpath(tests_root, setup_info["project_root"])
+    log_posthog_event("cli-tests-root-provided", {"tests_root": setup_info["tests_root"]})
     # Ask for paths to ignore and update the setup_info dictionary
     # ignore_paths_input = click.prompt("Are there any paths CodeFlash should ignore? (comma-separated, no spaces)",
     #                                   default='', show_default=False)
@@ -72,7 +80,9 @@ def prompt_github_action(setup_info: dict[str, str]):
         .lower()
         .strip()
     )
-    if optimize_prs.startswith("y"):
+    optimize_yes = optimize_prs.startswith("y")
+    log_posthog_event("cli-github-optimization-choice", {"optimize_prs": optimize_yes})
+    if optimize_yes:
         repo = Repo(setup_info["project_root"], search_parent_directories=True)
         git_root = repo.git.rev_parse("--show-toplevel")
         workflows_path = os.path.join(git_root, ".github", "workflows")
@@ -87,7 +97,12 @@ def prompt_github_action(setup_info: dict[str, str]):
             .lower()
             .strip()
         )
-        if confirm_creation.startswith("y"):
+        confirm_creation_yes = confirm_creation.startswith("y")
+        log_posthog_event(
+            "cli-github-optimization-confirm-workflow-creation",
+            {"confirm_creation": confirm_creation_yes},
+        )
+        if confirm_creation_yes:
             os.makedirs(workflows_path, exist_ok=True)
             from importlib.resources import read_text
 
@@ -108,6 +123,10 @@ def prompt_github_action(setup_info: dict[str, str]):
                 show_default=False,
             )
             click.launch(get_github_secrets_page_url(repo))
+            log_posthog_event("cli-github-workflow-created")
+        else:
+            click.echo("Skipping GitHub workflow creation.")
+            log_posthog_event("cli-github-workflow-skipped")
 
 
 # Create or update the pyproject.toml file with the CodeFlash dependency & configuration
@@ -182,12 +201,15 @@ def prompt_api_key() -> bool:
             show_default=False,
         )
         if use_existing_key == "":
+            log_posthog_event("cli-existing-api-key-used")
             return False
         else:
             enter_api_key_and_save_to_rc()
+            log_posthog_event("cli-new-api-key-entered")
             return True
     else:
         enter_api_key_and_save_to_rc()
+        log_posthog_event("cli-new-api-key-entered")
         return True
 
 

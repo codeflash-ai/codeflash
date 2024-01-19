@@ -1,3 +1,4 @@
+import logging
 from typing import Optional, Dict, Any
 
 import requests
@@ -5,6 +6,7 @@ from requests import Response
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.github.PrComment import PrComment
+from codeflash.version import __version__, __version_tuple__
 
 CFAPI_BASE_URL = "https://app.codeflash.ai"
 # CFAPI_BASE_URL = "http://localhost:3001"
@@ -28,6 +30,25 @@ def make_cfapi_request(
     else:
         response = requests.get(url, headers=CFAPI_HEADERS)
     return response
+
+
+def log_posthog_event(event: str, properties: Dict[str, Any] = None) -> None:
+    """
+    Log an event to PostHog.
+    :param event: The name of the event.
+    :param properties: A dictionary of properties to attach to the event.
+    """
+    if properties is None:
+        properties = {}
+
+    properties["cli_version"] = __version__
+    properties["cli_version_tuple"] = __version_tuple__
+
+    response = make_cfapi_request(
+        "/posthog-capture-from-cli", "POST", {"event": event, "properties": properties}
+    )
+    if response.status_code != 200:
+        logging.debug(f"Failed to log event to PostHog: {response.text}")
 
 
 def suggest_changes(
