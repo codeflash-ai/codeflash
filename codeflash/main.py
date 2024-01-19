@@ -20,7 +20,6 @@ from codeflash.code_utils.config_consts import (
 )
 from codeflash.code_utils.git_utils import get_repo_owner_and_name, get_github_secrets_page_url
 from codeflash.github.PrComment import FileDiffContent, PrComment
-from codeflash.verification import EXPLAIN_MODEL
 
 
 import os
@@ -225,10 +224,7 @@ class Optimizer:
                         code_to_optimize_with_dependents,
                         dependent_functions,
                     ) = get_constrained_function_context_and_dependent_functions(
-                        function_to_optimize,
-                        self.args.root,
-                        code_to_optimize,
-                        max_tokens=EXPLAIN_MODEL.max_tokens,
+                        function_to_optimize, self.args.root, code_to_optimize
                     )
                     logging.info("CODE TO OPTIMIZE %s", code_to_optimize_with_dependents)
                     module_path = module_name_from_file_path(path, self.args.root)

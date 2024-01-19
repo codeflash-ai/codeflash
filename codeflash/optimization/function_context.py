@@ -168,11 +168,14 @@ def get_function_variables_definitions(
     return deduped_sources
 
 
+EXPLAIN_MODEL_max_tokens = 128000  # gpt-4-128k
+
+
 def get_constrained_function_context_and_dependent_functions(
     function_to_optimize: FunctionToOptimize,
     project_root_path: str,
     code_to_optimize: str,
-    max_tokens: int,
+    max_tokens: int = EXPLAIN_MODEL_max_tokens,
 ) -> tuple[str, list[Source]]:
     # TODO: Not just do static analysis, but also find the datatypes of function arguments by running the existing
     #  unittests and inspecting the arguments to resolve the real definitions and dependencies.
