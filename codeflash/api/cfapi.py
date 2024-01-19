@@ -6,8 +6,8 @@ from requests import Response
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.github.PrComment import PrComment
 
-# CFAPI_BASE_URL = "https://app.codeflash.ai"
-CFAPI_BASE_URL = "http://localhost:3001"
+CFAPI_BASE_URL = "https://app.codeflash.ai"
+# CFAPI_BASE_URL = "http://localhost:3001"
 
 CFAPI_HEADERS = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
 
