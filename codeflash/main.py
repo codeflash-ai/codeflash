@@ -503,7 +503,6 @@ class Optimizer:
                         if os.path.exists(get_run_tmp_file(f"test_return_values_{j}.sqlite")):
                             os.remove(get_run_tmp_file(f"test_return_values_{j}.sqlite"))
                         if equal_results and times_run > 0:
-                            # TODO: Make the runtime more human readable by using humanize
                             new_test_time = min(all_test_times)
 
                             original_runtime_human = humanize_runtime(original_runtime)
@@ -550,7 +549,6 @@ class Optimizer:
                         # TODO: After doing the best optimization, remove the test cases that errored on the new code, because they might be failing because of syntax errors and such.
                         speedup = (original_runtime / best_runtime) - 1
                         # TODO: Sometimes the explanation says something similar to "This is the code that was optimized", remove such parts
-                        # TODO: Use python package humanize to make the runtime more human readable
 
                         explanation_final += (
                             f"Function {function_name} in file {path}:\n"
