@@ -8,7 +8,7 @@ import click
 import tomlkit
 from git import Repo
 
-from analytics.posthog import log_posthog_event
+from codeflash.analytics.posthog import log_posthog_event
 from codeflash.cli_cmds.cli import CODEFLASH_LOGO
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_github_secrets_page_url
