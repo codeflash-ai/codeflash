@@ -1,7 +1,8 @@
 import logging
+from typing import Any, Dict, List, Tuple, Optional
+
 import requests
 from pydantic import RootModel
-from typing import Any, Dict, List, Tuple, Optional
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -105,8 +106,8 @@ def generate_regression_tests(
     response = make_ai_service_request("/testgen", payload=data, timeout=600)
     # the timeout should be the same as the timeout for the AI service backend
 
-    response_json = response.json()
     if response.status_code == 200:
+        response_json = response.json()
         return response_json["generated_tests"], response_json["instrumented_tests"]
     else:
         logging.error(f"Error: {response.status_code} {response.text}")
