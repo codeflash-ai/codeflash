@@ -1,7 +1,7 @@
 import os
 from tempfile import NamedTemporaryFile
 
-os.environ["CODEFLASH_API_KEY"] = "test-key"
+os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
 from codeflash.code_utils.code_replacer import replace_function_in_file
 
 

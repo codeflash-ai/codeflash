@@ -11,6 +11,12 @@ def get_codeflash_api_key() -> Optional[str]:
             + "You can generate one at https://app.codeflash.ai/app/apikeys,\n"
             + "then set it as a CODEFLASH_API_KEY environment variable."
         )
+    if not api_key.startswith("cf-"):
+        raise EnvironmentError(
+            f"CodeFlash API key is invalid. It should start with a 'cf-' prefix, we found '{api_key}' instead.\n"
+            + "You can generate one at https://app.codeflash.ai/app/apikeys,\n"
+            + "then set it as a CODEFLASH_API_KEY environment variable."
+        )
     return api_key
 
 
