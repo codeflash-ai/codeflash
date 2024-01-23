@@ -127,7 +127,7 @@ def collect_setup_info(setup_info: dict[str, str]):
         default=os.path.join(setup_info["project_root"], test_subdir),
     )
     setup_info["tests_root"] = os.path.relpath(tests_root, setup_info["project_root"])
-    log_posthog_event("cli-tests-root-provided", {"tests_root": setup_info["tests_root"]})
+    log_posthog_event("cli-tests-root-provided")
     # Ask for paths to ignore and update the setup_info dictionary
     # ignore_paths_input = click.prompt("Are there any paths CodeFlash should ignore? (comma-separated, no spaces)",
     #                                   default='', show_default=False)
