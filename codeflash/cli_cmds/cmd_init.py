@@ -1,10 +1,9 @@
+import click
 import os
 import re
 import subprocess
 import sys
 import time
-
-import click
 import tomlkit
 from git import Repo
 
@@ -123,11 +122,15 @@ def collect_setup_info(setup_info: dict[str, str]):
     log_posthog_event(
         "cli-test-framework-provided", {"test_framework": setup_info["test_framework"]}
     )
-    test_subdir = "tests"  # maybe different defaults for pytest vs unittest?
+    test_subdir = "tests/"  # maybe different defaults for pytest vs unittest?
+    tests_full_path = os.path.join(setup_info["project_root"], test_subdir)
+    if not os.path.isdir(tests_full_path):
+        tests_full_path = None
     # TODO discover test dir, if we can't ask for it
     tests_root = click.prompt(
-        "Where are your tests located?",
-        default=os.path.join(setup_info["project_root"], test_subdir),
+        "Which directory are your tests located in? If no such directory exists, please create one first.",
+        default=tests_full_path,
+        type=click.Path(exists=True, file_okay=False, dir_okay=True),
     )
     setup_info["tests_root"] = os.path.relpath(tests_root, setup_info["project_root"])
     log_posthog_event("cli-tests-root-provided")
@@ -185,7 +188,7 @@ def prompt_github_action(setup_info: dict[str, str]):
 
             click.prompt(
                 f"As a final step, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.\n"
-                + "Press enter to open your repo's secrets page, then "
+                + "Press Enter to open your repo's secrets page, then "
                 + "click 'New repository secret' and add your api key with the variable name CODEFLASH_API_KEY.",
                 default="",
                 type=click.STRING,
@@ -266,7 +269,7 @@ def prompt_api_key() -> bool:
         display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
         use_existing_key = click.prompt(
             f"I found a CODEFLASH_API_KEY in your environment [{display_key}]!\n"
-            f"Press enter to use this key, or any other key to change it",
+            f"Press Enter to use this key, or any other key to change it",
             default="",
             show_default=False,
         ).strip()
