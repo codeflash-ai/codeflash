@@ -222,7 +222,7 @@ def check_for_toml_or_setup_file() -> Optional[str]:
     else:
         click.echo(
             f"❌ I couldn't find a pyproject.toml or a setup.py in the current directory ({curdir}).\n"
-            "Please make sure you're running codeflash init from your project directory.\n"
+            "Please make sure you're running codeflash init from your project root directory.\n"
             "See https://app.codeflash.ai/app/getting-started for more details!"
         )
         ph("cli-no-pyproject-toml-or-setup-py")
