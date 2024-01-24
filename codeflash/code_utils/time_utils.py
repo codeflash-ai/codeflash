@@ -1,6 +1,7 @@
-import humanize
 import datetime as dt
 import re
+
+import humanize
 
 
 def humanize_runtime(time_in_ns):
@@ -16,7 +17,7 @@ def humanize_runtime(time_in_ns):
             minimum_unit="microseconds",
         )
 
-        units = re.split(",|\s", runtime_human)[1]
+        units = re.split(r",|\s", runtime_human)[1]
 
         if units == "microseconds" or units == "microsecond":
             runtime_human = float("%.3g" % time_micro)
