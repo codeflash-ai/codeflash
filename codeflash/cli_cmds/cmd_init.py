@@ -1,13 +1,15 @@
-import click
 import os
 import re
 import subprocess
 import sys
 import time
+from typing import Optional
+
+import click
 import tomlkit
 from git import Repo
 
-from codeflash.analytics.posthog import log_posthog_event
+from codeflash.analytics.posthog import ph
 from codeflash.cli_cmds.cli import CODEFLASH_LOGO
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_github_secrets_page_url
@@ -44,10 +46,10 @@ def init_codeflash():
         # "    codeflash --pr <pr-number> to optimize a PR\n"
         "-or-\n"
         "    codeflash --help to see all options\n"
-        "Please reload the shell to load the CODEFLASH_API_KEY environment variable."
+        "Please restart your shell to load the CODEFLASH_API_KEY environment variable."
     )
 
-    log_posthog_event("cli-installation-successful")
+    ph("cli-installation-successful")
 
 
 def create_bubble_sort_file(setup_info: dict[str, str]):
@@ -110,36 +112,125 @@ def run_end_to_end_test(setup_info: dict[str, str]):
 
 
 def collect_setup_info(setup_info: dict[str, str]):
-    setup_info["project_root"] = click.prompt(
-        "What's your project's root directory?", default=f"{os.getcwd()}"
+    click.echo("\n⚡️ Let's set up CodeFlash for your project.")
+    click.echo("Checking for pyproject.toml or setup.py ...")
+    # Check for the existence of pyproject.toml or setup.py
+    project_name = check_for_toml_or_setup_file()
+
+    curdir = os.getcwd()
+    subdirs = [d for d in next(os.walk("."))[1] if not d.startswith(".")]
+
+    source_dir = click.prompt(
+        "What's your project's source directory? I'll optimize all code in this directory.",
+        type=click.Choice(
+            [dir for dir in subdirs if dir != "tests"],
+            case_sensitive=False,
+        ),
+        show_choices=True,
+        default=project_name if project_name in subdirs else subdirs[0] if subdirs else ".",
     )
-    log_posthog_event("cli-project-root-provided")
+    setup_info["project_root"] = source_dir
+    ph("cli-project-root-provided")
+
     setup_info["test_framework"] = click.prompt(
         "Which test framework do you use?",
         type=click.Choice(["pytest", "unittest"]),
         show_choices=True,
     )
-    log_posthog_event(
-        "cli-test-framework-provided", {"test_framework": setup_info["test_framework"]}
-    )
-    test_subdir = "tests/"  # maybe different defaults for pytest vs unittest?
-    tests_full_path = os.path.join(setup_info["project_root"], test_subdir)
-    if not os.path.isdir(tests_full_path):
-        tests_full_path = None
-    # TODO discover test dir, if we can't ask for it
-    tests_root = click.prompt(
-        "Which directory are your tests located in? If no such directory exists, please create one first.",
-        default=tests_full_path,
-        type=click.Path(exists=True, file_okay=False, dir_okay=True),
-    )
-    setup_info["tests_root"] = os.path.relpath(tests_root, setup_info["project_root"])
-    log_posthog_event("cli-tests-root-provided")
+    ph("cli-test-framework-provided", {"test_framework": setup_info["test_framework"]})
+
+    # Discover test directory
+    default_tests_subdir = "tests"
+    if default_tests_subdir in subdirs:
+        tests_root = click.prompt(
+            "Where are your tests located?",
+            default=os.path.join(curdir, default_tests_subdir),
+            type=click.Path(exists=True, file_okay=False, dir_okay=True),
+        )
+    else:
+        while True:
+            tests_root = click.prompt(
+                "Where are your tests located? If you don't have any tests yet, just press enter and I'll create an empty tests/ directory for you.",
+                default="",
+            )
+            if tests_root == "":
+                tests_root = os.path.join(curdir, default_tests_subdir)
+                os.mkdir(tests_root)
+            else:
+                if not os.path.isdir(os.path.join(curdir, default_tests_subdir)):
+                    click.echo(
+                        f"No directory exists at {os.path.join(curdir, default_tests_subdir)}, please enter a valid directory path."
+                    )
+                    continue
+            break
+    setup_info["tests_root"] = os.path.relpath(tests_root, curdir)
+    ph("cli-tests-root-provided")
+
     # Ask for paths to ignore and update the setup_info dictionary
     # ignore_paths_input = click.prompt("Are there any paths CodeFlash should ignore? (comma-separated, no spaces)",
     #                                   default='', show_default=False)
     # ignore_paths = ignore_paths_input.split(',') if ignore_paths_input else ['tests/']
     ignore_paths = []
     setup_info["ignore_paths"] = ignore_paths
+
+
+def check_for_toml_or_setup_file() -> Optional[str]:
+    curdir = os.getcwd()
+    pyproject_toml_path = os.path.join(curdir, "pyproject.toml")
+    setup_py_path = os.path.join(curdir, "setup.py")
+    project_name = None
+    if os.path.exists(pyproject_toml_path):
+        try:
+            with open(pyproject_toml_path, "r") as f:
+                pyproject_toml_content = f.read()
+            project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]
+            click.echo(f"✅ Found a pyproject.toml for your project {project_name}")
+            ph("cli-pyproject-toml-found-name")
+        except Exception as e:
+            click.echo(f"✅ Found a pyproject.toml.")
+            ph("cli-pyproject-toml-found")
+    elif os.path.exists(setup_py_path):
+        with open(setup_py_path, "r") as f:
+            setup_py_content = f.read()
+        project_name_match = re.search(
+            r"setup\s*\([^)]*?name\s*=\s*['\"](.*?)['\"]", setup_py_content, re.DOTALL
+        )
+        if project_name_match:
+            project_name = project_name_match.group(1)
+            click.echo(f"✅ Found setup.py for your project {project_name}")
+            ph("cli-setup-py-found-name")
+        else:
+            click.echo(f"✅ Found setup.py.")
+            ph("cli-setup-py-found")
+        # Create a pyproject.toml file because it doesn't exist
+        create_toml = (
+            click.prompt(
+                f"I need your project to have a pyproject.toml file to store CodeFlash configuration settings.\n"
+                f"Do you want to run `poetry init` to create one?",
+                default="y",
+                type=click.STRING,
+            )
+            .lower()
+            .strip()
+        )
+        if create_toml.startswith("y"):
+            # Check if Poetry is installed, if not, install it using pip
+            poetry_check = subprocess.run(["poetry", "--version"], capture_output=True, text=True)
+            if poetry_check.returncode != 0:
+                click.echo("Poetry is not installed. Installing Poetry...")
+                subprocess.run(["pip", "install", "poetry"], check=True)
+            subprocess.run(["poetry", "init"], cwd=curdir)
+            click.echo(f"✅ Created a pyproject.toml file at {pyproject_toml_path}")
+            ph("cli-created-pyproject-toml")
+    else:
+        click.echo(
+            f"❌ I couldn't find a pyproject.toml or a setup.py in the current directory ({curdir}).\n"
+            "Please make sure you're running codeflash init from your project directory.\n"
+            "See https://app.codeflash.ai/app/getting-started for more details!"
+        )
+        ph("cli-no-pyproject-toml-or-setup-py")
+        sys.exit(1)
+    return project_name
 
 
 # Ask if the user wants CodeFlash to optimize new GitHub PRs
@@ -154,7 +245,7 @@ def prompt_github_action(setup_info: dict[str, str]):
         .strip()
     )
     optimize_yes = optimize_prs.startswith("y")
-    log_posthog_event("cli-github-optimization-choice", {"optimize_prs": optimize_yes})
+    ph("cli-github-optimization-choice", {"optimize_prs": optimize_yes})
     if optimize_yes:
         repo = Repo(setup_info["project_root"], search_parent_directories=True)
         git_root = repo.git.rev_parse("--show-toplevel")
@@ -171,7 +262,7 @@ def prompt_github_action(setup_info: dict[str, str]):
             .strip()
         )
         confirm_creation_yes = confirm_creation.startswith("y")
-        log_posthog_event(
+        ph(
             "cli-github-optimization-confirm-workflow-creation",
             {"confirm_creation": confirm_creation_yes},
         )
@@ -196,40 +287,22 @@ def prompt_github_action(setup_info: dict[str, str]):
                 show_default=False,
             )
             click.launch(get_github_secrets_page_url(repo))
-            log_posthog_event("cli-github-workflow-created")
+            ph("cli-github-workflow-created")
         else:
             click.echo("Skipping GitHub workflow creation.")
-            log_posthog_event("cli-github-workflow-skipped")
+            ph("cli-github-workflow-skipped")
 
 
 # Create or update the pyproject.toml file with the CodeFlash dependency & configuration
 def configure_pyproject_toml(setup_info: dict[str, str]):
-    toml_path = os.path.join(setup_info["project_root"], "pyproject.toml")
-    if not os.path.exists(toml_path):
-        create_toml = (
-            click.prompt(
-                f"pyproject.toml does not exist at {setup_info['project_root']}. CodeFlash needs this file to store configuration settings.\n"
-                f"Do you want to run `poetry init` to create it?",
-                default="y",
-                type=click.STRING,
-            )
-            .lower()
-            .strip()
-        )
-        if create_toml.startswith("y"):
-            # Check if Poetry is installed, if not, install it using pip
-            poetry_check = subprocess.run(["poetry", "--version"], capture_output=True, text=True)
-            if poetry_check.returncode != 0:
-                click.echo("Poetry is not installed. Installing Poetry...")
-                subprocess.run(["pip", "install", "poetry"], check=True)
-            subprocess.run(["poetry", "init"], cwd=setup_info["project_root"])
+    toml_path = os.path.join(os.getcwd(), "pyproject.toml")
     try:
         with open(toml_path, "r") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
         click.echo(
-            f"Could not find pyproject.toml at {toml_path}.\n"
-            f"Please create it by running `poetry init`, or use a different project path and run `codeflash init` again."
+            f"Could not find a pyproject.toml in the current directory.\n"
+            f"Please create it by running `poetry init`, or run `codeflash init` again from a different project directory."
         )
 
     # Ensure the 'tool.poetry.dependencies' table exists
@@ -274,15 +347,15 @@ def prompt_api_key() -> bool:
             show_default=False,
         ).strip()
         if use_existing_key == "":
-            log_posthog_event("cli-existing-api-key-used")
+            ph("cli-existing-api-key-used")
             return False
         else:
             enter_api_key_and_save_to_rc(existing_api_key=use_existing_key)
-            log_posthog_event("cli-new-api-key-entered")
+            ph("cli-new-api-key-entered")
             return True
     else:
         enter_api_key_and_save_to_rc()
-        log_posthog_event("cli-new-api-key-entered")
+        ph("cli-new-api-key-entered")
         return True
 
 
