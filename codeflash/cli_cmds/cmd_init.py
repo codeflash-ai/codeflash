@@ -1,3 +1,4 @@
+import ast
 import click
 import os
 import re
@@ -118,23 +119,16 @@ def collect_setup_info(setup_info: dict[str, str]):
     curdir = os.getcwd()
     subdirs = [d for d in next(os.walk("."))[1] if not d.startswith(".")]
 
+    subdir_options = (
+        f' ({", ".join([dir for dir in subdirs if dir != "tests"])})' if subdirs else ""
+    )
+
     source_dir = click.prompt(
-        "What's your project's source directory? I'll only optimize code in this directory.",
-        type=click.Choice(
-            [dir for dir in subdirs if dir != "tests"],
-        ),
-        show_choices=True,
+        f"What's your project's source directory? I'll only optimize code in this directory.{subdir_options}",
         default=project_name if project_name in subdirs else subdirs[0] if subdirs else ".",
     )
     setup_info["project_root"] = source_dir
     ph("cli-project-root-provided")
-
-    setup_info["test_framework"] = click.prompt(
-        "Which test framework do you use?",
-        type=click.Choice(["pytest", "unittest"]),
-        show_choices=True,
-    )
-    ph("cli-test-framework-provided", {"test_framework": setup_info["test_framework"]})
 
     # Discover test directory
     default_tests_subdir = "tests"
@@ -153,15 +147,29 @@ def collect_setup_info(setup_info: dict[str, str]):
             if tests_root == "":
                 tests_root = os.path.join(curdir, default_tests_subdir)
                 os.mkdir(tests_root)
+                click.echo(f"✅ Created directory {tests_root}/")
             else:
-                if not os.path.isdir(os.path.join(curdir, default_tests_subdir)):
+                tests_root = os.path.join(curdir, default_tests_subdir)
+                if not os.path.isdir(tests_root):
                     click.echo(
-                        f"No directory exists at {os.path.join(curdir, default_tests_subdir)}, please enter a valid directory path."
+                        f"❌ {tests_root} doesn't exist, please enter a valid tests directory."
                     )
                     continue
             break
     setup_info["tests_root"] = os.path.relpath(tests_root, curdir)
     ph("cli-tests-root-provided")
+
+    # Autodiscover test framework
+    test_framework = detect_test_framework(curdir, tests_root)
+    autodetected = f" (autodetected: {test_framework})" if test_framework else ""
+    setup_info["test_framework"] = click.prompt(
+        f"Which test framework do you use?" + autodetected,
+        type=click.Choice(["pytest", "unittest"]),
+        show_choices=True,
+        default=test_framework,
+    )
+
+    ph("cli-test-framework-provided", {"test_framework": setup_info["test_framework"]})
 
     # Ask for paths to ignore and update the setup_info dictionary
     # ignore_paths_input = click.prompt("Are there any paths CodeFlash should ignore? (comma-separated, no spaces)",
@@ -169,6 +177,47 @@ def collect_setup_info(setup_info: dict[str, str]):
     # ignore_paths = ignore_paths_input.split(',') if ignore_paths_input else ['tests/']
     ignore_paths = []
     setup_info["ignore_paths"] = ignore_paths
+
+
+def detect_test_framework(curdir, tests_root) -> Optional[str]:
+    test_framework = None
+    pytest_files = ["pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg"]
+    pytest_config_patterns = {
+        "pytest.ini": r"\[pytest\]",
+        "pyproject.toml": r"\[tool\.pytest\.ini_options\]",
+        "tox.ini": r"\[pytest\]",
+        "setup.cfg": r"\[tool:pytest\]",
+    }
+    for pytest_file in pytest_files:
+        file_path = os.path.join(curdir, pytest_file)
+        if os.path.exists(file_path):
+            with open(file_path, "r") as file:
+                contents = file.read()
+                if re.search(pytest_config_patterns[pytest_file], contents):
+                    test_framework = "pytest"
+                    break
+        test_framework = "pytest"
+    else:
+        # Check if any python files contain a class that inherits from unittest.TestCase
+        for filename in os.listdir(tests_root):
+            if filename.endswith(".py"):
+                with open(os.path.join(tests_root, filename), "r") as file:
+                    contents = file.read()
+                    node = ast.parse(contents)
+                    if any(
+                        isinstance(item, ast.ClassDef)
+                        and any(
+                            isinstance(base, ast.Attribute)
+                            and base.attr == "TestCase"
+                            or isinstance(base, ast.Name)
+                            and base.id == "TestCase"
+                            for base in item.bases
+                        )
+                        for item in node.body
+                    ):
+                        test_framework = "unittest"
+                        break
+    return test_framework
 
 
 def check_for_toml_or_setup_file() -> Optional[str]:
@@ -222,7 +271,7 @@ def check_for_toml_or_setup_file() -> Optional[str]:
     else:
         click.echo(
             f"❌ I couldn't find a pyproject.toml or a setup.py in the current directory ({curdir}).\n"
-            "Please make sure you're running codeflash init from your project root directory.\n"
+            "Please make sure you're running codeflash init from your project's root directory.\n"
             "See https://app.codeflash.ai/app/getting-started for more details!"
         )
         ph("cli-no-pyproject-toml-or-setup-py")
