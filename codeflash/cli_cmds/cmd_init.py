@@ -1,9 +1,10 @@
-import click
 import os
 import re
 import subprocess
 import sys
 import time
+
+import click
 import tomlkit
 from git import Repo
 
@@ -293,10 +294,10 @@ def enter_api_key_and_save_to_rc():
         else:
             if not browser_launched:
                 click.echo(
-                    "Opening your CodeFlash API key page. Grab a key from there! Otherwise,"
-                    " get it from https://app.codeflash.ai/app/tokens"
+                    "Opening your CodeFlash API key page. Grab a key from there!\n"
+                    "You can also open this link manually: https://app.codeflash.ai/app/apikeys"
                 )
-                click.launch("https://app.codeflash.ai/app/tokens")
+                click.launch("https://app.codeflash.ai/app/apikeys")
                 browser_launched = True  # This does not work on remote consoles
     shell_rc_path = os.path.expanduser(
         f"~/.{os.environ.get('SHELL', '/bin/bash').split('/')[-1]}rc"
