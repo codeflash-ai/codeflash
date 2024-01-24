@@ -1,13 +1,12 @@
+import click
 import os
 import re
 import subprocess
 import sys
 import time
-from typing import Optional
-
-import click
 import tomlkit
 from git import Repo
+from typing import Optional
 
 from codeflash.analytics.posthog import ph
 from codeflash.cli_cmds.cli import CODEFLASH_LOGO
@@ -112,7 +111,6 @@ def run_end_to_end_test(setup_info: dict[str, str]):
 
 
 def collect_setup_info(setup_info: dict[str, str]):
-    click.echo("\n⚡️ Let's set up CodeFlash for your project.")
     click.echo("Checking for pyproject.toml or setup.py ...")
     # Check for the existence of pyproject.toml or setup.py
     project_name = check_for_toml_or_setup_file()
@@ -124,7 +122,6 @@ def collect_setup_info(setup_info: dict[str, str]):
         "What's your project's source directory? I'll optimize all code in this directory.",
         type=click.Choice(
             [dir for dir in subdirs if dir != "tests"],
-            case_sensitive=False,
         ),
         show_choices=True,
         default=project_name if project_name in subdirs else subdirs[0] if subdirs else ".",
