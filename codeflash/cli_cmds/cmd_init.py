@@ -3,6 +3,7 @@ import re
 import subprocess
 import sys
 import time
+from typing import Optional
 
 import click
 import tomlkit
@@ -114,10 +115,21 @@ def collect_setup_info(setup_info: dict[str, str]):
     click.echo("\n⚡️ Let's set up CodeFlash for your project.")
     click.echo("Checking for pyproject.toml or setup.py ...")
     # Check for the existence of pyproject.toml or setup.py
-    check_for_toml_or_setup_file()
+    project_name = check_for_toml_or_setup_file()
 
-    project_root = click.prompt("What's your project's source directory?", default=f"{os.getcwd()}")
-    setup_info["project_root"] = project_root
+    curdir = os.getcwd()
+    subdirs = [d for d in next(os.walk("."))[1] if not d.startswith(".")]
+
+    source_dir = click.prompt(
+        "What's your project's source directory? I'll optimize all code in this directory.",
+        type=click.Choice(
+            [dir for dir in subdirs if dir != "tests"],
+            case_sensitive=False,
+        ),
+        show_choices=True,
+        default=project_name if project_name in subdirs else subdirs[0] if subdirs else ".",
+    )
+    setup_info["project_root"] = source_dir
     ph("cli-project-root-provided")
 
     setup_info["test_framework"] = click.prompt(
@@ -125,17 +137,26 @@ def collect_setup_info(setup_info: dict[str, str]):
         type=click.Choice(["pytest", "unittest"]),
         show_choices=True,
     )
-    ph(
-        "cli-test-framework-provided", {"test_framework": setup_info["test_framework"]}
-    )
-    test_subdir = "tests"  # maybe different defaults for pytest vs unittest?
-    # TODO discover test dir, if we can't ask for it
-    tests_root = click.prompt(
-        "Where are your tests located?",
-        default=os.path.join(setup_info["project_root"], test_subdir),
-    )
-    setup_info["tests_root"] = os.path.relpath(tests_root, setup_info["project_root"])
+    ph("cli-test-framework-provided", {"test_framework": setup_info["test_framework"]})
+
+    # Discover test directory
+    default_tests_subdir = "tests"
+    if default_tests_subdir in subdirs:
+        tests_root = click.prompt(
+            "Where are your tests located?",
+            default=os.path.join(curdir, default_tests_subdir),
+        )
+    else:
+        tests_root = click.prompt(
+            "Where are your tests located? If you don't have any tests yet, just press enter and I'll create an empty tests/ directory for you.",
+            default="",
+        )
+        if tests_root == "":
+            tests_root = os.path.join(curdir, default_tests_subdir)
+            os.mkdir(tests_root)
+    setup_info["tests_root"] = os.path.relpath(tests_root, curdir)
     ph("cli-tests-root-provided")
+
     # Ask for paths to ignore and update the setup_info dictionary
     # ignore_paths_input = click.prompt("Are there any paths CodeFlash should ignore? (comma-separated, no spaces)",
     #                                   default='', show_default=False)
@@ -144,10 +165,11 @@ def collect_setup_info(setup_info: dict[str, str]):
     setup_info["ignore_paths"] = ignore_paths
 
 
-def check_for_toml_or_setup_file():
+def check_for_toml_or_setup_file() -> Optional[str]:
     curdir = os.getcwd()
     pyproject_toml_path = os.path.join(curdir, "pyproject.toml")
     setup_py_path = os.path.join(curdir, "setup.py")
+    project_name = None
     if os.path.exists(pyproject_toml_path):
         try:
             with open(pyproject_toml_path, "r") as f:
@@ -199,6 +221,7 @@ def check_for_toml_or_setup_file():
         )
         ph("cli-no-pyproject-toml-or-setup-py")
         sys.exit(1)
+    return project_name
 
 
 # Ask if the user wants CodeFlash to optimize new GitHub PRs
