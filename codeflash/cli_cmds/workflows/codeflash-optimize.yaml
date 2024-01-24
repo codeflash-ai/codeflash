@@ -16,7 +16,7 @@ jobs:
         id: bot_check
         working-directory: .
         run: |
-          echo "Checking if PR is created by CodeFlash bot..."
+          echo "Checking if the PR is created by CodeFlash bot, to avoid duplicate optimizations..."
           if [ "${{ github.event.pull_request.user.login }}" == "codeflash-ai[bot]" ]; then
             echo "PR created by CodeFlash bot. Skipping optimization."
             echo "::set-output name=skip_remaining_steps::true"
