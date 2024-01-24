@@ -293,3 +293,4 @@ def enter_api_key_and_save_to_rc():
         shell_rc.write(updated_shell_contents)
         shell_rc.truncate()
     click.echo(f"✅ Updated CODEFLASH_API_KEY in {shell_rc_path}")
+    os.environ["CODEFLASH_API_KEY"] = api_key
