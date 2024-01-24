@@ -119,7 +119,7 @@ def collect_setup_info(setup_info: dict[str, str]):
     subdirs = [d for d in next(os.walk("."))[1] if not d.startswith(".")]
 
     source_dir = click.prompt(
-        "What's your project's source directory? I'll optimize all code in this directory.",
+        "What's your project's source directory? I'll only optimize code in this directory.",
         type=click.Choice(
             [dir for dir in subdirs if dir != "tests"],
         ),
