@@ -275,8 +275,10 @@ def prompt_github_action(setup_info: dict[str, str]):
             click.echo(f"✅ Created {optimize_yaml_path}")
 
             click.prompt(
-                f"As a final step, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.\n"
-                + "Press Enter to open your repo's secrets page, then "
+                f"As a final step, you'll need to\n"
+                f"1. Edit the workflow file to install the right Python version and project dependencies.\n"
+                f"2. Add your CODEFLASH_API_KEY as a secret to your GitHub repo.\n"
+                + f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} then "
                 + "click 'New repository secret' and add your api key with the variable name CODEFLASH_API_KEY.",
                 default="",
                 type=click.STRING,
