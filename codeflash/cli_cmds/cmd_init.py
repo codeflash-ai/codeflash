@@ -43,7 +43,8 @@ def init_codeflash():
         "    codeflash --file <path-to-file> to optimize all functions in a file\n"
         # "    codeflash --pr <pr-number> to optimize a PR\n"
         "-or-\n"
-        "    codeflash --help to see all options"
+        "    codeflash --help to see all options\n"
+        "Please reload the shell to load the CODEFLASH_API_KEY environment variable."
     )
 
     log_posthog_event("cli-installation-successful")
@@ -114,8 +115,10 @@ def collect_setup_info(setup_info: dict[str, str]):
     )
     log_posthog_event("cli-project-root-provided")
     setup_info["test_framework"] = click.prompt(
-        "Which test framework do you use?", default="pytest"
-    )  # TODO options pytest/unittest
+        "Which test framework do you use?",
+        type=click.Choice(["pytest", "unittest"]),
+        show_choices=True,
+    )
     log_posthog_event(
         "cli-test-framework-provided", {"test_framework": setup_info["test_framework"]}
     )
@@ -265,12 +268,12 @@ def prompt_api_key() -> bool:
             f"Press enter to use this key, or any other key to change it",
             default="",
             show_default=False,
-        )
+        ).strip()
         if use_existing_key == "":
             log_posthog_event("cli-existing-api-key-used")
             return False
         else:
-            enter_api_key_and_save_to_rc()
+            enter_api_key_and_save_to_rc(existing_api_key=use_existing_key)
             log_posthog_event("cli-new-api-key-entered")
             return True
     else:
@@ -279,9 +282,10 @@ def prompt_api_key() -> bool:
         return True
 
 
-def enter_api_key_and_save_to_rc():
+def enter_api_key_and_save_to_rc(existing_api_key: str = ""):
     browser_launched = False
-    while True:
+    api_key = existing_api_key
+    while api_key == "":
         api_key = click.prompt(
             f"Enter your CodeFlash API key{' [or press Enter to open your API key page]' if not browser_launched else ''}",
             hide_input=False,
