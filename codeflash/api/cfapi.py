@@ -1,15 +1,12 @@
-from typing import Optional, Dict, Any
-
 import requests
 from requests import Response
+from typing import Optional, Dict, Any
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.github.PrComment import PrComment
 
 CFAPI_BASE_URL = "https://app.codeflash.ai"
 # CFAPI_BASE_URL = "http://localhost:3001"
-
-CFAPI_HEADERS = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
 
 
 def make_cfapi_request(
@@ -23,10 +20,11 @@ def make_cfapi_request(
     :return: The response object.
     """
     url = f"{CFAPI_BASE_URL}/cfapi{endpoint}"
+    cfapi_headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
     if method.upper() == "POST":
-        response = requests.post(url, json=payload, headers=CFAPI_HEADERS)
+        response = requests.post(url, json=payload, headers=cfapi_headers)
     else:
-        response = requests.get(url, headers=CFAPI_HEADERS)
+        response = requests.get(url, headers=cfapi_headers)
     return response
 
 

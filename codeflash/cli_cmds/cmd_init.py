@@ -1,10 +1,9 @@
+import click
 import os
 import re
 import subprocess
 import sys
 import time
-
-import click
 import tomlkit
 from git import Repo
 
@@ -236,7 +235,10 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
 
 # Returns True if the user entered a new API key, False if they used an existing one
 def prompt_api_key() -> bool:
-    existing_api_key = get_codeflash_api_key()
+    try:
+        existing_api_key = get_codeflash_api_key()
+    except EnvironmentError:
+        existing_api_key = None
     if existing_api_key:
         display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
         use_existing_key = click.prompt(
@@ -260,7 +262,7 @@ def enter_api_key_and_save_to_rc():
     while True:
         api_key = click.prompt(
             f"Enter your CodeFlash API key{' [or press Enter to open your API key page]' if not browser_launched else ''}",
-            hide_input=True,
+            hide_input=False,
             default="",
             show_default=False,
         ).strip()
@@ -268,9 +270,12 @@ def enter_api_key_and_save_to_rc():
             break
         else:
             if not browser_launched:
-                click.echo("Opening your CodeFlash API key page. Grab a key from there!")
+                click.echo(
+                    "Opening your CodeFlash API key page. Grab a key from there! Otherwise,"
+                    " get it from https://app.codeflash.ai/app/tokens"
+                )
                 click.launch("https://app.codeflash.ai/app/tokens")
-                browser_launched = True
+                browser_launched = True  # This does not work on remote consoles
     shell_rc_path = os.path.expanduser(
         f"~/.{os.environ.get('SHELL', '/bin/bash').split('/')[-1]}rc"
     )
