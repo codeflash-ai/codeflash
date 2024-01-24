@@ -1,3 +1,6 @@
+import logging
+from typing import Optional, Dict, Any
+
 import requests
 from requests import Response
 from typing import Optional, Dict, Any
@@ -26,6 +29,21 @@ def make_cfapi_request(
     else:
         response = requests.get(url, headers=cfapi_headers)
     return response
+
+
+def get_user_id() -> Optional[str]:
+    """
+    Retrieve the user's userid by making a request to the /cfapi/cli-get-user endpoint.
+    :return: The userid or None if the request fails.
+    """
+    response = make_cfapi_request(endpoint="/cli-get-user", method="GET")
+    if response.status_code == 200:
+        return response.text
+    else:
+        logging.error(
+            f"Failed to look up your userid; is your CF API key valid? ({response.reason})"
+        )
+        return None
 
 
 def suggest_changes(
