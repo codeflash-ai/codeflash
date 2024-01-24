@@ -247,11 +247,11 @@ def prompt_github_action(setup_info: dict[str, str]):
         repo = Repo(setup_info["project_root"], search_parent_directories=True)
         git_root = repo.git.rev_parse("--show-toplevel")
         workflows_path = os.path.join(git_root, ".github", "workflows")
-        optimize_yml_path = os.path.join(workflows_path, "codeflash-optimize.yml")
+        optimize_yaml_path = os.path.join(workflows_path, "codeflash-optimize.yaml")
 
         confirm_creation = (
             click.prompt(
-                f"Great! We'll create a new workflow file [{optimize_yml_path}]. Is this OK?",
+                f"Great! We'll create a new workflow file [{optimize_yaml_path}]. Is this OK?",
                 default="y",
                 type=click.STRING,
             )
@@ -270,9 +270,9 @@ def prompt_github_action(setup_info: dict[str, str]):
             optimize_yml_content = read_text(
                 "codeflash.cli_cmds.workflows", "codeflash-optimize.yaml"
             )
-            with open(optimize_yml_path, "w") as optimize_yml_file:
+            with open(optimize_yaml_path, "w") as optimize_yml_file:
                 optimize_yml_file.write(optimize_yml_content)
-            click.echo(f"✅ Created {optimize_yml_path}")
+            click.echo(f"✅ Created {optimize_yaml_path}")
 
             click.prompt(
                 f"As a final step, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.\n"
