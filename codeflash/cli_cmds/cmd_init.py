@@ -64,7 +64,7 @@ def create_bubble_sort_file(setup_info: dict[str, str]):
                 arr[j + 1] = temp
     return arr
 """
-    bubble_sort_path = os.path.join(setup_info["project_root"], "bubble_sort.py")
+    bubble_sort_path = os.path.join(setup_info["module_root"], "bubble_sort.py")
     with open(bubble_sort_path, "w") as bubble_sort_file:
         bubble_sort_file.write(bubble_sort_content)
     click.echo(f"✅ Created {bubble_sort_path}")
@@ -87,7 +87,7 @@ def run_end_to_end_test(setup_info: dict[str, str]):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        cwd=setup_info["project_root"],
+        cwd=setup_info["module_root"],
     )
     while process.poll() is None:
         sys.stdout.write(animation[idx % len(animation)])
@@ -102,7 +102,7 @@ def run_end_to_end_test(setup_info: dict[str, str]):
     if stderr:
         click.echo(stderr.strip())
 
-    bubble_sort_path = os.path.join(setup_info["project_root"], "bubble_sort.py")
+    bubble_sort_path = os.path.join(setup_info["module_root"], "bubble_sort.py")
     if process.returncode == 0:
         click.echo("\n✅ End-to-end test passed. CodeFlash has been correctly set up!")
     else:
@@ -125,11 +125,12 @@ def collect_setup_info(setup_info: dict[str, str]):
         f' ({", ".join([dir for dir in subdirs if dir != "tests"])})' if subdirs else ""
     )
 
-    source_dir = click.prompt(
-        f"What's your project's source directory? I'll only optimize code in this directory.{subdir_options}",
+    module_root = click.prompt(
+        f"What's your project's Python module that you want to optimize? "
+        f"This is the top-level root directory where all the Python source code is located.{subdir_options}",
         default=project_name if project_name in subdirs else subdirs[0] if subdirs else ".",
     )
-    setup_info["project_root"] = source_dir
+    setup_info["module_root"] = module_root
     ph("cli-project-root-provided")
 
     # Discover test directory
@@ -295,7 +296,7 @@ def prompt_github_action(setup_info: dict[str, str]):
     optimize_yes = optimize_prs.startswith("y")
     ph("cli-github-optimization-choice", {"optimize_prs": optimize_yes})
     if optimize_yes:
-        repo = Repo(setup_info["project_root"], search_parent_directories=True)
+        repo = Repo(setup_info["module_root"], search_parent_directories=True)
         git_root = repo.git.rev_parse("--show-toplevel")
         workflows_path = os.path.join(git_root, ".github", "workflows")
         optimize_yaml_path = os.path.join(workflows_path, "codeflash-optimize.yaml")
@@ -371,7 +372,7 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
         pyproject_data["tool"]["poetry"] = tomlkit.table()
     pyproject_data["tool"]["poetry"]["dependencies"] = poetry_dependencies
     codeflash_section = tomlkit.table()
-    codeflash_section["root"] = setup_info["project_root"]
+    codeflash_section["module-root"] = setup_info["module_root"]
     codeflash_section["test-root"] = setup_info["tests_root"]
     codeflash_section["test-framework"] = setup_info["test_framework"]
     codeflash_section["ignore-paths"] = setup_info["ignore_paths"]

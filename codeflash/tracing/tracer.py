@@ -1,13 +1,13 @@
+from collections import defaultdict
+
 import logging
 import os
 import pickle
 import sqlite3
 import sys
 import time
-from collections import defaultdict
-from typing import Any, Dict, List, Optional
-
 from codeflash.validation.validation_utils import get_test_file_path
+from typing import Any, Dict, List, Optional
 
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.code_utils.config_parser import parse_config_file
@@ -112,7 +112,7 @@ class Tracer:
             return
 
         self.function_modules[code.co_name] = module_name_from_file_path(
-            code.co_filename, project_root=self.config["root"]
+            code.co_filename, project_root=self.config["module-root"]
         )
         cur = self.con.cursor()
 

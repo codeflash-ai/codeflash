@@ -78,20 +78,22 @@ def parse_args() -> Namespace:
         default=SUPPRESS,
     )
     parser.add_argument(
-        "--config-file",
+        "--module-root",
         type=str,
-        help="Path to the pyproject.toml with codeflash configs.",
-    )
-    parser.add_argument(
-        "--root",
-        type=str,
-        help="Path to the project's source directory / python module? We will only optimize code in this directory.",
+        help="Path to the project's Python module that you want to optimize."
+             " This is the top-level root directory where all the Python source code is located.",
     )
     parser.add_argument(
         "--test-root",
         type=str,
+        help="Path to the test directory of the project, where all the tests are located.",
     )
     parser.add_argument("--test-framework", choices=["pytest", "unittest"])
+    parser.add_argument(
+        "--config-file",
+        type=str,
+        help="Path to the pyproject.toml with codeflash configs.",
+    )
     parser.add_argument(
         "--pytest-cmd",
         type=str,
@@ -114,7 +116,7 @@ def parse_args() -> Namespace:
 
     pyproject_config = parse_config_file(args.config_file)
     supported_keys = [
-        "root",
+        "module_root",
         "test_root",
         "test_framework",
         "ignore_paths",
@@ -128,8 +130,8 @@ def parse_args() -> Namespace:
                 and getattr(args, key.replace("-", "_")) is None
             ) or not hasattr(args, key.replace("-", "_")):
                 setattr(args, key.replace("-", "_"), pyproject_config[key])
-    assert os.path.isdir(args.root), f"--root {args.root} must be a valid directory"
-    assert os.path.isdir(args.test_root), f"--test_root {args.test_root} must be a valid directory"
+    assert os.path.isdir(args.module_root), f"--module-root {args.module_root} must be a valid directory"
+    assert os.path.isdir(args.test_root), f"--test-root {args.test_root} must be a valid directory"
     if env_utils.get_pr_number() is not None and not env_utils.ensure_codeflash_api_key():
         assert (
             "CodeFlash API key not found. When running in a Github Actions Context, provide the "
@@ -145,13 +147,13 @@ def parse_args() -> Namespace:
                 path
             ), f"ignore-paths config must be a valid path. Path {path} does not exist"
     # Actual root path is one level above the specified directory, because that's where the module can be imported from
-    args.root = os.path.realpath(os.path.join(args.root, ".."))
+    args.module_root = os.path.realpath(os.path.join(args.module_root, ".."))
     args.test_root = os.path.realpath(args.test_root)
     if not hasattr(args, "all"):
         setattr(args, "all", None)
     elif args.all == "":
-        # The default behavior of --all is to optimize everything in args.root
-        args.all = args.root
+        # The default behavior of --all is to optimize everything in args.module_root
+        args.all = args.module_root
     else:
         args.all = os.path.realpath(args.all)
     return args
@@ -162,7 +164,7 @@ class Optimizer:
         self.args = args
         self.test_cfg = TestConfig(
             test_root=args.test_root,
-            project_root_path=args.root,
+            project_root_path=args.module_root,
             test_framework=args.test_framework,
             pytest_cmd=args.pytest_cmd,
         )
@@ -225,10 +227,10 @@ class Optimizer:
                         code_to_optimize_with_dependents,
                         dependent_functions,
                     ) = get_constrained_function_context_and_dependent_functions(
-                        function_to_optimize, self.args.root, code_to_optimize
+                        function_to_optimize, self.args.module_root, code_to_optimize
                     )
                     logging.info("CODE TO OPTIMIZE %s", code_to_optimize_with_dependents)
-                    module_path = module_name_from_file_path(path, self.args.root)
+                    module_path = module_name_from_file_path(path, self.args.module_root)
                     unique_original_test_files = set()
                     relevant_test_files_count = 0
 
@@ -246,7 +248,7 @@ class Optimizer:
                             injected_test = inject_profiling_into_existing_test(
                                 tests_in_file.test_file,
                                 function_name,
-                                self.args.root,
+                                self.args.module_root,
                             )
                             new_test_path = (
                                 os.path.splitext(tests_in_file.test_file)[0]
@@ -620,7 +622,7 @@ class Optimizer:
                         elif self.args.all:
                             logging.info("Creating a new PR with the optimized code...")
                             owner, repo = get_repo_owner_and_name()
-                            relative_path = os.path.relpath(path, self.args.root)
+                            relative_path = os.path.relpath(path, self.args.module_root)
                             response = cfapi.create_pr(
                                 owner=owner,
                                 repo=repo,
@@ -676,7 +678,7 @@ class Optimizer:
         result_file_path, run_result = run_tests(
             test_file,
             test_framework=self.args.test_framework,
-            cwd=self.args.root,
+            cwd=self.args.module_root,
             pytest_timeout=INDIVIDUAL_TEST_TIMEOUT,
             pytest_cmd=self.test_cfg.pytest_cmd,
             verbose=True,
