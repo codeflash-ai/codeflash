@@ -1,13 +1,13 @@
+from collections import defaultdict
+
+import jedi
 import logging
 import os
 import re
 import subprocess
 import unittest
-from collections import defaultdict
-from typing import Dict, List, Optional
-
-import jedi
 from pydantic.dataclasses import dataclass
+from typing import Dict, List, Optional
 
 from codeflash.verification.verification_utils import TestConfig
 
@@ -61,13 +61,13 @@ def discover_unit_tests(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     return discover_tests(cfg)
 
 
-def get_pytest_rootdir_only(pytest_cmd_list, test_root, project_root) -> str:
+def get_pytest_rootdir_only(pytest_cmd_list, tests_root, project_root) -> str:
     # Ref - https://docs.pytest.org/en/stable/reference/customize.html#initialization-determining-rootdir-and-configfile
     # A very hacky solution that only runs the --co mode until we see the rootdir print and then it just kills the
     # pytest to save time. We should find better ways to just get the rootdir, one way is to not use the -q flag and
     # parse the --co output, but that could be more work.
     process = subprocess.Popen(
-        pytest_cmd_list + [test_root, "--co"],
+        pytest_cmd_list + [tests_root, "--co"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -83,23 +83,23 @@ def get_pytest_rootdir_only(pytest_cmd_list, test_root, project_root) -> str:
             if rootdir_re.search(output):
                 process.kill()
                 return rootdir_re.search(output).group(1)
-    raise ValueError(f"Could not find rootdir in pytest output for {test_root}")
+    raise ValueError(f"Could not find rootdir in pytest output for {tests_root}")
 
 
 # TODO use output without -q, that way we also get the rootdir from the output
 # then we can get rid of the above get_pytest_rootdir_only function
 def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
-    test_root = cfg.test_root
+    tests_root = cfg.tests_root
     project_root = cfg.project_root_path
     pytest_cmd_list = [chunk for chunk in cfg.pytest_cmd.split(" ") if chunk != ""]
     # Note - If the -q command does not work, see if the pytest ini file does not have the --vv flag set
     pytest_result = subprocess.run(
-        pytest_cmd_list + [f"{test_root}", "--co", "-q", "-m", "not skip"],
+        pytest_cmd_list + [f"{tests_root}", "--co", "-q", "-m", "not skip"],
         stdout=subprocess.PIPE,
         cwd=project_root,
     )
     pytest_rootdir = get_pytest_rootdir_only(
-        pytest_cmd_list, test_root=test_root, project_root=project_root
+        pytest_cmd_list, tests_root=tests_root, project_root=project_root
     )
     tests = parse_pytest_stdout(pytest_result.stdout.decode("utf-8"), pytest_rootdir)
     file_to_test_map = defaultdict(list)
@@ -111,10 +111,10 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
 
 
 def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
-    test_root = cfg.test_root
+    tests_root = cfg.tests_root
     project_root_path = cfg.project_root_path
     loader = unittest.TestLoader()
-    tests = loader.discover(str(test_root))
+    tests = loader.discover(str(tests_root))
     file_to_test_map = defaultdict(list)
     for _test_suite in tests._tests:
         for test_suite_2 in _test_suite._tests:
@@ -129,7 +129,7 @@ def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
                 )
 
                 test_module_path = test_module.replace(".", os.sep)
-                test_module_path = os.path.join(str(test_root), test_module_path) + ".py"
+                test_module_path = os.path.join(str(tests_root), test_module_path) + ".py"
                 if not os.path.exists(test_module_path):
                     continue
                 file_to_test_map[test_module_path].append(

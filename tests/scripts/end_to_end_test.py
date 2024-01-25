@@ -5,27 +5,27 @@ import subprocess
 
 
 def main():
-    root = pathlib.Path(__file__).parent.parent.parent.resolve()
-    test_root = root / "code_to_optimize" / "tests" / "pytest"
-    print("cwd", root)
+    module_root = (pathlib.Path(__file__).parent.parent.parent / "code_to_optimize").resolve()
+    test_root = module_root / "tests" / "pytest"
+    print("cwd", module_root)
     command = [
         "python",
-        "codeflash/main.py",
+        "../codeflash/main.py",
         "--file",
-        "code_to_optimize/bubble_sort.py",
+        "bubble_sort.py",
         "--function",
         "sorter",
-        "--test-root",
+        "--tests-root",
         str(test_root),
-        "--root",
-        str(root),
+        "--module-root",
+        str(module_root),
     ]
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        cwd=str(root),
+        cwd=str(module_root),
         env=os.environ.copy(),
     )
     output = []

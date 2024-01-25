@@ -112,7 +112,7 @@ class Tracer:
             return
 
         self.function_modules[code.co_name] = module_name_from_file_path(
-            code.co_filename, project_root=self.config["root"]
+            code.co_filename, module_root=self.config["module-root"]
         )
         cur = self.con.cursor()
 

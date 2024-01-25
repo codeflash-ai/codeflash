@@ -13,7 +13,7 @@ _posthog = Posthog(
 _cached_user_id = None
 
 
-def log_posthog_event(event: str, properties: Dict[str, Any] = None) -> None:
+def ph(event: str, properties: Dict[str, Any] = None) -> None:
     """
     Log an event to PostHog.
     :param event: The name of the event.

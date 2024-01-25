@@ -35,7 +35,7 @@ def generate_tests(
         logging.info(f"Using cached tests from {module_path}.CACHED_TESTS")
     else:
         test_module_path = module_name_from_file_path(
-            get_test_file_path(test_cfg.test_root, function_to_optimize.function_name, 0),
+            get_test_file_path(test_cfg.tests_root, function_to_optimize.function_name, 0),
             test_cfg.project_root_path,
         )
         response = generate_regression_tests(
