@@ -382,6 +382,17 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
     click.echo(f"✅ Added CodeFlash configuration to {toml_path}")
 
 
+class CFAPIKeyType(click.ParamType):
+    name = "cfapi-key"
+
+    def convert(self, value, param, ctx):
+        value = value.strip()
+        if value.startswith("cf-") or value == "":
+            return value
+        else:
+            self.fail(f"{value} does not start with the prefix 'cf-'. Please retry.", param, ctx)
+
+
 # Returns True if the user entered a new API key, False if they used an existing one
 def prompt_api_key() -> bool:
     try:
@@ -394,6 +405,7 @@ def prompt_api_key() -> bool:
             f"I found a CODEFLASH_API_KEY in your environment [{display_key}]!\n"
             f"Press Enter to use this key, or type any other key to change it",
             default="",
+            type=CFAPIKeyType(),
             show_default=False,
         ).strip()
         if use_existing_key == "":
