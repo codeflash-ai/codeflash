@@ -85,7 +85,7 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--root",
         type=str,
-        help="Path to the root of the project, from where your python modules are imported",
+        help="Path to the project's source directory / python module? We will only optimize code in this directory.",
     )
     parser.add_argument(
         "--test-root",
@@ -144,7 +144,8 @@ def parse_args() -> Namespace:
             assert os.path.exists(
                 path
             ), f"ignore-paths config must be a valid path. Path {path} does not exist"
-    args.root = os.path.realpath(args.root)
+    # Actual root path is one level above the specified directory, because that's where the module can be imported from
+    args.root = os.path.realpath(os.path.join(args.root, ".."))
     args.test_root = os.path.realpath(args.test_root)
     if not hasattr(args, "all"):
         setattr(args, "all", None)

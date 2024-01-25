@@ -326,7 +326,8 @@ def prompt_github_action(setup_info: dict[str, str]):
             click.prompt(
                 f"Next, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.\n"
                 + f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} then "
-                + "click 'New repository secret' and add your api key with the variable name CODEFLASH_API_KEY.",
+                + "click 'New repository secret' and add your api key with the variable name CODEFLASH_API_KEY.\n"
+                  "If you don't have access to the repo's secrets, ask your repo admin to add it for you.",
                 default="",
                 type=click.STRING,
                 prompt_suffix="",
@@ -391,7 +392,7 @@ def prompt_api_key() -> bool:
         display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
         use_existing_key = click.prompt(
             f"I found a CODEFLASH_API_KEY in your environment [{display_key}]!\n"
-            f"Press Enter to use this key, or any other key to change it",
+            f"Press Enter to use this key, or type any other key to change it",
             default="",
             show_default=False,
         ).strip()
