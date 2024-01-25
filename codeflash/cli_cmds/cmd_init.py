@@ -19,7 +19,7 @@ def init_codeflash():
     click.echo(CODEFLASH_LOGO)
     click.echo("⚡️ Welcome to CodeFlash! Let's get you set up.\n")
 
-    prompt_api_key()
+    did_add_new_key = prompt_api_key()
 
     setup_info: dict[str, str] = {}
 
@@ -46,8 +46,10 @@ def init_codeflash():
         # "    codeflash --pr <pr-number> to optimize a PR\n"
         "-or-\n"
         "    codeflash --help to see all options\n"
-        "Please restart your shell to load the CODEFLASH_API_KEY environment variable."
+
     )
+    if did_add_new_key:
+        click.echo("Please restart your shell to load the CODEFLASH_API_KEY environment variable.")
 
     ph("cli-installation-successful")
 

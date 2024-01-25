@@ -56,7 +56,7 @@ def parse_config_file(config_file_path=None):
     config = tool["codeflash"]
     # todo nice error message whe ncodeflash block is missing
     assert isinstance(config, dict)
-    path_keys = ["root", "tests-root"]
+    path_keys = ["root", "test-root"]
     path_list_keys = ["ignore-paths"]
     # TODO: minimum-peformance-gain should become a more dynamic auto-detection in the future
     float_keys = {

@@ -89,4 +89,4 @@ codeflash = "codeflash.main:main"
 root = "codeflash"
 test-root = "tests"
 test-framework = "pytest"
-ignore-paths = ["code_to_optimize/"]
+ignore-paths = []
