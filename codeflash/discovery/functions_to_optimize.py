@@ -1,12 +1,11 @@
 import ast
+import libcst as cst
 import logging
 import os
 from _ast import ClassDef, FunctionDef, AsyncFunctionDef
-from typing import Dict, Optional, List, Tuple, Union
-
-import libcst as cst
 from libcst import CSTNode
 from pydantic.dataclasses import dataclass
+from typing import Dict, Optional, List, Tuple, Union
 
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
 from codeflash.code_utils.git_utils import get_git_diff
@@ -184,7 +183,7 @@ def find_all_functions_in_file(file_path: str) -> Dict[str, List[FunctionToOptim
 
 
 def filter_functions(
-    modified_functions: Dict[str, List[FunctionToOptimize]], test_root: str, ignore_paths=List[str]
+    modified_functions: Dict[str, List[FunctionToOptimize]], tests_root: str, ignore_paths=List[str]
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
     # Remove any functions that we don't want to optimize
     filtered_modified_functions = {}
@@ -193,7 +192,7 @@ def filter_functions(
     site_packages_removed_count = 0
     ignore_paths_removed_count = 0
     for file_path, functions in modified_functions.items():
-        if file_path.startswith(test_root + os.sep):
+        if file_path.startswith(tests_root + os.sep):
             test_functions_removed_count += len(functions)
             continue
         if file_path in ignore_paths or any(
