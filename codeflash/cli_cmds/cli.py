@@ -1,3 +1,9 @@
+import git
+import logging
+import os
+from argparse import Namespace
+
+from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.version import __version__ as version
 
 CF_BASE_URL = "https://app.codeflash.ai"
@@ -17,3 +23,22 @@ CODEFLASH_LOGO: str = (
     "\n"
 )
 
+
+def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
+    if not hasattr(args, "all"):
+        setattr(args, "all", None)
+    if args.all is not None:
+        try:
+            git_root_dir()
+        except git.exc.InvalidGitRepositoryError:
+            logging.error(
+                "Could not find a git repository in the current directory. "
+                "We need a git repository to run --all and open PRs for optimizations. Exiting..."
+            )
+            exit(1)
+    elif args.all == "":
+        # The default behavior of --all is to optimize everything in args.module_root
+        args.all = args.module_root
+    else:
+        args.all = os.path.realpath(args.all)
+    return args

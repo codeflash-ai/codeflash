@@ -2,7 +2,7 @@ import concurrent.futures
 import logging
 import sys
 
-from codeflash.cli_cmds.cli import CODEFLASH_LOGO
+from codeflash.cli_cmds.cli import CODEFLASH_LOGO, handle_optimize_all_arg_parsing
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s", stream=sys.stdout)
@@ -157,13 +157,7 @@ def parse_args() -> Namespace:
     # Actual root path is one level above the specified directory, because that's where the module can be imported from
     args.module_root = os.path.realpath(os.path.join(args.module_root, ".."))
     args.tests_root = os.path.realpath(args.tests_root)
-    if not hasattr(args, "all"):
-        setattr(args, "all", None)
-    elif args.all == "":
-        # The default behavior of --all is to optimize everything in args.module_root
-        args.all = args.module_root
-    else:
-        args.all = os.path.realpath(args.all)
+    args = handle_optimize_all_arg_parsing(args)
     return args
 
 
