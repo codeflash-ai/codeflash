@@ -1,14 +1,13 @@
 import ast
+import click
 import os
 import re
 import subprocess
 import sys
 import time
-from typing import Optional
-
-import click
 import tomlkit
 from git import Repo
+from typing import Optional
 
 from codeflash.analytics.posthog import ph
 from codeflash.cli_cmds.cli import CODEFLASH_LOGO
@@ -369,9 +368,7 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
         pyproject_data["tool"]["poetry"] = tomlkit.table()
     pyproject_data["tool"]["poetry"]["dependencies"] = poetry_dependencies
     codeflash_section = tomlkit.table()
-    codeflash_section[
-        "root"
-    ] = "."  # Note we aren't using the project_root here, but the relative path to the root
+    codeflash_section["root"] = setup_info["project_root"]
     codeflash_section["test-root"] = setup_info["tests_root"]
     codeflash_section["test-framework"] = setup_info["test_framework"]
     codeflash_section["ignore-paths"] = setup_info["ignore_paths"]
