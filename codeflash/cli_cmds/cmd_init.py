@@ -1,13 +1,14 @@
 import ast
-import click
 import os
 import re
 import subprocess
 import sys
 import time
+from typing import Optional
+
+import click
 import tomlkit
 from git import Repo
-from typing import Optional
 
 from codeflash.analytics.posthog import ph
 from codeflash.cli_cmds.cli import CODEFLASH_LOGO
@@ -324,9 +325,7 @@ def prompt_github_action(setup_info: dict[str, str]):
             click.echo(f"✅ Created {optimize_yaml_path}")
 
             click.prompt(
-                f"As a final step, you'll need to\n"
-                f"1. Edit the workflow file to install the right Python version and project dependencies.\n"
-                f"2. Add your CODEFLASH_API_KEY as a secret to your GitHub repo.\n"
+                f"Next, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.\n"
                 + f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} then "
                 + "click 'New repository secret' and add your api key with the variable name CODEFLASH_API_KEY.",
                 default="",
@@ -335,6 +334,11 @@ def prompt_github_action(setup_info: dict[str, str]):
                 show_default=False,
             )
             click.launch(get_github_secrets_page_url(repo))
+            click.echo(
+                f"Finally, for the workflow to work, you'll need to edit the workflow file to install the right "
+                f"Python version and any project dependencies.\n"
+                + f"It's at: {optimize_yaml_path}\n"
+            )
             ph("cli-github-workflow-created")
         else:
             click.echo("Skipping GitHub workflow creation.")
