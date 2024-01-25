@@ -92,15 +92,18 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     test_root = cfg.test_root
     project_root = cfg.project_root_path
     pytest_cmd_list = [chunk for chunk in cfg.pytest_cmd.split(" ") if chunk != ""]
-    # Note - If the -q command does not work, see if the pytest ini file does not have the --vv flag set
     pytest_result = subprocess.run(
-        pytest_cmd_list + [f"{test_root}", "--co", "-q", "-m", "not skip"],
+        pytest_cmd_list + [f"{test_root}", "--co", "-m", "not skip"],
         stdout=subprocess.PIPE,
         cwd=project_root,
     )
-    pytest_rootdir = get_pytest_rootdir_only(
-        pytest_cmd_list, test_root=test_root, project_root=project_root
-    )
+    pytest_stdout = pytest_result.stdout.decode("utf-8")
+    rootdir_re = re.compile(r"^rootdir:\s?(\S*)", re.MULTILINE)
+    pytest_rootdir_match = rootdir_re.search(pytest_stdout)
+    if not pytest_rootdir_match:
+        raise ValueError(f"Could not find rootdir in pytest output for {test_root}")
+    pytest_rootdir = pytest_rootdir_match.group(1)
+
     tests = parse_pytest_stdout(pytest_result.stdout.decode("utf-8"), pytest_rootdir)
     file_to_test_map = defaultdict(list)
 
