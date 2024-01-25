@@ -9,7 +9,7 @@ from codeflash.analytics.posthog import ph
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
-if os.environ.get("AIS_SERVER", default="local").lower() == "local":
+if os.environ.get("AIS_SERVER", default="prod").lower() == "local":
     AI_SERVICE_BASE_URL = "http://localhost:8000/"
     logging.info(f"Using local AI Service at {AI_SERVICE_BASE_URL}.")
 else:

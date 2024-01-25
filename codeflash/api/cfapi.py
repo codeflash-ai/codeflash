@@ -8,7 +8,7 @@ from requests import Response
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.github.PrComment import PrComment
 
-if os.environ.get("CFAPI_SERVER", default="local").lower() == "local":
+if os.environ.get("CFAPI_SERVER", default="prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
     logging.info(f"Using local CF API at {CFAPI_BASE_URL}.")
 else:
