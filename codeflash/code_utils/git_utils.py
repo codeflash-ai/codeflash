@@ -52,6 +52,18 @@ def get_git_diff(
     return change_list
 
 
+def get_current_branch(repo: Optional[Repo] = None) -> str:
+    """
+    Returns the name of the current branch in the given repository.
+
+    :param repo: An optional Repo object. If not provided, the function will
+                 search for a repository in the current and parent directories.
+    :return: The name of the current branch.
+    """
+    repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+    return repository.active_branch.name
+
+
 def get_remote_url(repo: Optional[Repo] = None) -> str:
     repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
     return repository.remote().url
