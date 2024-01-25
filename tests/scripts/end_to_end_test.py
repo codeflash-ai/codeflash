@@ -5,14 +5,14 @@ import subprocess
 
 
 def main():
-    root = pathlib.Path(__file__).parent.parent.parent.resolve()
-    test_root = root / "code_to_optimize" / "tests" / "pytest"
+    root = (pathlib.Path(__file__).parent.parent.parent / "code_to_optimize").resolve()
+    test_root = root / "tests" / "pytest"
     print("cwd", root)
     command = [
         "python",
-        "codeflash/main.py",
+        "../codeflash/main.py",
         "--file",
-        "code_to_optimize/bubble_sort.py",
+        "bubble_sort.py",
         "--function",
         "sorter",
         "--test-root",
