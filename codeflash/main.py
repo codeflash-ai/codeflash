@@ -133,7 +133,9 @@ def parse_args() -> Namespace:
     assert os.path.isdir(
         args.module_root
     ), f"--module-root {args.module_root} must be a valid directory"
-    assert os.path.isdir(args.test_root), f"--tests-root {args.test_root} must be a valid directory"
+    assert os.path.isdir(
+        args.tests_root
+    ), f"--tests-root {args.tests_root} must be a valid directory"
     if env_utils.get_pr_number() is not None and not env_utils.ensure_codeflash_api_key():
         assert (
             "CodeFlash API key not found. When running in a Github Actions Context, provide the "
@@ -150,7 +152,7 @@ def parse_args() -> Namespace:
             ), f"ignore-paths config must be a valid path. Path {path} does not exist"
     # Actual root path is one level above the specified directory, because that's where the module can be imported from
     args.module_root = os.path.realpath(os.path.join(args.module_root, ".."))
-    args.test_root = os.path.realpath(args.test_root)
+    args.tests_root = os.path.realpath(args.tests_root)
     if not hasattr(args, "all"):
         setattr(args, "all", None)
     elif args.all == "":
@@ -165,7 +167,7 @@ class Optimizer:
     def __init__(self, args: Namespace):
         self.args = args
         self.test_cfg = TestConfig(
-            tests_root=args.test_root,
+            tests_root=args.tests_root,
             project_root_path=args.module_root,
             test_framework=args.test_framework,
             pytest_cmd=args.pytest_cmd,
@@ -299,7 +301,7 @@ class Optimizer:
                         continue
 
                     generated_tests_path = get_test_file_path(
-                        self.args.test_root, function_to_optimize.function_name, 0
+                        self.args.tests_root, function_to_optimize.function_name, 0
                     )
                     with open(generated_tests_path, "w") as file:
                         file.write(instrumented_test_source)
