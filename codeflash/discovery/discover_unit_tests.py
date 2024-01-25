@@ -98,7 +98,7 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     rootdir_re = re.compile(r"^rootdir:\s?(\S*)", re.MULTILINE)
     pytest_rootdir_match = rootdir_re.search(pytest_stdout)
     if not pytest_rootdir_match:
-        raise ValueError(f"Could not find rootdir in pytest output for {test_root}")
+        raise ValueError(f"Could not find rootdir in pytest output for {tests_root}")
     pytest_rootdir = pytest_rootdir_match.group(1)
 
     tests = parse_pytest_stdout(pytest_stdout, pytest_rootdir)
