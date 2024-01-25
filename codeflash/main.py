@@ -150,7 +150,7 @@ def parse_args() -> Namespace:
             ), f"ignore-paths config must be a valid path. Path {path} does not exist"
     # Actual root path is one level above the specified directory, because that's where the module can be imported from
     args.module_root = os.path.realpath(os.path.join(args.module_root, ".."))
-    args.test_root = os.path.realpath(args.test_root)
+    args.tests_root = os.path.realpath(args.tests_root)
     if not hasattr(args, "all"):
         setattr(args, "all", None)
     elif args.all == "":
