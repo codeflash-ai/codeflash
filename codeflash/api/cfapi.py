@@ -1,15 +1,18 @@
 import logging
+import os
 from typing import Optional, Dict, Any
 
 import requests
 from requests import Response
-from typing import Optional, Dict, Any
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.github.PrComment import PrComment
 
-CFAPI_BASE_URL = "https://app.codeflash.ai"
-# CFAPI_BASE_URL = "http://localhost:3001"
+if os.environ.get("CFAPI_SERVER", default="prod").lower() == "local":
+    CFAPI_BASE_URL = "http://localhost:3001"
+    logging.info(f"Using local CF API at {CFAPI_BASE_URL}.")
+else:
+    CFAPI_BASE_URL = "https://app.codeflash.ai"
 
 
 def make_cfapi_request(

@@ -133,7 +133,9 @@ def parse_args() -> Namespace:
     assert os.path.isdir(
         args.module_root
     ), f"--module-root {args.module_root} must be a valid directory"
-    assert os.path.isdir(args.tests_root), f"--tests-root {args.tests_root} must be a valid directory"
+    assert os.path.isdir(
+        args.tests_root
+    ), f"--tests-root {args.tests_root} must be a valid directory"
     if env_utils.get_pr_number() is not None and not env_utils.ensure_codeflash_api_key():
         assert (
             "CodeFlash API key not found. When running in a Github Actions Context, provide the "
