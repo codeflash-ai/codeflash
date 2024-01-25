@@ -5,9 +5,9 @@ import subprocess
 
 
 def main():
-    root = (pathlib.Path(__file__).parent.parent.parent / "code_to_optimize").resolve()
-    test_root = root / "tests" / "pytest"
-    print("cwd", root)
+    module_root = (pathlib.Path(__file__).parent.parent.parent / "code_to_optimize").resolve()
+    test_root = module_root / "tests" / "pytest"
+    print("cwd", module_root)
     command = [
         "python",
         "../codeflash/main.py",
@@ -15,10 +15,10 @@ def main():
         "bubble_sort.py",
         "--function",
         "sorter",
-        "--test-root",
+        "--tests-root",
         str(test_root),
         "--root",
-        str(root),
+        str(module_root),
     ]
     process = subprocess.Popen(
         command,

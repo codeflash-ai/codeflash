@@ -81,10 +81,10 @@ def parse_args() -> Namespace:
         "--module-root",
         type=str,
         help="Path to the project's Python module that you want to optimize."
-             " This is the top-level root directory where all the Python source code is located.",
+        " This is the top-level root directory where all the Python source code is located.",
     )
     parser.add_argument(
-        "--test-root",
+        "--tests-root",
         type=str,
         help="Path to the test directory of the project, where all the tests are located.",
     )
@@ -117,7 +117,7 @@ def parse_args() -> Namespace:
     pyproject_config = parse_config_file(args.config_file)
     supported_keys = [
         "module_root",
-        "test_root",
+        "tests_root",
         "test_framework",
         "ignore_paths",
         "minimum_performance_gain",
@@ -130,8 +130,10 @@ def parse_args() -> Namespace:
                 and getattr(args, key.replace("-", "_")) is None
             ) or not hasattr(args, key.replace("-", "_")):
                 setattr(args, key.replace("-", "_"), pyproject_config[key])
-    assert os.path.isdir(args.module_root), f"--module-root {args.module_root} must be a valid directory"
-    assert os.path.isdir(args.test_root), f"--test-root {args.test_root} must be a valid directory"
+    assert os.path.isdir(
+        args.module_root
+    ), f"--module-root {args.module_root} must be a valid directory"
+    assert os.path.isdir(args.test_root), f"--tests-root {args.test_root} must be a valid directory"
     if env_utils.get_pr_number() is not None and not env_utils.ensure_codeflash_api_key():
         assert (
             "CodeFlash API key not found. When running in a Github Actions Context, provide the "
@@ -163,7 +165,7 @@ class Optimizer:
     def __init__(self, args: Namespace):
         self.args = args
         self.test_cfg = TestConfig(
-            test_root=args.test_root,
+            tests_root=args.test_root,
             project_root_path=args.module_root,
             test_framework=args.test_framework,
             pytest_cmd=args.pytest_cmd,

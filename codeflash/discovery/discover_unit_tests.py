@@ -89,7 +89,7 @@ def get_pytest_rootdir_only(pytest_cmd_list, test_root, project_root) -> str:
 # TODO use output without -q, that way we also get the rootdir from the output
 # then we can get rid of the above get_pytest_rootdir_only function
 def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
-    test_root = cfg.test_root
+    test_root = cfg.tests_root
     project_root = cfg.project_root_path
     pytest_cmd_list = [chunk for chunk in cfg.pytest_cmd.split(" ") if chunk != ""]
     # Note - If the -q command does not work, see if the pytest ini file does not have the --vv flag set
@@ -111,7 +111,7 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
 
 
 def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
-    test_root = cfg.test_root
+    test_root = cfg.tests_root
     project_root_path = cfg.project_root_path
     loader = unittest.TestLoader()
     tests = loader.discover(str(test_root))

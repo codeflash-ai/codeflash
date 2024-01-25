@@ -87,6 +87,6 @@ codeflash = "codeflash.main:main"
 
 [tool.codeflash]
 module-root = "codeflash"
-test-root = "tests"
+tests-root = "tests"
 test-framework = "pytest"
 ignore-paths = []

@@ -1,13 +1,14 @@
 import ast
-import click
 import os
 import re
 import subprocess
 import sys
 import time
+from typing import Optional
+
+import click
 import tomlkit
 from git import Repo
-from typing import Optional
 
 from codeflash.analytics.posthog import ph
 from codeflash.cli_cmds.cli import CODEFLASH_LOGO
@@ -46,7 +47,6 @@ def init_codeflash():
         # "    codeflash --pr <pr-number> to optimize a PR\n"
         "-or-\n"
         "    codeflash --help to see all options\n"
-
     )
     if did_add_new_key:
         click.echo("Please restart your shell to load the CODEFLASH_API_KEY environment variable.")
@@ -330,7 +330,7 @@ def prompt_github_action(setup_info: dict[str, str]):
                 f"Next, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.\n"
                 + f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} then "
                 + "click 'New repository secret' and add your api key with the variable name CODEFLASH_API_KEY.\n"
-                  "If you don't have access to the repo's secrets, ask your repo admin to add it for you.",
+                "If you don't have access to the repo's secrets, ask your repo admin to add it for you.",
                 default="",
                 type=click.STRING,
                 prompt_suffix="",
@@ -373,7 +373,7 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
     pyproject_data["tool"]["poetry"]["dependencies"] = poetry_dependencies
     codeflash_section = tomlkit.table()
     codeflash_section["module-root"] = setup_info["module_root"]
-    codeflash_section["test-root"] = setup_info["tests_root"]
+    codeflash_section["tests-root"] = setup_info["tests_root"]
     codeflash_section["test-framework"] = setup_info["test_framework"]
     codeflash_section["ignore-paths"] = setup_info["ignore_paths"]
 

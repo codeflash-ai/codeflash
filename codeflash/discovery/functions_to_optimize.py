@@ -131,7 +131,7 @@ def get_functions_to_optimize_by_file(
     else:
         functions = get_functions_within_git_diff()
     filtered_modified_functions, functions_count = filter_functions(
-        functions, test_cfg.test_root, ignore_paths
+        functions, test_cfg.tests_root, ignore_paths
     )
     return filtered_modified_functions, functions_count
 
