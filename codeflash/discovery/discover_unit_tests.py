@@ -61,7 +61,7 @@ def discover_unit_tests(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     return discover_tests(cfg)
 
 
-def get_pytest_rootdir_only(pytest_cmd_list, test_root, project_root) -> str:
+def get_pytest_rootdir_only(pytest_cmd_list, tests_root, project_root) -> str:
     # Ref - https://docs.pytest.org/en/stable/reference/customize.html#initialization-determining-rootdir-and-configfile
     # A very hacky solution that only runs the --co mode until we see the rootdir print and then it just kills the
     # pytest to save time. We should find better ways to just get the rootdir, one way is to not use the -q flag and
@@ -99,7 +99,7 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
         cwd=project_root,
     )
     pytest_rootdir = get_pytest_rootdir_only(
-        pytest_cmd_list, test_root=tests_root, project_root=project_root
+        pytest_cmd_list, tests_root=tests_root, project_root=project_root
     )
     tests = parse_pytest_stdout(pytest_result.stdout.decode("utf-8"), pytest_rootdir)
     file_to_test_map = defaultdict(list)
