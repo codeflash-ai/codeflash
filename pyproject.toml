@@ -57,7 +57,7 @@ warn_required_dynamic_aliases = true
 
 [tool.black]
 line-length = 100
-target-version = ['py311']
+target-version = ['py312']
 
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.2.0,<2.0.0"]
@@ -86,7 +86,7 @@ initial-content = """
 codeflash = "codeflash.main:main"
 
 [tool.codeflash]
-root = "."
-test-root = "tests"
+module-root = "codeflash"
+tests-root = "tests"
 test-framework = "pytest"
-ignore-paths = ["code_to_optimize/"]
+ignore-paths = []

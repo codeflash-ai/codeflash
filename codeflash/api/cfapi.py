@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Optional, Dict, Any
 
 import requests
@@ -7,10 +8,30 @@ from requests import Response
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.github.PrComment import PrComment
 
-CFAPI_BASE_URL = "https://app.codeflash.ai"
-# CFAPI_BASE_URL = "http://localhost:3001"
+if os.environ.get("CFAPI_SERVER", default="prod").lower() == "local":
+    CFAPI_BASE_URL = "http://localhost:3001"
+    logging.info(f"Using local CF API at {CFAPI_BASE_URL}.")
+else:
+    CFAPI_BASE_URL = "https://app.codeflash.ai"
 
-CFAPI_HEADERS = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
+
+def make_cfapi_request(
+    endpoint: str, method: str, payload: Optional[Dict[str, Any]] = None
+) -> requests.Response:
+    """
+    Make an HTTP request using the specified method, URL, headers, and JSON payload.
+    :param endpoint: The URL to send the request to.
+    :param method: The HTTP method to use ('GET', 'POST', etc.).
+    :param payload: Optional JSON payload to include in the request body.
+    :return: The response object.
+    """
+    url = f"{CFAPI_BASE_URL}/cfapi{endpoint}"
+    cfapi_headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
+    if method.upper() == "POST":
+        response = requests.post(url, json=payload, headers=cfapi_headers)
+    else:
+        response = requests.get(url, headers=cfapi_headers)
+    return response
 
 
 def get_user_id() -> Optional[str]:
@@ -26,24 +47,6 @@ def get_user_id() -> Optional[str]:
             f"Failed to look up your userid; is your CF API key valid? ({response.reason})"
         )
         return None
-
-
-def make_cfapi_request(
-    endpoint: str, method: str, payload: Optional[Dict[str, Any]] = None
-) -> requests.Response:
-    """
-    Make an HTTP request using the specified method, URL, headers, and JSON payload.
-    :param endpoint: The URL to send the request to.
-    :param method: The HTTP method to use ('GET', 'POST', etc.).
-    :param payload: Optional JSON payload to include in the request body.
-    :return: The response object.
-    """
-    url = f"{CFAPI_BASE_URL}/cfapi{endpoint}"
-    if method.upper() == "POST":
-        response = requests.post(url, json=payload, headers=CFAPI_HEADERS)
-    else:
-        response = requests.get(url, headers=CFAPI_HEADERS)
-    return response
 
 
 def suggest_changes(

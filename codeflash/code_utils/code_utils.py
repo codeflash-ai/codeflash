@@ -5,21 +5,21 @@ from tempfile import TemporaryDirectory
 from typing import Optional, List, Union
 
 
-def module_name_from_file_path(file_path: str, project_root: str) -> str:
-    relative_path = os.path.relpath(file_path, project_root)
+def module_name_from_file_path(file_path: str, module_root: str) -> str:
+    relative_path = os.path.relpath(file_path, module_root)
     module_path = relative_path.replace("/", ".")
     if module_path.endswith(".py"):
         module_path = module_path[:-3]
     return module_path
 
 
-def file_path_from_module_name(module_name: str, project_root: str) -> str:
+def file_path_from_module_name(module_name: str, module_root: str) -> str:
     "Get file path from module path"
 
     file_path = module_name.replace(".", "/")
     if not file_path.endswith(".py"):
         file_path += ".py"
-    return os.path.join(project_root, file_path)
+    return os.path.join(module_root, file_path)
 
 
 def ellipsis_in_ast(module: ast.AST) -> bool:

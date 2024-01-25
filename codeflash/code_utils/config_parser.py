@@ -11,7 +11,7 @@ else:
 
 
 def supported_config_keys() -> List[str]:
-    return ["test-framework", "tests-root", "root"]
+    return ["test-framework", "tests-root", "module-root"]
 
 
 def find_pyproject_toml(config_file=None):
@@ -56,7 +56,7 @@ def parse_config_file(config_file_path=None):
     config = tool["codeflash"]
     # todo nice error message whe ncodeflash block is missing
     assert isinstance(config, dict)
-    path_keys = ["root", "tests-root"]
+    path_keys = ["module-root", "tests-root"]
     path_list_keys = ["ignore-paths"]
     # TODO: minimum-peformance-gain should become a more dynamic auto-detection in the future
     float_keys = {

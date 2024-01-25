@@ -1,15 +1,19 @@
 import logging
-import requests
-from pydantic import RootModel
+import os
 from typing import Any, Dict, List, Tuple, Optional
 
+import requests
+from pydantic import RootModel
+
+from codeflash.analytics.posthog import ph
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
-AI_SERVICE_BASE_URL = "https://app.codeflash.ai"
-# AI_SERVICE_BASE_URL = "http://localhost:8000/"
-
-AI_SERVICE_HEADERS = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
+if os.environ.get("AIS_SERVER", default="prod").lower() == "local":
+    AI_SERVICE_BASE_URL = "http://localhost:8000/"
+    logging.info(f"Using local AI Service at {AI_SERVICE_BASE_URL}.")
+else:
+    AI_SERVICE_BASE_URL = "https://app.codeflash.ai"
 
 
 def make_ai_service_request(
@@ -30,10 +34,11 @@ def make_ai_service_request(
     - requests.Response: The response from the API.
     """
     url = f"{AI_SERVICE_BASE_URL}/ai{endpoint}"
+    ai_service_headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
     if method.upper() == "POST":
-        response = requests.post(url, json=payload, headers=AI_SERVICE_HEADERS, timeout=timeout)
+        response = requests.post(url, json=payload, headers=ai_service_headers, timeout=timeout)
     else:
-        response = requests.get(url, headers=AI_SERVICE_HEADERS, timeout=timeout)
+        response = requests.get(url, headers=ai_service_headers, timeout=timeout)
     # response.raise_for_status()  # Will raise an HTTPError if the HTTP request returned an unsuccessful status code
     return response
 
@@ -52,14 +57,25 @@ def optimize_python_code(
     - List[Tuple[str, str]]: A list of tuples where the first element is the optimized code and the second is the explanation.
     """
     data = {"source_code": source_code, "num_variants": num_variants}
-    logging.info(f"Generating Optimizations ...")
-    response = make_ai_service_request("/optimize", payload=data, timeout=600)
+    logging.info(f"Generating optimized candidates ...")
+    try:
+        response = make_ai_service_request("/optimize", payload=data, timeout=600)
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error generating optimized candidates: {e}")
+        ph("cli-optimize-error-caught", {"error": str(e)})
+        return [(None, None)]
 
     if response.status_code == 200:
         optimizations = response.json()
         return [(opt["source_code"], opt["explanation"]) for opt in optimizations]
     else:
-        logging.error(f"Error: {response.status_code} {response.text}")
+        logging.error(
+            f"Error generating optimized candidates: {response.status_code} {response.text}"
+        )
+        ph(
+            "cli-optimize-error-response",
+            {"response_status_code": response.status_code, "response_text": response.text},
+        )
         return [(None, None)]
 
 
@@ -102,12 +118,22 @@ def generate_regression_tests(
         "test_framework": test_framework,
         "test_timeout": test_timeout,
     }
-    response = make_ai_service_request("/testgen", payload=data, timeout=600)
+    try:
+        response = make_ai_service_request("/testgen", payload=data, timeout=600)
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error generating tests: {e}")
+        ph("cli-testgen-error-caught", {"error": str(e)})
+        return None
+
     # the timeout should be the same as the timeout for the AI service backend
 
-    response_json = response.json()
     if response.status_code == 200:
+        response_json = response.json()
         return response_json["generated_tests"], response_json["instrumented_tests"]
     else:
-        logging.error(f"Error: {response.status_code} {response.text}")
+        logging.error(f"Error generating tests: {response.status_code} {response.text}")
+        ph(
+            "cli-testgen-error-response",
+            {"response_status_code": response.status_code, "response_text": response.text},
+        )
         return None
