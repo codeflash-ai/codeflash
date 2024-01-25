@@ -1,10 +1,9 @@
+import git
 import logging
 import os
+from git import Repo
 from io import StringIO
 from typing import Optional
-
-import git
-from git import Repo
 from unidiff import PatchSet
 
 
@@ -52,6 +51,18 @@ def get_git_diff(
     return change_list
 
 
+def get_current_branch(repo: Optional[Repo] = None) -> str:
+    """
+    Returns the name of the current branch in the given repository.
+
+    :param repo: An optional Repo object. If not provided, the function will
+                 search for a repository in the current and parent directories.
+    :return: The name of the current branch.
+    """
+    repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+    return repository.active_branch.name
+
+
 def get_remote_url(repo: Optional[Repo] = None) -> str:
     repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
     return repository.remote().url
@@ -78,3 +89,8 @@ def get_repo_owner_and_name(repo: Optional[Repo] = None) -> tuple[str, str]:
 def get_github_secrets_page_url(repo: Optional[Repo] = None) -> str:
     owner, repo_name = get_repo_owner_and_name(repo)
     return f"https://github.com/{owner}/{repo_name}/settings/secrets/actions"
+
+
+def git_root_dir(repo: Optional[Repo] = None) -> str:
+    repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+    return repository.working_dir

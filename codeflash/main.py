@@ -18,7 +18,11 @@ from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TEST_TIMEOUT,
     N_CANDIDATES,
 )
-from codeflash.code_utils.git_utils import get_repo_owner_and_name, get_github_secrets_page_url
+from codeflash.code_utils.git_utils import (
+    get_repo_owner_and_name,
+    get_github_secrets_page_url,
+    get_current_branch,
+)
 from codeflash.github.PrComment import FileDiffContent, PrComment
 
 
@@ -627,10 +631,11 @@ class Optimizer:
                             logging.info("Creating a new PR with the optimized code...")
                             owner, repo = get_repo_owner_and_name()
                             relative_path = os.path.relpath(path, self.args.module_root)
+                            base_branch = get_current_branch()
                             response = cfapi.create_pr(
                                 owner=owner,
                                 repo=repo,
-                                baseBranch="main",
+                                base_branch=base_branch,
                                 file_changes={
                                     relative_path: FileDiffContent(
                                         oldContent=original_code, newContent=new_code

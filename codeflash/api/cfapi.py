@@ -84,7 +84,7 @@ def suggest_changes(
 def create_pr(
     owner: str,
     repo: str,
-    baseBranch: str,
+    base_branch: str,
     file_changes: dict[str, dict[str, str]],
     pr_comment: PrComment,
     generated_tests: str,
@@ -93,7 +93,7 @@ def create_pr(
     Create a pull request, targeting the specified branch. (usually 'main')
     :param owner: The owner of the repository.
     :param repo: The name of the repository.
-    :param targetBranch: The branch to target.
+    :param base_branch: The base branch to target.
     :param file_changes: A dictionary of file changes.
     :param pr_comment: The pull request comment object, containing the optimization explanation, best runtime, etc.
     :param generated_tests: The generated tests.
@@ -102,7 +102,7 @@ def create_pr(
     payload = {
         "owner": owner,
         "repo": repo,
-        "baseBranch": baseBranch,
+        "baseBranch": base_branch,
         "diffContents": file_changes,
         "prCommentFields": pr_comment.to_json(),
         "generatedTests": generated_tests,
