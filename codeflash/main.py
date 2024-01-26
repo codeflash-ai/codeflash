@@ -545,13 +545,8 @@ class Optimizer:
                             # test_cfg.project_root_path,
                             # function_dependencies,
                         )
-                        if not self.args.all:
-                            # Not writing the optimized code, because optimizing functions in a sequence can lead to
-                            #  a. Error propagation, where error in one function can cause the next optimization to fail
-                            #  b. Performance estimates become unstable, as the runtime of an optimization might be
-                            #     dependent on the runtime of the previous optimization
-                            with open(path, "w") as f:
-                                f.write(new_code)
+                        with open(path, "w") as f:
+                            f.write(new_code)
                         # TODO: After doing the best optimization, remove the test cases that errored on the new code, because they might be failing because of syntax errors and such.
                         speedup = (original_runtime / best_runtime) - 1
                         # TODO: Sometimes the explanation says something similar to "This is the code that was optimized", remove such parts
@@ -660,6 +655,12 @@ class Optimizer:
                                     f"Optimization was successful, but I failed to create a PR with the optimized code."
                                     f" Response from server was: {response.text}"
                                 )
+                            # Reverting to original code, because optimizing functions in a sequence can lead to
+                            #  a. Error propagation, where error in one function can cause the next optimization to fail
+                            #  b. Performance estimates become unstable, as the runtime of an optimization might be
+                            #     dependent on the runtime of the previous optimization
+                            with open(path, "w") as f:
+                                f.write(original_code)
                     else:
                         # Delete it here to not cause a lot of clutter if we are optimizing with --all option
                         if os.path.exists(generated_tests_path):
