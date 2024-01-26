@@ -561,12 +561,6 @@ class Optimizer:
                             + f"Test Results for the best optimized code:- {TestResults.report_to_string(winning_test_results.get_test_pass_fail_report_by_type())}\n"
                         )
                         logging.info(f"EXPLANATION_FINAL\n{explanation_final}")
-                        if self.args.all:
-                            with open("optimizations_all.txt", "a") as f:
-                                f.write(best_optimization[0])
-                                f.write("\n\n")
-                                f.write(explanation_final)
-                                f.write("\n---------\n")
 
                         logging.info("Formatting code with black...")
                         # black currently does not have a stable public API, so we are using the CLI
