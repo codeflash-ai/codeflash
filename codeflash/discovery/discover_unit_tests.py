@@ -57,33 +57,6 @@ def discover_unit_tests(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     return discover_tests(cfg)
 
 
-def get_pytest_rootdir_only(pytest_cmd_list, tests_root, project_root) -> str:
-    # Ref - https://docs.pytest.org/en/stable/reference/customize.html#initialization-determining-rootdir-and-configfile
-    # A very hacky solution that only runs the --co mode until we see the rootdir print and then it just kills the
-    # pytest to save time. We should find better ways to just get the rootdir, one way is to not use the -q flag and
-    # parse the --co output, but that could be more work.
-    process = subprocess.Popen(
-        pytest_cmd_list + [tests_root, "--co"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=project_root,
-    )
-    rootdir_re = re.compile(r"^rootdir:\s?([^\s]*)")
-    # Iterate over the output lines
-    while True:
-        output = process.stdout.readline()
-        if output == "" and process.poll() is not None:
-            break
-        if output:
-            if rootdir_re.search(output):
-                process.kill()
-                return rootdir_re.search(output).group(1)
-    raise ValueError(f"Could not find rootdir in pytest output for {tests_root}")
-
-
-# TODO use output without -q, that way we also get the rootdir from the output
-# then we can get rid of the above get_pytest_rootdir_only function
 def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
