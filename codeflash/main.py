@@ -118,6 +118,10 @@ def parse_args() -> Namespace:
         exit()
     if args.function and not args.file:
         raise ValueError("If you specify a --function, you must specify the --file it is in")
+    if args.file:
+        if not os.path.exists(args.file):
+            raise ValueError(f"File {args.file} does not exist")
+        args.file = os.path.realpath(args.file)
 
     pyproject_config = parse_config_file(args.config_file)
     supported_keys = [
@@ -595,12 +599,13 @@ class Optimizer:
                             logging.info(f"Suggesting changes to PR #{pr} ...")
 
                             owner, repo = get_repo_owner_and_name()
+                            relative_path = os.path.relpath(path, git_root_dir())
                             response = cfapi.suggest_changes(
                                 owner=owner,
                                 repo=repo,
                                 pr_number=pr,
                                 file_changes={
-                                    path: FileDiffContent(
+                                    relative_path: FileDiffContent(
                                         oldContent=original_code, newContent=new_code
                                     ).model_dump(mode="json")
                                 },
@@ -609,7 +614,7 @@ class Optimizer:
                                     best_runtime=best_runtime,
                                     original_runtime=original_runtime,
                                     function_name=function_name,
-                                    relative_file_path=path,
+                                    relative_file_path=relative_path,
                                     speedup=speedup,
                                     winning_test_results=winning_test_results,
                                 ),
