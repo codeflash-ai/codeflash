@@ -137,6 +137,7 @@ def get_functions_to_optimize_by_file(
 
 def get_functions_within_git_diff() -> Dict[str, List[FunctionToOptimize]]:
     modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=False)
+    print("MODIFIED LINES", modified_lines)
     modified_functions: Dict[str, List[FunctionToOptimize]] = {}
     for path in modified_lines:
         if not os.path.exists(path):
