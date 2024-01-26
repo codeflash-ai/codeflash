@@ -137,15 +137,11 @@ def get_functions_to_optimize_by_file(
 
 def get_functions_within_git_diff() -> Dict[str, List[FunctionToOptimize]]:
     modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=False)
-    print("MODIFIED LINES", modified_lines)
     modified_functions: Dict[str, List[FunctionToOptimize]] = {}
     for path in modified_lines:
-        print("PATH", path)
         if not os.path.exists(path):
-            print("PATH DOES NOT EXIST", path)
             continue
         with open(path, "r") as f:
-            print("OPENING FILE", path)
             file_content = f.read()
             wrapper = cst.metadata.MetadataWrapper(cst.parse_module(file_content))
             function_lines = FunctionVisitor(file_path=path)
@@ -157,7 +153,6 @@ def get_functions_within_git_diff() -> Dict[str, List[FunctionToOptimize]]:
                     if path not in modified_functions:
                         modified_functions[path] = []
                     modified_functions[path].append(function_to_optimize)
-    print("MODIFIED FUNCTIONS", modified_functions)
     return modified_functions
 
 
