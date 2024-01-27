@@ -48,7 +48,9 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
         except Exception as e:
             logging.error(
                 f"Could not find the CodeFlash GitHub App installed on the repository {owner}/{repo}. "
-                "Please install the CodeFlash GitHub App on your repository to use --all. Exiting..."
+                "Please install the CodeFlash GitHub App on your repository to use --all."
+                " Instructions at https://app.codeflash.ai \n"
+                "Exiting..."
             )
             exit(1)
     if not hasattr(args, "all"):

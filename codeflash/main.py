@@ -210,6 +210,7 @@ class Optimizer:
                 with open(path, "r") as f:
                     original_code = f.read()
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
+                    instrumented_unittests_created_for_function = set()
                     function_name = function_to_optimize.function_name
                     function_iterator_count += 1
                     logging.info(
@@ -265,6 +266,7 @@ class Optimizer:
                             with open(new_test_path, "w") as f:
                                 f.write(injected_test)
                             instrumented_unittests_created.add(new_test_path)
+                            instrumented_unittests_created_for_function.add(new_test_path)
                             unique_original_test_files.add(tests_in_file.test_file)
                         logging.info(
                             f"Discovered {relevant_test_files_count} existing unit test file"
@@ -326,7 +328,7 @@ class Optimizer:
                             break
                         instrumented_test_timing = []
                         original_test_results_iter = TestResults()
-                        for test_file in instrumented_unittests_created:
+                        for test_file in instrumented_unittests_created_for_function:
                             unittest_results = self.run_and_parse_tests(
                                 test_env, test_file, TestType.EXISTING_UNIT_TEST, 0
                             )
@@ -444,7 +446,9 @@ class Optimizer:
 
                             optimized_test_results_iter = TestResults()
                             instrumented_test_timing = []
-                            for instrumented_test_file in instrumented_unittests_created:
+                            for (
+                                instrumented_test_file
+                            ) in instrumented_unittests_created_for_function:
                                 unittest_results_optimized = self.run_and_parse_tests(
                                     test_env, instrumented_test_file, TestType.EXISTING_UNIT_TEST, j
                                 )
@@ -655,10 +659,12 @@ class Optimizer:
                             #     dependent on the runtime of the previous optimization
                             with open(path, "w") as f:
                                 f.write(original_code)
-                    else:
-                        # Delete it here to not cause a lot of clutter if we are optimizing with --all option
-                        if os.path.exists(generated_tests_path):
-                            os.remove(generated_tests_path)
+                    # Delete all the generated tests to not cause any clutter.
+                    if os.path.exists(generated_tests_path):
+                        os.remove(generated_tests_path)
+                    for test_paths in instrumented_unittests_created_for_function:
+                        if os.path.exists(test_paths):
+                            os.remove(test_paths)
             if not self.found_atleast_one_optimization:
                 logging.info(f"❌ No optimizations found.")
 
