@@ -27,8 +27,6 @@ pydantic = "^2.5.2"
 black = "^23.3.0"
 humanize = "^4.9.0"
 posthog = "^3.3.2"
-icontract = "^2.6.6"
-icontract-hypothesis = "^1.1.7"
 
 [tool.poetry.group.dev]
 optional = true
