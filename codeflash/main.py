@@ -2,7 +2,7 @@ import concurrent.futures
 import logging
 import sys
 
-from codeflash.cli_cmds.cli import CODEFLASH_LOGO
+from codeflash.cli_cmds.cli import CODEFLASH_LOGO, handle_optimize_all_arg_parsing
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s", stream=sys.stdout)
@@ -22,6 +22,7 @@ from codeflash.code_utils.git_utils import (
     get_repo_owner_and_name,
     get_github_secrets_page_url,
     get_current_branch,
+    git_root_dir,
 )
 from codeflash.github.PrComment import FileDiffContent, PrComment
 
@@ -117,6 +118,10 @@ def parse_args() -> Namespace:
         exit()
     if args.function and not args.file:
         raise ValueError("If you specify a --function, you must specify the --file it is in")
+    if args.file:
+        if not os.path.exists(args.file):
+            raise ValueError(f"File {args.file} does not exist")
+        args.file = os.path.realpath(args.file)
 
     pyproject_config = parse_config_file(args.config_file)
     supported_keys = [
@@ -157,13 +162,7 @@ def parse_args() -> Namespace:
     # Actual root path is one level above the specified directory, because that's where the module can be imported from
     args.module_root = os.path.realpath(os.path.join(args.module_root, ".."))
     args.tests_root = os.path.realpath(args.tests_root)
-    if not hasattr(args, "all"):
-        setattr(args, "all", None)
-    elif args.all == "":
-        # The default behavior of --all is to optimize everything in args.module_root
-        args.all = args.module_root
-    else:
-        args.all = os.path.realpath(args.all)
+    args = handle_optimize_all_arg_parsing(args)
     return args
 
 
@@ -211,6 +210,7 @@ class Optimizer:
                 with open(path, "r") as f:
                     original_code = f.read()
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
+                    instrumented_unittests_created_for_function = set()
                     function_name = function_to_optimize.function_name
                     function_iterator_count += 1
                     logging.info(
@@ -266,6 +266,7 @@ class Optimizer:
                             with open(new_test_path, "w") as f:
                                 f.write(injected_test)
                             instrumented_unittests_created.add(new_test_path)
+                            instrumented_unittests_created_for_function.add(new_test_path)
                             unique_original_test_files.add(tests_in_file.test_file)
                         logging.info(
                             f"Discovered {relevant_test_files_count} existing unit test file"
@@ -327,7 +328,7 @@ class Optimizer:
                             break
                         instrumented_test_timing = []
                         original_test_results_iter = TestResults()
-                        for test_file in instrumented_unittests_created:
+                        for test_file in instrumented_unittests_created_for_function:
                             unittest_results = self.run_and_parse_tests(
                                 test_env, test_file, TestType.EXISTING_UNIT_TEST, 0
                             )
@@ -445,7 +446,9 @@ class Optimizer:
 
                             optimized_test_results_iter = TestResults()
                             instrumented_test_timing = []
-                            for instrumented_test_file in instrumented_unittests_created:
+                            for (
+                                instrumented_test_file
+                            ) in instrumented_unittests_created_for_function:
                                 unittest_results_optimized = self.run_and_parse_tests(
                                     test_env, instrumented_test_file, TestType.EXISTING_UNIT_TEST, j
                                 )
@@ -546,13 +549,8 @@ class Optimizer:
                             # test_cfg.project_root_path,
                             # function_dependencies,
                         )
-                        if not self.args.all:
-                            # Not writing the optimized code, because optimizing functions in a sequence can lead to
-                            #  a. Error propagation, where error in one function can cause the next optimization to fail
-                            #  b. Performance estimates become unstable, as the runtime of an optimization might be
-                            #     dependent on the runtime of the previous optimization
-                            with open(path, "w") as f:
-                                f.write(new_code)
+                        with open(path, "w") as f:
+                            f.write(new_code)
                         # TODO: After doing the best optimization, remove the test cases that errored on the new code, because they might be failing because of syntax errors and such.
                         speedup = (original_runtime / best_runtime) - 1
                         # TODO: Sometimes the explanation says something similar to "This is the code that was optimized", remove such parts
@@ -567,12 +565,6 @@ class Optimizer:
                             + f"Test Results for the best optimized code:- {TestResults.report_to_string(winning_test_results.get_test_pass_fail_report_by_type())}\n"
                         )
                         logging.info(f"EXPLANATION_FINAL\n{explanation_final}")
-                        if self.args.all:
-                            with open("optimizations_all.txt", "a") as f:
-                                f.write(best_optimization[0])
-                                f.write("\n\n")
-                                f.write(explanation_final)
-                                f.write("\n---------\n")
 
                         logging.info("Formatting code with black...")
                         # black currently does not have a stable public API, so we are using the CLI
@@ -600,12 +592,13 @@ class Optimizer:
                             logging.info(f"Suggesting changes to PR #{pr} ...")
 
                             owner, repo = get_repo_owner_and_name()
+                            relative_path = os.path.relpath(path, git_root_dir())
                             response = cfapi.suggest_changes(
                                 owner=owner,
                                 repo=repo,
                                 pr_number=pr,
                                 file_changes={
-                                    path: FileDiffContent(
+                                    relative_path: FileDiffContent(
                                         oldContent=original_code, newContent=new_code
                                     ).model_dump(mode="json")
                                 },
@@ -614,7 +607,7 @@ class Optimizer:
                                     best_runtime=best_runtime,
                                     original_runtime=original_runtime,
                                     function_name=function_name,
-                                    file_path=path,
+                                    relative_file_path=relative_path,
                                     speedup=speedup,
                                     winning_test_results=winning_test_results,
                                 ),
@@ -630,7 +623,8 @@ class Optimizer:
                         elif self.args.all:
                             logging.info("Creating a new PR with the optimized code...")
                             owner, repo = get_repo_owner_and_name()
-                            relative_path = os.path.relpath(path, self.args.module_root)
+
+                            relative_path = os.path.relpath(path, git_root_dir())
                             base_branch = get_current_branch()
                             response = cfapi.create_pr(
                                 owner=owner,
@@ -659,10 +653,18 @@ class Optimizer:
                                     f"Optimization was successful, but I failed to create a PR with the optimized code."
                                     f" Response from server was: {response.text}"
                                 )
-                    else:
-                        # Delete it here to not cause a lot of clutter if we are optimizing with --all option
-                        if os.path.exists(generated_tests_path):
-                            os.remove(generated_tests_path)
+                            # Reverting to original code, because optimizing functions in a sequence can lead to
+                            #  a. Error propagation, where error in one function can cause the next optimization to fail
+                            #  b. Performance estimates become unstable, as the runtime of an optimization might be
+                            #     dependent on the runtime of the previous optimization
+                            with open(path, "w") as f:
+                                f.write(original_code)
+                    # Delete all the generated tests to not cause any clutter.
+                    if os.path.exists(generated_tests_path):
+                        os.remove(generated_tests_path)
+                    for test_paths in instrumented_unittests_created_for_function:
+                        if os.path.exists(test_paths):
+                            os.remove(test_paths)
             if not self.found_atleast_one_optimization:
                 logging.info(f"❌ No optimizations found.")
 

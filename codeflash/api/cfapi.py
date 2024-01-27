@@ -1,9 +1,8 @@
 import logging
 import os
-from typing import Optional, Dict, Any
-
 import requests
 from requests import Response
+from typing import Optional, Dict, Any
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.github.PrComment import PrComment
@@ -108,4 +107,18 @@ def create_pr(
         "generatedTests": generated_tests,
     }
     response = make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
+    return response
+
+
+def check_github_app_installed_on_repo(owner: str, repo: str) -> Response:
+    """
+    Check if the Codeflash GitHub App is installed on the specified repository.
+    :param owner: The owner of the repository.
+    :param repo: The name of the repository.
+    :return: The response object.
+    """
+    response = make_cfapi_request(
+        endpoint=f"/is-github-app-installed?repo={repo}&owner={owner}",
+        method="GET",
+    )
     return response
