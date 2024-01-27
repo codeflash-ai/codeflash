@@ -17,7 +17,7 @@ def main():
         "sorter",
         "--tests-root",
         str(test_root),
-        "--root",
+        "--module-root",
         str(module_root),
     ]
     process = subprocess.Popen(
@@ -25,7 +25,7 @@ def main():
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        cwd=str(root),
+        cwd=str(module_root),
         env=os.environ.copy(),
     )
     output = []
