@@ -1,11 +1,18 @@
-import git
 import logging
 import os
 from argparse import Namespace
 
+import git
+
 from codeflash.api.cfapi import check_github_app_installed_on_repo
-from codeflash.code_utils.git_utils import git_root_dir, get_repo_owner_and_name
-from codeflash.version import __version__ as version
+from codeflash.cli_cmds.cmd_init import init_codeflash
+from codeflash.code_utils import env_utils
+from codeflash.code_utils.config_parser import parse_config_file
+from codeflash.code_utils.git_utils import (
+    git_root_dir,
+    get_repo_owner_and_name,
+    get_github_secrets_page_url,
+)
 
 CF_BASE_URL = "https://app.codeflash.ai"
 LOGIN_URL = f"{CF_BASE_URL}/login"  # Replace with your actual URL
@@ -13,16 +20,61 @@ POLLING_URL = f"{CF_BASE_URL}/api/get-token"  # Replace with your actual polling
 POLLING_INTERVAL = 10  # Polling interval in seconds
 MAX_POLLING_ATTEMPTS = 30  # Maximum number of polling attempts
 
-CODEFLASH_LOGO: str = (
-    "\n"
-    r"              __    _____         __ " + "\n"
-    r" _______  ___/ /__ / _/ /__ ____ / / " + "\n"
-    r"/ __/ _ \/ _  / -_) _/ / _ `(_-</ _ \ " + "\n"
-    r"\__/\___/\_,_/\__/_//_/\_,_/___/_//_/" + "\n"
-    f"{('v'+version).rjust(46)}\n"
-    "                          https://codeflash.ai\n"
-    "\n"
-)
+
+def process_cmd_args(args: Namespace) -> Namespace:
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG)
+    if "command" in args and args.command == "init":
+        init_codeflash()
+        exit()
+    if args.function and not args.file:
+        raise ValueError("If you specify a --function, you must specify the --file it is in")
+    if args.file:
+        if not os.path.exists(args.file):
+            raise ValueError(f"File {args.file} does not exist")
+        args.file = os.path.realpath(args.file)
+
+    pyproject_config = parse_config_file(args.config_file)
+    supported_keys = [
+        "module_root",
+        "tests_root",
+        "test_framework",
+        "ignore_paths",
+        "minimum_performance_gain",
+        "pytest_cmd",
+    ]
+    for key in supported_keys:
+        if key in pyproject_config:
+            if (
+                hasattr(args, key.replace("-", "_"))
+                and getattr(args, key.replace("-", "_")) is None
+            ) or not hasattr(args, key.replace("-", "_")):
+                setattr(args, key.replace("-", "_"), pyproject_config[key])
+    assert os.path.isdir(
+        args.module_root
+    ), f"--module-root {args.module_root} must be a valid directory"
+    assert os.path.isdir(
+        args.tests_root
+    ), f"--tests-root {args.tests_root} must be a valid directory"
+    if env_utils.get_pr_number() is not None and not env_utils.ensure_codeflash_api_key():
+        assert (
+            "CodeFlash API key not found. When running in a Github Actions Context, provide the "
+            "'CODEFLASH_API_KEY' environment variable as a secret.\n"
+            + "You can add a secret by going to your repository's settings page, then clicking 'Secrets' in the left sidebar.\n"
+            + "Then, click 'New repository secret' and add your api key with the variable name CODEFLASH_API_KEY.\n"
+            + f"Here's a direct link: {get_github_secrets_page_url()}\n"
+            + "Exiting..."
+        )
+    if hasattr(args, "ignore_paths") and args.ignore_paths is not None:
+        for path in args.ignore_paths:
+            assert os.path.exists(
+                path
+            ), f"ignore-paths config must be a valid path. Path {path} does not exist"
+    # Actual root path is one level above the specified directory, because that's where the module can be imported from
+    args.module_root = os.path.realpath(os.path.join(args.module_root, ".."))
+    args.tests_root = os.path.realpath(args.tests_root)
+    args = handle_optimize_all_arg_parsing(args)
+    return args
 
 
 def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:

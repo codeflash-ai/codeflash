@@ -2,7 +2,10 @@ import concurrent.futures
 import logging
 import sys
 
-from codeflash.cli_cmds.cli import CODEFLASH_LOGO, handle_optimize_all_arg_parsing
+from pydantic.dataclasses import dataclass
+
+from codeflash.cli_cmds.cli import process_cmd_args
+from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s", stream=sys.stdout)
@@ -10,7 +13,6 @@ from typing import Optional, Tuple, Union
 
 from codeflash.api import cfapi
 from codeflash.api.aiservice import optimize_python_code
-from codeflash.cli_cmds.cmd_init import init_codeflash
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.config_consts import (
     MAX_TEST_RUN_ITERATIONS,
@@ -20,7 +22,6 @@ from codeflash.code_utils.config_consts import (
 )
 from codeflash.code_utils.git_utils import (
     get_repo_owner_and_name,
-    get_github_secrets_page_url,
     get_current_branch,
     git_root_dir,
 )
@@ -41,7 +42,6 @@ from codeflash.code_utils.code_utils import (
     get_all_function_names,
     get_run_tmp_file,
 )
-from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.discovery.discover_unit_tests import discover_unit_tests, TestsInFile
 from codeflash.discovery.functions_to_optimize import (
     get_functions_to_optimize_by_file,
@@ -111,59 +111,39 @@ def parse_args() -> Namespace:
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose logs")
     args: Namespace = parser.parse_args()
-    if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
-    if "command" in args and args.command == "init":
-        init_codeflash()
-        exit()
-    if args.function and not args.file:
-        raise ValueError("If you specify a --function, you must specify the --file it is in")
-    if args.file:
-        if not os.path.exists(args.file):
-            raise ValueError(f"File {args.file} does not exist")
-        args.file = os.path.realpath(args.file)
+    return process_cmd_args(args)
 
-    pyproject_config = parse_config_file(args.config_file)
-    supported_keys = [
-        "module_root",
-        "tests_root",
-        "test_framework",
-        "ignore_paths",
-        "minimum_performance_gain",
-        "pytest_cmd",
-    ]
-    for key in supported_keys:
-        if key in pyproject_config:
-            if (
-                hasattr(args, key.replace("-", "_"))
-                and getattr(args, key.replace("-", "_")) is None
-            ) or not hasattr(args, key.replace("-", "_")):
-                setattr(args, key.replace("-", "_"), pyproject_config[key])
-    assert os.path.isdir(
-        args.module_root
-    ), f"--module-root {args.module_root} must be a valid directory"
-    assert os.path.isdir(
-        args.tests_root
-    ), f"--tests-root {args.tests_root} must be a valid directory"
-    if env_utils.get_pr_number() is not None and not env_utils.ensure_codeflash_api_key():
-        assert (
-            "CodeFlash API key not found. When running in a Github Actions Context, provide the "
-            "'CODEFLASH_API_KEY' environment variable as a secret.\n"
-            + "You can add a secret by going to your repository's settings page, then clicking 'Secrets' in the left sidebar.\n"
-            + "Then, click 'New repository secret' and add your api key with the variable name CODEFLASH_API_KEY.\n"
-            + f"Here's a direct link: {get_github_secrets_page_url()}\n"
-            + "Exiting..."
+
+@dataclass(frozen=True, config={"arbitrary_types_allowed": True})
+class Explanation:
+    raw_explanation_message: str
+    winning_test_results: TestResults
+    original_runtime_ns: int
+    best_runtime_ns: int
+    function_name: str
+    path: str
+
+    @property
+    def speedup(self) -> float:
+        return (self.original_runtime_ns / self.best_runtime_ns) - 1
+
+    def to_console_string(self) -> str:
+        # TODO: After doing the best optimization, remove the test cases that errored on the new code, because they might be failing because of syntax errors and such.
+        # TODO: Sometimes the explanation says something similar to "This is the code that was optimized", remove such parts
+        original_runtime_human = humanize_runtime(self.original_runtime_ns)
+        best_runtime_human = humanize_runtime(self.best_runtime_ns)
+
+        explanation = (
+            f"Function {self.function_name} in file {self.path}:\n"
+            f"Performance went up by {self.speedup:.2f}x ({self.speedup * 100:.2f}%). Runtime went down from {original_runtime_human} to {best_runtime_human} \n\n"
+            + "Optimization explanation:\n"
+            + self.raw_explanation_message
+            + " \n\n"
+            + "The code has been tested for correctness.\n"
+            + f"Test Results for the best optimized code:- {TestResults.report_to_string(self.winning_test_results.get_test_pass_fail_report_by_type())}\n"
         )
-    if hasattr(args, "ignore_paths") and args.ignore_paths is not None:
-        for path in args.ignore_paths:
-            assert os.path.exists(
-                path
-            ), f"ignore-paths config must be a valid path. Path {path} does not exist"
-    # Actual root path is one level above the specified directory, because that's where the module can be imported from
-    args.module_root = os.path.realpath(os.path.join(args.module_root, ".."))
-    args.tests_root = os.path.realpath(args.tests_root)
-    args = handle_optimize_all_arg_parsing(args)
-    return args
+
+        return explanation
 
 
 class Optimizer:
@@ -216,7 +196,6 @@ class Optimizer:
                     logging.info(
                         f"Optimizing function {function_iterator_count} of {num_modified_functions} - {function_name}"
                     )
-                    explanation_final = ""
                     winning_test_results = None
                     overall_original_test_results = None
                     if os.path.exists(get_run_tmp_file("test_return_values_0.bin")):
@@ -528,7 +507,7 @@ class Optimizer:
                                 logging.info("THIS IS BETTER!")
 
                                 logging.info(
-                                    f"original_test_time={original_runtime_human} new_test_time={new_test_time_human}, FASTER RATIO = {((original_runtime - new_test_time) / new_test_time)}"
+                                    f"original_test_time={humanize_runtime(original_runtime)} new_test_time={humanize_runtime(new_test_time)}, FASTER RATIO = {((original_runtime - new_test_time) / new_test_time)}"
                                 )
                                 best_optimization = [optimized_code, explanation]
                                 best_runtime = new_test_time
@@ -551,33 +530,18 @@ class Optimizer:
                         )
                         with open(path, "w") as f:
                             f.write(new_code)
-                        # TODO: After doing the best optimization, remove the test cases that errored on the new code, because they might be failing because of syntax errors and such.
-                        speedup = (original_runtime / best_runtime) - 1
-                        # TODO: Sometimes the explanation says something similar to "This is the code that was optimized", remove such parts
-
-                        explanation_final += (
-                            f"Function {function_name} in file {path}:\n"
-                            f"Performance went up by {speedup:.2f}x ({speedup * 100:.2f}%). Runtime went down from {original_runtime_human} to {new_test_time_human} \n\n"
-                            + "Optimization explanation:\n"
-                            + best_optimization[1]
-                            + " \n\n"
-                            + "The code has been tested for correctness.\n"
-                            + f"Test Results for the best optimized code:- {TestResults.report_to_string(winning_test_results.get_test_pass_fail_report_by_type())}\n"
+                        explanation_final = Explanation(
+                            raw_explanation_message=best_optimization[1],
+                            winning_test_results=winning_test_results,
+                            original_runtime_ns=original_runtime,
+                            best_runtime_ns=best_runtime,
+                            function_name=function_name,
+                            path=path,
                         )
-                        logging.info(f"EXPLANATION_FINAL\n{explanation_final}")
+                        logging.info(f"EXPLANATION\n{explanation_final.to_console_string()}")
 
-                        logging.info("Formatting code with black...")
-                        # black currently does not have a stable public API, so we are using the CLI
-                        # the main problem is custom config parsing https://github.com/psf/black/issues/779
-                        result = subprocess.run(
-                            ["black", path], stdout=subprocess.PIPE, stderr=subprocess.PIPE
-                        )
-                        if result.returncode == 0:
-                            logging.info("OK")
-                            with open(path, "r") as f:
-                                new_code = f.read()
-                        else:
-                            logging.error("Failed to format")
+                        new_code = self.lint_code(path)
+
                         logging.info(
                             f"Optimization was validated for correctness by running the following test - \n{generated_original_test_source}"
                         )
@@ -585,80 +549,20 @@ class Optimizer:
                         logging.info(
                             f"⚡️ Optimization successful! 📄 {function_name} in {path} 📈 {speedup * 100:.2f}% ({speedup:.2f}x) faster"
                         )
+                        self.create_pr(
+                            path=path,
+                            original_code=original_code,
+                            new_code=new_code,
+                            explanation=explanation_final,
+                            generated_original_test_source=generated_original_test_source,
+                        )
 
-                        pr: Optional[int] = env_utils.get_pr_number()
-
-                        if pr is not None:
-                            logging.info(f"Suggesting changes to PR #{pr} ...")
-
-                            owner, repo = get_repo_owner_and_name()
-                            relative_path = os.path.relpath(path, git_root_dir())
-                            response = cfapi.suggest_changes(
-                                owner=owner,
-                                repo=repo,
-                                pr_number=pr,
-                                file_changes={
-                                    relative_path: FileDiffContent(
-                                        oldContent=original_code, newContent=new_code
-                                    ).model_dump(mode="json")
-                                },
-                                pr_comment=PrComment(
-                                    optimization_explanation=best_optimization[1],
-                                    best_runtime=best_runtime,
-                                    original_runtime=original_runtime,
-                                    function_name=function_name,
-                                    relative_file_path=relative_path,
-                                    speedup=speedup,
-                                    winning_test_results=winning_test_results,
-                                ),
-                                generated_tests=generated_original_test_source,
-                            )
-                            if response.ok:
-                                logging.info("OK")
-                            else:
-                                logging.error(
-                                    f"Optimization was successful, but I failed to suggest changes to PR #{pr}."
-                                    f" Response from server was: {response.text}"
-                                )
-                        elif self.args.all:
-                            logging.info("Creating a new PR with the optimized code...")
-                            owner, repo = get_repo_owner_and_name()
-
-                            relative_path = os.path.relpath(path, git_root_dir())
-                            base_branch = get_current_branch()
-                            response = cfapi.create_pr(
-                                owner=owner,
-                                repo=repo,
-                                base_branch=base_branch,
-                                file_changes={
-                                    relative_path: FileDiffContent(
-                                        oldContent=original_code, newContent=new_code
-                                    ).model_dump(mode="json")
-                                },
-                                pr_comment=PrComment(
-                                    optimization_explanation=best_optimization[1],
-                                    best_runtime=best_runtime,
-                                    original_runtime=original_runtime,
-                                    function_name=function_name,
-                                    relative_file_path=relative_path,
-                                    speedup=speedup,
-                                    winning_test_results=winning_test_results,
-                                ),
-                                generated_tests=generated_original_test_source,
-                            )
-                            if response.ok:
-                                logging.info("OK")
-                            else:
-                                logging.error(
-                                    f"Optimization was successful, but I failed to create a PR with the optimized code."
-                                    f" Response from server was: {response.text}"
-                                )
-                            # Reverting to original code, because optimizing functions in a sequence can lead to
-                            #  a. Error propagation, where error in one function can cause the next optimization to fail
-                            #  b. Performance estimates become unstable, as the runtime of an optimization might be
-                            #     dependent on the runtime of the previous optimization
-                            with open(path, "w") as f:
-                                f.write(original_code)
+                        # Reverting to original code, because optimizing functions in a sequence can lead to
+                        #  a. Error propagation, where error in one function can cause the next optimization to fail
+                        #  b. Performance estimates become unstable, as the runtime of an optimization might be
+                        #     dependent on the runtime of the previous optimization
+                        with open(path, "w") as f:
+                            f.write(original_code)
                     # Delete all the generated tests to not cause any clutter.
                     if os.path.exists(generated_tests_path):
                         os.remove(generated_tests_path)
@@ -730,6 +634,89 @@ class Optimizer:
         generated_original_test_source, instrumented_test_source = response
 
         return generated_original_test_source, instrumented_test_source
+
+    def lint_code(self, path) -> str:
+        logging.info("Formatting code with black...")
+        # black currently does not have a stable public API, so we are using the CLI
+        # the main problem is custom config parsing https://github.com/psf/black/issues/779
+        result = subprocess.run(["black", path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode == 0:
+            logging.info("OK")
+        else:
+            logging.error("Failed to format")
+        with open(path, "r") as f:
+            new_code = f.read()
+        return new_code
+
+    def create_pr(self, path, original_code, new_code, explanation, generated_original_test_source):
+        pr_number: Optional[int] = env_utils.get_pr_number()
+
+        if pr_number is not None:
+            logging.info(f"Suggesting changes to PR #{pr_number} ...")
+
+            owner, repo = get_repo_owner_and_name()
+            relative_path = os.path.relpath(path, git_root_dir())
+            response = cfapi.suggest_changes(
+                owner=owner,
+                repo=repo,
+                pr_number=pr_number,
+                file_changes={
+                    relative_path: FileDiffContent(
+                        oldContent=original_code, newContent=new_code
+                    ).model_dump(mode="json")
+                },
+                pr_comment=PrComment(
+                    optimization_explanation=explanation.to_console_string(),
+                    best_runtime=explanation.best_runtime_ns,
+                    original_runtime=explanation.original_runtime_ns,
+                    function_name=explanation.function_name,
+                    relative_file_path=relative_path,
+                    speedup=explanation.speedup,
+                    winning_test_results=explanation.winning_test_results,
+                ),
+                generated_tests=generated_original_test_source,
+            )
+            if response.ok:
+                logging.info("OK")
+            else:
+                logging.error(
+                    f"Optimization was successful, but I failed to suggest changes to PR #{pr}."
+                    f" Response from server was: {response.text}"
+                )
+
+        elif self.args.all:
+            logging.info("Creating a new PR with the optimized code...")
+            owner, repo = get_repo_owner_and_name()
+
+            relative_path = os.path.relpath(path, git_root_dir())
+            base_branch = get_current_branch()
+            response = cfapi.create_pr(
+                owner=owner,
+                repo=repo,
+                base_branch=base_branch,
+                file_changes={
+                    relative_path: FileDiffContent(
+                        oldContent=original_code, newContent=new_code
+                    ).model_dump(mode="json")
+                },
+                pr_comment=PrComment(
+                    optimization_explanation=explanation.to_console_string(),
+                    best_runtime=explanation.best_runtime_ns,
+                    original_runtime=explanation.original_runtime_ns,
+                    function_name=explanation.function_name,
+                    relative_file_path=relative_path,
+                    speedup=explanation.speedup,
+                    winning_test_results=explanation.winning_test_results,
+                ),
+                generated_tests=generated_original_test_source,
+            )
+            if response.ok:
+                logging.info("OK")
+            else:
+                logging.error(
+                    f"Optimization was successful, but I failed to create a PR with the optimized code."
+                    f" Response from server was: {response.text}"
+                )
 
 
 def main():
