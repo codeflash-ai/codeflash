@@ -163,7 +163,7 @@ def collect_setup_info(setup_info: dict[str, str]):
                 os.mkdir(tests_root)
                 click.echo(f"✅ Created directory {tests_root}/")
             else:
-                tests_root = os.path.join(curdir, default_tests_subdir)
+                tests_root = os.path.join(curdir, tests_root)
                 if not os.path.isdir(tests_root):
                     click.echo(
                         f"❌ {tests_root} doesn't exist, please enter a valid tests directory."
