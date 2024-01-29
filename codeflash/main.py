@@ -103,6 +103,7 @@ def parse_args() -> Namespace:
         help="Use cached tests from a specified file for debugging.",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose logs")
+    parser.add_argument("--version", action="store_true", help="Print the version of codeflash")
     args: Namespace = parser.parse_args()
     return process_cmd_args(args)
 
