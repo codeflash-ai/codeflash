@@ -141,6 +141,7 @@ class Optimizer:
             if num_modified_functions == 0:
                 logging.info("No functions found to optimize. Exiting...")
                 return
+            logging.info("Discovering existing unit tests...")
             function_to_tests: dict[str, list[TestsInFile]] = discover_unit_tests(self.test_cfg)
             logging.info(
                 f"Discovered a total of {sum([len(value) for value in function_to_tests.values()])} "
