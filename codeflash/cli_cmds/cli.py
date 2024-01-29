@@ -15,10 +15,6 @@ from codeflash.code_utils.git_utils import (
 )
 
 CF_BASE_URL = "https://app.codeflash.ai"
-LOGIN_URL = f"{CF_BASE_URL}/login"  # Replace with your actual URL
-POLLING_URL = f"{CF_BASE_URL}/api/get-token"  # Replace with your actual polling endpoint
-POLLING_INTERVAL = 10  # Polling interval in seconds
-MAX_POLLING_ATTEMPTS = 30  # Maximum number of polling attempts
 
 
 def process_cmd_args(args: Namespace) -> Namespace:
