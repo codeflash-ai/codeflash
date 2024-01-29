@@ -111,8 +111,9 @@ class Tracer:
             self.flag = True
             return
 
+        project_root = os.path.realpath(os.path.join(self.config["module_root"], ".."))
         self.function_modules[code.co_name] = module_name_from_file_path(
-            code.co_filename, module_root=self.config["module-root"]
+            code.co_filename, project_root=project_root
         )
         cur = self.con.cursor()
 
