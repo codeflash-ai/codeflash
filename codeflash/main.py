@@ -1,5 +1,6 @@
 import concurrent.futures
 import logging
+import pathlib
 import sys
 
 from codeflash.cli_cmds.cli import process_cmd_args
@@ -156,11 +157,13 @@ class Optimizer:
                         f"Optimizing function {function_iterator_count} of {num_modified_functions} - {function_name}"
                     )
                     winning_test_results = None
-                    if os.path.exists(get_run_tmp_file("test_return_values_0.bin")):
-                        # remove left overs from previous run
-                        os.remove(get_run_tmp_file("test_return_values_0.bin"))
-                    if os.path.exists(get_run_tmp_file("test_return_values_0.sqlite")):
-                        os.remove(get_run_tmp_file("test_return_values_0.sqlite"))
+                    # remove left overs from previous run
+                    pathlib.Path(get_run_tmp_file("test_return_values_0.bin")).unlink(
+                        missing_ok=True
+                    )
+                    pathlib.Path(get_run_tmp_file("test_return_values_0.sqlite")).unlink(
+                        missing_ok=True
+                    )
                     code_to_optimize = get_code(function_to_optimize)
                     if code_to_optimize is None:
                         logging.error("Could not find function to optimize")
@@ -228,11 +231,13 @@ class Optimizer:
                         j = i + 1
                         if optimized_code is None:
                             continue
-                        if os.path.exists(get_run_tmp_file(f"test_return_values_{j}.bin")):
-                            # remove left overs from previous run
-                            os.remove(get_run_tmp_file(f"test_return_values_{j}.bin"))
-                        if os.path.exists(get_run_tmp_file(f"test_return_values_{j}.sqlite")):
-                            os.remove(get_run_tmp_file(f"test_return_values_{j}.sqlite"))
+                        # remove left overs from previous run
+                        pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.bin")).unlink(
+                            missing_ok=True
+                        )
+                        pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.sqlite")).unlink(
+                            missing_ok=True
+                        )
                         logging.info(f"Optimized Candidate:")
                         logging.info(optimized_code)
                         try:
@@ -338,22 +343,18 @@ class Optimizer:
                         with open(path, "w") as f:
                             f.write(original_code)
                     # Delete all the generated tests to not cause any clutter.
-                    if os.path.exists(generated_tests_path):
-                        os.remove(generated_tests_path)
+                    pathlib.Path(generated_tests_path).unlink(missing_ok=True)
                     for test_paths in instrumented_unittests_created_for_function:
-                        if os.path.exists(test_paths):
-                            os.remove(test_paths)
+                        pathlib.Path(test_paths).unlink(missing_ok=True)
             if not found_atleast_one_optimization:
                 logging.info(f"❌ No optimizations found.")
 
         finally:
             # TODO: Also revert the file/function being optimized if the process did not succeed
             for test_file in instrumented_unittests_created:
-                if os.path.exists(test_file):
-                    os.remove(test_file)
+                pathlib.Path(test_file).unlink(missing_ok=True)
             for test_file in test_files_created:
-                if os.path.exists(test_file):
-                    os.remove(test_file)
+                pathlib.Path(test_file).unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
 
@@ -557,10 +558,12 @@ class Optimizer:
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_index)
         for test_index in range(MAX_TEST_RUN_ITERATIONS):
-            if os.path.exists(get_run_tmp_file(f"test_return_values_{optimization_index}.bin")):
-                os.remove(get_run_tmp_file(f"test_return_values_{optimization_index}.bin"))
-            if os.path.exists(get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite")):
-                os.remove(get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite"))
+            pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.bin")).unlink(
+                missing_ok=True
+            )
+            pathlib.Path(
+                get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite")
+            ).unlink(missing_ok=True)
             if generated_tests_elapsed_time > MAX_FUNCTION_TEST_SECONDS:
                 break
 
@@ -627,10 +630,12 @@ class Optimizer:
                 best_test_results = optimized_test_results_iter
 
             times_run += 1
-        if os.path.exists(get_run_tmp_file(f"test_return_values_{optimization_index}.bin")):
-            os.remove(get_run_tmp_file(f"test_return_values_{optimization_index}.bin"))
-        if os.path.exists(get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite")):
-            os.remove(get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite"))
+        pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.bin")).unlink(
+            missing_ok=True
+        )
+        pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite")).unlink(
+            missing_ok=True
+        )
         if not (equal_results and times_run > 0):
             success = False
 

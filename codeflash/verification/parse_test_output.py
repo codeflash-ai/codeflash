@@ -1,5 +1,6 @@
 import logging
 import os
+import pathlib
 import pickle
 import re
 import sqlite3
@@ -307,8 +308,9 @@ def parse_test_results(
         except AttributeError as e:
             logging.error(e)
             test_results_bin_file = TestResults()
-            if os.path.exists(get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin")):
-                os.remove(get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"))
+            pathlib.Path(
+                get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin")
+            ).unlink(missing_ok=True)
     elif test_type == TestType.EXISTING_UNIT_TEST:
         try:
             test_results_bin_file = parse_sqlite_test_results(
@@ -325,10 +327,12 @@ def parse_test_results(
 
     # We Probably want to remove deleting this file here later, because we want to preserve the reference to the
     # pickle blob in the test_results
-    if os.path.exists(get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin")):
-        os.remove(get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"))
-    if os.path.exists(get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite")):
-        os.remove(get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite"))
+    pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin")).unlink(
+        missing_ok=True
+    )
+    pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite")).unlink(
+        missing_ok=True
+    )
 
     merged_results = merge_test_results(test_results_xml, test_results_bin_file)
     return merged_results

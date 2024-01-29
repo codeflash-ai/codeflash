@@ -1,4 +1,5 @@
 import os
+import pathlib
 import tempfile
 
 from codeflash.verification.parse_test_output import parse_test_xml
@@ -39,8 +40,7 @@ class TestUnittestRunnerSorter(unittest.TestCase):
         )
         results = parse_test_xml(result_file, fp.name, TestType.EXISTING_UNIT_TEST, config, process)
     assert results[0].did_pass, "Test did not pass as expected"
-    if os.path.exists(result_file):
-        os.remove(result_file)
+    pathlib.Path(result_file).unlink(missing_ok=True)
 
 
 def test_pytest_runner():
@@ -75,5 +75,4 @@ def test_sort():
             run_result=process,
         )
     assert results[0].did_pass, "Test did not pass as expected"
-    if os.path.exists(result_file):
-        os.remove(result_file)
+    pathlib.Path(result_file).unlink(missing_ok=True)
