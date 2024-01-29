@@ -88,7 +88,7 @@ def parse_config_file(config_file_path=None):
     assert config["test-framework"] in [
         "pytest",
         "unittest",
-    ], "CodeFlash only supports pytest and unittest in pyproject.toml"
+    ], "In pyproject.toml CodeFlash only supports the 'test-framework' as pytest and unittest."
     for key in list(config.keys()):
         if "-" in key:
             config[key.replace("-", "_")] = config[key]

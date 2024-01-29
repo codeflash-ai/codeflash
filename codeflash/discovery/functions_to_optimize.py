@@ -1,11 +1,12 @@
 import ast
-import libcst as cst
 import logging
 import os
 from _ast import ClassDef, FunctionDef, AsyncFunctionDef
+from typing import Dict, Optional, List, Tuple, Union
+
+import libcst as cst
 from libcst import CSTNode
 from pydantic.dataclasses import dataclass
-from typing import Dict, Optional, List, Tuple, Union
 
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
 from codeflash.code_utils.git_utils import get_git_diff
@@ -156,9 +157,9 @@ def get_functions_within_git_diff() -> Dict[str, List[FunctionToOptimize]]:
     return modified_functions
 
 
-def get_all_files_and_functions(project_root_path: str) -> Dict[str, List[FunctionToOptimize]]:
+def get_all_files_and_functions(module_root_path: str) -> Dict[str, List[FunctionToOptimize]]:
     functions = {}
-    for root, dirs, files in os.walk(project_root_path):
+    for root, dirs, files in os.walk(module_root_path):
         for file in files:
             if not file.endswith(".py"):
                 continue

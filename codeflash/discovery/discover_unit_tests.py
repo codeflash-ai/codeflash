@@ -20,24 +20,28 @@ class TestsInFile:
     test_suite: Optional[str]
 
     @classmethod
-    def from_pytest_stdout_line(cls, module_line: str, function_line: str, pytest_rootdir: str):
-        module_match = re.match(r"\s*<Module (.+)>", module_line)
-        function_match = re.match(r"\s*<Function (.+)>", function_line)
-        if module_match and function_match:
-            module_path = module_match.group(1)
-            function_name = function_match.group(1)
-            absolute_test_path = os.path.join(pytest_rootdir, module_path)
-            assert os.path.exists(
-                absolute_test_path
-            ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
+    def from_pytest_stdout_line(cls, line: str, pytest_rootdir: str):
+        parts = line.split("::")
+        absolute_test_path = os.path.join(pytest_rootdir, parts[0])
+        assert os.path.exists(
+            absolute_test_path
+        ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
+        if len(parts) == 3:
+            return cls(
+                test_file=absolute_test_path,
+                test_class=parts[1],
+                test_function=parts[2],
+                test_suite=None,
+            )
+        elif len(parts) == 2:
             return cls(
                 test_file=absolute_test_path,
                 test_class=None,
-                test_function=function_name,
+                test_function=parts[1],
                 test_suite=None,
             )
         else:
-            raise ValueError(f"Unexpected pytest result format: {module_line} or {function_line}")
+            raise ValueError(f"Unexpected pytest result format: {line}")
 
 
 @dataclass(frozen=True)
@@ -58,24 +62,47 @@ def discover_unit_tests(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     return discover_tests(cfg)
 
 
+def get_pytest_rootdir_only(pytest_cmd_list, tests_root, project_root) -> str:
+    # Ref - https://docs.pytest.org/en/stable/reference/customize.html#initialization-determining-rootdir-and-configfile
+    # A very hacky solution that only runs the --co mode until we see the rootdir print and then it just kills the
+    # pytest to save time. We should find better ways to just get the rootdir, one way is to not use the -q flag and
+    # parse the --co output, but that could be more work.
+    process = subprocess.Popen(
+        pytest_cmd_list + [tests_root, "--co"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=project_root,
+    )
+    rootdir_re = re.compile(r"^rootdir:\s?([^\s]*)")
+    # Iterate over the output lines
+    while True:
+        output = process.stdout.readline()
+        if output == "" and process.poll() is not None:
+            break
+        if output:
+            if rootdir_re.search(output):
+                process.kill()
+                return rootdir_re.search(output).group(1)
+    raise ValueError(f"Could not find rootdir in pytest output for {tests_root}")
+
+
+# TODO use output without -q, that way we also get the rootdir from the output
+# then we can get rid of the above get_pytest_rootdir_only function
 def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
     pytest_cmd_list = [chunk for chunk in cfg.pytest_cmd.split(" ") if chunk != ""]
+    # Note - If the -q command does not work, see if the pytest ini file does not have the --vv flag set
     pytest_result = subprocess.run(
-        pytest_cmd_list + [f"{tests_root}", "--co", "-m", "not skip"],
+        pytest_cmd_list + [f"{tests_root}", "--co", "-q", "-m", "not skip"],
         stdout=subprocess.PIPE,
-        cwd=tests_root,
+        cwd=project_root,
     )
-
-    pytest_stdout = pytest_result.stdout.decode("utf-8")
-    rootdir_re = re.compile(r"^rootdir:\s?(\S*)", re.MULTILINE)
-    pytest_rootdir_match = rootdir_re.search(pytest_stdout)
-    if not pytest_rootdir_match:
-        raise ValueError(f"Could not find rootdir in pytest output for {tests_root}")
-    pytest_rootdir = pytest_rootdir_match.group(1)
-
-    tests = parse_pytest_stdout(pytest_stdout, pytest_rootdir)
+    pytest_rootdir = get_pytest_rootdir_only(
+        pytest_cmd_list, tests_root=tests_root, project_root=project_root
+    )
+    tests = parse_pytest_stdout(pytest_result.stdout.decode("utf-8"), pytest_rootdir)
     file_to_test_map = defaultdict(list)
 
     for test in tests:
@@ -203,14 +230,16 @@ def process_test_files(
 
 def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir) -> List[TestsInFile]:
     test_results = []
-    module_line = None
     for line in pytest_stdout.splitlines():
-        if "<Module " in line:
-            module_line = line
-        elif "<Function " in line and module_line:
-            try:
-                test_result = TestsInFile.from_pytest_stdout_line(module_line, line, pytest_rootdir)
-                test_results.append(test_result)
-            except ValueError as e:
-                logging.warning(str(e))
+        if line.startswith("==") or line.startswith("\n") or line == "":
+            break
+        if "[" in line:
+            # TODO: Handle parameterized tests later. Update - This is important
+            continue
+        try:
+            test_result = TestsInFile.from_pytest_stdout_line(line, pytest_rootdir)
+            test_results.append(test_result)
+        except ValueError as e:
+            logging.warning(str(e))
+            continue
     return test_results

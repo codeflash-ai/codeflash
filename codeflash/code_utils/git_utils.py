@@ -29,6 +29,7 @@ def get_git_diff(
         file_path: str = patched_file.path  # file name
         if not file_path.endswith(".py"):
             continue
+        file_path = os.path.join(repository.working_dir, file_path)
         logging.debug("file name :" + file_path)
         add_line_no: list[int] = [
             line.target_line_no
