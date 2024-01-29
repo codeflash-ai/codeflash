@@ -1,3 +1,4 @@
+import os
 import ast
 import os
 import site
@@ -16,10 +17,7 @@ def module_name_from_file_path(file_path: str, project_root: str) -> str:
 def file_path_from_module_name(module_name: str, project_root: str) -> str:
     "Get file path from module path"
 
-    file_path = module_name.replace(".", "/")
-    if not file_path.endswith(".py"):
-        file_path += ".py"
-    return os.path.join(project_root, file_path)
+    return os.path.join(project_root, module_name.replace(".", "/") + ".py")
 
 
 def ellipsis_in_ast(module: ast.AST) -> bool:
