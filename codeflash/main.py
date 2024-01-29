@@ -111,7 +111,7 @@ class Optimizer:
         self.args = args
         self.test_cfg = TestConfig(
             tests_root=args.tests_root,
-            project_root_path=args.module_root,
+            project_root_path=args.project_root,
             test_framework=args.test_framework,
             pytest_cmd=args.pytest_cmd,
         )
@@ -172,10 +172,10 @@ class Optimizer:
                         code_to_optimize_with_dependents,
                         dependent_functions,
                     ) = get_constrained_function_context_and_dependent_functions(
-                        function_to_optimize, self.args.module_root, code_to_optimize
+                        function_to_optimize, self.args.project_root, code_to_optimize
                     )
                     logging.info("CODE TO OPTIMIZE %s", code_to_optimize_with_dependents)
-                    module_path = module_name_from_file_path(path, self.args.module_root)
+                    module_path = module_name_from_file_path(path, self.args.project_root)
 
                     instrumented_unittests_created_for_function = self.prepare_existing_tests(
                         function_name=function_name,
@@ -376,7 +376,7 @@ class Optimizer:
                 injected_test = inject_profiling_into_existing_test(
                     tests_in_file.test_file,
                     function_name,
-                    self.args.module_root,
+                    self.args.project_root,
                 )
                 new_test_path = (
                     os.path.splitext(tests_in_file.test_file)[0]
@@ -647,7 +647,7 @@ class Optimizer:
         result_file_path, run_result = run_tests(
             test_file,
             test_framework=self.args.test_framework,
-            cwd=self.args.module_root,
+            cwd=self.args.project_root,
             pytest_timeout=INDIVIDUAL_TEST_TIMEOUT,
             pytest_cmd=self.test_cfg.pytest_cmd,
             verbose=True,
