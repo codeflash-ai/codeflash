@@ -42,6 +42,7 @@ from codeflash.discovery.functions_to_optimize import (
 )
 from codeflash.optimization.function_context import (
     get_constrained_function_context_and_dependent_functions,
+    Source,
 )
 from codeflash.verification.equivalence import compare_results
 from codeflash.verification.parse_test_output import (
@@ -395,16 +396,16 @@ class Optimizer:
                 unique_original_test_files.add(tests_in_file.test_file)
             logging.info(
                 f"Discovered {relevant_test_files_count} existing unit test file"
-                f"{'s' if relevant_test_files_count > 1 else ''} for {full_module_function_path}"
+                f"{'s' if relevant_test_files_count != 1 else ''} for {full_module_function_path}"
             )
         return unique_instrumented_test_files
 
     def generate_tests_and_optimizations(
         self,
         code_to_optimize_with_dependents: str,
-        function_to_optimize: str,
-        dependent_functions,
-        module_path,
+        function_to_optimize: FunctionToOptimize,
+        dependent_functions: list[Source],
+        module_path: str,
     ):
         generated_original_test_source = None
         instrumented_test_source = None
