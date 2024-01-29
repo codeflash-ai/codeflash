@@ -357,7 +357,9 @@ class Optimizer:
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
 
-    def prepare_existing_tests(self, function_name: str, module_path, function_to_tests):
+    def prepare_existing_tests(
+        self, function_name: str, module_path: str, function_to_tests: dict[str, list[TestsInFile]]
+    ):
         relevant_test_files_count = 0
         unique_original_test_files = set()
         unique_instrumented_test_files = set()
@@ -395,8 +397,8 @@ class Optimizer:
 
     def generate_tests_and_optimizations(
         self,
-        code_to_optimize_with_dependents,
-        function_to_optimize,
+        code_to_optimize_with_dependents: str,
+        function_to_optimize: str,
         dependent_functions,
         module_path,
     ):
@@ -405,7 +407,6 @@ class Optimizer:
         optimizations = None
         success = True
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            # Newly generated tests (not instrumented yet)
             future_tests = executor.submit(
                 self.generate_and_instrument_tests,
                 code_to_optimize_with_dependents,
@@ -447,7 +448,10 @@ class Optimizer:
         )
 
     def establish_original_code_baseline(
-        self, function_name, instrumented_unittests_created_for_function, generated_tests_path
+        self,
+        function_name: str,
+        instrumented_unittests_created_for_function: set[str],
+        generated_tests_path: str,
     ):
         original_runtime = None
         best_runtime = None
@@ -538,7 +542,7 @@ class Optimizer:
     def run_optimized_candidate(
         self,
         optimization_index: int,
-        instrumented_unittests_created_for_function,
+        instrumented_unittests_created_for_function: set[str],
         overall_original_test_results: TestResults,
         original_gen_results: TestResults,
         generated_tests_path: str,
@@ -670,7 +674,7 @@ class Optimizer:
         dependent_function_names: list[str],
         module_path: str,
     ) -> Union[Tuple[str, str], None]:
-        response = generate_tests(
+        tests = generate_tests(
             source_code_being_tested=source_code_being_tested,
             function_to_optimize=function_to_optimize,
             dependent_function_names=dependent_function_names,
@@ -679,13 +683,13 @@ class Optimizer:
             test_timeout=INDIVIDUAL_TEST_TIMEOUT,
             use_cached_tests=self.args.use_cached_tests,
         )
-        if response is None:
+        if tests is None:
             logging.error(
                 f"Failed to generate and instrument tests for {function_to_optimize.function_name}"
             )
             return None
 
-        generated_original_test_source, instrumented_test_source = response
+        generated_original_test_source, instrumented_test_source = tests
 
         return generated_original_test_source, instrumented_test_source
 
