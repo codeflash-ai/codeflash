@@ -1,5 +1,6 @@
 import logging
 import os
+import pathlib
 import pickle
 import sqlite3
 import sys
@@ -48,8 +49,7 @@ class Tracer:
         if self.disable:
             return
 
-        if os.path.exists(self.output_file):
-            os.remove(self.output_file)
+        pathlib.Path(self.output_file).unlink(missing_ok=True)
 
         self.con = sqlite3.connect(self.output_file)
         cur = self.con.cursor()
