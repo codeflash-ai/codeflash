@@ -34,3 +34,6 @@ class Explanation:
         )
 
         return explanation
+
+    def explanation_message(self) -> str:
+        return self.raw_explanation_message
