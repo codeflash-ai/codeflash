@@ -278,8 +278,14 @@ def prompt_github_action(setup_info: dict[str, str]):
             os.makedirs(workflows_path, exist_ok=True)
             from importlib.resources import read_text
 
+            py_version = sys.version_info
+            python_version_string = f" {py_version.major}.{py_version.minor}"
+
             optimize_yml_content = read_text(
                 "codeflash.cli_cmds.workflows", "codeflash-optimize.yaml"
+            )
+            optimize_yml_content = optimize_yml_content.replace(
+                " {{ python_version }}", python_version_string
             )
             with open(optimize_yaml_path, "w") as optimize_yml_file:
                 optimize_yml_file.write(optimize_yml_content)
