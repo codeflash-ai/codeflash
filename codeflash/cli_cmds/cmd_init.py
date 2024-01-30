@@ -7,6 +7,7 @@ import time
 from typing import Optional
 
 import click
+import inquirer
 import tomlkit
 from git import Repo
 
@@ -70,30 +71,54 @@ def collect_setup_info(setup_info: dict[str, str]):
     # Check if the cwd is writable
     if not os.access(curdir, os.W_OK):
         click.echo(
-            f"❌The current directory isn't writable, please check your folder permissions and try again.\n"
+            f"❌ The current directory isn't writable, please check your folder permissions and try again.\n"
         )
         click.echo("It's likely you don't have write permissions for this folder.")
         sys.exit(1)
+
     # Check for the existence of pyproject.toml or setup.py
     project_name = check_for_toml_or_setup_file()
 
-    subdirs = [d for d in next(os.walk("."))[1] if not d.startswith(".")]
+    ignore_subdirs = [
+        "venv",
+        "node_modules",
+        "dist",
+        "build",
+        "build_temp",
+        "build_scripts",
+        "env",
+        "logs",
+        "tmp",
+    ]
+    valid_subdirs = [
+        d
+        for d in next(os.walk("."))[1]
+        if not d.startswith(".") and not d.startswith("__") and d not in ignore_subdirs
+    ]
 
-    subdir_options = (
-        f' ({", ".join([dir for dir in subdirs if dir != "tests"])})' if subdirs else ""
-    )
+    valid_module_subdirs = [dir for dir in valid_subdirs if dir != "tests"]
 
-    module_root = click.prompt(
-        f"What's your project's Python module that you want to optimize? "
-        f"This is the top-level root directory where all the Python source code is located.{subdir_options}",
-        default=project_name if project_name in subdirs else subdirs[0] if subdirs else ".",
-    )
-    setup_info["module_root"] = module_root
+    module_subdir_options = valid_module_subdirs if len(valid_module_subdirs) > 0 else [curdir]
+
+    module_root_question = [
+        inquirer.List(
+            "module_root",
+            message="Which Python module do you want me to optimize going forward? "
+            "(This is usually the top-most directory where all your Python source code is located)",
+            choices=module_subdir_options,
+            default=project_name
+            if project_name in module_subdir_options
+            else module_subdir_options[0],
+        )
+    ]
+    module_root_answer = inquirer.prompt(module_root_question)
+    module_root = module_root_answer["module_root"]
+    setup_info["module_root"] = "." if module_root == curdir else module_root
     ph("cli-project-root-provided")
 
     # Discover test directory
     default_tests_subdir = "tests"
-    if default_tests_subdir in subdirs:
+    if default_tests_subdir in valid_subdirs:
         tests_root = click.prompt(
             "Where are your tests located?",
             default=os.path.join(curdir, default_tests_subdir),
@@ -122,13 +147,18 @@ def collect_setup_info(setup_info: dict[str, str]):
 
     # Autodiscover test framework
     test_framework = detect_test_framework(curdir, tests_root)
-    autodetected = f" (autodetected: {test_framework})" if test_framework else ""
-    setup_info["test_framework"] = click.prompt(
-        f"Which test framework do you use?" + autodetected,
-        type=click.Choice(["pytest", "unittest"]),
-        show_choices=True,
-        default=test_framework,
-    )
+    autodetected = f" (seems to me like you're using {test_framework})" if test_framework else ""
+    questions = [
+        inquirer.List(
+            "test_framework",
+            message="Which test framework do you use?" + autodetected,
+            choices=["pytest", "unittest"],
+            default=test_framework or "unittest",
+            carousel=True,
+        )
+    ]
+    answers = inquirer.prompt(questions)
+    setup_info["test_framework"] = answers["test_framework"]
 
     ph("cli-test-framework-provided", {"test_framework": setup_info["test_framework"]})
 

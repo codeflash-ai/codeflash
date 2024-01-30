@@ -27,6 +27,7 @@ pydantic = "^2.5.2"
 black = "^23.3.0"
 humanize = "^4.9.0"
 posthog = "^3.3.2"
+inquirer = "^3.2.3"
 
 [tool.poetry.group.dev]
 optional = true
