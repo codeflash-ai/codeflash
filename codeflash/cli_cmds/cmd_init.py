@@ -100,48 +100,45 @@ def collect_setup_info(setup_info: dict[str, str]):
 
     module_subdir_options = valid_module_subdirs if len(valid_module_subdirs) > 0 else [curdir]
 
-    module_root_question = [
-        inquirer.List(
-            "module_root",
-            message="Which Python module do you want me to optimize going forward? "
-            "(This is usually the top-most directory where all your Python source code is located)",
-            choices=module_subdir_options,
-            default=project_name
-            if project_name in module_subdir_options
-            else module_subdir_options[0],
-        )
-    ]
-    module_root_answer = inquirer.prompt(module_root_question)
+    module_root_answer = inquirer.prompt(
+        [
+            inquirer.List(
+                "module_root",
+                message="Which Python module do you want me to optimize going forward? "
+                "(This is usually the top-most directory where all your Python source code is located)",
+                choices=module_subdir_options,
+                default=project_name
+                if project_name in module_subdir_options
+                else module_subdir_options[0],
+            )
+        ]
+    )
     module_root = module_root_answer["module_root"]
     setup_info["module_root"] = "." if module_root == curdir else module_root
     ph("cli-project-root-provided")
 
     # Discover test directory
     default_tests_subdir = "tests"
-    if default_tests_subdir in valid_subdirs:
-        tests_root = click.prompt(
-            "Where are your tests located?",
-            default=os.path.join(curdir, default_tests_subdir),
-            type=click.Path(exists=True, file_okay=False, dir_okay=True),
-        )
-    else:
-        while True:
-            tests_root = click.prompt(
-                "Where are your tests located? If you don't have any tests yet, just press enter and I'll create an empty tests/ directory for you.",
-                default="",
+    create_for_me_option = "okay, create a tests/ directory for me!"
+    test_subdir_options = valid_subdirs if len(valid_subdirs) > 0 else [create_for_me_option]
+    tests_root_answer = inquirer.prompt(
+        [
+            inquirer.List(
+                "tests_root",
+                message="Where are your tests located? "
+                "(If you don't have any tests yet, I can create an empty tests/ directory for you)",
+                choices=test_subdir_options,
+                default=default_tests_subdir
+                if default_tests_subdir in test_subdir_options
+                else test_subdir_options[0],
             )
-            if tests_root == "":
-                tests_root = os.path.join(curdir, default_tests_subdir)
-                os.mkdir(tests_root)
-                click.echo(f"✅ Created directory {tests_root}/")
-            else:
-                tests_root = os.path.join(curdir, tests_root)
-                if not os.path.isdir(tests_root):
-                    click.echo(
-                        f"❌ {tests_root} doesn't exist, please enter a valid tests directory."
-                    )
-                    continue
-            break
+        ]
+    )
+    tests_root = tests_root_answer["tests_root"]
+    if tests_root == create_for_me_option:
+        tests_root = os.path.join(curdir, default_tests_subdir)
+        os.mkdir(tests_root)
+        click.echo(f"✅ Created directory {tests_root}/")
     setup_info["tests_root"] = os.path.relpath(tests_root, curdir)
     ph("cli-tests-root-provided")
 
