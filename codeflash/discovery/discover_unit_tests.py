@@ -58,57 +58,28 @@ def discover_unit_tests(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     return discover_tests(cfg)
 
 
-def get_pytest_rootdir_only(pytest_cmd_list, tests_root, project_root) -> str:
-    # Ref - https://docs.pytest.org/en/stable/reference/customize.html#initialization-determining-rootdir-and-configfile
-    # A very hacky solution that only runs the --co mode until we see the rootdir print and then it just kills the
-    # pytest to save time. We should find better ways to just get the rootdir, one way is to not use the -q flag and
-    # parse the --co output, but that could be more work.
-    process = subprocess.Popen(
-        pytest_cmd_list + [tests_root, "--co"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=project_root,
-    )
-    rootdir_re = re.compile(r"^rootdir:\s?([^\s]*)")
-    # Iterate over the output lines
-    while True:
-        output = process.stdout.readline()
-        if output == "" and process.poll() is not None:
-            break
-        if output:
-            if rootdir_re.search(output):
-                process.kill()
-                return rootdir_re.search(output).group(1)
-    raise ValueError(f"Could not find rootdir in pytest output for {tests_root}")
-
-
-# TODO use output without -q, that way we also get the rootdir from the output
-# then we can get rid of the above get_pytest_rootdir_only function
 def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
     pytest_cmd_list = [chunk for chunk in cfg.pytest_cmd.split(" ") if chunk != ""]
-    # Note - If the -q command does not work, see if the pytest ini file does not have the --vv flag set
     pytest_result = subprocess.run(
-        pytest_cmd_list + [f"{tests_root}", "--co", "-q", "-m", "not skip"],
+        pytest_cmd_list + [f"{tests_root}", "--co", "-m", "not skip"],
         stdout=subprocess.PIPE,
-        cwd=project_root,
+        cwd=tests_root,
     )
-    pytest_rootdir = get_pytest_rootdir_only(
-        pytest_cmd_list, tests_root=tests_root, project_root=project_root
-    )
-    tests = parse_pytest_stdout(pytest_result.stdout.decode("utf-8"), pytest_rootdir)
+
+    pytest_stdout = pytest_result.stdout.decode("utf-8")
+    rootdir_re = re.compile(r"^rootdir:\s?(\S*)", re.MULTILINE)
+    pytest_rootdir_match = rootdir_re.search(pytest_stdout)
+    if not pytest_rootdir_match:
+        raise ValueError(f"Could not find rootdir in pytest output for {tests_root}")
+    pytest_rootdir = pytest_rootdir_match.group(1)
+
+    tests = parse_pytest_stdout(pytest_stdout, pytest_rootdir)
     file_to_test_map = defaultdict(list)
 
     for test in tests:
-        test_function = test.test_function
-        parameters = None
-        if "[" in test_function:
-            parameters = re.findall("\[(.*?)\]", test_function)[0]
-        file_to_test_map[test.test_file].append(
-            {"test_function": test.test_function, "parameters": parameters}
-        )
+        file_to_test_map[test.test_file].append({"test_function": test.test_function})
     # Within these test files, find the project functions they are referring to and return their names/locations
     return process_test_files(file_to_test_map, cfg)
 
