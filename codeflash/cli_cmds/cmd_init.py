@@ -70,11 +70,10 @@ def collect_setup_info(setup_info: dict[str, str]):
     # Check if the cwd is writable
     if not os.access(curdir, os.W_OK):
         click.echo(
-            f"❌The current directory is not writable, please check folder permissions and try again.\n"
+            f"❌The current directory isn't writable, please check your folder permissions and try again.\n"
         )
-        click.echo("It is likely you do not have write permissions for this folder.")
+        click.echo("It's likely you don't have write permissions for this folder.")
         sys.exit(1)
-    click.echo("Checking for pyproject.toml or setup.py ...")
     # Check for the existence of pyproject.toml or setup.py
     project_name = check_for_toml_or_setup_file()
 
@@ -183,6 +182,7 @@ def detect_test_framework(curdir, tests_root) -> Optional[str]:
 
 
 def check_for_toml_or_setup_file() -> Optional[str]:
+    click.echo("Checking for pyproject.toml or setup.py ...\r", nl=False)
     curdir = os.getcwd()
     pyproject_toml_path = os.path.join(curdir, "pyproject.toml")
     setup_py_path = os.path.join(curdir, "setup.py")
