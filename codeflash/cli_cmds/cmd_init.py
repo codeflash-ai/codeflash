@@ -270,16 +270,16 @@ def check_for_toml_or_setup_file() -> Optional[str]:
 
 # Ask if the user wants CodeFlash to optimize new GitHub PRs
 def prompt_github_action(setup_info: dict[str, str]):
-    optimize_prs = (
-        click.prompt(
-            "Do you want CodeFlash to automatically optimize new Github PRs when they're opened (recommended)?",
-            default="y",
-            type=click.STRING,
-        )
-        .lower()
-        .strip()
+    optimize_prs_answer = inquirer.prompt(
+        [
+            inquirer.Confirm(
+                "optimize_prs",
+                message="Do you want CodeFlash to automatically optimize new Github PRs when they're opened (recommended)?",
+                default=True,
+            )
+        ]
     )
-    optimize_yes = optimize_prs.startswith("y")
+    optimize_yes = optimize_prs_answer["optimize_prs"]
     ph("cli-github-optimization-choice", {"optimize_prs": optimize_yes})
     if optimize_yes:
         repo = Repo(setup_info["module_root"], search_parent_directories=True)
@@ -287,16 +287,16 @@ def prompt_github_action(setup_info: dict[str, str]):
         workflows_path = os.path.join(git_root, ".github", "workflows")
         optimize_yaml_path = os.path.join(workflows_path, "codeflash-optimize.yaml")
 
-        confirm_creation = (
-            click.prompt(
-                f"Great! We'll create a new workflow file [{optimize_yaml_path}]. Is this OK?",
-                default="y",
-                type=click.STRING,
-            )
-            .lower()
-            .strip()
+        confirm_creation_answer = inquirer.prompt(
+            [
+                inquirer.Confirm(
+                    "confirm_creation",
+                    message=f"Great! We'll create a new workflow file [{optimize_yaml_path}]. Is this OK?",
+                    default=True,
+                )
+            ]
         )
-        confirm_creation_yes = confirm_creation.startswith("y")
+        confirm_creation_yes = confirm_creation_answer["confirm_creation"]
         ph(
             "cli-github-optimization-confirm-workflow-creation",
             {"confirm_creation": confirm_creation_yes},
