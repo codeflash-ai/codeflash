@@ -32,7 +32,7 @@ jobs:
         if: steps.bot_check.outputs.skip_remaining_steps == 'false'
         uses: actions/setup-python@v4
         with:
-          python-version: 3.11.6 # TODO: Replace this with your favorite python version
+          python-version: {{ python_version }}
       - name: Install Project Dependencies
         if: steps.bot_check.outputs.skip_remaining_steps == 'false'
         run: |
