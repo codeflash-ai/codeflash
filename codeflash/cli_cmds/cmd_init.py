@@ -65,71 +65,19 @@ def init_codeflash():
     ph("cli-installation-successful")
 
 
-def create_bubble_sort_file(setup_info: dict[str, str]):
-    bubble_sort_content = """def sorter(arr):
-    for i in range(len(arr)):
-        for j in range(len(arr) - 1):
-            if arr[j] > arr[j + 1]:
-                temp = arr[j]
-                arr[j] = arr[j + 1]
-                arr[j + 1] = temp
-    return arr
-"""
-    bubble_sort_path = os.path.join(setup_info["module_root"], "bubble_sort.py")
-    with open(bubble_sort_path, "w") as bubble_sort_file:
-        bubble_sort_file.write(bubble_sort_content)
-    click.echo(f"✅ Created {bubble_sort_path}")
-
-
-def run_end_to_end_test(setup_info: dict[str, str]):
-    command = [
-        "codeflash",
-        "--file",
-        "bubble_sort.py",
-        "--function",
-        "sorter",
-    ]
-    animation = "|/-\\"
-    idx = 0
-    sys.stdout.write("Running end-to-end test... ")
-    sys.stdout.flush()
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=setup_info["module_root"],
-    )
-    while process.poll() is None:
-        sys.stdout.write(animation[idx % len(animation)])
-        sys.stdout.flush()
-        time.sleep(0.5)
-        sys.stdout.write("\b")
-        idx += 1
-
-    sys.stdout.write(" ")  # Clear the last animation character
-    sys.stdout.flush()
-    stderr = process.stderr.read()
-    if stderr:
-        click.echo(stderr.strip())
-
-    bubble_sort_path = os.path.join(setup_info["module_root"], "bubble_sort.py")
-    if process.returncode == 0:
-        click.echo("\n✅ End-to-end test passed. CodeFlash has been correctly set up!")
-    else:
-        click.echo("\n❌ End-to-end test failed. Please check the setup and try again.")
-
-    # Delete the bubble_sort.py file after the test
-    os.remove(bubble_sort_path)
-    click.echo(f"🗑️ Deleted {bubble_sort_path}")
-
-
 def collect_setup_info(setup_info: dict[str, str]):
+    curdir = os.getcwd()
+    # Check if the cwd is writable
+    if not os.access(curdir, os.W_OK):
+        click.echo(
+            f"❌The current directory is not writable, please check folder permissions and try again.\n"
+        )
+        click.echo("It is likely you do not have write permissions for this folder.")
+        sys.exit(1)
     click.echo("Checking for pyproject.toml or setup.py ...")
     # Check for the existence of pyproject.toml or setup.py
     project_name = check_for_toml_or_setup_file()
 
-    curdir = os.getcwd()
     subdirs = [d for d in next(os.walk("."))[1] if not d.startswith(".")]
 
     subdir_options = (
@@ -473,3 +421,62 @@ def enter_api_key_and_save_to_rc(existing_api_key: str = ""):
         shell_rc.truncate()
     click.echo(f"✅ Updated CODEFLASH_API_KEY in {shell_rc_path}")
     os.environ["CODEFLASH_API_KEY"] = api_key
+
+
+def create_bubble_sort_file(setup_info: dict[str, str]):
+    bubble_sort_content = """def sorter(arr):
+    for i in range(len(arr)):
+        for j in range(len(arr) - 1):
+            if arr[j] > arr[j + 1]:
+                temp = arr[j]
+                arr[j] = arr[j + 1]
+                arr[j + 1] = temp
+    return arr
+"""
+    bubble_sort_path = os.path.join(setup_info["module_root"], "bubble_sort.py")
+    with open(bubble_sort_path, "w") as bubble_sort_file:
+        bubble_sort_file.write(bubble_sort_content)
+    click.echo(f"✅ Created {bubble_sort_path}")
+
+
+def run_end_to_end_test(setup_info: dict[str, str]):
+    command = [
+        "codeflash",
+        "--file",
+        "bubble_sort.py",
+        "--function",
+        "sorter",
+    ]
+    animation = "|/-\\"
+    idx = 0
+    sys.stdout.write("Running end-to-end test... ")
+    sys.stdout.flush()
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=setup_info["module_root"],
+    )
+    while process.poll() is None:
+        sys.stdout.write(animation[idx % len(animation)])
+        sys.stdout.flush()
+        time.sleep(0.5)
+        sys.stdout.write("\b")
+        idx += 1
+
+    sys.stdout.write(" ")  # Clear the last animation character
+    sys.stdout.flush()
+    stderr = process.stderr.read()
+    if stderr:
+        click.echo(stderr.strip())
+
+    bubble_sort_path = os.path.join(setup_info["module_root"], "bubble_sort.py")
+    if process.returncode == 0:
+        click.echo("\n✅ End-to-end test passed. CodeFlash has been correctly set up!")
+    else:
+        click.echo("\n❌ End-to-end test failed. Please check the setup and try again.")
+
+    # Delete the bubble_sort.py file after the test
+    os.remove(bubble_sort_path)
+    click.echo(f"🗑️ Deleted {bubble_sort_path}")
