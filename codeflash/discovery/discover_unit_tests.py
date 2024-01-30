@@ -197,16 +197,14 @@ def process_test_files(
 
 def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir) -> List[TestsInFile]:
     test_results = []
+    module_line = None
     for line in pytest_stdout.splitlines():
-        if line.startswith("==") or line.startswith("\n") or line == "":
-            break
-        if "[" in line:
-            # TODO: Handle parameterized tests later. Update - This is important
-            continue
-        try:
-            test_result = TestsInFile.from_pytest_stdout_line(line, pytest_rootdir)
-            test_results.append(test_result)
-        except ValueError as e:
-            logging.warning(str(e))
-            continue
+        if "<Module " in line:
+            module_line = line
+        elif "<Function " in line and module_line:
+            try:
+                test_result = TestsInFile.from_pytest_stdout_line(module_line, line, pytest_rootdir)
+                test_results.append(test_result)
+            except ValueError as e:
+                logging.warning(str(e))
     return test_results
