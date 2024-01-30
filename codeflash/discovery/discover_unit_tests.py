@@ -20,28 +20,24 @@ class TestsInFile:
     test_suite: Optional[str]
 
     @classmethod
-    def from_pytest_stdout_line(cls, line: str, pytest_rootdir: str):
-        parts = line.split("::")
-        absolute_test_path = os.path.join(pytest_rootdir, parts[0])
-        assert os.path.exists(
-            absolute_test_path
-        ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
-        if len(parts) == 3:
-            return cls(
-                test_file=absolute_test_path,
-                test_class=parts[1],
-                test_function=parts[2],
-                test_suite=None,
-            )
-        elif len(parts) == 2:
+    def from_pytest_stdout_line(cls, module_line: str, function_line: str, pytest_rootdir: str):
+        module_match = re.match(r"\s*<Module (.+)>", module_line)
+        function_match = re.match(r"\s*<Function (.+)>", function_line)
+        if module_match and function_match:
+            module_path = module_match.group(1)
+            function_name = function_match.group(1)
+            absolute_test_path = os.path.join(pytest_rootdir, module_path)
+            assert os.path.exists(
+                absolute_test_path
+            ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
             return cls(
                 test_file=absolute_test_path,
                 test_class=None,
-                test_function=parts[1],
+                test_function=function_name,
                 test_suite=None,
             )
         else:
-            raise ValueError(f"Unexpected pytest result format: {line}")
+            raise ValueError(f"Unexpected pytest result format: {module_line} or {function_line}")
 
 
 @dataclass(frozen=True)
