@@ -28,7 +28,7 @@ def create_pr(
                 ).model_dump(mode="json")
             },
             pr_comment=PrComment(
-                optimization_explanation=explanation.to_console_string(),
+                optimization_explanation=explanation.explanation_message(),
                 best_runtime=explanation.best_runtime_ns,
                 original_runtime=explanation.original_runtime_ns,
                 function_name=explanation.function_name,
@@ -62,7 +62,7 @@ def create_pr(
                 ).model_dump(mode="json")
             },
             pr_comment=PrComment(
-                optimization_explanation=explanation.to_console_string(),
+                optimization_explanation=explanation.explanation_message(),
                 best_runtime=explanation.best_runtime_ns,
                 original_runtime=explanation.original_runtime_ns,
                 function_name=explanation.function_name,
