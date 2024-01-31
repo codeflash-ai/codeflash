@@ -162,7 +162,7 @@ def collect_setup_info(setup_info: dict[str, str]):
             "test_framework",
             message="Which test framework do you use?" + autodetected,
             choices=["pytest", "unittest"],
-            default=test_framework or "unittest",
+            default=test_framework or "pytest",
             carousel=True,
         )
     ]
