@@ -1,13 +1,9 @@
 import os
-import sys
 from typing import List
 
-from codeflash.code_utils.config_consts import MIN_IMPROVEMENT_THRESHOLD
+import tomlkit
 
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
+from codeflash.code_utils.config_consts import MIN_IMPROVEMENT_THRESHOLD
 
 
 def supported_config_keys() -> List[str]:
@@ -46,15 +42,21 @@ def parse_config_file(config_file_path=None):
     config_file = find_pyproject_toml(config_file_path)
     try:
         with open(config_file, "rb") as f:
-            data = tomllib.load(f)
-    except tomllib.TOMLDecodeError as e:
+            data = tomlkit.parse(f.read())
+    except tomlkit.exceptions.ParseError as e:
         raise ValueError(
             f"Error while parsing the config file {config_file}. Please recheck the file for syntax errors. Error: {e}"
         )
-    tool = data["tool"]
-    assert isinstance(tool, dict)
-    config = tool["codeflash"]
-    # todo nice error message whe ncodeflash block is missing
+
+    try:
+        tool = data["tool"]
+        assert isinstance(tool, dict)
+        config = tool["codeflash"]
+    except tomlkit.exceptions.NonExistentKey:
+        raise ValueError(
+            f"Could not find the 'codeflash' block in the config file {config_file}. "
+            f"Please run 'codeflash init' to create the config file."
+        )
     assert isinstance(config, dict)
     path_keys = ["module-root", "tests-root"]
     path_list_keys = ["ignore-paths"]
