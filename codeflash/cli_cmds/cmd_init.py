@@ -109,7 +109,7 @@ def collect_setup_info(setup_info: dict[str, str]):
 
     valid_module_subdirs = [dir for dir in valid_subdirs if dir != "tests"]
 
-    curdir_option = "current_directory (" + curdir + ")"
+    curdir_option = "current directory (" + curdir + ")"
     module_subdir_options = valid_module_subdirs + [curdir_option]
 
     module_root_answer = inquirer.prompt(
