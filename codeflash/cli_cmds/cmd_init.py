@@ -109,7 +109,8 @@ def collect_setup_info(setup_info: dict[str, str]):
 
     valid_module_subdirs = [dir for dir in valid_subdirs if dir != "tests"]
 
-    module_subdir_options = valid_module_subdirs if len(valid_module_subdirs) > 0 else [curdir]
+    curdir_option = "current_directory (" + curdir + ")"
+    module_subdir_options = valid_module_subdirs + [curdir_option]
 
     module_root_answer = inquirer.prompt(
         [
@@ -125,7 +126,7 @@ def collect_setup_info(setup_info: dict[str, str]):
         ]
     )
     module_root = module_root_answer["module_root"]
-    setup_info["module_root"] = "." if module_root == curdir else module_root
+    setup_info["module_root"] = "." if module_root == curdir_option else module_root
     ph("cli-project-root-provided")
 
     # Discover test directory
