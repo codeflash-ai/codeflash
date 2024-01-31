@@ -21,12 +21,12 @@ timeout-decorator = ">=0.5.0"
 pytest-timeout = ">=2.1.0"
 tomlkit = ">=0.11.7"
 unittest-xml-reporting = ">=3.2.0"
-junitparser = "^3.1.0"
+junitparser = ">=3.0.0"
 pydantic = "^2.5.2"
-black = "^23.3.0"
-humanize = "^4.9.0"
-posthog = "^3.3.2"
-inquirer = "^3.2.3"
+black = ">=22.1.0"
+humanize = ">=4.0.0"
+posthog = ">=3.0.0"
+inquirer = ">=3.0.0"
 
 [tool.poetry.group.dev]
 optional = true
