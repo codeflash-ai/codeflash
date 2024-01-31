@@ -28,11 +28,13 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+      # TODO: Replace this with your project's python installation method
       - name: Set up Python
         if: steps.bot_check.outputs.skip_remaining_steps == 'false'
         uses: actions/setup-python@v4
         with:
           python-version: {{ python_version }}
+      # TODO: Replace this with your project dependency installation method
       - name: Install Project Dependencies
         if: steps.bot_check.outputs.skip_remaining_steps == 'false'
         run: |

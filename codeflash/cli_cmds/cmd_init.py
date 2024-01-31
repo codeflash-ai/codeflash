@@ -42,14 +42,7 @@ def init_codeflash():
 
     prompt_github_action(setup_info)
 
-    run_tests = click.confirm(
-        "Do you want to run a sample optimization to ensure everything is set up correctly? This will take about 3 minutes.",
-        default=True,
-    )
-
-    if run_tests:
-        create_bubble_sort_file(setup_info)
-        run_end_to_end_test(setup_info)
+    ask_run_end_to_end_test(setup_info)  # mebbe run this after the following help text?
 
     click.echo(
         "\n"
@@ -61,9 +54,27 @@ def init_codeflash():
         "    codeflash --help to see all options\n"
     )
     if did_add_new_key:
-        click.echo("Please restart your shell to load the CODEFLASH_API_KEY environment variable.")
+        click.echo(
+            "🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
+        )
 
-    ph("cli-installation-successful")
+    ph("cli-installation-successful", {"did_add_new_key": did_add_new_key})
+
+
+def ask_run_end_to_end_test(setup_info):
+    run_tests_answer = inquirer.prompt(
+        [
+            inquirer.Confirm(
+                "run_tests",
+                message="⚡️ Do you want to run a sample optimization to make sure everything's set up correctly? (takes about 3 minutes)",
+                default=True,
+            )
+        ]
+    )
+    run_tests = run_tests_answer["run_tests"]
+    if run_tests:
+        create_bubble_sort_file(setup_info)
+        run_end_to_end_test(setup_info)
 
 
 def collect_setup_info(setup_info: dict[str, str]):
@@ -98,14 +109,15 @@ def collect_setup_info(setup_info: dict[str, str]):
 
     valid_module_subdirs = [dir for dir in valid_subdirs if dir != "tests"]
 
-    module_subdir_options = valid_module_subdirs if len(valid_module_subdirs) > 0 else [curdir]
+    curdir_option = "current directory (" + curdir + ")"
+    module_subdir_options = valid_module_subdirs + [curdir_option]
 
     module_root_answer = inquirer.prompt(
         [
             inquirer.List(
                 "module_root",
-                message="Which Python module do you want me to optimize going forward? "
-                "(This is usually the top-most directory where all your Python source code is located)",
+                message="Which Python module do you want me to optimize going forward?\n"
+                + "(This is usually the top-most directory where all your Python source code is located)",
                 choices=module_subdir_options,
                 default=project_name
                 if project_name in module_subdir_options
@@ -114,7 +126,7 @@ def collect_setup_info(setup_info: dict[str, str]):
         ]
     )
     module_root = module_root_answer["module_root"]
-    setup_info["module_root"] = "." if module_root == curdir else module_root
+    setup_info["module_root"] = "." if module_root == curdir_option else module_root
     ph("cli-project-root-provided")
 
     # Discover test directory
@@ -144,13 +156,13 @@ def collect_setup_info(setup_info: dict[str, str]):
 
     # Autodiscover test framework
     test_framework = detect_test_framework(curdir, tests_root)
-    autodetected = f" (seems to me like you're using {test_framework})" if test_framework else ""
+    autodetected = f" (seems to me you're using {test_framework})" if test_framework else ""
     questions = [
         inquirer.List(
             "test_framework",
             message="Which test framework do you use?" + autodetected,
             choices=["pytest", "unittest"],
-            default=test_framework or "unittest",
+            default=test_framework or "pytest",
             carousel=True,
         )
     ]
@@ -209,6 +221,7 @@ def detect_test_framework(curdir, tests_root) -> Optional[str]:
 
 
 def check_for_toml_or_setup_file() -> Optional[str]:
+    click.echo()
     click.echo("Checking for pyproject.toml or setup.py ...\r", nl=False)
     curdir = os.getcwd()
     pyproject_toml_path = os.path.join(curdir, "pyproject.toml")
@@ -219,10 +232,10 @@ def check_for_toml_or_setup_file() -> Optional[str]:
             with open(pyproject_toml_path, "r") as f:
                 pyproject_toml_content = f.read()
             project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]
-            click.echo(f"✅ Found a pyproject.toml for your project {project_name}")
+            click.echo(f"✅ I found a pyproject.toml for your project {project_name}.")
             ph("cli-pyproject-toml-found-name")
         except Exception as e:
-            click.echo(f"✅ Found a pyproject.toml.")
+            click.echo(f"✅ I found a pyproject.toml for your project.")
             ph("cli-pyproject-toml-found")
     elif os.path.exists(setup_py_path):
         with open(setup_py_path, "r") as f:
@@ -265,6 +278,7 @@ def check_for_toml_or_setup_file() -> Optional[str]:
         )
         ph("cli-no-pyproject-toml-or-setup-py")
         sys.exit(1)
+    click.echo()
     return project_name
 
 
@@ -291,7 +305,7 @@ def prompt_github_action(setup_info: dict[str, str]):
             [
                 inquirer.Confirm(
                     "confirm_creation",
-                    message=f"Great! We'll create a new workflow file [{optimize_yaml_path}]. Is this OK?",
+                    message=f"Great! I'll create a new workflow file at {optimize_yaml_path} ... is this OK?",
                     default=True,
                 )
             ]
@@ -316,13 +330,11 @@ def prompt_github_action(setup_info: dict[str, str]):
             )
             with open(optimize_yaml_path, "w") as optimize_yml_file:
                 optimize_yml_file.write(optimize_yml_content)
-            click.echo(f"✅ Created {optimize_yaml_path}")
-
+            click.echo(f"✅ Created {optimize_yaml_path}\n")
             click.prompt(
                 f"Next, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.\n"
-                + f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} then "
-                + "click 'New repository secret' and add your api key with the variable name CODEFLASH_API_KEY.\n"
-                "If you don't have access to the repo's secrets, ask your repo admin to add it for you.",
+                + f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} ...\n"
+                + f"Then, click 'New repository secret' to add your api key with the variable name CODEFLASH_API_KEY.\n",
                 default="",
                 type=click.STRING,
                 prompt_suffix="",
@@ -330,13 +342,32 @@ def prompt_github_action(setup_info: dict[str, str]):
             )
             click.launch(get_github_secrets_page_url(repo))
             click.echo(
+                "🐙 I opened your Github secrets page! Note: if you see a 404, you probably don't have access to this "
+                + "repo's secrets; ask a repo admin to add it for you, or (not super recommended) you can temporarily "
+                "hard-code your api key into the workflow file.\n",
+            )
+            click.pause()
+            click.echo()
+            click.prompt(
                 f"Finally, for the workflow to work, you'll need to edit the workflow file to install the right "
                 f"Python version and any project dependencies.\n"
-                + f"It's at: {optimize_yaml_path}\n"
+                + f"Press Enter to open {optimize_yaml_path} in your editor.\n",
+                default="",
+                type=click.STRING,
+                prompt_suffix="",
+                show_default=False,
             )
+            click.launch(optimize_yaml_path)
+            click.echo(
+                "📝 I opened the workflow file in your editor! You'll need to edit the steps that install the right Python "
+                + "version and any project dependencies. See the comments in the file for more details.\n"
+            )
+            click.pause()
+            click.echo()
+            click.echo("🚀 CodeFlash is now configured to automatically optimize new Github PRs!\n")
             ph("cli-github-workflow-created")
         else:
-            click.echo("Skipping GitHub workflow creation.")
+            click.echo("⏩️ Skipping GitHub workflow creation.")
             ph("cli-github-workflow-skipped")
 
 
@@ -360,10 +391,11 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
 
     # Add the 'codeflash' section
     pyproject_data["tool"]["codeflash"] = codeflash_section
-    click.echo(f"Writing CodeFlash configuration ...")
+    click.echo(f"Writing CodeFlash configuration ...\r", nl=False)
     with open(toml_path, "w") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
     click.echo(f"✅ Added CodeFlash configuration to {toml_path}")
+    click.echo()
 
 
 class CFAPIKeyType(click.ParamType):
@@ -471,7 +503,7 @@ def run_end_to_end_test(setup_info: dict[str, str]):
     ]
     animation = "|/-\\"
     idx = 0
-    sys.stdout.write("Running end-to-end test... ")
+    sys.stdout.write("Running sample optimization... ")
     sys.stdout.flush()
     process = subprocess.Popen(
         command,
@@ -494,11 +526,14 @@ def run_end_to_end_test(setup_info: dict[str, str]):
         click.echo(stderr.strip())
 
     bubble_sort_path = os.path.join(setup_info["module_root"], "bubble_sort.py")
-    if process.returncode == 0:
-        click.echo("\n✅ End-to-end test passed. CodeFlash has been correctly set up!")
-    else:
-        click.echo("\n❌ End-to-end test failed. Please check the setup and try again.")
 
     # Delete the bubble_sort.py file after the test
     os.remove(bubble_sort_path)
     click.echo(f"🗑️ Deleted {bubble_sort_path}")
+
+    if process.returncode == 0:
+        click.echo("\n✅ End-to-end test passed. CodeFlash has been correctly set up!")
+    else:
+        click.echo(
+            "\n❌ End-to-end test failed. Please check the logs above, and take a look at https://app.codeflash.ai/app/getting-started for help and troubleshooting."
+        )
