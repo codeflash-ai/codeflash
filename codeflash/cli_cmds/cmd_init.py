@@ -116,8 +116,8 @@ def collect_setup_info(setup_info: dict[str, str]):
         [
             inquirer.List(
                 "module_root",
-                message="Which Python module do you want me to optimize going forward? "
-                "(This is usually the top-most directory where all your Python source code is located)",
+                message="Which Python module do you want me to optimize going forward?\n"
+                + "(This is usually the top-most directory where all your Python source code is located)",
                 choices=module_subdir_options,
                 default=project_name
                 if project_name in module_subdir_options
@@ -526,13 +526,14 @@ def run_end_to_end_test(setup_info: dict[str, str]):
         click.echo(stderr.strip())
 
     bubble_sort_path = os.path.join(setup_info["module_root"], "bubble_sort.py")
+
+    # Delete the bubble_sort.py file after the test
+    os.remove(bubble_sort_path)
+    click.echo(f"🗑️ Deleted {bubble_sort_path}")
+
     if process.returncode == 0:
         click.echo("\n✅ End-to-end test passed. CodeFlash has been correctly set up!")
     else:
         click.echo(
             "\n❌ End-to-end test failed. Please check the logs above, and take a look at https://app.codeflash.ai/app/getting-started for help and troubleshooting."
         )
-
-    # Delete the bubble_sort.py file after the test
-    os.remove(bubble_sort_path)
-    click.echo(f"🗑️ Deleted {bubble_sort_path}")
