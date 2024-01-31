@@ -7,7 +7,7 @@ from codeflash.cli_cmds.cli import process_cmd_args
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.linter import lint_code
-from codeflash.result.create_pr import create_pr
+from codeflash.result.create_pr import check_create_pr
 from codeflash.result.explanation import Explanation
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s", stream=sys.stdout)
@@ -327,11 +327,9 @@ class Optimizer:
                             f"\n{generated_original_test_source}"
                         )
 
-                        logging.info(
-                            f"⚡️ Optimization successful! 📄 {function_name} in {path} 📈 "
-                            f"{explanation_final.speedup * 100:.2f}% ({explanation_final.speedup:.2f}x) faster"
-                        )
-                        create_pr(
+                        logging.info(f"⚡️ Optimization successful! 📄 {function_name} in {path} 📈")
+                        logging.info(explanation_final.perf_improvement_line)
+                        check_create_pr(
                             optimize_all=self.args.all,
                             path=path,
                             original_code=original_code,
