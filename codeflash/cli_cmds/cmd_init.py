@@ -352,17 +352,6 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
             f"Please create it by running `poetry init`, or run `codeflash init` again from a different project directory."
         )
 
-    # Ensure the 'tool.poetry.dependencies' table exists
-    poetry_dependencies = (
-        pyproject_data.get("tool", {}).get("poetry", {}).get("dependencies", tomlkit.table())
-    )
-
-    # Update the 'pyproject_data' with the modified dependencies
-    if "tool" not in pyproject_data:
-        pyproject_data["tool"] = tomlkit.table()
-    if "poetry" not in pyproject_data["tool"]:
-        pyproject_data["tool"]["poetry"] = tomlkit.table()
-    pyproject_data["tool"]["poetry"]["dependencies"] = poetry_dependencies
     codeflash_section = tomlkit.table()
     codeflash_section["module-root"] = setup_info["module_root"]
     codeflash_section["tests-root"] = setup_info["tests_root"]
