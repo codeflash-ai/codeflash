@@ -116,8 +116,8 @@ def collect_setup_info(setup_info: dict[str, str]):
         [
             inquirer.List(
                 "module_root",
-                message="Which Python module do you want me to optimize going forward? "
-                "(This is usually the top-most directory where all your Python source code is located)",
+                message="Which Python module do you want me to optimize going forward?\n"
+                + "(This is usually the top-most directory where all your Python source code is located)",
                 choices=module_subdir_options,
                 default=project_name
                 if project_name in module_subdir_options
