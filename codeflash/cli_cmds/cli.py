@@ -13,6 +13,7 @@ from codeflash.code_utils.git_utils import (
     get_repo_owner_and_name,
     get_github_secrets_page_url,
 )
+from codeflash.version import __version__ as version
 
 CF_BASE_URL = "https://app.codeflash.ai"
 
@@ -20,6 +21,9 @@ CF_BASE_URL = "https://app.codeflash.ai"
 def process_cmd_args(args: Namespace) -> Namespace:
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
+    if args.version:
+        logging.info(f"CodeFlash version {version}")
+        exit()
     if "command" in args and args.command == "init":
         init_codeflash()
         exit()

@@ -42,6 +42,7 @@ from codeflash.discovery.functions_to_optimize import (
 )
 from codeflash.optimization.function_context import (
     get_constrained_function_context_and_dependent_functions,
+    Source,
 )
 from codeflash.verification.equivalence import compare_results
 from codeflash.verification.parse_test_output import (
@@ -103,6 +104,7 @@ def parse_args() -> Namespace:
         help="Use cached tests from a specified file for debugging.",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose logs")
+    parser.add_argument("--version", action="store_true", help="Print the version of codeflash")
     args: Namespace = parser.parse_args()
     return process_cmd_args(args)
 
@@ -140,6 +142,7 @@ class Optimizer:
             if num_modified_functions == 0:
                 logging.info("No functions found to optimize. Exiting...")
                 return
+            logging.info("Discovering existing unit tests...")
             function_to_tests: dict[str, list[TestsInFile]] = discover_unit_tests(self.test_cfg)
             logging.info(
                 f"Discovered a total of {sum([len(value) for value in function_to_tests.values()])} "
@@ -178,7 +181,7 @@ class Optimizer:
                     ) = get_constrained_function_context_and_dependent_functions(
                         function_to_optimize, self.args.project_root, code_to_optimize
                     )
-                    logging.info("CODE TO OPTIMIZE %s", code_to_optimize_with_dependents)
+                    logging.info(f"CODE TO OPTIMIZE\n{code_to_optimize_with_dependents}")
                     module_path = module_name_from_file_path(path, self.args.project_root)
 
                     instrumented_unittests_created_for_function = self.prepare_existing_tests(
@@ -393,16 +396,16 @@ class Optimizer:
                 unique_original_test_files.add(tests_in_file.test_file)
             logging.info(
                 f"Discovered {relevant_test_files_count} existing unit test file"
-                f"{'s' if relevant_test_files_count > 1 else ''} for {full_module_function_path}"
+                f"{'s' if relevant_test_files_count != 1 else ''} for {full_module_function_path}"
             )
         return unique_instrumented_test_files
 
     def generate_tests_and_optimizations(
         self,
         code_to_optimize_with_dependents: str,
-        function_to_optimize: str,
-        dependent_functions,
-        module_path,
+        function_to_optimize: FunctionToOptimize,
+        dependent_functions: list[Source],
+        module_path: str,
     ):
         generated_original_test_source = None
         instrumented_test_source = None

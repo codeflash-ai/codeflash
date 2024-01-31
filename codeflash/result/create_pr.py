@@ -6,10 +6,16 @@ from codeflash.api import cfapi
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.git_utils import get_repo_owner_and_name, git_root_dir, get_current_branch
 from codeflash.github.PrComment import FileDiffContent, PrComment
+from codeflash.result.explanation import Explanation
 
 
 def create_pr(
-    optimize_all, path, original_code, new_code, explanation, generated_original_test_source
+    optimize_all: bool,
+    path: str,
+    original_code: str,
+    new_code: str,
+    explanation: Explanation,
+    generated_original_test_source: str,
 ):
     pr_number: Optional[int] = env_utils.get_pr_number()
 
