@@ -526,13 +526,14 @@ def run_end_to_end_test(setup_info: dict[str, str]):
         click.echo(stderr.strip())
 
     bubble_sort_path = os.path.join(setup_info["module_root"], "bubble_sort.py")
+
+    # Delete the bubble_sort.py file after the test
+    os.remove(bubble_sort_path)
+    click.echo(f"🗑️ Deleted {bubble_sort_path}")
+
     if process.returncode == 0:
         click.echo("\n✅ End-to-end test passed. CodeFlash has been correctly set up!")
     else:
         click.echo(
             "\n❌ End-to-end test failed. Please check the logs above, and take a look at https://app.codeflash.ai/app/getting-started for help and troubleshooting."
         )
-
-    # Delete the bubble_sort.py file after the test
-    os.remove(bubble_sort_path)
-    click.echo(f"🗑️ Deleted {bubble_sort_path}")
