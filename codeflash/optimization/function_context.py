@@ -31,7 +31,8 @@ def belongs_to_function(name: Name, function_name: str) -> bool:
     """
     if name.full_name and name.full_name.startswith(name.module_name):
         subname = name.full_name[len(name.module_name) :]
-        if f".{function_name}." in subname:
+        # The name is defined inside the function or is the function itself
+        if f".{function_name}." in subname or f".{function_name}" == subname:
             return True
     return False
 
