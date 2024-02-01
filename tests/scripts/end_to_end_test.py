@@ -38,7 +38,7 @@ def main():
     assert return_code == 0, f"The codeflash command returned exit code {return_code} instead of 0"
 
     m = re.search(
-        r"Optimization successful! 📄 sorter in .+\n.+📈.+(\d+,\d+)% improvement \((\d+,\d+\.\d+)x faster\)\.",
+        r"Optimization successful! 📄 sorter in .+\n.+📈\s+([\d+,]+)% improvement \(([\d+,.]+)x faster\)\.",
         stdout,
     )
     assert m, "Failed to find performance improvement at all"
