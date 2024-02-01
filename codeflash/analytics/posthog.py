@@ -10,8 +10,6 @@ _posthog = Posthog(
     project_api_key="phc_aUO790jHd7z1SXwsYCz8dRApxueplZlZWeDSpKc5hol", host="https://us.posthog.com"
 )
 
-_cached_user_id = None
-
 
 def ph(event: str, properties: Dict[str, Any] = None) -> None:
     """
@@ -19,7 +17,6 @@ def ph(event: str, properties: Dict[str, Any] = None) -> None:
     :param event: The name of the event.
     :param properties: A dictionary of properties to attach to the event.
     """
-    global _cached_user_id
 
     if properties is None:
         properties = {}
@@ -27,10 +24,8 @@ def ph(event: str, properties: Dict[str, Any] = None) -> None:
     properties["cli_version"] = __version__
     properties["cli_version_tuple"] = __version_tuple__
 
-    if _cached_user_id is None:
-        _cached_user_id = get_user_id()
+    user_id = get_user_id()
 
-    user_id = _cached_user_id
     if user_id:
         _posthog.capture(
             distinct_id=user_id,

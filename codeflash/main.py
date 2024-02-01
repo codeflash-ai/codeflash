@@ -1,33 +1,20 @@
 import concurrent.futures
 import logging
-import pathlib
-import sys
-
-from codeflash.cli_cmds.cli import process_cmd_args
-from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
-from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
-from codeflash.code_utils.linter import lint_code
-from codeflash.result.create_pr import check_create_pr
-from codeflash.result.explanation import Explanation
-
-logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s", stream=sys.stdout)
-from typing import Tuple, Union
-
-from codeflash.api.aiservice import optimize_python_code
-from codeflash.code_utils import env_utils
-from codeflash.code_utils.config_consts import (
-    MAX_TEST_RUN_ITERATIONS,
-    MAX_FUNCTION_TEST_SECONDS,
-    INDIVIDUAL_TEST_TIMEOUT,
-    N_CANDIDATES,
-)
-
 import os
+import pathlib
 from argparse import ArgumentParser, SUPPRESS, Namespace
 
 import libcst as cst
 
-from codeflash.code_utils.time_utils import humanize_runtime
+import codeflash.cli_cmds.logging_config  # intializes logging, has to be the first non-system import # noqa
+from codeflash.cli_cmds.cli import process_cmd_args
+from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
+from codeflash.result.create_pr import check_create_pr
+
+from typing import Tuple, Union
+
+from codeflash.api.aiservice import optimize_python_code
+from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import get_code
 from codeflash.code_utils.code_replacer import replace_function_in_file
 from codeflash.code_utils.code_utils import (
@@ -35,6 +22,15 @@ from codeflash.code_utils.code_utils import (
     get_all_function_names,
     get_run_tmp_file,
 )
+from codeflash.code_utils.config_consts import (
+    MAX_TEST_RUN_ITERATIONS,
+    MAX_FUNCTION_TEST_SECONDS,
+    INDIVIDUAL_TEST_TIMEOUT,
+    N_CANDIDATES,
+)
+from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
+from codeflash.code_utils.linter import lint_code
+from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests, TestsInFile
 from codeflash.discovery.functions_to_optimize import (
     get_functions_to_optimize_by_file,
@@ -44,14 +40,13 @@ from codeflash.optimization.function_context import (
     get_constrained_function_context_and_dependent_functions,
     Source,
 )
+from codeflash.result.explanation import Explanation
 from codeflash.verification.equivalence import compare_results
 from codeflash.verification.parse_test_output import (
     TestType,
     parse_test_results,
 )
 from codeflash.verification.test_results import TestResults
-
-
 from codeflash.verification.test_runner import run_tests
 from codeflash.verification.verification_utils import (
     get_test_file_path,

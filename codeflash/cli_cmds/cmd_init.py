@@ -49,6 +49,7 @@ def init_codeflash():
         "⚡️ CodeFlash is now set up! You can now run:\n"
         "    codeflash --file <path-to-file> --function <function-name> to optimize a function within a file\n"
         "    codeflash --file <path-to-file> to optimize all functions in a file\n"
+        f"    codeflash --all to optimize all functions in all files in the module you selected ({setup_info['module_root']})\n"
         # "    codeflash --pr <pr-number> to optimize a PR\n"
         "-or-\n"
         "    codeflash --help to see all options\n"

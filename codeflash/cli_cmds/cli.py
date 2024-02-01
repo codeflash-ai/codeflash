@@ -1,11 +1,13 @@
 import logging
 import os
+import sys
 from argparse import Namespace
 
 import git
 
 from codeflash.api.cfapi import check_github_app_installed_on_repo
 from codeflash.cli_cmds.cmd_init import init_codeflash
+from codeflash.cli_cmds.logging_config import LOGGING_FORMAT
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.git_utils import (
@@ -15,12 +17,10 @@ from codeflash.code_utils.git_utils import (
 )
 from codeflash.version import __version__ as version
 
-CF_BASE_URL = "https://app.codeflash.ai"
-
 
 def process_cmd_args(args: Namespace) -> Namespace:
     if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG, format=LOGGING_FORMAT, stream=sys.stdout)
     if args.version:
         logging.info(f"CodeFlash version {version}")
         exit()
