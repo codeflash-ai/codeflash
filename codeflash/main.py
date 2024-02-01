@@ -3,17 +3,14 @@ import logging
 import os
 import pathlib
 from argparse import ArgumentParser, SUPPRESS, Namespace
+from typing import Tuple, Union
 
 import libcst as cst
 
 import codeflash.cli_cmds.logging_config  # intializes logging, has to be the first non-system import # noqa
+from codeflash.api.aiservice import optimize_python_code
 from codeflash.cli_cmds.cli import process_cmd_args
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
-from codeflash.result.create_pr import check_create_pr
-
-from typing import Tuple, Union
-
-from codeflash.api.aiservice import optimize_python_code
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import get_code
 from codeflash.code_utils.code_replacer import replace_function_in_file
@@ -40,6 +37,7 @@ from codeflash.optimization.function_context import (
     get_constrained_function_context_and_dependent_functions,
     Source,
 )
+from codeflash.result.create_pr import check_create_pr
 from codeflash.result.explanation import Explanation
 from codeflash.verification.equivalence import compare_results
 from codeflash.verification.parse_test_output import (
@@ -322,8 +320,8 @@ class Optimizer:
                             f"\n{generated_original_test_source}"
                         )
 
-                        logging.info(f"⚡️ Optimization successful! 📄 {function_name} in {path} 📈")
-                        logging.info(explanation_final.perf_improvement_line)
+                        logging.info(f"⚡️ Optimization successful! 📄 {function_name} in {path}")
+                        logging.info(f"📈 {explanation_final.perf_improvement_line}")
                         check_create_pr(
                             optimize_all=self.args.all,
                             path=path,

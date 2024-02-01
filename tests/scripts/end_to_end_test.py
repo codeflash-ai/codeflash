@@ -38,11 +38,12 @@ def main():
     assert return_code == 0, f"The codeflash command returned exit code {return_code} instead of 0"
 
     m = re.search(
-        r"Optimization successful! .+ sorter in .+ (\d+\.\d+)% \((\d+\.\d+)x\) faster", stdout
+        r"Optimization successful! 📄 sorter in .+ 📈\n📈 .+ (\d+,\d+)% improvement \((\d+,\d+\.\d+)x faster\)\.",
+        stdout,
     )
     assert m, "Failed to find performance improvement at all"
-    improvement_pct = float(m.group(1))
-    improvement_x = float(m.group(2))
+    improvement_pct = float(m.group(1).replace(",", ""))
+    improvement_x = float(m.group(2).replace(",", ""))
 
     assert (
         150000 > improvement_pct > 30000
