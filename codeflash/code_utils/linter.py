@@ -12,7 +12,7 @@ def lint_code(path: str) -> str:
     if result.returncode == 0:
         logging.info("OK")
     else:
-        logging.error("Failed to format")
+        logging.error("Failed to format code with black")
     with open(path, "r") as f:
         new_code = f.read()
     return new_code
