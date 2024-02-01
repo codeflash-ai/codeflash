@@ -1,13 +1,12 @@
 import ast
+import jedi
 import logging
 import os
-from typing import List
-
-import jedi
 import tiktoken
 from jedi.api.classes import Name
 from pydantic import RootModel
 from pydantic.dataclasses import dataclass
+from typing import List
 
 from codeflash.code_utils.code_extractor import get_code_no_skeleton, get_code
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
@@ -27,9 +26,9 @@ def belongs_to_class(name: Name, class_name: str) -> bool:
 
 def belongs_to_function(name: Name, function_name: str) -> bool:
     """
-    Check if the given name belongs to the specified function.
+    Check if the given name belongs to the specified function
     """
-    if name.full_name and name.module_name in name.full_name:
+    if name.full_name and name.full_name.startswith(name.module_name):
         subname = name.full_name.replace(name.module_name, "", 1)
     else:
         return False
