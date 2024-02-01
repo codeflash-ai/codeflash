@@ -46,7 +46,7 @@ def check_create_pr(
             generated_tests=generated_original_test_source,
         )
         if response.ok:
-            logging.info("OK")
+            logging.info("Suggestions were successfully made to PR #" + str(pr_number))
         else:
             logging.error(
                 f"Optimization was successful, but I failed to suggest changes to PR #{pr_number}."
@@ -81,7 +81,7 @@ def check_create_pr(
             generated_tests=generated_original_test_source,
         )
         if response.ok:
-            logging.info("OK")
+            logging.info(f"Successfully created a new PR #{response.text} with the optimized code.")
         else:
             logging.error(
                 f"Optimization was successful, but I failed to create a PR with the optimized code."

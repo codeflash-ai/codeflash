@@ -174,7 +174,7 @@ class Optimizer:
                     ) = get_constrained_function_context_and_dependent_functions(
                         function_to_optimize, self.args.project_root, code_to_optimize
                     )
-                    logging.info(f"CODE TO OPTIMIZE\n{code_to_optimize_with_dependents}")
+                    logging.info(f"Code to be optimized:\n{code_to_optimize_with_dependents}")
                     module_path = module_name_from_file_path(path, self.args.project_root)
 
                     instrumented_unittests_created_for_function = self.prepare_existing_tests(
