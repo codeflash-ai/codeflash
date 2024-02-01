@@ -37,7 +37,7 @@ from codeflash.optimization.function_context import (
     get_constrained_function_context_and_dependent_functions,
     Source,
 )
-from codeflash.result.create_pr import create_pr
+from codeflash.result.create_pr import check_create_pr
 from codeflash.result.explanation import Explanation
 from codeflash.verification.equivalence import compare_results
 from codeflash.verification.parse_test_output import (
@@ -320,11 +320,9 @@ class Optimizer:
                             f"\n{generated_original_test_source}"
                         )
 
-                        logging.info(
-                            f"⚡️ Optimization successful! 📄 {function_name} in {path} 📈 "
-                            f"{explanation_final.speedup * 100:.2f}% ({explanation_final.speedup:.2f}x) faster"
-                        )
-                        create_pr(
+                        logging.info(f"⚡️ Optimization successful! 📄 {function_name} in {path}")
+                        logging.info(f"📈 {explanation_final.perf_improvement_line}")
+                        check_create_pr(
                             optimize_all=self.args.all,
                             path=path,
                             original_code=original_code,

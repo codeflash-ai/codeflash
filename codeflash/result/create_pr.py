@@ -9,7 +9,7 @@ from codeflash.github.PrComment import FileDiffContent, PrComment
 from codeflash.result.explanation import Explanation
 
 
-def create_pr(
+def check_create_pr(
     optimize_all: bool,
     path: str,
     original_code: str,
@@ -39,7 +39,8 @@ def create_pr(
                 original_runtime=explanation.original_runtime_ns,
                 function_name=explanation.function_name,
                 relative_file_path=relative_path,
-                speedup=explanation.speedup,
+                speedup_x=explanation.speedup_x,
+                speedup_pct=explanation.speedup_pct,
                 winning_test_results=explanation.winning_test_results,
             ),
             generated_tests=generated_original_test_source,
@@ -73,7 +74,8 @@ def create_pr(
                 original_runtime=explanation.original_runtime_ns,
                 function_name=explanation.function_name,
                 relative_file_path=relative_path,
-                speedup=explanation.speedup,
+                speedup_x=explanation.speedup_x,
+                speedup_pct=explanation.speedup_pct,
                 winning_test_results=explanation.winning_test_results,
             ),
             generated_tests=generated_original_test_source,
