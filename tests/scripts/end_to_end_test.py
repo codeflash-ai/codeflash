@@ -37,12 +37,19 @@ def main():
     stdout = "".join(output)
     assert return_code == 0, f"The codeflash command returned exit code {return_code} instead of 0"
 
-    m = re.search(r"Performance went up by (\d+\.\d+)x", stdout)
+    m = re.search(
+        r"Optimization successful! .+ sorter in .+ (\d+\.\d+)% \((\d+\.\d+)x\) faster", stdout
+    )
     assert m, "Failed to find performance improvement at all"
-    improvement = float(m.group(1))
+    improvement_pct = float(m.group(1))
+    improvement_x = float(m.group(2))
+
     assert (
-        30000 < improvement < 120000
-    ), f"Performance improvement was not in the expected range, got {improvement}"
+        improvement_pct > 30000
+    ), f"Performance improvement percentage was not greater than 30000, got {improvement_pct}"
+    assert (
+        improvement_x > 30000
+    ), f"Performance improvement factor was not greater than 30000, got {improvement_x}"
 
 
 if __name__ == "__main__":
