@@ -83,3 +83,23 @@ def test_multiple_classes_dependencies():
         "test_function_dependencies.C.run.calculate_something_3",
         "test_function_dependencies.C.run.global_dependency_3",
     ]
+
+
+def recursive_dependency_1(num):
+    if num == 0:
+        return 0
+    num_1 = calculate_something(num)
+    return recursive_dependency_1(num) + num_1
+
+
+def test_recursive_dependency():
+    file_path = pathlib.Path(__file__).resolve()
+    dependent_functions = get_function_variables_definitions(
+        FunctionToOptimize("recursive_dependency_1", str(file_path), []),
+        str(file_path.parent.resolve()),
+    )
+    assert len(dependent_functions) == 1
+    assert (
+        dependent_functions[0].definition.full_name
+        == "test_function_dependencies.calculate_something"
+    )
