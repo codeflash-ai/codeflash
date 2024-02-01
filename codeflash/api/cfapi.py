@@ -1,8 +1,10 @@
 import logging
 import os
+from functools import lru_cache
+from typing import Optional, Dict, Any
+
 import requests
 from requests import Response
-from typing import Optional, Dict, Any
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.github.PrComment import PrComment
@@ -33,6 +35,7 @@ def make_cfapi_request(
     return response
 
 
+@lru_cache(maxsize=1)
 def get_user_id() -> Optional[str]:
     """
     Retrieve the user's userid by making a request to the /cfapi/cli-get-user endpoint.
