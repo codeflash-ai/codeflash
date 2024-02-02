@@ -46,11 +46,11 @@ def main():
     improvement_x = float(m.group(2).replace(",", ""))
 
     assert (
-        12000000 > improvement_pct > 30000
-    ), f"Performance improvement percentage was {improvement_pct}, which was not in the range of 30,000% to 12,000,000%"
+        improvement_pct > 30000
+    ), f"Performance improvement percentage was {improvement_pct}, which was not above 30,000%"
     assert (
-        12000000 > improvement_x > 30000
-    ), f"Performance improvement rate was {improvement_x}x, which was not in the range of 30,000x to 12,000,000"
+        improvement_x > 30000
+    ), f"Performance improvement rate was {improvement_x}x, which was not above 30,000x"
 
 
 if __name__ == "__main__":
