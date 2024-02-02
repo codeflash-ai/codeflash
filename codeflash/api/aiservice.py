@@ -1,12 +1,12 @@
 import logging
 import os
+import requests
+from pydantic import RootModel
 from typing import Any, Dict, List, Tuple, Optional
 
-import requests
 from codeflash.analytics.posthog import ph
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from pydantic import RootModel
 
 if os.environ.get("AIS_SERVER", default="prod").lower() == "local":
     AI_SERVICE_BASE_URL = "http://localhost:8000/"
@@ -129,10 +129,18 @@ def generate_regression_tests(
         response_json = response.json()
         return response_json["generated_tests"], response_json["instrumented_tests"]
     else:
-        error = response.json()["error"]
-        logging.error(f"Error generating tests: {response.status_code} - {error}")
-        ph(
-            "cli-testgen-error-response",
-            {"response_status_code": response.status_code, "error": error},
-        )
-        return None
+        try:
+            error = response.json()["error"]
+            logging.error(f"Error generating tests: {response.status_code} - {error}")
+            ph(
+                "cli-testgen-error-response",
+                {"response_status_code": response.status_code, "error": error},
+            )
+            return None
+        except Exception as e:
+            logging.error(f"Error generating tests: {response.status_code} - {response.text}")
+            ph(
+                "cli-testgen-error-response",
+                {"response_status_code": response.status_code, "error": response.text},
+            )
+            return None
