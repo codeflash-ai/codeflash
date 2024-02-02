@@ -3,11 +3,10 @@ import os
 from typing import Any, Dict, List, Tuple, Optional
 
 import requests
-from pydantic import RootModel
-
 from codeflash.analytics.posthog import ph
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from pydantic import RootModel
 
 if os.environ.get("AIS_SERVER", default="prod").lower() == "local":
     AI_SERVICE_BASE_URL = "http://localhost:8000/"
@@ -66,15 +65,14 @@ def optimize_python_code(
         return [(None, None)]
 
     if response.status_code == 200:
-        optimizations = response.json()
+        optimizations = response.json()["optimizations"]
         return [(opt["source_code"], opt["explanation"]) for opt in optimizations]
     else:
-        logging.error(
-            f"Error generating optimized candidates: {response.status_code} {response.text}"
-        )
+        error = response.json()["error"]
+        logging.error(f"Error generating optimized candidates: {response.status_code} - {error}")
         ph(
             "cli-optimize-error-response",
-            {"response_status_code": response.status_code, "response_text": response.text},
+            {"response_status_code": response.status_code, "error": error},
         )
         return [(None, None)]
 
@@ -131,9 +129,10 @@ def generate_regression_tests(
         response_json = response.json()
         return response_json["generated_tests"], response_json["instrumented_tests"]
     else:
-        logging.error(f"Error generating tests: {response.status_code} {response.text}")
+        error = response.json()["error"]
+        logging.error(f"Error generating tests: {response.status_code} - {error}")
         ph(
             "cli-testgen-error-response",
-            {"response_status_code": response.status_code, "response_text": response.text},
+            {"response_status_code": response.status_code, "error": error},
         )
         return None
