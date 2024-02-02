@@ -116,8 +116,10 @@ def get_functions_to_optimize_by_file(
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
     functions = {}
     if optimize_all:
+        logging.info("Finding all functions in the module '%s' ...", optimize_all)
         functions = get_all_files_and_functions(optimize_all)
     elif file is not None:
+        logging.info("Finding all functions in the file '%s' ...", file)
         functions = find_all_functions_in_file(file)
         if function is not None:
             only_function_name = function.split(".")[-1]
@@ -129,10 +131,12 @@ def get_functions_to_optimize_by_file(
                 raise ValueError(f"Function {only_function_name} not found in file {file}")
             functions[file] = [found_function]
     else:
+        logging.info("Finding all functions modified in the current git diff ...")
         functions = get_functions_within_git_diff()
     filtered_modified_functions, functions_count = filter_functions(
         functions, test_cfg.tests_root, ignore_paths
     )
+    logging.info("Found %d functions to optimize", functions_count)
     return filtered_modified_functions, functions_count
 
 

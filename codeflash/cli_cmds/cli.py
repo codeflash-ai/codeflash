@@ -50,10 +50,10 @@ def process_cmd_args(args: Namespace) -> Namespace:
                 and getattr(args, key.replace("-", "_")) is None
             ) or not hasattr(args, key.replace("-", "_")):
                 setattr(args, key.replace("-", "_"), pyproject_config[key])
-    assert os.path.isdir(
+    assert args.module_root is not None and os.path.isdir(
         args.module_root
     ), f"--module-root {args.module_root} must be a valid directory"
-    assert os.path.isdir(
+    assert args.tests_root is not None and os.path.isdir(
         args.tests_root
     ), f"--tests-root {args.tests_root} must be a valid directory"
     assert not (
