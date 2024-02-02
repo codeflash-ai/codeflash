@@ -68,7 +68,10 @@ def optimize_python_code(
         optimizations = response.json()["optimizations"]
         return [(opt["source_code"], opt["explanation"]) for opt in optimizations]
     else:
-        error = response.json()["error"]
+        try:
+            error = response.json()["error"]
+        except Exception as e:
+            error = response.text
         logging.error(f"Error generating optimized candidates: {response.status_code} - {error}")
         ph(
             "cli-optimize-error-response",
