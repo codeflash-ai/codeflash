@@ -60,19 +60,18 @@ def get_type_annotation_context(
     sources = []
     ast_parents: list[str] = []
 
-    def visit_children(node, ast_parents):
+    def visit_children(node, node_parents):
         for child in ast.iter_child_nodes(node):
-            visit(child, ast_parents)
+            visit(child, node_parents)
 
-    def visit(node, ast_parents):
+    def visit(node, node_parents):
         if isinstance(
             node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
         ):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if node.name == function_name and ast_parents == function.parents:
+                if node.name == function_name and node_parents == function.parents:
                     for arg in node.args.args:
                         if arg.annotation and hasattr(arg.annotation, "id"):
-                            name = arg.annotation.id
                             line_no = arg.annotation.lineno
                             col_no = arg.annotation.col_offset
                             definition: List[Name] = jedi_script.goto(
@@ -100,7 +99,7 @@ def get_type_annotation_context(
                                         FunctionToOptimize(
                                             definition[0].name,
                                             definition_path,
-                                            ast_parents[:-1],
+                                            node_parents[:-1],
                                         )
                                     )
                                     if source_code:
@@ -115,10 +114,10 @@ def get_type_annotation_context(
                                             )
                                         )
             if not isinstance(node, ast.Module):
-                ast_parents.append(node.name)
-            visit_children(node, ast_parents)
+                node_parents.append(node.name)
+            visit_children(node, node_parents)
             if not isinstance(node, ast.Module):
-                ast_parents.pop()
+                node_parents.pop()
 
     visit(module, ast_parents)
 
@@ -127,13 +126,14 @@ def get_type_annotation_context(
 
 def get_function_variables_definitions(
     function_to_optimize: FunctionToOptimize, project_root_path: str
-) -> List[Source]:
+) -> List[tuple[Source, str]]:
     function_name = function_to_optimize.function_name
     file_path = function_to_optimize.file_path
     script = jedi.Script(path=file_path, project=jedi.Project(path=project_root_path))
     sources = []
     # TODO: The function name condition can be stricter so that it does not clash with other class names etc.
-    # TODO: The function could have been imported as some other name, We should be checking for the translation as well. Also check for the original function name
+    # TODO: The function could have been imported as some other name,
+    #  we should be checking for the translation as well. Also check for the original function name.
     names = []
     for ref in script.get_names(all_scopes=True, definitions=False, references=True):
         if ref.full_name:
@@ -193,10 +193,10 @@ def get_constrained_function_context_and_dependent_functions(
     project_root_path: str,
     code_to_optimize: str,
     max_tokens: int = MAX_PROMPT_TOKENS,
-) -> tuple[str, list[Source]]:
+) -> tuple[str, list[tuple[Source, str]]]:
     # TODO: Not just do static analysis, but also find the datatypes of function arguments by running the existing
     #  unittests and inspecting the arguments to resolve the real definitions and dependencies.
-    dependent_functions: list[Source] = get_function_variables_definitions(
+    dependent_functions: list[tuple[Source, str]] = get_function_variables_definitions(
         function_to_optimize, project_root_path
     )
     tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")

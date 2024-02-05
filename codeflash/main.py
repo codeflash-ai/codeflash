@@ -156,8 +156,9 @@ class Optimizer:
             )
             for path in file_to_funcs_to_optimize:
                 logging.info(f"Examining file {path} ...")
-                # TODO: Sequence the functions one goes through intelligently. If we are optimizing f(g(x)), then we might want to first
-                #  optimize f rather than g because optimizing f would already optimize g as it is a dependency
+                # TODO: Sequence the functions one goes through intelligently. If we are optimizing f(g(x)),
+                #  then we might want to first optimize f rather than g because optimizing f would already
+                #  optimize g as it is a dependency
                 with open(path, "r") as f:
                     original_code = f.read()
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
@@ -356,7 +357,8 @@ class Optimizer:
                         logging.info(f"📈 {explanation_final.perf_improvement_line}")
 
                         # TODO: Create multi-file PR for dependent functions, extract dependent functions from new code
-                        # and overwrite original definitions, with replace_function_in_file. Also need to lint edited files.
+                        # and overwrite original definitions, with replace_function_in_file. Also need to lint edited
+                        # files.
                         check_create_pr(
                             optimize_all=self.args.all,
                             path=path,
@@ -433,12 +435,11 @@ class Optimizer:
         self,
         code_to_optimize_with_dependents: str,
         function_to_optimize: FunctionToOptimize,
-        dependent_functions: Tuple[list[Source], str],
+        dependent_functions: list[Tuple[Source, str]],
         module_path: str,
     ):
         generated_original_test_source = None
         instrumented_test_source = None
-        optimizations = None
         success = True
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             future_tests = executor.submit(
@@ -520,14 +521,16 @@ class Optimizer:
                 instrumented_existing_test_timing.append(timing)
             if i == 0:
                 logging.info(
-                    f"original code, existing unit test results -> {original_test_results_iter.get_test_pass_fail_report()}"
+                    f"original code, existing unit test results -> "
+                    f"{original_test_results_iter.get_test_pass_fail_report()}"
                 )
 
             original_gen_results = self.run_and_parse_tests(
                 test_env, generated_tests_path, TestType.GENERATED_REGRESSION, 0
             )
 
-            # TODO: Implement the logic to disregard the timing info of the tests that ERRORed out. That is remove test cases that failed to run.
+            # TODO: Implement the logic to disregard the timing info of the tests that ERRORed out.
+            # That is remove test cases that failed to run.
 
             if not original_gen_results and len(instrumented_existing_test_timing) == 0:
                 logging.warning(
@@ -535,11 +538,12 @@ class Optimizer:
                 )
                 success = False
                 break
-            # TODO: Doing a simple sum of test runtime, Improve it by looking at test by test runtime, or a better scheme
+            # TODO: Doing a simple sum of test runtime, Improve it by looking at test by test runtime,
+            #  or a better scheme
             # TODO: If the runtime is None, that happens in the case where an exception is expected and is successfully
-            #  caught by the test framework. This makes the test pass, but we can't find runtime because the exception caused
-            #  the execution to not reach the runtime measurement part. We are currently ignoring such tests, because the performance
-            #  for such a execution that raises an exception should not matter.
+            #  caught by the test framework. This makes the test pass, but we can't find runtime because the exception
+            #  caused the execution to not reach the runtime measurement part. We are currently ignoring such tests,
+            #  because the performance for such a execution that raises an exception should not matter.
             if i == 0:
                 logging.info(
                     f"original generated tests results -> {original_gen_results.get_test_pass_fail_report()}"
@@ -558,7 +562,8 @@ class Optimizer:
             original_test_results_iter.merge(original_gen_results)
             if i == 0:
                 logging.info(
-                    f"Original overall test results = {TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}"
+                    f"Original overall test results = {TestResults.report_to_string(
+                        original_test_results_iter.get_test_pass_fail_report_by_type())}"
                 )
             if (
                 original_runtime is None
