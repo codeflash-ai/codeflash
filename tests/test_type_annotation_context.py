@@ -46,7 +46,7 @@ def test_function_context_includes_type_annotation():
     )
 
     assert len(dependent_functions) == 1
-    assert dependent_functions[0].full_name == "CustomType"
+    assert dependent_functions[0][0].full_name == "CustomType"
 
 
 def test_function_context_includes_type_annotation_dataclass():
@@ -62,7 +62,7 @@ def test_function_context_includes_type_annotation_dataclass():
     )
 
     assert len(dependent_functions) == 1
-    assert dependent_functions[0].full_name == "CustomDataClass"
+    assert dependent_functions[0][0].full_name == "CustomDataClass"
 
 
 def test_function_context_custom_datatype():
@@ -78,4 +78,4 @@ def test_function_context_custom_datatype():
     )
 
     assert len(dependent_functions) == 1
-    assert dependent_functions[0].full_name == "Matrix"
+    assert dependent_functions[0][0].full_name == "Matrix"

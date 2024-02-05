@@ -1,12 +1,13 @@
 import ast
-import jedi
 import logging
 import os
+from typing import List
+
+import jedi
 import tiktoken
 from jedi.api.classes import Name
 from pydantic import RootModel
 from pydantic.dataclasses import dataclass
-from typing import List
 
 from codeflash.code_utils.code_extractor import get_code_no_skeleton, get_code
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
@@ -50,7 +51,7 @@ class SourceList(RootModel):
 
 def get_type_annotation_context(
     function: FunctionToOptimize, jedi_script: jedi.Script, project_root_path: str
-) -> List[Source]:
+) -> List[tuple[Source]]:
     function_name = function.function_name
     file_path = function.file_path
     with open(file_path, "r") as file:
@@ -64,7 +65,9 @@ def get_type_annotation_context(
             visit(child, ast_parents)
 
     def visit(node, ast_parents):
-        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        if isinstance(
+            node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if node.name == function_name and ast_parents == function.parents:
                     for arg in node.args.args:
@@ -82,10 +85,16 @@ def get_type_annotation_context(
                                 definition_path = str(definition[0].module_path)
                                 # The definition is part of this project and not defined within the original function
                                 if (
-                                    definition_path.startswith(project_root_path + os.sep)
+                                    definition_path.startswith(
+                                        project_root_path + os.sep
+                                    )
                                     and definition[0].full_name
-                                    and not path_belongs_to_site_packages(definition_path)
-                                    and not belongs_to_function(definition[0], function_name)
+                                    and not path_belongs_to_site_packages(
+                                        definition_path
+                                    )
+                                    and not belongs_to_function(
+                                        definition[0], function_name
+                                    )
                                 ):
                                     source_code = get_code(
                                         FunctionToOptimize(
@@ -96,10 +105,13 @@ def get_type_annotation_context(
                                     )
                                     if source_code:
                                         sources.append(
-                                            Source(
-                                                definition[0].name,
-                                                definition[0],
-                                                source_code,
+                                            (
+                                                Source(
+                                                    definition[0].name,
+                                                    definition[0],
+                                                    source_code,
+                                                ),
+                                                definition_path,
                                             )
                                         )
             if not isinstance(node, ast.Module):
@@ -154,7 +166,12 @@ def get_function_variables_definitions(
             ):
                 source_code = get_code_no_skeleton(definition_path, definitions[0].name)
                 if source_code:
-                    sources.append(Source(name.full_name, definitions[0], source_code))
+                    sources.append(
+                        (
+                            Source(name.full_name, definitions[0], source_code),
+                            definition_path,
+                        )
+                    )
     annotation_sources = get_type_annotation_context(
         function_to_optimize, script, project_root_path
     )
@@ -162,9 +179,9 @@ def get_function_variables_definitions(
     deduped_sources = []
     existing_full_names = set()
     for source in sources:
-        if source.full_name not in existing_full_names:
+        if source[0].full_name not in existing_full_names:
             deduped_sources.append(source)
-            existing_full_names.add(source.full_name)
+            existing_full_names.add(source[0].full_name)
     return deduped_sources
 
 
@@ -184,7 +201,9 @@ def get_constrained_function_context_and_dependent_functions(
     )
     tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")
     code_to_optimize_tokens = tokenizer.encode(code_to_optimize)
-    dependent_functions_sources = [function.source_code for function in dependent_functions]
+    dependent_functions_sources = [
+        function[0].source_code for function in dependent_functions
+    ]
     dependent_functions_tokens = [
         len(tokenizer.encode(function)) for function in dependent_functions_sources
     ]
@@ -192,7 +211,9 @@ def get_constrained_function_context_and_dependent_functions(
     context_len = len(code_to_optimize_tokens)
     logging.debug(f"ORIGINAL CODE TOKENS LENGTH: {context_len}")
     logging.debug(f"ALL DEPENDENCIES TOKENS LENGTH: {sum(dependent_functions_tokens)}")
-    for function_source, source_len in zip(dependent_functions_sources, dependent_functions_tokens):
+    for function_source, source_len in zip(
+        dependent_functions_sources, dependent_functions_tokens
+    ):
         if context_len + source_len <= max_tokens:
             context_list.append(function_source)
             context_len += source_len

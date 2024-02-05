@@ -17,7 +17,7 @@ def test_simple_dependencies():
     dependent_functions = get_function_variables_definitions(
         FunctionToOptimize("simple_function_with_one_dep", str(file_path), []),
         str(file_path.parent.resolve()),
-    )
+    )[0]
     assert len(dependent_functions) == 1
     assert (
         dependent_functions[0].definition.full_name
@@ -76,7 +76,7 @@ def test_multiple_classes_dependencies():
     dependent_functions = get_function_variables_definitions(
         FunctionToOptimize("run", str(file_path), [FunctionParent("C", "ClassDef")]),
         str(file_path.parent.resolve()),
-    )
+    )[0]
 
     # assert len(dependent_functions) == 2
     assert list(map(lambda x: x.full_name, dependent_functions)) == [
@@ -97,7 +97,7 @@ def test_recursive_dependency():
     dependent_functions = get_function_variables_definitions(
         FunctionToOptimize("recursive_dependency_1", str(file_path), []),
         str(file_path.parent.resolve()),
-    )
+    )[0]
     assert len(dependent_functions) == 1
     assert (
         dependent_functions[0].definition.full_name
