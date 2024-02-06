@@ -562,8 +562,8 @@ class Optimizer:
             original_test_results_iter.merge(original_gen_results)
             if i == 0:
                 logging.info(
-                    f"Original overall test results = {TestResults.report_to_string(
-                        original_test_results_iter.get_test_pass_fail_report_by_type())}"
+                    f"Original overall test results = "
+                    f"{TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}"
                 )
             if (
                 original_runtime is None
