@@ -29,9 +29,7 @@ def check_create_pr(
             repo=repo,
             pr_number=pr_number,
             file_changes={
-                relative_path: FileDiffContent(
-                    oldContent=original_code, newContent=new_code
-                ).model_dump(mode="json")
+                relative_path: FileDiffContent(oldContent=original_code, newContent=new_code)
             },
             pr_comment=PrComment(
                 optimization_explanation=explanation.explanation_message(),
