@@ -2,6 +2,7 @@ import ast
 import libcst as cst
 import logging
 import os
+import random
 from _ast import ClassDef, FunctionDef, AsyncFunctionDef
 from libcst import CSTNode
 from pydantic.dataclasses import dataclass
@@ -172,7 +173,12 @@ def get_all_files_and_functions(module_root_path: str) -> Dict[str, List[Functio
             file_path = os.path.join(root, file)
             # Find all the functions in the file
             functions.update(find_all_functions_in_file(file_path))
-    return functions
+    # Randomize the order of the files to optimize to avoid optimizing the same file in the same order every time.
+    # Helpful if an optimize-all run is stuck and we restart it.
+    files_list = list(functions.items())
+    random.shuffle(files_list)
+    functions_shuffled = dict(files_list)
+    return functions_shuffled
 
 
 def find_all_functions_in_file(file_path: str) -> Dict[str, List[FunctionToOptimize]]:
