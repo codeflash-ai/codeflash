@@ -68,6 +68,7 @@ def optimize_python_code(
 
     if response.status_code == 200:
         optimizations = response.json()["optimizations"]
+        logging.info(f"Generated {len(optimizations)} candidates.")
         return [(opt["source_code"], opt["explanation"]) for opt in optimizations]
     else:
         try:
@@ -130,6 +131,7 @@ def generate_regression_tests(
 
     if response.status_code == 200:
         response_json = response.json()
+        logging.info(f"Generated tests for function {function_to_optimize.function_name}")
         return response_json["generated_tests"], response_json["instrumented_tests"]
     else:
         try:
