@@ -15,6 +15,12 @@ try:
     HAS_SQLALCHEMY = True
 except ImportError:
     HAS_SQLALCHEMY = False
+try:
+    import scipy
+
+    HAS_SCIPY = True
+except ImportError:
+    HAS_SCIPY = False
 
 
 def comparator(orig: Any, new: Any) -> bool:
@@ -49,7 +55,8 @@ def comparator(orig: Any, new: Any) -> bool:
         if math.isnan(orig) and math.isnan(new):
             return True
         return math.isclose(orig, new)
-    if isinstance(orig, dict):
+    # scipy condition because dok_matrix type is also a instance of dict, but dict comparison doesn't work for it
+    if isinstance(orig, dict) and not (HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix)):
         if len(orig) != len(new):
             return False
         for key in orig:
@@ -87,6 +94,9 @@ def comparator(orig: Any, new: Any) -> bool:
             return np.isinf(new)
     except Exception as e:
         pass
+
+    if HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix):
+        return (orig != new).nnz == 0
 
     if isinstance(orig, (datetime.datetime, datetime.date, datetime.timedelta)):
         return orig == new

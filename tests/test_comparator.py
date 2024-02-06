@@ -1,5 +1,4 @@
 import datetime
-
 import pytest
 
 from codeflash.verification.comparator import comparator
@@ -48,9 +47,11 @@ def test_basic_python_objects():
     b = {"a": 1, "b": 2}
     c = {"a": 1, "b": 3}
     d = {"c": 1, "b": 2}
+    e = {"a": 1, "b": 2, "c": 3}
     assert comparator(a, b)
     assert not comparator(a, c)
     assert not comparator(a, d)
+    assert not comparator(a, e)
 
     a = (1, 2, "str")
     b = (1, 2, "str")
@@ -158,6 +159,73 @@ def test_numpy():
     ac = np.array([1, 2, "str2"])
     ad = np.array([1, 2, "str2"])
     assert comparator(ac, ad)
+
+
+def test_scipy():
+    try:
+        import scipy as sp
+    except ImportError:
+        pytest.skip()
+    a = sp.sparse.csr_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
+    b = sp.sparse.csr_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
+    c = sp.sparse.csr_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 6]])
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    d = sp.sparse.csc_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
+    e = sp.sparse.csc_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
+    f = sp.sparse.csc_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 6]])
+    assert comparator(d, e)
+    assert not comparator(d, f)
+    assert not comparator(a, d)
+
+    g = sp.sparse.lil_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
+    h = sp.sparse.lil_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
+    i = sp.sparse.lil_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 6]])
+    assert comparator(g, h)
+    assert not comparator(g, i)
+    assert not comparator(a, g)
+
+    j = sp.sparse.dok_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
+    k = sp.sparse.dok_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
+    l = sp.sparse.dok_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 6]])
+    assert comparator(j, k)
+    assert not comparator(j, l)
+    assert not comparator(a, j)
+
+    m = sp.sparse.dia_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
+    n = sp.sparse.dia_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
+    o = sp.sparse.dia_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 6]])
+    assert comparator(m, n)
+    assert not comparator(m, o)
+    assert not comparator(a, m)
+
+    p = sp.sparse.coo_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
+    q = sp.sparse.coo_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
+    r = sp.sparse.coo_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 6]])
+    assert comparator(p, q)
+    assert not comparator(p, r)
+    assert not comparator(a, p)
+
+    s = sp.sparse.bsr_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
+    t = sp.sparse.bsr_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
+    u = sp.sparse.bsr_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 6]])
+    assert comparator(s, t)
+    assert not comparator(s, u)
+    assert not comparator(a, s)
+
+    try:
+        import numpy as np
+
+        row = np.array([0, 3, 1, 0])
+        col = np.array([0, 3, 1, 2])
+        data = np.array([4, 5, 7, 9])
+        v = sp.sparse.coo_array((data, (row, col)), shape=(4, 4)).toarray()
+        w = sp.sparse.coo_array((data, (row, col)), shape=(4, 4)).toarray()
+        assert comparator(v, w)
+    except ImportError:
+        print("Should run tests with numpy installed to test more thoroughly")
+        pass
 
 
 def test_custom_object():
