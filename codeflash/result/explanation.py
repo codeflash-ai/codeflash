@@ -14,8 +14,20 @@ class Explanation:
     path: str
 
     @property
+    def perf_improvement_line(self) -> str:
+        return f"{self.speedup_pct} improvement ({self.speedup_x} faster)."
+
+    @property
     def speedup(self) -> float:
         return (self.original_runtime_ns / self.best_runtime_ns) - 1
+
+    @property
+    def speedup_x(self) -> str:
+        return f"{self.speedup:,.2f}x"
+
+    @property
+    def speedup_pct(self) -> str:
+        return f"{self.speedup * 100:,.0f}%"
 
     def to_console_string(self) -> str:
         # TODO: After doing the best optimization, remove the test cases that errored on the new code, because they might be failing because of syntax errors and such.
@@ -24,13 +36,17 @@ class Explanation:
         best_runtime_human = humanize_runtime(self.best_runtime_ns)
 
         explanation = (
-            f"Function {self.function_name} in file {self.path}:\n"
-            f"Performance went up by {self.speedup:.2f}x ({self.speedup * 100:.2f}%). Runtime went down from {original_runtime_human} to {best_runtime_human} \n\n"
-            + "Optimization explanation:\n"
+            f"Optimized {self.function_name} in {self.path}\n"
+            f"{self.perf_improvement_line}\n"
+            f"Runtime went down from {original_runtime_human} to {best_runtime_human} \n\n"
+            + "Explanation:\n"
             + self.raw_explanation_message
             + " \n\n"
-            + "The code has been tested for correctness.\n"
-            + f"Test Results for the best optimized code:- {TestResults.report_to_string(self.winning_test_results.get_test_pass_fail_report_by_type())}\n"
+            + "The new optimized code was tested for correctness. The results are listed below.\n"
+            + f"{TestResults.report_to_string(self.winning_test_results.get_test_pass_fail_report_by_type())}\n"
         )
 
         return explanation
+
+    def explanation_message(self) -> str:
+        return self.raw_explanation_message

@@ -1,9 +1,8 @@
 import logging
 import os
-from typing import Any, Dict, List, Tuple, Optional
-
 import requests
 from pydantic import RootModel
+from typing import Any, Dict, List, Tuple, Optional
 
 from codeflash.analytics.posthog import ph
 from codeflash.code_utils.env_utils import get_codeflash_api_key
@@ -66,15 +65,17 @@ def optimize_python_code(
         return [(None, None)]
 
     if response.status_code == 200:
-        optimizations = response.json()
+        optimizations = response.json()["optimizations"]
         return [(opt["source_code"], opt["explanation"]) for opt in optimizations]
     else:
-        logging.error(
-            f"Error generating optimized candidates: {response.status_code} {response.text}"
-        )
+        try:
+            error = response.json()["error"]
+        except Exception as e:
+            error = response.text
+        logging.error(f"Error generating optimized candidates: {response.status_code} - {error}")
         ph(
             "cli-optimize-error-response",
-            {"response_status_code": response.status_code, "response_text": response.text},
+            {"response_status_code": response.status_code, "error": error},
         )
         return [(None, None)]
 
@@ -131,9 +132,18 @@ def generate_regression_tests(
         response_json = response.json()
         return response_json["generated_tests"], response_json["instrumented_tests"]
     else:
-        logging.error(f"Error generating tests: {response.status_code} {response.text}")
-        ph(
-            "cli-testgen-error-response",
-            {"response_status_code": response.status_code, "response_text": response.text},
-        )
-        return None
+        try:
+            error = response.json()["error"]
+            logging.error(f"Error generating tests: {response.status_code} - {error}")
+            ph(
+                "cli-testgen-error-response",
+                {"response_status_code": response.status_code, "error": error},
+            )
+            return None
+        except Exception as e:
+            logging.error(f"Error generating tests: {response.status_code} - {response.text}")
+            ph(
+                "cli-testgen-error-response",
+                {"response_status_code": response.status_code, "error": response.text},
+            )
+            return None

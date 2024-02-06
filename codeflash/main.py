@@ -1,33 +1,16 @@
 import concurrent.futures
+import libcst as cst
 import logging
+import os
 import pathlib
-import sys
-
-from codeflash.cli_cmds.cli import process_cmd_args
-from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
-from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
-from codeflash.code_utils.linter import lint_code
-from codeflash.result.create_pr import create_pr
-from codeflash.result.explanation import Explanation
-
-logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s", stream=sys.stdout)
+from argparse import ArgumentParser, SUPPRESS, Namespace
 from typing import Tuple, Union
 
+import codeflash.cli_cmds.logging_config  # intializes logging, has to be the first non-system import # noqa
 from codeflash.api.aiservice import optimize_python_code
+from codeflash.cli_cmds.cli import process_cmd_args
+from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.config_consts import (
-    MAX_TEST_RUN_ITERATIONS,
-    MAX_FUNCTION_TEST_SECONDS,
-    INDIVIDUAL_TEST_TIMEOUT,
-    N_CANDIDATES,
-)
-
-import os
-from argparse import ArgumentParser, SUPPRESS, Namespace
-
-import libcst as cst
-
-from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.code_utils.code_extractor import get_code
 from codeflash.code_utils.code_replacer import replace_function_in_file
 from codeflash.code_utils.code_utils import (
@@ -35,6 +18,15 @@ from codeflash.code_utils.code_utils import (
     get_all_function_names,
     get_run_tmp_file,
 )
+from codeflash.code_utils.config_consts import (
+    MAX_TEST_RUN_ITERATIONS,
+    MAX_FUNCTION_TEST_SECONDS,
+    INDIVIDUAL_TEST_TIMEOUT,
+    N_CANDIDATES,
+)
+from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
+from codeflash.code_utils.linter import lint_code
+from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests, TestsInFile
 from codeflash.discovery.functions_to_optimize import (
     get_functions_to_optimize_by_file,
@@ -42,15 +34,16 @@ from codeflash.discovery.functions_to_optimize import (
 )
 from codeflash.optimization.function_context import (
     get_constrained_function_context_and_dependent_functions,
+    Source,
 )
+from codeflash.result.create_pr import check_create_pr
+from codeflash.result.explanation import Explanation
 from codeflash.verification.equivalence import compare_results
 from codeflash.verification.parse_test_output import (
     TestType,
     parse_test_results,
 )
 from codeflash.verification.test_results import TestResults
-
-
 from codeflash.verification.test_runner import run_tests
 from codeflash.verification.verification_utils import (
     get_test_file_path,
@@ -103,6 +96,7 @@ def parse_args() -> Namespace:
         help="Use cached tests from a specified file for debugging.",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose logs")
+    parser.add_argument("--version", action="store_true", help="Print the version of codeflash")
     args: Namespace = parser.parse_args()
     return process_cmd_args(args)
 
@@ -140,10 +134,11 @@ class Optimizer:
             if num_modified_functions == 0:
                 logging.info("No functions found to optimize. Exiting...")
                 return
+            logging.info(f"Discovering existing unit tests in {self.test_cfg.tests_root} ...")
             function_to_tests: dict[str, list[TestsInFile]] = discover_unit_tests(self.test_cfg)
             logging.info(
-                f"Discovered a total of {sum([len(value) for value in function_to_tests.values()])} "
-                f"existing unit tests in the project."
+                f"Discovered {sum([len(value) for value in function_to_tests.values()])} "
+                f"existing unit tests in {self.test_cfg.tests_root}"
             )
             for path in file_to_funcs_to_optimize:
                 logging.info(f"Examining file {path} ...")
@@ -178,7 +173,7 @@ class Optimizer:
                     ) = get_constrained_function_context_and_dependent_functions(
                         function_to_optimize, self.args.project_root, code_to_optimize
                     )
-                    logging.info("CODE TO OPTIMIZE %s", code_to_optimize_with_dependents)
+                    logging.info(f"Code to be optimized:\n{code_to_optimize_with_dependents}")
                     module_path = module_name_from_file_path(path, self.args.project_root)
 
                     instrumented_unittests_created_for_function = self.prepare_existing_tests(
@@ -324,11 +319,9 @@ class Optimizer:
                             f"\n{generated_original_test_source}"
                         )
 
-                        logging.info(
-                            f"⚡️ Optimization successful! 📄 {function_name} in {path} 📈 "
-                            f"{explanation_final.speedup * 100:.2f}% ({explanation_final.speedup:.2f}x) faster"
-                        )
-                        create_pr(
+                        logging.info(f"⚡️ Optimization successful! 📄 {function_name} in {path}")
+                        logging.info(f"📈 {explanation_final.perf_improvement_line}")
+                        check_create_pr(
                             optimize_all=self.args.all,
                             path=path,
                             original_code=original_code,
@@ -336,13 +329,13 @@ class Optimizer:
                             explanation=explanation_final,
                             generated_original_test_source=generated_original_test_source,
                         )
-
-                        # Reverting to original code, because optimizing functions in a sequence can lead to
-                        #  a. Error propagation, where error in one function can cause the next optimization to fail
-                        #  b. Performance estimates become unstable, as the runtime of an optimization might be
-                        #     dependent on the runtime of the previous optimization
-                        with open(path, "w") as f:
-                            f.write(original_code)
+                        if self.args.all or env_utils.get_pr_number():
+                            # Reverting to original code, because optimizing functions in a sequence can lead to
+                            #  a. Error propagation, where error in one function can cause the next optimization to fail
+                            #  b. Performance estimates become unstable, as the runtime of an optimization might be
+                            #     dependent on the runtime of the previous optimization
+                            with open(path, "w") as f:
+                                f.write(original_code)
                     # Delete all the generated tests to not cause any clutter.
                     pathlib.Path(generated_tests_path).unlink(missing_ok=True)
                     for test_paths in instrumented_unittests_created_for_function:
@@ -393,16 +386,16 @@ class Optimizer:
                 unique_original_test_files.add(tests_in_file.test_file)
             logging.info(
                 f"Discovered {relevant_test_files_count} existing unit test file"
-                f"{'s' if relevant_test_files_count > 1 else ''} for {full_module_function_path}"
+                f"{'s' if relevant_test_files_count != 1 else ''} for {full_module_function_path}"
             )
         return unique_instrumented_test_files
 
     def generate_tests_and_optimizations(
         self,
         code_to_optimize_with_dependents: str,
-        function_to_optimize: str,
-        dependent_functions,
-        module_path,
+        function_to_optimize: FunctionToOptimize,
+        dependent_functions: list[Source],
+        module_path: str,
     ):
         generated_original_test_source = None
         instrumented_test_source = None

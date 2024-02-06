@@ -27,13 +27,14 @@ def belongs_to_class(name: Name, class_name: str) -> bool:
 
 def belongs_to_function(name: Name, function_name: str) -> bool:
     """
-    Check if the given name belongs to the specified function.
+    Check if the given name belongs to the specified function
     """
     if name.full_name and name.full_name.startswith(name.module_name):
-        subname = name.full_name[len(name.module_name) :]
-        if f".{function_name}." in subname:
-            return True
-    return False
+        subname = name.full_name.replace(name.module_name, "", 1)
+    else:
+        return False
+    # The name is defined inside the function or is the function itself
+    return f".{function_name}." in subname or f".{function_name}" == subname
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
@@ -72,12 +73,18 @@ def get_type_annotation_context(
                             name = arg.annotation.id
                             line_no = arg.annotation.lineno
                             col_no = arg.annotation.col_offset
-                            definition: List[Name] = jedi_script.goto(
-                                line=line_no,
-                                column=col_no,
-                                follow_imports=True,
-                                follow_builtin_imports=False,
-                            )
+                            try:
+                                definition: List[Name] = jedi_script.goto(
+                                    line=line_no,
+                                    column=col_no,
+                                    follow_imports=True,
+                                    follow_builtin_imports=False,
+                                )
+                            except Exception as e:
+                                logging.error(
+                                    f"Error while getting definition for {name.full_name}: {e}"
+                                )
+                                definition = []
                             if definition:  # TODO can be multiple definitions
                                 definition_path = str(definition[0].module_path)
                                 # The definition is part of this project and not defined within the original function
@@ -136,12 +143,16 @@ def get_function_variables_definitions(
                     names.append(ref)
 
     for name in names:
-        definitions: List[Name] = script.goto(
-            line=name.line,
-            column=name.column,
-            follow_imports=True,
-            follow_builtin_imports=False,
-        )
+        try:
+            definitions: List[Name] = script.goto(
+                line=name.line,
+                column=name.column,
+                follow_imports=True,
+                follow_builtin_imports=False,
+            )
+        except Exception as e:
+            logging.error(f"Error while getting definition for {name.full_name}: {e}")
+            definitions = []
         if definitions:
             # TODO: there can be multiple definitions, see how to handle such cases
             definition_path = str(definitions[0].module_path)

@@ -6,10 +6,16 @@ from codeflash.api import cfapi
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.git_utils import get_repo_owner_and_name, git_root_dir, get_current_branch
 from codeflash.github.PrComment import FileDiffContent, PrComment
+from codeflash.result.explanation import Explanation
 
 
-def create_pr(
-    optimize_all, path, original_code, new_code, explanation, generated_original_test_source
+def check_create_pr(
+    optimize_all: bool,
+    path: str,
+    original_code: str,
+    new_code: str,
+    explanation: Explanation,
+    generated_original_test_source: str,
 ):
     pr_number: Optional[int] = env_utils.get_pr_number()
 
@@ -28,18 +34,19 @@ def create_pr(
                 ).model_dump(mode="json")
             },
             pr_comment=PrComment(
-                optimization_explanation=explanation.to_console_string(),
+                optimization_explanation=explanation.explanation_message(),
                 best_runtime=explanation.best_runtime_ns,
                 original_runtime=explanation.original_runtime_ns,
                 function_name=explanation.function_name,
                 relative_file_path=relative_path,
-                speedup=explanation.speedup,
+                speedup_x=explanation.speedup_x,
+                speedup_pct=explanation.speedup_pct,
                 winning_test_results=explanation.winning_test_results,
             ),
             generated_tests=generated_original_test_source,
         )
         if response.ok:
-            logging.info("OK")
+            logging.info("Suggestions were successfully made to PR #" + str(pr_number))
         else:
             logging.error(
                 f"Optimization was successful, but I failed to suggest changes to PR #{pr_number}."
@@ -62,18 +69,19 @@ def create_pr(
                 ).model_dump(mode="json")
             },
             pr_comment=PrComment(
-                optimization_explanation=explanation.to_console_string(),
+                optimization_explanation=explanation.explanation_message(),
                 best_runtime=explanation.best_runtime_ns,
                 original_runtime=explanation.original_runtime_ns,
                 function_name=explanation.function_name,
                 relative_file_path=relative_path,
-                speedup=explanation.speedup,
+                speedup_x=explanation.speedup_x,
+                speedup_pct=explanation.speedup_pct,
                 winning_test_results=explanation.winning_test_results,
             ),
             generated_tests=generated_original_test_source,
         )
         if response.ok:
-            logging.info("OK")
+            logging.info(f"Successfully created a new PR #{response.text} with the optimized code.")
         else:
             logging.error(
                 f"Optimization was successful, but I failed to create a PR with the optimized code."

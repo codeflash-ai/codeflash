@@ -1,11 +1,13 @@
 import logging
 import os
+import sys
 from argparse import Namespace
 
 import git
 
 from codeflash.api.cfapi import check_github_app_installed_on_repo
 from codeflash.cli_cmds.cmd_init import init_codeflash
+from codeflash.cli_cmds.logging_config import LOGGING_FORMAT
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.git_utils import (
@@ -13,13 +15,15 @@ from codeflash.code_utils.git_utils import (
     get_repo_owner_and_name,
     get_github_secrets_page_url,
 )
-
-CF_BASE_URL = "https://app.codeflash.ai"
+from codeflash.version import __version__ as version
 
 
 def process_cmd_args(args: Namespace) -> Namespace:
     if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG, format=LOGGING_FORMAT, stream=sys.stdout)
+    if args.version:
+        logging.info(f"CodeFlash version {version}")
+        exit()
     if "command" in args and args.command == "init":
         init_codeflash()
         exit()
@@ -46,10 +50,10 @@ def process_cmd_args(args: Namespace) -> Namespace:
                 and getattr(args, key.replace("-", "_")) is None
             ) or not hasattr(args, key.replace("-", "_")):
                 setattr(args, key.replace("-", "_"), pyproject_config[key])
-    assert os.path.isdir(
+    assert args.module_root is not None and os.path.isdir(
         args.module_root
     ), f"--module-root {args.module_root} must be a valid directory"
-    assert os.path.isdir(
+    assert args.tests_root is not None and os.path.isdir(
         args.tests_root
     ), f"--tests-root {args.tests_root} must be a valid directory"
     assert not (

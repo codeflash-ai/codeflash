@@ -3,7 +3,7 @@ import os.path
 import subprocess
 
 
-def lint_code(path) -> str:
+def lint_code(path: str) -> str:
     logging.info("Formatting code with black...")
     # black currently does not have a stable public API, so we are using the CLI
     # the main problem is custom config parsing https://github.com/psf/black/issues/779
@@ -12,7 +12,7 @@ def lint_code(path) -> str:
     if result.returncode == 0:
         logging.info("OK")
     else:
-        logging.error("Failed to format")
+        logging.error("Failed to format code with black")
     with open(path, "r") as f:
         new_code = f.read()
     return new_code
