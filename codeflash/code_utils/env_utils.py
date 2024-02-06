@@ -1,8 +1,10 @@
 import logging
 import os
+from functools import lru_cache
 from typing import Optional
 
 
+@lru_cache(maxsize=1)
 def get_codeflash_api_key() -> Optional[str]:
     api_key = os.environ.get("CODEFLASH_API_KEY")
     if not api_key:
@@ -33,11 +35,13 @@ def ensure_codeflash_api_key() -> bool:
     return True
 
 
+@lru_cache(maxsize=1)
 def get_codeflash_org_key() -> Optional[str]:
     api_key = os.environ.get("CODEFLASH_ORG_KEY")
     return api_key
 
 
+@lru_cache(maxsize=1)
 def get_pr_number() -> Optional[int]:
     pr_number = os.environ.get("CODEFLASH_PR_NUMBER")
     if not pr_number:
