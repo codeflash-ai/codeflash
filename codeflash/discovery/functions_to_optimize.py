@@ -1,12 +1,11 @@
 import ast
+import libcst as cst
 import logging
 import os
 from _ast import ClassDef, FunctionDef, AsyncFunctionDef
-from typing import Dict, Optional, List, Tuple, Union
-
-import libcst as cst
 from libcst import CSTNode
 from pydantic.dataclasses import dataclass
+from typing import Dict, Optional, List, Tuple, Union
 
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
 from codeflash.code_utils.git_utils import get_git_diff
@@ -128,7 +127,10 @@ def get_functions_to_optimize_by_file(
                 if only_function_name == fn.function_name:
                     found_function = fn
             if found_function is None:
-                raise ValueError(f"Function {only_function_name} not found in file {file}")
+                raise ValueError(
+                    f"Function {only_function_name} not found in file {file} or"
+                    f" the function does not have a 'return' statement."
+                )
             functions[file] = [found_function]
     else:
         logging.info("Finding all functions modified in the current git diff ...")
