@@ -1,9 +1,11 @@
+import json
 import logging
 import os
 from functools import lru_cache
 from typing import Optional, Dict, Any
 
 import requests
+from pydantic.json import pydantic_encoder
 from requests import Response
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
@@ -21,15 +23,16 @@ def make_cfapi_request(
 ) -> requests.Response:
     """
     Make an HTTP request using the specified method, URL, headers, and JSON payload.
-    :param endpoint: The URL to send the request to.
+    :param endpoint: The endpoint URL to send the request to.
     :param method: The HTTP method to use ('GET', 'POST', etc.).
-    :param payload: Optional JSON payload to include in the request body.
-    :return: The response object.
+    :param payload: Optional JSON payload to include in the POST request body.
+    :return: The response object from the API.
     """
     url = f"{CFAPI_BASE_URL}/cfapi{endpoint}"
     cfapi_headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
     if method.upper() == "POST":
-        response = requests.post(url, json=payload, headers=cfapi_headers)
+        json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
+        response = requests.post(url, json=json_payload, headers=cfapi_headers)
     else:
         response = requests.get(url, headers=cfapi_headers)
     return response
