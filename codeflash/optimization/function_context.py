@@ -1,12 +1,13 @@
 import ast
-import jedi
 import logging
 import os
+from typing import List
+
+import jedi
 import tiktoken
 from jedi.api.classes import Name
 from pydantic import RootModel
 from pydantic.dataclasses import dataclass
-from typing import List
 
 from codeflash.code_utils.code_extractor import get_code_no_skeleton, get_code
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
@@ -72,12 +73,18 @@ def get_type_annotation_context(
                             name = arg.annotation.id
                             line_no = arg.annotation.lineno
                             col_no = arg.annotation.col_offset
-                            definition: List[Name] = jedi_script.goto(
-                                line=line_no,
-                                column=col_no,
-                                follow_imports=True,
-                                follow_builtin_imports=False,
-                            )
+                            try:
+                                definition: List[Name] = jedi_script.goto(
+                                    line=line_no,
+                                    column=col_no,
+                                    follow_imports=True,
+                                    follow_builtin_imports=False,
+                                )
+                            except Exception as e:
+                                logging.error(
+                                    f"Error while getting definition for {name.full_name}: {e}"
+                                )
+                                definition = []
                             if definition:  # TODO can be multiple definitions
                                 definition_path = str(definition[0].module_path)
                                 # The definition is part of this project and not defined within the original function
@@ -136,12 +143,16 @@ def get_function_variables_definitions(
                     names.append(ref)
 
     for name in names:
-        definitions: List[Name] = script.goto(
-            line=name.line,
-            column=name.column,
-            follow_imports=True,
-            follow_builtin_imports=False,
-        )
+        try:
+            definitions: List[Name] = script.goto(
+                line=name.line,
+                column=name.column,
+                follow_imports=True,
+                follow_builtin_imports=False,
+            )
+        except Exception as e:
+            logging.error(f"Error while getting definition for {name.full_name}: {e}")
+            definitions = []
         if definitions:
             # TODO: there can be multiple definitions, see how to handle such cases
             definition_path = str(definitions[0].module_path)
