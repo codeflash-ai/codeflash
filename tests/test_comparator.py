@@ -193,7 +193,6 @@ def test_scipy():
     assert not comparator(j, l)
     assert not comparator(a, j)
 
-    # generate more test cases for dia_matrix, coo_matrix and bsr_matrix
     m = sp.sparse.dia_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
     n = sp.sparse.dia_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
     o = sp.sparse.dia_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 6]])
