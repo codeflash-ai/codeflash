@@ -38,143 +38,21 @@ class InjectPerfOnly(ast.NodeTransformer):
         if call_node is None:
             return [test_node]
         updated_nodes = [
-            ast.Expr(
+            ast.Assign(
+                targets=[ast.Name(id="output", ctx=ast.Store())],
                 value=ast.Call(
-                    func=ast.Attribute(
-                        value=ast.Name(id="gc", ctx=ast.Load()),
-                        attr="disable",
-                        ctx=ast.Load(),
-                    ),
-                    args=[],
+                    func=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
+                    args=[
+                        ast.Name(id="sorter", ctx=ast.Load()),
+                        ast.Constant(value="test_sort"),
+                        ast.Constant(value="5"),
+                        ast.Name(id="codeflash_cur", ctx=ast.Load()),
+                        ast.Name(id="codeflash_con", ctx=ast.Load()),
+                        ast.Name(id="input", ctx=ast.Load()),
+                    ],
                     keywords=[],
                 ),
                 lineno=test_node.lineno,
-                col_offset=test_node.col_offset,
-            ),
-            ast.Assign(
-                targets=[ast.Name(id="counter", ctx=ast.Store())],
-                value=ast.Call(
-                    func=ast.Attribute(
-                        value=ast.Name(id="time", ctx=ast.Load()),
-                        attr="perf_counter_ns",
-                        ctx=ast.Load(),
-                    ),
-                    args=[],
-                    keywords=[],
-                ),
-                lineno=test_node.lineno + 1,
-                col_offset=test_node.col_offset,
-            ),
-            # TODO : This assign has a namespace clash with the rest of the function body
-            #  if it has a variable called return_value
-            ast.Assign(
-                targets=[ast.Name(id="return_value", ctx=ast.Store())],
-                value=call_node,
-                lineno=test_node.lineno + 2,
-                col_offset=test_node.col_offset,
-            ),
-            ast.Assign(
-                targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],
-                value=ast.BinOp(
-                    left=ast.Call(
-                        func=ast.Attribute(
-                            value=ast.Name(id="time", ctx=ast.Load()),
-                            attr="perf_counter_ns",
-                            ctx=ast.Load(),
-                        ),
-                        args=[],
-                        keywords=[],
-                    ),
-                    op=ast.Sub(),
-                    right=ast.Name(id="counter", ctx=ast.Load()),
-                ),
-                lineno=test_node.lineno + 3,
-                col_offset=test_node.col_offset,
-            ),
-            ast.Expr(
-                value=ast.Call(
-                    func=ast.Attribute(
-                        value=ast.Name(id="gc", ctx=ast.Load()),
-                        attr="enable",
-                        ctx=ast.Load(),
-                    ),
-                    args=[],
-                    keywords=[],
-                ),
-                lineno=test_node.lineno + 4,
-                col_offset=test_node.col_offset,
-            ),
-            ast.Expr(
-                value=ast.Call(
-                    func=ast.Attribute(
-                        value=ast.Name(id="codeflash_cur", ctx=ast.Load()),
-                        attr="execute",
-                        ctx=ast.Load(),
-                    ),
-                    args=[
-                        ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)"),
-                        ast.Tuple(
-                            elts=[
-                                ast.Constant(value=self.module_path),
-                                ast.Constant(value=test_class_name or None),
-                                ast.Constant(value=node_name),
-                                ast.Constant(value=self.only_function_name),
-                                ast.Constant(value=index),
-                                ast.Name(id="codeflash_duration", ctx=ast.Load()),
-                                ast.Call(
-                                    func=ast.Attribute(
-                                        value=ast.Name(id="pickle", ctx=ast.Load()),
-                                        attr="dumps",
-                                        ctx=ast.Load(),
-                                    ),
-                                    args=[ast.Name(id="return_value", ctx=ast.Load())],
-                                    keywords=[],
-                                ),
-                            ],
-                            ctx=ast.Load(),
-                        ),
-                    ],
-                    keywords=[],
-                ),
-                lineno=test_node.lineno + 5,
-                col_offset=test_node.col_offset,
-            ),
-            ast.Expr(
-                value=ast.Call(
-                    func=ast.Attribute(
-                        value=ast.Name(id="codeflash_con", ctx=ast.Load()),
-                        attr="commit",
-                        ctx=ast.Load(),
-                    ),
-                    args=[],
-                    keywords=[],
-                ),
-                lineno=test_node.lineno + 6,
-                col_offset=test_node.col_offset,
-            ),
-            # TODO: Remove this print statement as it has been supplanted by the sqlite logging
-            ast.Expr(
-                value=ast.Call(
-                    func=ast.Name(id="print", ctx=ast.Load()),
-                    args=[
-                        ast.JoinedStr(
-                            values=[
-                                ast.Constant(value="#####"),
-                                ast.Constant(
-                                    value=f"{self.module_path}:{test_class_name or ''}{'.' if test_class_name is not None else ''}{node_name}:{self.only_function_name}:{index}"
-                                ),
-                                ast.Constant(value="#####"),
-                                ast.FormattedValue(
-                                    value=ast.Name(id="codeflash_duration", ctx=ast.Load()),
-                                    conversion=-1,
-                                ),
-                                ast.Constant(value="^^^^^"),
-                            ]
-                        )
-                    ],
-                    keywords=[],
-                ),
-                lineno=test_node.lineno + 7,
                 col_offset=test_node.col_offset,
             ),
         ]
@@ -184,7 +62,7 @@ class InjectPerfOnly(ast.NodeTransformer):
         #  for equality amongst the original and the optimized version. This will ensure that the optimizations are correct
         #  in a more robust way.
 
-        updated_nodes.append(subbed_node)
+        # updated_nodes.append(subbed_node)
         return updated_nodes
 
     def is_target_function_line(self, line_node):
@@ -359,6 +237,379 @@ def inject_profiling_into_existing_test(test_path, function_name, root_path):
         ast.Import(names=[ast.alias(name="sqlite3")]),
         ast.Import(names=[ast.alias(name="pickle")]),
     ]
-    tree.body = new_imports + tree.body
+    tree.body = new_imports + [create_wrapper_function(function_name, module_path)] + tree.body
 
     return ast.unparse(tree)
+
+
+def create_wrapper_function(function_name, module_path):
+    lineno = 1
+    node = ast.FunctionDef(
+        name="codeflash_wrap",
+        args=ast.arguments(
+            args=[
+                ast.arg(arg="wrapped", annotation=None),
+                ast.arg(arg="test_name", annotation=None),
+                ast.arg(arg="test_id", annotation=None),
+                ast.arg(arg="codeflash_cur", annotation=None),
+                ast.arg(arg="codeflash_con", annotation=None),
+            ],
+            vararg=ast.arg(arg="args"),
+            kwarg=ast.arg(arg="kwargs"),
+            posonlyargs=[],
+            kwonlyargs=[],
+            kw_defaults=[],
+            defaults=[],
+        ),
+        body=[
+            ast.If(
+                test=ast.UnaryOp(
+                    op=ast.Not(),
+                    operand=ast.Call(
+                        func=ast.Name(id="hasattr", ctx=ast.Load()),
+                        args=[
+                            ast.Name(id="codeflash_wrap", ctx=ast.Load()),
+                            ast.Constant(value="index"),
+                        ],
+                        keywords=[],
+                    ),
+                ),
+                body=[
+                    ast.Assign(
+                        targets=[
+                            ast.Attribute(
+                                value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
+                                attr="index",
+                                ctx=ast.Store(),
+                            )
+                        ],
+                        value=ast.Dict(keys=[], values=[]),
+                        lineno=lineno + 2,
+                    )
+                ],
+                orelse=[],
+                lineno=lineno + 1,
+            ),
+            ast.If(
+                test=ast.Compare(
+                    left=ast.Name(id="test_name", ctx=ast.Load()),
+                    ops=[ast.In()],
+                    comparators=[
+                        ast.Attribute(
+                            value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
+                            attr="index",
+                            ctx=ast.Load(),
+                        )
+                    ],
+                ),
+                body=[
+                    ast.AugAssign(
+                        target=ast.Subscript(
+                            value=ast.Attribute(
+                                value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
+                                attr="index",
+                                ctx=ast.Load(),
+                            ),
+                            slice=ast.Name(id="test_name", ctx=ast.Load()),
+                            ctx=ast.Store(),
+                        ),
+                        op=ast.Add(),
+                        value=ast.Constant(value=1),
+                        lineno=lineno + 4,
+                    )
+                ],
+                orelse=[
+                    ast.Assign(
+                        targets=[
+                            ast.Subscript(
+                                value=ast.Attribute(
+                                    value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
+                                    attr="index",
+                                    ctx=ast.Load(),
+                                ),
+                                slice=ast.Name(id="test_name", ctx=ast.Load()),
+                                ctx=ast.Store(),
+                            )
+                        ],
+                        value=ast.Constant(value=0),
+                        lineno=lineno + 5,
+                    )
+                ],
+                lineno=lineno + 3,
+            ),
+            ast.Assign(
+                targets=[
+                    ast.Name(id="codeflash_test_index", ctx=ast.Store()),
+                ],
+                value=ast.Subscript(
+                    value=ast.Attribute(
+                        value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
+                        attr="index",
+                        ctx=ast.Load(),
+                    ),
+                    slice=ast.Name(id="test_name", ctx=ast.Load()),
+                    ctx=ast.Load(),
+                ),
+                lineno=lineno + 6,
+            ),
+            ast.Assign(
+                targets=[ast.Name(id="test_id", ctx=ast.Store())],
+                value=ast.JoinedStr(
+                    values=[
+                        ast.FormattedValue(
+                            value=ast.Name(id="test_id", ctx=ast.Load()), conversion=-1
+                        ),
+                        ast.Constant(value="_"),
+                        ast.FormattedValue(
+                            value=ast.Name(id="codeflash_test_index", ctx=ast.Load()), conversion=-1
+                        ),
+                    ]
+                ),
+                lineno=lineno + 7,
+            ),
+            ast.Expr(
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id="gc", ctx=ast.Load()),
+                        attr="disable",
+                        ctx=ast.Load(),
+                    ),
+                    args=[],
+                    keywords=[],
+                ),
+                lineno=lineno + 8,
+            ),
+            ast.Assign(
+                targets=[ast.Name(id="counter", ctx=ast.Store())],
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id="time", ctx=ast.Load()),
+                        attr="perf_counter_ns",
+                        ctx=ast.Load(),
+                    ),
+                    args=[],
+                    keywords=[],
+                ),
+                lineno=lineno + 9,
+            ),
+            ast.Assign(
+                targets=[ast.Name(id="return_value", ctx=ast.Store())],
+                value=ast.Call(
+                    func=ast.Name(id="wrapped", ctx=ast.Load()),
+                    args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
+                    keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+                ),
+                lineno=lineno + 10,
+            ),
+            ast.Assign(
+                targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],
+                value=ast.BinOp(
+                    left=ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Name(id="time", ctx=ast.Load()),
+                            attr="perf_counter_ns",
+                            ctx=ast.Load(),
+                        ),
+                        args=[],
+                        keywords=[],
+                    ),
+                    op=ast.Sub(),
+                    right=ast.Name(id="counter", ctx=ast.Load()),
+                ),
+                lineno=lineno + 11,
+            ),
+            ast.Expr(
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id="gc", ctx=ast.Load()),
+                        attr="enable",
+                        ctx=ast.Load(),
+                    ),
+                    args=[],
+                    keywords=[],
+                ),
+                lineno=lineno + 12,
+            ),
+            ast.Expr(
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id="codeflash_cur", ctx=ast.Load()),
+                        attr="execute",
+                        ctx=ast.Load(),
+                    ),
+                    args=[
+                        ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)"),
+                        ast.Tuple(
+                            elts=[
+                                ast.Constant(value=module_path),
+                                ast.Constant(value=None),
+                                ast.Constant(value="test_name"),
+                                ast.Constant(value=function_name),
+                                ast.JoinedStr(
+                                    values=[
+                                        ast.FormattedValue(
+                                            value=ast.Name(id="test_id", ctx=ast.Load()),
+                                            conversion=-1,
+                                        ),
+                                        ast.Constant(value=""),
+                                    ]
+                                ),
+                                ast.Name(id="codeflash_duration", ctx=ast.Load()),
+                                ast.Call(
+                                    func=ast.Attribute(
+                                        value=ast.Name(id="pickle", ctx=ast.Load()),
+                                        attr="dumps",
+                                        ctx=ast.Load(),
+                                    ),
+                                    args=[ast.Name(id="return_value", ctx=ast.Load())],
+                                    keywords=[],
+                                ),
+                            ],
+                            ctx=ast.Load(),
+                        ),
+                    ],
+                    keywords=[],
+                ),
+                lineno=lineno + 13,
+            ),
+            ast.Expr(
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id="codeflash_con", ctx=ast.Load()),
+                        attr="commit",
+                        ctx=ast.Load(),
+                    ),
+                    args=[],
+                    keywords=[],
+                ),
+                lineno=lineno + 14,
+            ),
+            ast.Expr(
+                value=ast.Call(
+                    func=ast.Name(id="print", ctx=ast.Load()),
+                    args=[
+                        ast.JoinedStr(
+                            values=[
+                                ast.Constant(value="#####"),
+                                ast.Constant(value=module_path),
+                                ast.Constant(value=":"),
+                                ast.Constant(value="test_name"),
+                                ast.Constant(value=":"),
+                                ast.Constant(value=function_name),
+                                ast.Constant(value=":"),
+                                ast.FormattedValue(
+                                    value=ast.Name(id="test_id", ctx=ast.Load()), conversion=-1
+                                ),
+                                ast.Constant(value="#####"),
+                                ast.FormattedValue(
+                                    value=ast.Name(id="codeflash_duration", ctx=ast.Load()),
+                                    conversion=-1,
+                                ),
+                                ast.Constant(value="^^^^^"),
+                            ]
+                        )
+                    ],
+                    keywords=[],
+                ),
+                lineno=lineno + 15,
+            ),
+            ast.Return(value=ast.Name(id="return_value", ctx=ast.Load()), lineno=lineno + 16),
+        ],
+        lineno=lineno,
+        decorator_list=[],
+        returns=None,
+        type_params=[],
+    )
+    return node
+
+    # node = ast.FunctionDef(
+    #     name="codeflash_wrap",
+    #     args=ast.arguments(
+    #         args=[
+    #             ast.arg(arg="function", annotation=None),
+    #             ast.arg(arg="test_name", annotation=None),
+    #             ast.arg(arg="test_id", annotation=None),
+    #             ast.arg(arg="*args", annotation=None),
+    #         ],
+    #         vararg=ast.arg(arg="*args"),
+    #         kwarg=ast.arg(arg="**kwargs"),
+    #         posonlyargs=[],
+    #         kwonlyargs=[],
+    #         kw_defaults=[],
+    #         defaults=[],
+    #     ),
+    #     body=[
+    #         ast.If(
+    #             test=ast.UnaryOp(
+    #                 op=ast.Not(),
+    #                 operand=ast.Attribute(
+    #                     value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
+    #                     attr="index",
+    #                     ctx=ast.Load(),
+    #                 ),
+    #             ),
+    #             body=[
+    #                 ast.Assign(
+    #                     targets=[
+    #                         ast.Subscript(
+    #                             value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
+    #                             slice=ast.Constant(value="index"),
+    #                             ctx=ast.Store(),
+    #                         )
+    #                     ],
+    #                     value=ast.Dict(keys=[], values=[]),
+    #                 )
+    #             ],
+    #             orelse=[],
+    #         ),
+    #         ast.If(
+    #             test=ast.Compare(
+    #                 left=ast.Name(id="test_name", ctx=ast.Load()),
+    #                 ops=[ast.In()],
+    #                 comparators=[
+    #                     ast.Attribute(
+    #                         value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
+    #                         attr="index",
+    #                         ctx=ast.Load(),
+    #                     )
+    #                 ],
+    #             ),
+    #             body=[
+    #                 ast.AugAssign(
+    #                     target=ast.Subscript(
+    #                         value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
+    #                         slice=ast.Name(id="test_name", ctx=ast.Load()),
+    #                         ctx=ast.Store(),
+    #                     ),
+    #                     op=ast.Add(),
+    #                     value=ast.Constant(value=1),
+    #                 )
+    #             ],
+    #             orelse=[
+    #                 ast.Assign(
+    #                     targets=[
+    #                         ast.Subscript(
+    #                             value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
+    #                             slice=ast.Name(id="test_name", ctx=ast.Load()),
+    #                             ctx=ast.Store(),
+    #                         )
+    #                     ],
+    #                     value=ast.Constant(value=0),
+    #                 )
+    #             ],
+    #         ),
+    #         ast.Assign(
+    #             targets=[
+    #                 ast.Name(id="codeflash_test_index", ctx=ast.Store()),
+    #             ],
+    #             value=ast.Tuple(
+    #                 elts=[
+    #                     ast.Subscript(
+    #                         value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
+    #                         slice=ast.Name(id="test_name", ctx=ast.Load()),
+    #                     )
+    #                 ]
+    #             ),
+    #         ),
+    #     ],
+    # )
