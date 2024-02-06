@@ -31,7 +31,7 @@ def make_cfapi_request(
     url = f"{CFAPI_BASE_URL}/cfapi{endpoint}"
     cfapi_headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
     if method.upper() == "POST":
-        json_payload = json.dumps(payload, indent=4, default=pydantic_encoder)
+        json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
         response = requests.post(url, json=json_payload, headers=cfapi_headers)
     else:
         response = requests.get(url, headers=cfapi_headers)
