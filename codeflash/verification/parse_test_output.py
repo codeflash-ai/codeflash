@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import logging
 import os
 import pathlib
@@ -5,10 +7,8 @@ import pickle
 import re
 import sqlite3
 import subprocess
-from collections import defaultdict
-from typing import Optional
-
 from junitparser.xunit2 import JUnitXml
+from typing import Optional
 
 from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
@@ -258,6 +258,7 @@ def merge_test_results(xml_test_results: TestResults, bin_test_results: TestResu
                     )
                 )
         else:
+            # Looks like we would never reach this condition because we are not printing the log line in the xml file
             for xml_result in xml_results:
                 bin_result = bin_results.get_by_id(xml_result.id)
                 if bin_result is None:

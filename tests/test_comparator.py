@@ -160,6 +160,23 @@ def test_numpy():
     ad = np.array([1, 2, "str2"])
     assert comparator(ac, ad)
 
+    # Test for numpy array with nan and inf
+    ae = np.array([1, 2, np.nan])
+    af = np.array([1, 2, np.nan])
+    ag = np.array([1, 2, np.inf])
+    ah = np.array([1, 2, np.inf])
+    ai = np.inf
+    aj = np.inf
+    ak = np.nan
+    al = np.nan
+    assert comparator(ae, af)
+    assert comparator(ag, ah)
+    assert not comparator(ae, ag)
+    assert not comparator(af, ah)
+    assert comparator(ai, aj)
+    assert comparator(ak, al)
+    assert not comparator(ai, ak)
+
 
 def test_scipy():
     try:
@@ -169,15 +186,20 @@ def test_scipy():
     a = sp.sparse.csr_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
     b = sp.sparse.csr_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
     c = sp.sparse.csr_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 6]])
+    ca = sp.sparse.csr_matrix([[1, 0, 0, 0], [0, 0, 3, 0], [4, 0, 6, 0]])
     assert comparator(a, b)
     assert not comparator(a, c)
+    assert not comparator(c, ca)
 
     d = sp.sparse.csc_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
     e = sp.sparse.csc_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
     f = sp.sparse.csc_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 6]])
+    fa = sp.sparse.csc_matrix([[1, 0, 0, 0], [0, 0, 3, 0], [4, 0, 6, 0]])
     assert comparator(d, e)
     assert not comparator(d, f)
     assert not comparator(a, d)
+    assert not comparator(c, f)
+    assert not comparator(f, fa)
 
     g = sp.sparse.lil_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
     h = sp.sparse.lil_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
@@ -226,6 +248,114 @@ def test_scipy():
     except ImportError:
         print("Should run tests with numpy installed to test more thoroughly")
         pass
+
+
+def test_pandas():
+    try:
+        import pandas as pd
+    except ImportError:
+        pytest.skip()
+    a = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+    b = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+    c = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 7]})
+    ca = pd.DataFrame({"a": [1, 2, 3, 4], "b": [4, 5, 6, 7]})
+    assert comparator(a, b)
+    assert not comparator(a, c)
+    assert not comparator(c, ca)
+
+    ak = pd.DataFrame(
+        {
+            "a": [datetime.datetime(2020, 2, 2, 2, 2, 2), datetime.datetime(2020, 2, 2, 2, 2, 2)],
+            "b": [4, 5],
+        }
+    )
+    al = pd.DataFrame(
+        {
+            "a": [datetime.datetime(2020, 2, 2, 2, 2, 2), datetime.datetime(2020, 2, 2, 2, 2, 2)],
+            "b": [4, 5],
+        }
+    )
+    am = pd.DataFrame(
+        {
+            "a": [datetime.datetime(2020, 2, 2, 2, 2, 2), datetime.datetime(2020, 2, 2, 2, 2, 3)],
+            "b": [4, 5],
+        }
+    )
+    assert comparator(ak, al)
+    assert not comparator(ak, am)
+
+    d = pd.Series([1, 2, 3])
+    e = pd.Series([1, 2, 3])
+    f = pd.Series([1, 2, 4])
+    assert comparator(d, e)
+    assert not comparator(d, f)
+
+    g = pd.Index([1, 2, 3])
+    h = pd.Index([1, 2, 3])
+    i = pd.Index([1, 2, 4])
+    assert comparator(g, h)
+    assert not comparator(g, i)
+
+    j = pd.MultiIndex.from_tuples([(1, 2), (3, 4)])
+    k = pd.MultiIndex.from_tuples([(1, 2), (3, 4)])
+    l = pd.MultiIndex.from_tuples([(1, 2), (3, 5)])
+    assert comparator(j, k)
+    assert not comparator(j, l)
+
+    m = pd.Categorical([1, 2, 3])
+    n = pd.Categorical([1, 2, 3])
+    o = pd.Categorical([1, 2, 4])
+    assert comparator(m, n)
+    assert not comparator(m, o)
+
+    p = pd.Interval(1, 2)
+    q = pd.Interval(1, 2)
+    r = pd.Interval(1, 3)
+    assert comparator(p, q)
+    assert not comparator(p, r)
+
+    s = pd.IntervalIndex.from_tuples([(1, 2), (3, 4)])
+    t = pd.IntervalIndex.from_tuples([(1, 2), (3, 4)])
+    u = pd.IntervalIndex.from_tuples([(1, 2), (3, 5)])
+    assert comparator(s, t)
+    assert not comparator(s, u)
+
+    v = pd.Period("2021-01")
+    w = pd.Period("2021-01")
+    x = pd.Period("2021-02")
+    assert comparator(v, w)
+    assert not comparator(v, x)
+
+    y = pd.period_range(start="2021-01", periods=3, freq="M")
+    z = pd.period_range(start="2021-01", periods=3, freq="M")
+    aa = pd.period_range(start="2021-01", periods=4, freq="M")
+    assert comparator(y, z)
+    assert not comparator(y, aa)
+
+    ab = pd.Timedelta("1 days")
+    ac = pd.Timedelta("1 days")
+    ad = pd.Timedelta("2 days")
+    assert comparator(ab, ac)
+    assert not comparator(ab, ad)
+
+    ae = pd.TimedeltaIndex(["1 days", "2 days"])
+    af = pd.TimedeltaIndex(["1 days", "2 days"])
+    ag = pd.TimedeltaIndex(["1 days", "3 days"])
+    assert comparator(ae, af)
+    assert not comparator(ae, ag)
+
+    ah = pd.Timestamp("2021-01-01")
+    ai = pd.Timestamp("2021-01-01")
+    aj = pd.Timestamp("2021-01-02")
+    assert comparator(ah, ai)
+    assert not comparator(ah, aj)
+
+    # test cases for sparse pandas arrays
+    an = pd.arrays.SparseArray([1, 2, 3])
+    ao = pd.arrays.SparseArray([1, 2, 3])
+    ap = pd.arrays.SparseArray([1, 2, 4])
+    assert comparator(an, ao)
+    assert not comparator(an, ap)
 
 
 def test_custom_object():
