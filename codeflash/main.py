@@ -341,6 +341,11 @@ class Optimizer:
                                 winning_test_results = best_test_results
                         with open(path, "w") as f:
                             f.write(original_code)
+                        for (
+                            module_abspath
+                        ) in dependent_functions_by_module_abspath.keys():
+                            with open(module_abspath, "w") as f:
+                                f.write(original_dependent_code[module_abspath])
                         logging.info("----------------")
                     logging.info(f"BEST OPTIMIZATION {best_optimization[0:2]}")
                     if best_optimization:
@@ -407,6 +412,11 @@ class Optimizer:
                             #     dependent on the runtime of the previous optimization
                             with open(path, "w") as f:
                                 f.write(original_code)
+                            for (
+                                module_abspath
+                            ) in dependent_functions_by_module_abspath.keys():
+                                with open(module_abspath, "w") as f:
+                                    f.write(original_dependent_code[module_abspath])
                     # Delete all the generated tests to not cause any clutter.
                     pathlib.Path(generated_tests_path).unlink(missing_ok=True)
                     for test_paths in instrumented_unittests_created_for_function:
