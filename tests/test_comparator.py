@@ -1,5 +1,6 @@
 import datetime
 import pytest
+import decimal
 
 from codeflash.verification.comparator import comparator
 from codeflash.verification.equivalence import compare_results
@@ -78,6 +79,12 @@ def test_standard_python_library_objects():
     a = datetime.timedelta(days=1)
     b = datetime.timedelta(days=1)
     c = datetime.timedelta(days=2)
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    a = decimal.Decimal(3.14)
+    b = decimal.Decimal(3.14)
+    c = decimal.Decimal(3.15)
     assert comparator(a, b)
     assert not comparator(a, c)
 

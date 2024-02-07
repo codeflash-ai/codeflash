@@ -1,4 +1,5 @@
 import datetime
+import decimal
 import logging
 import math
 from typing import Any
@@ -56,7 +57,7 @@ def comparator(orig: Any, new: Any) -> bool:
                 return False
         return True
 
-    if isinstance(orig, (str, int, bool, complex, type(None))):
+    if isinstance(orig, (str, int, bool, complex, type(None), decimal.Decimal)):
         return orig == new
     if isinstance(orig, float):
         if math.isnan(orig) and math.isnan(new):
