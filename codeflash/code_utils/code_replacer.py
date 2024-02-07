@@ -30,9 +30,13 @@ class OptimFunctionCollector(cst.CSTVisitor):
             pass
         if node.name.value == self.function_name:
             self.optim_body = node
-        elif node.name.value not in self.preexisting_functions and (
-            isinstance(parent, cst.Module)
-            or (parent2 is not None and not isinstance(parent2, cst.ClassDef))
+        elif (
+            self.preexisting_functions
+            and node.name.value not in self.preexisting_functions
+            and (
+                isinstance(parent, cst.Module)
+                or (parent2 is not None and not isinstance(parent2, cst.ClassDef))
+            )
         ):
             self.optim_new_functions.append(node)
 
@@ -146,48 +150,51 @@ class OptimFunctionReplacer(cst.CSTTransformer):
     #             print(import_node)
     #             for name in import_node.names:
     #                 asname = name.asname.name.value if name.asname else None
-    #                 AddImportsVisitor.add_needed_import(self.context, module =import_node.module.value,  obj=name.name.value, asname=asname)
+    #                 AddImportsVisitor.add_needed_import(
+    #                 self.context, module =import_node.module.value,  obj=name.name.value, asname=asname)
     #     #print(updated_node)
 
 
-def replace_function_in_file(
+def replace_functions_in_file(
     source_code: str,
-    original_function_name: str,
+    original_function_names: list[str],
     optimized_function: str,
     preexisting_functions: list[str],
 ) -> str:
     class_name = None
-    if original_function_name.count(".") == 0:
-        function_name = original_function_name
-    elif original_function_name.count(".") == 1:
-        class_name, function_name = original_function_name.split(".")
-    else:
-        raise ValueError(f"Don't know how to find {original_function_name} yet!")
-    visitor = OptimFunctionCollector(function_name, preexisting_functions)
-    module = cst.metadata.MetadataWrapper(cst.parse_module(optimized_function))
-    visited = module.visit(visitor)
+    for i, original_function_name in enumerate(original_function_names):
+        if original_function_name.count(".") == 0:
+            function_name = original_function_name
+        elif original_function_name.count(".") == 1:
+            class_name, function_name = original_function_name.split(".")
+        else:
+            raise ValueError(f"Don't know how to find {original_function_name} yet!")
+        visitor = OptimFunctionCollector(function_name, preexisting_functions)
+        module = cst.metadata.MetadataWrapper(cst.parse_module(optimized_function))
+        visited = module.visit(visitor)
 
-    if visitor.optim_body is None:
-        raise ValueError(
-            f"Did not find the function {function_name} in the optimized code"
+        if visitor.optim_body is None:
+            raise ValueError(
+                f"Did not find the function {function_name} in the optimized code"
+            )
+        optim_imports = [] if i > 0 else visitor.optim_imports
+
+        transformer = OptimFunctionReplacer(
+            visitor.function_name,
+            visitor.optim_body,
+            visitor.optim_new_class_functions,
+            optim_imports,
+            visitor.optim_new_functions,
+            class_name=class_name,
         )
-    # TODO: If a dependency has been optimized and that dependency is imported in the file,
-    # then we need to update the original file where the dependency is imported from
-    transformer = OptimFunctionReplacer(
-        visitor.function_name,
-        visitor.optim_body,
-        visitor.optim_new_class_functions,
-        visitor.optim_imports,
-        visitor.optim_new_functions,
-        class_name=class_name,
-    )
-    original_module = cst.parse_module(source_code)
-    modified_tree = original_module.visit(transformer)
-    return modified_tree.code
+        original_module = cst.parse_module(source_code)
+        modified_tree = original_module.visit(transformer)
+        source_code = modified_tree.code
+    return source_code
 
 
-def replace_function_definition_in_module(
-    function_name: str,
+def replace_function_definitions_in_module(
+    function_names: list[str],
     optimized_code: str,
     module_abspath: str,
     preexisting_functions: list[str],
@@ -195,9 +202,9 @@ def replace_function_definition_in_module(
     file: IO[str]
     with open(module_abspath, "r") as file:
         source_code: str = file.read()
-    new_code: str = replace_function_in_file(
+    new_code: str = replace_functions_in_file(
         source_code,
-        function_name,
+        function_names,
         optimized_code,
         preexisting_functions,
     )

@@ -3,6 +3,7 @@ import logging
 import os
 import pathlib
 from argparse import ArgumentParser, SUPPRESS, Namespace
+from collections import defaultdict
 from typing import Tuple, Union
 
 import libcst as cst
@@ -13,7 +14,7 @@ from codeflash.cli_cmds.cli import process_cmd_args
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import get_code
-from codeflash.code_utils.code_replacer import replace_function_definition_in_module
+from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
     get_all_function_names,
@@ -188,6 +189,19 @@ class Optimizer:
                     ) = get_constrained_function_context_and_dependent_functions(
                         function_to_optimize, self.args.project_root, code_to_optimize
                     )
+                    preexisting_functions.extend(
+                        [fn[0].full_name for fn in dependent_functions]
+                    )
+                    dependent_functions_by_module_abspath = defaultdict(set)
+                    for dependent_fn, module_abspath in dependent_functions:
+                        dependent_functions_by_module_abspath[module_abspath].add(
+                            dependent_fn.full_name
+                        )
+                    original_dependent_code = {}
+                    for module_abspath in dependent_functions_by_module_abspath.keys():
+                        with open(module_abspath, "r") as f:
+                            dependent_code = f.read()
+                            original_dependent_code[module_abspath] = dependent_code
                     logging.info(
                         f"Code to be optimized:\n{code_to_optimize_with_dependents}"
                     )
@@ -260,12 +274,22 @@ class Optimizer:
                         logging.info("Optimized Candidate:")
                         logging.info(optimized_code)
                         try:
-                            replace_function_definition_in_module(
-                                function_name,
+                            replace_function_definitions_in_module(
+                                [function_name],
                                 optimized_code,
                                 path,
                                 preexisting_functions,
                             )
+                            for (
+                                module_abspath,
+                                dependent_functions,
+                            ) in dependent_functions_by_module_abspath.items():
+                                replace_function_definitions_in_module(
+                                    list(dependent_functions),
+                                    optimized_code,
+                                    module_abspath,
+                                    [],
+                                )
                         except (
                             ValueError,
                             SyntaxError,
@@ -274,6 +298,7 @@ class Optimizer:
                         ) as e:
                             logging.error(e)
                             continue
+
                         (
                             success,
                             times_run,
@@ -322,12 +347,23 @@ class Optimizer:
                         found_atleast_one_optimization = True
                         logging.info(f"BEST OPTIMIZED CODE\n{best_optimization[0]}")
 
-                        replace_function_definition_in_module(
-                            function_name,
-                            best_optimization[0],
+                        optimized_code = best_optimization[0]
+                        replace_function_definitions_in_module(
+                            [function_name],
+                            optimized_code,
                             path,
                             preexisting_functions,
                         )
+                        for (
+                            module_abspath,
+                            dependent_functions,
+                        ) in dependent_functions_by_module_abspath.items():
+                            replace_function_definitions_in_module(
+                                list(dependent_functions),
+                                optimized_code,
+                                module_abspath,
+                                [],
+                            )
                         explanation_final = Explanation(
                             raw_explanation_message=best_optimization[1],
                             winning_test_results=winning_test_results,
@@ -341,6 +377,10 @@ class Optimizer:
                         )
 
                         new_code = lint_code(path)
+                        new_dependent_code = [
+                            lint_code(module_abspath)
+                            for module_abspath in dependent_functions_by_module_abspath.keys()
+                        ]
 
                         logging.info(
                             f"Optimization was validated for correctness by running the following test - "
@@ -352,9 +392,6 @@ class Optimizer:
                         )
                         logging.info(f"📈 {explanation_final.perf_improvement_line}")
 
-                        # TODO: Create multi-file PR for dependent functions, extract dependent functions from new code
-                        # and overwrite original definitions, with replace_function_in_file. Also need to lint edited
-                        # files.
                         check_create_pr(
                             optimize_all=self.args.all,
                             path=path,
