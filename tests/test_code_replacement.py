@@ -1,8 +1,8 @@
 import os
-from tempfile import NamedTemporaryFile
+
+from codeflash.code_utils.code_replacer import replace_function_in_file
 
 os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
-from codeflash.code_utils.code_replacer import replace_function_in_file
 
 
 def test_test_libcst_code_replacement():
@@ -45,15 +45,9 @@ def totally_new_function(value):
 print("Hello world")
 """
 
-    with NamedTemporaryFile(mode="w") as f:
-        f.write(original_code)
-        f.flush()
-        path = f.name
-        function_name = "NewClass.new_function"
-        preexisting_functions = ["NewClass.new_function"]
-        optimized_code = optim_code
-
-        new_code = replace_function_in_file(
-            path, function_name, optimized_code, preexisting_functions
-        )
-        assert new_code == expected
+    function_name: str = "NewClass.new_function"
+    preexisting_functions: list[str] = ["NewClass.new_function"]
+    new_code: str = replace_function_in_file(
+        original_code, function_name, optim_code, preexisting_functions
+    )
+    assert new_code == expected
