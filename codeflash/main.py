@@ -13,7 +13,7 @@ from codeflash.cli_cmds.cli import process_cmd_args
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import get_code
-from codeflash.code_utils.code_replacer import replace_function_in_file
+from codeflash.code_utils.code_replacer import replace_function_definition_in_module
 from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
     get_all_function_names,
@@ -260,10 +260,10 @@ class Optimizer:
                         logging.info("Optimized Candidate:")
                         logging.info(optimized_code)
                         try:
-                            new_code = replace_function_in_file(
-                                path,
+                            replace_function_definition_in_module(
                                 function_name,
                                 optimized_code,
+                                path,
                                 preexisting_functions,
                             )
                         except (
@@ -274,8 +274,6 @@ class Optimizer:
                         ) as e:
                             logging.error(e)
                             continue
-                        with open(path, "w") as f:
-                            f.write(new_code)
                         (
                             success,
                             times_run,
@@ -324,14 +322,12 @@ class Optimizer:
                         found_atleast_one_optimization = True
                         logging.info(f"BEST OPTIMIZED CODE\n{best_optimization[0]}")
 
-                        new_code = replace_function_in_file(
-                            path,
+                        replace_function_definition_in_module(
                             function_name,
                             best_optimization[0],
+                            path,
                             preexisting_functions,
                         )
-                        with open(path, "w") as f:
-                            f.write(new_code)
                         explanation_final = Explanation(
                             raw_explanation_message=best_optimization[1],
                             winning_test_results=winning_test_results,
