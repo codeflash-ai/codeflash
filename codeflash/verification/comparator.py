@@ -22,6 +22,13 @@ try:
 except ImportError:
     HAS_SCIPY = False
 
+try:
+    import pandas
+
+    HAS_PANDAS = True
+except ImportError:
+    HAS_PANDAS = False
+
 
 def comparator(orig: Any, new: Any) -> bool:
     if HAS_SQLALCHEMY:
@@ -83,6 +90,28 @@ def comparator(orig: Any, new: Any) -> bool:
     if HAS_NUMPY and isinstance(orig, (np.integer, np.bool_, np.byte)):
         return orig == new
 
+    if HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix):
+        if orig.dtype != new.dtype:
+            return False
+        if orig.get_shape() != new.get_shape():
+            return False
+        return (orig != new).nnz == 0
+
+    if HAS_PANDAS and isinstance(
+        orig,
+        (
+            pandas.DataFrame,
+            pandas.Series,
+            pandas.Index,
+            pandas.Categorical,
+            pandas.arrays.SparseArray,
+        ),
+    ):
+        return orig.equals(new)
+
+    if HAS_PANDAS and isinstance(orig, (pandas.CategoricalDtype, pandas.Interval, pandas.Period)):
+        return orig == new
+
     # This should be at the end of all numpy checking
     try:
         if HAS_NUMPY and np.isnan(orig):
@@ -94,9 +123,6 @@ def comparator(orig: Any, new: Any) -> bool:
             return np.isinf(new)
     except Exception as e:
         pass
-
-    if HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix):
-        return (orig != new).nnz == 0
 
     if isinstance(orig, (datetime.datetime, datetime.date, datetime.timedelta)):
         return orig == new
