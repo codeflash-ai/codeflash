@@ -12,7 +12,7 @@ class PrComment:
     best_runtime: int
     original_runtime: int
     function_name: str
-    relative_file_path: str
+    relative_file_path: list[str]
     speedup_x: str
     speedup_pct: str
     winning_test_results: TestResults

@@ -7,6 +7,7 @@ from codeflash.code_utils import env_utils
 from codeflash.code_utils.git_utils import (
     get_repo_owner_and_name,
     git_root_dir,
+    get_current_branch,
 )
 from codeflash.github.PrComment import FileDiffContent, PrComment
 from codeflash.result.explanation import Explanation
@@ -23,23 +24,26 @@ def check_create_pr(
 
     if pr_number is not None:
         logging.info(f"Suggesting changes to PR #{pr_number} ...")
-
         owner, repo = get_repo_owner_and_name()
-        relative_path = os.path.relpath(path, git_root_dir())
+        relative_file_path = [
+            os.path.relpath(p, git_root_dir()) for p in original_code.keys()
+        ]
         response = cfapi.suggest_changes(
             owner=owner,
             repo=repo,
             pr_number=pr_number,
             file_changes={
-                os.path.relpath(p, git_root_dir()): FileDiffContent(oldContent=original_code[p], newContent=new_code[p]
-                for p in original_code.keys()).model_dump(mode="json")},
+                os.path.relpath(p, git_root_dir()): FileDiffContent(
+                    oldContent=original_code[p], newContent=new_code[p]
+                ).model_dump(mode="json")
+                for p in original_code.keys()
             },
             pr_comment=PrComment(
                 optimization_explanation=explanation.explanation_message(),
                 best_runtime=explanation.best_runtime_ns,
                 original_runtime=explanation.original_runtime_ns,
                 function_name=explanation.function_name,
-                relative_file_path=relative_path,
+                relative_file_path=relative_file_path,
                 speedup_x=explanation.speedup_x,
                 speedup_pct=explanation.speedup_pct,
                 winning_test_results=explanation.winning_test_results,
@@ -58,16 +62,19 @@ def check_create_pr(
         logging.info("Creating a new PR with the optimized code...")
         owner, repo = get_repo_owner_and_name()
 
-        relative_path = os.path.relpath(path, git_root_dir())
+        relative_path = [
+            os.path.relpath(p, git_root_dir()) for p in original_code.keys()
+        ]
         base_branch = get_current_branch()
         response = cfapi.create_pr(
             owner=owner,
             repo=repo,
             base_branch=base_branch,
             file_changes={
-                relative_path: FileDiffContent(
-                    oldContent=original_code, newContent=new_code
+                os.path.relpath(p, git_root_dir()): FileDiffContent(
+                    oldContent=original_code[p], newContent=new_code[p]
                 ).model_dump(mode="json")
+                for p in original_code.keys()
             },
             pr_comment=PrComment(
                 optimization_explanation=explanation.explanation_message(),
