@@ -8,9 +8,7 @@ from libcst import SimpleStatementLine, FunctionDef
 class OptimFunctionCollector(cst.CSTVisitor):
     METADATA_DEPENDENCIES = (cst.metadata.ParentNodeProvider,)
 
-    def __init__(
-        self, function_name: str, preexisting_functions: Optional[List[str]] = None
-    ):
+    def __init__(self, function_name: str, preexisting_functions: Optional[List[str]] = None):
         super().__init__()
         if preexisting_functions is None:
             preexisting_functions = []
@@ -43,9 +41,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
 
     def visit_ClassDef_body(self, node: cst.ClassDef) -> None:
         for class_node in node.body.body:
-            if isinstance(
-                class_node, cst.FunctionDef
-            ) and class_node.name.value not in [
+            if isinstance(class_node, cst.FunctionDef) and class_node.name.value not in [
                 "__init__",
                 self.function_name,
             ]:
@@ -89,23 +85,17 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         if self.class_name is not None and original_node.name.value == self.class_name:
             return updated_node.with_changes(
                 body=updated_node.body.with_changes(
-                    body=(
-                        list(updated_node.body.body) + self.optim_new_class_functions
-                    ),
+                    body=(list(updated_node.body.body) + self.optim_new_class_functions),
                 )
             )
         else:
             return updated_node
 
-    def leave_Module(
-        self, original_node: cst.Module, updated_node: cst.Module
-    ) -> cst.Module:
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         if len(self.optim_new_imports) == 0:
             node = updated_node
         else:
-            node = updated_node.with_changes(
-                body=(*self.optim_new_imports, *updated_node.body)
-            )
+            node = updated_node.with_changes(body=(*self.optim_new_imports, *updated_node.body))
         max_function_index = None
         class_index = None
         for index, _node in enumerate(node.body):
@@ -163,29 +153,35 @@ def replace_functions_in_file(
     preexisting_functions: list[str],
     module: str,
 ) -> str:
-    class_name = None
-    for i, original_function_name in enumerate(original_function_names):
+
+    parsed_function_names = []
+    for original_function_name in original_function_names:
         if original_function_name.count(".") == 0:
             function_name = original_function_name
+            class_name = None
         elif preexisting_functions and original_function_name.count(".") == 1:
             class_name, function_name = original_function_name.split(".")
         elif original_function_name.count(".") == 1:
             function_name = original_function_name.split(".")[1]
+            class_name = None
         elif not preexisting_functions and original_function_name.count(".") > 1:
             if original_function_name.split(".")[-2] != module:
                 class_name, function_name = original_function_name.split(".")[-2:]
             else:
                 function_name = original_function_name.split(".")[-1]
+                class_name = None
         else:
             raise ValueError(f"Don't know how to find {original_function_name} yet!")
+        parsed_function_names.append((function_name, class_name))
+
+    module = cst.metadata.MetadataWrapper(cst.parse_module(optimized_function))
+
+    for i, (function_name, class_name) in enumerate(parsed_function_names):
         visitor = OptimFunctionCollector(function_name, preexisting_functions)
-        module = cst.metadata.MetadataWrapper(cst.parse_module(optimized_function))
         visited = module.visit(visitor)
 
         if visitor.optim_body is None:
-            raise ValueError(
-                f"Did not find the function {function_name} in the optimized code"
-            )
+            raise ValueError(f"Did not find the function {function_name} in the optimized code")
         optim_imports = [] if i > 0 else visitor.optim_imports
 
         transformer = OptimFunctionReplacer(
@@ -199,6 +195,7 @@ def replace_functions_in_file(
         original_module = cst.parse_module(source_code)
         modified_tree = original_module.visit(transformer)
         source_code = modified_tree.code
+
     return source_code
 
 
