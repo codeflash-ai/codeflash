@@ -386,8 +386,6 @@ class Optimizer:
                             module_abspath: lint_code(module_abspath)
                             for module_abspath in dependent_functions_by_module_abspath.keys()
                         }
-                        new_dependent_code.update({path: new_code})
-                        original_dependent_code.update({path: original_code})
                         logging.info(
                             f"Optimization was validated for correctness by running the following test - "
                             f"\n{generated_original_test_source}"
@@ -400,9 +398,9 @@ class Optimizer:
 
                         check_create_pr(
                             optimize_all=self.args.all,
-                            path=path,
-                            original_code=original_dependent_code,
-                            new_code=new_dependent_code,
+                            original_code=original_dependent_code
+                            | {path: original_code},
+                            new_code=new_dependent_code | {path: new_code},
                             explanation=explanation_final,
                             generated_original_test_source=generated_original_test_source,
                         )

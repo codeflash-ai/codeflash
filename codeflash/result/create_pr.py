@@ -7,7 +7,6 @@ from codeflash.code_utils import env_utils
 from codeflash.code_utils.git_utils import (
     get_repo_owner_and_name,
     git_root_dir,
-    get_current_branch,
 )
 from codeflash.github.PrComment import FileDiffContent, PrComment
 from codeflash.result.explanation import Explanation
@@ -15,7 +14,6 @@ from codeflash.result.explanation import Explanation
 
 def check_create_pr(
     optimize_all: bool,
-    path: str,
     original_code: dict[str, str],
     new_code: dict[str, str],
     explanation: Explanation,
@@ -33,9 +31,8 @@ def check_create_pr(
             repo=repo,
             pr_number=pr_number,
             file_changes={
-                relative_path: FileDiffContent(
-                    oldContent=original_code, newContent=new_code
-                ).model_dump(mode="json")
+                os.path.relpath(p, git_root_dir()): FileDiffContent(oldContent=original_code[p], newContent=new_code[p]
+                for p in original_code.keys()).model_dump(mode="json")},
             },
             pr_comment=PrComment(
                 optimization_explanation=explanation.explanation_message(),
