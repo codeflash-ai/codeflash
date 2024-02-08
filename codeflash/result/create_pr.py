@@ -35,7 +35,7 @@ def check_create_pr(
             file_changes={
                 os.path.relpath(p, git_root_dir()): FileDiffContent(
                     oldContent=original_code[p], newContent=new_code[p]
-                ).model_dump(mode="json")
+                )
                 for p in original_code.keys()
             },
             pr_comment=PrComment(
@@ -73,7 +73,7 @@ def check_create_pr(
             file_changes={
                 os.path.relpath(p, git_root_dir()): FileDiffContent(
                     oldContent=original_code[p], newContent=new_code[p]
-                ).model_dump(mode="json")
+                )
                 for p in original_code.keys()
             },
             pr_comment=PrComment(

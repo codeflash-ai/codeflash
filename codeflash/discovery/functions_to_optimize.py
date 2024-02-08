@@ -1,12 +1,12 @@
 import ast
+import libcst as cst
 import logging
 import os
+import random
 from _ast import ClassDef, FunctionDef, AsyncFunctionDef
-from typing import Dict, Optional, List, Tuple, Union
-
-import libcst as cst
 from libcst import CSTNode
 from pydantic.dataclasses import dataclass
+from typing import Dict, Optional, List, Tuple, Union
 
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
 from codeflash.code_utils.git_utils import get_git_diff
@@ -128,7 +128,10 @@ def get_functions_to_optimize_by_file(
                 if only_function_name == fn.function_name:
                     found_function = fn
             if found_function is None:
-                raise ValueError(f"Function {only_function_name} not found in file {file}")
+                raise ValueError(
+                    f"Function {only_function_name} not found in file {file} or"
+                    f" the function does not have a 'return' statement."
+                )
             functions[file] = [found_function]
     else:
         logging.info("Finding all functions modified in the current git diff ...")
@@ -170,7 +173,12 @@ def get_all_files_and_functions(module_root_path: str) -> Dict[str, List[Functio
             file_path = os.path.join(root, file)
             # Find all the functions in the file
             functions.update(find_all_functions_in_file(file_path))
-    return functions
+    # Randomize the order of the files to optimize to avoid optimizing the same file in the same order every time.
+    # Helpful if an optimize-all run is stuck and we restart it.
+    files_list = list(functions.items())
+    random.shuffle(files_list)
+    functions_shuffled = dict(files_list)
+    return functions_shuffled
 
 
 def find_all_functions_in_file(file_path: str) -> Dict[str, List[FunctionToOptimize]]:
