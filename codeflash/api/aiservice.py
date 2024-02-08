@@ -35,6 +35,7 @@ def make_ai_service_request(
     ai_service_headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
     if method.upper() == "POST":
         json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
+        ai_service_headers["Content-Type"] = "application/json"
         response = requests.post(
             url, data=json_payload, headers=ai_service_headers, timeout=timeout
         )
