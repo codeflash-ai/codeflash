@@ -1,4 +1,4 @@
-"""Thanks for being curious about how codeflash works! If you might want to work with us on making performance a
+"""Thanks for being curious about how codeflash works! If you might want to work with us on finally making performance a
 solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 """
 import concurrent.futures
