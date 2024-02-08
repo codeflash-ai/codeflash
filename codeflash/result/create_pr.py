@@ -4,7 +4,11 @@ from typing import Optional
 
 from codeflash.api import cfapi
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.git_utils import get_repo_owner_and_name, git_root_dir, get_current_branch
+from codeflash.code_utils.git_utils import (
+    get_repo_owner_and_name,
+    git_root_dir,
+    get_current_branch,
+)
 from codeflash.github.PrComment import FileDiffContent, PrComment
 from codeflash.result.explanation import Explanation
 
@@ -12,8 +16,8 @@ from codeflash.result.explanation import Explanation
 def check_create_pr(
     optimize_all: bool,
     path: str,
-    original_code: str,
-    new_code: str,
+    original_code: dict[str, str],
+    new_code: dict[str, str],
     explanation: Explanation,
     generated_original_test_source: str,
 ):
@@ -81,7 +85,9 @@ def check_create_pr(
             generated_tests=generated_original_test_source,
         )
         if response.ok:
-            logging.info(f"Successfully created a new PR #{response.text} with the optimized code.")
+            logging.info(
+                f"Successfully created a new PR #{response.text} with the optimized code."
+            )
         else:
             logging.error(
                 f"Optimization was successful, but I failed to create a PR with the optimized code."

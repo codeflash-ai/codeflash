@@ -1,3 +1,4 @@
+import os
 from typing import List, Union, Optional, IO, NoReturn
 
 import libcst as cst
@@ -160,13 +161,21 @@ def replace_functions_in_file(
     original_function_names: list[str],
     optimized_function: str,
     preexisting_functions: list[str],
+    module: str,
 ) -> str:
     class_name = None
     for i, original_function_name in enumerate(original_function_names):
         if original_function_name.count(".") == 0:
             function_name = original_function_name
-        elif original_function_name.count(".") == 1:
+        elif preexisting_functions and original_function_name.count(".") == 1:
             class_name, function_name = original_function_name.split(".")
+        elif original_function_name.count(".") == 1:
+            function_name = original_function_name.split(".")[1]
+        elif not preexisting_functions and original_function_name.count(".") > 1:
+            if original_function_name.split(".")[-2] != module:
+                class_name, function_name = original_function_name.split(".")[-2:]
+            else:
+                function_name = original_function_name.split(".")[-1]
         else:
             raise ValueError(f"Don't know how to find {original_function_name} yet!")
         visitor = OptimFunctionCollector(function_name, preexisting_functions)
@@ -202,11 +211,13 @@ def replace_function_definitions_in_module(
     file: IO[str]
     with open(module_abspath, "r") as file:
         source_code: str = file.read()
+
     new_code: str = replace_functions_in_file(
         source_code,
         function_names,
         optimized_code,
         preexisting_functions,
+        os.path.basename(module_abspath)[: -len(".py")],
     )
     with open(module_abspath, "w") as file:
         file.write(new_code)

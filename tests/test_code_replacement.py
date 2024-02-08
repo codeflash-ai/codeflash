@@ -48,7 +48,7 @@ print("Hello world")
     function_name: str = "NewClass.new_function"
     preexisting_functions: list[str] = ["NewClass.new_function"]
     new_code: str = replace_functions_in_file(
-        original_code, [function_name], optim_code, preexisting_functions
+        original_code, [function_name], optim_code, preexisting_functions, "module"
     )
     assert new_code == expected
 
@@ -103,7 +103,7 @@ print("Hello world")
     function_name: str = "NewClass.new_function"
     preexisting_functions: list[str] = ["NewClass.new_function", "other_function"]
     new_code: str = replace_functions_in_file(
-        original_code, [function_name], optim_code, preexisting_functions
+        original_code, [function_name], optim_code, preexisting_functions, "module"
     )
     assert new_code == expected
 
@@ -156,10 +156,10 @@ def other_function(st):
 print("Salut monde")
 """
 
-    function_names: list[str] = ["other_function"]
+    function_names: list[str] = ["module.other_function"]
     preexisting_functions: list[str] = []
     new_code: str = replace_functions_in_file(
-        original_code, function_names, optim_code, preexisting_functions
+        original_code, function_names, optim_code, preexisting_functions, "module"
     )
     assert new_code == expected
 
@@ -214,9 +214,9 @@ def other_function(st):
 print("Salut monde")
 """
 
-    function_names: list[str] = ["yet_another_function", "other_function"]
+    function_names: list[str] = ["module.yet_another_function", "module.other_function"]
     preexisting_functions: list[str] = []
     new_code: str = replace_functions_in_file(
-        original_code, function_names, optim_code, preexisting_functions
+        original_code, function_names, optim_code, preexisting_functions, "module"
     )
     assert new_code == expected
