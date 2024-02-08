@@ -1,9 +1,8 @@
 from typing import Union
 
+from codeflash.verification.test_results import TestResults
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
-
-from codeflash.verification.test_results import TestResults
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
@@ -12,7 +11,7 @@ class PrComment:
     best_runtime: int
     original_runtime: int
     function_name: str
-    relative_file_path: list[str]
+    relative_file_path: str
     speedup_x: str
     speedup_pct: str
     winning_test_results: TestResults

@@ -220,3 +220,48 @@ print("Salut monde")
         original_code, function_names, optim_code, preexisting_functions, "module"
     )
     assert new_code == expected
+
+
+def test_test_libcst_code_replacement5():
+    optim_code = """def sorter_deps(arr):
+    supersort(badsort(arr))
+    return arr
+
+def badsort(ploc):
+    donothing(ploc)
+    
+def supersort(doink):
+    for i in range(len(doink)):
+        fix(doink, i)
+"""
+
+    original_code = """from code_to_optimize.bubble_sort_dep1_helper import dep1_comparer
+from code_to_optimize.bubble_sort_dep2_swap import dep2_swap
+
+def sorter_deps(arr):
+    for i in range(len(arr)):
+        for j in range(len(arr) - 1):
+            if dep1_comparer(arr, j):
+                dep2_swap(arr, j)
+    return arr
+"""
+    expected = """from code_to_optimize.bubble_sort_dep1_helper import dep1_comparer
+from code_to_optimize.bubble_sort_dep2_swap import dep2_swap
+def sorter_deps(arr):
+    supersort(badsort(arr))
+    return arr
+
+def badsort(ploc):
+    donothing(ploc)
+    
+def supersort(doink):
+    for i in range(len(doink)):
+        fix(doink, i)
+"""
+
+    function_names: list[str] = ["sorter_deps"]
+    preexisting_functions: list[str] = ["sorter_deps"]
+    new_code: str = replace_functions_in_file(
+        original_code, function_names, optim_code, preexisting_functions, "module"
+    )
+    assert new_code == expected
