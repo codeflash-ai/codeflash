@@ -20,13 +20,13 @@ class TestsInFile:
     test_suite: Optional[str]
 
     @classmethod
-    def from_pytest_stdout_line(cls, module_line: str, function_line: str, pytest_rootdir: str):
+    def from_pytest_stdout_line(cls, module_line: str, function_line: str, directory: str):
         module_match = re.match(r"\s*<Module (.+)>", module_line)
         function_match = re.match(r"\s*<Function (.+)>", function_line)
         if module_match and function_match:
             module_path = module_match.group(1)
             function_name = function_match.group(1)
-            absolute_test_path = os.path.join(pytest_rootdir, module_path)
+            absolute_test_path = os.path.join(directory, module_path)
             assert os.path.exists(
                 absolute_test_path
             ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
@@ -198,12 +198,27 @@ def process_test_files(
 def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir) -> List[TestsInFile]:
     test_results = []
     module_line = None
+    directory = pytest_rootdir
+    indent = 0
     for line in pytest_stdout.splitlines():
-        if "<Module " in line:
+        if "<Dir " in line:
+            new_dir = re.match(r"\s*<Dir (.+)>", line).group(1)
+            if new_dir not in directory:
+                while len(line) - len(line.lstrip()) <= indent:
+                    directory = os.path.dirname(directory)
+                    indent -= 2
+
+                indent = len(line) - len(line.lstrip())
+                directory = os.path.join(directory, new_dir)
+        elif "<Module " in line:
+            while len(line) - len(line.lstrip()) <= indent:
+                directory = os.path.dirname(directory)
+                indent -= 2
+
             module_line = line
         elif "<Function " in line and module_line:
             try:
-                test_result = TestsInFile.from_pytest_stdout_line(module_line, line, pytest_rootdir)
+                test_result = TestsInFile.from_pytest_stdout_line(module_line, line, directory)
                 test_results.append(test_result)
             except ValueError as e:
                 logging.warning(str(e))

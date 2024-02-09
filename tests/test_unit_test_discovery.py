@@ -127,6 +127,93 @@ def test_discover_tests_pytest_with_multi_level_dirs():
         )
 
 
+def test_discover_tests_pytest_dirs():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # Create multi-level directories
+        level1_dir = pathlib.Path(tmpdirname) / "level1"
+        level2_dir = level1_dir / "level2"
+        level2_dir.mkdir(parents=True)
+        level3_dir = level1_dir / "level3"
+        level3_dir.mkdir(parents=True)
+
+        # Create code files at each level
+        root_code_file_path = pathlib.Path(tmpdirname) / "root_code.py"
+        root_code_file_content = "def root_function():\n    return True\n"
+        root_code_file_path.write_text(root_code_file_content)
+
+        level1_code_file_path = level1_dir / "level1_code.py"
+        level1_code_file_content = "def level1_function():\n    return True\n"
+        level1_code_file_path.write_text(level1_code_file_content)
+
+        level2_code_file_path = level2_dir / "level2_code.py"
+        level2_code_file_content = "def level2_function():\n    return True\n"
+        level2_code_file_path.write_text(level2_code_file_content)
+
+        level3_code_file_path = level3_dir / "level3_code.py"
+        level3_code_file_content = "def level3_function():\n    return True\n"
+        level3_code_file_path.write_text(level3_code_file_content)
+
+        # Create a test file at the root level
+        root_test_file_path = pathlib.Path(tmpdirname) / "test_root.py"
+        root_test_file_content = (
+            "from root_code import root_function\n\n"
+            "def test_root_function():\n"
+            "    assert True\n"
+            "    assert root_function() is True\n"
+        )
+        root_test_file_path.write_text(root_test_file_content)
+
+        # Create a test file at level 1
+        level1_test_file_path = level1_dir / "test_level1.py"
+        level1_test_file_content = (
+            "from level1_code import level1_function\n\n"
+            "def test_level1_function():\n"
+            "    assert True\n"
+            "    assert level1_function() is True\n"
+        )
+        level1_test_file_path.write_text(level1_test_file_content)
+
+        # Create a test file at level 2
+        level2_test_file_path = level2_dir / "test_level2.py"
+        level2_test_file_content = (
+            "from level2_code import level2_function\n\n"
+            "def test_level2_function():\n"
+            "    assert True\n"
+            "    assert level2_function() is True\n"
+        )
+        level2_test_file_path.write_text(level2_test_file_content)
+
+        level3_test_file_path = level3_dir / "test_level3.py"
+        level3_test_file_content = (
+            "from level3_code import level3_function\n\n"
+            "def test_level3_function():\n"
+            "    assert True\n"
+            "    assert level3_function() is True\n"
+        )
+        level3_test_file_path.write_text(level3_test_file_content)
+
+        # Create a TestConfig with the temporary directory as the root
+        test_config = TestConfig(
+            tests_root=str(tmpdirname), project_root_path=str(tmpdirname), test_framework="pytest"
+        )
+
+        # Discover tests
+        discovered_tests = discover_unit_tests(test_config)
+
+        # Check if the test files at all levels are discovered
+        assert len(discovered_tests) == 4
+        assert discovered_tests["root_code.root_function"][0].test_file == str(root_test_file_path)
+        assert discovered_tests["level1_code.level1_function"][0].test_file == str(
+            level1_test_file_path
+        )
+        assert discovered_tests["level2_code.level2_function"][0].test_file == str(
+            level2_test_file_path
+        )
+        assert discovered_tests["level3_code.level3_function"][0].test_file == str(
+            level3_test_file_path
+        )
+
+
 def test_discover_tests_pytest_with_class():
     with tempfile.TemporaryDirectory() as tmpdirname:
         # Create a code file with a class
