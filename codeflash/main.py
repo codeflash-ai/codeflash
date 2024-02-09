@@ -461,7 +461,6 @@ class Optimizer:
         overall_original_test_results = None
         times_run = 0
         success = True
-        # TODO : Dynamically determine the number of times to run the tests based on the runtime of the tests.
         # Keep the runtime in some acceptable range
         generated_tests_elapsed_time = 0.0
 
