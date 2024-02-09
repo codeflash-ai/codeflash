@@ -273,7 +273,7 @@ class Optimizer:
 
                         if success:
                             logging.info(
-                                f"NEW CODE RUNTIME OVER {times_run} RUN{'S' if times_run > 1 else ''} = "
+                                f"NEW CODE RUNTIME MEASURED OVER {times_run} RUN{'S' if times_run > 1 else ''} = "
                                 f"{humanize_runtime(best_test_runtime)}, SPEEDUP RATIO = "
                                 f"{((original_runtime - best_test_runtime) / best_test_runtime):.3f}"
                             )
@@ -551,7 +551,7 @@ class Optimizer:
             success = False
         if success:
             logging.info(
-                f"ORIGINAL CODE RUNTIME OVER {times_run} RUN{'S' if times_run > 1 else ''} = {original_runtime}ns"
+                f"ORIGINAL CODE RUNTIME MEASURED OVER {times_run} RUN{'S' if times_run > 1 else ''} = {humanize_runtime(original_runtime)}"
             )
         return success, original_gen_results, overall_original_test_results, best_runtime
 
