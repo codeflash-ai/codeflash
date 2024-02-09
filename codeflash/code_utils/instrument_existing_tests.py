@@ -6,7 +6,7 @@ from codeflash.code_utils.code_utils import module_name_from_file_path, get_run_
 
 
 class ReplaceCallNodeWithName(ast.NodeTransformer):
-    def __init__(self, only_function_name, new_variable_name="return_value"):
+    def __init__(self, only_function_name, new_variable_name="codeflash_return_value"):
         self.only_function_name = only_function_name
         self.new_variable_name = new_variable_name
 
@@ -39,17 +39,21 @@ class InjectPerfOnly(ast.NodeTransformer):
             return [test_node]
         updated_nodes = [
             ast.Assign(
-                targets=[ast.Name(id="output", ctx=ast.Store())],
+                targets=[ast.Name(id="codeflash_return_value", ctx=ast.Store())],
                 value=ast.Call(
                     func=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
                     args=[
-                        ast.Name(id="sorter", ctx=ast.Load()),
-                        ast.Constant(value="test_sort"),
-                        ast.Constant(value="5"),
+                        ast.Name(id=call_node.func.id, ctx=ast.Load()),
+                        ast.Constant(value=self.module_path),
+                        ast.Constant(value=test_class_name or None),
+                        ast.Constant(value=node_name),
+                        ast.Constant(value=self.only_function_name),
+                        ast.Constant(value=index),
                         ast.Name(id="codeflash_cur", ctx=ast.Load()),
                         ast.Name(id="codeflash_con", ctx=ast.Load()),
-                        ast.Name(id="input", ctx=ast.Load()),
-                    ],
+                    ]
+                    + call_node.args
+                    + call_node.keywords,
                     keywords=[],
                 ),
                 lineno=test_node.lineno,
@@ -62,7 +66,7 @@ class InjectPerfOnly(ast.NodeTransformer):
         #  for equality amongst the original and the optimized version. This will ensure that the optimizations are correct
         #  in a more robust way.
 
-        # updated_nodes.append(subbed_node)
+        updated_nodes.append(subbed_node)
         return updated_nodes
 
     def is_target_function_line(self, line_node):
@@ -183,7 +187,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                 line_node = node.body[i]
                 # TODO: Validate if the functional call actually did not raise any exceptions
 
-                if isinstance(line_node, (ast.With, ast.For)):
+                if isinstance(line_node, (ast.With, ast.For, ast.While)):
                     j = len(line_node.body) - 1
                     while j >= 0:
                         compound_line_node = line_node.body[j]
@@ -249,8 +253,11 @@ def create_wrapper_function(function_name, module_path):
         args=ast.arguments(
             args=[
                 ast.arg(arg="wrapped", annotation=None),
+                ast.arg(arg="test_module_name", annotation=None),
+                ast.arg(arg="test_class_name", annotation=None),
                 ast.arg(arg="test_name", annotation=None),
-                ast.arg(arg="test_id", annotation=None),
+                ast.arg(arg="function_name", annotation=None),
+                ast.arg(arg="line_id", annotation=None),
                 ast.arg(arg="codeflash_cur", annotation=None),
                 ast.arg(arg="codeflash_con", annotation=None),
             ],
@@ -262,6 +269,29 @@ def create_wrapper_function(function_name, module_path):
             defaults=[],
         ),
         body=[
+            ast.Assign(
+                targets=[ast.Name(id="test_id", ctx=ast.Store())],
+                value=ast.JoinedStr(
+                    values=[
+                        ast.FormattedValue(
+                            value=ast.Name(id="test_module_name", ctx=ast.Load()), conversion=-1
+                        ),
+                        ast.Constant(value=":"),
+                        ast.FormattedValue(
+                            value=ast.Name(id="test_class_name", ctx=ast.Load()), conversion=-1
+                        ),
+                        ast.Constant(value=":"),
+                        ast.FormattedValue(
+                            value=ast.Name(id="test_name", ctx=ast.Load()), conversion=-1
+                        ),
+                        ast.Constant(value=":"),
+                        ast.FormattedValue(
+                            value=ast.Name(id="line_id", ctx=ast.Load()), conversion=-1
+                        ),
+                    ]
+                ),
+                lineno=lineno + 1,
+            ),
             ast.If(
                 test=ast.UnaryOp(
                     op=ast.Not(),
@@ -284,15 +314,15 @@ def create_wrapper_function(function_name, module_path):
                             )
                         ],
                         value=ast.Dict(keys=[], values=[]),
-                        lineno=lineno + 2,
+                        lineno=lineno + 3,
                     )
                 ],
                 orelse=[],
-                lineno=lineno + 1,
+                lineno=lineno + 2,
             ),
             ast.If(
                 test=ast.Compare(
-                    left=ast.Name(id="test_name", ctx=ast.Load()),
+                    left=ast.Name(id="test_id", ctx=ast.Load()),
                     ops=[ast.In()],
                     comparators=[
                         ast.Attribute(
@@ -310,12 +340,12 @@ def create_wrapper_function(function_name, module_path):
                                 attr="index",
                                 ctx=ast.Load(),
                             ),
-                            slice=ast.Name(id="test_name", ctx=ast.Load()),
+                            slice=ast.Name(id="test_id", ctx=ast.Load()),
                             ctx=ast.Store(),
                         ),
                         op=ast.Add(),
                         value=ast.Constant(value=1),
-                        lineno=lineno + 4,
+                        lineno=lineno + 5,
                     )
                 ],
                 orelse=[
@@ -327,15 +357,15 @@ def create_wrapper_function(function_name, module_path):
                                     attr="index",
                                     ctx=ast.Load(),
                                 ),
-                                slice=ast.Name(id="test_name", ctx=ast.Load()),
+                                slice=ast.Name(id="test_id", ctx=ast.Load()),
                                 ctx=ast.Store(),
                             )
                         ],
                         value=ast.Constant(value=0),
-                        lineno=lineno + 5,
+                        lineno=lineno + 6,
                     )
                 ],
-                lineno=lineno + 3,
+                lineno=lineno + 4,
             ),
             ast.Assign(
                 targets=[
@@ -347,17 +377,17 @@ def create_wrapper_function(function_name, module_path):
                         attr="index",
                         ctx=ast.Load(),
                     ),
-                    slice=ast.Name(id="test_name", ctx=ast.Load()),
+                    slice=ast.Name(id="test_id", ctx=ast.Load()),
                     ctx=ast.Load(),
                 ),
-                lineno=lineno + 6,
+                lineno=lineno + 7,
             ),
             ast.Assign(
-                targets=[ast.Name(id="test_id", ctx=ast.Store())],
+                targets=[ast.Name(id="invocation_id", ctx=ast.Store())],
                 value=ast.JoinedStr(
                     values=[
                         ast.FormattedValue(
-                            value=ast.Name(id="test_id", ctx=ast.Load()), conversion=-1
+                            value=ast.Name(id="line_id", ctx=ast.Load()), conversion=-1
                         ),
                         ast.Constant(value="_"),
                         ast.FormattedValue(
@@ -365,7 +395,7 @@ def create_wrapper_function(function_name, module_path):
                         ),
                     ]
                 ),
-                lineno=lineno + 7,
+                lineno=lineno + 8,
             ),
             ast.Expr(
                 value=ast.Call(
@@ -377,7 +407,7 @@ def create_wrapper_function(function_name, module_path):
                     args=[],
                     keywords=[],
                 ),
-                lineno=lineno + 8,
+                lineno=lineno + 9,
             ),
             ast.Assign(
                 targets=[ast.Name(id="counter", ctx=ast.Store())],
@@ -390,7 +420,7 @@ def create_wrapper_function(function_name, module_path):
                     args=[],
                     keywords=[],
                 ),
-                lineno=lineno + 9,
+                lineno=lineno + 10,
             ),
             ast.Assign(
                 targets=[ast.Name(id="return_value", ctx=ast.Store())],
@@ -399,7 +429,7 @@ def create_wrapper_function(function_name, module_path):
                     args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
                     keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
                 ),
-                lineno=lineno + 10,
+                lineno=lineno + 11,
             ),
             ast.Assign(
                 targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],
@@ -416,7 +446,7 @@ def create_wrapper_function(function_name, module_path):
                     op=ast.Sub(),
                     right=ast.Name(id="counter", ctx=ast.Load()),
                 ),
-                lineno=lineno + 11,
+                lineno=lineno + 12,
             ),
             ast.Expr(
                 value=ast.Call(
@@ -428,7 +458,7 @@ def create_wrapper_function(function_name, module_path):
                     args=[],
                     keywords=[],
                 ),
-                lineno=lineno + 12,
+                lineno=lineno + 13,
             ),
             ast.Expr(
                 value=ast.Call(
@@ -441,19 +471,11 @@ def create_wrapper_function(function_name, module_path):
                         ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)"),
                         ast.Tuple(
                             elts=[
-                                ast.Constant(value=module_path),
-                                ast.Constant(value=None),
-                                ast.Constant(value="test_name"),
-                                ast.Constant(value=function_name),
-                                ast.JoinedStr(
-                                    values=[
-                                        ast.FormattedValue(
-                                            value=ast.Name(id="test_id", ctx=ast.Load()),
-                                            conversion=-1,
-                                        ),
-                                        ast.Constant(value=""),
-                                    ]
-                                ),
+                                ast.Name(id="test_module_name", ctx=ast.Load()),
+                                ast.Name(id="test_class_name", ctx=ast.Load()),
+                                ast.Name(id="test_name", ctx=ast.Load()),
+                                ast.Name(id="function_name", ctx=ast.Load()),
+                                ast.Name(id="invocation_id", ctx=ast.Load()),
                                 ast.Name(id="codeflash_duration", ctx=ast.Load()),
                                 ast.Call(
                                     func=ast.Attribute(
@@ -470,7 +492,7 @@ def create_wrapper_function(function_name, module_path):
                     ],
                     keywords=[],
                 ),
-                lineno=lineno + 13,
+                lineno=lineno + 14,
             ),
             ast.Expr(
                 value=ast.Call(
@@ -480,35 +502,6 @@ def create_wrapper_function(function_name, module_path):
                         ctx=ast.Load(),
                     ),
                     args=[],
-                    keywords=[],
-                ),
-                lineno=lineno + 14,
-            ),
-            ast.Expr(
-                value=ast.Call(
-                    func=ast.Name(id="print", ctx=ast.Load()),
-                    args=[
-                        ast.JoinedStr(
-                            values=[
-                                ast.Constant(value="#####"),
-                                ast.Constant(value=module_path),
-                                ast.Constant(value=":"),
-                                ast.Constant(value="test_name"),
-                                ast.Constant(value=":"),
-                                ast.Constant(value=function_name),
-                                ast.Constant(value=":"),
-                                ast.FormattedValue(
-                                    value=ast.Name(id="test_id", ctx=ast.Load()), conversion=-1
-                                ),
-                                ast.Constant(value="#####"),
-                                ast.FormattedValue(
-                                    value=ast.Name(id="codeflash_duration", ctx=ast.Load()),
-                                    conversion=-1,
-                                ),
-                                ast.Constant(value="^^^^^"),
-                            ]
-                        )
-                    ],
                     keywords=[],
                 ),
                 lineno=lineno + 15,
@@ -521,95 +514,3 @@ def create_wrapper_function(function_name, module_path):
         type_params=[],
     )
     return node
-
-    # node = ast.FunctionDef(
-    #     name="codeflash_wrap",
-    #     args=ast.arguments(
-    #         args=[
-    #             ast.arg(arg="function", annotation=None),
-    #             ast.arg(arg="test_name", annotation=None),
-    #             ast.arg(arg="test_id", annotation=None),
-    #             ast.arg(arg="*args", annotation=None),
-    #         ],
-    #         vararg=ast.arg(arg="*args"),
-    #         kwarg=ast.arg(arg="**kwargs"),
-    #         posonlyargs=[],
-    #         kwonlyargs=[],
-    #         kw_defaults=[],
-    #         defaults=[],
-    #     ),
-    #     body=[
-    #         ast.If(
-    #             test=ast.UnaryOp(
-    #                 op=ast.Not(),
-    #                 operand=ast.Attribute(
-    #                     value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
-    #                     attr="index",
-    #                     ctx=ast.Load(),
-    #                 ),
-    #             ),
-    #             body=[
-    #                 ast.Assign(
-    #                     targets=[
-    #                         ast.Subscript(
-    #                             value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
-    #                             slice=ast.Constant(value="index"),
-    #                             ctx=ast.Store(),
-    #                         )
-    #                     ],
-    #                     value=ast.Dict(keys=[], values=[]),
-    #                 )
-    #             ],
-    #             orelse=[],
-    #         ),
-    #         ast.If(
-    #             test=ast.Compare(
-    #                 left=ast.Name(id="test_name", ctx=ast.Load()),
-    #                 ops=[ast.In()],
-    #                 comparators=[
-    #                     ast.Attribute(
-    #                         value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
-    #                         attr="index",
-    #                         ctx=ast.Load(),
-    #                     )
-    #                 ],
-    #             ),
-    #             body=[
-    #                 ast.AugAssign(
-    #                     target=ast.Subscript(
-    #                         value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
-    #                         slice=ast.Name(id="test_name", ctx=ast.Load()),
-    #                         ctx=ast.Store(),
-    #                     ),
-    #                     op=ast.Add(),
-    #                     value=ast.Constant(value=1),
-    #                 )
-    #             ],
-    #             orelse=[
-    #                 ast.Assign(
-    #                     targets=[
-    #                         ast.Subscript(
-    #                             value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
-    #                             slice=ast.Name(id="test_name", ctx=ast.Load()),
-    #                             ctx=ast.Store(),
-    #                         )
-    #                     ],
-    #                     value=ast.Constant(value=0),
-    #                 )
-    #             ],
-    #         ),
-    #         ast.Assign(
-    #             targets=[
-    #                 ast.Name(id="codeflash_test_index", ctx=ast.Store()),
-    #             ],
-    #             value=ast.Tuple(
-    #                 elts=[
-    #                     ast.Subscript(
-    #                         value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
-    #                         slice=ast.Name(id="test_name", ctx=ast.Load()),
-    #                     )
-    #                 ]
-    #             ),
-    #         ),
-    #     ],
-    # )

@@ -12,7 +12,6 @@ from codeflash.verification.verification_utils import (
     TestConfig,
 )
 from codeflash.verification.verification_utils import delete_multiple_if_name_main
-from django.aiservice.injectperf.instrument_test_source import instrument_test_source
 
 
 def generate_tests(
@@ -32,20 +31,7 @@ def generate_tests(
 
         module = importlib.import_module(module_path)
         generated_test_source = module.CACHED_TESTS
-        # instrumented_test_source = module.CACHED_TESTS
-        test_module_path = module_name_from_file_path(
-            get_test_file_path(test_cfg.tests_root, function_to_optimize.function_name, 0),
-            test_cfg.project_root_path,
-        )
-        instrumented_test_source = instrument_test_source(
-            generated_test_source,
-            function_to_optimize,
-            dependent_function_names,
-            module_path,
-            test_module_path,
-            test_cfg.test_framework,
-            test_timeout,
-        )
+        instrumented_test_source = module.CACHED_INSTRUMENTED_TESTS
         instrumented_test_source = instrumented_test_source.replace(
             "{codeflash_run_tmp_dir_client_side}", get_run_tmp_file("")
         )
