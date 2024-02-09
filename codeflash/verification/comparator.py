@@ -1,4 +1,5 @@
 import datetime
+import decimal
 import logging
 import math
 from typing import Any
@@ -15,6 +16,19 @@ try:
     HAS_SQLALCHEMY = True
 except ImportError:
     HAS_SQLALCHEMY = False
+try:
+    import scipy
+
+    HAS_SCIPY = True
+except ImportError:
+    HAS_SCIPY = False
+
+try:
+    import pandas
+
+    HAS_PANDAS = True
+except ImportError:
+    HAS_PANDAS = False
 
 
 def comparator(orig: Any, new: Any) -> bool:
@@ -43,13 +57,14 @@ def comparator(orig: Any, new: Any) -> bool:
                 return False
         return True
 
-    if isinstance(orig, (str, int, bool, complex, type(None))):
+    if isinstance(orig, (str, int, bool, complex, type(None), decimal.Decimal)):
         return orig == new
     if isinstance(orig, float):
         if math.isnan(orig) and math.isnan(new):
             return True
         return math.isclose(orig, new)
-    if isinstance(orig, dict):
+    # scipy condition because dok_matrix type is also a instance of dict, but dict comparison doesn't work for it
+    if isinstance(orig, dict) and not (HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix)):
         if len(orig) != len(new):
             return False
         for key in orig:
@@ -74,6 +89,28 @@ def comparator(orig: Any, new: Any) -> bool:
         return np.isclose(orig, new)
 
     if HAS_NUMPY and isinstance(orig, (np.integer, np.bool_, np.byte)):
+        return orig == new
+
+    if HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix):
+        if orig.dtype != new.dtype:
+            return False
+        if orig.get_shape() != new.get_shape():
+            return False
+        return (orig != new).nnz == 0
+
+    if HAS_PANDAS and isinstance(
+        orig,
+        (
+            pandas.DataFrame,
+            pandas.Series,
+            pandas.Index,
+            pandas.Categorical,
+            pandas.arrays.SparseArray,
+        ),
+    ):
+        return orig.equals(new)
+
+    if HAS_PANDAS and isinstance(orig, (pandas.CategoricalDtype, pandas.Interval, pandas.Period)):
         return orig == new
 
     # This should be at the end of all numpy checking

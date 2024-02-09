@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import logging
 import os
 import pathlib
@@ -5,10 +7,8 @@ import pickle
 import re
 import sqlite3
 import subprocess
-from collections import defaultdict
-from typing import Optional
-
 from junitparser.xunit2 import JUnitXml
+from typing import Optional
 
 from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
