@@ -15,6 +15,7 @@ from codeflash.result.explanation import Explanation
 
 def check_create_pr(
     optimize_all: bool,
+    path: str,
     original_code: dict[str, str],
     new_code: dict[str, str],
     explanation: Explanation,
@@ -25,13 +26,12 @@ def check_create_pr(
     if pr_number is not None:
         logging.info(f"Suggesting changes to PR #{pr_number} ...")
         owner, repo = get_repo_owner_and_name()
-        relative_file_path = [
-            os.path.relpath(p, git_root_dir()) for p in original_code.keys()
-        ]
+        relative_path = os.path.relpath(path, git_root_dir())
         response = cfapi.suggest_changes(
             owner=owner,
             repo=repo,
             pr_number=pr_number,
+            relative_path=relative_path,
             file_changes={
                 os.path.relpath(p, git_root_dir()): FileDiffContent(
                     oldContent=original_code[p], newContent=new_code[p]
@@ -43,7 +43,7 @@ def check_create_pr(
                 best_runtime=explanation.best_runtime_ns,
                 original_runtime=explanation.original_runtime_ns,
                 function_name=explanation.function_name,
-                relative_file_path=relative_file_path,
+                relative_file_path=relative_path,
                 speedup_x=explanation.speedup_x,
                 speedup_pct=explanation.speedup_pct,
                 winning_test_results=explanation.winning_test_results,
@@ -62,9 +62,7 @@ def check_create_pr(
         logging.info("Creating a new PR with the optimized code...")
         owner, repo = get_repo_owner_and_name()
 
-        relative_path = [
-            os.path.relpath(p, git_root_dir()) for p in original_code.keys()
-        ]
+        relative_path = os.path.relpath(path, git_root_dir())
         base_branch = get_current_branch()
         response = cfapi.create_pr(
             owner=owner,

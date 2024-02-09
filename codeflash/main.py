@@ -9,9 +9,8 @@ from argparse import ArgumentParser, SUPPRESS, Namespace
 from collections import defaultdict
 from typing import Tuple, Union
 
-import libcst as cst
-
 import codeflash.cli_cmds.logging_config  # intializes logging, has to be the first non-system import # noqa
+import libcst as cst
 from codeflash.api.aiservice import optimize_python_code
 from codeflash.cli_cmds.cli import process_cmd_args
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
@@ -401,6 +400,7 @@ class Optimizer:
 
                         check_create_pr(
                             optimize_all=self.args.all,
+                            path=path,
                             original_code=original_dependent_code
                             | {path: original_code},
                             new_code=new_dependent_code | {path: new_code},
