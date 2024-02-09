@@ -524,10 +524,11 @@ class Optimizer:
                 )
                 if original_total_runtime_iter == 0:
                     logging.warning(
-                        f"The overall test runtime of the original function is 0, trying again..."
+                        f"The overall test runtime of the original function is 0, couldn't run tests."
                     )
                     logging.warning(original_gen_results.test_results)
-                    continue
+                    do_break = True
+                    break
                 original_test_results_iter.merge(original_gen_results)
                 if i == 0 and first_run:
                     logging.info(
@@ -651,9 +652,10 @@ class Optimizer:
 
                 if test_runtime == 0:
                     logging.warning(
-                        f"The overall test runtime of the optimized function is 0, trying again..."
+                        f"The overall test runtime of the optimized function is 0, couldn't run tests."
                     )
-                    continue
+                    do_break = True
+                    break
                 if best_test_runtime is None or test_runtime < best_test_runtime:
                     optimized_test_results_iter.merge(test_results)
                     best_test_runtime = test_runtime
