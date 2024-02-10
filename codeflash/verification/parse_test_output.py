@@ -4,7 +4,6 @@ import logging
 import os
 import pathlib
 import pickle
-import re
 import sqlite3
 import subprocess
 from junitparser.xunit2 import JUnitXml
@@ -248,7 +247,10 @@ def merge_test_results(xml_test_results: TestResults, bin_test_results: TestResu
         else:
             for i in range(len(xml_results.test_results)):
                 xml_result = xml_results.test_results[i]
-                bin_result = bin_results.test_results[i]
+                try:
+                    bin_result = bin_results.test_results[i]
+                except IndexError:
+                    bin_result = None
                 if bin_result is None:
                     # if xml_result.test_type == TestType.EXISTING_UNIT_TEST:
                     # only support
