@@ -579,7 +579,9 @@ def test_sort():
     inputs = [[5, 4, 3, 2, 1, 0], [5.0, 4.0, 3.0, 2.0, 1.0, 0.0], list(reversed(range(50)))]
     expected_outputs = [[0, 1, 2, 3, 4, 5], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0], list(range(50))]
 
-    for input, expected_output in zip(inputs, expected_outputs):
+    for i in range(3):   
+        input = inputs[i]
+        expected_output = expected_outputs[i]
         output = sorter(input)
         assert output == expected_output"""
 
@@ -616,8 +618,10 @@ def test_sort():
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     inputs = [[5, 4, 3, 2, 1, 0], [5.0, 4.0, 3.0, 2.0, 1.0, 0.0], list(reversed(range(50)))]
     expected_outputs = [[0, 1, 2, 3, 4, 5], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0], list(range(50))]
-    for input, expected_output in zip(inputs, expected_outputs):
-        codeflash_return_value = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '6_0', codeflash_cur, codeflash_con, input)
+    for i in range(3):
+        input = inputs[i]
+        expected_output = expected_outputs[i]
+        codeflash_return_value = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '6_2', codeflash_cur, codeflash_con, input)
         output = codeflash_return_value
         assert output == expected_output
     codeflash_con.close()"""
@@ -670,7 +674,7 @@ def test_sort():
     )
 
     assert test_results[0].id.function_getting_tested == "sorter"
-    assert test_results[0].id.iteration_id == "6_0_0"
+    assert test_results[0].id.iteration_id == "6_2_0"
     assert test_results[0].id.test_class_name == None
     assert test_results[0].id.test_function_name == "test_sort"
     assert (
@@ -681,7 +685,7 @@ def test_sort():
     assert test_results[0].did_pass == True
 
     assert test_results[1].id.function_getting_tested == "sorter"
-    assert test_results[1].id.iteration_id == "6_0_1"
+    assert test_results[1].id.iteration_id == "6_2_1"
     assert test_results[1].id.test_class_name == None
     assert test_results[1].id.test_function_name == "test_sort"
     assert (
@@ -692,7 +696,7 @@ def test_sort():
     assert test_results[1].did_pass == True
 
     assert test_results[2].id.function_getting_tested == "sorter"
-    assert test_results[2].id.iteration_id == "6_0_2"
+    assert test_results[2].id.iteration_id == "6_2_2"
     assert test_results[2].id.test_class_name == None
     assert test_results[2].id.test_function_name == "test_sort"
     assert (
