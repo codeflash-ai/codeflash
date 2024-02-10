@@ -151,7 +151,7 @@ def process_test_files(
                             and def_name.full_name is not None
                             and f".{name.name}." in def_name.full_name
                         ):
-                            test_functions.add(TestFunction(def_name.name, name.name))
+                            test_functions.add(TestFunction(def_name.name, name.name, None))
         test_functions_list = list(test_functions)
         test_functions_raw = [elem.function_name for elem in test_functions_list]
 
