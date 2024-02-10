@@ -5,10 +5,11 @@ from functools import lru_cache
 from typing import Optional, Dict, Any
 
 import requests
-from codeflash.code_utils.env_utils import get_codeflash_api_key
-from codeflash.github.PrComment import PrComment
 from pydantic.json import pydantic_encoder
 from requests import Response
+
+from codeflash.code_utils.env_utils import get_codeflash_api_key
+from codeflash.github.PrComment import PrComment, FileDiffContent
 
 if os.environ.get("CFAPI_SERVER", default="prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
@@ -58,8 +59,7 @@ def suggest_changes(
     owner: str,
     repo: str,
     pr_number: int,
-    relative_path: str,
-    file_changes: dict[str, dict[str, str]],
+    file_changes: dict[str, FileDiffContent],
     pr_comment: PrComment,
     generated_tests: str,
 ) -> Response:
@@ -79,14 +79,11 @@ def suggest_changes(
         "owner": owner,
         "repo": repo,
         "pullNumber": pr_number,
-        "relativePath": relative_path,
         "diffContents": file_changes,
         "prCommentFields": pr_comment.to_json(),
         "generatedTests": generated_tests,
     }
-    response = make_cfapi_request(
-        endpoint="/suggest-pr-changes", method="POST", payload=payload
-    )
+    response = make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
     return response
 
 
@@ -94,8 +91,7 @@ def create_pr(
     owner: str,
     repo: str,
     base_branch: str,
-    relative_path: str,
-    file_changes: dict[str, dict[str, str]],
+    file_changes: dict[str, FileDiffContent],
     pr_comment: PrComment,
     generated_tests: str,
 ) -> Response:
@@ -113,7 +109,6 @@ def create_pr(
         "owner": owner,
         "repo": repo,
         "baseBranch": base_branch,
-        "relativePath": relative_path,
         "diffContents": file_changes,
         "prCommentFields": pr_comment.to_json(),
         "generatedTests": generated_tests,

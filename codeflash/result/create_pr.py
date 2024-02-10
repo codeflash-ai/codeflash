@@ -31,7 +31,6 @@ def check_create_pr(
             owner=owner,
             repo=repo,
             pr_number=pr_number,
-            relative_path=relative_path,
             file_changes={
                 os.path.relpath(p, git_root_dir()): FileDiffContent(
                     oldContent=original_code[p], newContent=new_code[p]
@@ -87,9 +86,7 @@ def check_create_pr(
             generated_tests=generated_original_test_source,
         )
         if response.ok:
-            logging.info(
-                f"Successfully created a new PR #{response.text} with the optimized code."
-            )
+            logging.info(f"Successfully created a new PR #{response.text} with the optimized code.")
         else:
             logging.error(
                 f"Optimization was successful, but I failed to create a PR with the optimized code."
