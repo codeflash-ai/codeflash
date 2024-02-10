@@ -166,42 +166,23 @@ def parse_test_xml(
             # for system_out in testcase.system_out:
 
             #     system_out_content += system_out.text
-            if testcase.system_out and (
-                m := re.findall(r"#####([^#]*?)#####([\d\.]*?)\^\^\^\^\^", testcase.system_out)
-            ):
-                for encoded_id, time_taken in m:
-                    time_taken = int(time_taken)
-                    invocation_id = InvocationId.from_str_id(encoded_id)
-                    test_results.add(
-                        FunctionTestInvocation(
-                            id=invocation_id,
-                            file_name=file_name,
-                            runtime=time_taken,
-                            test_framework=test_config.test_framework,
-                            did_pass=result,
-                            test_type=test_type,
-                            return_value=None,
-                        )
-                    )
-            else:
-                logging.debug(f"No system_out for testcase or pattern didn't match: {testcase}")
-                test_results.add(
-                    FunctionTestInvocation(
-                        id=InvocationId(
-                            test_module_path=test_module_path,
-                            test_class_name=test_class,
-                            test_function_name=test_function,
-                            function_getting_tested="",  # FIXME,
-                            iteration_id=None,
-                        ),
-                        file_name=file_name,
-                        runtime=None,
-                        test_framework=test_config.test_framework,
-                        did_pass=result,
-                        test_type=test_type,
-                        return_value=None,
-                    )
+            test_results.add(
+                FunctionTestInvocation(
+                    id=InvocationId(
+                        test_module_path=test_module_path,
+                        test_class_name=test_class,
+                        test_function_name=test_function,
+                        function_getting_tested="",  # FIXME,
+                        iteration_id=None,
+                    ),
+                    file_name=file_name,
+                    runtime=None,
+                    test_framework=test_config.test_framework,
+                    did_pass=result,
+                    test_type=test_type,
+                    return_value=None,
                 )
+            )
     if len(test_results) == 0:
         logging.info(f"Test '{test_py_file_path}' failed to run, skipping it")
         if run_result is not None:
@@ -219,12 +200,19 @@ def merge_test_results(xml_test_results: TestResults, bin_test_results: TestResu
 
     # This is done to match the right iteration_id which might not be available in the xml
     for result in xml_test_results:
+        if "[" in result.id.test_function_name:
+            test_function_name = result.id.test_function_name[
+                : result.id.test_function_name.index("[")
+            ]
+        else:
+            test_function_name = result.id.test_function_name
+
         grouped_xml_results[
             result.id.test_module_path
             + ":"
             + (result.id.test_class_name or "")
             + ":"
-            + result.id.test_function_name
+            + test_function_name
         ].add(result)
     for result in bin_test_results:
         grouped_bin_results[
@@ -258,9 +246,9 @@ def merge_test_results(xml_test_results: TestResults, bin_test_results: TestResu
                     )
                 )
         else:
-            # Looks like we would never reach this condition because we are not printing the log line in the xml file
-            for xml_result in xml_results:
-                bin_result = bin_results.get_by_id(xml_result.id)
+            for i in range(len(xml_results.test_results)):
+                xml_result = xml_results.test_results[i]
+                bin_result = bin_results.test_results[i]
                 if bin_result is None:
                     # if xml_result.test_type == TestType.EXISTING_UNIT_TEST:
                     # only support
