@@ -2,6 +2,7 @@ import os.path
 import sys
 import tempfile
 import pytest
+import pathlib
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import INDIVIDUAL_TEST_TIMEOUT
@@ -218,11 +219,17 @@ def test_sort():
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()"""
 
-    test_path = "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_results_temp.py"
+    test_path = (
+        pathlib.Path(__file__).parent.resolve()
+        / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_results_temp.py"
+    )
     with open(test_path, "w") as f:
         f.write(code)
 
-    new_test = inject_profiling_into_existing_test(test_path, "sorter", "../code_to_optimize/")
+    tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+    project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+
+    new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
 
     assert new_test == expected.format(
         module_path="tests.pytest.test_perfinjector_bubble_sort_results_temp",
@@ -237,15 +244,15 @@ def test_sort():
     test_env["CODEFLASH_TEST_ITERATION"] = "0"
     test_type = TestType.EXISTING_UNIT_TEST
     test_cfg = TestConfig(
-        tests_root="../code_to_optimize/tests/pytest/",
-        project_root_path="../code_to_optimize/",
+        tests_root=str(tests_root),
+        project_root_path=str(project_root_path),
         test_framework="pytest",
         pytest_cmd="pytest",
     )
     result_file_path, run_result = run_tests(
-        "tests/pytest/test_perfinjector_bubble_sort_results_temp.py",
+        str(test_path),
         test_framework="pytest",
-        cwd="../code_to_optimize/",
+        cwd=str(project_root_path),
         pytest_timeout=INDIVIDUAL_TEST_TIMEOUT,
         pytest_cmd="pytest",
         verbose=True,
@@ -253,7 +260,7 @@ def test_sort():
     )
     test_results = parse_test_results(
         test_xml_path=result_file_path,
-        test_py_path="../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_results_temp.py",
+        test_py_path=str(test_path),
         test_config=test_cfg,
         test_type=test_type,
         run_result=run_result,
@@ -338,12 +345,17 @@ def test_sort_parametrized(input, expected_output):
     output = codeflash_return_value
     assert output == expected_output
     codeflash_con.close()"""
-
-    test_path = "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_parametrized_results_temp.py"
+    test_path = (
+        pathlib.Path(__file__).parent.resolve()
+        / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_parametrized_results_temp.py"
+    )
     with open(test_path, "w") as f:
         f.write(code)
 
-    new_test = inject_profiling_into_existing_test(test_path, "sorter", "../code_to_optimize/")
+    tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+    project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+
+    new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
     assert new_test == expected.format(
         module_path="tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp",
         tmp_dir_path=get_run_tmp_file("test_return_values"),
@@ -357,15 +369,15 @@ def test_sort_parametrized(input, expected_output):
     test_env["CODEFLASH_TEST_ITERATION"] = "0"
     test_type = TestType.EXISTING_UNIT_TEST
     test_cfg = TestConfig(
-        tests_root="../code_to_optimize/tests/pytest/",
-        project_root_path="../code_to_optimize/",
+        tests_root=str(tests_root),
+        project_root_path=str(project_root_path),
         test_framework="pytest",
         pytest_cmd="pytest",
     )
     result_file_path, run_result = run_tests(
-        "tests/pytest/test_perfinjector_bubble_sort_parametrized_results_temp.py",
+        str(test_path),
         test_framework="pytest",
-        cwd="../code_to_optimize/",
+        cwd=str(project_root_path),
         pytest_timeout=INDIVIDUAL_TEST_TIMEOUT,
         pytest_cmd="pytest",
         verbose=True,
@@ -374,7 +386,7 @@ def test_sort_parametrized(input, expected_output):
 
     test_results = parse_test_results(
         test_xml_path=result_file_path,
-        test_py_path="../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_parametrized_results_temp.py",
+        test_py_path=str(test_path),
         test_config=test_cfg,
         test_type=test_type,
         run_result=run_result,
@@ -475,11 +487,17 @@ def test_sort_parametrized(input, expected_output):
         assert output == expected_output
     codeflash_con.close()"""
 
-    test_path = "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_parametrized_results_temp2.py"
+    test_path = (
+        pathlib.Path(__file__).parent.resolve()
+        / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_parametrized_results_temp2.py"
+    )
     with open(test_path, "w") as f:
         f.write(code)
 
-    new_test = inject_profiling_into_existing_test(test_path, "sorter", "../code_to_optimize/")
+    tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+    project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+
+    new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
     assert new_test == expected.format(
         module_path="tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp2",
         tmp_dir_path=get_run_tmp_file("test_return_values"),
@@ -493,15 +511,15 @@ def test_sort_parametrized(input, expected_output):
     test_env["CODEFLASH_TEST_ITERATION"] = "0"
     test_type = TestType.EXISTING_UNIT_TEST
     test_cfg = TestConfig(
-        tests_root="../code_to_optimize/tests/pytest/",
-        project_root_path="../code_to_optimize/",
+        tests_root=str(tests_root),
+        project_root_path=str(project_root_path),
         test_framework="pytest",
         pytest_cmd="pytest",
     )
     result_file_path, run_result = run_tests(
-        "tests/pytest/test_perfinjector_bubble_sort_parametrized_results_temp2.py",
+        str(test_path),
         test_framework="pytest",
-        cwd="../code_to_optimize/",
+        cwd=str(project_root_path),
         pytest_timeout=INDIVIDUAL_TEST_TIMEOUT,
         pytest_cmd="pytest",
         verbose=True,
@@ -510,7 +528,7 @@ def test_sort_parametrized(input, expected_output):
 
     test_results = parse_test_results(
         test_xml_path=result_file_path,
-        test_py_path="../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_parametrized_results_temp2.py",
+        test_py_path=str(test_path),
         test_config=test_cfg,
         test_type=test_type,
         run_result=run_result,
@@ -605,12 +623,16 @@ def test_sort():
     codeflash_con.close()"""
 
     test_path = (
-        "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_loop_results_temp.py"
+        pathlib.Path(__file__).parent.resolve()
+        / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_loop_results_temp.py"
     )
     with open(test_path, "w") as f:
         f.write(code)
 
-    new_test = inject_profiling_into_existing_test(test_path, "sorter", "../code_to_optimize/")
+    tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+    project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+
+    new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
     assert new_test == expected.format(
         module_path="tests.pytest.test_perfinjector_bubble_sort_loop_results_temp",
         tmp_dir_path=get_run_tmp_file("test_return_values"),
@@ -624,15 +646,15 @@ def test_sort():
     test_env["CODEFLASH_TEST_ITERATION"] = "0"
     test_type = TestType.EXISTING_UNIT_TEST
     test_cfg = TestConfig(
-        tests_root="../code_to_optimize/tests/pytest/",
-        project_root_path="../code_to_optimize/",
+        tests_root=str(tests_root),
+        project_root_path=str(project_root_path),
         test_framework="pytest",
         pytest_cmd="pytest",
     )
     result_file_path, run_result = run_tests(
-        "tests/pytest/test_perfinjector_bubble_sort_loop_results_temp.py",
+        str(test_path),
         test_framework="pytest",
-        cwd="../code_to_optimize/",
+        cwd=str(project_root_path),
         pytest_timeout=INDIVIDUAL_TEST_TIMEOUT,
         pytest_cmd="pytest",
         verbose=True,
@@ -640,7 +662,7 @@ def test_sort():
     )
     test_results = parse_test_results(
         test_xml_path=result_file_path,
-        test_py_path="../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_loop_results_temp.py",
+        test_py_path=str(test_path),
         test_config=test_cfg,
         test_type=test_type,
         run_result=run_result,
