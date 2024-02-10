@@ -48,7 +48,7 @@ print("Hello world")
     function_name: str = "NewClass.new_function"
     preexisting_functions: list[str] = ["NewClass.new_function"]
     new_code: str = replace_functions_in_file(
-        original_code, [function_name], optim_code, preexisting_functions, "module"
+        original_code, [function_name], optim_code, preexisting_functions,
     )
     assert new_code == expected
 
@@ -103,7 +103,7 @@ print("Hello world")
     function_name: str = "NewClass.new_function"
     preexisting_functions: list[str] = ["NewClass.new_function", "other_function"]
     new_code: str = replace_functions_in_file(
-        original_code, [function_name], optim_code, preexisting_functions, "module"
+        original_code, [function_name], optim_code, preexisting_functions
     )
     assert new_code == expected
 
@@ -159,7 +159,7 @@ print("Salut monde")
     function_names: list[str] = ["module.other_function"]
     preexisting_functions: list[str] = []
     new_code: str = replace_functions_in_file(
-        original_code, function_names, optim_code, preexisting_functions, "module"
+        original_code, function_names, optim_code, preexisting_functions
     )
     assert new_code == expected
 
@@ -217,7 +217,7 @@ print("Salut monde")
     function_names: list[str] = ["module.yet_another_function", "module.other_function"]
     preexisting_functions: list[str] = []
     new_code: str = replace_functions_in_file(
-        original_code, function_names, optim_code, preexisting_functions, "module"
+        original_code, function_names, optim_code, preexisting_functions
     )
     assert new_code == expected
 
@@ -262,6 +262,6 @@ def supersort(doink):
     function_names: list[str] = ["sorter_deps"]
     preexisting_functions: list[str] = ["sorter_deps"]
     new_code: str = replace_functions_in_file(
-        original_code, function_names, optim_code, preexisting_functions, "module"
+        original_code, function_names, optim_code, preexisting_functions
     )
     assert new_code == expected
