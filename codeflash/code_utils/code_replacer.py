@@ -151,11 +151,10 @@ def replace_functions_in_file(
         optimized_function: str,
         preexisting_functions: list[str],
 ) -> str:
-
     parsed_function_names = []
     for original_function_name in original_function_names:
         if original_function_name.count(".") == 0:
-            function_name = original_function_name
+            class_name, function_name = None, original_function_name
         elif original_function_name.count(".") == 1:
             class_name, function_name = original_function_name.split(".")
         else:

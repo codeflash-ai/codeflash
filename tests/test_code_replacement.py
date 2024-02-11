@@ -265,3 +265,82 @@ def supersort(doink):
         original_code, function_names, optim_code, preexisting_functions
     )
     assert new_code == expected
+
+
+def test_test_libcst_code_replacement6():
+    optim_code = """import libcst as cst
+from typing import Optional
+
+def other_function(st):
+    return(st * blob(st))
+
+def blob(st):
+    return(st * 2)
+"""
+    original_code_main = """import libcst as cst
+from typing import Mandatory
+from dependent import blob
+
+print("Au revoir")
+
+def yet_another_function(values):
+    return len(values)
+
+def other_function(st):
+    return(st + blob(st))
+
+print("Salut monde")
+"""
+
+    original_code_dependent = """import numpy as np
+
+print("Cool")
+
+def blob(values):
+    return len(values)
+
+def blab(st):
+    return(st + st)
+
+print("Not cool")
+"""
+    expected_main = """import libcst as cst
+from typing import Optional
+import libcst as cst
+from typing import Mandatory
+from dependent import blob
+
+print("Au revoir")
+
+def yet_another_function(values):
+    return len(values)
+
+def other_function(st):
+    return(st * blob(st))
+
+print("Salut monde")
+"""
+
+    expected_dependent = """import libcst as cst
+from typing import Optional
+import numpy as np
+
+print("Cool")
+
+def blob(st):
+    return(st * 2)
+
+def blab(st):
+    return(st + st)
+
+print("Not cool")
+"""
+    new_main_code: str = replace_functions_in_file(
+        original_code_main, ["other_function"], optim_code, ["other_function", "yet_another_function", "blob"]
+    )
+    assert new_main_code == expected_main
+
+    new_dependent_code: str = replace_functions_in_file(
+        original_code_dependent, ["blob"], optim_code, []
+    )
+    assert new_dependent_code == expected_dependent
