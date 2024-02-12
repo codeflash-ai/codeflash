@@ -66,6 +66,7 @@ def get_type_annotation_context(
                 if node.name == function_name and node_parents == function.parents:
                     for arg in node.args.args:
                         if arg.annotation and hasattr(arg.annotation, "id"):
+                            name = arg.annotation.id
                             line_no = arg.annotation.lineno
                             col_no = arg.annotation.col_offset
                             try:
