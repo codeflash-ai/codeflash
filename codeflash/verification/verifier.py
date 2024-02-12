@@ -31,7 +31,10 @@ def generate_tests(
 
         module = importlib.import_module(module_path)
         generated_test_source = module.CACHED_TESTS
-        instrumented_test_source = module.CACHED_TESTS
+        instrumented_test_source = module.CACHED_INSTRUMENTED_TESTS
+        instrumented_test_source = instrumented_test_source.replace(
+            "{codeflash_run_tmp_dir_client_side}", get_run_tmp_file("")
+        )
         logging.info(f"Using cached tests from {module_path}.CACHED_TESTS")
     else:
         test_module_path = module_name_from_file_path(

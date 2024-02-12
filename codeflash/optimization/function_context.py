@@ -5,11 +5,12 @@ from typing import List
 
 import jedi
 import tiktoken
+from jedi.api.classes import Name
+from pydantic.dataclasses import dataclass
+
 from codeflash.code_utils.code_extractor import get_code_no_skeleton, get_code
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from jedi.api.classes import Name
-from pydantic.dataclasses import dataclass
 
 
 def belongs_to_class(name: Name, class_name: str) -> bool:
@@ -155,7 +156,11 @@ def get_function_variables_definitions(
                 follow_builtin_imports=False,
             )
         except Exception as e:
-            logging.error(f"Error while getting definition for {name.full_name}: {e}")
+            try:
+                logging.error(f"Error while getting definition for {name.full_name}: {e}")
+            except Exception as e:
+                # name.full_name can also throw exceptions sometimes
+                logging.error(f"Error while getting definition: {e}")
             definitions = []
         if definitions:
             # TODO: there can be multiple definitions, see how to handle such cases

@@ -325,7 +325,7 @@ class Optimizer:
 
                         if success:
                             logging.info(
-                                f"NEW CODE RUNTIME OVER {times_run} RUN{'S' if times_run > 1 else ''} = "
+                                f"NEW CODE RUNTIME MEASURED OVER {times_run} RUN{'S' if times_run > 1 else ''} = "
                                 f"{humanize_runtime(best_test_runtime)}, SPEEDUP RATIO = "
                                 f"{((original_runtime - best_test_runtime) / best_test_runtime):.3f}"
                             )
@@ -434,6 +434,8 @@ class Optimizer:
                         pathlib.Path(test_paths).unlink(missing_ok=True)
             if not found_atleast_one_optimization:
                 logging.info(f"❌ No optimizations found.")
+            elif self.args.all:
+                logging.info("✨ All functions have been optimized! ✨")
 
         finally:
             # TODO: Also revert the file/function being optimized if the process did not succeed
@@ -551,7 +553,6 @@ class Optimizer:
         overall_original_test_results = None
         times_run = 0
         success = True
-        # TODO : Dynamically determine the number of times to run the tests based on the runtime of the tests.
         # Keep the runtime in some acceptable range
         generated_tests_elapsed_time = 0.0
 
@@ -560,65 +561,81 @@ class Optimizer:
         #  if they are different, then we can't optimize this function because it is a non-deterministic function
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = str(0)
-        for i in range(MAX_TEST_RUN_ITERATIONS):
-            if generated_tests_elapsed_time > MAX_FUNCTION_TEST_SECONDS:
+        cumulative_test_runtime = 0
+        cumulative_test_runs = 0
+        first_run = True
+        do_break = False
+        while (
+                cumulative_test_runtime < MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS
+                and cumulative_test_runs < MAX_TEST_FUNCTION_RUNS
+        ):
+            for i in range(MAX_TEST_RUN_ITERATIONS):
+                if generated_tests_elapsed_time > MAX_FUNCTION_TEST_SECONDS:
+                    do_break = True
+                    break
+                instrumented_existing_test_timing = []
+                original_test_results_iter = TestResults()
+                for test_file in instrumented_unittests_created_for_function:
+                    unittest_results = self.run_and_parse_tests(
+                        test_env, test_file, TestType.EXISTING_UNIT_TEST, 0
+                    )
+
+                    timing = unittest_results.total_passed_runtime()
+                    original_test_results_iter.merge(unittest_results)
+                    instrumented_existing_test_timing.append(timing)
+                if i == 0 and first_run:
+                    logging.info(
+                        f"original code, existing unit test results -> {original_test_results_iter.get_test_pass_fail_report()}"
+                    )
+
+                original_gen_results = self.run_and_parse_tests(
+                    test_env, generated_tests_path, TestType.GENERATED_REGRESSION, 0
+                )
+
+                # TODO: Implement the logic to disregard the timing info of the tests that ERRORed out. That is remove test cases that failed to run.
+
+                if not original_gen_results and len(instrumented_existing_test_timing) == 0:
+                    logging.warning(
+                        f"Couldn't run any tests for original function {function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
+                    )
+                    success = False
+                    do_break = True
+                    break
+                # TODO: Doing a simple sum of test runtime, Improve it by looking at test by test runtime, or a better scheme
+                # TODO: If the runtime is None, that happens in the case where an exception is expected and is successfully
+                #  caught by the test framework. This makes the test pass, but we can't find runtime because the exception caused
+                #  the execution to not reach the runtime measurement part. We are currently ignoring such tests, because the performance
+                #  for such a execution that raises an exception should not matter.
+                if i == 0 and first_run:
+                    logging.info(
+                        f"original generated tests results -> {original_gen_results.get_test_pass_fail_report()}"
+                    )
+
+                original_total_runtime_iter = original_gen_results.total_passed_runtime() + sum(
+                    instrumented_existing_test_timing
+                )
+                if original_total_runtime_iter == 0:
+                    logging.warning(
+                        f"The overall test runtime of the original function is 0, couldn't run tests."
+                    )
+                    logging.warning(original_gen_results.test_results)
+                    do_break = True
+                    break
+                original_test_results_iter.merge(original_gen_results)
+                if i == 0 and first_run:
+                    logging.info(
+                        f"Original overall test results = {TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}"
+                    )
+                if original_runtime is None or original_total_runtime_iter < original_runtime:
+                    original_runtime = best_runtime = original_total_runtime_iter
+                    overall_original_test_results = original_test_results_iter
+                cumulative_test_runs += 1
+                cumulative_test_runtime += original_total_runtime_iter
+                times_run += 1
+            if first_run:
+                first_run = False
+            if do_break:
                 break
-            instrumented_existing_test_timing = []
-            original_test_results_iter = TestResults()
-            for test_file in instrumented_unittests_created_for_function:
-                unittest_results = self.run_and_parse_tests(
-                    test_env, test_file, TestType.EXISTING_UNIT_TEST, 0
-                )
-
-                timing = unittest_results.total_passed_runtime()
-                original_test_results_iter.merge(unittest_results)
-                instrumented_existing_test_timing.append(timing)
-            if i == 0:
-                logging.info(
-                    f"original code, existing unit test results -> {original_test_results_iter.get_test_pass_fail_report()}"
-                )
-
-            original_gen_results = self.run_and_parse_tests(
-                test_env, generated_tests_path, TestType.GENERATED_REGRESSION, 0
-            )
-
-            # TODO: Implement the logic to disregard the timing info of the tests that ERRORed out. That is remove test cases that failed to run.
-
-            if not original_gen_results and len(instrumented_existing_test_timing) == 0:
-                logging.warning(
-                    f"Couldn't run any tests for original function {function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
-                )
-                success = False
-                break
-            # TODO: Doing a simple sum of test runtime, Improve it by looking at test by test runtime, or a better scheme
-            # TODO: If the runtime is None, that happens in the case where an exception is expected and is successfully
-            #  caught by the test framework. This makes the test pass, but we can't find runtime because the exception caused
-            #  the execution to not reach the runtime measurement part. We are currently ignoring such tests, because the performance
-            #  for such a execution that raises an exception should not matter.
-            if i == 0:
-                logging.info(
-                    f"original generated tests results -> {original_gen_results.get_test_pass_fail_report()}"
-                )
-
-            original_total_runtime_iter = original_gen_results.total_passed_runtime() + sum(
-                instrumented_existing_test_timing
-            )
-            if original_total_runtime_iter == 0:
-                logging.warning(
-                    f"The overall test runtime of the original function is 0, trying again..."
-                )
-                logging.warning(original_gen_results.test_results)
-                continue
-            original_test_results_iter.merge(original_gen_results)
-            if i == 0:
-                logging.info(
-                    f"Original overall test results = {TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}"
-                )
-            if original_runtime is None or original_total_runtime_iter < original_runtime:
-                original_runtime = best_runtime = original_total_runtime_iter
-                overall_original_test_results = original_test_results_iter
-
-            times_run += 1
 
         if times_run == 0:
             logging.warning(
@@ -627,7 +644,7 @@ class Optimizer:
             success = False
         if success:
             logging.info(
-                f"ORIGINAL CODE RUNTIME OVER {times_run} RUN{'S' if times_run > 1 else ''} = {original_runtime}ns"
+                f"ORIGINAL CODE RUNTIME MEASURED OVER {times_run} RUN{'S' if times_run > 1 else ''} = {humanize_runtime(original_runtime)}"
             )
         return success, original_gen_results, overall_original_test_results, best_runtime
 
