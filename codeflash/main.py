@@ -431,7 +431,7 @@ class Optimizer:
                     for test_paths in instrumented_unittests_created_for_function:
                         pathlib.Path(test_paths).unlink(missing_ok=True)
             if not found_atleast_one_optimization:
-                logging.info("❌ No optimizations found.")
+                logging.info(f"❌ No optimizations found.")
 
         finally:
             # TODO: Also revert the file/function being optimized if the process did not succeed
@@ -603,7 +603,7 @@ class Optimizer:
             )
             if original_total_runtime_iter == 0:
                 logging.warning(
-                    "The overall test runtime of the original function is 0, trying again..."
+                    f"The overall test runtime of the original function is 0, trying again..."
                 )
                 logging.warning(original_gen_results.test_results)
                 continue
@@ -710,7 +710,7 @@ class Optimizer:
 
             if test_runtime == 0:
                 logging.warning(
-                    "The overall test runtime of the optimized function is 0, trying again..."
+                    f"The overall test runtime of the optimized function is 0, trying again..."
                 )
                 continue
             if best_test_runtime is None or test_runtime < best_test_runtime:
