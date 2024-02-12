@@ -710,7 +710,7 @@ class Optimizer:
 
             if test_runtime == 0:
                 logging.warning(
-                    "The overall test runtime of the optimized function is 0, trying again..."
+                    f"The overall test runtime of the optimized function is 0, trying again..."
                 )
                 continue
             if best_test_runtime is None or test_runtime < best_test_runtime:
