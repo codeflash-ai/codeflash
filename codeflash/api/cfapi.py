@@ -9,7 +9,7 @@ from pydantic.json import pydantic_encoder
 from requests import Response
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
-from codeflash.github.PrComment import PrComment
+from codeflash.github.PrComment import PrComment, FileDiffContent
 
 if os.environ.get("CFAPI_SERVER", default="prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
@@ -59,7 +59,7 @@ def suggest_changes(
     owner: str,
     repo: str,
     pr_number: int,
-    file_changes: dict[str, dict[str, str]],
+    file_changes: dict[str, FileDiffContent],
     pr_comment: PrComment,
     generated_tests: str,
 ) -> Response:
@@ -91,7 +91,7 @@ def create_pr(
     owner: str,
     repo: str,
     base_branch: str,
-    file_changes: dict[str, dict[str, str]],
+    file_changes: dict[str, FileDiffContent],
     pr_comment: PrComment,
     generated_tests: str,
 ) -> Response:

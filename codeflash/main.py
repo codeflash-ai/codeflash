@@ -2,20 +2,21 @@
 solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 """
 import concurrent.futures
-import libcst as cst
 import logging
 import os
 import pathlib
 from argparse import ArgumentParser, SUPPRESS, Namespace
+from collections import defaultdict
 from typing import Tuple, Union
 
-import codeflash.cli_cmds.logging_config  # intializes logging, has to be the first non-system import # noqa
+import libcst as cst
+
 from codeflash.api.aiservice import optimize_python_code
 from codeflash.cli_cmds.cli import process_cmd_args
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import get_code
-from codeflash.code_utils.code_replacer import replace_function_in_file
+from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
     get_all_function_names,
@@ -29,7 +30,9 @@ from codeflash.code_utils.config_consts import (
     MAX_TEST_FUNCTION_RUNS,
     MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS,
 )
-from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
+from codeflash.code_utils.instrument_existing_tests import (
+    inject_profiling_into_existing_test,
+)
 from codeflash.code_utils.linter import lint_code
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests, TestsInFile
@@ -68,7 +71,7 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--all",
         help="Try to optimize all functions. Can take a really long time. Can pass an optional starting directory to"
-        " optimize code from. If no args specified (just --all), will optimize all code in the project.",
+             " optimize code from. If no args specified (just --all), will optimize all code in the project.",
         nargs="?",
         const="",
         default=SUPPRESS,
@@ -77,7 +80,7 @@ def parse_args() -> Namespace:
         "--module-root",
         type=str,
         help="Path to the project's Python module that you want to optimize."
-        " This is the top-level root directory where all the Python source code is located.",
+             " This is the top-level root directory where all the Python source code is located.",
     )
     parser.add_argument(
         "--tests-root",
@@ -100,8 +103,12 @@ def parse_args() -> Namespace:
         action="store_true",
         help="Use cached tests from a specified file for debugging.",
     )
-    parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose logs")
-    parser.add_argument("--version", action="store_true", help="Print the version of codeflash")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Print verbose logs"
+    )
+    parser.add_argument(
+        "--version", action="store_true", help="Print the version of codeflash"
+    )
     args: Namespace = parser.parse_args()
     return process_cmd_args(args)
 
@@ -122,7 +129,10 @@ class Optimizer:
         if not env_utils.ensure_codeflash_api_key():
             return
 
-        file_to_funcs_to_optimize, num_modified_functions = get_functions_to_optimize_by_file(
+        (
+            file_to_funcs_to_optimize,
+            num_modified_functions,
+        ) = get_functions_to_optimize_by_file(
             optimize_all=self.args.all,
             file=self.args.file,
             function=self.args.function,
@@ -139,16 +149,21 @@ class Optimizer:
             if num_modified_functions == 0:
                 logging.info("No functions found to optimize. Exiting...")
                 return
-            logging.info(f"Discovering existing unit tests in {self.test_cfg.tests_root} ...")
-            function_to_tests: dict[str, list[TestsInFile]] = discover_unit_tests(self.test_cfg)
+            logging.info(
+                f"Discovering existing unit tests in {self.test_cfg.tests_root} ..."
+            )
+            function_to_tests: dict[str, list[TestsInFile]] = discover_unit_tests(
+                self.test_cfg
+            )
             logging.info(
                 f"Discovered {sum([len(value) for value in function_to_tests.values()])} "
                 f"existing unit tests in {self.test_cfg.tests_root}"
             )
             for path in file_to_funcs_to_optimize:
                 logging.info(f"Examining file {path} ...")
-                # TODO: Sequence the functions one goes through intelligently. If we are optimizing f(g(x)), then we might want to first
-                #  optimize f rather than g because optimizing f would already optimize g as it is a dependency
+                # TODO: Sequence the functions one goes through intelligently. If we are optimizing f(g(x)),
+                #  then we might want to first optimize f rather than g because optimizing f would already
+                #  optimize g as it is a dependency
                 with open(path, "r") as f:
                     original_code = f.read()
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
@@ -162,9 +177,9 @@ class Optimizer:
                     pathlib.Path(get_run_tmp_file("test_return_values_0.bin")).unlink(
                         missing_ok=True
                     )
-                    pathlib.Path(get_run_tmp_file("test_return_values_0.sqlite")).unlink(
-                        missing_ok=True
-                    )
+                    pathlib.Path(
+                        get_run_tmp_file("test_return_values_0.sqlite")
+                    ).unlink(missing_ok=True)
                     code_to_optimize = get_code(function_to_optimize)
                     if code_to_optimize is None:
                         logging.error("Could not find function to optimize")
@@ -178,13 +193,32 @@ class Optimizer:
                     ) = get_constrained_function_context_and_dependent_functions(
                         function_to_optimize, self.args.project_root, code_to_optimize
                     )
-                    logging.info(f"Code to be optimized:\n{code_to_optimize_with_dependents}")
-                    module_path = module_name_from_file_path(path, self.args.project_root)
+                    preexisting_functions.extend(
+                        [fn[0].full_name.split(".")[-1] for fn in dependent_functions]
+                    )
+                    dependent_functions_by_module_abspath = defaultdict(set)
+                    for _, module_abspath, qualified_name in dependent_functions:
+                        dependent_functions_by_module_abspath[module_abspath].add(
+                            qualified_name
+                        )
+                    original_dependent_code = {}
+                    for module_abspath in dependent_functions_by_module_abspath.keys():
+                        with open(module_abspath, "r") as f:
+                            dependent_code = f.read()
+                            original_dependent_code[module_abspath] = dependent_code
+                    logging.info(
+                        f"Code to be optimized:\n{code_to_optimize_with_dependents}"
+                    )
+                    module_path = module_name_from_file_path(
+                        path, self.args.project_root
+                    )
 
-                    instrumented_unittests_created_for_function = self.prepare_existing_tests(
-                        function_name=function_name,
-                        module_path=module_path,
-                        function_to_tests=function_to_tests,
+                    instrumented_unittests_created_for_function = (
+                        self.prepare_existing_tests(
+                            function_name=function_name,
+                            module_path=module_path,
+                            function_to_tests=function_to_tests,
+                        )
                     )
                     instrumented_unittests_created.update(
                         instrumented_unittests_created_for_function
@@ -223,7 +257,9 @@ class Optimizer:
                     )
                     if not success:
                         continue
-                    best_runtime = original_runtime  # The fastest code runtime until now
+                    best_runtime = (
+                        original_runtime  # The fastest code runtime until now
+                    )
                     logging.info("OPTIMIZING CODE....")
                     # TODO: Postprocess the optimized function to include the original docstring and such
 
@@ -233,31 +269,47 @@ class Optimizer:
                         if optimized_code is None:
                             continue
                         # remove left overs from previous run
-                        pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.bin")).unlink(
-                            missing_ok=True
-                        )
-                        pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.sqlite")).unlink(
-                            missing_ok=True
-                        )
-                        logging.info(f"Optimized Candidate:")
+                        pathlib.Path(
+                            get_run_tmp_file(f"test_return_values_{j}.bin")
+                        ).unlink(missing_ok=True)
+                        pathlib.Path(
+                            get_run_tmp_file(f"test_return_values_{j}.sqlite")
+                        ).unlink(missing_ok=True)
+                        logging.info("Optimized Candidate:")
                         logging.info(optimized_code)
                         try:
-                            new_code = replace_function_in_file(
-                                path,
-                                function_name,
+                            replace_function_definitions_in_module(
+                                [function_name],
                                 optimized_code,
+                                path,
                                 preexisting_functions,
                             )
+                            for (
+                                    module_abspath,
+                                    qualified_names,
+                            ) in dependent_functions_by_module_abspath.items():
+                                replace_function_definitions_in_module(
+                                    list(qualified_names),
+                                    optimized_code,
+                                    module_abspath,
+                                    [],
+                                )
                         except (
-                            ValueError,
-                            SyntaxError,
-                            cst.ParserSyntaxError,
-                            AttributeError,
+                                ValueError,
+                                SyntaxError,
+                                cst.ParserSyntaxError,
+                                AttributeError,
                         ) as e:
                             logging.error(e)
+                            with open(path, "w") as f:
+                                f.write(original_code)
+                            for (
+                                    module_abspath
+                            ) in dependent_functions_by_module_abspath.keys():
+                                with open(module_abspath, "w") as f:
+                                    f.write(original_dependent_code[module_abspath])
                             continue
-                        with open(path, "w") as f:
-                            f.write(new_code)
+
                         (
                             success,
                             times_run,
@@ -278,8 +330,11 @@ class Optimizer:
                                 f"{((original_runtime - best_test_runtime) / best_test_runtime):.3f}"
                             )
                             if (
-                                ((original_runtime - best_test_runtime) / best_test_runtime)
-                                > self.args.minimum_performance_gain
+                                    (
+                                            (original_runtime - best_test_runtime)
+                                            / best_test_runtime
+                                    )
+                                    > self.args.minimum_performance_gain
                             ) and best_test_runtime < best_runtime:
                                 logging.info("THIS IS BETTER!")
 
@@ -288,25 +343,43 @@ class Optimizer:
                                     f"{humanize_runtime(best_test_runtime)}, FASTER RATIO = "
                                     f"{((original_runtime - best_test_runtime) / best_test_runtime)}"
                                 )
-                                best_optimization = [optimized_code, explanation]
+                                best_optimization = [
+                                    optimized_code,
+                                    explanation,
+                                    dependent_functions,
+                                ]
                                 best_runtime = best_test_runtime
                                 winning_test_results = best_test_results
                         with open(path, "w") as f:
                             f.write(original_code)
+                        for (
+                                module_abspath
+                        ) in dependent_functions_by_module_abspath.keys():
+                            with open(module_abspath, "w") as f:
+                                f.write(original_dependent_code[module_abspath])
                         logging.info("----------------")
-                    logging.info(f"BEST OPTIMIZATION {best_optimization}")
+                    logging.info(f"BEST OPTIMIZATION {best_optimization[0:2]}")
                     if best_optimization:
                         found_atleast_one_optimization = True
                         logging.info(f"BEST OPTIMIZED CODE\n{best_optimization[0]}")
 
-                        new_code = replace_function_in_file(
+                        optimized_code = best_optimization[0]
+                        replace_function_definitions_in_module(
+                            [function_name],
+                            optimized_code,
                             path,
-                            function_name,
-                            best_optimization[0],
                             preexisting_functions,
                         )
-                        with open(path, "w") as f:
-                            f.write(new_code)
+                        for (
+                                module_abspath,
+                                qualified_names,
+                        ) in dependent_functions_by_module_abspath.items():
+                            replace_function_definitions_in_module(
+                                list(qualified_names),
+                                optimized_code,
+                                module_abspath,
+                                [],
+                            )
                         explanation_final = Explanation(
                             raw_explanation_message=best_optimization[1],
                             winning_test_results=winning_test_results,
@@ -315,22 +388,31 @@ class Optimizer:
                             function_name=function_name,
                             path=path,
                         )
-                        logging.info(f"EXPLANATION\n{explanation_final.to_console_string()}")
+                        logging.info(
+                            f"EXPLANATION\n{explanation_final.to_console_string()}"
+                        )
 
                         new_code = lint_code(path)
-
+                        new_dependent_code: dict[str, str] = {
+                            module_abspath: lint_code(module_abspath)
+                            for module_abspath in dependent_functions_by_module_abspath.keys()
+                        }
                         logging.info(
                             f"Optimization was validated for correctness by running the following test - "
                             f"\n{generated_original_test_source}"
                         )
 
-                        logging.info(f"⚡️ Optimization successful! 📄 {function_name} in {path}")
+                        logging.info(
+                            f"⚡️ Optimization successful! 📄 {function_name} in {path}"
+                        )
                         logging.info(f"📈 {explanation_final.perf_improvement_line}")
+
                         check_create_pr(
                             optimize_all=self.args.all,
                             path=path,
-                            original_code=original_code,
-                            new_code=new_code,
+                            original_code=original_dependent_code
+                                          | {path: original_code},
+                            new_code=new_dependent_code | {path: new_code},
                             explanation=explanation_final,
                             generated_original_test_source=generated_original_test_source,
                         )
@@ -341,6 +423,11 @@ class Optimizer:
                             #     dependent on the runtime of the previous optimization
                             with open(path, "w") as f:
                                 f.write(original_code)
+                            for (
+                                    module_abspath
+                            ) in dependent_functions_by_module_abspath.keys():
+                                with open(module_abspath, "w") as f:
+                                    f.write(original_dependent_code[module_abspath])
                     # Delete all the generated tests to not cause any clutter.
                     pathlib.Path(generated_tests_path).unlink(missing_ok=True)
                     for test_paths in instrumented_unittests_created_for_function:
@@ -360,7 +447,10 @@ class Optimizer:
                 get_run_tmp_file.tmpdir.cleanup()
 
     def prepare_existing_tests(
-        self, function_name: str, module_path: str, function_to_tests: dict[str, list[TestsInFile]]
+            self,
+            function_name: str,
+            module_path: str,
+            function_to_tests: dict[str, list[TestsInFile]],
     ):
         relevant_test_files_count = 0
         unique_original_test_files = set()
@@ -383,9 +473,9 @@ class Optimizer:
                     self.args.project_root,
                 )
                 new_test_path = (
-                    os.path.splitext(tests_in_file.test_file)[0]
-                    + "__perfinstrumented"
-                    + os.path.splitext(tests_in_file.test_file)[1]
+                        os.path.splitext(tests_in_file.test_file)[0]
+                        + "__perfinstrumented"
+                        + os.path.splitext(tests_in_file.test_file)[1]
                 )
                 with open(new_test_path, "w") as f:
                     f.write(injected_test)
@@ -398,22 +488,21 @@ class Optimizer:
         return unique_instrumented_test_files
 
     def generate_tests_and_optimizations(
-        self,
-        code_to_optimize_with_dependents: str,
-        function_to_optimize: FunctionToOptimize,
-        dependent_functions: list[Source],
-        module_path: str,
+            self,
+            code_to_optimize_with_dependents: str,
+            function_to_optimize: FunctionToOptimize,
+            dependent_functions: list[Tuple[Source, str, str]],
+            module_path: str,
     ):
         generated_original_test_source = None
         instrumented_test_source = None
-        optimizations = None
         success = True
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             future_tests = executor.submit(
                 self.generate_and_instrument_tests,
                 code_to_optimize_with_dependents,
                 function_to_optimize,
-                [definition.full_name for definition in dependent_functions],
+                [definition[0].full_name for definition in dependent_functions],
                 module_path,
             )
             future_optimization = executor.submit(
@@ -425,9 +514,9 @@ class Optimizer:
             future_tests_result = future_tests.result()
             optimizations = future_optimization.result()
         if (
-            future_tests_result
-            and isinstance(future_tests_result, tuple)
-            and len(future_tests_result) == 2
+                future_tests_result
+                and isinstance(future_tests_result, tuple)
+                and len(future_tests_result) == 2
         ):
             (
                 generated_original_test_source,
@@ -435,11 +524,14 @@ class Optimizer:
             ) = future_tests_result
 
         else:
-            logging.error("/!\\ NO TESTS GENERATED for %s", function_to_optimize.function_name)
+            logging.error(
+                "/!\\ NO TESTS GENERATED for %s", function_to_optimize.function_name
+            )
             success = False
         if len(optimizations) == 1 and optimizations[0][0] is None:
             logging.error(
-                "/!\\ NO OPTIMIZATIONS GENERATED for %s", function_to_optimize.function_name
+                "/!\\ NO OPTIMIZATIONS GENERATED for %s",
+                function_to_optimize.function_name,
             )
             success = False
         return (
@@ -450,10 +542,10 @@ class Optimizer:
         )
 
     def establish_original_code_baseline(
-        self,
-        function_name: str,
-        instrumented_unittests_created_for_function: set[str],
-        generated_tests_path: str,
+            self,
+            function_name: str,
+            instrumented_unittests_created_for_function: set[str],
+            generated_tests_path: str,
     ):
         original_runtime = None
         best_runtime = None
@@ -474,8 +566,8 @@ class Optimizer:
         first_run = True
         do_break = False
         while (
-            cumulative_test_runtime < MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS
-            and cumulative_test_runs < MAX_TEST_FUNCTION_RUNS
+                cumulative_test_runtime < MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS
+                and cumulative_test_runs < MAX_TEST_FUNCTION_RUNS
         ):
             for i in range(MAX_TEST_RUN_ITERATIONS):
                 if generated_tests_elapsed_time > MAX_FUNCTION_TEST_SECONDS:
@@ -557,12 +649,12 @@ class Optimizer:
         return success, original_gen_results, overall_original_test_results, best_runtime
 
     def run_optimized_candidate(
-        self,
-        optimization_index: int,
-        instrumented_unittests_created_for_function: set[str],
-        overall_original_test_results: TestResults,
-        original_gen_results: TestResults,
-        generated_tests_path: str,
+            self,
+            optimization_index: int,
+            instrumented_unittests_created_for_function: set[str],
+            overall_original_test_results: TestResults,
+            original_gen_results: TestResults,
+            generated_tests_path: str,
     ):
         success = True
         best_test_runtime = None
@@ -578,8 +670,8 @@ class Optimizer:
         first_run = True
         do_break = False
         while (
-            cumulative_test_runtime < MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS
-            and cumulative_test_runs < MAX_TEST_FUNCTION_RUNS
+                cumulative_test_runtime < MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS
+                and cumulative_test_runs < MAX_TEST_FUNCTION_RUNS
         ):
             for test_index in range(MAX_TEST_RUN_ITERATIONS):
                 pathlib.Path(
@@ -685,11 +777,11 @@ class Optimizer:
         )
 
     def run_and_parse_tests(
-        self,
-        test_env: dict[str, str],
-        test_file: str,
-        test_type: TestType,
-        optimization_iteration: int,
+            self,
+            test_env: dict[str, str],
+            test_file: str,
+            test_type: TestType,
+            optimization_iteration: int,
     ) -> TestResults:
         result_file_path, run_result = run_tests(
             test_file,
@@ -711,11 +803,11 @@ class Optimizer:
         return unittest_results
 
     def generate_and_instrument_tests(
-        self,
-        source_code_being_tested: str,
-        function_to_optimize: FunctionToOptimize,
-        dependent_function_names: list[str],
-        module_path: str,
+            self,
+            source_code_being_tested: str,
+            function_to_optimize: FunctionToOptimize,
+            dependent_function_names: list[str],
+            module_path: str,
     ) -> Union[Tuple[str, str], None]:
         tests = generate_tests(
             source_code_being_tested=source_code_being_tested,

@@ -1,5 +1,6 @@
-from code_to_optimize.bubble_sort import sorter
 import pytest
+
+from code_to_optimize.bubble_sort import sorter
 
 
 @pytest.mark.parametrize(

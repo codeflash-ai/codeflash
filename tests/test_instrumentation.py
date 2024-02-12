@@ -1,15 +1,15 @@
 import os.path
+import pathlib
 import sys
 import tempfile
+
 import pytest
-import pathlib
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import INDIVIDUAL_TEST_TIMEOUT
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestType
-
 from codeflash.verification.test_runner import run_tests
 from codeflash.verification.verification_utils import TestConfig
 
@@ -220,8 +220,8 @@ def test_sort():
     codeflash_con.close()"""
 
     test_path = (
-        pathlib.Path(__file__).parent.resolve()
-        / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_results_temp.py"
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_results_temp.py"
     )
     with open(test_path, "w") as f:
         f.write(code)
@@ -271,8 +271,8 @@ def test_sort():
     assert test_results[0].id.test_class_name == None
     assert test_results[0].id.test_function_name == "test_sort"
     assert (
-        test_results[0].id.test_module_path
-        == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
+            test_results[0].id.test_module_path
+            == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
     )
     assert test_results[0].runtime > 0
     assert test_results[0].did_pass == True
@@ -282,8 +282,8 @@ def test_sort():
     assert test_results[1].id.test_class_name == None
     assert test_results[1].id.test_function_name == "test_sort"
     assert (
-        test_results[1].id.test_module_path
-        == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
+            test_results[1].id.test_module_path
+            == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
     )
     assert test_results[1].runtime > 0
     assert test_results[1].did_pass == True
@@ -346,8 +346,8 @@ def test_sort_parametrized(input, expected_output):
     assert output == expected_output
     codeflash_con.close()"""
     test_path = (
-        pathlib.Path(__file__).parent.resolve()
-        / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_parametrized_results_temp.py"
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_parametrized_results_temp.py"
     )
     with open(test_path, "w") as f:
         f.write(code)
@@ -398,8 +398,8 @@ def test_sort_parametrized(input, expected_output):
     assert test_results[0].id.test_class_name == None
     assert test_results[0].id.test_function_name == "test_sort_parametrized"
     assert (
-        test_results[0].id.test_module_path
-        == "tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp"
+            test_results[0].id.test_module_path
+            == "tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp"
     )
     assert test_results[0].runtime > 0
     assert test_results[0].did_pass == True
@@ -409,8 +409,8 @@ def test_sort_parametrized(input, expected_output):
     assert test_results[1].id.test_class_name == None
     assert test_results[1].id.test_function_name == "test_sort_parametrized"
     assert (
-        test_results[1].id.test_module_path
-        == "tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp"
+            test_results[1].id.test_module_path
+            == "tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp"
     )
     assert test_results[1].runtime > 0
     assert test_results[1].did_pass == True
@@ -420,8 +420,8 @@ def test_sort_parametrized(input, expected_output):
     assert test_results[2].id.test_class_name == None
     assert test_results[2].id.test_function_name == "test_sort_parametrized"
     assert (
-        test_results[2].id.test_module_path
-        == "tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp"
+            test_results[2].id.test_module_path
+            == "tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp"
     )
     assert test_results[2].runtime > 0
     assert test_results[2].did_pass == True
@@ -488,8 +488,8 @@ def test_sort_parametrized(input, expected_output):
     codeflash_con.close()"""
 
     test_path = (
-        pathlib.Path(__file__).parent.resolve()
-        / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_parametrized_results_temp2.py"
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_parametrized_results_temp2.py"
     )
     with open(test_path, "w") as f:
         f.write(code)
@@ -540,8 +540,8 @@ def test_sort_parametrized(input, expected_output):
     assert test_results[0].id.test_class_name == None
     assert test_results[0].id.test_function_name == "test_sort_parametrized"
     assert (
-        test_results[0].id.test_module_path
-        == "tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp2"
+            test_results[0].id.test_module_path
+            == "tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp2"
     )
     assert test_results[0].runtime > 0
     assert test_results[0].did_pass == True
@@ -551,8 +551,8 @@ def test_sort_parametrized(input, expected_output):
     assert test_results[1].id.test_class_name == None
     assert test_results[1].id.test_function_name == "test_sort_parametrized"
     assert (
-        test_results[1].id.test_module_path
-        == "tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp2"
+            test_results[1].id.test_module_path
+            == "tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp2"
     )
     assert test_results[1].runtime > 0
     assert test_results[1].did_pass == True
@@ -562,8 +562,8 @@ def test_sort_parametrized(input, expected_output):
     assert test_results[2].id.test_class_name == None
     assert test_results[2].id.test_function_name == "test_sort_parametrized"
     assert (
-        test_results[2].id.test_module_path
-        == "tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp2"
+            test_results[2].id.test_module_path
+            == "tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp2"
     )
     assert test_results[2].runtime > 0
     assert test_results[2].did_pass == True
@@ -627,8 +627,8 @@ def test_sort():
     codeflash_con.close()"""
 
     test_path = (
-        pathlib.Path(__file__).parent.resolve()
-        / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_loop_results_temp.py"
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_loop_results_temp.py"
     )
     with open(test_path, "w") as f:
         f.write(code)
@@ -678,8 +678,8 @@ def test_sort():
     assert test_results[0].id.test_class_name == None
     assert test_results[0].id.test_function_name == "test_sort"
     assert (
-        test_results[0].id.test_module_path
-        == "tests.pytest.test_perfinjector_bubble_sort_loop_results_temp"
+            test_results[0].id.test_module_path
+            == "tests.pytest.test_perfinjector_bubble_sort_loop_results_temp"
     )
     assert test_results[0].runtime > 0
     assert test_results[0].did_pass == True
@@ -689,8 +689,8 @@ def test_sort():
     assert test_results[1].id.test_class_name == None
     assert test_results[1].id.test_function_name == "test_sort"
     assert (
-        test_results[1].id.test_module_path
-        == "tests.pytest.test_perfinjector_bubble_sort_loop_results_temp"
+            test_results[1].id.test_module_path
+            == "tests.pytest.test_perfinjector_bubble_sort_loop_results_temp"
     )
     assert test_results[1].runtime > 0
     assert test_results[1].did_pass == True
@@ -700,8 +700,8 @@ def test_sort():
     assert test_results[2].id.test_class_name == None
     assert test_results[2].id.test_function_name == "test_sort"
     assert (
-        test_results[2].id.test_module_path
-        == "tests.pytest.test_perfinjector_bubble_sort_loop_results_temp"
+            test_results[2].id.test_module_path
+            == "tests.pytest.test_perfinjector_bubble_sort_loop_results_temp"
     )
     assert test_results[2].runtime > 0
     assert test_results[2].did_pass == True
