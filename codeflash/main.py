@@ -27,6 +27,8 @@ from codeflash.code_utils.config_consts import (
     MAX_FUNCTION_TEST_SECONDS,
     INDIVIDUAL_TEST_TIMEOUT,
     N_CANDIDATES,
+    MAX_TEST_FUNCTION_RUNS,
+    MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS,
 )
 from codeflash.code_utils.instrument_existing_tests import (
     inject_profiling_into_existing_test,
@@ -646,79 +648,101 @@ class Optimizer:
         times_run = 0
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_index)
-        for test_index in range(MAX_TEST_RUN_ITERATIONS):
-            pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.bin")).unlink(
-                missing_ok=True
-            )
-            pathlib.Path(
-                get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite")
-            ).unlink(missing_ok=True)
-            if generated_tests_elapsed_time > MAX_FUNCTION_TEST_SECONDS:
-                break
+        cumulative_test_runtime = 0
+        cumulative_test_runs = 0
+        first_run = True
+        do_break = False
+        while (
+                cumulative_test_runtime < MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS
+                and cumulative_test_runs < MAX_TEST_FUNCTION_RUNS
+        ):
+            for test_index in range(MAX_TEST_RUN_ITERATIONS):
+                pathlib.Path(
+                    get_run_tmp_file(f"test_return_values_{optimization_index}.bin")
+                ).unlink(missing_ok=True)
+                pathlib.Path(
+                    get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite")
+                ).unlink(missing_ok=True)
+                if generated_tests_elapsed_time > MAX_FUNCTION_TEST_SECONDS:
+                    do_break = True
+                    break
 
-            optimized_test_results_iter = TestResults()
-            instrumented_test_timing = []
-            for instrumented_test_file in instrumented_unittests_created_for_function:
-                unittest_results_optimized = self.run_and_parse_tests(
-                    test_env,
-                    instrumented_test_file,
-                    TestType.EXISTING_UNIT_TEST,
-                    optimization_index,
-                )
-                timing = unittest_results_optimized.total_passed_runtime()
-                optimized_test_results_iter.merge(unittest_results_optimized)
-                instrumented_test_timing.append(timing)
-            if test_index == 0:
-                equal_results = True
-                logging.info(
-                    f"optimized existing unit tests result -> {optimized_test_results_iter.get_test_pass_fail_report()}"
-                )
-                for test_invocation in optimized_test_results_iter:
-                    if (
+                optimized_test_results_iter = TestResults()
+                instrumented_test_timing = []
+                for instrumented_test_file in instrumented_unittests_created_for_function:
+                    unittest_results_optimized = self.run_and_parse_tests(
+                        test_env,
+                        instrumented_test_file,
+                        TestType.EXISTING_UNIT_TEST,
+                        optimization_index,
+                    )
+                    timing = unittest_results_optimized.total_passed_runtime()
+                    optimized_test_results_iter.merge(unittest_results_optimized)
+                    instrumented_test_timing.append(timing)
+                if first_run and test_index == 0:
+                    equal_results = True
+                    logging.info(
+                        f"optimized existing unit tests result -> {optimized_test_results_iter.get_test_pass_fail_report()}"
+                    )
+                    for test_invocation in optimized_test_results_iter:
+                        if (
                             overall_original_test_results.get_by_id(test_invocation.id) is None
                             or test_invocation.did_pass
                             != overall_original_test_results.get_by_id(test_invocation.id).did_pass
-                    ):
-                        logging.info("RESULTS DID NOT MATCH")
-                        logging.info(
-                            f"Test {test_invocation.id} failed on the optimized code. Skipping this optimization"
-                        )
-                        equal_results = False
+                        ):
+                            logging.info("RESULTS DID NOT MATCH")
+                            logging.info(
+                                f"Test {test_invocation.id} failed on the optimized code. Skipping this optimization"
+                            )
+                            equal_results = False
+                            do_break = True
+                            break
+                    if not equal_results:
+                        do_break = True
                         break
+
+                test_results = self.run_and_parse_tests(
+                    test_env,
+                    generated_tests_path,
+                    TestType.GENERATED_REGRESSION,
+                    optimization_index,
+                )
+
+                if first_run and test_index == 0:
+                    logging.info(
+                        f"generated test_results optimized -> {test_results.get_test_pass_fail_report()}"
+                    )
+                    if test_results:
+                        if compare_results(original_gen_results, test_results):
+                            equal_results = True
+                            logging.info("RESULTS MATCHED!")
+                        else:
+                            logging.info("RESULTS DID NOT MATCH")
+                            equal_results = False
                 if not equal_results:
+                    do_break = True
                     break
 
-            test_results = self.run_and_parse_tests(
-                test_env, generated_tests_path, TestType.GENERATED_REGRESSION, optimization_index
-            )
+                test_runtime = test_results.total_passed_runtime() + sum(instrumented_test_timing)
 
-            if test_index == 0:
-                logging.info(
-                    f"generated test_results optimized -> {test_results.get_test_pass_fail_report()}"
-                )
-                if test_results:
-                    if compare_results(original_gen_results, test_results):
-                        equal_results = True
-                        logging.info("RESULTS MATCHED!")
-                    else:
-                        logging.info("RESULTS DID NOT MATCH")
-                        equal_results = False
-            if not equal_results:
+                if test_runtime == 0:
+                    logging.warning(
+                        f"The overall test runtime of the optimized function is 0, couldn't run tests."
+                    )
+                    do_break = True
+                    break
+                if best_test_runtime is None or test_runtime < best_test_runtime:
+                    optimized_test_results_iter.merge(test_results)
+                    best_test_runtime = test_runtime
+                    best_test_results = optimized_test_results_iter
+                cumulative_test_runs += 1
+                cumulative_test_runtime += test_runtime
+                times_run += 1
+            if first_run:
+                first_run = False
+            if do_break:
                 break
 
-            test_runtime = test_results.total_passed_runtime() + sum(instrumented_test_timing)
-
-            if test_runtime == 0:
-                logging.warning(
-                    f"The overall test runtime of the optimized function is 0, trying again..."
-                )
-                continue
-            if best_test_runtime is None or test_runtime < best_test_runtime:
-                optimized_test_results_iter.merge(test_results)
-                best_test_runtime = test_runtime
-                best_test_results = optimized_test_results_iter
-
-            times_run += 1
         pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.bin")).unlink(
             missing_ok=True
         )
