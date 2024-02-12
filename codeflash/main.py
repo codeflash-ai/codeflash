@@ -549,6 +549,7 @@ class Optimizer:
         overall_original_test_results = None
         times_run = 0
         success = True
+        # TODO : Dynamically determine the number of times to run the tests based on the runtime of the tests.
         # Keep the runtime in some acceptable range
         generated_tests_elapsed_time = 0.0
 
@@ -572,8 +573,7 @@ class Optimizer:
                 instrumented_existing_test_timing.append(timing)
             if i == 0:
                 logging.info(
-                    f"original code, existing unit test results -> "
-                    f"{original_test_results_iter.get_test_pass_fail_report()}"
+                    f"original code, existing unit test results -> {original_test_results_iter.get_test_pass_fail_report()}"
                 )
 
             original_gen_results = self.run_and_parse_tests(
