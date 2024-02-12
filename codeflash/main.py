@@ -9,8 +9,8 @@ from argparse import ArgumentParser, SUPPRESS, Namespace
 from collections import defaultdict
 from typing import Tuple, Union
 
-import codeflash.cli_cmds.logging_config  # intializes logging, has to be the first non-system import # noqa
 import libcst as cst
+
 from codeflash.api.aiservice import optimize_python_code
 from codeflash.cli_cmds.cli import process_cmd_args
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
@@ -487,7 +487,7 @@ class Optimizer:
             self,
             code_to_optimize_with_dependents: str,
             function_to_optimize: FunctionToOptimize,
-            dependent_functions: list[Tuple[Source, str]],
+            dependent_functions: list[Tuple[Source, str, str]],
             module_path: str,
     ):
         generated_original_test_source = None
@@ -549,7 +549,6 @@ class Optimizer:
         overall_original_test_results = None
         times_run = 0
         success = True
-        # TODO : Dynamically determine the number of times to run the tests based on the runtime of the tests.
         # Keep the runtime in some acceptable range
         generated_tests_elapsed_time = 0.0
 
@@ -581,8 +580,7 @@ class Optimizer:
                 test_env, generated_tests_path, TestType.GENERATED_REGRESSION, 0
             )
 
-            # TODO: Implement the logic to disregard the timing info of the tests that ERRORed out.
-            # That is remove test cases that failed to run.
+            # TODO: Implement the logic to disregard the timing info of the tests that ERRORed out. That is remove test cases that failed to run.
 
             if not original_gen_results and len(instrumented_existing_test_timing) == 0:
                 logging.warning(
@@ -590,20 +588,18 @@ class Optimizer:
                 )
                 success = False
                 break
-            # TODO: Doing a simple sum of test runtime, Improve it by looking at test by test runtime,
-            #  or a better scheme
+            # TODO: Doing a simple sum of test runtime, Improve it by looking at test by test runtime, or a better scheme
             # TODO: If the runtime is None, that happens in the case where an exception is expected and is successfully
-            #  caught by the test framework. This makes the test pass, but we can't find runtime because the exception
-            #  caused the execution to not reach the runtime measurement part. We are currently ignoring such tests,
-            #  because the performance for such a execution that raises an exception should not matter.
+            #  caught by the test framework. This makes the test pass, but we can't find runtime because the exception caused
+            #  the execution to not reach the runtime measurement part. We are currently ignoring such tests, because the performance
+            #  for such a execution that raises an exception should not matter.
             if i == 0:
                 logging.info(
                     f"original generated tests results -> {original_gen_results.get_test_pass_fail_report()}"
                 )
 
-            original_total_runtime_iter = (
-                    original_gen_results.total_passed_runtime()
-                    + sum(instrumented_existing_test_timing)
+            original_total_runtime_iter = original_gen_results.total_passed_runtime() + sum(
+                instrumented_existing_test_timing
             )
             if original_total_runtime_iter == 0:
                 logging.warning(
@@ -614,13 +610,9 @@ class Optimizer:
             original_test_results_iter.merge(original_gen_results)
             if i == 0:
                 logging.info(
-                    f"Original overall test results = "
-                    f"{TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}"
+                    f"Original overall test results = {TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}"
                 )
-            if (
-                    original_runtime is None
-                    or original_total_runtime_iter < original_runtime
-            ):
+            if original_runtime is None or original_total_runtime_iter < original_runtime:
                 original_runtime = best_runtime = original_total_runtime_iter
                 overall_original_test_results = original_test_results_iter
 
@@ -635,12 +627,7 @@ class Optimizer:
             logging.info(
                 f"ORIGINAL CODE RUNTIME OVER {times_run} RUN{'S' if times_run > 1 else ''} = {original_runtime}ns"
             )
-        return (
-            success,
-            original_gen_results,
-            overall_original_test_results,
-            best_runtime,
-        )
+        return success, original_gen_results, overall_original_test_results, best_runtime
 
     def run_optimized_candidate(
             self,
@@ -660,9 +647,9 @@ class Optimizer:
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_index)
         for test_index in range(MAX_TEST_RUN_ITERATIONS):
-            pathlib.Path(
-                get_run_tmp_file(f"test_return_values_{optimization_index}.bin")
-            ).unlink(missing_ok=True)
+            pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.bin")).unlink(
+                missing_ok=True
+            )
             pathlib.Path(
                 get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite")
             ).unlink(missing_ok=True)
@@ -688,12 +675,9 @@ class Optimizer:
                 )
                 for test_invocation in optimized_test_results_iter:
                     if (
-                            overall_original_test_results.get_by_id(test_invocation.id)
-                            is None
+                            overall_original_test_results.get_by_id(test_invocation.id) is None
                             or test_invocation.did_pass
-                            != overall_original_test_results.get_by_id(
-                        test_invocation.id
-                    ).did_pass
+                            != overall_original_test_results.get_by_id(test_invocation.id).did_pass
                     ):
                         logging.info("RESULTS DID NOT MATCH")
                         logging.info(
@@ -705,10 +689,7 @@ class Optimizer:
                     break
 
             test_results = self.run_and_parse_tests(
-                test_env,
-                generated_tests_path,
-                TestType.GENERATED_REGRESSION,
-                optimization_index,
+                test_env, generated_tests_path, TestType.GENERATED_REGRESSION, optimization_index
             )
 
             if test_index == 0:
@@ -725,9 +706,7 @@ class Optimizer:
             if not equal_results:
                 break
 
-            test_runtime = test_results.total_passed_runtime() + sum(
-                instrumented_test_timing
-            )
+            test_runtime = test_results.total_passed_runtime() + sum(instrumented_test_timing)
 
             if test_runtime == 0:
                 logging.warning(
@@ -740,12 +719,12 @@ class Optimizer:
                 best_test_results = optimized_test_results_iter
 
             times_run += 1
-        pathlib.Path(
-            get_run_tmp_file(f"test_return_values_{optimization_index}.bin")
-        ).unlink(missing_ok=True)
-        pathlib.Path(
-            get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite")
-        ).unlink(missing_ok=True)
+        pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.bin")).unlink(
+            missing_ok=True
+        )
+        pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite")).unlink(
+            missing_ok=True
+        )
         if not (equal_results and times_run > 0):
             success = False
 
