@@ -1,6 +1,6 @@
 import datetime
-import pytest
 import decimal
+import pytest
 
 from codeflash.verification.comparator import comparator
 from codeflash.verification.equivalence import compare_results
@@ -58,6 +58,14 @@ def test_basic_python_objects():
     b = (1, 2, "str")
     c = (1, 2, "str2")
     d = [1, 2, "str"]
+    assert comparator(a, b)
+    assert not comparator(a, c)
+    assert not comparator(a, d)
+
+    a = {1, 2, 3}
+    b = {2, 3, 1}
+    c = {1, 2, 4}
+    d = {1, 2, 3, 4}
     assert comparator(a, b)
     assert not comparator(a, c)
     assert not comparator(a, d)
