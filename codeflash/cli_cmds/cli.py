@@ -34,7 +34,11 @@ def process_cmd_args(args: Namespace) -> Namespace:
             raise ValueError(f"File {args.file} does not exist")
         args.file = os.path.realpath(args.file)
 
-    pyproject_config = parse_config_file(args.config_file)
+    try:
+        pyproject_config = parse_config_file(args.config_file)
+    except ValueError as e:
+        logging.error(e.args[0])
+        exit(1)
     supported_keys = [
         "module_root",
         "tests_root",

@@ -120,9 +120,11 @@ def collect_setup_info(setup_info: dict[str, str]):
                 message="Which Python module do you want me to optimize going forward?\n"
                 + "(This is usually the top-most directory where all your Python source code is located)",
                 choices=module_subdir_options,
-                default=project_name
-                if project_name in module_subdir_options
-                else module_subdir_options[0],
+                default=(
+                    project_name
+                    if project_name in module_subdir_options
+                    else module_subdir_options[0]
+                ),
             )
         ]
     )
@@ -141,9 +143,11 @@ def collect_setup_info(setup_info: dict[str, str]):
                 message="Where are your tests located? "
                 "(If you don't have any tests yet, I can create an empty tests/ directory for you)",
                 choices=test_subdir_options,
-                default=default_tests_subdir
-                if default_tests_subdir in test_subdir_options
-                else test_subdir_options[0],
+                default=(
+                    default_tests_subdir
+                    if default_tests_subdir in test_subdir_options
+                    else test_subdir_options[0]
+                ),
             )
         ]
     )
@@ -379,10 +383,9 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
         with open(toml_path, "r") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
-        click.echo(
-            f"Could not find a pyproject.toml in the current directory.\n"
-            f"Please create it by running `poetry init`, or run `codeflash init` again from a different project directory."
-        )
+        click.echo(f"Creating a new pyproject.toml file at {toml_path} ...")
+        pyproject_data = tomlkit.document()
+        pyproject_data.add(tomlkit.table())
 
     codeflash_section = tomlkit.table()
     codeflash_section["module-root"] = setup_info["module_root"]
@@ -390,8 +393,11 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
     codeflash_section["test-framework"] = setup_info["test_framework"]
     codeflash_section["ignore-paths"] = setup_info["ignore_paths"]
 
-    # Add the 'codeflash' section
-    pyproject_data["tool"]["codeflash"] = codeflash_section
+    # Add the 'codeflash' section, ensuring 'tool' section exists
+    tool_section = pyproject_data.get("tool", tomlkit.table())
+    tool_section["codeflash"] = codeflash_section
+    pyproject_data["tool"] = tool_section
+
     click.echo(f"Writing CodeFlash configuration ...\r", nl=False)
     with open(toml_path, "w") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
