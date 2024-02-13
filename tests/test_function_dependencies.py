@@ -20,7 +20,7 @@ def test_simple_dependencies():
     )
     assert len(dependent_functions) == 1
     assert (
-        dependent_functions[0].definition.full_name
+        dependent_functions[0][0].definition.full_name
         == "test_function_dependencies.calculate_something"
     )
 
@@ -79,7 +79,7 @@ def test_multiple_classes_dependencies():
     )
 
     # assert len(dependent_functions) == 2
-    assert list(map(lambda x: x.full_name, dependent_functions)) == [
+    assert list(map(lambda x: x[0].full_name, dependent_functions)) == [
         "test_function_dependencies.C.run.calculate_something_3",
         "test_function_dependencies.C.run.global_dependency_3",
     ]
@@ -100,6 +100,6 @@ def test_recursive_dependency():
     )
     assert len(dependent_functions) == 1
     assert (
-        dependent_functions[0].definition.full_name
+        dependent_functions[0][0].definition.full_name
         == "test_function_dependencies.calculate_something"
     )

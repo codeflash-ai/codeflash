@@ -1,13 +1,13 @@
-from collections import defaultdict
-
 import logging
 import os
 import pathlib
 import pickle
 import sqlite3
 import subprocess
-from junitparser.xunit2 import JUnitXml
+from collections import defaultdict
 from typing import Optional
+
+from junitparser.xunit2 import JUnitXml
 
 from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
@@ -201,8 +201,8 @@ def merge_test_results(xml_test_results: TestResults, bin_test_results: TestResu
     for result in xml_test_results:
         if "[" in result.id.test_function_name:
             test_function_name = result.id.test_function_name[
-                : result.id.test_function_name.index("[")
-            ]
+                                 : result.id.test_function_name.index("[")
+                                 ]
         else:
             test_function_name = result.id.test_function_name
 

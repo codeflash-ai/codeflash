@@ -43,17 +43,17 @@ class InjectPerfOnly(ast.NodeTransformer):
                 value=ast.Call(
                     func=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
                     args=[
-                        ast.Name(id=call_node.func.id, ctx=ast.Load()),
-                        ast.Constant(value=self.module_path),
-                        ast.Constant(value=test_class_name or None),
-                        ast.Constant(value=node_name),
-                        ast.Constant(value=self.only_function_name),
-                        ast.Constant(value=index),
-                        ast.Name(id="codeflash_cur", ctx=ast.Load()),
-                        ast.Name(id="codeflash_con", ctx=ast.Load()),
-                    ]
-                    + call_node.args
-                    + call_node.keywords,
+                             ast.Name(id=call_node.func.id, ctx=ast.Load()),
+                             ast.Constant(value=self.module_path),
+                             ast.Constant(value=test_class_name or None),
+                             ast.Constant(value=node_name),
+                             ast.Constant(value=self.only_function_name),
+                             ast.Constant(value=index),
+                             ast.Name(id="codeflash_cur", ctx=ast.Load()),
+                             ast.Name(id="codeflash_con", ctx=ast.Load()),
+                         ]
+                         + call_node.args
+                         + call_node.keywords,
                     keywords=[],
                 ),
                 lineno=test_node.lineno,
