@@ -20,13 +20,19 @@ class TestsInFile:
     test_suite: Optional[str]
 
     @classmethod
-    def from_pytest_stdout_line(cls, module_line: str, function_line: str, directory: str):
+    def from_pytest_stdout_line(
+        cls, module_line: str, function_line: str, directory: str, tests_root: str
+    ):
         module_match = re.match(r"\s*<Module (.+)>", module_line)
         function_match = re.match(r"\s*<Function (.+)>", function_line)
         if module_match and function_match:
             module_path = module_match.group(1)
+            cwd = os.getcwd()
+            os.chdir(tests_root)
+            path = os.path.abspath(module_path)
             function_name = function_match.group(1)
             absolute_test_path = os.path.join(directory, module_path)
+            os.chdir(cwd)
             assert os.path.exists(
                 absolute_test_path
             ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
@@ -63,7 +69,7 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     project_root = cfg.project_root_path
     pytest_cmd_list = [chunk for chunk in cfg.pytest_cmd.split(" ") if chunk != ""]
     pytest_result = subprocess.run(
-        pytest_cmd_list + [f"{tests_root}", "--co", "-m", "not skip"],
+        pytest_cmd_list + [f"{tests_root}", "--co", f"--rootdir={tests_root}", "-m", "not skip"],
         stdout=subprocess.PIPE,
         cwd=tests_root,
     )
@@ -75,7 +81,7 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
         raise ValueError(f"Could not find rootdir in pytest output for {tests_root}")
     pytest_rootdir = pytest_rootdir_match.group(1)
 
-    tests = parse_pytest_stdout(pytest_stdout, pytest_rootdir)
+    tests = parse_pytest_stdout(pytest_stdout, pytest_rootdir, tests_root)
     file_to_test_map = defaultdict(list)
 
     for test in tests:
@@ -195,7 +201,7 @@ def process_test_files(
     return deduped_function_to_test_map
 
 
-def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir) -> List[TestsInFile]:
+def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[TestsInFile]:
     test_results = []
     module_line = None
     directory = pytest_rootdir
@@ -203,23 +209,50 @@ def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir) -> List[TestsInFile]
     for line in pytest_stdout.splitlines():
         if "<Dir " in line:
             new_dir = re.match(r"\s*<Dir (.+)>", line).group(1)
-            if new_dir not in directory:
-                while len(line) - len(line.lstrip()) <= indent:
-                    directory = os.path.dirname(directory)
-                    indent -= 2
-
-                indent = len(line) - len(line.lstrip())
-                directory = os.path.join(directory, new_dir)
-        elif "<Module " in line:
-            while len(line) - len(line.lstrip()) <= indent:
+            # if new_dir not in directory:
+            # while len(line) - len(line.lstrip()) <= indent:
+            #     directory = os.path.dirname(directory)
+            #     indent -= 2
+            #
+            # indent = len(line) - len(line.lstrip())
+            # directory = os.path.join(directory, new_dir)
+            new_directory = os.path.join(directory, new_dir)
+            while not os.path.exists(new_directory):
                 directory = os.path.dirname(directory)
-                indent -= 2
+                new_directory = os.path.join(directory, new_dir)
+
+            directory = new_directory
+
+        elif "<Package " in line:
+            new_dir = re.match(r"\s*<Package (.+)>", line).group(1)
+            new_directory = os.path.join(directory, new_dir)
+            while not os.path.exists(new_directory):
+                directory = os.path.dirname(directory)
+                new_directory = os.path.join(directory, new_dir)
+
+            directory = new_directory
+
+        elif "<Module " in line:
+            # while len(line) - len(line.lstrip()) <= indent:
+            #     directory = os.path.dirname(directory)
+            #     indent -= 2
+
+            module = re.match(r"\s*<Module (.+)>", line).group(1)
+            if ".py" not in module:
+                module.append(".py")
+
+            while not os.path.exists(os.path.join(directory, module)):
+                directory = os.path.dirname(directory)
 
             module_line = line
+
         elif "<Function " in line and module_line:
             try:
-                test_result = TestsInFile.from_pytest_stdout_line(module_line, line, directory)
+                test_result = TestsInFile.from_pytest_stdout_line(
+                    module_line, line, directory, tests_root
+                )
                 test_results.append(test_result)
             except ValueError as e:
                 logging.warning(str(e))
+
     return test_results
