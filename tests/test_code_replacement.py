@@ -46,7 +46,7 @@ print("Hello world")
 """
 
     function_name: str = "NewClass.new_function"
-    preexisting_functions: list[str] = ["NewClass.new_function"]
+    preexisting_functions: list[str] = ["new_function"]
     new_code: str = replace_functions_in_file(
         original_code,
         [function_name],
@@ -104,7 +104,7 @@ print("Hello world")
 """
 
     function_name: str = "NewClass.new_function"
-    preexisting_functions: list[str] = ["NewClass.new_function", "other_function"]
+    preexisting_functions: list[str] = ["new_function", "other_function"]
     new_code: str = replace_functions_in_file(
         original_code, [function_name], optim_code, preexisting_functions
     )
@@ -535,8 +535,8 @@ class CacheConfig(BaseConfig):
 
     function_names: list[str] = ["CacheSimilarityEvalConfig.from_config"]
     preexisting_functions: list[str] = [
-        "CacheSimilarityEvalConfig.__init__",
-        "CacheSimilarityEvalConfig.from_config",
+        "__init__",
+        "from_config",
     ]
     new_code: str = replace_functions_in_file(
         original_code, function_names, optim_code, preexisting_functions
