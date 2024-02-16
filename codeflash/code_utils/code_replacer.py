@@ -29,12 +29,12 @@ class OptimFunctionCollector(cst.CSTVisitor):
         if node.name.value == self.function_name:
             self.optim_body = node
         elif (
-                self.preexisting_functions
-                and node.name.value not in self.preexisting_functions
-                and (
-                        isinstance(parent, cst.Module)
-                        or (parent2 is not None and not isinstance(parent2, cst.ClassDef))
-                )
+            self.preexisting_functions
+            and node.name.value not in self.preexisting_functions
+            and (
+                isinstance(parent, cst.Module)
+                or (parent2 is not None and not isinstance(parent2, cst.ClassDef))
+            )
         ):
             self.optim_new_functions.append(node)
 
@@ -55,13 +55,13 @@ class OptimFunctionCollector(cst.CSTVisitor):
 
 class OptimFunctionReplacer(cst.CSTTransformer):
     def __init__(
-            self,
-            function_name: str,
-            optim_body: cst.FunctionDef,
-            optim_new_class_functions: List[cst.FunctionDef],
-            optim_imports: List[Union[cst.Import, cst.ImportFrom]],
-            optim_new_functions,
-            class_name=None,
+        self,
+        function_name: str,
+        optim_body: cst.FunctionDef,
+        optim_new_class_functions: List[cst.FunctionDef],
+        optim_imports: List[Union[cst.Import, cst.ImportFrom]],
+        optim_new_functions,
+        class_name=None,
     ):
         super().__init__()
         self.function_name = function_name
@@ -70,25 +70,39 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         self.optim_new_imports = optim_imports
         self.optim_new_functions = optim_new_functions
         self.class_name = class_name
+        self.depth: int = 0
+        self.in_class: bool = False
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
+        self.depth += 1
+        return False
 
     def leave_FunctionDef(
-            self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef
+        self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef
     ) -> cst.FunctionDef:
-        if original_node.name.value == self.function_name:
+        self.depth -= 1
+        if original_node.name.value == self.function_name and (
+            self.depth == 0 or (self.depth == 1 and self.in_class)
+        ):
             return self.optim_body
         return updated_node
 
+    def visit_ClassDef(self, node: cst.ClassDef) -> bool:
+        self.in_class = (self.depth == 0) and (node.name.value == self.class_name)
+        self.depth += 1
+        return self.in_class
+
     def leave_ClassDef(
-            self, original_node: cst.ClassDef, updated_node: cst.ClassDef
+        self, original_node: cst.ClassDef, updated_node: cst.ClassDef
     ) -> cst.ClassDef:
-        if self.class_name is not None and original_node.name.value == self.class_name:
+        if self.in_class:
+            self.in_class = False
             return updated_node.with_changes(
                 body=updated_node.body.with_changes(
                     body=(list(updated_node.body.body) + self.optim_new_class_functions),
                 )
             )
-        else:
-            return updated_node
+        return updated_node
 
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         if len(self.optim_new_imports) == 0:
@@ -107,7 +121,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
                 body=(
                     *node.body[: max_function_index + 1],
                     *self.optim_new_functions,
-                    *node.body[max_function_index + 1:],
+                    *node.body[max_function_index + 1 :],
                 )
             )
         elif class_index is not None:
@@ -115,7 +129,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
                 body=(
                     *node.body[: class_index + 1],
                     *self.optim_new_functions,
-                    *node.body[class_index + 1:],
+                    *node.body[class_index + 1 :],
                 )
             )
         else:
@@ -146,10 +160,10 @@ class OptimFunctionReplacer(cst.CSTTransformer):
 
 
 def replace_functions_in_file(
-        source_code: str,
-        original_function_names: list[str],
-        optimized_function: str,
-        preexisting_functions: list[str],
+    source_code: str,
+    original_function_names: list[str],
+    optimized_code: str,
+    preexisting_functions: list[str],
 ) -> str:
     parsed_function_names = []
     for original_function_name in original_function_names:
@@ -161,7 +175,7 @@ def replace_functions_in_file(
             raise ValueError(f"Don't know how to find {original_function_name} yet!")
         parsed_function_names.append((function_name, class_name))
 
-    module = cst.metadata.MetadataWrapper(cst.parse_module(optimized_function))
+    module = cst.metadata.MetadataWrapper(cst.parse_module(optimized_code))
 
     for i, (function_name, class_name) in enumerate(parsed_function_names):
         visitor = OptimFunctionCollector(function_name, preexisting_functions)
@@ -170,9 +184,7 @@ def replace_functions_in_file(
         if visitor.optim_body is None and not preexisting_functions:
             continue
         elif visitor.optim_body is None:
-            raise ValueError(
-                f"Did not find the function {function_name} in the optimized code"
-            )
+            raise ValueError(f"Did not find the function {function_name} in the optimized code")
         optim_imports = [] if i > 0 else visitor.optim_imports
 
         transformer = OptimFunctionReplacer(
@@ -191,10 +203,10 @@ def replace_functions_in_file(
 
 
 def replace_function_definitions_in_module(
-        function_names: list[str],
-        optimized_code: str,
-        module_abspath: str,
-        preexisting_functions: list[str],
+    function_names: list[str],
+    optimized_code: str,
+    module_abspath: str,
+    preexisting_functions: list[str],
 ) -> NoReturn:
     file: IO[str]
     with open(module_abspath, "r") as file:

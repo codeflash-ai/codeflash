@@ -159,7 +159,16 @@ class Optimizer:
                 with open(path, "r") as f:
                     original_code = f.read()
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
-                    function_name = function_to_optimize.function_name
+                    function_name = (
+                        function_to_optimize.function_name
+                        if function_to_optimize.parents == []
+                        else ".".join(
+                            [
+                                function_to_optimize.parents[0].name,
+                                function_to_optimize.function_name,
+                            ]
+                        )
+                    )
                     function_iterator_count += 1
                     logging.info(
                         f"Optimizing function {function_iterator_count} of {num_modified_functions} - {function_name}"
