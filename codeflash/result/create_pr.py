@@ -4,7 +4,11 @@ from typing import Optional
 
 from codeflash.api import cfapi
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.git_utils import get_repo_owner_and_name, git_root_dir, get_current_branch
+from codeflash.code_utils.git_utils import (
+    get_repo_owner_and_name,
+    git_root_dir,
+    get_current_branch,
+)
 from codeflash.github.PrComment import FileDiffContent, PrComment
 from codeflash.result.explanation import Explanation
 
@@ -12,8 +16,8 @@ from codeflash.result.explanation import Explanation
 def check_create_pr(
     optimize_all: bool,
     path: str,
-    original_code: str,
-    new_code: str,
+    original_code: dict[str, str],
+    new_code: dict[str, str],
     explanation: Explanation,
     generated_original_test_source: str,
 ):
@@ -21,7 +25,6 @@ def check_create_pr(
 
     if pr_number is not None:
         logging.info(f"Suggesting changes to PR #{pr_number} ...")
-
         owner, repo = get_repo_owner_and_name()
         relative_path = os.path.relpath(path, git_root_dir())
         response = cfapi.suggest_changes(
@@ -29,7 +32,10 @@ def check_create_pr(
             repo=repo,
             pr_number=pr_number,
             file_changes={
-                relative_path: FileDiffContent(oldContent=original_code, newContent=new_code)
+                os.path.relpath(p, git_root_dir()): FileDiffContent(
+                    oldContent=original_code[p], newContent=new_code[p]
+                )
+                for p in original_code.keys()
             },
             pr_comment=PrComment(
                 optimization_explanation=explanation.explanation_message(),
@@ -62,7 +68,10 @@ def check_create_pr(
             repo=repo,
             base_branch=base_branch,
             file_changes={
-                relative_path: FileDiffContent(oldContent=original_code, newContent=new_code)
+                os.path.relpath(p, git_root_dir()): FileDiffContent(
+                    oldContent=original_code[p], newContent=new_code[p]
+                )
+                for p in original_code.keys()
             },
             pr_comment=PrComment(
                 optimization_explanation=explanation.explanation_message(),

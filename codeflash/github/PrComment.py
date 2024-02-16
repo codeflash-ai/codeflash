@@ -1,9 +1,8 @@
 from typing import Union
 
+from codeflash.verification.test_results import TestResults
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
-
-from codeflash.verification.test_results import TestResults
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})

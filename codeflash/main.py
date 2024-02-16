@@ -2,20 +2,21 @@
 solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 """
 import concurrent.futures
-import libcst as cst
 import logging
 import os
 import pathlib
 from argparse import ArgumentParser, SUPPRESS, Namespace
+from collections import defaultdict
 from typing import Tuple, Union
 
-import codeflash.cli_cmds.logging_config  # intializes logging, has to be the first non-system import # noqa
+import libcst as cst
+
 from codeflash.api.aiservice import optimize_python_code
 from codeflash.cli_cmds.cli import process_cmd_args
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import get_code
-from codeflash.code_utils.code_replacer import replace_function_in_file
+from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
     get_all_function_names,
@@ -26,8 +27,12 @@ from codeflash.code_utils.config_consts import (
     MAX_FUNCTION_TEST_SECONDS,
     INDIVIDUAL_TEST_TIMEOUT,
     N_CANDIDATES,
+    MAX_TEST_FUNCTION_RUNS,
+    MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS,
 )
-from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
+from codeflash.code_utils.instrument_existing_tests import (
+    inject_profiling_into_existing_test,
+)
 from codeflash.code_utils.linter import lint_code
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests, TestsInFile
@@ -120,7 +125,10 @@ class Optimizer:
         if not env_utils.ensure_codeflash_api_key():
             return
 
-        file_to_funcs_to_optimize, num_modified_functions = get_functions_to_optimize_by_file(
+        (
+            file_to_funcs_to_optimize,
+            num_modified_functions,
+        ) = get_functions_to_optimize_by_file(
             optimize_all=self.args.all,
             file=self.args.file,
             function=self.args.function,
@@ -145,8 +153,9 @@ class Optimizer:
             )
             for path in file_to_funcs_to_optimize:
                 logging.info(f"Examining file {path} ...")
-                # TODO: Sequence the functions one goes through intelligently. If we are optimizing f(g(x)), then we might want to first
-                #  optimize f rather than g because optimizing f would already optimize g as it is a dependency
+                # TODO: Sequence the functions one goes through intelligently. If we are optimizing f(g(x)),
+                #  then we might want to first optimize f rather than g because optimizing f would already
+                #  optimize g as it is a dependency
                 with open(path, "r") as f:
                     original_code = f.read()
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
@@ -176,6 +185,17 @@ class Optimizer:
                     ) = get_constrained_function_context_and_dependent_functions(
                         function_to_optimize, self.args.project_root, code_to_optimize
                     )
+                    preexisting_functions.extend(
+                        [fn[0].full_name.split(".")[-1] for fn in dependent_functions]
+                    )
+                    dependent_functions_by_module_abspath = defaultdict(set)
+                    for _, module_abspath, qualified_name in dependent_functions:
+                        dependent_functions_by_module_abspath[module_abspath].add(qualified_name)
+                    original_dependent_code = {}
+                    for module_abspath in dependent_functions_by_module_abspath.keys():
+                        with open(module_abspath, "r") as f:
+                            dependent_code = f.read()
+                            original_dependent_code[module_abspath] = dependent_code
                     logging.info(f"Code to be optimized:\n{code_to_optimize_with_dependents}")
                     module_path = module_name_from_file_path(path, self.args.project_root)
 
@@ -237,15 +257,25 @@ class Optimizer:
                         pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.sqlite")).unlink(
                             missing_ok=True
                         )
-                        logging.info(f"Optimized Candidate:")
+                        logging.info("Optimized Candidate:")
                         logging.info(optimized_code)
                         try:
-                            new_code = replace_function_in_file(
-                                path,
-                                function_name,
+                            replace_function_definitions_in_module(
+                                [function_name],
                                 optimized_code,
+                                path,
                                 preexisting_functions,
                             )
+                            for (
+                                module_abspath,
+                                qualified_names,
+                            ) in dependent_functions_by_module_abspath.items():
+                                replace_function_definitions_in_module(
+                                    list(qualified_names),
+                                    optimized_code,
+                                    module_abspath,
+                                    [],
+                                )
                         except (
                             ValueError,
                             SyntaxError,
@@ -253,9 +283,13 @@ class Optimizer:
                             AttributeError,
                         ) as e:
                             logging.error(e)
+                            with open(path, "w") as f:
+                                f.write(original_code)
+                            for module_abspath in dependent_functions_by_module_abspath.keys():
+                                with open(module_abspath, "w") as f:
+                                    f.write(original_dependent_code[module_abspath])
                             continue
-                        with open(path, "w") as f:
-                            f.write(new_code)
+
                         (
                             success,
                             times_run,
@@ -267,11 +301,12 @@ class Optimizer:
                             overall_original_test_results=overall_original_test_results,
                             original_gen_results=original_gen_results,
                             generated_tests_path=generated_tests_path,
+                            best_runtime_until_now=best_runtime,
                         )
 
                         if success:
                             logging.info(
-                                f"NEW CODE RUNTIME OVER {times_run} RUN{'S' if times_run > 1 else ''} = "
+                                f"NEW CODE RUNTIME MEASURED OVER {times_run} RUN{'S' if times_run > 1 else ''} = "
                                 f"{humanize_runtime(best_test_runtime)}, SPEEDUP RATIO = "
                                 f"{((original_runtime - best_test_runtime) / best_test_runtime):.3f}"
                             )
@@ -286,25 +321,41 @@ class Optimizer:
                                     f"{humanize_runtime(best_test_runtime)}, FASTER RATIO = "
                                     f"{((original_runtime - best_test_runtime) / best_test_runtime)}"
                                 )
-                                best_optimization = [optimized_code, explanation]
+                                best_optimization = [
+                                    optimized_code,
+                                    explanation,
+                                    dependent_functions,
+                                ]
                                 best_runtime = best_test_runtime
                                 winning_test_results = best_test_results
                         with open(path, "w") as f:
                             f.write(original_code)
+                        for module_abspath in dependent_functions_by_module_abspath.keys():
+                            with open(module_abspath, "w") as f:
+                                f.write(original_dependent_code[module_abspath])
                         logging.info("----------------")
-                    logging.info(f"BEST OPTIMIZATION {best_optimization}")
+                    logging.info(f"BEST OPTIMIZATION {best_optimization[0:2]}")
                     if best_optimization:
                         found_atleast_one_optimization = True
                         logging.info(f"BEST OPTIMIZED CODE\n{best_optimization[0]}")
 
-                        new_code = replace_function_in_file(
+                        optimized_code = best_optimization[0]
+                        replace_function_definitions_in_module(
+                            [function_name],
+                            optimized_code,
                             path,
-                            function_name,
-                            best_optimization[0],
                             preexisting_functions,
                         )
-                        with open(path, "w") as f:
-                            f.write(new_code)
+                        for (
+                            module_abspath,
+                            qualified_names,
+                        ) in dependent_functions_by_module_abspath.items():
+                            replace_function_definitions_in_module(
+                                list(qualified_names),
+                                optimized_code,
+                                module_abspath,
+                                [],
+                            )
                         explanation_final = Explanation(
                             raw_explanation_message=best_optimization[1],
                             winning_test_results=winning_test_results,
@@ -316,7 +367,10 @@ class Optimizer:
                         logging.info(f"EXPLANATION\n{explanation_final.to_console_string()}")
 
                         new_code = lint_code(path)
-
+                        new_dependent_code: dict[str, str] = {
+                            module_abspath: lint_code(module_abspath)
+                            for module_abspath in dependent_functions_by_module_abspath.keys()
+                        }
                         logging.info(
                             f"Optimization was validated for correctness by running the following test - "
                             f"\n{generated_original_test_source}"
@@ -324,11 +378,12 @@ class Optimizer:
 
                         logging.info(f"⚡️ Optimization successful! 📄 {function_name} in {path}")
                         logging.info(f"📈 {explanation_final.perf_improvement_line}")
+
                         check_create_pr(
                             optimize_all=self.args.all,
                             path=path,
-                            original_code=original_code,
-                            new_code=new_code,
+                            original_code=original_dependent_code | {path: original_code},
+                            new_code=new_dependent_code | {path: new_code},
                             explanation=explanation_final,
                             generated_original_test_source=generated_original_test_source,
                         )
@@ -339,12 +394,17 @@ class Optimizer:
                             #     dependent on the runtime of the previous optimization
                             with open(path, "w") as f:
                                 f.write(original_code)
+                            for module_abspath in dependent_functions_by_module_abspath.keys():
+                                with open(module_abspath, "w") as f:
+                                    f.write(original_dependent_code[module_abspath])
                     # Delete all the generated tests to not cause any clutter.
                     pathlib.Path(generated_tests_path).unlink(missing_ok=True)
                     for test_paths in instrumented_unittests_created_for_function:
                         pathlib.Path(test_paths).unlink(missing_ok=True)
             if not found_atleast_one_optimization:
-                logging.info(f"❌ No optimizations found.")
+                logging.info("❌ No optimizations found.")
+            elif self.args.all:
+                logging.info("✨ All functions have been optimized! ✨")
 
         finally:
             # TODO: Also revert the file/function being optimized if the process did not succeed
@@ -356,7 +416,10 @@ class Optimizer:
                 get_run_tmp_file.tmpdir.cleanup()
 
     def prepare_existing_tests(
-        self, function_name: str, module_path: str, function_to_tests: dict[str, list[TestsInFile]]
+        self,
+        function_name: str,
+        module_path: str,
+        function_to_tests: dict[str, list[TestsInFile]],
     ):
         relevant_test_files_count = 0
         unique_original_test_files = set()
@@ -397,19 +460,18 @@ class Optimizer:
         self,
         code_to_optimize_with_dependents: str,
         function_to_optimize: FunctionToOptimize,
-        dependent_functions: list[Source],
+        dependent_functions: list[Tuple[Source, str, str]],
         module_path: str,
     ):
         generated_original_test_source = None
         instrumented_test_source = None
-        optimizations = None
         success = True
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             future_tests = executor.submit(
                 self.generate_and_instrument_tests,
                 code_to_optimize_with_dependents,
                 function_to_optimize,
-                [definition.full_name for definition in dependent_functions],
+                [definition[0].full_name for definition in dependent_functions],
                 module_path,
             )
             future_optimization = executor.submit(
@@ -435,7 +497,8 @@ class Optimizer:
             success = False
         if len(optimizations) == 1 and optimizations[0][0] is None:
             logging.error(
-                "/!\\ NO OPTIMIZATIONS GENERATED for %s", function_to_optimize.function_name
+                "/!\\ NO OPTIMIZATIONS GENERATED for %s",
+                function_to_optimize.function_name,
             )
             success = False
         return (
@@ -457,7 +520,6 @@ class Optimizer:
         overall_original_test_results = None
         times_run = 0
         success = True
-        # TODO : Dynamically determine the number of times to run the tests based on the runtime of the tests.
         # Keep the runtime in some acceptable range
         generated_tests_elapsed_time = 0.0
 
@@ -466,65 +528,81 @@ class Optimizer:
         #  if they are different, then we can't optimize this function because it is a non-deterministic function
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = str(0)
-        for i in range(MAX_TEST_RUN_ITERATIONS):
-            if generated_tests_elapsed_time > MAX_FUNCTION_TEST_SECONDS:
+        cumulative_test_runtime = 0
+        cumulative_test_runs = 0
+        first_run = True
+        do_break = False
+        while (
+            cumulative_test_runtime < MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS
+            and cumulative_test_runs < MAX_TEST_FUNCTION_RUNS
+        ):
+            for i in range(MAX_TEST_RUN_ITERATIONS):
+                if generated_tests_elapsed_time > MAX_FUNCTION_TEST_SECONDS:
+                    do_break = True
+                    break
+                instrumented_existing_test_timing = []
+                original_test_results_iter = TestResults()
+                for test_file in instrumented_unittests_created_for_function:
+                    unittest_results = self.run_and_parse_tests(
+                        test_env, test_file, TestType.EXISTING_UNIT_TEST, 0
+                    )
+
+                    timing = unittest_results.total_passed_runtime()
+                    original_test_results_iter.merge(unittest_results)
+                    instrumented_existing_test_timing.append(timing)
+                if i == 0 and first_run:
+                    logging.info(
+                        f"original code, existing unit test results -> {original_test_results_iter.get_test_pass_fail_report()}"
+                    )
+
+                original_gen_results = self.run_and_parse_tests(
+                    test_env, generated_tests_path, TestType.GENERATED_REGRESSION, 0
+                )
+
+                # TODO: Implement the logic to disregard the timing info of the tests that ERRORed out. That is remove test cases that failed to run.
+
+                if not original_gen_results and len(instrumented_existing_test_timing) == 0:
+                    logging.warning(
+                        f"Couldn't run any tests for original function {function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
+                    )
+                    success = False
+                    do_break = True
+                    break
+                # TODO: Doing a simple sum of test runtime, Improve it by looking at test by test runtime, or a better scheme
+                # TODO: If the runtime is None, that happens in the case where an exception is expected and is successfully
+                #  caught by the test framework. This makes the test pass, but we can't find runtime because the exception caused
+                #  the execution to not reach the runtime measurement part. We are currently ignoring such tests, because the performance
+                #  for such a execution that raises an exception should not matter.
+                if i == 0 and first_run:
+                    logging.info(
+                        f"original generated tests results -> {original_gen_results.get_test_pass_fail_report()}"
+                    )
+
+                original_total_runtime_iter = original_gen_results.total_passed_runtime() + sum(
+                    instrumented_existing_test_timing
+                )
+                if original_total_runtime_iter == 0:
+                    logging.warning(
+                        "The overall test runtime of the original function is 0, couldn't run tests."
+                    )
+                    logging.warning(original_gen_results.test_results)
+                    do_break = True
+                    break
+                original_test_results_iter.merge(original_gen_results)
+                if i == 0 and first_run:
+                    logging.info(
+                        f"Original overall test results = {TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}"
+                    )
+                if original_runtime is None or original_total_runtime_iter < original_runtime:
+                    original_runtime = best_runtime = original_total_runtime_iter
+                    overall_original_test_results = original_test_results_iter
+                cumulative_test_runs += 1
+                cumulative_test_runtime += original_total_runtime_iter
+                times_run += 1
+            if first_run:
+                first_run = False
+            if do_break:
                 break
-            instrumented_existing_test_timing = []
-            original_test_results_iter = TestResults()
-            for test_file in instrumented_unittests_created_for_function:
-                unittest_results = self.run_and_parse_tests(
-                    test_env, test_file, TestType.EXISTING_UNIT_TEST, 0
-                )
-
-                timing = unittest_results.total_passed_runtime()
-                original_test_results_iter.merge(unittest_results)
-                instrumented_existing_test_timing.append(timing)
-            if i == 0:
-                logging.info(
-                    f"original code, existing unit test results -> {original_test_results_iter.get_test_pass_fail_report()}"
-                )
-
-            original_gen_results = self.run_and_parse_tests(
-                test_env, generated_tests_path, TestType.GENERATED_REGRESSION, 0
-            )
-
-            # TODO: Implement the logic to disregard the timing info of the tests that ERRORed out. That is remove test cases that failed to run.
-
-            if not original_gen_results and len(instrumented_existing_test_timing) == 0:
-                logging.warning(
-                    f"Couldn't run any tests for original function {function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
-                )
-                success = False
-                break
-            # TODO: Doing a simple sum of test runtime, Improve it by looking at test by test runtime, or a better scheme
-            # TODO: If the runtime is None, that happens in the case where an exception is expected and is successfully
-            #  caught by the test framework. This makes the test pass, but we can't find runtime because the exception caused
-            #  the execution to not reach the runtime measurement part. We are currently ignoring such tests, because the performance
-            #  for such a execution that raises an exception should not matter.
-            if i == 0:
-                logging.info(
-                    f"original generated tests results -> {original_gen_results.get_test_pass_fail_report()}"
-                )
-
-            original_total_runtime_iter = original_gen_results.total_passed_runtime() + sum(
-                instrumented_existing_test_timing
-            )
-            if original_total_runtime_iter == 0:
-                logging.warning(
-                    f"The overall test runtime of the original function is 0, trying again..."
-                )
-                logging.warning(original_gen_results.test_results)
-                continue
-            original_test_results_iter.merge(original_gen_results)
-            if i == 0:
-                logging.info(
-                    f"Original overall test results = {TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}"
-                )
-            if original_runtime is None or original_total_runtime_iter < original_runtime:
-                original_runtime = best_runtime = original_total_runtime_iter
-                overall_original_test_results = original_test_results_iter
-
-            times_run += 1
 
         if times_run == 0:
             logging.warning(
@@ -533,7 +611,7 @@ class Optimizer:
             success = False
         if success:
             logging.info(
-                f"ORIGINAL CODE RUNTIME OVER {times_run} RUN{'S' if times_run > 1 else ''} = {original_runtime}ns"
+                f"ORIGINAL CODE RUNTIME MEASURED OVER {times_run} RUN{'S' if times_run > 1 else ''} = {humanize_runtime(original_runtime)}"
             )
         return success, original_gen_results, overall_original_test_results, best_runtime
 
@@ -544,6 +622,7 @@ class Optimizer:
         overall_original_test_results: TestResults,
         original_gen_results: TestResults,
         generated_tests_path: str,
+        best_runtime_until_now: int,
     ):
         success = True
         best_test_runtime = None
@@ -554,79 +633,106 @@ class Optimizer:
         times_run = 0
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_index)
-        for test_index in range(MAX_TEST_RUN_ITERATIONS):
-            pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.bin")).unlink(
-                missing_ok=True
-            )
-            pathlib.Path(
-                get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite")
-            ).unlink(missing_ok=True)
-            if generated_tests_elapsed_time > MAX_FUNCTION_TEST_SECONDS:
-                break
-
-            optimized_test_results_iter = TestResults()
-            instrumented_test_timing = []
-            for instrumented_test_file in instrumented_unittests_created_for_function:
-                unittest_results_optimized = self.run_and_parse_tests(
-                    test_env,
-                    instrumented_test_file,
-                    TestType.EXISTING_UNIT_TEST,
-                    optimization_index,
-                )
-                timing = unittest_results_optimized.total_passed_runtime()
-                optimized_test_results_iter.merge(unittest_results_optimized)
-                instrumented_test_timing.append(timing)
-            if test_index == 0:
-                equal_results = True
-                logging.info(
-                    f"optimized existing unit tests result -> {optimized_test_results_iter.get_test_pass_fail_report()}"
-                )
-                for test_invocation in optimized_test_results_iter:
-                    if (
-                        overall_original_test_results.get_by_id(test_invocation.id) is None
-                        or test_invocation.did_pass
-                        != overall_original_test_results.get_by_id(test_invocation.id).did_pass
-                    ):
-                        logging.info("RESULTS DID NOT MATCH")
-                        logging.info(
-                            f"Test {test_invocation.id} failed on the optimized code. Skipping this optimization"
-                        )
-                        equal_results = False
-                        break
-                if not equal_results:
+        cumulative_test_runtime = 0
+        cumulative_test_runs = 0
+        first_run = True
+        do_break = False
+        while (
+            cumulative_test_runtime < MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS
+            and cumulative_test_runs < MAX_TEST_FUNCTION_RUNS
+        ):
+            for test_index in range(MAX_TEST_RUN_ITERATIONS):
+                pathlib.Path(
+                    get_run_tmp_file(f"test_return_values_{optimization_index}.bin")
+                ).unlink(missing_ok=True)
+                pathlib.Path(
+                    get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite")
+                ).unlink(missing_ok=True)
+                if generated_tests_elapsed_time > MAX_FUNCTION_TEST_SECONDS:
+                    do_break = True
                     break
 
-            test_results = self.run_and_parse_tests(
-                test_env, generated_tests_path, TestType.GENERATED_REGRESSION, optimization_index
-            )
+                optimized_test_results_iter = TestResults()
+                instrumented_test_timing = []
+                for instrumented_test_file in instrumented_unittests_created_for_function:
+                    unittest_results_optimized = self.run_and_parse_tests(
+                        test_env,
+                        instrumented_test_file,
+                        TestType.EXISTING_UNIT_TEST,
+                        optimization_index,
+                    )
+                    timing = unittest_results_optimized.total_passed_runtime()
+                    optimized_test_results_iter.merge(unittest_results_optimized)
+                    instrumented_test_timing.append(timing)
+                if first_run and test_index == 0:
+                    equal_results = True
+                    logging.info(
+                        f"optimized existing unit tests result -> {optimized_test_results_iter.get_test_pass_fail_report()}"
+                    )
+                    for test_invocation in optimized_test_results_iter:
+                        if (
+                            overall_original_test_results.get_by_id(test_invocation.id) is None
+                            or test_invocation.did_pass
+                            != overall_original_test_results.get_by_id(test_invocation.id).did_pass
+                        ):
+                            logging.info("RESULTS DID NOT MATCH")
+                            logging.info(
+                                f"Test {test_invocation.id} failed on the optimized code. Skipping this optimization"
+                            )
+                            equal_results = False
+                            do_break = True
+                            break
+                    if not equal_results:
+                        do_break = True
+                        break
 
-            if test_index == 0:
-                logging.info(
-                    f"generated test_results optimized -> {test_results.get_test_pass_fail_report()}"
+                test_results = self.run_and_parse_tests(
+                    test_env,
+                    generated_tests_path,
+                    TestType.GENERATED_REGRESSION,
+                    optimization_index,
                 )
-                if test_results:
-                    if compare_results(original_gen_results, test_results):
-                        equal_results = True
-                        logging.info("RESULTS MATCHED!")
-                    else:
-                        logging.info("RESULTS DID NOT MATCH")
-                        equal_results = False
-            if not equal_results:
+
+                if first_run and test_index == 0:
+                    logging.info(
+                        f"generated test_results optimized -> {test_results.get_test_pass_fail_report()}"
+                    )
+                    if test_results:
+                        if compare_results(original_gen_results, test_results):
+                            equal_results = True
+                            logging.info("RESULTS MATCHED!")
+                        else:
+                            logging.info("RESULTS DID NOT MATCH")
+                            equal_results = False
+                if not equal_results:
+                    do_break = True
+                    break
+
+                test_runtime = test_results.total_passed_runtime() + sum(instrumented_test_timing)
+
+                if test_runtime == 0:
+                    logging.warning(
+                        "The overall test runtime of the optimized function is 0, couldn't run tests."
+                    )
+                    do_break = True
+                    break
+                if best_test_runtime is None or test_runtime < best_test_runtime:
+                    optimized_test_results_iter.merge(test_results)
+                    best_test_runtime = test_runtime
+                    best_test_results = optimized_test_results_iter
+                cumulative_test_runs += 1
+                cumulative_test_runtime += test_runtime
+                times_run += 1
+            if first_run:
+                first_run = False
+            if best_test_runtime is not None and (best_test_runtime > 3 * best_runtime_until_now):
+                # If after 5 runs, the optimized candidate is taking 3 times longer than the best code until now,
+                # then it is not a good optimization. Early exit to save time.
+                success = True
+                do_break = True
+            if do_break:
                 break
 
-            test_runtime = test_results.total_passed_runtime() + sum(instrumented_test_timing)
-
-            if test_runtime == 0:
-                logging.warning(
-                    f"The overall test runtime of the optimized function is 0, trying again..."
-                )
-                continue
-            if best_test_runtime is None or test_runtime < best_test_runtime:
-                optimized_test_results_iter.merge(test_results)
-                best_test_runtime = test_runtime
-                best_test_results = optimized_test_results_iter
-
-            times_run += 1
         pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.bin")).unlink(
             missing_ok=True
         )
