@@ -20,19 +20,13 @@ class TestsInFile:
     test_suite: Optional[str]
 
     @classmethod
-    def from_pytest_stdout_line(
-        cls, module_line: str, function_line: str, directory: str, tests_root: str
-    ):
+    def from_pytest_stdout_line(cls, module_line: str, function_line: str, directory: str):
         module_match = re.match(r"\s*<Module (.+)>", module_line)
         function_match = re.match(r"\s*<Function (.+)>", function_line)
         if module_match and function_match:
             module_path = module_match.group(1)
-            cwd = os.getcwd()
-            os.chdir(tests_root)
-            path = os.path.abspath(module_path)
             function_name = function_match.group(1)
             absolute_test_path = os.path.join(directory, module_path)
-            os.chdir(cwd)
             assert os.path.exists(
                 absolute_test_path
             ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
@@ -69,7 +63,7 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     project_root = cfg.project_root_path
     pytest_cmd_list = [chunk for chunk in cfg.pytest_cmd.split(" ") if chunk != ""]
     pytest_result = subprocess.run(
-        pytest_cmd_list + [f"{tests_root}", "--co", f"--rootdir={tests_root}", "-m", "not skip"],
+        pytest_cmd_list + [f"{tests_root}", "--co", "-m", "not skip"],
         stdout=subprocess.PIPE,
         cwd=tests_root,
     )
@@ -204,18 +198,10 @@ def process_test_files(
 def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[TestsInFile]:
     test_results = []
     module_line = None
-    directory = pytest_rootdir
-    indent = 0
+    directory = tests_root
     for line in pytest_stdout.splitlines():
         if "<Dir " in line:
             new_dir = re.match(r"\s*<Dir (.+)>", line).group(1)
-            # if new_dir not in directory:
-            # while len(line) - len(line.lstrip()) <= indent:
-            #     directory = os.path.dirname(directory)
-            #     indent -= 2
-            #
-            # indent = len(line) - len(line.lstrip())
-            # directory = os.path.join(directory, new_dir)
             new_directory = os.path.join(directory, new_dir)
             while not os.path.exists(new_directory):
                 directory = os.path.dirname(directory)
@@ -226,31 +212,31 @@ def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[
         elif "<Package " in line:
             new_dir = re.match(r"\s*<Package (.+)>", line).group(1)
             new_directory = os.path.join(directory, new_dir)
-            while not os.path.exists(new_directory):
+            while len(new_directory) > 0 and not os.path.exists(new_directory):
                 directory = os.path.dirname(directory)
                 new_directory = os.path.join(directory, new_dir)
+
+            if len(new_directory) == 0:
+                return test_results
 
             directory = new_directory
 
         elif "<Module " in line:
-            # while len(line) - len(line.lstrip()) <= indent:
-            #     directory = os.path.dirname(directory)
-            #     indent -= 2
-
             module = re.match(r"\s*<Module (.+)>", line).group(1)
             if ".py" not in module:
                 module.append(".py")
 
-            while not os.path.exists(os.path.join(directory, module)):
+            while len(directory) > 0 and not os.path.exists(os.path.join(directory, module)):
                 directory = os.path.dirname(directory)
+
+            if len(directory) == 0:
+                return test_results
 
             module_line = line
 
         elif "<Function " in line and module_line:
             try:
-                test_result = TestsInFile.from_pytest_stdout_line(
-                    module_line, line, directory, tests_root
-                )
+                test_result = TestsInFile.from_pytest_stdout_line(module_line, line, directory)
                 test_results.append(test_result)
             except ValueError as e:
                 logging.warning(str(e))
