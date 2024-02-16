@@ -90,8 +90,8 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
             git_root_dir(repo)
         except git.exc.InvalidGitRepositoryError:
             logging.error(
-                "Could not find a git repository in the current directory. "
-                "We need a git repository to run --all and open PRs for optimizations. Exiting..."
+                "I couldn't find a git repository in the current directory. "
+                "I need a git repository to run --all and open PRs for optimizations. Exiting..."
             )
             exit(1)
         owner, repo = get_repo_owner_and_name(repo)

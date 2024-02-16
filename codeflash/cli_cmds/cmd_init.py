@@ -12,7 +12,12 @@ import tomlkit
 from git import Repo
 
 from codeflash.analytics.posthog import ph
-from codeflash.code_utils.env_utils import get_codeflash_api_key
+from codeflash.code_utils.env_utils import (
+    get_codeflash_api_key,
+    read_api_key_from_shell_config,
+    SHELL_RC_EXPORT_PATTERN,
+)
+from codeflash.code_utils.env_utils import get_shell_rc_path
 from codeflash.code_utils.git_utils import get_github_secrets_page_url
 from codeflash.version import __version__ as version
 
@@ -58,6 +63,8 @@ def init_codeflash():
         click.echo(
             "🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
         )
+        click.echo("Or run the following command to reload:")
+        click.echo(f"  source {get_shell_rc_path()}")
 
     ph("cli-installation-successful", {"did_add_new_key": did_add_new_key})
 
@@ -413,7 +420,11 @@ class CFAPIKeyType(click.ParamType):
         if value.startswith("cf-") or value == "":
             return value
         else:
-            self.fail(f"{value} does not start with the prefix 'cf-'. Please retry.", param, ctx)
+            self.fail(
+                f"That key [{value}] seems to be invalid. It should start with a 'cf-' prefix. Please try again.",
+                param,
+                ctx,
+            )
 
 
 # Returns True if the user entered a new API key, False if they used an existing one
@@ -424,24 +435,20 @@ def prompt_api_key() -> bool:
         existing_api_key = None
     if existing_api_key:
         display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
-        use_existing_key = click.prompt(
-            f"I found a CODEFLASH_API_KEY in your environment [{display_key}]!\n"
-            f"Press Enter to use this key, or type any other key to change it",
-            default="",
-            type=CFAPIKeyType(),
+        click.echo(f"🔑 I found a CODEFLASH_API_KEY in your environment [{display_key}]!")
+
+        use_existing_key = inquirer.confirm(
+            message="Do you want to use this key?",
+            default=True,
             show_default=False,
-        ).strip()
-        if use_existing_key == "":
+        )
+        if use_existing_key:
             ph("cli-existing-api-key-used")
             return False
-        else:
-            enter_api_key_and_save_to_rc(existing_api_key=use_existing_key)
-            ph("cli-new-api-key-entered")
-            return True
-    else:
-        enter_api_key_and_save_to_rc()
-        ph("cli-new-api-key-entered")
-        return True
+
+    enter_api_key_and_save_to_rc()
+    ph("cli-new-api-key-entered")
+    return True
 
 
 def enter_api_key_and_save_to_rc(existing_api_key: str = ""):
@@ -452,6 +459,7 @@ def enter_api_key_and_save_to_rc(existing_api_key: str = ""):
             f"Enter your CodeFlash API key{' [or press Enter to open your API key page]' if not browser_launched else ''}",
             hide_input=False,
             default="",
+            type=CFAPIKeyType(),
             show_default=False,
         ).strip()
         if api_key:
@@ -464,23 +472,23 @@ def enter_api_key_and_save_to_rc(existing_api_key: str = ""):
                 )
                 click.launch("https://app.codeflash.ai/app/apikeys")
                 browser_launched = True  # This does not work on remote consoles
-    shell_rc_path = os.path.expanduser(
-        f"~/.{os.environ.get('SHELL', '/bin/bash').split('/')[-1]}rc"
-    )
-    api_key_line = f'export CODEFLASH_API_KEY="{api_key}"'
-    api_key_pattern = re.compile(r'^export CODEFLASH_API_KEY=".*"$', re.M)
-    with open(shell_rc_path, "r+") as shell_rc:
-        shell_contents = shell_rc.read()
-        if api_key_pattern.search(shell_contents):
+    shell_rc_path = get_shell_rc_path()
+    with open(shell_rc_path, "r+") as shell_file:
+        shell_contents = shell_file.read()
+        existing_api_key = read_api_key_from_shell_config()
+        api_key_line = f'export CODEFLASH_API_KEY="{api_key}"'
+
+        if existing_api_key:
             # Replace the existing API key line
-            updated_shell_contents = api_key_pattern.sub(api_key_line, shell_contents)
+            updated_shell_contents = re.sub(SHELL_RC_EXPORT_PATTERN, api_key_line, shell_contents)
         else:
             # Append the new API key line
             updated_shell_contents = shell_contents.rstrip() + f"\n{api_key_line}\n"
-        shell_rc.seek(0)
-        shell_rc.write(updated_shell_contents)
-        shell_rc.truncate()
-    click.echo(f"✅ Updated CODEFLASH_API_KEY in {shell_rc_path}")
+
+        shell_file.seek(0)
+        shell_file.write(updated_shell_contents)
+        shell_file.truncate()
+    click.echo(f"✅ Updated CODEFLASH_API_KEY in {shell_rc_path}.")
     os.environ["CODEFLASH_API_KEY"] = api_key
 
 
