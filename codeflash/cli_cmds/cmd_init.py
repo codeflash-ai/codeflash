@@ -456,9 +456,9 @@ def prompt_api_key() -> bool:
     return True
 
 
-def enter_api_key_and_save_to_rc(existing_api_key: str = ""):
+def enter_api_key_and_save_to_rc():
     browser_launched = False
-    api_key = existing_api_key
+    api_key = ""
     while api_key == "":
         api_key = click.prompt(
             f"Enter your CodeFlash API key{' [or press Enter to open your API key page]' if not browser_launched else ''}",
@@ -486,14 +486,16 @@ def enter_api_key_and_save_to_rc(existing_api_key: str = ""):
         if existing_api_key:
             # Replace the existing API key line
             updated_shell_contents = re.sub(SHELL_RC_EXPORT_PATTERN, api_key_line, shell_contents)
+            action = "Updated CODEFLASH_API_KEY in"
         else:
             # Append the new API key line
             updated_shell_contents = shell_contents.rstrip() + f"\n{api_key_line}\n"
+            action = "Added CODEFLASH_API_KEY to"
 
         shell_file.seek(0)
         shell_file.write(updated_shell_contents)
         shell_file.truncate()
-    click.echo(f"✅ Updated CODEFLASH_API_KEY in {shell_rc_path}.")
+    click.echo(f"✅ {action} {shell_rc_path}.")
     os.environ["CODEFLASH_API_KEY"] = api_key
 
 
