@@ -34,7 +34,11 @@ def process_cmd_args(args: Namespace) -> Namespace:
             raise ValueError(f"File {args.file} does not exist")
         args.file = os.path.realpath(args.file)
 
-    pyproject_config = parse_config_file(args.config_file)
+    try:
+        pyproject_config = parse_config_file(args.config_file)
+    except ValueError as e:
+        logging.error(e.args[0])
+        exit(1)
     supported_keys = [
         "module_root",
         "tests_root",
@@ -86,8 +90,8 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
             git_root_dir(repo)
         except git.exc.InvalidGitRepositoryError:
             logging.error(
-                "Could not find a git repository in the current directory. "
-                "We need a git repository to run --all and open PRs for optimizations. Exiting..."
+                "I couldn't find a git repository in the current directory. "
+                "I need a git repository to run --all and open PRs for optimizations. Exiting..."
             )
             exit(1)
         owner, repo = get_repo_owner_and_name(repo)
