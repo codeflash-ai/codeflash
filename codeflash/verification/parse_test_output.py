@@ -191,7 +191,9 @@ def parse_test_xml(
     return test_results
 
 
-def merge_test_results(xml_test_results: TestResults, bin_test_results: TestResults) -> TestResults:
+def merge_test_results(
+    xml_test_results: TestResults, bin_test_results: TestResults, test_framework: str
+) -> TestResults:
     merged_test_results = TestResults()
 
     grouped_xml_results = defaultdict(TestResults)
@@ -199,11 +201,15 @@ def merge_test_results(xml_test_results: TestResults, bin_test_results: TestResu
 
     # This is done to match the right iteration_id which might not be available in the xml
     for result in xml_test_results:
-        if "[" in result.id.test_function_name:
-            test_function_name = result.id.test_function_name[
-                                 : result.id.test_function_name.index("[")
-                                 ]
-        else:
+        if test_framework == "pytest":
+            if "[" in result.id.test_function_name:
+                test_function_name = result.id.test_function_name[
+                    : result.id.test_function_name.index("[")
+                ]
+            else:
+                test_function_name = result.id.test_function_name
+
+        if test_framework == "unittest":
             test_function_name = result.id.test_function_name
 
         grouped_xml_results[
@@ -325,5 +331,7 @@ def parse_test_results(
         missing_ok=True
     )
 
-    merged_results = merge_test_results(test_results_xml, test_results_bin_file)
+    merged_results = merge_test_results(
+        test_results_xml, test_results_bin_file, test_config.test_framework
+    )
     return merged_results
