@@ -160,7 +160,16 @@ class Optimizer:
                 with open(path, "r") as f:
                     original_code = f.read()
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
-                    function_name = function_to_optimize.function_name
+                    function_name = (
+                        function_to_optimize.function_name
+                        if function_to_optimize.parents == []
+                        else ".".join(
+                            [
+                                function_to_optimize.parents[0].name,
+                                function_to_optimize.function_name,
+                            ]
+                        )
+                    )
                     function_iterator_count += 1
                     logging.info(
                         f"Optimizing function {function_iterator_count} of {num_modified_functions} - {function_name}"
@@ -302,6 +311,7 @@ class Optimizer:
                             overall_original_test_results=overall_original_test_results,
                             original_gen_results=original_gen_results,
                             generated_tests_path=generated_tests_path,
+                            best_runtime_until_now=best_runtime,
                         )
 
                         if success:
@@ -622,6 +632,7 @@ class Optimizer:
         overall_original_test_results: TestResults,
         original_gen_results: TestResults,
         generated_tests_path: str,
+        best_runtime_until_now: int,
     ):
         success = True
         best_test_runtime = None
@@ -724,6 +735,11 @@ class Optimizer:
                 times_run += 1
             if first_run:
                 first_run = False
+            if best_test_runtime is not None and (best_test_runtime > 3 * best_runtime_until_now):
+                # If after 5 runs, the optimized candidate is taking 3 times longer than the best code until now,
+                # then it is not a good optimization. Early exit to save time.
+                success = True
+                do_break = True
             if do_break:
                 break
 
