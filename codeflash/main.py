@@ -1,15 +1,15 @@
 """Thanks for being curious about how codeflash works! If you might want to work with us on finally making performance a
 solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 """
+from collections import defaultdict
+
 import concurrent.futures
+import libcst as cst
 import logging
 import os
 import pathlib
 from argparse import ArgumentParser, SUPPRESS, Namespace
-from collections import defaultdict
 from typing import Tuple, Union
-
-import libcst as cst
 
 from codeflash.api.aiservice import optimize_python_code
 from codeflash.cli_cmds.cli import process_cmd_args
@@ -198,6 +198,7 @@ class Optimizer:
                         [fn[0].full_name.split(".")[-1] for fn in dependent_functions]
                     )
                     dependent_functions_by_module_abspath = defaultdict(set)
+                    print("DEPENDENT FUNCTIONS", dependent_functions)
                     for _, module_abspath, qualified_name in dependent_functions:
                         dependent_functions_by_module_abspath[module_abspath].add(qualified_name)
                     original_dependent_code = {}

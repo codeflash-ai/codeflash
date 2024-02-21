@@ -34,7 +34,7 @@ def find_pyproject_toml(config_file=None):
             # Search for pyproject.toml in the parent directories
             dir_path = os.path.dirname(dir_path)
         raise ValueError(
-            f"Could not find pyproject.toml in the current directory {os.getcwd()} or any of the parent directories. Please pass the path to pyproject.toml with --config-file argument"
+            f"Could not find pyproject.toml in the current directory {os.getcwd()} or any of the parent directories. Please create it by running `poetry init`, or pass the path to pyproject.toml with the --config-file argument."
         )
 
 
