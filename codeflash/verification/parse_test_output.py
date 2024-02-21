@@ -201,8 +201,8 @@ def merge_test_results(xml_test_results: TestResults, bin_test_results: TestResu
     for result in xml_test_results:
         if "[" in result.id.test_function_name:
             test_function_name = result.id.test_function_name[
-                                 : result.id.test_function_name.index("[")
-                                 ]
+                : result.id.test_function_name.index("[")
+            ]
         else:
             test_function_name = result.id.test_function_name
 
@@ -245,26 +245,26 @@ def merge_test_results(xml_test_results: TestResults, bin_test_results: TestResu
                     )
                 )
         else:
-            for i in range(len(xml_results.test_results)):
-                xml_result = xml_results.test_results[i]
+            for i in range(len(bin_results.test_results)):
+                bin_result = bin_results.test_results[i]
                 try:
-                    bin_result = bin_results.test_results[i]
+                    xml_result = xml_results.test_results[i]
                 except IndexError:
-                    bin_result = None
-                if bin_result is None:
+                    xml_result = None
+                if xml_result is None:
                     # if xml_result.test_type == TestType.EXISTING_UNIT_TEST:
                     # only support
-                    logging.warning(f"Could not find bin result for xml result: {xml_result.id}")
-                    merged_test_results.add(xml_result)
+                    # logging.warning(f"Could not find xml result for bin result: {bin_result.id}")
+                    merged_test_results.add(bin_result)
                     continue
                 merged_test_results.add(
                     FunctionTestInvocation(
                         id=bin_result.id,
-                        file_name=xml_result.file_name,
+                        file_name=bin_result.file_name,
                         runtime=bin_result.runtime,
-                        test_framework=xml_result.test_framework,
-                        did_pass=xml_result.did_pass,
-                        test_type=xml_result.test_type,
+                        test_framework=bin_result.test_framework,
+                        did_pass=bin_result.did_pass,
+                        test_type=bin_result.test_type,
                         return_value=bin_result.return_value,
                     )
                 )
