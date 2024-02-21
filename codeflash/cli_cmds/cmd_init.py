@@ -477,25 +477,36 @@ def enter_api_key_and_save_to_rc():
                 )
                 click.launch("https://app.codeflash.ai/app/apikeys")
                 browser_launched = True  # This does not work on remote consoles
+
     shell_rc_path = get_shell_rc_path()
-    with open(shell_rc_path, "r+") as shell_file:
-        shell_contents = shell_file.read()
-        existing_api_key = read_api_key_from_shell_config()
-        api_key_line = f'export CODEFLASH_API_KEY="{api_key}"'
+    api_key_line = f'export CODEFLASH_API_KEY="{api_key}"'
+    try:
+        with open(shell_rc_path, "r+") as shell_file:
+            shell_contents = shell_file.read()
+            existing_api_key = read_api_key_from_shell_config()
 
-        if existing_api_key:
-            # Replace the existing API key line
-            updated_shell_contents = re.sub(SHELL_RC_EXPORT_PATTERN, api_key_line, shell_contents)
-            action = "Updated CODEFLASH_API_KEY in"
-        else:
-            # Append the new API key line
-            updated_shell_contents = shell_contents.rstrip() + f"\n{api_key_line}\n"
-            action = "Added CODEFLASH_API_KEY to"
+            if existing_api_key:
+                # Replace the existing API key line
+                updated_shell_contents = re.sub(
+                    SHELL_RC_EXPORT_PATTERN, api_key_line, shell_contents
+                )
+                action = "Updated CODEFLASH_API_KEY in"
+            else:
+                # Append the new API key line
+                updated_shell_contents = shell_contents.rstrip() + f"\n{api_key_line}\n"
+                action = "Added CODEFLASH_API_KEY to"
 
-        shell_file.seek(0)
-        shell_file.write(updated_shell_contents)
-        shell_file.truncate()
-    click.echo(f"✅ {action} {shell_rc_path}.")
+            shell_file.seek(0)
+            shell_file.write(updated_shell_contents)
+            shell_file.truncate()
+        click.echo(f"✅ {action} {shell_rc_path}.")
+    except IOError as e:
+        click.echo(
+            f"💡 I tried adding your CodeFlash API key to {shell_rc_path} - but seems like I don't have permissions to do so.\n"
+            f"You'll need to open it yourself and add the following line:\n\n{api_key_line}\n"
+        )
+        click.pause()
+
     os.environ["CODEFLASH_API_KEY"] = api_key
 
 
