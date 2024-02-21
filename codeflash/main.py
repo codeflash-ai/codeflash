@@ -1,6 +1,7 @@
 """Thanks for being curious about how codeflash works! If you might want to work with us on finally making performance a
 solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 """
+
 import concurrent.futures
 import logging
 import os
@@ -371,7 +372,7 @@ class Optimizer:
                             for module_abspath in dependent_functions_by_module_abspath.keys()
                         }
                         logging.info(
-                            f"Optimization was validated for correctness by running the following test - "
+                            f"Optimization was validated for correctness by running the following tests - "
                             f"\n{generated_original_test_source}"
                         )
 
