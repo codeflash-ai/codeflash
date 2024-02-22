@@ -202,7 +202,7 @@ def merge_test_results(
     # This is done to match the right iteration_id which might not be available in the xml
     for result in xml_test_results:
         if test_framework == "pytest":
-            if "[" in result.id.test_function_name:
+            if "[" in result.id.test_function_name:  # handle parameterized test
                 test_function_name = result.id.test_function_name[
                     : result.id.test_function_name.index("[")
                 ]
@@ -211,6 +211,11 @@ def merge_test_results(
 
         if test_framework == "unittest":
             test_function_name = result.id.test_function_name
+            test_function_list = test_function_name.split("_")
+            if (
+                len(test_function_list) > 1 and test_function_list[-1].isdigit()
+            ):  # handle parameterized test
+                test_function_name = "_".join(test_function_list[:-1])
 
         grouped_xml_results[
             result.id.test_module_path
