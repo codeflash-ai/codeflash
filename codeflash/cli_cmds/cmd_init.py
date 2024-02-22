@@ -479,7 +479,7 @@ def enter_api_key_and_save_to_rc():
                 browser_launched = True  # This does not work on remote consoles
 
     shell_rc_path = get_shell_rc_path()
-    api_key_line = f'export CODEFLASH_API_KEY="{api_key}"'
+    api_key_line = f"export CODEFLASH_API_KEY={api_key}"
     try:
         with open(shell_rc_path, "r+") as shell_file:
             shell_contents = shell_file.read()

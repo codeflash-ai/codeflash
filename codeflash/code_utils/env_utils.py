@@ -59,7 +59,7 @@ def ensure_pr_number() -> bool:
     return True
 
 
-SHELL_RC_EXPORT_PATTERN = re.compile(r'^export CODEFLASH_API_KEY="(.*)"$', re.M)
+SHELL_RC_EXPORT_PATTERN = re.compile(r'^export CODEFLASH_API_KEY="?(.*)"?$', re.M)
 
 
 def read_api_key_from_shell_config() -> Optional[str]:
