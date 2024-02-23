@@ -1,6 +1,7 @@
 """Thanks for being curious about how codeflash works! If you might want to work with us on finally making performance a
 solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 """
+
 import concurrent.futures
 import logging
 import os
@@ -159,7 +160,16 @@ class Optimizer:
                 with open(path, "r") as f:
                     original_code = f.read()
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
-                    function_name = function_to_optimize.function_name
+                    function_name = (
+                        function_to_optimize.function_name
+                        if function_to_optimize.parents == []
+                        else ".".join(
+                            [
+                                function_to_optimize.parents[0].name,
+                                function_to_optimize.function_name,
+                            ]
+                        )
+                    )
                     function_iterator_count += 1
                     logging.info(
                         f"Optimizing function {function_iterator_count} of {num_modified_functions} - {function_name}"
@@ -174,7 +184,7 @@ class Optimizer:
                     )
                     code_to_optimize = get_code(function_to_optimize)
                     if code_to_optimize is None:
-                        logging.error("Could not find function to optimize")
+                        logging.error("Could not find function to optimize.")
                         continue
 
                     preexisting_functions = get_all_function_names(code_to_optimize)
@@ -189,6 +199,7 @@ class Optimizer:
                         [fn[0].full_name.split(".")[-1] for fn in dependent_functions]
                     )
                     dependent_functions_by_module_abspath = defaultdict(set)
+                    print("Dependent functions:", dependent_functions)
                     for _, module_abspath, qualified_name in dependent_functions:
                         dependent_functions_by_module_abspath[module_abspath].add(qualified_name)
                     original_dependent_code = {}
@@ -242,7 +253,7 @@ class Optimizer:
                     if not success:
                         continue
                     best_runtime = original_runtime  # The fastest code runtime until now
-                    logging.info("OPTIMIZING CODE....")
+                    logging.info("Optimizing code ...")
                     # TODO: Postprocess the optimized function to include the original docstring and such
 
                     best_optimization = []
@@ -257,7 +268,7 @@ class Optimizer:
                         pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.sqlite")).unlink(
                             missing_ok=True
                         )
-                        logging.info("Optimized Candidate:")
+                        logging.info("Optimized candidate:")
                         logging.info(optimized_code)
                         try:
                             replace_function_definitions_in_module(
@@ -301,23 +312,26 @@ class Optimizer:
                             overall_original_test_results=overall_original_test_results,
                             original_gen_results=original_gen_results,
                             generated_tests_path=generated_tests_path,
+                            best_runtime_until_now=best_runtime,
                         )
 
                         if success:
                             logging.info(
-                                f"NEW CODE RUNTIME MEASURED OVER {times_run} RUN{'S' if times_run > 1 else ''} = "
-                                f"{humanize_runtime(best_test_runtime)}, SPEEDUP RATIO = "
+                                f"Candidate runtime measured over {times_run} run{'s' if times_run > 1 else ''}: "
+                                f"{humanize_runtime(best_test_runtime)}, speedup ratio = "
                                 f"{((original_runtime - best_test_runtime) / best_test_runtime):.3f}"
                             )
                             if (
                                 ((original_runtime - best_test_runtime) / best_test_runtime)
                                 > self.args.minimum_performance_gain
                             ) and best_test_runtime < best_runtime:
-                                logging.info("THIS IS BETTER!")
+                                logging.info(
+                                    "This candidate is better than the previous best candidate."
+                                )
 
                                 logging.info(
-                                    f"original_test_time={humanize_runtime(original_runtime)} new_test_time="
-                                    f"{humanize_runtime(best_test_runtime)}, FASTER RATIO = "
+                                    f"Original runtime: {humanize_runtime(original_runtime)} Best test runtime: "
+                                    f"{humanize_runtime(best_test_runtime)}, ratio = "
                                     f"{((original_runtime - best_test_runtime) / best_test_runtime)}"
                                 )
                                 best_optimization = [
@@ -333,10 +347,10 @@ class Optimizer:
                             with open(module_abspath, "w") as f:
                                 f.write(original_dependent_code[module_abspath])
                         logging.info("----------------")
-                    logging.info(f"BEST OPTIMIZATION {best_optimization[0:2]}")
+                    logging.info(f"Best optimization: {best_optimization[0:2]}")
                     if best_optimization:
                         found_atleast_one_optimization = True
-                        logging.info(f"BEST OPTIMIZED CODE\n{best_optimization[0]}")
+                        logging.info(f"Best candidate:\n{best_optimization[0]}")
 
                         optimized_code = best_optimization[0]
                         replace_function_definitions_in_module(
@@ -371,7 +385,7 @@ class Optimizer:
                             for module_abspath in dependent_functions_by_module_abspath.keys()
                         }
                         logging.info(
-                            f"Optimization was validated for correctness by running the following test - "
+                            f"Optimization was validated for correctness by running the following tests - "
                             f"\n{generated_original_test_source}"
                         )
 
@@ -619,7 +633,7 @@ class Optimizer:
             success = False
         if success:
             logging.info(
-                f"ORIGINAL CODE RUNTIME MEASURED OVER {times_run} RUN{'S' if times_run > 1 else ''} = {humanize_runtime(original_runtime)}"
+                f"Original code runtime measured over {times_run} run{'s' if times_run > 1 else ''}: {humanize_runtime(original_runtime)}"
             )
         return success, original_gen_results, overall_original_test_results, best_runtime
 
@@ -630,6 +644,7 @@ class Optimizer:
         overall_original_test_results: TestResults,
         original_gen_results: TestResults,
         generated_tests_path: str,
+        best_runtime_until_now: int,
     ):
         success = True
         best_test_runtime = None
@@ -682,7 +697,7 @@ class Optimizer:
                             or test_invocation.did_pass
                             != overall_original_test_results.get_by_id(test_invocation.id).did_pass
                         ):
-                            logging.info("RESULTS DID NOT MATCH")
+                            logging.info("Results did not match.")
                             logging.info(
                                 f"Test {test_invocation.id} failed on the optimized code. Skipping this optimization"
                             )
@@ -707,9 +722,9 @@ class Optimizer:
                     if test_results:
                         if compare_results(original_gen_results, test_results):
                             equal_results = True
-                            logging.info("RESULTS MATCHED!")
+                            logging.info("Results matched!")
                         else:
-                            logging.info("RESULTS DID NOT MATCH")
+                            logging.info("Results did not match.")
                             equal_results = False
                 if not equal_results:
                     do_break = True
@@ -732,6 +747,11 @@ class Optimizer:
                 times_run += 1
             if first_run:
                 first_run = False
+            if best_test_runtime is not None and (best_test_runtime > 3 * best_runtime_until_now):
+                # If after 5 runs, the optimized candidate is taking 3 times longer than the best code until now,
+                # then it is not a good optimization. Early exit to save time.
+                success = True
+                do_break = True
             if do_break:
                 break
 

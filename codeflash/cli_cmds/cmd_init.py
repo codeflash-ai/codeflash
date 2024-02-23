@@ -12,7 +12,12 @@ import tomlkit
 from git import Repo
 
 from codeflash.analytics.posthog import ph
-from codeflash.code_utils.env_utils import get_codeflash_api_key
+from codeflash.code_utils.env_utils import (
+    get_codeflash_api_key,
+    read_api_key_from_shell_config,
+    SHELL_RC_EXPORT_PATTERN,
+)
+from codeflash.code_utils.env_utils import get_shell_rc_path
 from codeflash.code_utils.git_utils import get_github_secrets_page_url
 from codeflash.version import __version__ as version
 
@@ -58,6 +63,8 @@ def init_codeflash():
         click.echo(
             "🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
         )
+        click.echo("Or run the following command to reload:")
+        click.echo(f"  source {get_shell_rc_path()}")
 
     ph("cli-installation-successful", {"did_add_new_key": did_add_new_key})
 
@@ -120,9 +127,11 @@ def collect_setup_info(setup_info: dict[str, str]):
                 message="Which Python module do you want me to optimize going forward?\n"
                 + "(This is usually the top-most directory where all your Python source code is located)",
                 choices=module_subdir_options,
-                default=project_name
-                if project_name in module_subdir_options
-                else module_subdir_options[0],
+                default=(
+                    project_name
+                    if project_name in module_subdir_options
+                    else module_subdir_options[0]
+                ),
             )
         ]
     )
@@ -141,9 +150,11 @@ def collect_setup_info(setup_info: dict[str, str]):
                 message="Where are your tests located? "
                 "(If you don't have any tests yet, I can create an empty tests/ directory for you)",
                 choices=test_subdir_options,
-                default=default_tests_subdir
-                if default_tests_subdir in test_subdir_options
-                else test_subdir_options[0],
+                default=(
+                    default_tests_subdir
+                    if default_tests_subdir in test_subdir_options
+                    else test_subdir_options[0]
+                ),
             )
         ]
     )
@@ -251,34 +262,38 @@ def check_for_toml_or_setup_file() -> Optional[str]:
         else:
             click.echo(f"✅ Found setup.py.")
             ph("cli-setup-py-found")
-        # Create a pyproject.toml file because it doesn't exist
-        create_toml = (
-            click.prompt(
-                f"I need your project to have a pyproject.toml file to store CodeFlash configuration settings.\n"
-                f"Do you want to run `poetry init` to create one?",
-                default="y",
-                type=click.STRING,
-            )
-            .lower()
-            .strip()
+    else:
+        click.echo(
+            f"💡 I couldn't find a pyproject.toml in the current directory ({curdir}).\n"
+            "(make sure you're running `codeflash init` from your project's root directory!)\n"
+            f"I need your project to have a pyproject.toml file to store configuration settings."
         )
-        if create_toml.startswith("y"):
+        ph("cli-no-pyproject-toml-or-setup-py")
+
+        # Create a pyproject.toml file because it doesn't exist
+        create_toml = inquirer.confirm(
+            f"Do you want to run `poetry init` to create it?",
+            default=True,
+            show_default=False,
+        )
+        if create_toml:
             # Check if Poetry is installed, if not, install it using pip
             poetry_check = subprocess.run(["poetry", "--version"], capture_output=True, text=True)
             if poetry_check.returncode != 0:
                 click.echo("Poetry is not installed. Installing Poetry...")
                 subprocess.run(["pip", "install", "poetry"], check=True)
             subprocess.run(["poetry", "init"], cwd=curdir)
-            click.echo(f"✅ Created a pyproject.toml file at {pyproject_toml_path}")
+            # Check if the pyproject.toml file was created
+            if os.path.exists(pyproject_toml_path):
+                click.echo(
+                    f"✅ Poetry init complete! Created a pyproject.toml file at {pyproject_toml_path}"
+                )
+                click.pause()
             ph("cli-created-pyproject-toml")
-    else:
-        click.echo(
-            f"❌ I couldn't find a pyproject.toml or a setup.py in the current directory ({curdir}).\n"
-            "Please make sure you're running codeflash init from your project's root directory.\n"
-            "See https://app.codeflash.ai/app/getting-started for more details!"
-        )
-        ph("cli-no-pyproject-toml-or-setup-py")
-        sys.exit(1)
+        else:
+            click.echo("See https://app.codeflash.ai/app/getting-started for more details!")
+            click.echo("Exiting...")
+            sys.exit(1)
     click.echo()
     return project_name
 
@@ -380,7 +395,7 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
         click.echo(
-            f"Could not find a pyproject.toml in the current directory.\n"
+            f"I couln't find a pyproject.toml in the current directory.\n"
             f"Please create it by running `poetry init`, or run `codeflash init` again from a different project directory."
         )
 
@@ -390,8 +405,11 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
     codeflash_section["test-framework"] = setup_info["test_framework"]
     codeflash_section["ignore-paths"] = setup_info["ignore_paths"]
 
-    # Add the 'codeflash' section
-    pyproject_data["tool"]["codeflash"] = codeflash_section
+    # Add the 'codeflash' section, ensuring 'tool' section exists
+    tool_section = pyproject_data.get("tool", tomlkit.table())
+    tool_section["codeflash"] = codeflash_section
+    pyproject_data["tool"] = tool_section
+
     click.echo(f"Writing CodeFlash configuration ...\r", nl=False)
     with open(toml_path, "w") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
@@ -407,7 +425,11 @@ class CFAPIKeyType(click.ParamType):
         if value.startswith("cf-") or value == "":
             return value
         else:
-            self.fail(f"{value} does not start with the prefix 'cf-'. Please retry.", param, ctx)
+            self.fail(
+                f"That key [{value}] seems to be invalid. It should start with a 'cf-' prefix. Please try again.",
+                param,
+                ctx,
+            )
 
 
 # Returns True if the user entered a new API key, False if they used an existing one
@@ -418,34 +440,31 @@ def prompt_api_key() -> bool:
         existing_api_key = None
     if existing_api_key:
         display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
-        use_existing_key = click.prompt(
-            f"I found a CODEFLASH_API_KEY in your environment [{display_key}]!\n"
-            f"Press Enter to use this key, or type any other key to change it",
-            default="",
-            type=CFAPIKeyType(),
+        click.echo(f"🔑 I found a CODEFLASH_API_KEY in your environment [{display_key}]!")
+
+        use_existing_key = inquirer.confirm(
+            message="Do you want to use this key?",
+            default=True,
             show_default=False,
-        ).strip()
-        if use_existing_key == "":
+        )
+        if use_existing_key:
             ph("cli-existing-api-key-used")
             return False
-        else:
-            enter_api_key_and_save_to_rc(existing_api_key=use_existing_key)
-            ph("cli-new-api-key-entered")
-            return True
-    else:
-        enter_api_key_and_save_to_rc()
-        ph("cli-new-api-key-entered")
-        return True
+
+    enter_api_key_and_save_to_rc()
+    ph("cli-new-api-key-entered")
+    return True
 
 
-def enter_api_key_and_save_to_rc(existing_api_key: str = ""):
+def enter_api_key_and_save_to_rc():
     browser_launched = False
-    api_key = existing_api_key
+    api_key = ""
     while api_key == "":
         api_key = click.prompt(
             f"Enter your CodeFlash API key{' [or press Enter to open your API key page]' if not browser_launched else ''}",
             hide_input=False,
             default="",
+            type=CFAPIKeyType(),
             show_default=False,
         ).strip()
         if api_key:
@@ -458,23 +477,36 @@ def enter_api_key_and_save_to_rc(existing_api_key: str = ""):
                 )
                 click.launch("https://app.codeflash.ai/app/apikeys")
                 browser_launched = True  # This does not work on remote consoles
-    shell_rc_path = os.path.expanduser(
-        f"~/.{os.environ.get('SHELL', '/bin/bash').split('/')[-1]}rc"
-    )
-    api_key_line = f'export CODEFLASH_API_KEY="{api_key}"'
-    api_key_pattern = re.compile(r'^export CODEFLASH_API_KEY=".*"$', re.M)
-    with open(shell_rc_path, "r+") as shell_rc:
-        shell_contents = shell_rc.read()
-        if api_key_pattern.search(shell_contents):
-            # Replace the existing API key line
-            updated_shell_contents = api_key_pattern.sub(api_key_line, shell_contents)
-        else:
-            # Append the new API key line
-            updated_shell_contents = shell_contents.rstrip() + f"\n{api_key_line}\n"
-        shell_rc.seek(0)
-        shell_rc.write(updated_shell_contents)
-        shell_rc.truncate()
-    click.echo(f"✅ Updated CODEFLASH_API_KEY in {shell_rc_path}")
+
+    shell_rc_path = get_shell_rc_path()
+    api_key_line = f"export CODEFLASH_API_KEY={api_key}"
+    try:
+        with open(shell_rc_path, "r+") as shell_file:
+            shell_contents = shell_file.read()
+            existing_api_key = read_api_key_from_shell_config()
+
+            if existing_api_key:
+                # Replace the existing API key line
+                updated_shell_contents = re.sub(
+                    SHELL_RC_EXPORT_PATTERN, api_key_line, shell_contents
+                )
+                action = "Updated CODEFLASH_API_KEY in"
+            else:
+                # Append the new API key line
+                updated_shell_contents = shell_contents.rstrip() + f"\n{api_key_line}\n"
+                action = "Added CODEFLASH_API_KEY to"
+
+            shell_file.seek(0)
+            shell_file.write(updated_shell_contents)
+            shell_file.truncate()
+        click.echo(f"✅ {action} {shell_rc_path}.")
+    except IOError as e:
+        click.echo(
+            f"💡 I tried adding your CodeFlash API key to {shell_rc_path} - but seems like I don't have permissions to do so.\n"
+            f"You'll need to open it yourself and add the following line:\n\n{api_key_line}\n"
+        )
+        click.pause()
+
     os.environ["CODEFLASH_API_KEY"] = api_key
 
 
