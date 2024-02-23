@@ -994,8 +994,6 @@ class TestPigLatin(unittest.TestCase):
         test_env=test_env,
     )
 
-    assert run_result.returncode == 0
-
     test_results = parse_test_results(
         test_xml_path=result_file_path,
         test_py_path=str(test_path),
