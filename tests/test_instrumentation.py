@@ -2,7 +2,6 @@ import os.path
 import pathlib
 import sys
 import tempfile
-import logging
 
 import pytest
 
@@ -994,8 +993,6 @@ class TestPigLatin(unittest.TestCase):
         verbose=True,
         test_env=test_env,
     )
-
-    logging.info(run_result)
 
     assert run_result.returncode == 0
 
