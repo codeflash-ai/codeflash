@@ -19,6 +19,7 @@ def check_create_pr(
     original_code: dict[str, str],
     new_code: dict[str, str],
     explanation: Explanation,
+    existing_tests_source: str,
     generated_original_test_source: str,
 ):
     pr_number: Optional[int] = env_utils.get_pr_number()
@@ -47,6 +48,7 @@ def check_create_pr(
                 speedup_pct=explanation.speedup_pct,
                 winning_test_results=explanation.winning_test_results,
             ),
+            existing_tests=existing_tests_source,
             generated_tests=generated_original_test_source,
         )
         if response.ok:
@@ -83,6 +85,7 @@ def check_create_pr(
                 speedup_pct=explanation.speedup_pct,
                 winning_test_results=explanation.winning_test_results,
             ),
+            existing_tests=existing_tests_source,
             generated_tests=generated_original_test_source,
         )
         if response.ok:

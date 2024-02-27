@@ -61,6 +61,7 @@ def suggest_changes(
     pr_number: int,
     file_changes: dict[str, FileDiffContent],
     pr_comment: PrComment,
+    existing_tests: str,
     generated_tests: str,
 ) -> Response:
     """
@@ -81,6 +82,7 @@ def suggest_changes(
         "pullNumber": pr_number,
         "diffContents": file_changes,
         "prCommentFields": pr_comment.to_json(),
+        "existingTests": existing_tests,
         "generatedTests": generated_tests,
     }
     response = make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
@@ -93,6 +95,7 @@ def create_pr(
     base_branch: str,
     file_changes: dict[str, FileDiffContent],
     pr_comment: PrComment,
+    existing_tests: str,
     generated_tests: str,
 ) -> Response:
     """
@@ -111,6 +114,7 @@ def create_pr(
         "baseBranch": base_branch,
         "diffContents": file_changes,
         "prCommentFields": pr_comment.to_json(),
+        "existingTests": existing_tests,
         "generatedTests": generated_tests,
     }
     response = make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
