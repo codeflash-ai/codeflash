@@ -112,6 +112,14 @@ def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     return process_test_files(file_to_test_map, cfg)
 
 
+def discover_parameters_unittest(function_name: str):
+    function_name = function_name.split("_")
+    if len(function_name) > 1 and function_name[-1].isdigit():
+        return True, "_".join(function_name[:-1]), function_name[-1]
+
+    return False, function_name, None
+
+
 def process_test_files(
     file_to_test_map: Dict[str, List[Dict[str, str]]], cfg: TestConfig
 ) -> Dict[str, List[TestsInFile]]:
@@ -151,21 +159,17 @@ def process_test_files(
                             and f".{name.name}." in def_name.full_name
                         ):
                             for function in functions_to_search:
-                                target_function = function.split("_")
-                                def_function = def_name.name.split("_")
+                                (
+                                    is_parameterized,
+                                    new_function,
+                                    parameters,
+                                ) = discover_parameters_unittest(function)
 
-                                if (
-                                    len(target_function) == len(def_function) + 1
-                                    and target_function[:-1] == def_function
-                                    and target_function[-1].isdigit()
-                                ):
+                                if is_parameterized and new_function == def_name.name:
                                     test_functions.add(
-                                        TestFunction(def_name.name, name.name, target_function[-1])
+                                        TestFunction(def_name.name, name.name, parameters)
                                     )
-                                elif (
-                                    len(target_function) == len(def_function)
-                                    and function == def_name.name
-                                ):
+                                elif function == def_name.name:
                                     test_functions.add(TestFunction(def_name.name, name.name, None))
 
         test_functions_list = list(test_functions)

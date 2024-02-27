@@ -20,6 +20,7 @@ from codeflash.verification.test_results import (
     InvocationId,
 )
 from codeflash.verification.verification_utils import TestConfig
+from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 
 
 def parse_test_return_values_bin(
@@ -211,11 +212,11 @@ def merge_test_results(
 
         if test_framework == "unittest":
             test_function_name = result.id.test_function_name
-            test_function_list = test_function_name.split("_")
-            if (
-                len(test_function_list) > 1 and test_function_list[-1].isdigit()
-            ):  # handle parameterized test
-                test_function_name = "_".join(test_function_list[:-1])
+            is_parameterized, new_test_function_name, _ = discover_parameters_unittest(
+                test_function_name
+            )
+            if is_parameterized:  # handle parameterized test
+                test_function_name = new_test_function_name
 
         grouped_xml_results[
             result.id.test_module_path
