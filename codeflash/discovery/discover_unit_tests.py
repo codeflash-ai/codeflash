@@ -69,6 +69,7 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     )
 
     pytest_stdout = pytest_result.stdout.decode("utf-8")
+    print(pytest_stdout)
     rootdir_re = re.compile(r"^rootdir:\s?(\S*)", re.MULTILINE)
     pytest_rootdir_match = rootdir_re.search(pytest_stdout)
     if not pytest_rootdir_match:
