@@ -200,6 +200,7 @@ def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[
     test_results = []
     module_line = None
     directory = tests_root
+    print("directory: ", directory)
     for line in pytest_stdout.splitlines():
         if "<Dir " in line:
             new_dir = re.match(r"\s*<Dir (.+)>", line).group(1)
@@ -238,6 +239,7 @@ def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[
         elif "<Function " in line and module_line:
             try:
                 test_result = TestsInFile.from_pytest_stdout_line(module_line, line, directory)
+                print("Test result: ", test_result)
                 test_results.append(test_result)
             except ValueError as e:
                 logging.warning(str(e))
