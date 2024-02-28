@@ -199,7 +199,6 @@ class Optimizer:
                         [fn[0].full_name.split(".")[-1] for fn in dependent_functions]
                     )
                     dependent_functions_by_module_abspath = defaultdict(set)
-                    print("Dependent functions:", dependent_functions)
                     for _, module_abspath, qualified_name in dependent_functions:
                         dependent_functions_by_module_abspath[module_abspath].add(qualified_name)
                     original_dependent_code = {}
