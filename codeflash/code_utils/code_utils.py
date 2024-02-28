@@ -1,4 +1,3 @@
-import os
 import ast
 import os
 import site
@@ -8,16 +7,15 @@ from typing import Optional, List, Union
 
 def module_name_from_file_path(file_path: str, project_root: str) -> str:
     relative_path = os.path.relpath(file_path, project_root)
-    module_path = relative_path.replace("/", ".")
-    if module_path.endswith(".py"):
+    module_path = relative_path.replace(os.sep, ".")
+    if module_path.lower().endswith(".py"):
         module_path = module_path[:-3]
     return module_path
 
 
 def file_path_from_module_name(module_name: str, project_root: str) -> str:
-    "Get file path from module path"
-
-    return os.path.join(project_root, module_name.replace(".", "/") + ".py")
+    """Get file path from module path"""
+    return os.path.join(project_root, module_name.replace(".", os.sep) + ".py")
 
 
 def ellipsis_in_ast(module: ast.AST) -> bool:
