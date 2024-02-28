@@ -64,7 +64,7 @@ SHELL_RC_EXPORT_PATTERN = re.compile(r'^export CODEFLASH_API_KEY="?(.*)"?$', re.
 
 def read_api_key_from_shell_config() -> Optional[str]:
     shell_rc_path = get_shell_rc_path()
-    with open(shell_rc_path, "r") as shell_rc:
+    with open(shell_rc_path, "r", encoding="utf8") as shell_rc:
         shell_contents = shell_rc.read()
         match = SHELL_RC_EXPORT_PATTERN.search(shell_contents)
         return match.group(1) if match else None

@@ -157,7 +157,7 @@ class Optimizer:
                 # TODO: Sequence the functions one goes through intelligently. If we are optimizing f(g(x)),
                 #  then we might want to first optimize f rather than g because optimizing f would already
                 #  optimize g as it is a dependency
-                with open(path, "r") as f:
+                with open(path, "r", encoding="utf8") as f:
                     original_code = f.read()
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
                     function_name = (
@@ -204,7 +204,7 @@ class Optimizer:
                         dependent_functions_by_module_abspath[module_abspath].add(qualified_name)
                     original_dependent_code = {}
                     for module_abspath in dependent_functions_by_module_abspath.keys():
-                        with open(module_abspath, "r") as f:
+                        with open(module_abspath, "r", encoding="utf8") as f:
                             dependent_code = f.read()
                             original_dependent_code[module_abspath] = dependent_code
                     logging.info(f"Code to be optimized:\n{code_to_optimize_with_dependents}")
@@ -236,7 +236,7 @@ class Optimizer:
                     generated_tests_path = get_test_file_path(
                         self.args.tests_root, function_to_optimize.function_name, 0
                     )
-                    with open(generated_tests_path, "w") as file:
+                    with open(generated_tests_path, "w", encoding="utf8") as file:
                         file.write(instrumented_test_source)
 
                     test_files_created.add(generated_tests_path)
@@ -294,10 +294,10 @@ class Optimizer:
                             AttributeError,
                         ) as e:
                             logging.error(e)
-                            with open(path, "w") as f:
+                            with open(path, "w", encoding="utf8") as f:
                                 f.write(original_code)
                             for module_abspath in dependent_functions_by_module_abspath.keys():
-                                with open(module_abspath, "w") as f:
+                                with open(module_abspath, "w", encoding="utf8") as f:
                                     f.write(original_dependent_code[module_abspath])
                             continue
 
@@ -341,10 +341,10 @@ class Optimizer:
                                 ]
                                 best_runtime = best_test_runtime
                                 winning_test_results = best_test_results
-                        with open(path, "w") as f:
+                        with open(path, "w", encoding="utf8") as f:
                             f.write(original_code)
                         for module_abspath in dependent_functions_by_module_abspath.keys():
-                            with open(module_abspath, "w") as f:
+                            with open(module_abspath, "w", encoding="utf8") as f:
                                 f.write(original_dependent_code[module_abspath])
                         logging.info("----------------")
                     logging.info(f"Best optimization: {best_optimization[0:2]}")
@@ -395,7 +395,7 @@ class Optimizer:
                         test_files = function_to_tests[module_path + "." + function_name]
                         existing_tests = ""
                         for test_file in test_files:
-                            with open(test_file.test_file, "r") as f:
+                            with open(test_file.test_file, "r", encoding="utf8") as f:
                                 new_test = "".join(f.readlines())
                                 if new_test not in existing_tests:
                                     existing_tests += new_test
@@ -414,10 +414,10 @@ class Optimizer:
                             #  a. Error propagation, where error in one function can cause the next optimization to fail
                             #  b. Performance estimates become unstable, as the runtime of an optimization might be
                             #     dependent on the runtime of the previous optimization
-                            with open(path, "w") as f:
+                            with open(path, "w", encoding="utf8") as f:
                                 f.write(original_code)
                             for module_abspath in dependent_functions_by_module_abspath.keys():
-                                with open(module_abspath, "w") as f:
+                                with open(module_abspath, "w", encoding="utf8") as f:
                                     f.write(original_dependent_code[module_abspath])
                     # Delete all the generated tests to not cause any clutter.
                     pathlib.Path(generated_tests_path).unlink(missing_ok=True)
@@ -468,7 +468,7 @@ class Optimizer:
                     + "__perfinstrumented"
                     + os.path.splitext(tests_in_file.test_file)[1]
                 )
-                with open(new_test_path, "w") as f:
+                with open(new_test_path, "w", encoding="utf8") as f:
                     f.write(injected_test)
                 unique_instrumented_test_files.add(new_test_path)
                 unique_original_test_files.add(tests_in_file.test_file)
