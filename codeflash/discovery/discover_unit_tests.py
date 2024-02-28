@@ -207,6 +207,7 @@ def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[
         elif "<Package " in line:
             new_dir = re.match(r"\s*<Package (.+)>", line).group(1)
             new_directory = os.path.join(directory, new_dir)
+            print(directory, new_dir)
             print(new_dir, new_directory, directory)
             while len(new_directory) > 0 and not os.path.exists(new_directory):
                 directory = os.path.dirname(directory)
@@ -237,7 +238,16 @@ def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[
 
                 module_list = module.split("/")
                 if index < len(module_list) - 1:
-                    module = "/".join(module_list[index + 1 :])
+                    index += 1
+                    module_list = module_list[index:]
+                    while not directory.endswith(curr_dir):
+                        directory = os.path.dirname(directory)
+
+                while len(module_list) > 1:
+                    directory = os.path.join(directory, module_list[0])
+                    module_list = module_list[1:]
+
+                module = module_list[0]
 
             print("module: ", module)
 
