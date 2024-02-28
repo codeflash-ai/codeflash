@@ -193,7 +193,7 @@ def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[
     test_results = []
     module_line = None
     directory = tests_root
-    # print("directory: ", directory)
+    print("directory: ", directory)
     for line in pytest_stdout.splitlines():
         if "<Dir " in line:
             new_dir = re.match(r"\s*<Dir (.+)>", line).group(1)
@@ -207,7 +207,7 @@ def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[
         elif "<Package " in line:
             new_dir = re.match(r"\s*<Package (.+)>", line).group(1)
             new_directory = os.path.join(directory, new_dir)
-            # print(new_dir, new_directory, directory)
+            print(new_dir, new_directory, directory)
             while len(new_directory) > 0 and not os.path.exists(new_directory):
                 directory = os.path.dirname(directory)
                 new_directory = os.path.join(directory, new_dir)
@@ -218,7 +218,7 @@ def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[
             directory = new_directory
 
         elif "<Module " in line:
-            # print("before: ", directory)
+            print("before: ", directory)
             module = re.match(r"\s*<Module (.+)>", line).group(1)
             # module = module.split("/")[-1]
             if ".py" not in module:
@@ -239,7 +239,7 @@ def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[
                 if index < len(module_list) - 1:
                     module = "/".join(module_list[index + 1 :])
 
-            # print("module: ", module)
+            print("module: ", module)
 
             while len(directory) > 0 and not os.path.exists(os.path.join(directory, module)):
                 directory = os.path.dirname(directory)
@@ -248,7 +248,7 @@ def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[
                 return test_results
 
             # module_line = line
-            # print("after: ", directory)
+            print("after: ", directory)
 
         elif "<Function " in line and module is not None:
             function = re.match(r"\s*<Function (.+)>", line)
