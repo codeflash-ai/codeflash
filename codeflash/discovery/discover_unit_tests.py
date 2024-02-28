@@ -20,24 +20,17 @@ class TestsInFile:
     test_suite: Optional[str]
 
     @classmethod
-    def from_pytest_stdout_line(cls, module_line: str, function_line: str, directory: str):
-        module_match = re.match(r"\s*<Module (.+)>", module_line)
-        function_match = re.match(r"\s*<Function (.+)>", function_line)
-        if module_match and function_match:
-            module_path = module_match.group(1)
-            function_name = function_match.group(1)
-            absolute_test_path = os.path.join(directory, module_path)
-            assert os.path.exists(
-                absolute_test_path
-            ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
-            return cls(
-                test_file=absolute_test_path,
-                test_class=None,
-                test_function=function_name,
-                test_suite=None,
-            )
-        else:
-            raise ValueError(f"Unexpected pytest result format: {module_line} or {function_line}")
+    def from_pytest_stdout_line(cls, module: str, function: str, directory: str):
+        absolute_test_path = os.path.join(directory, module)
+        assert os.path.exists(
+            absolute_test_path
+        ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
+        return cls(
+            test_file=absolute_test_path,
+            test_class=None,
+            test_function=function,
+            test_suite=None,
+        )
 
 
 @dataclass(frozen=True)
@@ -200,7 +193,7 @@ def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[
     test_results = []
     module_line = None
     directory = tests_root
-    print("directory: ", directory)
+    # print("directory: ", directory)
     for line in pytest_stdout.splitlines():
         if "<Dir " in line:
             new_dir = re.match(r"\s*<Dir (.+)>", line).group(1)
@@ -214,6 +207,7 @@ def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[
         elif "<Package " in line:
             new_dir = re.match(r"\s*<Package (.+)>", line).group(1)
             new_directory = os.path.join(directory, new_dir)
+            # print(new_dir, new_directory, directory)
             while len(new_directory) > 0 and not os.path.exists(new_directory):
                 directory = os.path.dirname(directory)
                 new_directory = os.path.join(directory, new_dir)
@@ -224,9 +218,28 @@ def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[
             directory = new_directory
 
         elif "<Module " in line:
+            # print("before: ", directory)
             module = re.match(r"\s*<Module (.+)>", line).group(1)
+            # module = module.split("/")[-1]
             if ".py" not in module:
                 module.append(".py")
+
+            # print("module: ", module)
+
+            module_list = module.split("/")
+            index = len(module_list) - 1
+            if len(module_list) > 1:
+                curr_dir = module
+                while len(module_list) > 1 and curr_dir not in directory:
+                    curr_dir = os.path.dirname(curr_dir)
+                    module_list = module_list[:-1]
+                    index -= 1
+
+                module_list = module.split("/")
+                if index < len(module_list) - 1:
+                    module = "/".join(module_list[index + 1 :])
+
+            # print("module: ", module)
 
             while len(directory) > 0 and not os.path.exists(os.path.join(directory, module)):
                 directory = os.path.dirname(directory)
@@ -234,14 +247,18 @@ def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[
             if len(directory) == 0:
                 return test_results
 
-            module_line = line
+            # module_line = line
+            # print("after: ", directory)
 
-        elif "<Function " in line and module_line:
-            try:
-                test_result = TestsInFile.from_pytest_stdout_line(module_line, line, directory)
-                print("Test result: ", test_result)
-                test_results.append(test_result)
-            except ValueError as e:
-                logging.warning(str(e))
+        elif "<Function " in line and module is not None:
+            function = re.match(r"\s*<Function (.+)>", line)
+            if function:
+                function = function.group(1)
+                try:
+                    test_result = TestsInFile.from_pytest_stdout_line(module, function, directory)
+                    print("Test result: ", test_result)
+                    test_results.append(test_result)
+                except ValueError as e:
+                    logging.warning(str(e))
 
     return test_results
