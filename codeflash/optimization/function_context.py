@@ -178,6 +178,7 @@ def get_function_variables_definitions(
         function_to_optimize, script, project_root_path
     )
     sources[:0] = annotation_sources  # prepend the annotation sources
+    print("NON DEDUPED SOURCES", sources)
     deduped_sources = []
     existing_full_names = set()
     for source in sources:
