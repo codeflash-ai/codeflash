@@ -392,13 +392,15 @@ class Optimizer:
                         logging.info(f"⚡️ Optimization successful! 📄 {function_name} in {path}")
                         logging.info(f"📈 {explanation_final.perf_improvement_line}")
 
-                        test_files = function_to_tests[module_path + "." + function_name]
+                        function_name = module_path + "." + function_name
                         existing_tests = ""
-                        for test_file in test_files:
-                            with open(test_file.test_file, "r") as f:
-                                new_test = "".join(f.readlines())
-                                if new_test not in existing_tests:
-                                    existing_tests += new_test
+                        if function_name in function_to_tests:
+                            test_files = function_to_tests[module_path + "." + function_name]
+                            for test_file in test_files:
+                                with open(test_file.test_file, "r") as f:
+                                    new_test = "".join(f.readlines())
+                                    if new_test not in existing_tests:
+                                        existing_tests += new_test
 
                         check_create_pr(
                             optimize_all=self.args.all,
