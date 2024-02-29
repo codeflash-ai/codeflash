@@ -35,7 +35,7 @@ def get_imports_from_file(
         sum([file_path is not None, file_string is not None, file_ast is not None]) == 1
     ), "Must provide exactly one of file_path, file_string, or file_ast"
     if file_path:
-        with open(file_path, "r") as file:
+        with open(file_path, "r", encoding="utf8") as file:
             file_string = file.read()
     if file_ast is None:
         file_ast = ast.parse(file_string)

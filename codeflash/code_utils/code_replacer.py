@@ -209,7 +209,7 @@ def replace_function_definitions_in_module(
     preexisting_functions: list[str],
 ) -> NoReturn:
     file: IO[str]
-    with open(module_abspath, "r") as file:
+    with open(module_abspath, "r", encoding="utf8") as file:
         source_code: str = file.read()
     new_code: str = replace_functions_in_file(
         source_code,
@@ -217,5 +217,5 @@ def replace_function_definitions_in_module(
         optimized_code,
         preexisting_functions,
     )
-    with open(module_abspath, "w") as file:
+    with open(module_abspath, "w", encoding="utf8") as file:
         file.write(new_code)

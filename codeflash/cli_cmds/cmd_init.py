@@ -203,7 +203,7 @@ def detect_test_framework(curdir, tests_root) -> Optional[str]:
     for pytest_file in pytest_files:
         file_path = os.path.join(curdir, pytest_file)
         if os.path.exists(file_path):
-            with open(file_path, "r") as file:
+            with open(file_path, "r", encoding="utf8") as file:
                 contents = file.read()
                 if re.search(pytest_config_patterns[pytest_file], contents):
                     test_framework = "pytest"
@@ -213,7 +213,7 @@ def detect_test_framework(curdir, tests_root) -> Optional[str]:
         # Check if any python files contain a class that inherits from unittest.TestCase
         for filename in os.listdir(tests_root):
             if filename.endswith(".py"):
-                with open(os.path.join(tests_root, filename), "r") as file:
+                with open(os.path.join(tests_root, filename), "r", encoding="utf8") as file:
                     contents = file.read()
                     node = ast.parse(contents)
                     if any(
@@ -241,7 +241,7 @@ def check_for_toml_or_setup_file() -> Optional[str]:
     project_name = None
     if os.path.exists(pyproject_toml_path):
         try:
-            with open(pyproject_toml_path, "r") as f:
+            with open(pyproject_toml_path, "r", encoding="utf8") as f:
                 pyproject_toml_content = f.read()
             project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]
             click.echo(f"✅ I found a pyproject.toml for your project {project_name}.")
@@ -250,7 +250,7 @@ def check_for_toml_or_setup_file() -> Optional[str]:
             click.echo(f"✅ I found a pyproject.toml for your project.")
             ph("cli-pyproject-toml-found")
     elif os.path.exists(setup_py_path):
-        with open(setup_py_path, "r") as f:
+        with open(setup_py_path, "r", encoding="utf8") as f:
             setup_py_content = f.read()
         project_name_match = re.search(
             r"setup\s*\([^)]*?name\s*=\s*['\"](.*?)['\"]", setup_py_content, re.DOTALL
@@ -344,7 +344,7 @@ def prompt_github_action(setup_info: dict[str, str]):
             optimize_yml_content = optimize_yml_content.replace(
                 " {{ python_version }}", python_version_string
             )
-            with open(optimize_yaml_path, "w") as optimize_yml_file:
+            with open(optimize_yaml_path, "w", encoding="utf8") as optimize_yml_file:
                 optimize_yml_file.write(optimize_yml_content)
             click.echo(f"✅ Created {optimize_yaml_path}\n")
             click.prompt(
@@ -391,7 +391,7 @@ def prompt_github_action(setup_info: dict[str, str]):
 def configure_pyproject_toml(setup_info: dict[str, str]):
     toml_path = os.path.join(os.getcwd(), "pyproject.toml")
     try:
-        with open(toml_path, "r") as pyproject_file:
+        with open(toml_path, "r", encoding="utf8") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
         click.echo(
@@ -411,7 +411,7 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
     pyproject_data["tool"] = tool_section
 
     click.echo(f"Writing CodeFlash configuration ...\r", nl=False)
-    with open(toml_path, "w") as pyproject_file:
+    with open(toml_path, "w", encoding="utf8") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
     click.echo(f"✅ Added CodeFlash configuration to {toml_path}")
     click.echo()
@@ -481,7 +481,7 @@ def enter_api_key_and_save_to_rc():
     shell_rc_path = get_shell_rc_path()
     api_key_line = f"export CODEFLASH_API_KEY={api_key}"
     try:
-        with open(shell_rc_path, "r+") as shell_file:
+        with open(shell_rc_path, "r+", encoding="utf8") as shell_file:
             shell_contents = shell_file.read()
             existing_api_key = read_api_key_from_shell_config()
 
@@ -521,7 +521,7 @@ def create_bubble_sort_file(setup_info: dict[str, str]):
     return arr
 """
     bubble_sort_path = os.path.join(setup_info["module_root"], "bubble_sort.py")
-    with open(bubble_sort_path, "w") as bubble_sort_file:
+    with open(bubble_sort_path, "w", encoding="utf8") as bubble_sort_file:
         bubble_sort_file.write(bubble_sort_content)
     click.echo(f"✅ Created {bubble_sort_path}")
 

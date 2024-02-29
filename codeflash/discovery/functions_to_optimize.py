@@ -1,12 +1,13 @@
 import ast
-import libcst as cst
 import logging
 import os
 import random
 from _ast import ClassDef, FunctionDef, AsyncFunctionDef
+from typing import Dict, Optional, List, Tuple, Union
+
+import libcst as cst
 from libcst import CSTNode
 from pydantic.dataclasses import dataclass
-from typing import Dict, Optional, List, Tuple, Union
 
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
 from codeflash.code_utils.git_utils import get_git_diff
@@ -149,7 +150,7 @@ def get_functions_within_git_diff() -> Dict[str, List[FunctionToOptimize]]:
     for path in modified_lines:
         if not os.path.exists(path):
             continue
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf8") as f:
             file_content = f.read()
             wrapper = cst.metadata.MetadataWrapper(cst.parse_module(file_content))
             function_lines = FunctionVisitor(file_path=path)
@@ -183,7 +184,7 @@ def get_all_files_and_functions(module_root_path: str) -> Dict[str, List[Functio
 
 def find_all_functions_in_file(file_path: str) -> Dict[str, List[FunctionToOptimize]]:
     functions: Dict[str, List[FunctionToOptimize]] = {}
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf8") as f:
         try:
             ast_module = ast.parse(f.read())
         except Exception as e:

@@ -18,7 +18,7 @@ def belongs_to_class(name: Name, class_name: str) -> bool:
     Check if the given name belongs to the specified class.
     """
     if name.full_name and name.full_name.startswith(name.module_name):
-        subname = name.full_name[len(name.module_name) + 1:]
+        subname = name.full_name[len(name.module_name) + 1 :]
         class_prefix = f"{class_name}."
         return subname.startswith(class_prefix)
     return False
@@ -44,11 +44,11 @@ class Source:
 
 
 def get_type_annotation_context(
-        function: FunctionToOptimize, jedi_script: jedi.Script, project_root_path: str
+    function: FunctionToOptimize, jedi_script: jedi.Script, project_root_path: str
 ) -> List[tuple[Source]]:
     function_name = function.function_name
     file_path = function.file_path
-    with open(file_path, "r") as file:
+    with open(file_path, "r", encoding="utf8") as file:
         file_contents = file.read()
     module = ast.parse(file_contents)
     sources = []
@@ -59,9 +59,7 @@ def get_type_annotation_context(
             visit(child, node_parents)
 
     def visit(node, node_parents):
-        if isinstance(
-                node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-        ):
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if node.name == function_name and node_parents == function.parents:
                     for arg in node.args.args:
@@ -85,16 +83,10 @@ def get_type_annotation_context(
                                 definition_path = str(definition[0].module_path)
                                 # The definition is part of this project and not defined within the original function
                                 if (
-                                        definition_path.startswith(
-                                            project_root_path + os.sep
-                                        )
-                                        and definition[0].full_name
-                                        and not path_belongs_to_site_packages(
-                                    definition_path
-                                )
-                                        and not belongs_to_function(
-                                    definition[0], function_name
-                                )
+                                    definition_path.startswith(project_root_path + os.sep)
+                                    and definition[0].full_name
+                                    and not path_belongs_to_site_packages(definition_path)
+                                    and not belongs_to_function(definition[0], function_name)
                                 ):
                                     source_code = get_code(
                                         FunctionToOptimize(
@@ -126,7 +118,7 @@ def get_type_annotation_context(
 
 
 def get_function_variables_definitions(
-        function_to_optimize: FunctionToOptimize, project_root_path: str
+    function_to_optimize: FunctionToOptimize, project_root_path: str
 ) -> List[tuple[Source, str, str]]:
     function_name = function_to_optimize.function_name
     file_path = function_to_optimize.file_path
@@ -141,7 +133,7 @@ def get_function_variables_definitions(
             if function_to_optimize.parents:
                 # Check if the reference belongs to the specified class when FunctionParent is provided
                 if belongs_to_class(
-                        ref, function_to_optimize.parents[-1].name
+                    ref, function_to_optimize.parents[-1].name
                 ) and belongs_to_function(ref, function_name):
                     names.append(ref)
             else:
@@ -168,17 +160,18 @@ def get_function_variables_definitions(
             definition_path = str(definitions[0].module_path)
             # The definition is part of this project and not defined within the original function
             if (
-                    definition_path.startswith(project_root_path + os.sep)
-                    and not path_belongs_to_site_packages(definition_path)
-                    and definitions[0].full_name
-                    and not belongs_to_function(definitions[0], function_name)
+                definition_path.startswith(project_root_path + os.sep)
+                and not path_belongs_to_site_packages(definition_path)
+                and definitions[0].full_name
+                and not belongs_to_function(definitions[0], function_name)
             ):
                 source_code = get_code_no_skeleton(definition_path, definitions[0].name)
                 if source_code:
                     sources.append(
                         (
                             Source(name.full_name, definitions[0], source_code),
-                            definition_path, name.full_name.removeprefix(name.module_name + '.'),
+                            definition_path,
+                            name.full_name.removeprefix(name.module_name + "."),
                         )
                     )
     annotation_sources = get_type_annotation_context(
@@ -198,10 +191,10 @@ MAX_PROMPT_TOKENS = 4096  # 128000  # gpt-4-128k
 
 
 def get_constrained_function_context_and_dependent_functions(
-        function_to_optimize: FunctionToOptimize,
-        project_root_path: str,
-        code_to_optimize: str,
-        max_tokens: int = MAX_PROMPT_TOKENS,
+    function_to_optimize: FunctionToOptimize,
+    project_root_path: str,
+    code_to_optimize: str,
+    max_tokens: int = MAX_PROMPT_TOKENS,
 ) -> tuple[str, list[tuple[Source, str, str]]]:
     # TODO: Not just do static analysis, but also find the datatypes of function arguments by running the existing
     #  unittests and inspecting the arguments to resolve the real definitions and dependencies.
@@ -210,9 +203,7 @@ def get_constrained_function_context_and_dependent_functions(
     )
     tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")
     code_to_optimize_tokens = tokenizer.encode(code_to_optimize)
-    dependent_functions_sources = [
-        function[0].source_code for function in dependent_functions
-    ]
+    dependent_functions_sources = [function[0].source_code for function in dependent_functions]
     dependent_functions_tokens = [
         len(tokenizer.encode(function)) for function in dependent_functions_sources
     ]
@@ -220,9 +211,7 @@ def get_constrained_function_context_and_dependent_functions(
     context_len = len(code_to_optimize_tokens)
     logging.debug(f"ORIGINAL CODE TOKENS LENGTH: {context_len}")
     logging.debug(f"ALL DEPENDENCIES TOKENS LENGTH: {sum(dependent_functions_tokens)}")
-    for function_source, source_len in zip(
-            dependent_functions_sources, dependent_functions_tokens
-    ):
+    for function_source, source_len in zip(dependent_functions_sources, dependent_functions_tokens):
         if context_len + source_len <= max_tokens:
             context_list.append(function_source)
             context_len += source_len

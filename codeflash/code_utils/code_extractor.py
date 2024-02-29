@@ -49,7 +49,7 @@ def get_code(function_to_optimize: FunctionToOptimize) -> Optional[str]:
 
         return None
 
-    with open(file_path, "r") as file:
+    with open(file_path, "r", encoding="utf8") as file:
         source_code = file.read()
 
     module_node = ast.parse(source_code)
@@ -90,7 +90,7 @@ def get_code(function_to_optimize: FunctionToOptimize) -> Optional[str]:
 def get_code_no_skeleton(file_path: str, target_name: str) -> Optional[str]:
     """Returns the code for a function in a file. Irrespective of class skeleton."""
 
-    with open(file_path, "r") as file:
+    with open(file_path, "r", encoding="utf8") as file:
         source_code = file.read()
 
     module_node = ast.parse(source_code)
