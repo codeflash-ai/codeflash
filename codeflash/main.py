@@ -393,11 +393,12 @@ class Optimizer:
 
                         test_files = function_to_tests.get(module_path + "." + function_name)
                         existing_tests = ""
-                        for test_file in test_files:
-                            with open(test_file.test_file, "r", encoding="utf8") as f:
-                                new_test = "".join(f.readlines())
-                                if new_test not in existing_tests:
-                                    existing_tests += new_test
+                        if test_files:
+                            for test_file in test_files:
+                                with open(test_file.test_file, "r", encoding="utf8") as f:
+                                    new_test = "".join(f.readlines())
+                                    if new_test not in existing_tests:
+                                        existing_tests += new_test
 
                         check_create_pr(
                             optimize_all=self.args.all,
