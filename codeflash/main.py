@@ -135,6 +135,7 @@ class Optimizer:
             function=self.args.function,
             test_cfg=self.test_cfg,
             ignore_paths=self.args.ignore_paths,
+            project_root=self.args.project_root,
         )
 
         test_files_created = set()
