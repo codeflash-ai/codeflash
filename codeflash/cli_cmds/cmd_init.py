@@ -291,13 +291,17 @@ def check_for_toml_or_setup_file() -> Optional[str]:
             ph("cli-created-pyproject-toml")
         else:
             click.echo("⏩️ Skipping pyproject.toml creation.")
-            click.echo(
-                "See https://app.codeflash.ai/app/getting-started for further help getting started with CodeFlash!"
-            )
-            click.echo("Exiting...")
-            sys.exit(1)
+            apologize_and_exit()
     click.echo()
     return project_name
+
+
+def apologize_and_exit():
+    click.echo(
+        "💡 If you're having trouble, see https://app.codeflash.ai/app/getting-started for further help getting started with CodeFlash!"
+    )
+    click.echo("Exiting...")
+    sys.exit(1)
 
 
 # Ask if the user wants CodeFlash to optimize new GitHub PRs
@@ -400,6 +404,7 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
             f"I couln't find a pyproject.toml in the current directory.\n"
             f"Please create it by running `poetry init`, or run `codeflash init` again from a different project directory."
         )
+        apologize_and_exit()
 
     codeflash_section = tomlkit.table()
     codeflash_section["module-root"] = setup_info["module_root"]
