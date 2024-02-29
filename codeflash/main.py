@@ -391,13 +391,14 @@ class Optimizer:
                         logging.info(f"⚡️ Optimization successful! 📄 {function_name} in {path}")
                         logging.info(f"📈 {explanation_final.perf_improvement_line}")
 
-                        test_files = function_to_tests[module_path + "." + function_name]
+                        test_files = function_to_tests.get(module_path + "." + function_name)
                         existing_tests = ""
-                        for test_file in test_files:
-                            with open(test_file.test_file, "r", encoding="utf8") as f:
-                                new_test = "".join(f.readlines())
-                                if new_test not in existing_tests:
-                                    existing_tests += new_test
+                        if test_files:
+                            for test_file in test_files:
+                                with open(test_file.test_file, "r", encoding="utf8") as f:
+                                    new_test = "".join(f.readlines())
+                                    if new_test not in existing_tests:
+                                        existing_tests += new_test
 
                         check_create_pr(
                             optimize_all=self.args.all,
@@ -549,6 +550,10 @@ class Optimizer:
         #  if they are different, then we can't optimize this function because it is a non-deterministic function
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = str(0)
+        if "PYTHONPATH" not in test_env:
+            test_env["PYTHONPATH"] = self.args.project_root
+        else:
+            test_env["PYTHONPATH"] += os.pathsep + self.args.project_root
         cumulative_test_runtime = 0
         cumulative_test_runs = 0
         first_run = True
@@ -654,6 +659,10 @@ class Optimizer:
         times_run = 0
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_index)
+        if "PYTHONPATH" not in test_env:
+            test_env["PYTHONPATH"] = self.args.project_root
+        else:
+            test_env["PYTHONPATH"] += os.pathsep + self.args.project_root
         cumulative_test_runtime = 0
         cumulative_test_runs = 0
         first_run = True
