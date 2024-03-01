@@ -104,7 +104,8 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
                 raise Exception
         except Exception as e:
             logging.error(
-                f"Could not find the CodeFlash GitHub App installed on the repository {owner}/{repo}. "
+                f"Could not find the CodeFlash GitHub App installed on the repository {owner}/{repo} or the GitHub"
+                f" account linked to your CODEFLASH_API_KEY does not have access to the repository {owner}/{repo}. "
                 "Please install the CodeFlash GitHub App on your repository to use --all."
                 " Instructions at https://app.codeflash.ai \n"
                 "Exiting..."
