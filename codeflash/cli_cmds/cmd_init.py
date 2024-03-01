@@ -162,7 +162,7 @@ def collect_setup_info(setup_info: dict[str, str]):
     if tests_root == create_for_me_option:
         tests_root = os.path.join(curdir, default_tests_subdir)
         os.mkdir(tests_root)
-        click.echo(f"✅ Created directory {tests_root}/")
+        click.echo(f"✅ Created directory {tests_root}/\n")
     setup_info["tests_root"] = os.path.relpath(tests_root, curdir)
     ph("cli-tests-root-provided")
 
@@ -266,36 +266,48 @@ def check_for_toml_or_setup_file() -> Optional[str]:
         click.echo(
             f"💡 I couldn't find a pyproject.toml in the current directory ({curdir}).\n"
             "(make sure you're running `codeflash init` from your project's root directory!)\n"
-            f"I need your project to have a pyproject.toml file to store configuration settings."
+            f"I need this file to store my configuration settings."
         )
         ph("cli-no-pyproject-toml-or-setup-py")
 
         # Create a pyproject.toml file because it doesn't exist
         create_toml = inquirer.confirm(
-            f"Do you want to run `poetry init` to create it?",
+            f"Do you want me to create a pyproject.toml file in the current directory?",
             default=True,
             show_default=False,
         )
         if create_toml:
-            # Check if Poetry is installed, if not, install it using pip
-            poetry_check = subprocess.run(["poetry", "--version"], capture_output=True, text=True)
-            if poetry_check.returncode != 0:
-                click.echo("Poetry is not installed. Installing Poetry...")
-                subprocess.run(["pip", "install", "poetry"], check=True)
-            subprocess.run(["poetry", "init"], cwd=curdir)
-            # Check if the pyproject.toml file was created
-            if os.path.exists(pyproject_toml_path):
+            ph("cli-create-pyproject-toml")
+            # Define a minimal pyproject.toml content
+            new_pyproject_toml = tomlkit.document()
+            new_pyproject_toml["tool"] = {"codeflash": {}}
+            try:
+                with open(pyproject_toml_path, "w", encoding="utf8") as pyproject_file:
+                    pyproject_file.write(tomlkit.dumps(new_pyproject_toml))
+
+                # Check if the pyproject.toml file was created
+                if os.path.exists(pyproject_toml_path):
+                    click.echo(f"✅ Created a pyproject.toml file at {pyproject_toml_path}")
+                    click.pause()
+                ph("cli-created-pyproject-toml")
+            except IOError as e:
                 click.echo(
-                    f"✅ Poetry init complete! Created a pyproject.toml file at {pyproject_toml_path}"
+                    "❌ Failed to create pyproject.toml. Please check your disk permissions and available space."
                 )
-                click.pause()
-            ph("cli-created-pyproject-toml")
+                apologize_and_exit()
         else:
-            click.echo("See https://app.codeflash.ai/app/getting-started for more details!")
-            click.echo("Exiting...")
-            sys.exit(1)
+            click.echo("⏩️ Skipping pyproject.toml creation.")
+            apologize_and_exit()
     click.echo()
     return project_name
+
+
+def apologize_and_exit():
+    click.echo(
+        "💡 If you're having trouble, see https://app.codeflash.ai/app/getting-started for further help getting started with CodeFlash!"
+    )
+    click.echo("Exiting...")
+    sys.exit(1)
 
 
 # Ask if the user wants CodeFlash to optimize new GitHub PRs
@@ -398,6 +410,7 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
             f"I couln't find a pyproject.toml in the current directory.\n"
             f"Please create it by running `poetry init`, or run `codeflash init` again from a different project directory."
         )
+        apologize_and_exit()
 
     codeflash_section = tomlkit.table()
     codeflash_section["module-root"] = setup_info["module_root"]
