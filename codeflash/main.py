@@ -395,7 +395,7 @@ class Optimizer:
                         function_name = module_path + "." + function_name
                         existing_tests = ""
                         if function_name in function_to_tests:
-                            test_files = function_to_tests[module_path + "." + function_name]
+                            test_files = function_to_tests[function_name]
                             for test_file in test_files:
                                 with open(test_file.test_file, "r") as f:
                                     new_test = "".join(f.readlines())
