@@ -1,7 +1,7 @@
 import ast
 import logging
 import os
-from typing import NoReturn
+from typing import NoReturn, Union
 
 import jedi
 import tiktoken
@@ -55,14 +55,14 @@ def get_type_annotation_context(
     ast_parents: list[str] = []
 
     def visit_children(
-        node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Module, node_parents
+        node: Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module], node_parents
     ) -> NoReturn:
         for child in ast.iter_child_nodes(node):
             visit(child, node_parents)
 
     def visit(
-        node: ast.AST | ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Module,
-        node_parents: list[FunctionParent | str],
+        node: Union[ast.AST, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module],
+        node_parents: list[Union[FunctionParent, str]],
     ) -> NoReturn:
         if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
