@@ -12,6 +12,7 @@ from typing import Tuple, Union
 
 import libcst as cst
 
+from codeflash.analytics.sentry import init_sentry
 from codeflash.api.aiservice import optimize_python_code
 from codeflash.cli_cmds.cli import process_cmd_args
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
@@ -834,6 +835,7 @@ class Optimizer:
 
 def main():
     """Entry point for the codeflash command-line interface."""
+    init_sentry()
     Optimizer(parse_args()).run()
 
 
