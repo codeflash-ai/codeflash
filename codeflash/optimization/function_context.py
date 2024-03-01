@@ -1,7 +1,7 @@
 import ast
 import logging
 import os
-from typing import List
+from typing import NoReturn, Union
 
 import jedi
 import tiktoken
@@ -10,7 +10,7 @@ from pydantic.dataclasses import dataclass
 
 from codeflash.code_utils.code_extractor import get_code_no_skeleton, get_code
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize, FunctionParent
 
 
 def belongs_to_class(name: Name, class_name: str) -> bool:
@@ -45,20 +45,25 @@ class Source:
 
 def get_type_annotation_context(
     function: FunctionToOptimize, jedi_script: jedi.Script, project_root_path: str
-) -> List[tuple[Source]]:
-    function_name = function.function_name
-    file_path = function.file_path
+) -> list[tuple[Source, str, str]]:
+    function_name: str = function.function_name
+    file_path: str = function.file_path
     with open(file_path, "r", encoding="utf8") as file:
-        file_contents = file.read()
-    module = ast.parse(file_contents)
-    sources = []
+        file_contents: str = file.read()
+    module: ast.Module = ast.parse(file_contents)
+    sources: list[tuple[Source, str, str]] = []
     ast_parents: list[str] = []
 
-    def visit_children(node, node_parents):
+    def visit_children(
+        node: Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module], node_parents
+    ) -> NoReturn:
         for child in ast.iter_child_nodes(node):
             visit(child, node_parents)
 
-    def visit(node, node_parents):
+    def visit(
+        node: Union[ast.AST, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module],
+        node_parents: list[Union[FunctionParent, str]],
+    ) -> NoReturn:
         if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if node.name == function_name and node_parents == function.parents:
@@ -68,7 +73,7 @@ def get_type_annotation_context(
                             line_no = arg.annotation.lineno
                             col_no = arg.annotation.col_offset
                             try:
-                                definition: List[Name] = jedi_script.goto(
+                                definition: list[Name] = jedi_script.goto(
                                     line=line_no,
                                     column=col_no,
                                     follow_imports=True,
@@ -104,6 +109,9 @@ def get_type_annotation_context(
                                                     source_code,
                                                 ),
                                                 definition_path,
+                                                definition[0].full_name.removeprefix(
+                                                    definition[0].module_name + "."
+                                                ),
                                             )
                                         )
             if not isinstance(node, ast.Module):
@@ -119,11 +127,11 @@ def get_type_annotation_context(
 
 def get_function_variables_definitions(
     function_to_optimize: FunctionToOptimize, project_root_path: str
-) -> List[tuple[Source, str, str]]:
+) -> list[tuple[Source, str, str]]:
     function_name = function_to_optimize.function_name
     file_path = function_to_optimize.file_path
     script = jedi.Script(path=file_path, project=jedi.Project(path=project_root_path))
-    sources = []
+    sources: list[tuple[Source, str, str]] = []
     # TODO: The function name condition can be stricter so that it does not clash with other class names etc.
     # TODO: The function could have been imported as some other name,
     #  we should be checking for the translation as well. Also check for the original function name.
@@ -142,7 +150,7 @@ def get_function_variables_definitions(
 
     for name in names:
         try:
-            definitions: List[Name] = script.goto(
+            definitions: list[Name] = script.goto(
                 line=name.line,
                 column=name.column,
                 follow_imports=True,

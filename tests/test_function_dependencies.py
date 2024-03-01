@@ -1,4 +1,5 @@
 import pathlib
+from dataclasses import dataclass
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize, FunctionParent
 from codeflash.optimization.function_context import get_function_variables_definitions
@@ -102,4 +103,31 @@ def test_recursive_dependency():
     assert (
         dependent_functions[0][0].definition.full_name
         == "test_function_dependencies.calculate_something"
+    )
+
+
+@dataclass
+class MyData:
+    MyInt: int
+
+
+def calculate_something_ann(data):
+    return data + 1
+
+
+def simple_function_with_one_dep_ann(data: MyData):
+    return calculate_something_ann(data)
+
+
+def test_simple_dependencies_ann():
+    file_path = pathlib.Path(__file__).resolve()
+    dependent_functions = get_function_variables_definitions(
+        FunctionToOptimize("simple_function_with_one_dep_ann", str(file_path), []),
+        str(file_path.parent.resolve()),
+    )
+    assert len(dependent_functions) == 2
+    assert dependent_functions[0][0].definition.full_name == "test_function_dependencies.MyData"
+    assert (
+        dependent_functions[1][0].definition.full_name
+        == "test_function_dependencies.calculate_something_ann"
     )
