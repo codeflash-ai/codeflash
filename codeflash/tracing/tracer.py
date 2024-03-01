@@ -81,7 +81,7 @@ class Tracer:
         test_file_path = get_test_file_path(
             self.config["tests_root"], function_path, test_type="replay"
         )
-        with open(test_file_path, "w") as file:
+        with open(test_file_path, "w", encoding="utf8") as file:
             file.write(replay_test)
 
         logging.info(
