@@ -281,14 +281,20 @@ def check_for_toml_or_setup_file() -> Optional[str]:
             # Define a minimal pyproject.toml content
             new_pyproject_toml = tomlkit.document()
             new_pyproject_toml["tool"] = {"codeflash": {}}
-            with open(pyproject_toml_path, "w", encoding="utf8") as pyproject_file:
-                pyproject_file.write(tomlkit.dumps(new_pyproject_toml))
+            try:
+                with open(pyproject_toml_path, "w", encoding="utf8") as pyproject_file:
+                    pyproject_file.write(tomlkit.dumps(new_pyproject_toml))
 
-            # Check if the pyproject.toml file was created
-            if os.path.exists(pyproject_toml_path):
-                click.echo(f"✅ Created a pyproject.toml file at {pyproject_toml_path}")
-                click.pause()
-            ph("cli-created-pyproject-toml")
+                # Check if the pyproject.toml file was created
+                if os.path.exists(pyproject_toml_path):
+                    click.echo(f"✅ Created a pyproject.toml file at {pyproject_toml_path}")
+                    click.pause()
+                ph("cli-created-pyproject-toml")
+            except IOError as e:
+                click.echo(
+                    "❌ Failed to create pyproject.toml. Please check your disk permissions and available space."
+                )
+                apologize_and_exit()
         else:
             click.echo("⏩️ Skipping pyproject.toml creation.")
             apologize_and_exit()
