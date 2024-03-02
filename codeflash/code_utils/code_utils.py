@@ -38,7 +38,11 @@ def get_imports_from_file(
         with open(file_path, "r", encoding="utf8") as file:
             file_string = file.read()
     if file_ast is None:
-        file_ast = ast.parse(file_string)
+        try:
+            file_ast = ast.parse(file_string)
+        except SyntaxError as e:
+            logging.error(f"Syntax error in code: {e}")
+            return []
     imports = []
     for node in ast.walk(file_ast):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -46,13 +50,18 @@ def get_imports_from_file(
     return imports
 
 
-def get_all_function_names(code: str) -> List[str]:
-    module = ast.parse(code)
+def get_all_function_names(code: str) -> Tuple[bool, List[str]]:
+    try:
+        module = ast.parse(code)
+    except SyntaxError as e:
+        logging.error(f"Syntax error in code: {e}")
+        return False, []
+
     function_names = []
     for node in ast.walk(module):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             function_names.append(node.name)
-    return function_names
+    return True, function_names
 
 
 def get_run_tmp_file(file_path: str) -> str:

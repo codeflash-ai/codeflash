@@ -51,8 +51,11 @@ def get_code(function_to_optimize: FunctionToOptimize) -> Optional[str]:
 
     with open(file_path, "r", encoding="utf8") as file:
         source_code = file.read()
-
-    module_node = ast.parse(source_code)
+    try:
+        module_node = ast.parse(source_code)
+    except SyntaxError as e:
+        logging.error(f"get_code - Syntax error in code: {e}")
+        return None
     if len(function_to_optimize.parents) == 1:
         if function_to_optimize.parents[0].type == "ClassDef":
             name_parts = [function_to_optimize.parents[0].name, function_to_optimize.function_name]
@@ -92,8 +95,11 @@ def get_code_no_skeleton(file_path: str, target_name: str) -> Optional[str]:
 
     with open(file_path, "r", encoding="utf8") as file:
         source_code = file.read()
-
-    module_node = ast.parse(source_code)
+    try:
+        module_node = ast.parse(source_code)
+    except SyntaxError as e:
+        logging.error(f"get_code_no_skeleton - Syntax error in code: {e}")
+        return None
     name_parts = target_name.split(".")
     target_node = None
     for node in ast.walk(module_node):

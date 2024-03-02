@@ -1,6 +1,6 @@
 import ast
 from _ast import ClassDef
-from typing import Any, Optional
+from typing import Any, Optional, Tuple, Bool
 
 from codeflash.code_utils.code_utils import module_name_from_file_path, get_run_tmp_file
 
@@ -224,10 +224,14 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
                     self.imported_as_function_name = alias.asname
 
 
-def inject_profiling_into_existing_test(test_path, function_name, root_path):
+def inject_profiling_into_existing_test(test_path, function_name, root_path) -> Tuple[bool, str]:
     with open(test_path, "r", encoding="utf8") as f:
         test_code = f.read()
-    tree = ast.parse(test_code)
+    try:
+        tree = ast.parse(test_code)
+    except SyntaxError as e:
+        print(f"Syntax error in code: {e}")
+        return False, None
     # TODO: Pass the full name of function here, otherwise we can run into namespace clashes
     import_visitor = FunctionImportedAsVisitor(function_name)
     import_visitor.visit(tree)
@@ -243,7 +247,7 @@ def inject_profiling_into_existing_test(test_path, function_name, root_path):
     ]
     tree.body = new_imports + [create_wrapper_function(function_name, module_path)] + tree.body
 
-    return ast.unparse(tree)
+    return True, ast.unparse(tree)
 
 
 def create_wrapper_function(function_name, module_path):

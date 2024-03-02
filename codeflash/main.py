@@ -3,14 +3,13 @@ solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 """
 
 import concurrent.futures
+import libcst as cst
 import logging
 import os
 import pathlib
 from argparse import ArgumentParser, SUPPRESS, Namespace
 from collections import defaultdict
 from typing import Tuple, Union
-
-import libcst as cst
 
 from codeflash.api.aiservice import optimize_python_code
 from codeflash.cli_cmds.cli import process_cmd_args
@@ -161,116 +160,204 @@ class Optimizer:
                 with open(path, "r", encoding="utf8") as f:
                     original_code = f.read()
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
-                    function_name = (
-                        function_to_optimize.function_name
-                        if function_to_optimize.parents == []
-                        else ".".join(
-                            [
-                                function_to_optimize.parents[0].name,
-                                function_to_optimize.function_name,
-                            ]
+                    try:
+                        function_name = (
+                            function_to_optimize.function_name
+                            if function_to_optimize.parents == []
+                            else ".".join(
+                                [
+                                    function_to_optimize.parents[0].name,
+                                    function_to_optimize.function_name,
+                                ]
+                            )
                         )
-                    )
-                    function_iterator_count += 1
-                    logging.info(
-                        f"Optimizing function {function_iterator_count} of {num_modified_functions} - {function_name}"
-                    )
-                    winning_test_results = None
-                    # remove left overs from previous run
-                    pathlib.Path(get_run_tmp_file("test_return_values_0.bin")).unlink(
-                        missing_ok=True
-                    )
-                    pathlib.Path(get_run_tmp_file("test_return_values_0.sqlite")).unlink(
-                        missing_ok=True
-                    )
-                    code_to_optimize = get_code(function_to_optimize)
-                    if code_to_optimize is None:
-                        logging.error("Could not find function to optimize.")
-                        continue
-
-                    preexisting_functions = get_all_function_names(code_to_optimize)
-
-                    (
-                        code_to_optimize_with_dependents,
-                        dependent_functions,
-                    ) = get_constrained_function_context_and_dependent_functions(
-                        function_to_optimize, self.args.project_root, code_to_optimize
-                    )
-                    preexisting_functions.extend(
-                        [fn[0].full_name.split(".")[-1] for fn in dependent_functions]
-                    )
-                    dependent_functions_by_module_abspath = defaultdict(set)
-                    for _, module_abspath, qualified_name in dependent_functions:
-                        dependent_functions_by_module_abspath[module_abspath].add(qualified_name)
-                    original_dependent_code = {}
-                    for module_abspath in dependent_functions_by_module_abspath.keys():
-                        with open(module_abspath, "r", encoding="utf8") as f:
-                            dependent_code = f.read()
-                            original_dependent_code[module_abspath] = dependent_code
-                    logging.info(f"Code to be optimized:\n{code_to_optimize_with_dependents}")
-                    module_path = module_name_from_file_path(path, self.args.project_root)
-
-                    instrumented_unittests_created_for_function = self.prepare_existing_tests(
-                        function_name=function_name,
-                        module_path=module_path,
-                        function_to_tests=function_to_tests,
-                    )
-                    instrumented_unittests_created.update(
-                        instrumented_unittests_created_for_function
-                    )
-
-                    (
-                        success,
-                        generated_original_test_source,
-                        instrumented_test_source,
-                        optimizations,
-                    ) = self.generate_tests_and_optimizations(
-                        code_to_optimize_with_dependents,
-                        function_to_optimize,
-                        dependent_functions,
-                        module_path,
-                    )
-                    if not success:
-                        continue
-
-                    generated_tests_path = get_test_file_path(
-                        self.args.tests_root, function_to_optimize.function_name, 0
-                    )
-                    with open(generated_tests_path, "w", encoding="utf8") as file:
-                        file.write(instrumented_test_source)
-
-                    test_files_created.add(generated_tests_path)
-                    (
-                        success,
-                        original_gen_results,
-                        overall_original_test_results,
-                        original_runtime,
-                    ) = self.establish_original_code_baseline(
-                        function_name,
-                        instrumented_unittests_created_for_function,
-                        generated_tests_path,
-                    )
-                    if not success:
-                        continue
-                    best_runtime = original_runtime  # The fastest code runtime until now
-                    logging.info("Optimizing code ...")
-                    # TODO: Postprocess the optimized function to include the original docstring and such
-
-                    best_optimization = []
-                    for i, (optimized_code, explanation) in enumerate(optimizations):
-                        j = i + 1
-                        if optimized_code is None:
-                            continue
+                        function_iterator_count += 1
+                        logging.info(
+                            f"Optimizing function {function_iterator_count} of {num_modified_functions} - {function_name}"
+                        )
+                        winning_test_results = None
                         # remove left overs from previous run
-                        pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.bin")).unlink(
+                        pathlib.Path(get_run_tmp_file("test_return_values_0.bin")).unlink(
                             missing_ok=True
                         )
-                        pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.sqlite")).unlink(
+                        pathlib.Path(get_run_tmp_file("test_return_values_0.sqlite")).unlink(
                             missing_ok=True
                         )
-                        logging.info("Optimized candidate:")
-                        logging.info(optimized_code)
-                        try:
+                        code_to_optimize = get_code(function_to_optimize)
+                        if code_to_optimize is None:
+                            logging.error("Could not find function to optimize.")
+                            continue
+
+                        success, preexisting_functions = get_all_function_names(code_to_optimize)
+                        if not success:
+                            logging.error("Error in parsing the code, skipping optimization.")
+                            continue
+
+                        (
+                            code_to_optimize_with_dependents,
+                            dependent_functions,
+                        ) = get_constrained_function_context_and_dependent_functions(
+                            function_to_optimize, self.args.project_root, code_to_optimize
+                        )
+                        preexisting_functions.extend(
+                            [fn[0].full_name.split(".")[-1] for fn in dependent_functions]
+                        )
+                        dependent_functions_by_module_abspath = defaultdict(set)
+                        for _, module_abspath, qualified_name in dependent_functions:
+                            dependent_functions_by_module_abspath[module_abspath].add(
+                                qualified_name
+                            )
+                        original_dependent_code = {}
+                        for module_abspath in dependent_functions_by_module_abspath.keys():
+                            with open(module_abspath, "r", encoding="utf8") as f:
+                                dependent_code = f.read()
+                                original_dependent_code[module_abspath] = dependent_code
+                        logging.info(f"Code to be optimized:\n{code_to_optimize_with_dependents}")
+                        module_path = module_name_from_file_path(path, self.args.project_root)
+
+                        instrumented_unittests_created_for_function = self.prepare_existing_tests(
+                            function_name=function_name,
+                            module_path=module_path,
+                            function_to_tests=function_to_tests,
+                        )
+                        instrumented_unittests_created.update(
+                            instrumented_unittests_created_for_function
+                        )
+
+                        (
+                            success,
+                            generated_original_test_source,
+                            instrumented_test_source,
+                            optimizations,
+                        ) = self.generate_tests_and_optimizations(
+                            code_to_optimize_with_dependents,
+                            function_to_optimize,
+                            dependent_functions,
+                            module_path,
+                        )
+                        if not success:
+                            continue
+
+                        generated_tests_path = get_test_file_path(
+                            self.args.tests_root, function_to_optimize.function_name, 0
+                        )
+                        with open(generated_tests_path, "w", encoding="utf8") as file:
+                            file.write(instrumented_test_source)
+
+                        test_files_created.add(generated_tests_path)
+                        (
+                            success,
+                            original_gen_results,
+                            overall_original_test_results,
+                            original_runtime,
+                        ) = self.establish_original_code_baseline(
+                            function_name,
+                            instrumented_unittests_created_for_function,
+                            generated_tests_path,
+                        )
+                        if not success:
+                            continue
+                        best_runtime = original_runtime  # The fastest code runtime until now
+                        logging.info("Optimizing code ...")
+                        # TODO: Postprocess the optimized function to include the original docstring and such
+
+                        best_optimization = []
+                        for i, (optimized_code, explanation) in enumerate(optimizations):
+                            j = i + 1
+                            if optimized_code is None:
+                                continue
+                            # remove left overs from previous run
+                            pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.bin")).unlink(
+                                missing_ok=True
+                            )
+                            pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.sqlite")).unlink(
+                                missing_ok=True
+                            )
+                            logging.info("Optimized candidate:")
+                            logging.info(optimized_code)
+                            try:
+                                replace_function_definitions_in_module(
+                                    [function_name],
+                                    optimized_code,
+                                    path,
+                                    preexisting_functions,
+                                )
+                                for (
+                                    module_abspath,
+                                    qualified_names,
+                                ) in dependent_functions_by_module_abspath.items():
+                                    replace_function_definitions_in_module(
+                                        list(qualified_names),
+                                        optimized_code,
+                                        module_abspath,
+                                        [],
+                                    )
+                            except (
+                                ValueError,
+                                SyntaxError,
+                                cst.ParserSyntaxError,
+                                AttributeError,
+                            ) as e:
+                                logging.error(e)
+                                with open(path, "w", encoding="utf8") as f:
+                                    f.write(original_code)
+                                for module_abspath in dependent_functions_by_module_abspath.keys():
+                                    with open(module_abspath, "w", encoding="utf8") as f:
+                                        f.write(original_dependent_code[module_abspath])
+                                continue
+
+                            (
+                                success,
+                                times_run,
+                                best_test_runtime,
+                                best_test_results,
+                            ) = self.run_optimized_candidate(
+                                optimization_index=j,
+                                instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
+                                overall_original_test_results=overall_original_test_results,
+                                original_gen_results=original_gen_results,
+                                generated_tests_path=generated_tests_path,
+                                best_runtime_until_now=best_runtime,
+                            )
+
+                            if success:
+                                logging.info(
+                                    f"Candidate runtime measured over {times_run} run{'s' if times_run > 1 else ''}: "
+                                    f"{humanize_runtime(best_test_runtime)}, speedup ratio = "
+                                    f"{((original_runtime - best_test_runtime) / best_test_runtime):.3f}"
+                                )
+                                if (
+                                    ((original_runtime - best_test_runtime) / best_test_runtime)
+                                    > self.args.minimum_performance_gain
+                                ) and best_test_runtime < best_runtime:
+                                    logging.info(
+                                        "This candidate is better than the previous best candidate."
+                                    )
+
+                                    logging.info(
+                                        f"Original runtime: {humanize_runtime(original_runtime)} Best test runtime: "
+                                        f"{humanize_runtime(best_test_runtime)}, ratio = "
+                                        f"{((original_runtime - best_test_runtime) / best_test_runtime)}"
+                                    )
+                                    best_optimization = [
+                                        optimized_code,
+                                        explanation,
+                                        dependent_functions,
+                                    ]
+                                    best_runtime = best_test_runtime
+                                    winning_test_results = best_test_results
+                            with open(path, "w", encoding="utf8") as f:
+                                f.write(original_code)
+                            for module_abspath in dependent_functions_by_module_abspath.keys():
+                                with open(module_abspath, "w", encoding="utf8") as f:
+                                    f.write(original_dependent_code[module_abspath])
+                            logging.info("----------------")
+                        logging.info(f"Best optimization: {best_optimization[0:2]}")
+                        if best_optimization:
+                            found_atleast_one_optimization = True
+                            logging.info(f"Best candidate:\n{best_optimization[0]}")
+
+                            optimized_code = best_optimization[0]
                             replace_function_definitions_in_module(
                                 [function_name],
                                 optimized_code,
@@ -287,143 +374,69 @@ class Optimizer:
                                     module_abspath,
                                     [],
                                 )
-                        except (
-                            ValueError,
-                            SyntaxError,
-                            cst.ParserSyntaxError,
-                            AttributeError,
-                        ) as e:
-                            logging.error(e)
-                            with open(path, "w", encoding="utf8") as f:
-                                f.write(original_code)
-                            for module_abspath in dependent_functions_by_module_abspath.keys():
-                                with open(module_abspath, "w", encoding="utf8") as f:
-                                    f.write(original_dependent_code[module_abspath])
-                            continue
+                            explanation_final = Explanation(
+                                raw_explanation_message=best_optimization[1],
+                                winning_test_results=winning_test_results,
+                                original_runtime_ns=original_runtime,
+                                best_runtime_ns=best_runtime,
+                                function_name=function_name,
+                                path=path,
+                            )
+                            logging.info(f"EXPLANATION\n{explanation_final.to_console_string()}")
 
-                        (
-                            success,
-                            times_run,
-                            best_test_runtime,
-                            best_test_results,
-                        ) = self.run_optimized_candidate(
-                            optimization_index=j,
-                            instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
-                            overall_original_test_results=overall_original_test_results,
-                            original_gen_results=original_gen_results,
-                            generated_tests_path=generated_tests_path,
-                            best_runtime_until_now=best_runtime,
-                        )
-
-                        if success:
+                            new_code = lint_code(path)
+                            new_dependent_code: dict[str, str] = {
+                                module_abspath: lint_code(module_abspath)
+                                for module_abspath in dependent_functions_by_module_abspath.keys()
+                            }
                             logging.info(
-                                f"Candidate runtime measured over {times_run} run{'s' if times_run > 1 else ''}: "
-                                f"{humanize_runtime(best_test_runtime)}, speedup ratio = "
-                                f"{((original_runtime - best_test_runtime) / best_test_runtime):.3f}"
+                                f"Optimization was validated for correctness by running the following tests - "
+                                f"\n{generated_original_test_source}"
                             )
-                            if (
-                                ((original_runtime - best_test_runtime) / best_test_runtime)
-                                > self.args.minimum_performance_gain
-                            ) and best_test_runtime < best_runtime:
-                                logging.info(
-                                    "This candidate is better than the previous best candidate."
-                                )
 
-                                logging.info(
-                                    f"Original runtime: {humanize_runtime(original_runtime)} Best test runtime: "
-                                    f"{humanize_runtime(best_test_runtime)}, ratio = "
-                                    f"{((original_runtime - best_test_runtime) / best_test_runtime)}"
-                                )
-                                best_optimization = [
-                                    optimized_code,
-                                    explanation,
-                                    dependent_functions,
-                                ]
-                                best_runtime = best_test_runtime
-                                winning_test_results = best_test_results
-                        with open(path, "w", encoding="utf8") as f:
-                            f.write(original_code)
-                        for module_abspath in dependent_functions_by_module_abspath.keys():
-                            with open(module_abspath, "w", encoding="utf8") as f:
-                                f.write(original_dependent_code[module_abspath])
-                        logging.info("----------------")
-                    logging.info(f"Best optimization: {best_optimization[0:2]}")
-                    if best_optimization:
-                        found_atleast_one_optimization = True
-                        logging.info(f"Best candidate:\n{best_optimization[0]}")
+                            logging.info(f"⚡️ Optimization successful! 📄 {function_name} in {path}")
+                            logging.info(f"📈 {explanation_final.perf_improvement_line}")
 
-                        optimized_code = best_optimization[0]
-                        replace_function_definitions_in_module(
-                            [function_name],
-                            optimized_code,
-                            path,
-                            preexisting_functions,
-                        )
-                        for (
-                            module_abspath,
-                            qualified_names,
-                        ) in dependent_functions_by_module_abspath.items():
-                            replace_function_definitions_in_module(
-                                list(qualified_names),
-                                optimized_code,
-                                module_abspath,
-                                [],
+                            test_files = function_to_tests.get(module_path + "." + function_name)
+                            existing_tests = ""
+                            if test_files:
+                                for test_file in test_files:
+                                    with open(test_file.test_file, "r", encoding="utf8") as f:
+                                        new_test = "".join(f.readlines())
+                                        if new_test not in existing_tests:
+                                            existing_tests += new_test
+
+                            check_create_pr(
+                                optimize_all=self.args.all,
+                                path=path,
+                                original_code=original_dependent_code | {path: original_code},
+                                new_code=new_dependent_code | {path: new_code},
+                                explanation=explanation_final,
+                                existing_tests_source=existing_tests,
+                                generated_original_test_source=generated_original_test_source,
                             )
-                        explanation_final = Explanation(
-                            raw_explanation_message=best_optimization[1],
-                            winning_test_results=winning_test_results,
-                            original_runtime_ns=original_runtime,
-                            best_runtime_ns=best_runtime,
-                            function_name=function_name,
-                            path=path,
+                            if self.args.all or env_utils.get_pr_number():
+                                # Reverting to original code, because optimizing functions in a sequence can lead to
+                                #  a. Error propagation, where error in one function can cause the next optimization to fail
+                                #  b. Performance estimates become unstable, as the runtime of an optimization might be
+                                #     dependent on the runtime of the previous optimization
+                                with open(path, "w", encoding="utf8") as f:
+                                    f.write(original_code)
+                                for module_abspath in dependent_functions_by_module_abspath.keys():
+                                    with open(module_abspath, "w", encoding="utf8") as f:
+                                        f.write(original_dependent_code[module_abspath])
+                        # Delete all the generated tests to not cause any clutter.
+                        pathlib.Path(generated_tests_path).unlink(missing_ok=True)
+                        for test_paths in instrumented_unittests_created_for_function:
+                            pathlib.Path(test_paths).unlink(missing_ok=True)
+                    except KeyboardInterrupt:
+                        logging.info("Received keyboard interrupt, exiting ...")
+                        raise KeyboardInterrupt  # to let cleanup happen
+                    except Exception as e:
+                        logging.error(
+                            f"Error in optimizing function {function_to_optimize.function_name}: {e}"
                         )
-                        logging.info(f"EXPLANATION\n{explanation_final.to_console_string()}")
-
-                        new_code = lint_code(path)
-                        new_dependent_code: dict[str, str] = {
-                            module_abspath: lint_code(module_abspath)
-                            for module_abspath in dependent_functions_by_module_abspath.keys()
-                        }
-                        logging.info(
-                            f"Optimization was validated for correctness by running the following tests - "
-                            f"\n{generated_original_test_source}"
-                        )
-
-                        logging.info(f"⚡️ Optimization successful! 📄 {function_name} in {path}")
-                        logging.info(f"📈 {explanation_final.perf_improvement_line}")
-
-                        test_files = function_to_tests.get(module_path + "." + function_name)
-                        existing_tests = ""
-                        if test_files:
-                            for test_file in test_files:
-                                with open(test_file.test_file, "r", encoding="utf8") as f:
-                                    new_test = "".join(f.readlines())
-                                    if new_test not in existing_tests:
-                                        existing_tests += new_test
-
-                        check_create_pr(
-                            optimize_all=self.args.all,
-                            path=path,
-                            original_code=original_dependent_code | {path: original_code},
-                            new_code=new_dependent_code | {path: new_code},
-                            explanation=explanation_final,
-                            existing_tests_source=existing_tests,
-                            generated_original_test_source=generated_original_test_source,
-                        )
-                        if self.args.all or env_utils.get_pr_number():
-                            # Reverting to original code, because optimizing functions in a sequence can lead to
-                            #  a. Error propagation, where error in one function can cause the next optimization to fail
-                            #  b. Performance estimates become unstable, as the runtime of an optimization might be
-                            #     dependent on the runtime of the previous optimization
-                            with open(path, "w", encoding="utf8") as f:
-                                f.write(original_code)
-                            for module_abspath in dependent_functions_by_module_abspath.keys():
-                                with open(module_abspath, "w", encoding="utf8") as f:
-                                    f.write(original_dependent_code[module_abspath])
-                    # Delete all the generated tests to not cause any clutter.
-                    pathlib.Path(generated_tests_path).unlink(missing_ok=True)
-                    for test_paths in instrumented_unittests_created_for_function:
-                        pathlib.Path(test_paths).unlink(missing_ok=True)
+                        continue
             if not found_atleast_one_optimization:
                 logging.info("❌ No optimizations found.")
             elif self.args.all:
@@ -459,11 +472,13 @@ class Optimizer:
                 if tests_in_file.test_file in unique_original_test_files:
                     continue
                 relevant_test_files_count += 1
-                injected_test = inject_profiling_into_existing_test(
+                success, injected_test = inject_profiling_into_existing_test(
                     tests_in_file.test_file,
                     function_name,
                     self.args.project_root,
                 )
+                if not success:
+                    continue
                 new_test_path = (
                     os.path.splitext(tests_in_file.test_file)[0]
                     + "__perfinstrumented"

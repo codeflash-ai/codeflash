@@ -1,12 +1,11 @@
 import ast
+import jedi
 import logging
 import os
-from typing import NoReturn, Union
-
-import jedi
 import tiktoken
 from jedi.api.classes import Name
 from pydantic.dataclasses import dataclass
+from typing import NoReturn, Union
 
 from codeflash.code_utils.code_extractor import get_code_no_skeleton, get_code
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
@@ -50,7 +49,11 @@ def get_type_annotation_context(
     file_path: str = function.file_path
     with open(file_path, "r", encoding="utf8") as file:
         file_contents: str = file.read()
-    module: ast.Module = ast.parse(file_contents)
+    try:
+        module: ast.Module = ast.parse(file_contents)
+    except SyntaxError as e:
+        logging.error(f"get_type_annotation_context - Syntax error in code: {e}")
+        return []
     sources: list[tuple[Source, str, str]] = []
     ast_parents: list[str] = []
 
