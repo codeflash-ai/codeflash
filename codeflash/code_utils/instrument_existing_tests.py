@@ -1,6 +1,6 @@
 import ast
 from _ast import ClassDef
-from typing import Any, Optional, Tuple, Bool
+from typing import Any, Optional, Tuple
 
 from codeflash.code_utils.code_utils import module_name_from_file_path, get_run_tmp_file
 
