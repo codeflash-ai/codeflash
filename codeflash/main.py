@@ -431,7 +431,6 @@ class Optimizer:
                 logging.info("❌ No optimizations found.")
             elif self.args.all:
                 logging.info("✨ All functions have been optimized! ✨")
-
         finally:
             # TODO: Also revert the file/function being optimized if the process did not succeed
             for test_file in instrumented_unittests_created:
