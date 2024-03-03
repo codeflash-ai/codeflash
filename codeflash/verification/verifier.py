@@ -74,8 +74,12 @@ def generate_tests(
 
 
 def merge_unit_tests(unit_test_source: str, inspired_unit_tests: str, test_framework: str) -> str:
-    inspired_unit_tests_ast = ast.parse(inspired_unit_tests)
-    unit_test_source_ast = ast.parse(unit_test_source)
+    try:
+        inspired_unit_tests_ast = ast.parse(inspired_unit_tests)
+        unit_test_source_ast = ast.parse(unit_test_source)
+    except SyntaxError as e:
+        logging.error(f"Syntax error in code: {e}")
+        return unit_test_source
     import_list: list[ast.stmt] = list()
     modified_ast = ModifyInspiredTests(import_list, test_framework).visit(inspired_unit_tests_ast)
     if test_framework == "pytest":

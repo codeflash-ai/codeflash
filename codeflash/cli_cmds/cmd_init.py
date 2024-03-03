@@ -1,15 +1,14 @@
 import ast
+import click
+import inquirer
 import os
 import re
 import subprocess
 import sys
 import time
-from typing import Optional
-
-import click
-import inquirer
 import tomlkit
 from git import Repo
+from typing import Optional
 
 from codeflash.analytics.posthog import ph
 from codeflash.code_utils.env_utils import (
@@ -215,7 +214,10 @@ def detect_test_framework(curdir, tests_root) -> Optional[str]:
             if filename.endswith(".py"):
                 with open(os.path.join(tests_root, filename), "r", encoding="utf8") as file:
                     contents = file.read()
-                    node = ast.parse(contents)
+                    try:
+                        node = ast.parse(contents)
+                    except SyntaxError:
+                        continue
                     if any(
                         isinstance(item, ast.ClassDef)
                         and any(
