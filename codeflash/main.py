@@ -3,13 +3,14 @@ solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 """
 
 import concurrent.futures
-import libcst as cst
 import logging
 import os
 import pathlib
 from argparse import ArgumentParser, SUPPRESS, Namespace
 from collections import defaultdict
 from typing import Tuple, Union
+
+import libcst as cst
 
 from codeflash.api.aiservice import optimize_python_code
 from codeflash.cli_cmds.cli import process_cmd_args
@@ -30,10 +31,10 @@ from codeflash.code_utils.config_consts import (
     MAX_TEST_FUNCTION_RUNS,
     MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS,
 )
+from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.instrument_existing_tests import (
     inject_profiling_into_existing_test,
 )
-from codeflash.code_utils.linter import lint_code
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests, TestsInFile
 from codeflash.discovery.functions_to_optimize import (
@@ -384,9 +385,9 @@ class Optimizer:
                             )
                             logging.info(f"EXPLANATION\n{explanation_final.to_console_string()}")
 
-                            new_code = lint_code(path)
+                            new_code = format_code(self.args.formatter_cmd, path)
                             new_dependent_code: dict[str, str] = {
-                                module_abspath: lint_code(module_abspath)
+                                module_abspath: format_code(module_abspath)
                                 for module_abspath in dependent_functions_by_module_abspath.keys()
                             }
                             logging.info(
