@@ -1,9 +1,8 @@
+import git
 import logging
 import os
 import sys
 from argparse import Namespace
-
-import git
 
 from codeflash.api.cfapi import check_github_app_installed_on_repo
 from codeflash.cli_cmds.cmd_init import init_codeflash
@@ -46,6 +45,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
         "ignore_paths",
         "minimum_performance_gain",
         "pytest_cmd",
+        "formatter_cmd",
     ]
     for key in supported_keys:
         if key in pyproject_config:
