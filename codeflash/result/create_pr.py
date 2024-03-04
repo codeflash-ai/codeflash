@@ -1,5 +1,6 @@
 import logging
 import os.path
+import pathlib
 from typing import Optional
 
 from codeflash.api import cfapi
@@ -27,13 +28,13 @@ def check_create_pr(
     if pr_number is not None:
         logging.info(f"Suggesting changes to PR #{pr_number} ...")
         owner, repo = get_repo_owner_and_name()
-        relative_path = os.path.relpath(path, git_root_dir())
+        relative_path = str(pathlib.Path(os.path.relpath(path, git_root_dir())).as_posix())
         response = cfapi.suggest_changes(
             owner=owner,
             repo=repo,
             pr_number=pr_number,
             file_changes={
-                os.path.relpath(p, git_root_dir()): FileDiffContent(
+                str(pathlib.Path(os.path.relpath(p, git_root_dir())).as_posix()): FileDiffContent(
                     oldContent=original_code[p], newContent=new_code[p]
                 )
                 for p in original_code.keys()
@@ -63,14 +64,14 @@ def check_create_pr(
         logging.info("Creating a new PR with the optimized code...")
         owner, repo = get_repo_owner_and_name()
 
-        relative_path = os.path.relpath(path, git_root_dir())
+        relative_path = str(pathlib.Path(os.path.relpath(path, git_root_dir())).as_posix())
         base_branch = get_current_branch()
         response = cfapi.create_pr(
             owner=owner,
             repo=repo,
             base_branch=base_branch,
             file_changes={
-                os.path.relpath(p, git_root_dir()): FileDiffContent(
+                str(pathlib.Path(os.path.relpath(p, git_root_dir())).as_posix()): FileDiffContent(
                     oldContent=original_code[p], newContent=new_code[p]
                 )
                 for p in original_code.keys()
