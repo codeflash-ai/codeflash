@@ -1,6 +1,6 @@
 import ast
 from _ast import ClassDef
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 from codeflash.code_utils.code_utils import module_name_from_file_path, get_run_tmp_file
 
@@ -43,17 +43,17 @@ class InjectPerfOnly(ast.NodeTransformer):
                 value=ast.Call(
                     func=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
                     args=[
-                             ast.Name(id=call_node.func.id, ctx=ast.Load()),
-                             ast.Constant(value=self.module_path),
-                             ast.Constant(value=test_class_name or None),
-                             ast.Constant(value=node_name),
-                             ast.Constant(value=self.only_function_name),
-                             ast.Constant(value=index),
-                             ast.Name(id="codeflash_cur", ctx=ast.Load()),
-                             ast.Name(id="codeflash_con", ctx=ast.Load()),
-                         ]
-                         + call_node.args
-                         + call_node.keywords,
+                        ast.Name(id=call_node.func.id, ctx=ast.Load()),
+                        ast.Constant(value=self.module_path),
+                        ast.Constant(value=test_class_name or None),
+                        ast.Constant(value=node_name),
+                        ast.Constant(value=self.only_function_name),
+                        ast.Constant(value=index),
+                        ast.Name(id="codeflash_cur", ctx=ast.Load()),
+                        ast.Name(id="codeflash_con", ctx=ast.Load()),
+                    ]
+                    + call_node.args
+                    + call_node.keywords,
                     keywords=[],
                 ),
                 lineno=test_node.lineno,
@@ -224,10 +224,14 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
                     self.imported_as_function_name = alias.asname
 
 
-def inject_profiling_into_existing_test(test_path, function_name, root_path):
-    with open(test_path, "r") as f:
+def inject_profiling_into_existing_test(test_path, function_name, root_path) -> Tuple[bool, str]:
+    with open(test_path, "r", encoding="utf8") as f:
         test_code = f.read()
-    tree = ast.parse(test_code)
+    try:
+        tree = ast.parse(test_code)
+    except SyntaxError as e:
+        print(f"Syntax error in code: {e}")
+        return False, None
     # TODO: Pass the full name of function here, otherwise we can run into namespace clashes
     import_visitor = FunctionImportedAsVisitor(function_name)
     import_visitor.visit(tree)
@@ -243,7 +247,7 @@ def inject_profiling_into_existing_test(test_path, function_name, root_path):
     ]
     tree.body = new_imports + [create_wrapper_function(function_name, module_path)] + tree.body
 
-    return ast.unparse(tree)
+    return True, ast.unparse(tree)
 
 
 def create_wrapper_function(function_name, module_path):

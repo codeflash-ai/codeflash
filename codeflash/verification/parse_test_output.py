@@ -135,7 +135,7 @@ def parse_test_xml(
                 "file"
             )  # file_path_from_module_name(generated_tests_path, test_config.project_root_path)
             if (
-                file_name == "unittest/loader.py"
+                file_name == f"unittest{os.sep}loader.py"
                 and class_name == "unittest.loader._FailedTest"
                 and suite.errors == 1
                 and suite.tests == 1

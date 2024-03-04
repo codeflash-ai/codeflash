@@ -1,15 +1,14 @@
 import ast
+import click
+import inquirer
 import os
 import re
 import subprocess
 import sys
 import time
-from typing import Optional
-
-import click
-import inquirer
 import tomlkit
 from git import Repo
+from typing import Optional
 
 from codeflash.analytics.posthog import ph
 from codeflash.code_utils.env_utils import (
@@ -162,7 +161,7 @@ def collect_setup_info(setup_info: dict[str, str]):
     if tests_root == create_for_me_option:
         tests_root = os.path.join(curdir, default_tests_subdir)
         os.mkdir(tests_root)
-        click.echo(f"✅ Created directory {tests_root}/")
+        click.echo(f"✅ Created directory {tests_root}/\n")
     setup_info["tests_root"] = os.path.relpath(tests_root, curdir)
     ph("cli-tests-root-provided")
 
@@ -195,17 +194,17 @@ def detect_test_framework(curdir, tests_root) -> Optional[str]:
     test_framework = None
     pytest_files = ["pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg"]
     pytest_config_patterns = {
-        "pytest.ini": r"\[pytest\]",
-        "pyproject.toml": r"\[tool\.pytest\.ini_options\]",
-        "tox.ini": r"\[pytest\]",
-        "setup.cfg": r"\[tool:pytest\]",
+        "pytest.ini": "[pytest]",
+        "pyproject.toml": "[tool.pytest.ini_options]",
+        "tox.ini": "[pytest]",
+        "setup.cfg": "[tool:pytest]",
     }
     for pytest_file in pytest_files:
         file_path = os.path.join(curdir, pytest_file)
         if os.path.exists(file_path):
-            with open(file_path, "r") as file:
+            with open(file_path, "r", encoding="utf8") as file:
                 contents = file.read()
-                if re.search(pytest_config_patterns[pytest_file], contents):
+                if pytest_config_patterns[pytest_file] in contents:
                     test_framework = "pytest"
                     break
         test_framework = "pytest"
@@ -213,9 +212,12 @@ def detect_test_framework(curdir, tests_root) -> Optional[str]:
         # Check if any python files contain a class that inherits from unittest.TestCase
         for filename in os.listdir(tests_root):
             if filename.endswith(".py"):
-                with open(os.path.join(tests_root, filename), "r") as file:
+                with open(os.path.join(tests_root, filename), "r", encoding="utf8") as file:
                     contents = file.read()
-                    node = ast.parse(contents)
+                    try:
+                        node = ast.parse(contents)
+                    except SyntaxError:
+                        continue
                     if any(
                         isinstance(item, ast.ClassDef)
                         and any(
@@ -241,7 +243,7 @@ def check_for_toml_or_setup_file() -> Optional[str]:
     project_name = None
     if os.path.exists(pyproject_toml_path):
         try:
-            with open(pyproject_toml_path, "r") as f:
+            with open(pyproject_toml_path, "r", encoding="utf8") as f:
                 pyproject_toml_content = f.read()
             project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]
             click.echo(f"✅ I found a pyproject.toml for your project {project_name}.")
@@ -250,7 +252,7 @@ def check_for_toml_or_setup_file() -> Optional[str]:
             click.echo(f"✅ I found a pyproject.toml for your project.")
             ph("cli-pyproject-toml-found")
     elif os.path.exists(setup_py_path):
-        with open(setup_py_path, "r") as f:
+        with open(setup_py_path, "r", encoding="utf8") as f:
             setup_py_content = f.read()
         project_name_match = re.search(
             r"setup\s*\([^)]*?name\s*=\s*['\"](.*?)['\"]", setup_py_content, re.DOTALL
@@ -266,36 +268,48 @@ def check_for_toml_or_setup_file() -> Optional[str]:
         click.echo(
             f"💡 I couldn't find a pyproject.toml in the current directory ({curdir}).\n"
             "(make sure you're running `codeflash init` from your project's root directory!)\n"
-            f"I need your project to have a pyproject.toml file to store configuration settings."
+            f"I need this file to store my configuration settings."
         )
         ph("cli-no-pyproject-toml-or-setup-py")
 
         # Create a pyproject.toml file because it doesn't exist
         create_toml = inquirer.confirm(
-            f"Do you want to run `poetry init` to create it?",
+            f"Do you want me to create a pyproject.toml file in the current directory?",
             default=True,
             show_default=False,
         )
         if create_toml:
-            # Check if Poetry is installed, if not, install it using pip
-            poetry_check = subprocess.run(["poetry", "--version"], capture_output=True, text=True)
-            if poetry_check.returncode != 0:
-                click.echo("Poetry is not installed. Installing Poetry...")
-                subprocess.run(["pip", "install", "poetry"], check=True)
-            subprocess.run(["poetry", "init"], cwd=curdir)
-            # Check if the pyproject.toml file was created
-            if os.path.exists(pyproject_toml_path):
+            ph("cli-create-pyproject-toml")
+            # Define a minimal pyproject.toml content
+            new_pyproject_toml = tomlkit.document()
+            new_pyproject_toml["tool"] = {"codeflash": {}}
+            try:
+                with open(pyproject_toml_path, "w", encoding="utf8") as pyproject_file:
+                    pyproject_file.write(tomlkit.dumps(new_pyproject_toml))
+
+                # Check if the pyproject.toml file was created
+                if os.path.exists(pyproject_toml_path):
+                    click.echo(f"✅ Created a pyproject.toml file at {pyproject_toml_path}")
+                    click.pause()
+                ph("cli-created-pyproject-toml")
+            except IOError as e:
                 click.echo(
-                    f"✅ Poetry init complete! Created a pyproject.toml file at {pyproject_toml_path}"
+                    "❌ Failed to create pyproject.toml. Please check your disk permissions and available space."
                 )
-                click.pause()
-            ph("cli-created-pyproject-toml")
+                apologize_and_exit()
         else:
-            click.echo("See https://app.codeflash.ai/app/getting-started for more details!")
-            click.echo("Exiting...")
-            sys.exit(1)
+            click.echo("⏩️ Skipping pyproject.toml creation.")
+            apologize_and_exit()
     click.echo()
     return project_name
+
+
+def apologize_and_exit():
+    click.echo(
+        "💡 If you're having trouble, see https://app.codeflash.ai/app/getting-started for further help getting started with CodeFlash!"
+    )
+    click.echo("Exiting...")
+    sys.exit(1)
 
 
 # Ask if the user wants CodeFlash to optimize new GitHub PRs
@@ -344,7 +358,7 @@ def prompt_github_action(setup_info: dict[str, str]):
             optimize_yml_content = optimize_yml_content.replace(
                 " {{ python_version }}", python_version_string
             )
-            with open(optimize_yaml_path, "w") as optimize_yml_file:
+            with open(optimize_yaml_path, "w", encoding="utf8") as optimize_yml_file:
                 optimize_yml_file.write(optimize_yml_content)
             click.echo(f"✅ Created {optimize_yaml_path}\n")
             click.prompt(
@@ -391,13 +405,14 @@ def prompt_github_action(setup_info: dict[str, str]):
 def configure_pyproject_toml(setup_info: dict[str, str]):
     toml_path = os.path.join(os.getcwd(), "pyproject.toml")
     try:
-        with open(toml_path, "r") as pyproject_file:
+        with open(toml_path, "r", encoding="utf8") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
         click.echo(
             f"I couln't find a pyproject.toml in the current directory.\n"
             f"Please create it by running `poetry init`, or run `codeflash init` again from a different project directory."
         )
+        apologize_and_exit()
 
     codeflash_section = tomlkit.table()
     codeflash_section["module-root"] = setup_info["module_root"]
@@ -411,7 +426,7 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
     pyproject_data["tool"] = tool_section
 
     click.echo(f"Writing CodeFlash configuration ...\r", nl=False)
-    with open(toml_path, "w") as pyproject_file:
+    with open(toml_path, "w", encoding="utf8") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
     click.echo(f"✅ Added CodeFlash configuration to {toml_path}")
     click.echo()
@@ -481,7 +496,7 @@ def enter_api_key_and_save_to_rc():
     shell_rc_path = get_shell_rc_path()
     api_key_line = f"export CODEFLASH_API_KEY={api_key}"
     try:
-        with open(shell_rc_path, "r+") as shell_file:
+        with open(shell_rc_path, "r+", encoding="utf8") as shell_file:
             shell_contents = shell_file.read()
             existing_api_key = read_api_key_from_shell_config()
 
@@ -521,7 +536,7 @@ def create_bubble_sort_file(setup_info: dict[str, str]):
     return arr
 """
     bubble_sort_path = os.path.join(setup_info["module_root"], "bubble_sort.py")
-    with open(bubble_sort_path, "w") as bubble_sort_file:
+    with open(bubble_sort_path, "w", encoding="utf8") as bubble_sort_file:
         bubble_sort_file.write(bubble_sort_content)
     click.echo(f"✅ Created {bubble_sort_path}")
 

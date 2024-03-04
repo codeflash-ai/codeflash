@@ -1,9 +1,8 @@
 import os.path
 import pathlib
+import pytest
 import sys
 import tempfile
-
-import pytest
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import INDIVIDUAL_TEST_TIMEOUT
@@ -84,7 +83,10 @@ class TestPigLatin(unittest.TestCase):
     with tempfile.NamedTemporaryFile(mode="w") as f:
         f.write(code)
         f.flush()
-        new_test = inject_profiling_into_existing_test(f.name, "sorter", os.path.dirname(f.name))
+        success, new_test = inject_profiling_into_existing_test(
+            f.name, "sorter", os.path.dirname(f.name)
+        )
+        assert success
         assert new_test == expected.format(
             module_path=os.path.basename(f.name),
             tmp_dir_path=get_run_tmp_file("test_return_values"),
@@ -156,9 +158,10 @@ def test_prepare_image_for_yolo():
         f.write(code)
         f.flush()
 
-        new_test = inject_profiling_into_existing_test(
+        success, new_test = inject_profiling_into_existing_test(
             f.name, "prepare_image_for_yolo", os.path.dirname(f.name)
         )
+        assert success
         assert new_test == expected.format(
             module_path=os.path.basename(f.name),
             tmp_dir_path=get_run_tmp_file("test_return_values"),
@@ -229,8 +232,8 @@ def test_sort():
     tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
     project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
 
-    new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
-
+    success, new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+    assert success
     assert new_test == expected.format(
         module_path="tests.pytest.test_perfinjector_bubble_sort_results_temp",
         tmp_dir_path=get_run_tmp_file("test_return_values"),
@@ -355,7 +358,8 @@ def test_sort_parametrized(input, expected_output):
     tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
     project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
 
-    new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+    success, new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+    assert success
     assert new_test == expected.format(
         module_path="tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp",
         tmp_dir_path=get_run_tmp_file("test_return_values"),
@@ -496,7 +500,8 @@ def test_sort_parametrized_loop(input, expected_output):
     tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
     project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
 
-    new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+    success, new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+    assert success
     assert new_test == expected.format(
         module_path="tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp",
         tmp_dir_path=get_run_tmp_file("test_return_values"),
@@ -668,7 +673,8 @@ def test_sort():
     tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
     project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
 
-    new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+    success, new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+    assert success
     assert new_test == expected.format(
         module_path="tests.pytest.test_perfinjector_bubble_sort_loop_results_temp",
         tmp_dir_path=get_run_tmp_file("test_return_values"),
