@@ -1,13 +1,12 @@
 import ast
+import libcst as cst
 import logging
 import os
 import random
 from _ast import ClassDef, FunctionDef, AsyncFunctionDef
-from typing import Dict, Optional, List, Tuple, Union
-
-import libcst as cst
 from libcst import CSTNode
 from pydantic.dataclasses import dataclass
+from typing import Dict, Optional, List, Tuple, Union
 
 from codeflash.code_utils.code_utils import (
     path_belongs_to_site_packages,
@@ -156,7 +155,11 @@ def get_functions_within_git_diff() -> Dict[str, List[FunctionToOptimize]]:
             continue
         with open(path, "r", encoding="utf8") as f:
             file_content = f.read()
-            wrapper = cst.metadata.MetadataWrapper(cst.parse_module(file_content))
+            try:
+                wrapper = cst.metadata.MetadataWrapper(cst.parse_module(file_content))
+            except Exception as e:
+                logging.error(e)
+                continue
             function_lines = FunctionVisitor(file_path=path)
             wrapper.visit(function_lines)
             for function_to_optimize in function_lines.functions:
