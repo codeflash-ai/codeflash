@@ -826,8 +826,9 @@ class TestPigLatin(unittest.TestCase):
     tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
     project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
 
-    new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+    success, new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
 
+    assert success
     assert new_test == expected.format(
         module_path="tests.unittest.test_perfinjector_bubble_sort_unittest_results_temp",
         tmp_dir_path=get_run_tmp_file("test_return_values"),
@@ -972,7 +973,8 @@ class TestPigLatin(unittest.TestCase):
     tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
     project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
 
-    new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+    success, new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+    assert success
     assert new_test == expected.format(
         module_path="tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_results_temp",
         tmp_dir_path=get_run_tmp_file("test_return_values"),
@@ -1116,7 +1118,8 @@ class TestPigLatin(unittest.TestCase):
     tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
     project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
 
-    new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+    success, new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+    assert success
     assert new_test == expected.format(
         module_path="tests.unittest.test_perfinjector_bubble_sort_unittest_loop_results_temp",
         tmp_dir_path=get_run_tmp_file("test_return_values"),
@@ -1263,7 +1266,8 @@ class TestPigLatin(unittest.TestCase):
     tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
     project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
 
-    new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+    success, new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+    assert success
     assert new_test == expected.format(
         module_path="tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp",
         tmp_dir_path=get_run_tmp_file("test_return_values"),
