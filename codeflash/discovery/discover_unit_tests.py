@@ -112,6 +112,14 @@ def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     return process_test_files(file_to_test_map, cfg)
 
 
+def discover_parameters_unittest(function_name: str):
+    function_name = function_name.split("_")
+    if len(function_name) > 1 and function_name[-1].isdigit():
+        return True, "_".join(function_name[:-1]), function_name[-1]
+
+    return False, function_name, None
+
+
 def process_test_files(
     file_to_test_map: Dict[str, List[Dict[str, str]]], cfg: TestConfig
 ) -> Dict[str, List[TestsInFile]]:
@@ -146,12 +154,24 @@ def process_test_files(
                 if name.name in test_suites and name.type == "class":
                     for def_name in all_defs:
                         if (
-                            def_name.name in functions_to_search
-                            and def_name.type == "function"
+                            def_name.type == "function"
                             and def_name.full_name is not None
                             and f".{name.name}." in def_name.full_name
                         ):
-                            test_functions.add(TestFunction(def_name.name, name.name, None))
+                            for function in functions_to_search:
+                                (
+                                    is_parameterized,
+                                    new_function,
+                                    parameters,
+                                ) = discover_parameters_unittest(function)
+
+                                if is_parameterized and new_function == def_name.name:
+                                    test_functions.add(
+                                        TestFunction(def_name.name, name.name, parameters)
+                                    )
+                                elif function == def_name.name:
+                                    test_functions.add(TestFunction(def_name.name, name.name, None))
+
         test_functions_list = list(test_functions)
         test_functions_raw = [elem.function_name for elem in test_functions_list]
 
@@ -185,7 +205,11 @@ def process_test_files(
                         and definition[0].module_name != name.module_name
                     ):
                         if scope_parameters is not None:
-                            scope_test_function += "[" + scope_parameters + "]"
+                            if test_framework == "pytest":
+                                scope_test_function += "[" + scope_parameters + "]"
+                            if test_framework == "unittest":
+                                scope_test_function += "_" + scope_parameters
+
                         function_to_test_map[definition[0].full_name].append(
                             TestsInFile(test_file, None, scope_test_function, scope_test_suite)
                         )
