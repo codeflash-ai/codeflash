@@ -3,7 +3,6 @@ solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 """
 
 import concurrent.futures
-import libcst as cst
 import logging
 import os
 import pathlib
@@ -11,7 +10,10 @@ from argparse import ArgumentParser, SUPPRESS, Namespace
 from collections import defaultdict
 from typing import Tuple, Union
 
+import libcst as cst
 
+from codeflash.analytics import posthog
+from codeflash.analytics.posthog import ph
 from codeflash.analytics.sentry import init_sentry
 from codeflash.api.aiservice import optimize_python_code
 from codeflash.cli_cmds.cli import process_cmd_args
@@ -114,6 +116,8 @@ def parse_args() -> Namespace:
 class Optimizer:
     def __init__(self, args: Namespace):
         self.args = args
+        posthog.enable_analytics(args.enable_analytics)
+
         self.test_cfg = TestConfig(
             tests_root=args.tests_root,
             project_root_path=args.project_root,
@@ -122,6 +126,7 @@ class Optimizer:
         )
 
     def run(self):
+        ph("cli-optimize-start", {"args": self.args})
         logging.info(CODEFLASH_LOGO)
         logging.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
@@ -396,7 +401,9 @@ class Optimizer:
                                 f"\n{generated_original_test_source}"
                             )
 
-                            logging.info(f"⚡️ Optimization successful! 📄 {function_name} in {path}")
+                            logging.info(
+                                f"⚡️ Optimization successful! 📄 {function_name} in {path}"
+                            )
                             logging.info(f"📈 {explanation_final.perf_improvement_line}")
 
                             test_files = function_to_tests.get(module_path + "." + function_name)

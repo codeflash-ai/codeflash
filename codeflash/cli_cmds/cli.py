@@ -46,6 +46,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
         "ignore_paths",
         "minimum_performance_gain",
         "pytest_cmd",
+        "enable_analytics",
     ]
     for key in supported_keys:
         if key in pyproject_config:
