@@ -11,6 +11,7 @@ from collections import defaultdict
 from typing import Tuple, Union
 
 import libcst as cst
+
 from codeflash.analytics.sentry import init_sentry
 from codeflash.api.aiservice import optimize_python_code
 from codeflash.cli_cmds.cli import process_cmd_args
@@ -120,7 +121,7 @@ class Optimizer:
             pytest_cmd=args.pytest_cmd,
         )
 
-    def run(self):
+    def run(self) -> None:
         logging.info(CODEFLASH_LOGO)
         logging.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
@@ -384,7 +385,7 @@ class Optimizer:
 
                         new_code = format_code(self.args.formatter_cmd, path)
                         new_dependent_code: dict[str, str] = {
-                            module_abspath: format_code(module_abspath)
+                            module_abspath: format_code(self.args.formatter_cmd, module_abspath)
                             for module_abspath in dependent_functions_by_module_abspath.keys()
                         }
                         logging.info(
