@@ -68,6 +68,7 @@ def parse_config_file(config_file_path=None):
     }  # the value is the default value
     str_keys = {
         "pytest-cmd": "pytest",
+        "formatter-cmd": "black",
     }
     bool_keys = {
         "enable-analytics": True,
