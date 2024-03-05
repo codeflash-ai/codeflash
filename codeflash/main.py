@@ -126,7 +126,7 @@ class Optimizer:
         )
 
     def run(self):
-        ph("cli-optimize-start", {"args": self.args})
+        ph("cli-optimize-run-start", {"args": self.args})
         logging.info(CODEFLASH_LOGO)
         logging.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
@@ -146,19 +146,21 @@ class Optimizer:
 
         test_files_created = set()
         instrumented_unittests_created = set()
-        found_atleast_one_optimization = False
+        optimizations_found = 0
 
         function_iterator_count = 0
         try:
+            ph("cli-optimize-functions-to-optimize", {"num_functions": num_modified_functions})
             if num_modified_functions == 0:
                 logging.info("No functions found to optimize. Exiting...")
                 return
             logging.info(f"Discovering existing unit tests in {self.test_cfg.tests_root} ...")
             function_to_tests: dict[str, list[TestsInFile]] = discover_unit_tests(self.test_cfg)
+            num_discovered_tests = sum([len(value) for value in function_to_tests.values()])
             logging.info(
-                f"Discovered {sum([len(value) for value in function_to_tests.values()])} "
-                f"existing unit tests in {self.test_cfg.tests_root}"
+                f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}"
             )
+            ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
             for path in file_to_funcs_to_optimize:
                 logging.info(f"Examining file {path} ...")
                 # TODO: Sequence the functions one goes through intelligently. If we are optimizing f(g(x)),
@@ -183,7 +185,7 @@ class Optimizer:
                             f"Optimizing function {function_iterator_count} of {num_modified_functions} - {function_name}"
                         )
                         winning_test_results = None
-                        # remove left overs from previous run
+                        # remove leftovers from previous run
                         pathlib.Path(get_run_tmp_file("test_return_values_0.bin")).unlink(
                             missing_ok=True
                         )
@@ -361,7 +363,7 @@ class Optimizer:
                             logging.info("----------------")
                         logging.info(f"Best optimization: {best_optimization[0:2]}")
                         if best_optimization:
-                            found_atleast_one_optimization = True
+                            optimizations_found += 1
                             logging.info(f"Best candidate:\n{best_optimization[0]}")
 
                             optimized_code = best_optimization[0]
@@ -389,7 +391,7 @@ class Optimizer:
                                 function_name=function_name,
                                 path=path,
                             )
-                            logging.info(f"EXPLANATION\n{explanation_final.to_console_string()}")
+                            logging.info(f"Explanation: \n{explanation_final.to_console_string()}")
 
                             new_code = lint_code(path)
                             new_dependent_code: dict[str, str] = {
@@ -405,6 +407,18 @@ class Optimizer:
                                 f"⚡️ Optimization successful! 📄 {function_name} in {path}"
                             )
                             logging.info(f"📈 {explanation_final.perf_improvement_line}")
+                            ph(
+                                "cli-optimize-success",
+                                {
+                                    "function_name": function_name,
+                                    "path": path,
+                                    "speedup_x": explanation_final.speedup_x,
+                                    "speedup_pct": explanation_final.speedup_pct,
+                                    "best_runtime": explanation_final.best_runtime_ns,
+                                    "original_runtime": explanation_final.original_runtime_ns,
+                                    "winning_test_results": explanation_final.winning_test_results,
+                                },
+                            )
 
                             test_files = function_to_tests.get(module_path + "." + function_name)
                             existing_tests = ""
@@ -446,7 +460,8 @@ class Optimizer:
                             f"Error in optimizing function {function_to_optimize.function_name}: {e}"
                         )
                         continue
-            if not found_atleast_one_optimization:
+            ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
+            if optimizations_found == 0:
                 logging.info("❌ No optimizations found.")
             elif self.args.all:
                 logging.info("✨ All functions have been optimized! ✨")
