@@ -19,26 +19,31 @@ jobs:
           echo "Checking if this PR is created by CodeFlash bot..."
           if [ "${{ github.event.pull_request.user.login }}" == "codeflash-ai[bot]" ]; then
             echo "PR created by CodeFlash bot. Skipping optimization."
-            exit 0
+            echo "skip_remaining_steps=yes" >> $GITHUB_OUTPUT
           else
+            echo "skip_remaining_steps=no" >> $GITHUB_OUTPUT
             echo "It's not. Proceeding with the optimization."
           fi
       - uses: actions/checkout@v3
+        if: steps.bot_check.outputs.skip_remaining_steps == 'no'
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
       # TODO: Replace this with your project's python installation method
       - name: Set up Python
+        if: steps.bot_check.outputs.skip_remaining_steps == 'no'
         uses: actions/setup-python@v4
         with:
           python-version: {{ python_version }}
       # TODO: Replace this with your project's dependency installation method
       - name: Install Project Dependencies
+        if: steps.bot_check.outputs.skip_remaining_steps == 'no'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt # TODO: Replace this with your project setup method
           pip install codeflash
       - name: Run CodeFlash to optimize code
+        if: steps.bot_check.outputs.skip_remaining_steps == 'no'
         id: optimize_code
         run: |
           codeflash
