@@ -5,11 +5,17 @@ import subprocess
 import unittest
 from collections import defaultdict
 from typing import Dict, List, Optional
+from enum import Enum
 
 import jedi
 from pydantic.dataclasses import dataclass
 
 from codeflash.verification.verification_utils import TestConfig
+
+
+class ParseType(Enum):
+    CO = "co"
+    Q = "q"
 
 
 @dataclass(frozen=True)
@@ -105,11 +111,6 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
     pytest_cmd_list = [chunk for chunk in cfg.pytest_cmd.split(" ") if chunk != ""]
-    # pytest_result = subprocess.run(
-    #     pytest_cmd_list + [f"{tests_root}", "--co", "-m", "not skip"],
-    #     stdout=subprocess.PIPE,
-    #     cwd=tests_root,
-    # )
     pytest_result = subprocess.run(
         pytest_cmd_list + [f"{tests_root}", "--co", "-q", "-m", "not skip"],
         stdout=subprocess.PIPE,
@@ -118,7 +119,7 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
 
     pytest_stdout = pytest_result.stdout.decode("utf-8")
 
-    parse_type = "q"
+    parse_type = ParseType.Q
     if "rootdir: " not in pytest_stdout:
         pytest_rootdir = get_pytest_rootdir_only(pytest_cmd_list, tests_root, project_root)
     else:
@@ -127,7 +128,7 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
         if not pytest_rootdir_match:
             raise ValueError(f"Could not find rootdir in pytest output for {tests_root}")
         pytest_rootdir = pytest_rootdir_match.group(1)
-        parse_type = "co"
+        parse_type = ParseType.CO
 
     tests = parse_pytest_stdout(pytest_stdout, pytest_rootdir, tests_root, parse_type)
     file_to_test_map = defaultdict(list)
@@ -274,10 +275,10 @@ def process_test_files(
 
 
 def parse_pytest_stdout(
-    pytest_stdout: str, pytest_rootdir, tests_root, parse_type
+    pytest_stdout: str, pytest_rootdir: str, tests_root: str, parse_type: ParseType
 ) -> List[TestsInFile]:
     test_results = []
-    if parse_type == "q":
+    if parse_type == ParseType.Q:
         for line in pytest_stdout.splitlines():
             if line.startswith("==") or line.startswith("\n") or line == "":
                 break
