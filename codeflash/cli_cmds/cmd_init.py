@@ -194,17 +194,17 @@ def detect_test_framework(curdir, tests_root) -> Optional[str]:
     test_framework = None
     pytest_files = ["pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg"]
     pytest_config_patterns = {
-        "pytest.ini": r"\[pytest\]",
-        "pyproject.toml": r"\[tool\.pytest\.ini_options\]",
-        "tox.ini": r"\[pytest\]",
-        "setup.cfg": r"\[tool:pytest\]",
+        "pytest.ini": "[pytest]",
+        "pyproject.toml": "[tool.pytest.ini_options]",
+        "tox.ini": "[pytest]",
+        "setup.cfg": "[tool:pytest]",
     }
     for pytest_file in pytest_files:
         file_path = os.path.join(curdir, pytest_file)
         if os.path.exists(file_path):
             with open(file_path, "r", encoding="utf8") as file:
                 contents = file.read()
-                if re.search(pytest_config_patterns[pytest_file], contents):
+                if pytest_config_patterns[pytest_file] in contents:
                     test_framework = "pytest"
                     break
         test_framework = "pytest"
