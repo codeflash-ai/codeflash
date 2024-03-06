@@ -153,7 +153,7 @@ def parse_test_xml(
             result = testcase.is_passed  # TODO: See for the cases of ERROR and SKIPPED
             test_module_path = module_name_from_file_path(file_name, test_config.project_root_path)
             test_class = None
-            if class_name.startswith(test_module_path):
+            if class_name is not None and class_name.startswith(test_module_path):
                 test_class = class_name[
                     len(test_module_path) + 1 :
                 ]  # +1 for the dot, gets Unittest class name
