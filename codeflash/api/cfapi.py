@@ -1,12 +1,11 @@
 import json
 import logging
 import os
-from functools import lru_cache
-from typing import Optional, Dict, Any
-
 import requests
+from functools import lru_cache
 from pydantic.json import pydantic_encoder
 from requests import Response
+from typing import Optional, Dict, Any
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.github.PrComment import PrComment, FileDiffContent
@@ -46,12 +45,13 @@ def get_user_id() -> Optional[str]:
     :return: The userid or None if the request fails.
     """
     response = make_cfapi_request(endpoint="/cli-get-user", method="GET")
-    if response.status_code != 200:
+    if response.status_code == 200:
+        return response.text
+    else:
         logging.error(
             f"Failed to look up your userid; is your CF API key valid? ({response.reason})"
         )
         return None
-    return response.text
 
 
 def suggest_changes(
