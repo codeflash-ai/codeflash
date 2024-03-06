@@ -207,18 +207,19 @@ def collect_setup_info(setup_info: dict[str, str]):
     setup_info["ignore_paths"] = ignore_paths
 
     # Ask the user if they agree to enable PostHog analytics logging
-    enable_analytics_question = [
-        inquirer.List(
-            "enable_analytics",
-            message="⚡️ Is it OK to collect usage analytics to help improve CodeFlash? (recommended)",
-            choices=[
-                ("Sure, I'd love to help make CodeFlash better!", True),
-                ("No, thanks.", False),
-            ],
-        )
-    ]
-    enable_analytics_answer = inquirer.prompt(enable_analytics_question)
-    setup_info["enable_analytics"] = enable_analytics_answer["enable_analytics"]
+    # enable_analytics_question = [
+    #     inquirer.List(
+    #         "enable_analytics",
+    #         message="⚡️ Is it OK to collect usage analytics to help improve CodeFlash? (recommended)",
+    #         choices=[
+    #             ("Sure, I'd love to help make CodeFlash better!", True),
+    #             ("No, thanks.", False),
+    #         ],
+    #     )
+    # ]
+    # enable_analytics_answer = inquirer.prompt(enable_analytics_question)
+    # setup_info["enable_analytics"] = enable_analytics_answer["enable_analytics"]
+
     ph("cli-analytics-choice", {"enable_analytics": setup_info["enable_analytics"]})
 
 

@@ -36,11 +36,8 @@ def ph(event: str, properties: Dict[str, Any] = None) -> None:
     if not _ANALYTICS_ENABLED:
         return
 
-    if properties is None:
-        properties = {}
-
-    properties["cli_version"] = __version__
-    properties["cli_version_tuple"] = __version_tuple__
+    properties = properties or {}
+    properties.update({"cli_version": __version__, "cli_version_tuple": __version_tuple__})
 
     user_id = get_user_id()
 
