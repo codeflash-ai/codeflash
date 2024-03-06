@@ -1,12 +1,11 @@
 import json
 import logging
 import os
-from functools import lru_cache
-from typing import Optional, Dict, Any
-
 import requests
+from functools import lru_cache
 from pydantic.json import pydantic_encoder
 from requests import Response
+from typing import Optional, Dict, Any
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.github.PrComment import PrComment, FileDiffContent
@@ -128,8 +127,7 @@ def check_github_app_installed_on_repo(owner: str, repo: str) -> Response:
     :param repo: The name of the repository.
     :return: The response object.
     """
-    response = make_cfapi_request(
+    return make_cfapi_request(
         endpoint=f"/is-github-app-installed?repo={repo}&owner={owner}",
         method="GET",
     )
-    return response

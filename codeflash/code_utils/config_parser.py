@@ -58,6 +58,8 @@ def parse_config_file(config_file_path=None):
             f"Please run 'codeflash init' to create the config file."
         )
     assert isinstance(config, dict)
+
+    # default values:
     path_keys = ["module-root", "tests-root"]
     path_list_keys = ["ignore-paths"]
     # TODO: minimum-peformance-gain should become a more dynamic auto-detection in the future
@@ -67,6 +69,9 @@ def parse_config_file(config_file_path=None):
     str_keys = {
         "pytest-cmd": "pytest",
         "formatter-cmd": "black",
+    }
+    bool_keys = {
+        "enable-analytics": True,
     }
 
     for key in float_keys:
@@ -79,6 +84,11 @@ def parse_config_file(config_file_path=None):
             config[key] = str(config[key])
         else:
             config[key] = str_keys[key]
+    for key in bool_keys:
+        if key in config:
+            config[key] = bool(config[key])
+        else:
+            config[key] = bool_keys[key]
     for key in path_keys:
         if key in config:
             config[key] = os.path.join(os.path.dirname(config_file), config[key])
@@ -88,6 +98,7 @@ def parse_config_file(config_file_path=None):
             config[key] = [os.path.join(os.path.dirname(config_file), path) for path in config[key]]
         else:  # Default to empty list
             config[key] = []
+
     assert config["test-framework"] in [
         "pytest",
         "unittest",
