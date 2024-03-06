@@ -11,12 +11,30 @@ _posthog = Posthog(
 )
 
 
+_ANALYTICS_ENABLED = True
+
+
+def enable_analytics(enabled: bool) -> None:
+    """
+    Enable or disable analytics.
+    :param enabled: Whether to enable analytics.
+    """
+    if enabled:
+        ph("cli-analytics-enabled")
+    else:
+        ph("cli-analytics-disabled")
+    global _ANALYTICS_ENABLED
+    _ANALYTICS_ENABLED = enabled
+
+
 def ph(event: str, properties: Dict[str, Any] = None) -> None:
     """
     Log an event to PostHog.
     :param event: The name of the event.
     :param properties: A dictionary of properties to attach to the event.
     """
+    if not _ANALYTICS_ENABLED:
+        return
 
     if properties is None:
         properties = {}
