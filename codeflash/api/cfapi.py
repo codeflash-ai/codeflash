@@ -46,13 +46,12 @@ def get_user_id() -> Optional[str]:
     :return: The userid or None if the request fails.
     """
     response = make_cfapi_request(endpoint="/cli-get-user", method="GET")
-    if response.status_code == 200:
-        return response.text
-    else:
+    if response.status_code != 200:
         logging.error(
             f"Failed to look up your userid; is your CF API key valid? ({response.reason})"
         )
         return None
+    return response.text
 
 
 def suggest_changes(
