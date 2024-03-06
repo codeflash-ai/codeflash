@@ -70,20 +70,19 @@ def get_remote_url(repo: Optional[Repo] = None) -> str:
 
 
 def get_repo_owner_and_name(repo: Optional[Repo] = None) -> tuple[str, str]:
-    remote_url = get_remote_url(repo)
-    if remote_url.endswith(".git"):
-        remote_url = remote_url[:-4]
-    if "://" in remote_url:
-        # It's an HTTP/HTTPS URL
-        repo_owner, repo_name = remote_url.split("/")[-2:]
-    else:
-        # It's an SSH URL and should contain ':' after the domain
-        repo_owner_with_github, repo_name = remote_url.split("/")[-2:]
-        repo_owner = (
-            repo_owner_with_github.split(":")[1]
-            if ":" in repo_owner_with_github
-            else repo_owner_with_github
-        )
+    # removed redundant operations, and split the operations directly
+    remote_url = (
+        get_remote_url(repo).rstrip(".git")
+        if get_remote_url(repo).endswith(".git")
+        else get_remote_url(repo)
+    )
+    split_url = remote_url.split("/")
+    repo_owner_with_github, repo_name = split_url[-2], split_url[-1]
+    repo_owner = (
+        repo_owner_with_github.split(":")[1]
+        if ":" in repo_owner_with_github
+        else repo_owner_with_github
+    )
     return repo_owner, repo_name
 
 

@@ -85,27 +85,16 @@ def process_cmd_args(args: Namespace) -> Namespace:
 
 def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
     if hasattr(args, "all"):
-        # Ensure that the user can actually open PRs on the repo.
         try:
             git_repo = git.Repo(search_parent_directories=True)
-        except git.exc.InvalidGitRepositoryError:
-            logging.error(
-                "I couldn't find a git repository in the current directory. "
-                "I need a git repository to run --all and open PRs for optimizations. Exiting..."
-            )
-            exit(1)
-        owner, repo = get_repo_owner_and_name(git_repo)
-        try:
+            owner, repo = get_repo_owner_and_name(git_repo)
             response = check_github_app_installed_on_repo(owner, repo)
-            if response.ok and response.text == "true":
-                pass
-            else:
-                logging.error(f"Error: {response.text}")
-                raise Exception
-        except Exception as e:
+            if not response.ok or response.text != "true":
+                raise Exception(f"Error: {response.text}")
+        except Exception as _:
             logging.error(
-                f"Could not find the CodeFlash GitHub App installed on the repository {owner}/{repo} or the GitHub"
-                f" account linked to your CODEFLASH_API_KEY does not have access to the repository {owner}/{repo}. "
+                "Could not find the CodeFlash GitHub App installed on the repository {owner}/{repo} or the GitHub"
+                " account linked to your CODEFLASH_API_KEY does not have access to the repository {owner}/{repo}. "
                 "Please install the CodeFlash GitHub App on your repository to use --all."
                 " Instructions at https://app.codeflash.ai \n"
                 "Exiting..."
@@ -114,7 +103,6 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
     if not hasattr(args, "all"):
         setattr(args, "all", None)
     elif args.all == "":
-        # The default behavior of --all is to optimize everything in args.module_root
         args.all = args.module_root
     else:
         args.all = os.path.realpath(args.all)
