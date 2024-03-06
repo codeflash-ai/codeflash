@@ -1,12 +1,12 @@
 import unittest
 from unittest.mock import patch
 
-from cli.codeflash.code_utils.git_utils import get_repo_owner_and_name
+from codeflash.code_utils.git_utils import get_repo_owner_and_name
 
 
 class TestGitUtils(unittest.TestCase):
 
-    @patch("cli.codeflash.code_utils.git_utils.get_remote_url")
+    @patch("codeflash.code_utils.git_utils.get_remote_url")
     def test_test_get_repo_owner_and_name(self, mock_get_remote_url):
         # Test with a standard GitHub HTTPS URL
         mock_get_remote_url.return_value = "https://github.com/owner/repo.git"
