@@ -6,6 +6,7 @@ import unittest
 from collections import defaultdict
 from typing import Dict, List, Optional
 from enum import Enum
+import pathlib
 
 import jedi
 from pydantic.dataclasses import dataclass
@@ -318,7 +319,7 @@ def parse_pytest_stdout(
             if ".py" not in module:
                 module.append(".py")
 
-            module_list = module.split("/")
+            module_list = pathlib.Path(module).parts
             index = len(module_list) - 1
             if len(module_list) > 1:
                 curr_dir = module
@@ -327,7 +328,7 @@ def parse_pytest_stdout(
                     module_list = module_list[:-1]
                     index -= 1
 
-                module_list = module.split("/")
+                module_list = pathlib.Path(module).parts
                 if index < len(module_list) - 1:
                     index += 1
                     module_list = module_list[index:]
