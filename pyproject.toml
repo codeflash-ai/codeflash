@@ -1,3 +1,4 @@
+[tool]
 [tool.poetry]
 name = "codeflash"
 version = "0.0.0" # Determined by poetry-dynamic-versioning during `poetry build`
@@ -36,21 +37,32 @@ optional = true
 
 [tool.poetry.group.dev.dependencies]
 ipython = "^8.12.0"
-mypy = "^1.6.1"
+mypy = "^1.8.0"
+
+
+[tool.poetry.build]
+script = "codeflash/update_license_version.py"
+
+[tool.poetry.scripts]
+codeflash = "codeflash.main:main"
+
 
 [tool.mypy]
-warn_return_any = true
+disallow_any_decorated = true
+disallow_any_explicit = true
+disallow_any_expr = true
+disallow_any_unimported = true
+disallow_subclassing_any = true
+pretty = true
+show_absolute_path = true
+show_column_numbers = true
+show_error_context = true
+strict = true
+verbosity = 3
+warn_unreachable = true
 plugins = [
     "pydantic.mypy"
 ]
-follow_imports = "silent"
-warn_redundant_casts = true
-warn_unused_ignores = true
-disallow_any_generics = true
-check_untyped_defs = true
-no_implicit_reexport = true
-# for strict mypy: (this is the tricky one :-))
-disallow_untyped_defs = true
 
 [tool.pydantic-mypy]
 init_forbid_extra = true
@@ -60,13 +72,6 @@ warn_required_dynamic_aliases = true
 [tool.black]
 line-length = 100
 target-version = ['py312']
-
-[build-system]
-requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.2.0,<2.0.0"]
-build-backend = "poetry_dynamic_versioning.backend"
-
-[tool.poetry.build]
-script = "codeflash/update_license_version.py"
 
 [tool.poetry-dynamic-versioning]
 enable = true
@@ -84,11 +89,15 @@ initial-content = """
   __version_tuple__ = (0, 0, 0)
 """
 
-[tool.poetry.scripts]
-codeflash = "codeflash.main:main"
 
 [tool.codeflash]
 module-root = "codeflash"
 tests-root = "tests"
 test-framework = "pytest"
 ignore-paths = []
+enable-analytics = true
+
+[build-system]
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.2.0,<2.0.0"]
+build-backend = "poetry_dynamic_versioning.backend"
+

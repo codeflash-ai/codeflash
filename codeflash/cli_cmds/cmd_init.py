@@ -1,14 +1,16 @@
 import ast
-import click
-import inquirer
 import os
 import re
 import subprocess
 import sys
 import time
+from typing import Optional
+
+import click
+import inquirer
+import inquirer.themes
 import tomlkit
 from git import Repo
-from typing import Optional
 
 from codeflash.analytics.posthog import ph
 from codeflash.code_utils.env_utils import (
@@ -78,7 +80,7 @@ def ask_run_end_to_end_test(setup_info):
             )
         ]
     )
-    run_tests = run_tests_answer["run_tests"]
+    run_tests = run_tests_answer.get("run_tests", False)
     if run_tests:
         create_bubble_sort_file(setup_info)
         run_end_to_end_test(setup_info)
@@ -142,6 +144,8 @@ def collect_setup_info(setup_info: dict[str, str]):
     default_tests_subdir = "tests"
     create_for_me_option = "okay, create a tests/ directory for me!"
     test_subdir_options = valid_subdirs if len(valid_subdirs) > 0 else [create_for_me_option]
+    custom_dir_option = "enter a custom directory..."
+    test_subdir_options.append(custom_dir_option)
     tests_root_answer = inquirer.prompt(
         [
             inquirer.List(
@@ -162,6 +166,19 @@ def collect_setup_info(setup_info: dict[str, str]):
         tests_root = os.path.join(curdir, default_tests_subdir)
         os.mkdir(tests_root)
         click.echo(f"✅ Created directory {tests_root}/\n")
+    elif tests_root == custom_dir_option:
+        custom_tests_root_answer = inquirer.prompt(
+            [
+                inquirer.Path(
+                    "custom_tests_root",  # Removed the colon and space from the message
+                    message=f"Enter the path to your tests directory inside {os.path.abspath(module_root) + os.sep} ",
+                    path_type=inquirer.Path.DIRECTORY,
+                    exists=True,
+                    normalize_to_absolute_path=True,
+                ),
+            ]
+        )
+        tests_root = custom_tests_root_answer["custom_tests_root"]
     setup_info["tests_root"] = os.path.relpath(tests_root, curdir)
     ph("cli-tests-root-provided")
 
@@ -188,6 +205,22 @@ def collect_setup_info(setup_info: dict[str, str]):
     # ignore_paths = ignore_paths_input.split(',') if ignore_paths_input else ['tests/']
     ignore_paths = []
     setup_info["ignore_paths"] = ignore_paths
+
+    # Ask the user if they agree to enable PostHog analytics logging
+    # enable_analytics_question = [
+    #     inquirer.List(
+    #         "enable_analytics",
+    #         message="⚡️ Is it OK to collect usage analytics to help improve CodeFlash? (recommended)",
+    #         choices=[
+    #             ("Sure, I'd love to help make CodeFlash better!", True),
+    #             ("No, thanks.", False),
+    #         ],
+    #     )
+    # ]
+    # enable_analytics_answer = inquirer.prompt(enable_analytics_question)
+    # setup_info["enable_analytics"] = enable_analytics_answer["enable_analytics"]
+
+    ph("cli-analytics-choice", {"enable_analytics": setup_info["enable_analytics"]})
 
 
 def detect_test_framework(curdir, tests_root) -> Optional[str]:
@@ -419,6 +452,7 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
     codeflash_section["tests-root"] = setup_info["tests_root"]
     codeflash_section["test-framework"] = setup_info["test_framework"]
     codeflash_section["ignore-paths"] = setup_info["ignore_paths"]
+    codeflash_section["enable-analytics"] = setup_info["enable_analytics"]
 
     # Add the 'codeflash' section, ensuring 'tool' section exists
     tool_section = pyproject_data.get("tool", tomlkit.table())
