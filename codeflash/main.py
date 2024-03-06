@@ -125,7 +125,7 @@ class Optimizer:
             pytest_cmd=args.pytest_cmd,
         )
 
-    def run(self):
+    def run(self) -> None:
         ph("cli-optimize-run-start", {"args": self.args})
         logging.info(CODEFLASH_LOGO)
         logging.info("Running optimizer.")
@@ -392,7 +392,7 @@ class Optimizer:
 
                         new_code = format_code(self.args.formatter_cmd, path)
                         new_dependent_code: dict[str, str] = {
-                            module_abspath: format_code(module_abspath)
+                            module_abspath: format_code(self.args.formatter_cmd, module_abspath)
                             for module_abspath in dependent_functions_by_module_abspath.keys()
                         }
                         logging.info(
