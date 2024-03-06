@@ -1,9 +1,10 @@
-import git
 import logging
 import os
-from git import Repo
 from io import StringIO
 from typing import Optional
+
+import git
+from git import Repo
 from unidiff import PatchSet
 
 
@@ -70,7 +71,6 @@ def get_remote_url(repo: Optional[Repo] = None) -> str:
 
 
 def get_repo_owner_and_name(repo: Optional[Repo] = None) -> tuple[str, str]:
-    # removed redundant operations, and split the operations directly
     remote_url = (
         get_remote_url(repo).rstrip(".git")
         if get_remote_url(repo).endswith(".git")
