@@ -1,5 +1,6 @@
 import logging
 import os
+import pathlib
 import pickle
 import sqlite3
 import sys
@@ -48,8 +49,7 @@ class Tracer:
         if self.disable:
             return
 
-        if os.path.exists(self.output_file):
-            os.remove(self.output_file)
+        pathlib.Path(self.output_file).unlink(missing_ok=True)
 
         self.con = sqlite3.connect(self.output_file)
         cur = self.con.cursor()
@@ -81,7 +81,7 @@ class Tracer:
         test_file_path = get_test_file_path(
             self.config["tests_root"], function_path, test_type="replay"
         )
-        with open(test_file_path, "w") as file:
+        with open(test_file_path, "w", encoding="utf8") as file:
             file.write(replay_test)
 
         logging.info(
@@ -111,8 +111,9 @@ class Tracer:
             self.flag = True
             return
 
+        project_root = os.path.realpath(os.path.join(self.config["module_root"], ".."))
         self.function_modules[code.co_name] = module_name_from_file_path(
-            code.co_filename, project_root=self.config["root"]
+            code.co_filename, project_root=project_root
         )
         cur = self.con.cursor()
 

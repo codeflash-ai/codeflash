@@ -1,4 +1,5 @@
 import os
+import pathlib
 import tempfile
 
 from codeflash.verification.parse_test_output import parse_test_xml
@@ -26,7 +27,7 @@ class TestUnittestRunnerSorter(unittest.TestCase):
 """
     cur_dir_path = os.path.dirname(os.path.abspath(__file__))
     config = TestConfig(
-        test_root=cur_dir_path, project_root_path=cur_dir_path, test_framework="unittest"
+        tests_root=cur_dir_path, project_root_path=cur_dir_path, test_framework="unittest"
     )
 
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
@@ -39,8 +40,7 @@ class TestUnittestRunnerSorter(unittest.TestCase):
         )
         results = parse_test_xml(result_file, fp.name, TestType.EXISTING_UNIT_TEST, config, process)
     assert results[0].did_pass, "Test did not pass as expected"
-    if os.path.exists(result_file):
-        os.remove(result_file)
+    pathlib.Path(result_file).unlink(missing_ok=True)
 
 
 def test_pytest_runner():
@@ -56,7 +56,7 @@ def test_sort():
 """
     cur_dir_path = os.path.dirname(os.path.abspath(__file__))
     config = TestConfig(
-        test_root=cur_dir_path, project_root_path=cur_dir_path, test_framework="pytest"
+        tests_root=cur_dir_path, project_root_path=cur_dir_path, test_framework="pytest"
     )
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         fp.write(code.encode("utf-8"))
@@ -75,5 +75,4 @@ def test_sort():
             run_result=process,
         )
     assert results[0].did_pass, "Test did not pass as expected"
-    if os.path.exists(result_file):
-        os.remove(result_file)
+    pathlib.Path(result_file).unlink(missing_ok=True)

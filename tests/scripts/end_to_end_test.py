@@ -5,27 +5,27 @@ import subprocess
 
 
 def main():
-    root = pathlib.Path(__file__).parent.parent.parent.resolve()
-    test_root = root / "code_to_optimize" / "tests" / "pytest"
-    print("cwd", root)
+    module_root = (pathlib.Path(__file__).parent.parent.parent / "code_to_optimize").resolve()
+    test_root = module_root / "tests" / "pytest"
+    print("cwd", module_root)
     command = [
         "python",
-        "codeflash/main.py",
+        "../codeflash/main.py",
         "--file",
-        "code_to_optimize/bubble_sort.py",
+        "bubble_sort.py",
         "--function",
         "sorter",
-        "--test-root",
+        "--tests-root",
         str(test_root),
-        "--root",
-        str(root),
+        "--module-root",
+        str(module_root),
     ]
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        cwd=str(root),
+        cwd=str(module_root),
         env=os.environ.copy(),
     )
     output = []
@@ -37,12 +37,20 @@ def main():
     stdout = "".join(output)
     assert return_code == 0, f"The codeflash command returned exit code {return_code} instead of 0"
 
-    m = re.search(r"Performance went up by (\d+\.\d+)x", stdout)
+    m = re.search(
+        r"Optimization successful! 📄 sorter in .+\n.+📈\s+([\d+,]+)% improvement \(([\d+,.]+)x faster\)\.",
+        stdout,
+    )
     assert m, "Failed to find performance improvement at all"
-    improvement = float(m.group(1))
+    improvement_pct = int(m.group(1).replace(",", ""))
+    improvement_x = float(m.group(2).replace(",", ""))
+
     assert (
-        30000 < improvement < 120000
-    ), f"Performance improvement was not in the expected range, got {improvement}"
+        improvement_pct > 30000
+    ), f"Performance improvement percentage was {improvement_pct}, which was not above 30,000%"
+    assert (
+        improvement_x > 30000
+    ), f"Performance improvement rate was {improvement_x}x, which was not above 30,000x"
 
 
 if __name__ == "__main__":

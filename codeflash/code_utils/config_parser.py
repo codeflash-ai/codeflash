@@ -1,17 +1,13 @@
 import os
-import sys
 from typing import List
+
+import tomlkit
 
 from codeflash.code_utils.config_consts import MIN_IMPROVEMENT_THRESHOLD
 
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
-
 
 def supported_config_keys() -> List[str]:
-    return ["test-framework", "tests-root", "root"]
+    return ["test-framework", "tests-root", "module-root"]
 
 
 def find_pyproject_toml(config_file=None):
@@ -38,7 +34,7 @@ def find_pyproject_toml(config_file=None):
             # Search for pyproject.toml in the parent directories
             dir_path = os.path.dirname(dir_path)
         raise ValueError(
-            f"Could not find pyproject.toml in the current directory {os.getcwd()} or any of the parent directories. Please pass the path to pyproject.toml with --config-file argument"
+            f"Could not find pyproject.toml in the current directory {os.getcwd()} or any of the parent directories. Please create it by running `poetry init`, or pass the path to pyproject.toml with the --config-file argument."
         )
 
 
@@ -46,17 +42,25 @@ def parse_config_file(config_file_path=None):
     config_file = find_pyproject_toml(config_file_path)
     try:
         with open(config_file, "rb") as f:
-            data = tomllib.load(f)
-    except tomllib.TOMLDecodeError as e:
+            data = tomlkit.parse(f.read())
+    except tomlkit.exceptions.ParseError as e:
         raise ValueError(
             f"Error while parsing the config file {config_file}. Please recheck the file for syntax errors. Error: {e}"
         )
-    tool = data["tool"]
-    assert isinstance(tool, dict)
-    config = tool["codeflash"]
-    # todo nice error message whe ncodeflash block is missing
+
+    try:
+        tool = data["tool"]
+        assert isinstance(tool, dict)
+        config = tool["codeflash"]
+    except tomlkit.exceptions.NonExistentKey:
+        raise ValueError(
+            f"Could not find the 'codeflash' block in the config file {config_file}. "
+            f"Please run 'codeflash init' to create the config file."
+        )
     assert isinstance(config, dict)
-    path_keys = ["root", "tests-root"]
+
+    # default values:
+    path_keys = ["module-root", "tests-root"]
     path_list_keys = ["ignore-paths"]
     # TODO: minimum-peformance-gain should become a more dynamic auto-detection in the future
     float_keys = {
@@ -64,6 +68,10 @@ def parse_config_file(config_file_path=None):
     }  # the value is the default value
     str_keys = {
         "pytest-cmd": "pytest",
+        "formatter-cmd": "black",
+    }
+    bool_keys = {
+        "enable-analytics": True,
     }
 
     for key in float_keys:
@@ -76,6 +84,11 @@ def parse_config_file(config_file_path=None):
             config[key] = str(config[key])
         else:
             config[key] = str_keys[key]
+    for key in bool_keys:
+        if key in config:
+            config[key] = bool(config[key])
+        else:
+            config[key] = bool_keys[key]
     for key in path_keys:
         if key in config:
             config[key] = os.path.join(os.path.dirname(config_file), config[key])
@@ -85,10 +98,11 @@ def parse_config_file(config_file_path=None):
             config[key] = [os.path.join(os.path.dirname(config_file), path) for path in config[key]]
         else:  # Default to empty list
             config[key] = []
+
     assert config["test-framework"] in [
         "pytest",
         "unittest",
-    ], "CodeFlash only supports pytest and unittest in pyproject.toml"
+    ], "In pyproject.toml CodeFlash only supports the 'test-framework' as pytest and unittest."
     for key in list(config.keys()):
         if "-" in key:
             config[key.replace("-", "_")] = config[key]

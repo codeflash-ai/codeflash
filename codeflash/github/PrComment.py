@@ -1,9 +1,8 @@
 from typing import Union
 
+from codeflash.verification.test_results import TestResults
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
-
-from codeflash.verification.test_results import TestResults
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
@@ -13,7 +12,8 @@ class PrComment:
     original_runtime: int
     function_name: str
     relative_file_path: str
-    speedup: float
+    speedup_x: str
+    speedup_pct: str
     winning_test_results: TestResults
 
     def to_json(self) -> dict[str, Union[str, dict[str, dict[str, int]]]]:
@@ -23,8 +23,8 @@ class PrComment:
             "original_runtime": f"{(self.original_runtime / 1000):.2f}",
             "function_name": self.function_name,
             "file_path": self.relative_file_path,
-            "speedup_x": f"{self.speedup:.2f}",
-            "speedup_pct": f"{self.speedup * 100:.2f}",
+            "speedup_x": self.speedup_x,
+            "speedup_pct": self.speedup_pct,
             "report_table": {
                 test_type.to_name(): result
                 for test_type, result in self.winning_test_results.get_test_pass_fail_report_by_type().items()

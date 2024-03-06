@@ -1,6 +1,6 @@
 import os
 
-os.environ["CODEFLASH_API_KEY"] = "test-key"
+os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
 from codeflash.verification.verifier import merge_unit_tests
 
 

@@ -68,7 +68,7 @@ class ModifyInspiredTests(ast.NodeTransformer):
 
 @dataclass(frozen=True)
 class TestConfig:
-    test_root: str
+    tests_root: str
     project_root_path: str
     test_framework: str
     pytest_cmd: str = "pytest"

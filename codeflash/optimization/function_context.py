@@ -1,17 +1,15 @@
 import ast
+import jedi
 import logging
 import os
-from typing import List
-
-import jedi
 import tiktoken
 from jedi.api.classes import Name
-from pydantic import RootModel
 from pydantic.dataclasses import dataclass
+from typing import NoReturn, Union
 
 from codeflash.code_utils.code_extractor import get_code_no_skeleton, get_code
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize, FunctionParent
 
 
 def belongs_to_class(name: Name, class_name: str) -> bool:
@@ -27,13 +25,14 @@ def belongs_to_class(name: Name, class_name: str) -> bool:
 
 def belongs_to_function(name: Name, function_name: str) -> bool:
     """
-    Check if the given name belongs to the specified function.
+    Check if the given name belongs to the specified function
     """
     if name.full_name and name.full_name.startswith(name.module_name):
-        subname = name.full_name[len(name.module_name) :]
-        if f".{function_name}." in subname:
-            return True
-    return False
+        subname = name.full_name.replace(name.module_name, "", 1)
+    else:
+        return False
+    # The name is defined inside the function or is the function itself
+    return f".{function_name}." in subname or f".{function_name}" == subname
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
@@ -43,41 +42,51 @@ class Source:
     source_code: str
 
 
-@dataclass(frozen=True)
-class SourceList(RootModel):
-    root: list[Source]
-
-
 def get_type_annotation_context(
     function: FunctionToOptimize, jedi_script: jedi.Script, project_root_path: str
-) -> List[Source]:
-    function_name = function.function_name
-    file_path = function.file_path
-    with open(file_path, "r") as file:
-        file_contents = file.read()
-    module = ast.parse(file_contents)
-    sources = []
+) -> list[tuple[Source, str, str]]:
+    function_name: str = function.function_name
+    file_path: str = function.file_path
+    with open(file_path, "r", encoding="utf8") as file:
+        file_contents: str = file.read()
+    try:
+        module: ast.Module = ast.parse(file_contents)
+    except SyntaxError as e:
+        logging.error(f"get_type_annotation_context - Syntax error in code: {e}")
+        return []
+    sources: list[tuple[Source, str, str]] = []
     ast_parents: list[str] = []
 
-    def visit_children(node, ast_parents):
+    def visit_children(
+        node: Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module], node_parents
+    ) -> NoReturn:
         for child in ast.iter_child_nodes(node):
-            visit(child, ast_parents)
+            visit(child, node_parents)
 
-    def visit(node, ast_parents):
+    def visit(
+        node: Union[ast.AST, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module],
+        node_parents: list[Union[FunctionParent, str]],
+    ) -> NoReturn:
         if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if node.name == function_name and ast_parents == function.parents:
+                if node.name == function_name and node_parents == function.parents:
                     for arg in node.args.args:
                         if arg.annotation and hasattr(arg.annotation, "id"):
                             name = arg.annotation.id
                             line_no = arg.annotation.lineno
                             col_no = arg.annotation.col_offset
-                            definition: List[Name] = jedi_script.goto(
-                                line=line_no,
-                                column=col_no,
-                                follow_imports=True,
-                                follow_builtin_imports=False,
-                            )
+                            try:
+                                definition: list[Name] = jedi_script.goto(
+                                    line=line_no,
+                                    column=col_no,
+                                    follow_imports=True,
+                                    follow_builtin_imports=False,
+                                )
+                            except Exception as e:
+                                logging.error(
+                                    f"Error while getting definition for {name.full_name}: {e}"
+                                )
+                                definition = []
                             if definition:  # TODO can be multiple definitions
                                 definition_path = str(definition[0].module_path)
                                 # The definition is part of this project and not defined within the original function
@@ -91,22 +100,28 @@ def get_type_annotation_context(
                                         FunctionToOptimize(
                                             definition[0].name,
                                             definition_path,
-                                            ast_parents[:-1],
+                                            node_parents[:-1],
                                         )
                                     )
                                     if source_code:
                                         sources.append(
-                                            Source(
-                                                definition[0].name,
-                                                definition[0],
-                                                source_code,
+                                            (
+                                                Source(
+                                                    definition[0].name,
+                                                    definition[0],
+                                                    source_code,
+                                                ),
+                                                definition_path,
+                                                definition[0].full_name.removeprefix(
+                                                    definition[0].module_name + "."
+                                                ),
                                             )
                                         )
             if not isinstance(node, ast.Module):
-                ast_parents.append(node.name)
-            visit_children(node, ast_parents)
+                node_parents.append(node.name)
+            visit_children(node, node_parents)
             if not isinstance(node, ast.Module):
-                ast_parents.pop()
+                node_parents.pop()
 
     visit(module, ast_parents)
 
@@ -115,13 +130,14 @@ def get_type_annotation_context(
 
 def get_function_variables_definitions(
     function_to_optimize: FunctionToOptimize, project_root_path: str
-) -> List[Source]:
+) -> list[tuple[Source, str, str]]:
     function_name = function_to_optimize.function_name
     file_path = function_to_optimize.file_path
     script = jedi.Script(path=file_path, project=jedi.Project(path=project_root_path))
-    sources = []
+    sources: list[tuple[Source, str, str]] = []
     # TODO: The function name condition can be stricter so that it does not clash with other class names etc.
-    # TODO: The function could have been imported as some other name, We should be checking for the translation as well. Also check for the original function name
+    # TODO: The function could have been imported as some other name,
+    #  we should be checking for the translation as well. Also check for the original function name.
     names = []
     for ref in script.get_names(all_scopes=True, definitions=False, references=True):
         if ref.full_name:
@@ -136,12 +152,20 @@ def get_function_variables_definitions(
                     names.append(ref)
 
     for name in names:
-        definitions: List[Name] = script.goto(
-            line=name.line,
-            column=name.column,
-            follow_imports=True,
-            follow_builtin_imports=False,
-        )
+        try:
+            definitions: list[Name] = script.goto(
+                line=name.line,
+                column=name.column,
+                follow_imports=True,
+                follow_builtin_imports=False,
+            )
+        except Exception as e:
+            try:
+                logging.error(f"Error while getting definition for {name.full_name}: {e}")
+            except Exception as e:
+                # name.full_name can also throw exceptions sometimes
+                logging.error(f"Error while getting definition: {e}")
+            definitions = []
         if definitions:
             # TODO: there can be multiple definitions, see how to handle such cases
             definition_path = str(definitions[0].module_path)
@@ -154,7 +178,13 @@ def get_function_variables_definitions(
             ):
                 source_code = get_code_no_skeleton(definition_path, definitions[0].name)
                 if source_code:
-                    sources.append(Source(name.full_name, definitions[0], source_code))
+                    sources.append(
+                        (
+                            Source(name.full_name, definitions[0], source_code),
+                            definition_path,
+                            name.full_name.removeprefix(name.module_name + "."),
+                        )
+                    )
     annotation_sources = get_type_annotation_context(
         function_to_optimize, script, project_root_path
     )
@@ -162,9 +192,9 @@ def get_function_variables_definitions(
     deduped_sources = []
     existing_full_names = set()
     for source in sources:
-        if source.full_name not in existing_full_names:
+        if source[0].full_name not in existing_full_names:
             deduped_sources.append(source)
-            existing_full_names.add(source.full_name)
+            existing_full_names.add(source[0].full_name)
     return deduped_sources
 
 
@@ -176,15 +206,15 @@ def get_constrained_function_context_and_dependent_functions(
     project_root_path: str,
     code_to_optimize: str,
     max_tokens: int = MAX_PROMPT_TOKENS,
-) -> tuple[str, list[Source]]:
+) -> tuple[str, list[tuple[Source, str, str]]]:
     # TODO: Not just do static analysis, but also find the datatypes of function arguments by running the existing
     #  unittests and inspecting the arguments to resolve the real definitions and dependencies.
-    dependent_functions: list[Source] = get_function_variables_definitions(
+    dependent_functions: list[tuple[Source, str, str]] = get_function_variables_definitions(
         function_to_optimize, project_root_path
     )
     tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")
     code_to_optimize_tokens = tokenizer.encode(code_to_optimize)
-    dependent_functions_sources = [function.source_code for function in dependent_functions]
+    dependent_functions_sources = [function[0].source_code for function in dependent_functions]
     dependent_functions_tokens = [
         len(tokenizer.encode(function)) for function in dependent_functions_sources
     ]

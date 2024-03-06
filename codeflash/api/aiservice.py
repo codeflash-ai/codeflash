@@ -1,15 +1,20 @@
+import json
 import logging
-import requests
-from pydantic import RootModel
+import os
 from typing import Any, Dict, List, Tuple, Optional
 
+import requests
+from pydantic.json import pydantic_encoder
+
+from codeflash.analytics.posthog import ph
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
-AI_SERVICE_BASE_URL = "https://app.codeflash.ai"
-# AI_SERVICE_BASE_URL = "http://localhost:8000/"
-
-AI_SERVICE_HEADERS = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
+if os.environ.get("AIS_SERVER", default="prod").lower() == "local":
+    AI_SERVICE_BASE_URL = "http://localhost:8000/"
+    logging.info(f"Using local AI Service at {AI_SERVICE_BASE_URL}.")
+else:
+    AI_SERVICE_BASE_URL = "https://app.codeflash.ai"
 
 
 def make_ai_service_request(
@@ -20,20 +25,22 @@ def make_ai_service_request(
 ) -> requests.Response:
     """
     Make an API request to the given endpoint on the AI service.
-
-    Parameters:
-    - endpoint (str): The endpoint to call, e.g., "/optimize".
-    - method (str): The HTTP method to use, e.g., "POST".
-    - data (Dict[str, Any]): The data to send in the request.
-
-    Returns:
-    - requests.Response: The response from the API.
+    :param endpoint: The endpoint to call, e.g., "/optimize".
+    :param method: The HTTP method to use ('GET' or 'POST').
+    :param payload: Optional JSON payload to include in the POST request body.
+    :param timeout: The timeout for the request.
+    :return: The response object from the API.
     """
     url = f"{AI_SERVICE_BASE_URL}/ai{endpoint}"
+    ai_service_headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
     if method.upper() == "POST":
-        response = requests.post(url, json=payload, headers=AI_SERVICE_HEADERS, timeout=timeout)
+        json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
+        ai_service_headers["Content-Type"] = "application/json"
+        response = requests.post(
+            url, data=json_payload, headers=ai_service_headers, timeout=timeout
+        )
     else:
-        response = requests.get(url, headers=AI_SERVICE_HEADERS, timeout=timeout)
+        response = requests.get(url, headers=ai_service_headers, timeout=timeout)
     # response.raise_for_status()  # Will raise an HTTPError if the HTTP request returned an unsuccessful status code
     return response
 
@@ -51,15 +58,29 @@ def optimize_python_code(
     Returns:
     - List[Tuple[str, str]]: A list of tuples where the first element is the optimized code and the second is the explanation.
     """
-    data = {"source_code": source_code, "num_variants": num_variants}
-    logging.info(f"Generating Optimizations ...")
-    response = make_ai_service_request("/optimize", payload=data, timeout=600)
+    payload = {"source_code": source_code, "num_variants": num_variants}
+    logging.info(f"Generating optimized candidates ...")
+    try:
+        response = make_ai_service_request("/optimize", payload=payload, timeout=600)
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error generating optimized candidates: {e}")
+        ph("cli-optimize-error-caught", {"error": str(e)})
+        return [(None, None)]
 
     if response.status_code == 200:
-        optimizations = response.json()
+        optimizations = response.json()["optimizations"]
+        logging.info(f"Generated {len(optimizations)} candidates.")
         return [(opt["source_code"], opt["explanation"]) for opt in optimizations]
     else:
-        logging.error(f"Error: {response.status_code} {response.text}")
+        try:
+            error = response.json()["error"]
+        except Exception as e:
+            error = response.text
+        logging.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+        ph(
+            "cli-optimize-error-response",
+            {"response_status_code": response.status_code, "error": error},
+        )
         return [(None, None)]
 
 
@@ -91,23 +112,41 @@ def generate_regression_tests(
         "pytest",
         "unittest",
     ], f"Invalid test framework, got {test_framework} but expected 'pytest' or 'unittest'"
-    data = {
+    payload = {
         "source_code_being_tested": source_code_being_tested,
-        "function_to_optimize": RootModel[FunctionToOptimize](function_to_optimize).model_dump(
-            mode="json"
-        ),
+        "function_to_optimize": function_to_optimize,
         "dependent_function_names": dependent_function_names,
         "module_path": module_path,
         "test_module_path": test_module_path,
         "test_framework": test_framework,
         "test_timeout": test_timeout,
     }
-    response = make_ai_service_request("/testgen", payload=data, timeout=600)
+    try:
+        response = make_ai_service_request("/testgen", payload=payload, timeout=600)
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error generating tests: {e}")
+        ph("cli-testgen-error-caught", {"error": str(e)})
+        return None
+
     # the timeout should be the same as the timeout for the AI service backend
 
-    response_json = response.json()
     if response.status_code == 200:
+        response_json = response.json()
+        logging.info(f"Generated tests for function {function_to_optimize.function_name}")
         return response_json["generated_tests"], response_json["instrumented_tests"]
     else:
-        logging.error(f"Error: {response.status_code} {response.text}")
-        return None
+        try:
+            error = response.json()["error"]
+            logging.error(f"Error generating tests: {response.status_code} - {error}")
+            ph(
+                "cli-testgen-error-response",
+                {"response_status_code": response.status_code, "error": error},
+            )
+            return None
+        except Exception as e:
+            logging.error(f"Error generating tests: {response.status_code} - {response.text}")
+            ph(
+                "cli-testgen-error-response",
+                {"response_status_code": response.status_code, "error": response.text},
+            )
+            return None

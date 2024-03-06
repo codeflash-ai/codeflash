@@ -1,14 +1,17 @@
 import ast
+import libcst as cst
 import logging
 import os
+import random
 from _ast import ClassDef, FunctionDef, AsyncFunctionDef
-from typing import Dict, Optional, List, Tuple, Union
-
-import libcst as cst
 from libcst import CSTNode
 from pydantic.dataclasses import dataclass
+from typing import Dict, Optional, List, Tuple, Union
 
-from codeflash.code_utils.code_utils import path_belongs_to_site_packages
+from codeflash.code_utils.code_utils import (
+    path_belongs_to_site_packages,
+    module_name_from_file_path,
+)
 from codeflash.code_utils.git_utils import get_git_diff
 from codeflash.verification.verification_utils import TestConfig
 
@@ -113,11 +116,14 @@ def get_functions_to_optimize_by_file(
     function: Optional[str],
     test_cfg: TestConfig,
     ignore_paths: List[str],
+    project_root: str,
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
     functions = {}
     if optimize_all:
+        logging.info("Finding all functions in the module '%s' ...", optimize_all)
         functions = get_all_files_and_functions(optimize_all)
     elif file is not None:
+        logging.info("Finding all functions in the file '%s' ...", file)
         functions = find_all_functions_in_file(file)
         if function is not None:
             only_function_name = function.split(".")[-1]
@@ -126,13 +132,18 @@ def get_functions_to_optimize_by_file(
                 if only_function_name == fn.function_name:
                     found_function = fn
             if found_function is None:
-                raise ValueError(f"Function {only_function_name} not found in file {file}")
+                raise ValueError(
+                    f"Function {only_function_name} not found in file {file} or"
+                    f" the function does not have a 'return' statement."
+                )
             functions[file] = [found_function]
     else:
+        logging.info("Finding all functions modified in the current git diff ...")
         functions = get_functions_within_git_diff()
     filtered_modified_functions, functions_count = filter_functions(
-        functions, test_cfg.test_root, ignore_paths
+        functions, test_cfg.tests_root, ignore_paths, project_root
     )
+    logging.info("Found %d functions to optimize", functions_count)
     return filtered_modified_functions, functions_count
 
 
@@ -142,9 +153,13 @@ def get_functions_within_git_diff() -> Dict[str, List[FunctionToOptimize]]:
     for path in modified_lines:
         if not os.path.exists(path):
             continue
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf8") as f:
             file_content = f.read()
-            wrapper = cst.metadata.MetadataWrapper(cst.parse_module(file_content))
+            try:
+                wrapper = cst.metadata.MetadataWrapper(cst.parse_module(file_content))
+            except Exception as e:
+                logging.error(e)
+                continue
             function_lines = FunctionVisitor(file_path=path)
             wrapper.visit(function_lines)
             for function_to_optimize in function_lines.functions:
@@ -157,21 +172,27 @@ def get_functions_within_git_diff() -> Dict[str, List[FunctionToOptimize]]:
     return modified_functions
 
 
-def get_all_files_and_functions(project_root_path: str) -> Dict[str, List[FunctionToOptimize]]:
+def get_all_files_and_functions(module_root_path: str) -> Dict[str, List[FunctionToOptimize]]:
     functions = {}
-    for root, dirs, files in os.walk(project_root_path):
+    for root, dirs, files in os.walk(module_root_path):
         for file in files:
             if not file.endswith(".py"):
                 continue
             file_path = os.path.join(root, file)
+
             # Find all the functions in the file
             functions.update(find_all_functions_in_file(file_path))
-    return functions
+    # Randomize the order of the files to optimize to avoid optimizing the same file in the same order every time.
+    # Helpful if an optimize-all run is stuck and we restart it.
+    files_list = list(functions.items())
+    random.shuffle(files_list)
+    functions_shuffled = dict(files_list)
+    return functions_shuffled
 
 
 def find_all_functions_in_file(file_path: str) -> Dict[str, List[FunctionToOptimize]]:
     functions: Dict[str, List[FunctionToOptimize]] = {}
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf8") as f:
         try:
             ast_module = ast.parse(f.read())
         except Exception as e:
@@ -184,7 +205,10 @@ def find_all_functions_in_file(file_path: str) -> Dict[str, List[FunctionToOptim
 
 
 def filter_functions(
-    modified_functions: Dict[str, List[FunctionToOptimize]], test_root: str, ignore_paths=List[str]
+    modified_functions: Dict[str, List[FunctionToOptimize]],
+    tests_root: str,
+    ignore_paths: List[str],
+    project_root: str,
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
     # Remove any functions that we don't want to optimize
     filtered_modified_functions = {}
@@ -192,8 +216,9 @@ def filter_functions(
     test_functions_removed_count = 0
     site_packages_removed_count = 0
     ignore_paths_removed_count = 0
+    malformed_paths_count = 0
     for file_path, functions in modified_functions.items():
-        if file_path.startswith(test_root + os.sep):
+        if file_path.startswith(tests_root + os.sep):
             test_functions_removed_count += len(functions)
             continue
         if file_path in ignore_paths or any(
@@ -204,16 +229,22 @@ def filter_functions(
         if path_belongs_to_site_packages(file_path):
             site_packages_removed_count += len(functions)
             continue
+        try:
+            ast.parse(f"import {module_name_from_file_path(file_path, project_root)}")
+        except SyntaxError:
+            malformed_paths_count += 1
+            continue
         filtered_modified_functions[file_path] = functions
         functions_count += len(functions)
     if (
         test_functions_removed_count > 0
         or site_packages_removed_count > 0
         or ignore_paths_removed_count > 0
+        or malformed_paths_count > 0
     ):
         logging.info(
-            f"Ignoring {test_functions_removed_count} test functions, {site_packages_removed_count} site-packages functions "
-            f"and {ignore_paths_removed_count} functions from ignored paths"
+            f"Ignoring {test_functions_removed_count} test functions, {site_packages_removed_count} site-packages functions, "
+            f"{malformed_paths_count} non-importable file paths and {ignore_paths_removed_count} files from ignored paths"
         )
     for path in list(filtered_modified_functions.keys()):
         if len(filtered_modified_functions[path]) == 0:

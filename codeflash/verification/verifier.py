@@ -31,11 +31,15 @@ def generate_tests(
 
         module = importlib.import_module(module_path)
         generated_test_source = module.CACHED_TESTS
-        instrumented_test_source = module.CACHED_TESTS
+        instrumented_test_source = module.CACHED_INSTRUMENTED_TESTS
+        path = get_run_tmp_file("").replace("\\", "\\\\")  # Escape backslash for windows paths
+        instrumented_test_source = instrumented_test_source.replace(
+            "{codeflash_run_tmp_dir_client_side}", path
+        )
         logging.info(f"Using cached tests from {module_path}.CACHED_TESTS")
     else:
         test_module_path = module_name_from_file_path(
-            get_test_file_path(test_cfg.test_root, function_to_optimize.function_name, 0),
+            get_test_file_path(test_cfg.tests_root, function_to_optimize.function_name, 0),
             test_cfg.project_root_path,
         )
         response = generate_regression_tests(
@@ -49,8 +53,9 @@ def generate_tests(
         )
         if response and isinstance(response, tuple) and len(response) == 2:
             generated_test_source, instrumented_test_source = response
+            path = get_run_tmp_file("").replace("\\", "\\\\")  # Escape backslash for windows paths
             instrumented_test_source = instrumented_test_source.replace(
-                "{codeflash_run_tmp_dir_client_side}", get_run_tmp_file("")
+                "{codeflash_run_tmp_dir_client_side}", path
             )
         else:
             logging.error(
@@ -69,8 +74,12 @@ def generate_tests(
 
 
 def merge_unit_tests(unit_test_source: str, inspired_unit_tests: str, test_framework: str) -> str:
-    inspired_unit_tests_ast = ast.parse(inspired_unit_tests)
-    unit_test_source_ast = ast.parse(unit_test_source)
+    try:
+        inspired_unit_tests_ast = ast.parse(inspired_unit_tests)
+        unit_test_source_ast = ast.parse(unit_test_source)
+    except SyntaxError as e:
+        logging.error(f"Syntax error in code: {e}")
+        return unit_test_source
     import_list: list[ast.stmt] = list()
     modified_ast = ModifyInspiredTests(import_list, test_framework).visit(inspired_unit_tests_ast)
     if test_framework == "pytest":
