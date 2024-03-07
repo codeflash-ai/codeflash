@@ -583,7 +583,7 @@ def run_end_to_end_test(setup_info: SetupInfo) -> None:
 
     # Delete the bubble_sort.py file after the test
     os.remove(bubble_sort_path)
-    click.echo(f"🗑️ Deleted {bubble_sort_path}")
+    click.echo(f"\n🗑️ Deleted {bubble_sort_path}")
 
     if process.returncode == 0:
         click.echo("\n✅ End-to-end test passed. CodeFlash has been correctly set up!")
