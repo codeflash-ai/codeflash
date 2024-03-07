@@ -5,11 +5,18 @@ import subprocess
 import unittest
 from collections import defaultdict
 from typing import Dict, List, Optional
+from enum import Enum
+import pathlib
 
 import jedi
 from pydantic.dataclasses import dataclass
 
 from codeflash.verification.verification_utils import TestConfig
+
+
+class ParseType(Enum):
+    CO = "co"
+    Q = "q"
 
 
 @dataclass(frozen=True)
@@ -20,24 +27,41 @@ class TestsInFile:
     test_suite: Optional[str]
 
     @classmethod
-    def from_pytest_stdout_line(cls, module_line: str, function_line: str, directory: str):
-        module_match = re.match(r"\s*<Module (.+)>", module_line)
-        function_match = re.match(r"\s*<Function (.+)>", function_line)
-        if module_match and function_match:
-            module_path = module_match.group(1)
-            function_name = function_match.group(1)
-            absolute_test_path = os.path.join(directory, module_path)
-            assert os.path.exists(
-                absolute_test_path
-            ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
+    def from_pytest_stdout_line_co(cls, module: str, function: str, directory: str):
+        absolute_test_path = os.path.join(directory, module)
+        assert os.path.exists(
+            absolute_test_path
+        ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
+        return cls(
+            test_file=absolute_test_path,
+            test_class=None,
+            test_function=function,
+            test_suite=None,
+        )
+
+    @classmethod
+    def from_pytest_stdout_line_q(cls, line: str, pytest_rootdir: str):
+        parts = line.split("::")
+        absolute_test_path = os.path.join(pytest_rootdir, parts[0])
+        assert os.path.exists(
+            absolute_test_path
+        ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
+        if len(parts) == 3:
+            return cls(
+                test_file=absolute_test_path,
+                test_class=parts[1],
+                test_function=parts[2],
+                test_suite=None,
+            )
+        elif len(parts) == 2:
             return cls(
                 test_file=absolute_test_path,
                 test_class=None,
-                test_function=function_name,
+                test_function=parts[1],
                 test_suite=None,
             )
         else:
-            raise ValueError(f"Unexpected pytest result format: {module_line} or {function_line}")
+            raise ValueError(f"Unexpected pytest result format: {line}")
 
 
 @dataclass(frozen=True)
@@ -58,24 +82,56 @@ def discover_unit_tests(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     return discover_tests(cfg)
 
 
+def get_pytest_rootdir_only(pytest_cmd_list, tests_root, project_root) -> str:
+    # Ref - https://docs.pytest.org/en/stable/reference/customize.html#initialization-determining-rootdir-and-configfile
+    # A very hacky solution that only runs the --co mode until we see the rootdir print and then it just kills the
+    # pytest to save time. We should find better ways to just get the rootdir, one way is to not use the -q flag and
+    # parse the --co output, but that could be more work.
+    process = subprocess.Popen(
+        pytest_cmd_list + [tests_root, "--co"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=project_root,
+    )
+    rootdir_re = re.compile(r"^rootdir:\s?([^\s]*)")
+    # Iterate over the output lines
+    while True:
+        output = process.stdout.readline()
+        if output == "" and process.poll() is not None:
+            break
+        if output:
+            if rootdir_re.search(output):
+                process.kill()
+                return rootdir_re.search(output).group(1)
+    raise ValueError(f"Could not find rootdir in pytest output for {tests_root}")
+
+
+# Use -q parsing unless there is a rootdir in the output, in which case use --co parsing
 def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
     pytest_cmd_list = [chunk for chunk in cfg.pytest_cmd.split(" ") if chunk != ""]
     pytest_result = subprocess.run(
-        pytest_cmd_list + [f"{tests_root}", "--co", "-m", "not skip"],
+        pytest_cmd_list + [f"{tests_root}", "--co", "-q", "-m", "not skip"],
         stdout=subprocess.PIPE,
-        cwd=tests_root,
+        cwd=project_root,
     )
 
     pytest_stdout = pytest_result.stdout.decode("utf-8")
-    rootdir_re = re.compile(r"^rootdir:\s?(\S*)", re.MULTILINE)
-    pytest_rootdir_match = rootdir_re.search(pytest_stdout)
-    if not pytest_rootdir_match:
-        raise ValueError(f"Could not find rootdir in pytest output for {tests_root}")
-    pytest_rootdir = pytest_rootdir_match.group(1)
 
-    tests = parse_pytest_stdout(pytest_stdout, pytest_rootdir, tests_root)
+    parse_type = ParseType.Q
+    if "rootdir: " not in pytest_stdout:
+        pytest_rootdir = get_pytest_rootdir_only(pytest_cmd_list, tests_root, project_root)
+    else:
+        rootdir_re = re.compile(r"^rootdir:\s?(\S*)", re.MULTILINE)
+        pytest_rootdir_match = rootdir_re.search(pytest_stdout)
+        if not pytest_rootdir_match:
+            raise ValueError(f"Could not find rootdir in pytest output for {tests_root}")
+        pytest_rootdir = pytest_rootdir_match.group(1)
+        parse_type = ParseType.CO
+
+    tests = parse_pytest_stdout(pytest_stdout, pytest_rootdir, tests_root, parse_type)
     file_to_test_map = defaultdict(list)
 
     for test in tests:
@@ -219,9 +275,22 @@ def process_test_files(
     return deduped_function_to_test_map
 
 
-def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[TestsInFile]:
+def parse_pytest_stdout(
+    pytest_stdout: str, pytest_rootdir: str, tests_root: str, parse_type: ParseType
+) -> List[TestsInFile]:
     test_results = []
-    module_line = None
+    if parse_type == ParseType.Q:
+        for line in pytest_stdout.splitlines():
+            if line.startswith("==") or line.startswith("\n") or line == "":
+                break
+            try:
+                test_result = TestsInFile.from_pytest_stdout_line_q(line, pytest_rootdir)
+                test_results.append(test_result)
+            except ValueError as e:
+                logging.warning(str(e))
+                continue
+        return test_results
+
     directory = tests_root
     for line in pytest_stdout.splitlines():
         if "<Dir " in line:
@@ -250,19 +319,44 @@ def parse_pytest_stdout(pytest_stdout: str, pytest_rootdir, tests_root) -> List[
             if ".py" not in module:
                 module.append(".py")
 
+            module_list = pathlib.Path(module).parts
+            index = len(module_list) - 1
+            if len(module_list) > 1:
+                curr_dir = module
+                while len(module_list) > 1 and curr_dir not in directory:
+                    curr_dir = os.path.dirname(curr_dir)
+                    module_list = module_list[:-1]
+                    index -= 1
+
+                module_list = pathlib.Path(module).parts
+                if index < len(module_list) - 1:
+                    index += 1
+                    module_list = module_list[index:]
+                    while not directory.endswith(curr_dir):
+                        directory = os.path.dirname(directory)
+
+                while len(module_list) > 1:
+                    directory = os.path.join(directory, module_list[0])
+                    module_list = module_list[1:]
+
+                module = module_list[0]
+
             while len(directory) > 0 and not os.path.exists(os.path.join(directory, module)):
                 directory = os.path.dirname(directory)
 
             if len(directory) == 0:
                 return test_results
 
-            module_line = line
-
-        elif "<Function " in line and module_line:
-            try:
-                test_result = TestsInFile.from_pytest_stdout_line(module_line, line, directory)
-                test_results.append(test_result)
-            except ValueError as e:
-                logging.warning(str(e))
+        elif "<Function " in line and module is not None:
+            function = re.match(r"\s*<Function (.+)>", line)
+            if function:
+                function = function.group(1)
+                try:
+                    test_result = TestsInFile.from_pytest_stdout_line_co(
+                        module, function, directory
+                    )
+                    test_results.append(test_result)
+                except ValueError as e:
+                    logging.warning(str(e))
 
     return test_results
