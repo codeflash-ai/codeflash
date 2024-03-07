@@ -59,7 +59,12 @@ def ensure_pr_number() -> bool:
     return True
 
 
-SHELL_RC_EXPORT_PATTERN = re.compile(r'^export CODEFLASH_API_KEY="?(.*)"?$', re.M)
+if os.name == "nt":  # Windows
+    SHELL_RC_EXPORT_PATTERN = re.compile(r"^set CODEFLASH_API_KEY=(.*)$", re.M)
+    SHELL_RC_EXPORT_PREFIX = f"set CODEFLASH_API_KEY="
+else:
+    SHELL_RC_EXPORT_PATTERN = re.compile(r'^export CODEFLASH_API_KEY="?(.*)"?$', re.M)
+    SHELL_RC_EXPORT_PREFIX = f"export CODEFLASH_API_KEY="
 
 
 def read_api_key_from_shell_config() -> Optional[str]:
@@ -72,17 +77,20 @@ def read_api_key_from_shell_config() -> Optional[str]:
 
 def get_shell_rc_path() -> str:
     """Get the path to the user's shell configuration file."""
-    shell = os.environ.get("SHELL", "/bin/bash").split("/")[-1]
-    if shell == "bash":
-        shell_rc_filename = ".bashrc"
-    elif shell == "zsh":
-        shell_rc_filename = ".zshrc"
-    elif shell == "ksh":
-        shell_rc_filename = ".kshrc"
-    elif shell == "csh" or shell == "tcsh":
-        shell_rc_filename = ".cshrc"
-    elif shell == "dash":
-        shell_rc_filename = ".profile"
+    if os.name == "nt":  # on Windows, we use a batch file in the user's home directory
+        return os.path.expanduser("~\\codeflash_env.bat")
     else:
-        shell_rc_filename = ".bashrc"  # default to bash if unknown shell
-    return os.path.expanduser(f"~/{shell_rc_filename}")
+        shell = os.environ.get("SHELL", "/bin/bash").split("/")[-1]
+        if shell == "bash":
+            shell_rc_filename = ".bashrc"
+        elif shell == "zsh":
+            shell_rc_filename = ".zshrc"
+        elif shell == "ksh":
+            shell_rc_filename = ".kshrc"
+        elif shell == "csh" or shell == "tcsh":
+            shell_rc_filename = ".cshrc"
+        elif shell == "dash":
+            shell_rc_filename = ".profile"
+        else:
+            shell_rc_filename = ".bashrc"  # default to bash if unknown shell
+        return os.path.expanduser(f"~/{shell_rc_filename}")
