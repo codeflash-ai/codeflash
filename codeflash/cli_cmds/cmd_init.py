@@ -220,7 +220,7 @@ def collect_setup_info(setup_info: dict[str, str]):
     # enable_analytics_answer = inquirer.prompt(enable_analytics_question)
     # setup_info["enable_analytics"] = enable_analytics_answer["enable_analytics"]
 
-    ph("cli-analytics-choice", {"enable_analytics": setup_info["enable_analytics"]})
+    # ph("cli-analytics-choice", {"enable_analytics": setup_info["enable_analytics"]})
 
 
 def detect_test_framework(curdir, tests_root) -> Optional[str]:
