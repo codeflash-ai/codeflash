@@ -95,7 +95,7 @@ module-root = "codeflash"
 tests-root = "tests"
 test-framework = "pytest"
 ignore-paths = []
-enable-analytics = true
+
 
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.2.0,<2.0.0"]

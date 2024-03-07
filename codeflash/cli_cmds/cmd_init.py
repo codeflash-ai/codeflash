@@ -4,13 +4,14 @@ import re
 import subprocess
 import sys
 import time
-from typing import Optional
+from typing import Optional, NoReturn
 
 import click
 import inquirer
 import inquirer.themes
 import tomlkit
 from git import Repo
+from pydantic.dataclasses import dataclass
 
 from codeflash.analytics.posthog import ph
 from codeflash.code_utils.env_utils import (
@@ -34,15 +35,21 @@ CODEFLASH_LOGO: str = (
 )
 
 
-def init_codeflash():
+@dataclass
+class SetupInfo:
+    module_root: str
+    tests_root: str
+    test_framework: str
+    ignore_paths: list[str]
+
+
+def init_codeflash() -> None:
     click.echo(CODEFLASH_LOGO)
     click.echo("⚡️ Welcome to CodeFlash! Let's get you set up.\n")
 
     did_add_new_key = prompt_api_key()
 
-    setup_info: dict[str, str] = {}
-
-    collect_setup_info(setup_info)
+    setup_info: SetupInfo = collect_setup_info()
 
     configure_pyproject_toml(setup_info)
 
@@ -55,7 +62,7 @@ def init_codeflash():
         "⚡️ CodeFlash is now set up! You can now run:\n"
         "    codeflash --file <path-to-file> --function <function-name> to optimize a function within a file\n"
         "    codeflash --file <path-to-file> to optimize all functions in a file\n"
-        f"    codeflash --all to optimize all functions in all files in the module you selected ({setup_info['module_root']})\n"
+        f"    codeflash --all to optimize all functions in all files in the module you selected ({setup_info.module_root})\n"
         # "    codeflash --pr <pr-number> to optimize a PR\n"
         "-or-\n"
         "    codeflash --help to see all options\n"
@@ -70,7 +77,7 @@ def init_codeflash():
     ph("cli-installation-successful", {"did_add_new_key": did_add_new_key})
 
 
-def ask_run_end_to_end_test(setup_info):
+def ask_run_end_to_end_test(setup_info) -> None:
     run_tests_answer = inquirer.prompt(
         [
             inquirer.Confirm(
@@ -86,7 +93,7 @@ def ask_run_end_to_end_test(setup_info):
         run_end_to_end_test(setup_info)
 
 
-def collect_setup_info(setup_info: dict[str, str]):
+def collect_setup_info() -> SetupInfo:
     curdir = os.getcwd()
     # Check if the cwd is writable
     if not os.access(curdir, os.W_OK):
@@ -121,23 +128,15 @@ def collect_setup_info(setup_info: dict[str, str]):
     curdir_option = "current directory (" + curdir + ")"
     module_subdir_options = valid_module_subdirs + [curdir_option]
 
-    module_root_answer = inquirer.prompt(
-        [
-            inquirer.List(
-                "module_root",
-                message="Which Python module do you want me to optimize going forward?\n"
-                + "(This is usually the top-most directory where all your Python source code is located)",
-                choices=module_subdir_options,
-                default=(
-                    project_name
-                    if project_name in module_subdir_options
-                    else module_subdir_options[0]
-                ),
-            )
-        ]
+    module_root_answer = inquirer.list_input(
+        message="Which Python module do you want me to optimize going forward?\n"
+        + "(This is usually the top-most directory where all your Python source code is located)",
+        choices=module_subdir_options,
+        default=(
+            project_name if project_name in module_subdir_options else module_subdir_options[0]
+        ),
     )
-    module_root = module_root_answer["module_root"]
-    setup_info["module_root"] = "." if module_root == curdir_option else module_root
+    module_root = "." if module_root_answer == curdir_option else module_root_answer
     ph("cli-project-root-provided")
 
     # Discover test directory
@@ -146,27 +145,22 @@ def collect_setup_info(setup_info: dict[str, str]):
     test_subdir_options = valid_subdirs if len(valid_subdirs) > 0 else [create_for_me_option]
     custom_dir_option = "enter a custom directory..."
     test_subdir_options.append(custom_dir_option)
-    tests_root_answer = inquirer.prompt(
-        [
-            inquirer.List(
-                "tests_root",
-                message="Where are your tests located? "
-                "(If you don't have any tests yet, I can create an empty tests/ directory for you)",
-                choices=test_subdir_options,
-                default=(
-                    default_tests_subdir
-                    if default_tests_subdir in test_subdir_options
-                    else test_subdir_options[0]
-                ),
-            )
-        ]
+    tests_root_answer = inquirer.list_input(
+        message="Where are your tests located? "
+        "(If you don't have any tests yet, I can create an empty tests/ directory for you)",
+        choices=test_subdir_options,
+        default=(
+            default_tests_subdir
+            if default_tests_subdir in test_subdir_options
+            else test_subdir_options[0]
+        ),
     )
-    tests_root = tests_root_answer["tests_root"]
-    if tests_root == create_for_me_option:
+
+    if tests_root_answer == create_for_me_option:
         tests_root = os.path.join(curdir, default_tests_subdir)
         os.mkdir(tests_root)
         click.echo(f"✅ Created directory {tests_root}/\n")
-    elif tests_root == custom_dir_option:
+    elif tests_root_answer == custom_dir_option:
         custom_tests_root_answer = inquirer.prompt(
             [
                 inquirer.Path(
@@ -179,48 +173,39 @@ def collect_setup_info(setup_info: dict[str, str]):
             ]
         )
         tests_root = custom_tests_root_answer["custom_tests_root"]
-    setup_info["tests_root"] = os.path.relpath(tests_root, curdir)
+    else:
+        tests_root = tests_root_answer
+    tests_root = os.path.relpath(tests_root, curdir)
     ph("cli-tests-root-provided")
 
     # Autodiscover test framework
-    test_framework = detect_test_framework(curdir, tests_root)
-    autodetected = f" (seems to me you're using {test_framework})" if test_framework else ""
-    questions = [
-        inquirer.List(
-            "test_framework",
-            message="Which test framework do you use?" + autodetected,
-            choices=["pytest", "unittest"],
-            default=test_framework or "pytest",
-            carousel=True,
-        )
-    ]
-    answers = inquirer.prompt(questions)
-    setup_info["test_framework"] = answers["test_framework"]
+    autodetected_test_framework = detect_test_framework(curdir, tests_root)
+    autodetected_suffix = (
+        f" (seems to me you're using {autodetected_test_framework})"
+        if autodetected_test_framework
+        else ""
+    )
+    test_framework = inquirer.list_input(
+        message="Which test framework do you use?" + autodetected_suffix,
+        choices=["pytest", "unittest"],
+        default=autodetected_test_framework or "pytest",
+        carousel=True,
+    )
 
-    ph("cli-test-framework-provided", {"test_framework": setup_info["test_framework"]})
+    ph("cli-test-framework-provided", {"test_framework": test_framework})
 
     # Ask for paths to ignore and update the setup_info dictionary
     # ignore_paths_input = click.prompt("Are there any paths CodeFlash should ignore? (comma-separated, no spaces)",
     #                                   default='', show_default=False)
     # ignore_paths = ignore_paths_input.split(',') if ignore_paths_input else ['tests/']
-    ignore_paths = []
-    setup_info["ignore_paths"] = ignore_paths
+    ignore_paths: list[str] = []
 
-    # Ask the user if they agree to enable PostHog analytics logging
-    # enable_analytics_question = [
-    #     inquirer.List(
-    #         "enable_analytics",
-    #         message="⚡️ Is it OK to collect usage analytics to help improve CodeFlash? (recommended)",
-    #         choices=[
-    #             ("Sure, I'd love to help make CodeFlash better!", True),
-    #             ("No, thanks.", False),
-    #         ],
-    #     )
-    # ]
-    # enable_analytics_answer = inquirer.prompt(enable_analytics_question)
-    # setup_info["enable_analytics"] = enable_analytics_answer["enable_analytics"]
-
-    # ph("cli-analytics-choice", {"enable_analytics": setup_info["enable_analytics"]})
+    return SetupInfo(
+        module_root=module_root,
+        tests_root=tests_root,
+        test_framework=test_framework,
+        ignore_paths=ignore_paths,
+    )
 
 
 def detect_test_framework(curdir, tests_root) -> Optional[str]:
@@ -337,7 +322,7 @@ def check_for_toml_or_setup_file() -> Optional[str]:
     return project_name
 
 
-def apologize_and_exit():
+def apologize_and_exit() -> NoReturn:
     click.echo(
         "💡 If you're having trouble, see https://app.codeflash.ai/app/getting-started for further help getting started with CodeFlash!"
     )
@@ -346,7 +331,7 @@ def apologize_and_exit():
 
 
 # Ask if the user wants CodeFlash to optimize new GitHub PRs
-def prompt_github_action(setup_info: dict[str, str]):
+def prompt_github_action(setup_info: SetupInfo) -> None:
     optimize_prs_answer = inquirer.prompt(
         [
             inquirer.Confirm(
@@ -359,21 +344,15 @@ def prompt_github_action(setup_info: dict[str, str]):
     optimize_yes = optimize_prs_answer["optimize_prs"]
     ph("cli-github-optimization-choice", {"optimize_prs": optimize_yes})
     if optimize_yes:
-        repo = Repo(setup_info["module_root"], search_parent_directories=True)
+        repo = Repo(setup_info.module_root, search_parent_directories=True)
         git_root = repo.git.rev_parse("--show-toplevel")
         workflows_path = os.path.join(git_root, ".github", "workflows")
         optimize_yaml_path = os.path.join(workflows_path, "codeflash-optimize.yaml")
 
-        confirm_creation_answer = inquirer.prompt(
-            [
-                inquirer.Confirm(
-                    "confirm_creation",
-                    message=f"Great! I'll create a new workflow file at {optimize_yaml_path} ... is this OK?",
-                    default=True,
-                )
-            ]
+        confirm_creation_yes = inquirer.confirm(
+            message=f"Great! I'll create a new workflow file at {optimize_yaml_path} ... is this OK?",
+            default=True,
         )
-        confirm_creation_yes = confirm_creation_answer["confirm_creation"]
         ph(
             "cli-github-optimization-confirm-workflow-creation",
             {"confirm_creation": confirm_creation_yes},
@@ -435,7 +414,7 @@ def prompt_github_action(setup_info: dict[str, str]):
 
 
 # Create or update the pyproject.toml file with the CodeFlash dependency & configuration
-def configure_pyproject_toml(setup_info: dict[str, str]):
+def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     toml_path = os.path.join(os.getcwd(), "pyproject.toml")
     try:
         with open(toml_path, "r", encoding="utf8") as pyproject_file:
@@ -448,11 +427,10 @@ def configure_pyproject_toml(setup_info: dict[str, str]):
         apologize_and_exit()
 
     codeflash_section = tomlkit.table()
-    codeflash_section["module-root"] = setup_info["module_root"]
-    codeflash_section["tests-root"] = setup_info["tests_root"]
-    codeflash_section["test-framework"] = setup_info["test_framework"]
-    codeflash_section["ignore-paths"] = setup_info["ignore_paths"]
-    codeflash_section["enable-analytics"] = setup_info["enable_analytics"]
+    codeflash_section["module-root"] = setup_info.module_root
+    codeflash_section["tests-root"] = setup_info.tests_root
+    codeflash_section["test-framework"] = setup_info.test_framework
+    codeflash_section["ignore-paths"] = setup_info.ignore_paths
 
     # Add the 'codeflash' section, ensuring 'tool' section exists
     tool_section = pyproject_data.get("tool", tomlkit.table())
@@ -505,7 +483,7 @@ def prompt_api_key() -> bool:
     return True
 
 
-def enter_api_key_and_save_to_rc():
+def enter_api_key_and_save_to_rc() -> None:
     browser_launched = False
     api_key = ""
     while api_key == "":
@@ -559,7 +537,7 @@ def enter_api_key_and_save_to_rc():
     os.environ["CODEFLASH_API_KEY"] = api_key
 
 
-def create_bubble_sort_file(setup_info: dict[str, str]):
+def create_bubble_sort_file(setup_info: SetupInfo) -> None:
     bubble_sort_content = """def sorter(arr):
     for i in range(len(arr)):
         for j in range(len(arr) - 1):
@@ -569,13 +547,13 @@ def create_bubble_sort_file(setup_info: dict[str, str]):
                 arr[j + 1] = temp
     return arr
 """
-    bubble_sort_path = os.path.join(setup_info["module_root"], "bubble_sort.py")
+    bubble_sort_path = os.path.join(setup_info.module_root, "bubble_sort.py")
     with open(bubble_sort_path, "w", encoding="utf8") as bubble_sort_file:
         bubble_sort_file.write(bubble_sort_content)
     click.echo(f"✅ Created {bubble_sort_path}")
 
 
-def run_end_to_end_test(setup_info: dict[str, str]):
+def run_end_to_end_test(setup_info: SetupInfo) -> None:
     command = [
         "codeflash",
         "--file",
@@ -592,7 +570,7 @@ def run_end_to_end_test(setup_info: dict[str, str]):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        cwd=setup_info["module_root"],
+        cwd=setup_info.module_root,
     )
     while process.poll() is None:
         sys.stdout.write(animation[idx % len(animation)])
@@ -603,11 +581,12 @@ def run_end_to_end_test(setup_info: dict[str, str]):
 
     sys.stdout.write(" ")  # Clear the last animation character
     sys.stdout.flush()
-    stderr = process.stderr.read()
-    if stderr:
-        click.echo(stderr.strip())
+    if process.stderr:
+        stderr = process.stderr.read()
+        if stderr:
+            click.echo(stderr.strip())
 
-    bubble_sort_path = os.path.join(setup_info["module_root"], "bubble_sort.py")
+    bubble_sort_path = os.path.join(setup_info.module_root, "bubble_sort.py")
 
     # Delete the bubble_sort.py file after the test
     os.remove(bubble_sort_path)
