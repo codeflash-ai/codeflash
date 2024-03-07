@@ -44,50 +44,48 @@ class SetupInfo:
 
 
 def init_codeflash() -> None:
-    click.echo(CODEFLASH_LOGO)
-    click.echo("⚡️ Welcome to CodeFlash! Let's get you set up.\n")
+    try:
+        click.echo(CODEFLASH_LOGO)
+        click.echo("⚡️ Welcome to CodeFlash! Let's get you set up.\n")
 
-    did_add_new_key = prompt_api_key()
+        did_add_new_key = prompt_api_key()
 
-    setup_info: SetupInfo = collect_setup_info()
+        setup_info: SetupInfo = collect_setup_info()
 
-    configure_pyproject_toml(setup_info)
+        configure_pyproject_toml(setup_info)
 
-    prompt_github_action(setup_info)
+        prompt_github_action(setup_info)
 
-    ask_run_end_to_end_test(setup_info)  # mebbe run this after the following help text?
+        ask_run_end_to_end_test(setup_info)  # mebbe run this after the following help text?
 
-    click.echo(
-        "\n"
-        "⚡️ CodeFlash is now set up! You can now run:\n"
-        "    codeflash --file <path-to-file> --function <function-name> to optimize a function within a file\n"
-        "    codeflash --file <path-to-file> to optimize all functions in a file\n"
-        f"    codeflash --all to optimize all functions in all files in the module you selected ({setup_info.module_root})\n"
-        # "    codeflash --pr <pr-number> to optimize a PR\n"
-        "-or-\n"
-        "    codeflash --help to see all options\n"
-    )
-    if did_add_new_key:
         click.echo(
-            "🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
+            "\n"
+            "⚡️ CodeFlash is now set up! You can now run:\n"
+            "    codeflash --file <path-to-file> --function <function-name> to optimize a function within a file\n"
+            "    codeflash --file <path-to-file> to optimize all functions in a file\n"
+            f"    codeflash --all to optimize all functions in all files in the module you selected ({setup_info.module_root})\n"
+            # "    codeflash --pr <pr-number> to optimize a PR\n"
+            "-or-\n"
+            "    codeflash --help to see all options\n"
         )
-        click.echo("Or run the following command to reload:")
-        click.echo(f"  source {get_shell_rc_path()}")
+        if did_add_new_key:
+            click.echo(
+                "🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
+            )
+            click.echo("Or run the following command to reload:")
+            click.echo(f"  source {get_shell_rc_path()}")
 
-    ph("cli-installation-successful", {"did_add_new_key": did_add_new_key})
+        ph("cli-installation-successful", {"did_add_new_key": did_add_new_key})
+    except KeyboardInterrupt:
+        apologize_and_exit()
 
 
 def ask_run_end_to_end_test(setup_info) -> None:
-    run_tests_answer = inquirer.prompt(
-        [
-            inquirer.Confirm(
-                "run_tests",
-                message="⚡️ Do you want to run a sample optimization to make sure everything's set up correctly? (takes about 3 minutes)",
-                default=True,
-            )
-        ]
+    run_tests = inquirer.confirm(
+        "run_tests",
+        message="⚡️ Do you want to run a sample optimization to make sure everything's set up correctly? (takes about 3 minutes)",
+        default=True,
     )
-    run_tests = run_tests_answer.get("run_tests", False)
     if run_tests:
         create_bubble_sort_file(setup_info)
         run_end_to_end_test(setup_info)
@@ -164,7 +162,7 @@ def collect_setup_info() -> SetupInfo:
         custom_tests_root_answer = inquirer.prompt(
             [
                 inquirer.Path(
-                    "custom_tests_root",  # Removed the colon and space from the message
+                    "path",
                     message=f"Enter the path to your tests directory inside {os.path.abspath(module_root) + os.sep} ",
                     path_type=inquirer.Path.DIRECTORY,
                     exists=True,
@@ -172,7 +170,9 @@ def collect_setup_info() -> SetupInfo:
                 ),
             ]
         )
-        tests_root = custom_tests_root_answer["custom_tests_root"]
+        tests_root = (
+            custom_tests_root_answer["path"] if custom_tests_root_answer else apologize_and_exit()
+        )
     else:
         tests_root = tests_root_answer
     tests_root = os.path.relpath(tests_root, curdir)
@@ -326,22 +326,17 @@ def apologize_and_exit() -> NoReturn:
     click.echo(
         "💡 If you're having trouble, see https://app.codeflash.ai/app/getting-started for further help getting started with CodeFlash!"
     )
-    click.echo("Exiting...")
+    click.echo("👋 Exiting...")
     sys.exit(1)
 
 
 # Ask if the user wants CodeFlash to optimize new GitHub PRs
 def prompt_github_action(setup_info: SetupInfo) -> None:
-    optimize_prs_answer = inquirer.prompt(
-        [
-            inquirer.Confirm(
-                "optimize_prs",
-                message="Do you want CodeFlash to automatically optimize new Github PRs when they're opened (recommended)?",
-                default=True,
-            )
-        ]
+    optimize_yes = inquirer.confirm(
+        "optimize_prs",
+        message="Do you want CodeFlash to automatically optimize new Github PRs when they're opened (recommended)?",
+        default=True,
     )
-    optimize_yes = optimize_prs_answer["optimize_prs"]
     ph("cli-github-optimization-choice", {"optimize_prs": optimize_yes})
     if optimize_yes:
         repo = Repo(setup_info.module_root, search_parent_directories=True)
