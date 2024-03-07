@@ -35,7 +35,7 @@ CODEFLASH_LOGO: str = (
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class SetupInfo:
     module_root: str
     tests_root: str
@@ -82,7 +82,6 @@ def init_codeflash() -> None:
 
 def ask_run_end_to_end_test(setup_info) -> None:
     run_tests = inquirer.confirm(
-        "run_tests",
         message="⚡️ Do you want to run a sample optimization to make sure everything's set up correctly? (takes about 3 minutes)",
         default=True,
     )
@@ -333,7 +332,6 @@ def apologize_and_exit() -> NoReturn:
 # Ask if the user wants CodeFlash to optimize new GitHub PRs
 def prompt_github_action(setup_info: SetupInfo) -> None:
     optimize_yes = inquirer.confirm(
-        "optimize_prs",
         message="Do you want CodeFlash to automatically optimize new Github PRs when they're opened (recommended)?",
         default=True,
     )
