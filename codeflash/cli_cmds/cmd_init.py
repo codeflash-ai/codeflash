@@ -8,6 +8,7 @@ from typing import Optional
 
 import click
 import inquirer
+import inquirer.themes
 import tomlkit
 from git import Repo
 
@@ -143,6 +144,8 @@ def collect_setup_info(setup_info: dict[str, str]):
     default_tests_subdir = "tests"
     create_for_me_option = "okay, create a tests/ directory for me!"
     test_subdir_options = valid_subdirs if len(valid_subdirs) > 0 else [create_for_me_option]
+    custom_dir_option = "enter a custom directory..."
+    test_subdir_options.append(custom_dir_option)
     tests_root_answer = inquirer.prompt(
         [
             inquirer.List(
@@ -163,6 +166,19 @@ def collect_setup_info(setup_info: dict[str, str]):
         tests_root = os.path.join(curdir, default_tests_subdir)
         os.mkdir(tests_root)
         click.echo(f"✅ Created directory {tests_root}/\n")
+    elif tests_root == custom_dir_option:
+        custom_tests_root_answer = inquirer.prompt(
+            [
+                inquirer.Path(
+                    "custom_tests_root",  # Removed the colon and space from the message
+                    message=f"Enter the path to your tests directory inside {os.path.abspath(module_root) + os.sep} ",
+                    path_type=inquirer.Path.DIRECTORY,
+                    exists=True,
+                    normalize_to_absolute_path=True,
+                ),
+            ]
+        )
+        tests_root = custom_tests_root_answer["custom_tests_root"]
     setup_info["tests_root"] = os.path.relpath(tests_root, curdir)
     ph("cli-tests-root-provided")
 
@@ -204,7 +220,7 @@ def collect_setup_info(setup_info: dict[str, str]):
     # enable_analytics_answer = inquirer.prompt(enable_analytics_question)
     # setup_info["enable_analytics"] = enable_analytics_answer["enable_analytics"]
 
-    ph("cli-analytics-choice", {"enable_analytics": setup_info["enable_analytics"]})
+    # ph("cli-analytics-choice", {"enable_analytics": setup_info["enable_analytics"]})
 
 
 def detect_test_framework(curdir, tests_root) -> Optional[str]:

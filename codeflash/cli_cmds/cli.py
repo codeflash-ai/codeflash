@@ -1,8 +1,9 @@
-import git
 import logging
 import os
 import sys
 from argparse import Namespace
+
+import git
 
 from codeflash.api.cfapi import check_github_app_installed_on_repo
 from codeflash.cli_cmds.cmd_init import init_codeflash
@@ -10,7 +11,6 @@ from codeflash.cli_cmds.logging_config import LOGGING_FORMAT
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.git_utils import (
-    git_root_dir,
     get_repo_owner_and_name,
     get_github_secrets_page_url,
 )
@@ -87,15 +87,14 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
     if hasattr(args, "all"):
         # Ensure that the user can actually open PRs on the repo.
         try:
-            repo = git.Repo(search_parent_directories=True)
-            git_root_dir(repo)
+            git_repo = git.Repo(search_parent_directories=True)
         except git.exc.InvalidGitRepositoryError:
             logging.error(
                 "I couldn't find a git repository in the current directory. "
                 "I need a git repository to run --all and open PRs for optimizations. Exiting..."
             )
             exit(1)
-        owner, repo = get_repo_owner_and_name(repo)
+        owner, repo = get_repo_owner_and_name(git_repo)
         try:
             response = check_github_app_installed_on_repo(owner, repo)
             if response.ok and response.text == "true":

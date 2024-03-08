@@ -406,8 +406,6 @@ class Optimizer:
                         ph(
                             "cli-optimize-success",
                             {
-                                "function_name": function_name,
-                                "path": path,
                                 "speedup_x": explanation_final.speedup_x,
                                 "speedup_pct": explanation_final.speedup_pct,
                                 "best_runtime": explanation_final.best_runtime_ns,
