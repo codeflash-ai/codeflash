@@ -1,11 +1,18 @@
 import json
 import os
 import subprocess
+import unittest.mock
+import io
 
 
 def create_files() -> None:
-    for jsonl_file in ["test.jsonl", "val.jsonl", "train.jsonl"]:
+    for jsonl_file in [
+        "original_data/test.jsonl",
+        "original_data/val.jsonl",
+        "original_data/train.jsonl",
+    ]:
         if not os.path.exists(jsonl_file):
+            print(f"File {jsonl_file} does not exist.")
             continue
         with open(jsonl_file, "r") as file:
             for line in file:
@@ -14,8 +21,9 @@ def create_files() -> None:
                 input_code = test_case["input"]
 
                 # Create a new Python file for each problem_id
-                file_path = f"{problem_id}.py"
+                file_path = f"../{problem_id}.py"
                 if os.path.exists(file_path):
+                    print(f"File {file_path} already exists.")
                     continue
 
                 with open(file_path, "w") as code_file:
@@ -35,15 +43,18 @@ def create_files() -> None:
                     continue
 
                 # Create test cases for each problem_id
-                test_dir = f"tests/public_test_cases/{problem_id}"
+                test_dir = f"../tests/public_test_cases/{problem_id}"
                 if not os.path.exists(test_dir):
+                    print(f"Directory {test_dir} does not exist.")
                     continue
                 test_files = sorted(
                     [f for f in os.listdir(test_dir) if f.startswith("input")],
                     key=lambda x: int(x.split(".")[1]),
                 )
-                test_code_file_path = f"tests/test_{problem_id}.py"
+                test_code_file_path = f"../tests/test_{problem_id}.py"
                 with open(test_code_file_path, "w") as test_code_file:
+                    test_code_file.write("import unittest.mock\n")
+                    test_code_file.write("import io\n\n")
                     test_code_file.write(
                         "from code_to_optimize.pie_test_set.scripts.run_pie_test_case import run_pie_test_case\n\n"
                     )
@@ -58,7 +69,7 @@ def create_files() -> None:
                         test_case_code = generate_test_case_code(
                             problem_id, input_num, input_content, expected_output
                         )
-                        test_code_file_path = f"tests/test_{problem_id}.py"
+                        test_code_file_path = f"../tests/test_{problem_id}.py"
                         with open(test_code_file_path, "a") as test_code_file:
                             test_code_file.write(test_case_code)
                         try:
@@ -73,14 +84,14 @@ def create_files() -> None:
 def generate_test_case_code(
     problem_id: str, input_num: str, input_content: str, expected_output: str
 ) -> str:
-    input_content_escaped = input_content.replace("'", "\\'").replace("\n", "\\n")
-    expected_output_escaped = expected_output.replace("'", "\\'").replace("\n", "\\n")
-    return (
-        f"def test_problem_{problem_id}_{input_num}():\n"
-        f"    input_content = '{input_content_escaped}'\n"
-        f"    expected_output = '{expected_output_escaped}'\n"
-        f"    run_pie_test_case('../{problem_id}.py', input_content, expected_output)\n"
-    )
+    return f"""\n
+def test_problem_{problem_id}_{input_num}():
+    with unittest.mock.patch('builtins.input', side_effect=[{repr(input_content)}]), \\
+         unittest.mock.patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+        from code_to_optimize.pie_test_set.{problem_id} import problem_{problem_id}
+        problem_{problem_id}()
+        assert mock_stdout.getvalue().strip() == {repr(expected_output)}
+"""
 
 
 if __name__ == "__main__":
