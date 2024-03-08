@@ -12,19 +12,16 @@ import inquirer.themes
 import tomlkit
 from git import Repo
 from pydantic.dataclasses import dataclass
+from returns.pipeline import is_successful
 
 from codeflash.analytics.posthog import ph
+from codeflash.code_utils.compat import LF
 from codeflash.code_utils.env_utils import (
     get_codeflash_api_key,
-    read_api_key_from_shell_config,
-    SHELL_RC_EXPORT_PATTERN,
-    SHELL_RC_EXPORT_PREFIX,
 )
-from codeflash.code_utils.env_utils import get_shell_rc_path
 from codeflash.code_utils.git_utils import get_github_secrets_page_url
+from codeflash.code_utils.shell_utils import save_api_key_to_rc, get_shell_rc_path
 from codeflash.version import __version__ as version
-
-LF: str = os.linesep
 
 CODEFLASH_LOGO: str = (
     f"{LF}"
@@ -132,7 +129,7 @@ def collect_setup_info() -> SetupInfo:
     module_subdir_options = valid_module_subdirs + [curdir_option]
 
     module_root_answer = inquirer.list_input(
-        message="Which Python module do you want me to optimize going forward?{LF}"
+        message=f"Which Python module do you want me to optimize going forward?{LF}"
         + "(This is usually the top-most directory where all your Python source code is located)",
         choices=module_subdir_options,
         default=(
@@ -506,36 +503,11 @@ def enter_api_key_and_save_to_rc() -> None:
                 click.launch("https://app.codeflash.ai/app/apikeys")
                 browser_launched = True  # This does not work on remote consoles
 
-    shell_rc_path = get_shell_rc_path()
-    api_key_line = f"{SHELL_RC_EXPORT_PREFIX}{api_key}"
-    try:
-        with open(shell_rc_path, "r+", encoding="utf8") as shell_file:
-            shell_contents = shell_file.read()
-            if os.name == "nt":  # on Windows, we're writing a batch file
-                if not shell_contents:
-                    shell_contents = "@echo off"
-            existing_api_key = read_api_key_from_shell_config()
-
-            if existing_api_key:
-                # Replace the existing API key line
-                updated_shell_contents = re.sub(
-                    SHELL_RC_EXPORT_PATTERN, api_key_line, shell_contents
-                )
-                action = "Updated CODEFLASH_API_KEY in"
-            else:
-                # Append the new API key line
-                updated_shell_contents = shell_contents.rstrip() + f"{LF}{api_key_line}{LF}"
-                action = "Added CODEFLASH_API_KEY to"
-
-            shell_file.seek(0)
-            shell_file.write(updated_shell_contents)
-            shell_file.truncate()
-        click.echo(f"✅ {action} {shell_rc_path}.")
-    except IOError as e:
-        click.echo(
-            f"💡 I tried adding your CodeFlash API key to {shell_rc_path} - but seems like I don't have permissions to do so.{LF}"
-            f"You'll need to open it yourself and add the following line:{LF}{LF}{api_key_line}{LF}"
-        )
+    result = save_api_key_to_rc(api_key)
+    if is_successful(result):
+        click.echo(result.unwrap())
+    else:
+        click.echo(result.failure())
         click.pause()
 
     os.environ["CODEFLASH_API_KEY"] = api_key

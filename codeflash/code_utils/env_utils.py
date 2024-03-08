@@ -1,8 +1,9 @@
 import logging
 import os
-import re
 from functools import lru_cache
 from typing import Optional
+
+from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
 
 
 @lru_cache(maxsize=1)
@@ -57,40 +58,3 @@ def ensure_pr_number() -> bool:
             f"CODEFLASH_PR_NUMBER not found in environment variables; make sure the Github Action is setting this so CodeFlash can comment on the right PR"
         )
     return True
-
-
-if os.name == "nt":  # Windows
-    SHELL_RC_EXPORT_PATTERN = re.compile(r"^set CODEFLASH_API_KEY=(.*)$", re.M)
-    SHELL_RC_EXPORT_PREFIX = f"set CODEFLASH_API_KEY="
-else:
-    SHELL_RC_EXPORT_PATTERN = re.compile(r'^export CODEFLASH_API_KEY="?(.*)"?$', re.M)
-    SHELL_RC_EXPORT_PREFIX = f"export CODEFLASH_API_KEY="
-
-
-def read_api_key_from_shell_config() -> Optional[str]:
-    shell_rc_path = get_shell_rc_path()
-    with open(shell_rc_path, "r", encoding="utf8") as shell_rc:
-        shell_contents = shell_rc.read()
-        match = SHELL_RC_EXPORT_PATTERN.search(shell_contents)
-        return match.group(1) if match else None
-
-
-def get_shell_rc_path() -> str:
-    """Get the path to the user's shell configuration file."""
-    if os.name == "nt":  # on Windows, we use a batch file in the user's home directory
-        return os.path.expanduser("~\\codeflash_env.bat")
-    else:
-        shell = os.environ.get("SHELL", "/bin/bash").split("/")[-1]
-        if shell == "bash":
-            shell_rc_filename = ".bashrc"
-        elif shell == "zsh":
-            shell_rc_filename = ".zshrc"
-        elif shell == "ksh":
-            shell_rc_filename = ".kshrc"
-        elif shell == "csh" or shell == "tcsh":
-            shell_rc_filename = ".cshrc"
-        elif shell == "dash":
-            shell_rc_filename = ".profile"
-        else:
-            shell_rc_filename = ".bashrc"  # default to bash if unknown shell
-        return os.path.expanduser(f"~/{shell_rc_filename}")
