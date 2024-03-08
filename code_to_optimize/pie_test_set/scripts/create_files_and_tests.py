@@ -33,7 +33,7 @@ def create_files() -> None:
                     indented_code = "    " + input_code.replace("\n", "\n    ")
                     code_file.write(indented_code + "\n")
                     # Call the function at the end of the file
-                    code_file.write(f"\nproblem_{problem_id}()")
+                    # code_file.write(f"\nproblem_{problem_id}()")
                 try:
                     # Run black to reformat the code file
                     subprocess.run(["black", file_path], check=True)
@@ -53,10 +53,10 @@ def create_files() -> None:
                 )
                 test_code_file_path = f"../tests/test_{problem_id}.py"
                 with open(test_code_file_path, "w") as test_code_file:
-                    test_code_file.write("import unittest.mock\n")
-                    test_code_file.write("import io\n\n")
+                    test_code_file.write("from unittest.mock import patch\n")
+                    test_code_file.write("from io import StringIO\n\n")
                     test_code_file.write(
-                        "from code_to_optimize.pie_test_set.scripts.run_pie_test_case import run_pie_test_case\n\n"
+                        f"from code_to_optimize.pie_test_set.{problem_id} import problem_{problem_id}\n\n"
                     )
                 for test_file in test_files:
                     input_num = test_file.split(".")[1]
@@ -84,13 +84,13 @@ def create_files() -> None:
 def generate_test_case_code(
     problem_id: str, input_num: str, input_content: str, expected_output: str
 ) -> str:
-    return f"""\n
-def test_problem_{problem_id}_{input_num}():
-    with unittest.mock.patch('builtins.input', side_effect=[{repr(input_content)}]), \\
-         unittest.mock.patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
-        from code_to_optimize.pie_test_set.{problem_id} import problem_{problem_id}
-        problem_{problem_id}()
-        assert mock_stdout.getvalue().strip() == {repr(expected_output)}
+    return f"""def test_problem_{problem_id}_{input_num}():
+    user_input = "{input_content}"
+    expected_output = "{expected_output}"
+    with patch('builtins.input', side_effect=user_input.split('\\n')):
+        with patch('sys.stdout', new_callable=StringIO) as mock_stdout:
+            problem_{problem_id}()
+            assert mock_stdout.getvalue().strip() == expected_output
 """
 
 
