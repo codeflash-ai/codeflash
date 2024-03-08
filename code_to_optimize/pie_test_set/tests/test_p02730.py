@@ -1,0 +1,25 @@
+from code_to_optimize.pie_test_set.scripts.run_pie_test_case import run_pie_test_case
+
+
+def test_problem_p02730_0():
+    input_content = "akasaka"
+    expected_output = "Yes"
+    run_pie_test_case("../p02730.py", input_content, expected_output)
+
+
+def test_problem_p02730_1():
+    input_content = "akasaka"
+    expected_output = "Yes"
+    run_pie_test_case("../p02730.py", input_content, expected_output)
+
+
+def test_problem_p02730_2():
+    input_content = "atcoder"
+    expected_output = "No"
+    run_pie_test_case("../p02730.py", input_content, expected_output)
+
+
+def test_problem_p02730_3():
+    input_content = "level"
+    expected_output = "No"
+    run_pie_test_case("../p02730.py", input_content, expected_output)
