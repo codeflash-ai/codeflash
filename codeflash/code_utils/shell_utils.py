@@ -27,19 +27,16 @@ def get_shell_rc_path() -> str:
     if os.name == "nt":  # on Windows, we use a batch file in the user's home directory
         return os.path.expanduser("~\\codeflash_env.bat")
     else:
-        shell = os.environ.get("SHELL", "/bin/bash").split("/")[-1]
-        if shell == "bash":
-            shell_rc_filename = ".bashrc"
-        elif shell == "zsh":
-            shell_rc_filename = ".zshrc"
-        elif shell == "ksh":
-            shell_rc_filename = ".kshrc"
-        elif shell == "csh" or shell == "tcsh":
-            shell_rc_filename = ".cshrc"
-        elif shell == "dash":
-            shell_rc_filename = ".profile"
-        else:
-            shell_rc_filename = ".bashrc"  # default to bash if unknown shell
+        shell = os.environ["SHELL"].split("/")[-1] if "SHELL" in os.environ else "/bin/bash"
+        shell_rc_filename = {
+            "zsh": ".zshrc",
+            "ksh": ".kshrc",
+            "csh": ".cshrc",
+            "tcsh": ".cshrc",
+            "dash": ".profile",
+        }.get(
+            shell, ".bashrc"
+        )  # map each shell to its config file and default to .bashrc
         return os.path.expanduser(f"~/{shell_rc_filename}")
 
 
