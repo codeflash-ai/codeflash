@@ -126,7 +126,7 @@ class Optimizer:
         )
 
     def run(self) -> None:
-        ph("cli-optimize-run-start", {"args": self.args})
+        ph("cli-optimize-run-start", {"args": self.args.__dict__})
         logging.info(CODEFLASH_LOGO)
         logging.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
@@ -410,7 +410,7 @@ class Optimizer:
                                 "speedup_pct": explanation_final.speedup_pct,
                                 "best_runtime": explanation_final.best_runtime_ns,
                                 "original_runtime": explanation_final.original_runtime_ns,
-                                "winning_test_results": explanation_final.winning_test_results,
+                                "winning_test_results": explanation_final.winning_test_results.get_test_pass_fail_report_by_type(),
                             },
                         )
                         test_files = function_to_tests.get(module_path + "." + function_name)
