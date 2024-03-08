@@ -471,8 +471,8 @@ class Optimizer:
 
         full_module_function_path = module_path + "." + function_name
         if full_module_function_path not in function_to_tests:
-            logging.warning(
-                "Could not find any pre-existing tests for '%s', will only use generated tests.",
+            logging.info(
+                "Did not find any pre-existing tests for '%s', will only use generated tests.",
                 full_module_function_path,
             )
         else:
