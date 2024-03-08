@@ -30,7 +30,7 @@ CODEFLASH_LOGO: str = (
     r"/ __/ _ \/ _  / -_) _/ / _ `(_-</ _ \ " + f"{LF}"
     r"\__/\___/\_,_/\__/_//_/\_,_/___/_//_/" + f"{LF}"
     f"{('v'+version).rjust(46)}{LF}"
-    "                          https://codeflash.ai{LF}"
+    f"                          https://codeflash.ai{LF}"
     f"{LF}"
 )
 
@@ -64,7 +64,7 @@ def init_codeflash() -> None:
             f"    codeflash --file <path-to-file> --function <function-name> to optimize a function within a file{LF}"
             f"    codeflash --file <path-to-file> to optimize all functions in a file{LF}"
             f"    codeflash --all to optimize all functions in all files in the module you selected ({setup_info.module_root}){LF}"
-            # "    codeflash --pr <pr-number> to optimize a PR{LF}"
+            # f"    codeflash --pr <pr-number> to optimize a PR{LF}"
             f"-or-{LF}"
             f"    codeflash --help to see all options{LF}"
         )
@@ -287,7 +287,7 @@ def check_for_toml_or_setup_file() -> Optional[str]:
     else:
         click.echo(
             f"💡 I couldn't find a pyproject.toml in the current directory ({curdir}).{LF}"
-            "(make sure you're running `codeflash init` from your project's root directory!){LF}"
+            f"(make sure you're running `codeflash init` from your project's root directory!){LF}"
             f"I need this file to store my configuration settings."
         )
         ph("cli-no-pyproject-toml-or-setup-py")
@@ -403,7 +403,7 @@ def prompt_github_action(setup_info: SetupInfo) -> None:
             click.pause()
             click.echo()
             click.echo(
-                "🚀 CodeFlash is now configured to automatically optimize new Github PRs!{LF}"
+                f"🚀 CodeFlash is now configured to automatically optimize new Github PRs!{LF}"
             )
             ph("cli-github-workflow-created")
         else:
