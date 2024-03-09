@@ -8,10 +8,10 @@ from returns.result import Failure, Result, Success
 from codeflash.code_utils.compat import LF
 
 if os.name == "nt":  # Windows
-    SHELL_RC_EXPORT_PATTERN = re.compile(r"^set CODEFLASH_API_KEY=(.*)$", re.M)
+    SHELL_RC_EXPORT_PATTERN = re.compile(r"^set CODEFLASH_API_KEY=(cf-.*)$", re.M)
     SHELL_RC_EXPORT_PREFIX = f"set CODEFLASH_API_KEY="
 else:
-    SHELL_RC_EXPORT_PATTERN = re.compile(r'^export CODEFLASH_API_KEY="?([^"]*)"?$', re.M)
+    SHELL_RC_EXPORT_PATTERN = re.compile(r'^export CODEFLASH_API_KEY="?(cf-[^"]*)"?$', re.M)
     SHELL_RC_EXPORT_PREFIX = f"export CODEFLASH_API_KEY="
 
 
@@ -20,8 +20,8 @@ def read_api_key_from_shell_config() -> Optional[str]:
         shell_rc_path = get_shell_rc_path()
         with open(shell_rc_path, "r", encoding="utf8") as shell_rc:
             shell_contents = shell_rc.read()
-            match = SHELL_RC_EXPORT_PATTERN.search(shell_contents)
-            return match.group(1) if match else None
+            matches = SHELL_RC_EXPORT_PATTERN.findall(shell_contents)
+            return matches[-1] if matches else None
     except FileNotFoundError:
         return None
 
