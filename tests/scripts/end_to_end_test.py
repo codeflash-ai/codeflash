@@ -49,8 +49,8 @@ def main():
         improvement_pct > 30000
     ), f"Performance improvement percentage was {improvement_pct}, which was not above 30,000%"
     assert (
-        improvement_x > 30000
-    ), f"Performance improvement rate was {improvement_x}x, which was not above 30,000x"
+        improvement_x > 300
+    ), f"Performance improvement rate was {improvement_x}x, which was not above 300x"
 
 
 if __name__ == "__main__":
