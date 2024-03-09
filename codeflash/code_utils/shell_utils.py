@@ -1,5 +1,6 @@
 import os
 import re
+from pathlib import Path
 from typing import Optional
 
 from returns.result import Failure, Result, Success
@@ -10,24 +11,27 @@ if os.name == "nt":  # Windows
     SHELL_RC_EXPORT_PATTERN = re.compile(r"^set CODEFLASH_API_KEY=(.*)$", re.M)
     SHELL_RC_EXPORT_PREFIX = f"set CODEFLASH_API_KEY="
 else:
-    SHELL_RC_EXPORT_PATTERN = re.compile(r'^export CODEFLASH_API_KEY="?(.*)"?$', re.M)
+    SHELL_RC_EXPORT_PATTERN = re.compile(r'^export CODEFLASH_API_KEY="?([^"]*)"?$', re.M)
     SHELL_RC_EXPORT_PREFIX = f"export CODEFLASH_API_KEY="
 
 
 def read_api_key_from_shell_config() -> Optional[str]:
-    shell_rc_path = get_shell_rc_path()
-    with open(shell_rc_path, "r", encoding="utf8") as shell_rc:
-        shell_contents = shell_rc.read()
-        match = SHELL_RC_EXPORT_PATTERN.search(shell_contents)
-        return match.group(1) if match else None
+    try:
+        shell_rc_path = get_shell_rc_path()
+        with open(shell_rc_path, "r", encoding="utf8") as shell_rc:
+            shell_contents = shell_rc.read()
+            match = SHELL_RC_EXPORT_PATTERN.search(shell_contents)
+            return match.group(1) if match else None
+    except FileNotFoundError:
+        return None
 
 
 def get_shell_rc_path() -> str:
     """Get the path to the user's shell configuration file."""
     if os.name == "nt":  # on Windows, we use a batch file in the user's home directory
-        return os.path.expanduser("~\\codeflash_env.bat")
+        return str(Path.home() / "codeflash_env.bat")
     else:
-        shell = os.environ["SHELL"].split("/")[-1] if "SHELL" in os.environ else "/bin/bash"
+        shell = os.environ.get("SHELL", "/bin/bash").split("/")[-1]
         shell_rc_filename = {
             "zsh": ".zshrc",
             "ksh": ".kshrc",
@@ -37,7 +41,7 @@ def get_shell_rc_path() -> str:
         }.get(
             shell, ".bashrc"
         )  # map each shell to its config file and default to .bashrc
-        return os.path.expanduser(f"~/{shell_rc_filename}")
+        return str(Path.home() / shell_rc_filename)
 
 
 def save_api_key_to_rc(api_key) -> Result[str, str]:
@@ -66,8 +70,13 @@ def save_api_key_to_rc(api_key) -> Result[str, str]:
             shell_file.write(updated_shell_contents)
             shell_file.truncate()
         return Success(f"✅ {action} {shell_rc_path}.")
-    except IOError as e:
+    except PermissionError:
         return Failure(
             f"💡 I tried adding your CodeFlash API key to {shell_rc_path} - but seems like I don't have permissions to do so.{LF}"
             f"You'll need to open it yourself and add the following line:{LF}{LF}{api_key_line}{LF}"
+        )
+    except FileNotFoundError:
+        return Failure(
+            f"💡 I couldn't find your shell configuration file at {shell_rc_path}.{LF}"
+            f"Please create it and add the following line:{LF}{LF}{api_key_line}{LF}"
         )
