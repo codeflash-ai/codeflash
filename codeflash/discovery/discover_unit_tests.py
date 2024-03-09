@@ -6,7 +6,7 @@ import subprocess
 import unittest
 from collections import defaultdict
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import jedi
 from pydantic.dataclasses import dataclass
@@ -71,6 +71,13 @@ class TestFunction:
     parameters: Optional[str]
 
 
+@dataclass(frozen=True)
+class TestDetails:
+    test_function: str
+    test_module_path: str
+    test_suite_name: str
+
+
 def discover_unit_tests(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     test_frameworks = {
         "pytest": discover_tests_pytest,
@@ -107,7 +114,6 @@ def get_pytest_rootdir_only(pytest_cmd_list, tests_root, project_root) -> str:
     raise ValueError(f"Could not find rootdir in pytest output for {tests_root}")
 
 
-# Use -q parsing unless there is a rootdir in the output, in which case use --co parsing
 def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
@@ -147,7 +153,7 @@ def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     tests = loader.discover(str(tests_root))
     file_to_test_map = defaultdict(list)
 
-    def get_test_details(_test) -> Optional[Tuple[str, str, str]]:
+    def get_test_details(_test) -> Optional[TestDetails]:
         _test_function, _test_module, _test_suite_name = (
             _test._testMethodName,
             _test.__class__.__module__,
@@ -158,7 +164,7 @@ def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
         _test_module_path = os.path.join(str(tests_root), _test_module_path) + ".py"
         if not os.path.exists(_test_module_path):
             return None
-        return _test_function, _test_module_path, _test_suite_name
+        return TestDetails(_test_function, _test_module_path, _test_suite_name)
 
     for _test_suite in tests._tests:
         for test_suite_2 in _test_suite._tests:
@@ -175,16 +181,20 @@ def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
                             continue
                         details = get_test_details(test_2)
                         if details is not None:
-                            test_function, test_module_path, test_suite_name = details
-                            file_to_test_map[test_module_path].append(
-                                {"test_function": test_function, "test_suite_name": test_suite_name}
+                            file_to_test_map[details.test_module_path].append(
+                                {
+                                    "test_function": details.test_function,
+                                    "test_suite_name": details.test_suite_name,
+                                }
                             )
                 else:
                     details = get_test_details(test)
                     if details is not None:
-                        test_function, test_module_path, test_suite_name = details
-                        file_to_test_map[test_module_path].append(
-                            {"test_function": test_function, "test_suite_name": test_suite_name}
+                        file_to_test_map[details.test_module_path].append(
+                            {
+                                "test_function": details.test_function,
+                                "test_suite_name": details.test_suite_name,
+                            }
                         )
     return process_test_files(file_to_test_map, cfg)
 
