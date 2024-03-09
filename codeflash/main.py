@@ -410,7 +410,10 @@ class Optimizer:
                                 "speedup_pct": explanation_final.speedup_pct,
                                 "best_runtime": explanation_final.best_runtime_ns,
                                 "original_runtime": explanation_final.original_runtime_ns,
-                                "winning_test_results": explanation_final.winning_test_results.get_test_pass_fail_report_by_type(),
+                                "winning_test_results": {
+                                    k.to_name(): v
+                                    for k, v in explanation_final.winning_test_results.get_test_pass_fail_report_by_type()
+                                },
                             },
                         )
                         test_files = function_to_tests.get(module_path + "." + function_name)
