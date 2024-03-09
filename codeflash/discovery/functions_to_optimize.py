@@ -248,6 +248,7 @@ def filter_functions(
         or site_packages_removed_count > 0
         or ignore_paths_removed_count > 0
         or malformed_paths_count > 0
+        or non_module_functions_removed_count > 0
     ):
         logging.info(
             f"Ignoring {test_functions_removed_count} test functions, {site_packages_removed_count} site-packages functions, "
