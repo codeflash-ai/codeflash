@@ -1,12 +1,13 @@
 import ast
-import libcst as cst
 import logging
 import os
 import random
 from _ast import ClassDef, FunctionDef, AsyncFunctionDef
+from typing import Dict, Optional, List, Tuple, Union
+
+import libcst as cst
 from libcst import CSTNode
 from pydantic.dataclasses import dataclass
-from typing import Dict, Optional, List, Tuple, Union
 
 from codeflash.code_utils.code_utils import (
     path_belongs_to_site_packages,
@@ -117,6 +118,7 @@ def get_functions_to_optimize_by_file(
     test_cfg: TestConfig,
     ignore_paths: List[str],
     project_root: str,
+    module_root: str,
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
     functions = {}
     if optimize_all:
@@ -141,7 +143,7 @@ def get_functions_to_optimize_by_file(
         logging.info("Finding all functions modified in the current git diff ...")
         functions = get_functions_within_git_diff()
     filtered_modified_functions, functions_count = filter_functions(
-        functions, test_cfg.tests_root, ignore_paths, project_root
+        functions, test_cfg.tests_root, ignore_paths, project_root, module_root
     )
     logging.info("Found %d functions to optimize", functions_count)
     return filtered_modified_functions, functions_count
@@ -209,6 +211,7 @@ def filter_functions(
     tests_root: str,
     ignore_paths: List[str],
     project_root: str,
+    module_root: str,
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
     # Remove any functions that we don't want to optimize
     filtered_modified_functions = {}
@@ -217,6 +220,7 @@ def filter_functions(
     site_packages_removed_count = 0
     ignore_paths_removed_count = 0
     malformed_paths_count = 0
+    non_module_functions_removed_count = 0
     for file_path, functions in modified_functions.items():
         if file_path.startswith(tests_root + os.sep):
             test_functions_removed_count += len(functions)
@@ -228,6 +232,9 @@ def filter_functions(
             continue
         if path_belongs_to_site_packages(file_path):
             site_packages_removed_count += len(functions)
+            continue
+        if not file_path.startswith(module_root + os.sep):
+            non_module_functions_removed_count += len(functions)
             continue
         try:
             ast.parse(f"import {module_name_from_file_path(file_path, project_root)}")
@@ -244,7 +251,8 @@ def filter_functions(
     ):
         logging.info(
             f"Ignoring {test_functions_removed_count} test functions, {site_packages_removed_count} site-packages functions, "
-            f"{malformed_paths_count} non-importable file paths and {ignore_paths_removed_count} files from ignored paths"
+            f"{malformed_paths_count} non-importable file paths, {non_module_functions_removed_count} functions outside module-root"
+            f" and {ignore_paths_removed_count} files from ignored paths"
         )
     for path in list(filtered_modified_functions.keys()):
         if len(filtered_modified_functions[path]) == 0:
