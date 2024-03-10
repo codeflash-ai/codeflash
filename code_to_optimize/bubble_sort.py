@@ -1,5 +1,4 @@
 def sorter(arr):
-    """adding a docstring to test if this function gets optimized"""
     for i in range(len(arr)):
         for j in range(len(arr) - 1):
             if arr[j] > arr[j + 1]:
