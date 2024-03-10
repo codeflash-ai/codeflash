@@ -3,6 +3,8 @@ import os
 from functools import lru_cache
 from typing import Optional
 
+import git
+
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
 
 
@@ -58,3 +60,12 @@ def ensure_pr_number() -> bool:
             f"CODEFLASH_PR_NUMBER not found in environment variables; make sure the Github Action is setting this so CodeFlash can comment on the right PR"
         )
     return True
+
+
+def ensure_git_repo(module_root: str):
+    try:
+        _ = git.Repo(module_root).git_dir
+        return True
+    except git.exc.InvalidGitRepositoryError:
+        # TODO: Ask the user if they want to run regardless, and abort if running in non-interactive mode
+        pass
