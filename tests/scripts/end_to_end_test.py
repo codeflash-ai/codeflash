@@ -15,6 +15,8 @@ def main():
         "bubble_sort.py",
         "--function",
         "sorter",
+        "--test-framework",
+        "pytest",
         "--tests-root",
         str(test_root),
         "--module-root",
@@ -51,6 +53,14 @@ def main():
     assert (
         improvement_x > 300
     ), f"Performance improvement rate was {improvement_x}x, which was not above 300x"
+
+    # Check for the line indicating the number of discovered existing unit tests
+    unit_test_search = re.search(
+        r"Discovered (\d+) existing unit tests",
+        stdout,
+    )
+    num_unit_tests = int(unit_test_search.group(1))
+    assert num_unit_tests > 0, f"Could not find existing unit tests"
 
 
 if __name__ == "__main__":
