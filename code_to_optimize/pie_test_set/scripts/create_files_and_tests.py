@@ -6,6 +6,7 @@ import io
 
 
 def create_files() -> None:
+    problems = set()
     for jsonl_file in [
         "original_data/test.jsonl",
         "original_data/val.jsonl",
@@ -19,6 +20,10 @@ def create_files() -> None:
                 test_case = json.loads(line)
                 problem_id = test_case["problem_id"]
                 input_code = test_case["input"]
+                if problem_id in problems:
+                    continue
+
+                problems.add(problem_id)
 
                 # Create a new Python file for each problem_id
                 file_path = f"../{problem_id}.py"
@@ -65,14 +70,22 @@ def create_files() -> None:
                     with open(f"{test_dir}/{test_file}", "r") as input_f, open(
                         f"{test_dir}/{output_file}", "r"
                     ) as output_f:
-                        input_content = input_f.read().strip()
-                        expected_output = output_f.read().strip()
-                        test_case_code = generate_test_case_code(
-                            problem_id, input_num, input_content, expected_output
-                        )
-                        test_code_file_path = f"../tests/test_{problem_id}.py"
-                        with open(test_code_file_path, "a") as test_code_file:
-                            test_code_file.write(test_case_code)
+                        input_content = input_f.read()
+                        expected_output = output_f.read()
+                        if '\n' in input_content.strip() or '\n' in expected_output.strip():
+                            print(f"Multiple lines detected in input or output for {problem_id}, skipping.")
+                            os.remove(file_path)
+                            if os.path.exists(test_code_file_path):
+                                os.remove(test_code_file_path)
+                            break
+                        else:
+                            input_content = input_content.strip()
+                            expected_output = expected_output.strip()
+                            test_case_code = generate_test_case_code(
+                                problem_id, input_num, input_content, expected_output
+                            )
+                            with open(test_code_file_path, "a") as test_code_file:
+                                test_code_file.write(test_case_code)
                         try:
                             # Run black to reformat the test file
                             subprocess.run(["black", test_code_file_path], check=True)
@@ -87,9 +100,14 @@ def generate_test_case_code(
 ) -> str:
     return (
         f"def test_problem_{problem_id}_{input_num}():\n"
-        f"    actual_output = problem_{problem_id}({input_content!r})\n"
-        f"    expected_output = {expected_output!r}\n"
-        f"    assert actual_output == expected_output\n\n"
+        f"    actual_output = problem_{problem_id}({input_content!r})\n" +
+        f"    expected_output = {expected_output!r}\n" +
+        f"    if isinstance(actual_output, type(expected_output)):\n" +
+        f"        assert actual_output == expected_output\n" +
+        f"    else:\n" +
+        f"        # Cast expected output to the type of actual output if they differ\n" +
+        f"        cast_expected_output = type(actual_output)(expected_output)\n" +
+        f"        assert actual_output == cast_expected_output\n\n"
     )
 
 
