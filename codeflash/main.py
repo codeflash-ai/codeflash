@@ -91,7 +91,7 @@ def parse_args() -> Namespace:
         type=str,
         help="Path to the test directory of the project, where all the tests are located.",
     )
-    parser.add_argument("--test-framework", choices=["pytest", "unittest"])
+    parser.add_argument("--test-framework", choices=["pytest", "unittest"], default="pytest")
     parser.add_argument(
         "--config-file",
         type=str,
@@ -126,7 +126,7 @@ class Optimizer:
         )
 
     def run(self) -> None:
-        ph("cli-optimize-run-start", {"args": self.args})
+        ph("cli-optimize-run-start", {"args": self.args.__dict__})
         logging.info(CODEFLASH_LOGO)
         logging.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
@@ -142,6 +142,7 @@ class Optimizer:
             test_cfg=self.test_cfg,
             ignore_paths=self.args.ignore_paths,
             project_root=self.args.project_root,
+            module_root=self.args.module_root,
         )
 
         test_files_created = set()
@@ -410,7 +411,10 @@ class Optimizer:
                                 "speedup_pct": explanation_final.speedup_pct,
                                 "best_runtime": explanation_final.best_runtime_ns,
                                 "original_runtime": explanation_final.original_runtime_ns,
-                                "winning_test_results": explanation_final.winning_test_results,
+                                "winning_test_results": {
+                                    tt.to_name(): v
+                                    for tt, v in explanation_final.winning_test_results.get_test_pass_fail_report_by_type().items()
+                                },
                             },
                         )
                         test_files = function_to_tests.get(module_path + "." + function_name)
@@ -471,8 +475,8 @@ class Optimizer:
 
         full_module_function_path = module_path + "." + function_name
         if full_module_function_path not in function_to_tests:
-            logging.warning(
-                "Could not find any pre-existing tests for '%s', will only use generated tests.",
+            logging.info(
+                "Did not find any pre-existing tests for '%s', will only use generated tests.",
                 full_module_function_path,
             )
         else:
