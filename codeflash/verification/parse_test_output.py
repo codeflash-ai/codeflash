@@ -13,6 +13,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
     get_run_tmp_file,
 )
+from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.verification.test_results import (
     TestResults,
     FunctionTestInvocation,
@@ -20,7 +21,6 @@ from codeflash.verification.test_results import (
     InvocationId,
 )
 from codeflash.verification.verification_utils import TestConfig
-from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 
 
 def parse_test_return_values_bin(
@@ -28,7 +28,7 @@ def parse_test_return_values_bin(
 ) -> TestResults:
     test_results = TestResults()
     if not os.path.exists(file_location):
-        logging.error(f"File {file_location} doesn't exist.")
+        logging.warning(f"No test results for {file_location} found.")
         return test_results
     with open(file_location, "rb") as file:
         while file:
@@ -76,7 +76,7 @@ def parse_sqlite_test_results(
 ):
     test_results = TestResults()
     if not os.path.exists(sqlite_file_path):
-        logging.error(f"File {sqlite_file_path} doesn't exist.")
+        logging.warning(f"No test results for {sqlite_file_path} found.")
         return test_results
     db = sqlite3.connect(sqlite_file_path)
     cur = db.cursor()
@@ -120,7 +120,7 @@ def parse_test_xml(
 
     # Parse unittest output
     if not os.path.exists(test_xml_file_path):
-        logging.warning(f"File {test_xml_file_path} doesn't exist.")
+        logging.warning(f"No test results for {test_xml_file_path} found.")
         return test_results
     try:
         xml = JUnitXml.fromfile(test_xml_file_path)
