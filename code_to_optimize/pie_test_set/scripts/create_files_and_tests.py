@@ -28,12 +28,14 @@ def create_files() -> None:
 
                 with open(file_path, "w") as code_file:
                     # Write the input code into a new function in the file
-                    code_file.write(f"def problem_{problem_id}():\n")
-                    # Indent the input code and write it to the function
-                    indented_code = "    " + input_code.replace("\n", "\n    ")
+                    code_file.write(f"def problem_{problem_id}(input_data):\n")
+                    # Replace input() calls with input_data handling
+                    indented_code = "    " + input_code.replace("input()", "input_data").replace(
+                        "read()", "input_data"
+                    ).replace("print", "return ").replace("\n", "\n    ")
                     code_file.write(indented_code + "\n")
-                    # Call the function at the end of the file
-                    # code_file.write(f"\nproblem_{problem_id}()")
+                    # Return the result instead of printing it
+                    # Ensure the result is returned instead of printed
                 try:
                     # Run black to reformat the code file
                     subprocess.run(["black", file_path], check=True)
@@ -53,8 +55,7 @@ def create_files() -> None:
                 )
                 test_code_file_path = f"../tests/test_{problem_id}.py"
                 with open(test_code_file_path, "w") as test_code_file:
-                    test_code_file.write("from unittest.mock import patch\n")
-                    test_code_file.write("from io import StringIO\n\n")
+                    test_code_file.write("\n")
                     test_code_file.write(
                         f"from code_to_optimize.pie_test_set.{problem_id} import problem_{problem_id}\n\n"
                     )
@@ -84,14 +85,12 @@ def create_files() -> None:
 def generate_test_case_code(
     problem_id: str, input_num: str, input_content: str, expected_output: str
 ) -> str:
-    return f"""def test_problem_{problem_id}_{input_num}():
-    user_input = "{input_content}"
-    expected_output = "{expected_output}"
-    with patch('builtins.input', side_effect=user_input.split('\\n')):
-        with patch('sys.stdout', new_callable=StringIO) as mock_stdout:
-            problem_{problem_id}()
-            assert mock_stdout.getvalue().strip() == expected_output
-"""
+    return (
+        f"def test_problem_{problem_id}_{input_num}():\n"
+        f"    actual_output = problem_{problem_id}({input_content!r})\n"
+        f"    expected_output = {expected_output!r}\n"
+        f"    assert actual_output == expected_output\n\n"
+    )
 
 
 if __name__ == "__main__":
