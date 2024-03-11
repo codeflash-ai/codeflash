@@ -4,94 +4,101 @@ import re
 import subprocess
 import sys
 import time
-from typing import Optional
+from typing import Optional, NoReturn
 
 import click
 import inquirer
 import inquirer.themes
 import tomlkit
 from git import Repo
+from pydantic.dataclasses import dataclass
+from returns.pipeline import is_successful
 
 from codeflash.analytics.posthog import ph
+from codeflash.code_utils.compat import LF
 from codeflash.code_utils.env_utils import (
     get_codeflash_api_key,
-    read_api_key_from_shell_config,
-    SHELL_RC_EXPORT_PATTERN,
 )
-from codeflash.code_utils.env_utils import get_shell_rc_path
 from codeflash.code_utils.git_utils import get_github_secrets_page_url
+from codeflash.code_utils.shell_utils import save_api_key_to_rc, get_shell_rc_path
 from codeflash.version import __version__ as version
 
 CODEFLASH_LOGO: str = (
-    "\n"
-    r"              __    _____         __ " + "\n"
-    r" _______  ___/ /__ / _/ /__ ____ / / " + "\n"
-    r"/ __/ _ \/ _  / -_) _/ / _ `(_-</ _ \ " + "\n"
-    r"\__/\___/\_,_/\__/_//_/\_,_/___/_//_/" + "\n"
-    f"{('v'+version).rjust(46)}\n"
-    "                          https://codeflash.ai\n"
-    "\n"
+    f"{LF}"
+    r"              __    _____         __ " + f"{LF}"
+    r" _______  ___/ /__ / _/ /__ ____ / / " + f"{LF}"
+    r"/ __/ _ \/ _  / -_) _/ / _ `(_-</ _ \ " + f"{LF}"
+    r"\__/\___/\_,_/\__/_//_/\_,_/___/_//_/" + f"{LF}"
+    f"{('v'+version).rjust(46)}{LF}"
+    f"                          https://codeflash.ai{LF}"
+    f"{LF}"
 )
 
 
-def init_codeflash():
-    click.echo(CODEFLASH_LOGO)
-    click.echo("⚡️ Welcome to CodeFlash! Let's get you set up.\n")
+@dataclass(frozen=True)
+class SetupInfo:
+    module_root: str
+    tests_root: str
+    test_framework: str
+    ignore_paths: list[str]
 
-    did_add_new_key = prompt_api_key()
 
-    setup_info: dict[str, str] = {}
+def init_codeflash() -> None:
+    try:
+        click.echo(CODEFLASH_LOGO)
+        click.echo(f"⚡️ Welcome to CodeFlash! Let's get you set up.{LF}")
 
-    collect_setup_info(setup_info)
+        did_add_new_key = prompt_api_key()
 
-    configure_pyproject_toml(setup_info)
+        setup_info: SetupInfo = collect_setup_info()
 
-    prompt_github_action(setup_info)
+        configure_pyproject_toml(setup_info)
 
-    ask_run_end_to_end_test(setup_info)  # mebbe run this after the following help text?
+        prompt_github_action(setup_info)
 
-    click.echo(
-        "\n"
-        "⚡️ CodeFlash is now set up! You can now run:\n"
-        "    codeflash --file <path-to-file> --function <function-name> to optimize a function within a file\n"
-        "    codeflash --file <path-to-file> to optimize all functions in a file\n"
-        f"    codeflash --all to optimize all functions in all files in the module you selected ({setup_info['module_root']})\n"
-        # "    codeflash --pr <pr-number> to optimize a PR\n"
-        "-or-\n"
-        "    codeflash --help to see all options\n"
-    )
-    if did_add_new_key:
+        ask_run_end_to_end_test(setup_info)  # mebbe run this after the following help text?
+
         click.echo(
-            "🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
+            f"{LF}"
+            f"⚡️ CodeFlash is now set up! You can now run:{LF}"
+            f"    codeflash --file <path-to-file> --function <function-name> to optimize a function within a file{LF}"
+            f"    codeflash --file <path-to-file> to optimize all functions in a file{LF}"
+            f"    codeflash --all to optimize all functions in all files in the module you selected ({setup_info.module_root}){LF}"
+            # f"    codeflash --pr <pr-number> to optimize a PR{LF}"
+            f"-or-{LF}"
+            f"    codeflash --help to see all options{LF}"
         )
-        click.echo("Or run the following command to reload:")
-        click.echo(f"  source {get_shell_rc_path()}")
-
-    ph("cli-installation-successful", {"did_add_new_key": did_add_new_key})
-
-
-def ask_run_end_to_end_test(setup_info):
-    run_tests_answer = inquirer.prompt(
-        [
-            inquirer.Confirm(
-                "run_tests",
-                message="⚡️ Do you want to run a sample optimization to make sure everything's set up correctly? (takes about 3 minutes)",
-                default=True,
+        if did_add_new_key:
+            click.echo(
+                "🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
             )
-        ]
+            click.echo("Or run the following command to reload:")
+            if os.name == "nt":
+                click.echo(f"  call {get_shell_rc_path()}")
+            else:
+                click.echo(f"  source {get_shell_rc_path()}")
+
+        ph("cli-installation-successful", {"did_add_new_key": did_add_new_key})
+    except KeyboardInterrupt:
+        apologize_and_exit()
+
+
+def ask_run_end_to_end_test(setup_info) -> None:
+    run_tests = inquirer.confirm(
+        message="⚡️ Do you want to run a sample optimization to make sure everything's set up correctly? (takes about 3 minutes)",
+        default=True,
     )
-    run_tests = run_tests_answer.get("run_tests", False)
     if run_tests:
         create_bubble_sort_file(setup_info)
         run_end_to_end_test(setup_info)
 
 
-def collect_setup_info(setup_info: dict[str, str]):
+def collect_setup_info() -> SetupInfo:
     curdir = os.getcwd()
     # Check if the cwd is writable
     if not os.access(curdir, os.W_OK):
         click.echo(
-            f"❌ The current directory isn't writable, please check your folder permissions and try again.\n"
+            f"❌ The current directory isn't writable, please check your folder permissions and try again.{LF}"
         )
         click.echo("It's likely you don't have write permissions for this folder.")
         sys.exit(1)
@@ -121,106 +128,86 @@ def collect_setup_info(setup_info: dict[str, str]):
     curdir_option = "current directory (" + curdir + ")"
     module_subdir_options = valid_module_subdirs + [curdir_option]
 
-    module_root_answer = inquirer.prompt(
-        [
-            inquirer.List(
-                "module_root",
-                message="Which Python module do you want me to optimize going forward?\n"
-                + "(This is usually the top-most directory where all your Python source code is located)",
-                choices=module_subdir_options,
-                default=(
-                    project_name
-                    if project_name in module_subdir_options
-                    else module_subdir_options[0]
-                ),
-            )
-        ]
+    module_root_answer = inquirer.list_input(
+        message=f"Which Python module do you want me to optimize going forward?{LF}"
+        + "(This is usually the top-most directory where all your Python source code is located)",
+        choices=module_subdir_options,
+        default=(
+            project_name if project_name in module_subdir_options else module_subdir_options[0]
+        ),
     )
-    module_root = module_root_answer["module_root"]
-    setup_info["module_root"] = "." if module_root == curdir_option else module_root
+    module_root = "." if module_root_answer == curdir_option else module_root_answer
     ph("cli-project-root-provided")
 
     # Discover test directory
     default_tests_subdir = "tests"
-    create_for_me_option = "okay, create a tests/ directory for me!"
+    create_for_me_option = f"okay, create a tests{os.pathsep} directory for me!"
     test_subdir_options = valid_subdirs if len(valid_subdirs) > 0 else [create_for_me_option]
     custom_dir_option = "enter a custom directory..."
     test_subdir_options.append(custom_dir_option)
-    tests_root_answer = inquirer.prompt(
-        [
-            inquirer.List(
-                "tests_root",
-                message="Where are your tests located? "
-                "(If you don't have any tests yet, I can create an empty tests/ directory for you)",
-                choices=test_subdir_options,
-                default=(
-                    default_tests_subdir
-                    if default_tests_subdir in test_subdir_options
-                    else test_subdir_options[0]
-                ),
-            )
-        ]
+    tests_root_answer = inquirer.list_input(
+        message="Where are your tests located? "
+        f"(If you don't have any tests yet, I can create an empty tests{os.pathsep} directory for you)",
+        choices=test_subdir_options,
+        default=(
+            default_tests_subdir
+            if default_tests_subdir in test_subdir_options
+            else test_subdir_options[0]
+        ),
     )
-    tests_root = tests_root_answer["tests_root"]
-    if tests_root == create_for_me_option:
+
+    if tests_root_answer == create_for_me_option:
         tests_root = os.path.join(curdir, default_tests_subdir)
         os.mkdir(tests_root)
-        click.echo(f"✅ Created directory {tests_root}/\n")
-    elif tests_root == custom_dir_option:
+        click.echo(f"✅ Created directory {tests_root}{os.pathsep}{LF}")
+    elif tests_root_answer == custom_dir_option:
         custom_tests_root_answer = inquirer.prompt(
             [
                 inquirer.Path(
-                    "custom_tests_root",  # Removed the colon and space from the message
-                    message=f"Enter the path to your tests directory inside {os.path.abspath(module_root) + os.sep} ",
+                    "path",
+                    message=f"Enter the path to your tests directory inside {os.path.abspath(module_root) + os.pathsep} ",
                     path_type=inquirer.Path.DIRECTORY,
                     exists=True,
                     normalize_to_absolute_path=True,
                 ),
             ]
         )
-        tests_root = custom_tests_root_answer["custom_tests_root"]
-    setup_info["tests_root"] = os.path.relpath(tests_root, curdir)
+        tests_root = (
+            custom_tests_root_answer["path"] if custom_tests_root_answer else apologize_and_exit()
+        )
+    else:
+        tests_root = tests_root_answer
+    tests_root = os.path.relpath(tests_root, curdir)
     ph("cli-tests-root-provided")
 
     # Autodiscover test framework
-    test_framework = detect_test_framework(curdir, tests_root)
-    autodetected = f" (seems to me you're using {test_framework})" if test_framework else ""
-    questions = [
-        inquirer.List(
-            "test_framework",
-            message="Which test framework do you use?" + autodetected,
-            choices=["pytest", "unittest"],
-            default=test_framework or "pytest",
-            carousel=True,
-        )
-    ]
-    answers = inquirer.prompt(questions)
-    setup_info["test_framework"] = answers["test_framework"]
+    autodetected_test_framework = detect_test_framework(curdir, tests_root)
+    autodetected_suffix = (
+        f" (seems to me you're using {autodetected_test_framework})"
+        if autodetected_test_framework
+        else ""
+    )
+    test_framework = inquirer.list_input(
+        message="Which test framework do you use?" + autodetected_suffix,
+        choices=["pytest", "unittest"],
+        default=autodetected_test_framework or "pytest",
+        carousel=True,
+    )
 
-    ph("cli-test-framework-provided", {"test_framework": setup_info["test_framework"]})
+    ph("cli-test-framework-provided", {"test_framework": test_framework})
 
     # Ask for paths to ignore and update the setup_info dictionary
     # ignore_paths_input = click.prompt("Are there any paths CodeFlash should ignore? (comma-separated, no spaces)",
     #                                   default='', show_default=False)
-    # ignore_paths = ignore_paths_input.split(',') if ignore_paths_input else ['tests/']
-    ignore_paths = []
-    setup_info["ignore_paths"] = ignore_paths
+    # ignore_paths = ignore_paths_input.split(',') if ignore_paths_input else [f'tests{os.pathsep}']
+    ignore_paths: list[str] = []
 
-    # Ask the user if they agree to enable PostHog analytics logging
-    # enable_analytics_question = [
-    #     inquirer.List(
-    #         "enable_analytics",
-    #         message="⚡️ Is it OK to collect usage analytics to help improve CodeFlash? (recommended)",
-    #         choices=[
-    #             ("Sure, I'd love to help make CodeFlash better!", True),
-    #             ("No, thanks.", False),
-    #         ],
-    #     )
-    # ]
-    # enable_analytics_answer = inquirer.prompt(enable_analytics_question)
-    # setup_info["enable_analytics"] = enable_analytics_answer["enable_analytics"]
-
-    # ph("cli-analytics-choice", {"enable_analytics": setup_info["enable_analytics"]})
+    return SetupInfo(
+        module_root=module_root,
+        tests_root=tests_root,
+        test_framework=test_framework,
+        ignore_paths=ignore_paths,
+    )
 
 
 def detect_test_framework(curdir, tests_root) -> Optional[str]:
@@ -299,8 +286,8 @@ def check_for_toml_or_setup_file() -> Optional[str]:
             ph("cli-setup-py-found")
     else:
         click.echo(
-            f"💡 I couldn't find a pyproject.toml in the current directory ({curdir}).\n"
-            "(make sure you're running `codeflash init` from your project's root directory!)\n"
+            f"💡 I couldn't find a pyproject.toml in the current directory ({curdir}).{LF}"
+            f"(make sure you're running `codeflash init` from your project's root directory!){LF}"
             f"I need this file to store my configuration settings."
         )
         ph("cli-no-pyproject-toml-or-setup-py")
@@ -337,43 +324,31 @@ def check_for_toml_or_setup_file() -> Optional[str]:
     return project_name
 
 
-def apologize_and_exit():
+def apologize_and_exit() -> NoReturn:
     click.echo(
         "💡 If you're having trouble, see https://app.codeflash.ai/app/getting-started for further help getting started with CodeFlash!"
     )
-    click.echo("Exiting...")
+    click.echo("👋 Exiting...")
     sys.exit(1)
 
 
 # Ask if the user wants CodeFlash to optimize new GitHub PRs
-def prompt_github_action(setup_info: dict[str, str]):
-    optimize_prs_answer = inquirer.prompt(
-        [
-            inquirer.Confirm(
-                "optimize_prs",
-                message="Do you want CodeFlash to automatically optimize new Github PRs when they're opened (recommended)?",
-                default=True,
-            )
-        ]
+def prompt_github_action(setup_info: SetupInfo) -> None:
+    optimize_yes = inquirer.confirm(
+        message="Do you want CodeFlash to automatically optimize new Github PRs when they're opened (recommended)?",
+        default=True,
     )
-    optimize_yes = optimize_prs_answer["optimize_prs"]
     ph("cli-github-optimization-choice", {"optimize_prs": optimize_yes})
     if optimize_yes:
-        repo = Repo(setup_info["module_root"], search_parent_directories=True)
+        repo = Repo(setup_info.module_root, search_parent_directories=True)
         git_root = repo.git.rev_parse("--show-toplevel")
         workflows_path = os.path.join(git_root, ".github", "workflows")
         optimize_yaml_path = os.path.join(workflows_path, "codeflash-optimize.yaml")
 
-        confirm_creation_answer = inquirer.prompt(
-            [
-                inquirer.Confirm(
-                    "confirm_creation",
-                    message=f"Great! I'll create a new workflow file at {optimize_yaml_path} ... is this OK?",
-                    default=True,
-                )
-            ]
+        confirm_creation_yes = inquirer.confirm(
+            message=f"Great! I'll create a new workflow file at {optimize_yaml_path} ... is this OK?",
+            default=True,
         )
-        confirm_creation_yes = confirm_creation_answer["confirm_creation"]
         ph(
             "cli-github-optimization-confirm-workflow-creation",
             {"confirm_creation": confirm_creation_yes},
@@ -393,11 +368,11 @@ def prompt_github_action(setup_info: dict[str, str]):
             )
             with open(optimize_yaml_path, "w", encoding="utf8") as optimize_yml_file:
                 optimize_yml_file.write(optimize_yml_content)
-            click.echo(f"✅ Created {optimize_yaml_path}\n")
+            click.echo(f"✅ Created {optimize_yaml_path}{LF}")
             click.prompt(
-                f"Next, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.\n"
-                + f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} ...\n"
-                + f"Then, click 'New repository secret' to add your api key with the variable name CODEFLASH_API_KEY.\n",
+                f"Next, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.{LF}"
+                + f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} ...{LF}"
+                + f"Then, click 'New repository secret' to add your api key with the variable name CODEFLASH_API_KEY.{LF}",
                 default="",
                 type=click.STRING,
                 prompt_suffix="",
@@ -407,14 +382,14 @@ def prompt_github_action(setup_info: dict[str, str]):
             click.echo(
                 "🐙 I opened your Github secrets page! Note: if you see a 404, you probably don't have access to this "
                 + "repo's secrets; ask a repo admin to add it for you, or (not super recommended) you can temporarily "
-                "hard-code your api key into the workflow file.\n",
+                f"hard-code your api key into the workflow file.{LF}",
             )
             click.pause()
             click.echo()
             click.prompt(
                 f"Finally, for the workflow to work, you'll need to edit the workflow file to install the right "
-                f"Python version and any project dependencies.\n"
-                + f"Press Enter to open {optimize_yaml_path} in your editor.\n",
+                f"Python version and any project dependencies.{LF}"
+                + f"Press Enter to open {optimize_yaml_path} in your editor.{LF}",
                 default="",
                 type=click.STRING,
                 prompt_suffix="",
@@ -423,11 +398,13 @@ def prompt_github_action(setup_info: dict[str, str]):
             click.launch(optimize_yaml_path)
             click.echo(
                 "📝 I opened the workflow file in your editor! You'll need to edit the steps that install the right Python "
-                + "version and any project dependencies. See the comments in the file for more details.\n"
+                + f"version and any project dependencies. See the comments in the file for more details.{LF}"
             )
             click.pause()
             click.echo()
-            click.echo("🚀 CodeFlash is now configured to automatically optimize new Github PRs!\n")
+            click.echo(
+                f"🚀 CodeFlash is now configured to automatically optimize new Github PRs!{LF}"
+            )
             ph("cli-github-workflow-created")
         else:
             click.echo("⏩️ Skipping GitHub workflow creation.")
@@ -435,24 +412,23 @@ def prompt_github_action(setup_info: dict[str, str]):
 
 
 # Create or update the pyproject.toml file with the CodeFlash dependency & configuration
-def configure_pyproject_toml(setup_info: dict[str, str]):
+def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     toml_path = os.path.join(os.getcwd(), "pyproject.toml")
     try:
         with open(toml_path, "r", encoding="utf8") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
         click.echo(
-            f"I couln't find a pyproject.toml in the current directory.\n"
+            f"I couln't find a pyproject.toml in the current directory.{LF}"
             f"Please create it by running `poetry init`, or run `codeflash init` again from a different project directory."
         )
         apologize_and_exit()
 
     codeflash_section = tomlkit.table()
-    codeflash_section["module-root"] = setup_info["module_root"]
-    codeflash_section["tests-root"] = setup_info["tests_root"]
-    codeflash_section["test-framework"] = setup_info["test_framework"]
-    codeflash_section["ignore-paths"] = setup_info["ignore_paths"]
-    codeflash_section["enable-analytics"] = setup_info["enable_analytics"]
+    codeflash_section["module-root"] = setup_info.module_root
+    codeflash_section["tests-root"] = setup_info.tests_root
+    codeflash_section["test-framework"] = setup_info.test_framework
+    codeflash_section["ignore-paths"] = setup_info.ignore_paths
 
     # Add the 'codeflash' section, ensuring 'tool' section exists
     tool_section = pyproject_data.get("tool", tomlkit.table())
@@ -505,7 +481,7 @@ def prompt_api_key() -> bool:
     return True
 
 
-def enter_api_key_and_save_to_rc():
+def enter_api_key_and_save_to_rc() -> None:
     browser_launched = False
     api_key = ""
     while api_key == "":
@@ -521,45 +497,23 @@ def enter_api_key_and_save_to_rc():
         else:
             if not browser_launched:
                 click.echo(
-                    "Opening your CodeFlash API key page. Grab a key from there!\n"
+                    f"Opening your CodeFlash API key page. Grab a key from there!{LF}"
                     "You can also open this link manually: https://app.codeflash.ai/app/apikeys"
                 )
                 click.launch("https://app.codeflash.ai/app/apikeys")
                 browser_launched = True  # This does not work on remote consoles
 
-    shell_rc_path = get_shell_rc_path()
-    api_key_line = f"export CODEFLASH_API_KEY={api_key}"
-    try:
-        with open(shell_rc_path, "r+", encoding="utf8") as shell_file:
-            shell_contents = shell_file.read()
-            existing_api_key = read_api_key_from_shell_config()
-
-            if existing_api_key:
-                # Replace the existing API key line
-                updated_shell_contents = re.sub(
-                    SHELL_RC_EXPORT_PATTERN, api_key_line, shell_contents
-                )
-                action = "Updated CODEFLASH_API_KEY in"
-            else:
-                # Append the new API key line
-                updated_shell_contents = shell_contents.rstrip() + f"\n{api_key_line}\n"
-                action = "Added CODEFLASH_API_KEY to"
-
-            shell_file.seek(0)
-            shell_file.write(updated_shell_contents)
-            shell_file.truncate()
-        click.echo(f"✅ {action} {shell_rc_path}.")
-    except IOError as e:
-        click.echo(
-            f"💡 I tried adding your CodeFlash API key to {shell_rc_path} - but seems like I don't have permissions to do so.\n"
-            f"You'll need to open it yourself and add the following line:\n\n{api_key_line}\n"
-        )
+    result = save_api_key_to_rc(api_key)
+    if is_successful(result):
+        click.echo(result.unwrap())
+    else:
+        click.echo(result.failure())
         click.pause()
 
     os.environ["CODEFLASH_API_KEY"] = api_key
 
 
-def create_bubble_sort_file(setup_info: dict[str, str]):
+def create_bubble_sort_file(setup_info: SetupInfo) -> None:
     bubble_sort_content = """def sorter(arr):
     for i in range(len(arr)):
         for j in range(len(arr) - 1):
@@ -569,13 +523,13 @@ def create_bubble_sort_file(setup_info: dict[str, str]):
                 arr[j + 1] = temp
     return arr
 """
-    bubble_sort_path = os.path.join(setup_info["module_root"], "bubble_sort.py")
+    bubble_sort_path = os.path.join(setup_info.module_root, "bubble_sort.py")
     with open(bubble_sort_path, "w", encoding="utf8") as bubble_sort_file:
         bubble_sort_file.write(bubble_sort_content)
     click.echo(f"✅ Created {bubble_sort_path}")
 
 
-def run_end_to_end_test(setup_info: dict[str, str]):
+def run_end_to_end_test(setup_info: SetupInfo) -> None:
     command = [
         "codeflash",
         "--file",
@@ -592,7 +546,7 @@ def run_end_to_end_test(setup_info: dict[str, str]):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        cwd=setup_info["module_root"],
+        cwd=setup_info.module_root,
     )
     while process.poll() is None:
         sys.stdout.write(animation[idx % len(animation)])
@@ -603,19 +557,20 @@ def run_end_to_end_test(setup_info: dict[str, str]):
 
     sys.stdout.write(" ")  # Clear the last animation character
     sys.stdout.flush()
-    stderr = process.stderr.read()
-    if stderr:
-        click.echo(stderr.strip())
+    if process.stderr:
+        stderr = process.stderr.read()
+        if stderr:
+            click.echo(stderr.strip())
 
-    bubble_sort_path = os.path.join(setup_info["module_root"], "bubble_sort.py")
+    bubble_sort_path = os.path.join(setup_info.module_root, "bubble_sort.py")
 
     # Delete the bubble_sort.py file after the test
     os.remove(bubble_sort_path)
-    click.echo(f"🗑️ Deleted {bubble_sort_path}")
+    click.echo(f"{LF}🗑️ Deleted {bubble_sort_path}")
 
     if process.returncode == 0:
-        click.echo("\n✅ End-to-end test passed. CodeFlash has been correctly set up!")
+        click.echo(f"{LF}✅ End-to-end test passed. CodeFlash has been correctly set up!")
     else:
         click.echo(
-            "\n❌ End-to-end test failed. Please check the logs above, and take a look at https://app.codeflash.ai/app/getting-started for help and troubleshooting."
+            f"{LF}❌ End-to-end test failed. Please check the logs above, and take a look at https://app.codeflash.ai/app/getting-started for help and troubleshooting."
         )

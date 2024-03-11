@@ -46,10 +46,7 @@ def test_filter_functions():
     }
 
     _, functions_count = filter_functions(
-        functions,
-        "/user/projects/nuitka/tests",
-        [],
-        "/user/projects",
+        functions, "/user/projects/nuitka/tests", [], "/user/projects", "/user/projects/nuitka"
     )
     assert functions_count == 1
 
@@ -66,9 +63,6 @@ def test_filter_functions():
     }
 
     _, functions_count = filter_functions(
-        functions,
-        "/user/projects/nuitka/tests",
-        [],
-        "/user/projects",
+        functions, "/user/projects/nuitka/tests", [], "/user/projects", "/user/projects/nuitka"
     )
     assert functions_count == 0

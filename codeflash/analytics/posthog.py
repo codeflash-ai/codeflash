@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from posthog import Posthog
 
@@ -27,7 +27,7 @@ def enable_analytics(enabled: bool) -> None:
     _ANALYTICS_ENABLED = enabled
 
 
-def ph(event: str, properties: Dict[str, Any] = None) -> None:
+def ph(event: str, properties: Optional[Dict[str, Any]] = None) -> None:
     """
     Log an event to PostHog.
     :param event: The name of the event.
