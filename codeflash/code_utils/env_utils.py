@@ -62,7 +62,7 @@ def ensure_pr_number() -> bool:
     return True
 
 
-def ensure_git_repo(module_root: str):
+def ensure_git_repo(module_root: str, ask_interactively: bool = False) -> bool:
     try:
         _ = git.Repo(module_root).git_dir
         return True
