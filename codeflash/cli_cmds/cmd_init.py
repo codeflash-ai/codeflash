@@ -14,13 +14,13 @@ from git import Repo
 from pydantic.dataclasses import dataclass
 from returns.pipeline import is_successful
 
-from codeflash.analytics.posthog import ph
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.env_utils import (
     get_codeflash_api_key,
 )
 from codeflash.code_utils.git_utils import get_github_secrets_page_url
 from codeflash.code_utils.shell_utils import save_api_key_to_rc, get_shell_rc_path
+from codeflash.telemetry.posthog import ph
 from codeflash.version import __version__ as version
 
 CODEFLASH_LOGO: str = (
