@@ -1,12 +1,12 @@
 import logging
 import os
+import pathlib
 import re
 import subprocess
 import unittest
 from collections import defaultdict
-from typing import Dict, List, Optional
 from enum import Enum
-import pathlib
+from typing import Dict, List, Optional
 
 import jedi
 from pydantic.dataclasses import dataclass
@@ -71,6 +71,13 @@ class TestFunction:
     parameters: Optional[str]
 
 
+@dataclass(frozen=True)
+class TestDetails:
+    test_function: str
+    test_module_path: str
+    test_suite_name: str
+
+
 def discover_unit_tests(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     test_frameworks = {
         "pytest": discover_tests_pytest,
@@ -107,7 +114,6 @@ def get_pytest_rootdir_only(pytest_cmd_list, tests_root, project_root) -> str:
     raise ValueError(f"Could not find rootdir in pytest output for {tests_root}")
 
 
-# Use -q parsing unless there is a rootdir in the output, in which case use --co parsing
 def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
@@ -146,25 +152,50 @@ def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     loader = unittest.TestLoader()
     tests = loader.discover(str(tests_root))
     file_to_test_map = defaultdict(list)
+
+    def get_test_details(_test) -> Optional[TestDetails]:
+        _test_function, _test_module, _test_suite_name = (
+            _test._testMethodName,
+            _test.__class__.__module__,
+            _test.__class__.__qualname__,
+        )
+
+        _test_module_path = _test_module.replace(".", os.sep)
+        _test_module_path = os.path.join(str(tests_root), _test_module_path) + ".py"
+        if not os.path.exists(_test_module_path):
+            return None
+        return TestDetails(_test_function, _test_module_path, _test_suite_name)
+
     for _test_suite in tests._tests:
         for test_suite_2 in _test_suite._tests:
             if not hasattr(test_suite_2, "_tests"):
                 logging.warning(f"Didn't find tests for {test_suite_2}")
                 continue
-            for test in test_suite_2._tests:
-                test_function, test_module, test_suite_name = (
-                    test._testMethodName,
-                    test.__class__.__module__,
-                    test.__class__.__qualname__,
-                )
 
-                test_module_path = test_module.replace(".", os.sep)
-                test_module_path = os.path.join(str(tests_root), test_module_path) + ".py"
-                if not os.path.exists(test_module_path):
-                    continue
-                file_to_test_map[test_module_path].append(
-                    {"test_function": test_function, "test_suite_name": test_suite_name}
-                )
+            for test in test_suite_2._tests:
+                # some test suites are nested, so we need to go deeper
+                if not hasattr(test, "_testMethodName") and hasattr(test, "_tests"):
+                    for test_2 in test._tests:
+                        if not hasattr(test_2, "_testMethodName"):
+                            logging.warning(f"Didn't find tests for {test_2}")  # it goes deeper?
+                            continue
+                        details = get_test_details(test_2)
+                        if details is not None:
+                            file_to_test_map[details.test_module_path].append(
+                                {
+                                    "test_function": details.test_function,
+                                    "test_suite_name": details.test_suite_name,
+                                }
+                            )
+                else:
+                    details = get_test_details(test)
+                    if details is not None:
+                        file_to_test_map[details.test_module_path].append(
+                            {
+                                "test_function": details.test_function,
+                                "test_suite_name": details.test_suite_name,
+                            }
+                        )
     return process_test_files(file_to_test_map, cfg)
 
 
