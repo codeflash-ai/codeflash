@@ -3,6 +3,7 @@ import os
 from functools import lru_cache
 from typing import Optional
 
+import click
 import git
 
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
@@ -68,4 +69,16 @@ def ensure_git_repo(module_root: str, ask_interactively: bool = False) -> bool:
         return True
     except git.exc.InvalidGitRepositoryError:
         # TODO: Ask the user if they want to run regardless, and abort if running in non-interactive mode
-        pass
+        if ask_interactively:
+            response = click.prompt(
+                "I did not find a git repository for the code. If you run codeflash, it might overwrite the"
+                " code and you might irreversibly lose your current code. Proceed?",
+                type=click.Choice(["yes", "no"], case_sensitive=False),
+                show_choices=True,
+            )
+            if response == "no":
+                return False
+            if response == "yes":
+                return True
+        else:
+            return False
