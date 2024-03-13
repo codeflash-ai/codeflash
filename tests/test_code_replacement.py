@@ -5,7 +5,7 @@ from codeflash.code_utils.code_replacer import replace_functions_in_file
 os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
 
 
-def test_test_libcst_code_replacement():
+def test_test_libcst_code_replacement() -> None:
     optim_code = """import libcst as cst
 from typing import Optional
 
@@ -56,7 +56,7 @@ print("Hello world")
     assert new_code == expected
 
 
-def test_test_libcst_code_replacement2():
+def test_test_libcst_code_replacement2() -> None:
     optim_code = """import libcst as cst
 from typing import Optional
 
@@ -111,7 +111,7 @@ print("Hello world")
     assert new_code == expected
 
 
-def test_test_libcst_code_replacement3():
+def test_test_libcst_code_replacement3() -> None:
     optim_code = """import libcst as cst
 from typing import Optional
 
@@ -167,7 +167,7 @@ print("Salut monde")
     assert new_code == expected
 
 
-def test_test_libcst_code_replacement4():
+def test_test_libcst_code_replacement4() -> None:
     optim_code = """import libcst as cst
 from typing import Optional
 
@@ -225,7 +225,7 @@ print("Salut monde")
     assert new_code == expected
 
 
-def test_test_libcst_code_replacement5():
+def test_test_libcst_code_replacement5() -> None:
     optim_code = """def sorter_deps(arr):
     supersort(badsort(arr))
     return arr
@@ -270,7 +270,7 @@ def supersort(doink):
     assert new_code == expected
 
 
-def test_test_libcst_code_replacement6():
+def test_test_libcst_code_replacement6() -> None:
     optim_code = """import libcst as cst
 from typing import Optional
 
@@ -352,7 +352,7 @@ print("Not cool")
     assert new_dependent_code == expected_dependent
 
 
-def test_test_libcst_code_replacement7():
+def test_test_libcst_code_replacement7() -> None:
     optim_code = """@register_deserializable
 class CacheSimilarityEvalConfig(BaseConfig):
 
@@ -532,11 +532,76 @@ class CacheConfig(BaseConfig):
                 init_config=CacheInitConfig.from_config(config.get("init_config", {})),
             )
 """
-
     function_names: list[str] = ["CacheSimilarityEvalConfig.from_config"]
     preexisting_functions: list[str] = [
         "__init__",
         "from_config",
+    ]
+    new_code: str = replace_functions_in_file(
+        original_code, function_names, optim_code, preexisting_functions
+    )
+    assert new_code == expected
+
+
+def test_test_libcst_code_replacement8() -> None:
+    optim_code = '''class _EmbeddingDistanceChainMixin(Chain):
+    @staticmethod
+    def _hamming_distance(a: np.ndarray, b: np.ndarray) -> np.floating:
+        """Compute the Hamming distance between two vectors.
+
+        Args:
+            a (np.ndarray): The first vector.
+            b (np.ndarray): The second vector.
+
+        Returns:
+            np.floating: The Hamming distance.
+        """
+        return np.sum(a != b) / a.size
+'''
+
+    original_code = '''class _EmbeddingDistanceChainMixin(Chain):
+
+    class Config:
+        """Permit embeddings to go unvalidated."""
+
+        arbitrary_types_allowed: bool = True
+
+
+    @staticmethod
+    def _hamming_distance(a: np.ndarray, b: np.ndarray) -> np.floating:
+        """Compute the Hamming distance between two vectors.
+
+        Args:
+            a (np.ndarray): The first vector.
+            b (np.ndarray): The second vector.
+
+        Returns:
+            np.floating: The Hamming distance.
+        """
+        return np.mean(a != b)
+'''
+    expected = '''class _EmbeddingDistanceChainMixin(Chain):
+
+    class Config:
+        """Permit embeddings to go unvalidated."""
+
+        arbitrary_types_allowed: bool = True
+    @staticmethod
+    def _hamming_distance(a: np.ndarray, b: np.ndarray) -> np.floating:
+        """Compute the Hamming distance between two vectors.
+
+        Args:
+            a (np.ndarray): The first vector.
+            b (np.ndarray): The second vector.
+
+        Returns:
+            np.floating: The Hamming distance.
+        """
+        return np.sum(a != b) / a.size
+'''
+    function_names: list[str] = ["_EmbeddingDistanceChainMixin._hamming_distance"]
+    preexisting_functions: list[str] = [
+        "_hamming_distance",
     ]
     new_code: str = replace_functions_in_file(
         original_code, function_names, optim_code, preexisting_functions

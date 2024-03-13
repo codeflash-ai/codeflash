@@ -1,4 +1,4 @@
-from typing import List, Union, Optional, IO, NoReturn
+from typing import List, Union, Optional, IO
 
 import libcst as cst
 from libcst import SimpleStatementLine, FunctionDef
@@ -13,9 +13,9 @@ class OptimFunctionCollector(cst.CSTVisitor):
             preexisting_functions = []
         self.function_name = function_name
         self.optim_body: Union[FunctionDef, None] = None
-        self.optim_new_class_functions = []
-        self.optim_new_functions = []
-        self.optim_imports = []
+        self.optim_new_class_functions: list[cst.FunctionDef] = []
+        self.optim_new_functions: list[cst.FunctionDef] = []
+        self.optim_imports: List[Union[cst.Import, cst.ImportFrom]] = []
         self.preexisting_functions = preexisting_functions
 
     def visit_FunctionDef(self, node: cst.FunctionDef):
@@ -74,13 +74,11 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         self.in_class: bool = False
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
-        self.depth += 1
         return False
 
     def leave_FunctionDef(
         self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef
     ) -> cst.FunctionDef:
-        self.depth -= 1
         if original_node.name.value == self.function_name and (
             self.depth == 0 or (self.depth == 1 and self.in_class)
         ):
@@ -88,14 +86,17 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         return updated_node
 
     def visit_ClassDef(self, node: cst.ClassDef) -> bool:
-        self.in_class = (self.depth == 0) and (node.name.value == self.class_name)
         self.depth += 1
+        if self.in_class:
+            return False
+        self.in_class = (self.depth == 1) and (node.name.value == self.class_name)
         return self.in_class
 
     def leave_ClassDef(
         self, original_node: cst.ClassDef, updated_node: cst.ClassDef
     ) -> cst.ClassDef:
-        if self.in_class:
+        self.depth -= 1
+        if self.in_class and (self.depth == 0) and (original_node.name.value == self.class_name):
             self.in_class = False
             return updated_node.with_changes(
                 body=updated_node.body.with_changes(
@@ -207,7 +208,7 @@ def replace_function_definitions_in_module(
     optimized_code: str,
     module_abspath: str,
     preexisting_functions: list[str],
-) -> NoReturn:
+) -> None:
     file: IO[str]
     with open(module_abspath, "r", encoding="utf8") as file:
         source_code: str = file.read()
