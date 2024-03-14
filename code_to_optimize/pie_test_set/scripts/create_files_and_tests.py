@@ -72,8 +72,10 @@ def create_files() -> None:
                     ) as output_f:
                         input_content = input_f.read()
                         expected_output = output_f.read()
-                        if '\n' in input_content.strip() or '\n' in expected_output.strip():
-                            print(f"Multiple lines detected in input or output for {problem_id}, skipping.")
+                        if "\n" in input_content.strip() or "\n" in expected_output.strip():
+                            print(
+                                f"Multiple lines detected in input or output for {problem_id}, skipping."
+                            )
                             os.remove(file_path)
                             if os.path.exists(test_code_file_path):
                                 os.remove(test_code_file_path)
@@ -100,14 +102,9 @@ def generate_test_case_code(
 ) -> str:
     return (
         f"def test_problem_{problem_id}_{input_num}():\n"
-        f"    actual_output = problem_{problem_id}({input_content!r})\n" +
-        f"    expected_output = {expected_output!r}\n" +
-        f"    if isinstance(actual_output, type(expected_output)):\n" +
-        f"        assert actual_output == expected_output\n" +
-        f"    else:\n" +
-        f"        # Cast expected output to the type of actual output if they differ\n" +
-        f"        cast_expected_output = type(actual_output)(expected_output)\n" +
-        f"        assert actual_output == cast_expected_output\n\n"
+        f"    actual_output = problem_{problem_id}({input_content!r})\n"
+        + f"    expected_output = {expected_output!r}\n"
+        + f"    assert str(actual_output) == expected_output\n\n"
     )
 
 
