@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 from functools import lru_cache
 from typing import Optional
 
@@ -63,13 +64,13 @@ def ensure_pr_number() -> bool:
     return True
 
 
-def ensure_git_repo(module_root: str, ask_interactively: bool = False) -> bool:
+def ensure_git_repo(module_root: str) -> bool:
     try:
         _ = git.Repo(module_root).git_dir
         return True
     except git.exc.InvalidGitRepositoryError:
-        # TODO: Ask the user if they want to run regardless, and abort if running in non-interactive mode
-        if ask_interactively:
+        # Only ask for the prompt if running in non-interactive mode
+        if sys.__stdin__.isatty():
             response = click.prompt(
                 "I did not find a git repository for the code. If you run codeflash, it might overwrite the"
                 " code and you might irreversibly lose your current code. Proceed?",
