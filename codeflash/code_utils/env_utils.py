@@ -82,4 +82,5 @@ def ensure_git_repo(module_root: str) -> bool:
             if response == "yes":
                 return True
         else:
-            return False
+            # continue running, important for GitHub actions
+            return True
