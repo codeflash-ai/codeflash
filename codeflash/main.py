@@ -12,9 +12,6 @@ from typing import Tuple, Union
 
 import libcst as cst
 
-from codeflash.analytics import posthog
-from codeflash.analytics.posthog import ph
-from codeflash.analytics.sentry import init_sentry
 from codeflash.api.aiservice import optimize_python_code
 from codeflash.cli_cmds.cli import process_cmd_args
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
@@ -50,6 +47,9 @@ from codeflash.optimization.function_context import (
 )
 from codeflash.result.create_pr import check_create_pr
 from codeflash.result.explanation import Explanation
+from codeflash.telemetry import posthog
+from codeflash.telemetry.posthog import ph
+from codeflash.telemetry.sentry import init_sentry
 from codeflash.verification.equivalence import compare_results
 from codeflash.verification.parse_test_output import (
     TestType,
@@ -116,7 +116,8 @@ def parse_args() -> Namespace:
 class Optimizer:
     def __init__(self, args: Namespace):
         self.args = args
-        posthog.enable_analytics(args.enable_analytics)
+        init_sentry(not args.disable_telemetry)
+        posthog.initialize_posthog(not args.disable_telemetry)
 
         self.test_cfg = TestConfig(
             tests_root=args.tests_root,
@@ -862,7 +863,6 @@ class Optimizer:
 
 def main():
     """Entry point for the codeflash command-line interface."""
-    init_sentry()
     Optimizer(parse_args()).run()
 
 
