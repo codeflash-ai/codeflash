@@ -132,6 +132,9 @@ class Optimizer:
         logging.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
             return
+        if not env_utils.ensure_git_repo(module_root=self.args.module_root):
+            logging.error("No git repository detected and user aborted run. Exiting...")
+            exit(1)
 
         (
             file_to_funcs_to_optimize,

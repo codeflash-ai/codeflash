@@ -1,7 +1,11 @@
 import logging
 import os
+import sys
 from functools import lru_cache
 from typing import Optional
+
+import click
+import git
 
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
 
@@ -58,3 +62,25 @@ def ensure_pr_number() -> bool:
             f"CODEFLASH_PR_NUMBER not found in environment variables; make sure the Github Action is setting this so CodeFlash can comment on the right PR"
         )
     return True
+
+
+def ensure_git_repo(module_root: str) -> bool:
+    try:
+        _ = git.Repo(module_root).git_dir
+        return True
+    except git.exc.InvalidGitRepositoryError:
+        # Only ask for the prompt if running in non-interactive mode
+        if sys.__stdin__.isatty():
+            response = click.prompt(
+                "I did not find a git repository for the code. If you run codeflash, it might overwrite the"
+                " code and you might irreversibly lose your current code. Proceed?",
+                type=click.Choice(["yes", "no"], case_sensitive=False),
+                show_choices=True,
+            )
+            if response == "no":
+                return False
+            if response == "yes":
+                return True
+        else:
+            # continue running, important for GitHub actions
+            return True
