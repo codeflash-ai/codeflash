@@ -6,25 +6,23 @@ from posthog import Posthog
 from codeflash.api.cfapi import get_user_id
 from codeflash.version import __version__, __version_tuple__
 
-_posthog = Posthog(
-    project_api_key="phc_aUO790jHd7z1SXwsYCz8dRApxueplZlZWeDSpKc5hol", host="https://us.posthog.com"
-)
+_posthog = None
 
 
-_ANALYTICS_ENABLED = True
-
-
-def enable_analytics(enabled: bool) -> None:
+def initialize_posthog(enabled: bool) -> None:
     """
-    Enable or disable analytics.
-    :param enabled: Whether to enable analytics.
+    Enable or disable PostHog.
+    :param enabled: Whether to enable PostHog.
     """
-    if enabled:
-        ph("cli-analytics-enabled")
-    else:
-        ph("cli-analytics-disabled")
-    global _ANALYTICS_ENABLED
-    _ANALYTICS_ENABLED = enabled
+    if not enabled:
+        return
+
+    global _posthog
+    _posthog = Posthog(
+        project_api_key="phc_aUO790jHd7z1SXwsYCz8dRApxueplZlZWeDSpKc5hol",
+        host="https://us.posthog.com",
+    )
+    ph("cli-telemetry-enabled")
 
 
 def ph(event: str, properties: Optional[Dict[str, Any]] = None) -> None:
@@ -33,7 +31,7 @@ def ph(event: str, properties: Optional[Dict[str, Any]] = None) -> None:
     :param event: The name of the event.
     :param properties: A dictionary of properties to attach to the event.
     """
-    if not _ANALYTICS_ENABLED:
+    if _posthog is None:
         return
 
     properties = properties or {}

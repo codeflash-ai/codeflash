@@ -6,9 +6,9 @@ from typing import Any, Dict, List, Tuple, Optional
 import requests
 from pydantic.json import pydantic_encoder
 
-from codeflash.analytics.posthog import ph
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.telemetry.posthog import ph
 
 if os.environ.get("AIS_SERVER", default="prod").lower() == "local":
     AI_SERVICE_BASE_URL = "http://localhost:8000/"
