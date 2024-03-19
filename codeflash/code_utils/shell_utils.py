@@ -72,7 +72,7 @@ def save_api_key_to_rc(api_key) -> Result[str, str]:
         return Success(f"✅ {action} {shell_rc_path}.")
     except PermissionError:
         return Failure(
-            f"💡 I tried adding your CodeFlash API key to {shell_rc_path} - but seems like I don't have permissions to do so.{LF}"
+            f"💡 I tried adding your Codeflash API key to {shell_rc_path} - but seems like I don't have permissions to do so.{LF}"
             f"You'll need to open it yourself and add the following line:{LF}{LF}{api_key_line}{LF}"
         )
     except FileNotFoundError:
