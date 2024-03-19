@@ -319,10 +319,6 @@ def check_for_toml_or_setup_file() -> Optional[str]:
                 apologize_and_exit()
         else:
             click.echo("⏩️ Skipping pyproject.toml creation.")
-            click.echo(
-                f"I couldn't find a pyproject.toml in the current directory. Codeflash needs one to store configuration.{LF}"
-                f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
-            )
             apologize_and_exit()
     click.echo()
     return project_name
