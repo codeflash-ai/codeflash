@@ -271,20 +271,20 @@ def check_for_toml_or_setup_file() -> Optional[str]:
         except Exception as e:
             click.echo(f"✅ I found a pyproject.toml for your project.")
             ph("cli-pyproject-toml-found")
-    elif os.path.exists(setup_py_path):
-        with open(setup_py_path, "r", encoding="utf8") as f:
-            setup_py_content = f.read()
-        project_name_match = re.search(
-            r"setup\s*\([^)]*?name\s*=\s*['\"](.*?)['\"]", setup_py_content, re.DOTALL
-        )
-        if project_name_match:
-            project_name = project_name_match.group(1)
-            click.echo(f"✅ Found setup.py for your project {project_name}")
-            ph("cli-setup-py-found-name")
-        else:
-            click.echo(f"✅ Found setup.py.")
-            ph("cli-setup-py-found")
     else:
+        if os.path.exists(setup_py_path):
+            with open(setup_py_path, "r", encoding="utf8") as f:
+                setup_py_content = f.read()
+            project_name_match = re.search(
+                r"setup\s*\([^)]*?name\s*=\s*['\"](.*?)['\"]", setup_py_content, re.DOTALL
+            )
+            if project_name_match:
+                project_name = project_name_match.group(1)
+                click.echo(f"✅ Found setup.py for your project {project_name}")
+                ph("cli-setup-py-found-name")
+            else:
+                click.echo(f"✅ Found setup.py.")
+                ph("cli-setup-py-found")
         click.echo(
             f"💡 I couldn't find a pyproject.toml in the current directory ({curdir}).{LF}"
             f"(make sure you're running `codeflash init` from your project's root directory!){LF}"
@@ -319,6 +319,10 @@ def check_for_toml_or_setup_file() -> Optional[str]:
                 apologize_and_exit()
         else:
             click.echo("⏩️ Skipping pyproject.toml creation.")
+            click.echo(
+                f"I couldn't find a pyproject.toml in the current directory. Codeflash needs one to store configuration.{LF}"
+                f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
+            )
             apologize_and_exit()
     click.echo()
     return project_name
@@ -419,8 +423,8 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
         click.echo(
-            f"I couln't find a pyproject.toml in the current directory.{LF}"
-            f"Please create it by running `poetry init`, or run `codeflash init` again from a different project directory."
+            f"I couldn't find a pyproject.toml in the current directory.{LF}"
+            f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
         )
         apologize_and_exit()
 
