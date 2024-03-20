@@ -66,7 +66,7 @@ def ensure_pr_number() -> bool:
 
 def ensure_git_repo(module_root: str) -> bool:
     try:
-        _ = git.Repo(module_root, search_parents_directories=True).git_dir
+        _ = git.Repo(module_root, search_parent_directories=True).git_dir
         return True
     except git.exc.InvalidGitRepositoryError:
         # Only ask for the prompt if running in non-interactive mode
