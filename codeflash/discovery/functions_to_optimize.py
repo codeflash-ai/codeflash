@@ -16,6 +16,7 @@ from codeflash.code_utils.code_utils import (
     path_belongs_to_site_packages,
     module_name_from_file_path,
 )
+from codeflash.code_utils.env_utils import ensure_git_repo
 from codeflash.code_utils.git_utils import get_git_diff
 from codeflash.verification.verification_utils import TestConfig
 
@@ -224,6 +225,7 @@ def filter_functions(
     module_root: str,
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
     # Remove any functions that we don't want to optimize
+    is_git_repo: bool = ensure_git_repo(module_root)
     filtered_modified_functions: Dict[str, List[FunctionToOptimize]] = {}
     functions_count: int = 0
     test_functions_removed_count: int = 0
@@ -249,7 +251,7 @@ def filter_functions(
             non_module_functions_removed_count += len(functions)
             continue
         # Remove non-git-module functions (which includes submodule functions)
-        if is_not_git_module_file(Path(file_path), git.Repo(module_root)):
+        if is_git_repo and is_not_git_module_file(Path(file_path), git.Repo(module_root)):
             non_git_module_file_functions_removed_count += len(functions)
             continue
         try:
