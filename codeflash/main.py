@@ -829,9 +829,9 @@ class Optimizer:
         )
         if run_result.returncode != 0:
             logging.debug(
-                f"Nonzero return code {run_result.returncode} when running tests in {test_file}."
-                f"stdout: {run_result.stdout}"
-                f"stderr: {run_result.stderr}"
+                f"Nonzero return code {run_result.returncode} when running tests in {test_file}.\n"
+                f"stdout: {run_result.stdout}\n"
+                f"stderr: {run_result.stderr}\n"
             )
         unittest_results = parse_test_results(
             test_xml_path=result_file_path,
