@@ -3,10 +3,13 @@ import logging
 import os
 import random
 from _ast import ClassDef, FunctionDef, AsyncFunctionDef
-from typing import Dict, Optional, List, Tuple, Union
+from pathlib import Path
+from typing import Dict, Optional, List, Tuple, Union, Any
 
+import git
 import libcst as cst
 from libcst import CSTNode
+from libcst.metadata import CodeRange
 from pydantic.dataclasses import dataclass
 
 from codeflash.code_utils.code_utils import (
@@ -18,9 +21,9 @@ from codeflash.verification.verification_utils import TestConfig
 
 
 class ReturnStatementVisitor(cst.CSTVisitor):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
-        self.has_return_statement = False
+        self.has_return_statement: bool = False
 
     def visit_Return(self, node: cst.Return) -> None:
         self.has_return_statement = True
@@ -29,18 +32,18 @@ class ReturnStatementVisitor(cst.CSTVisitor):
 class FunctionVisitor(cst.CSTVisitor):
     METADATA_DEPENDENCIES = (cst.metadata.PositionProvider, cst.metadata.ParentNodeProvider)
 
-    def __init__(self, file_path):
+    def __init__(self, file_path: str):
         super().__init__()
-        self.file_path = file_path
-        self.functions = []
+        self.file_path: str = file_path
+        self.functions: list[FunctionToOptimize] = []
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
-        return_visitor = ReturnStatementVisitor()
+        return_visitor: ReturnStatementVisitor = ReturnStatementVisitor()
         node.visit(return_visitor)
         if return_visitor.has_return_statement:
-            pos = self.get_metadata(cst.metadata.PositionProvider, node)
+            pos: CodeRange = self.get_metadata(cst.metadata.PositionProvider, node)
             parents: Optional[CSTNode] = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-            ast_parents = []
+            ast_parents: list[FunctionParent] = []
             while parents is not None:
                 if isinstance(parents, (cst.FunctionDef, cst.ClassDef)):
                     ast_parents.append(
@@ -59,12 +62,12 @@ class FunctionVisitor(cst.CSTVisitor):
 
 
 class FunctionWithReturnStatement(ast.NodeVisitor):
-    def __init__(self, file_path):
+    def __init__(self, file_path: str) -> None:
         self.functions: List[FunctionToOptimize] = []
         self.ast_path: List[FunctionParent] = []
         self.file_path: str = file_path
 
-    def visit_FunctionDef(self, node: FunctionDef):
+    def visit_FunctionDef(self, node: FunctionDef) -> None:
         # Check if the function has a return statement and add it to the list
         if function_has_return_statement(node):
             self.functions.append(
@@ -75,7 +78,7 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
         # Continue visiting the body of the function to find nested functions
         self.generic_visit(node)
 
-    def generic_visit(self, node):
+    def generic_visit(self, node: ast.AST) -> None:
         if isinstance(node, (FunctionDef, AsyncFunctionDef, ClassDef)):
             self.ast_path.append(FunctionParent(node.name, node.__class__.__name__))
         super().generic_visit(node)
@@ -102,17 +105,17 @@ class FunctionToOptimize:
     # # TODO does not support nested classes or functions
     @property
     def top_level_parent_name(self) -> str:
-        if self.parents:
-            return self.parents[0].name
-        else:
-            return self.function_name
+        return self.function_name if not self.parents else self.parents[0].name
 
     def __str__(self) -> str:
-        return f"{self.file_path}:{'.'.join([p.name for p in self.parents]) + '.' if self.parents else ''}{self.function_name}"
+        return (
+            f"{self.file_path}:{'.'.join([p.name for p in self.parents])}"
+            f"{'.' if self.parents else ''}{self.function_name}"
+        )
 
 
 def get_functions_to_optimize_by_file(
-    optimize_all,
+    optimize_all: str,
     file: Optional[str],
     function: Optional[str],
     test_cfg: TestConfig,
@@ -120,10 +123,9 @@ def get_functions_to_optimize_by_file(
     project_root: str,
     module_root: str,
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
-    functions = {}
     if optimize_all:
         logging.info("Finding all functions in the module '%s' ...", optimize_all)
-        functions = get_all_files_and_functions(optimize_all)
+        functions: Dict[str, List[FunctionToOptimize]] = get_all_files_and_functions(optimize_all)
     elif file is not None:
         logging.info("Finding all functions in the file '%s' ...", file)
         functions = find_all_functions_in_file(file)
@@ -164,18 +166,18 @@ def get_functions_within_git_diff() -> Dict[str, List[FunctionToOptimize]]:
                 continue
             function_lines = FunctionVisitor(file_path=path)
             wrapper.visit(function_lines)
-            for function_to_optimize in function_lines.functions:
-                start_line = function_to_optimize.starting_line
-                end_line = function_to_optimize.ending_line
-                if any(start_line <= line <= end_line for line in modified_lines[path]):
-                    if path not in modified_functions:
-                        modified_functions[path] = []
-                    modified_functions[path].append(function_to_optimize)
+            modified_functions[path] = [
+                function_to_optimize
+                for function_to_optimize in function_lines.functions
+                if (start_line := function_to_optimize.starting_line) is not None
+                and (end_line := function_to_optimize.ending_line) is not None
+                and any(start_line <= line <= end_line for line in modified_lines[path])
+            ]
     return modified_functions
 
 
 def get_all_files_and_functions(module_root_path: str) -> Dict[str, List[FunctionToOptimize]]:
-    functions = {}
+    functions: dict[Any, Any] = {}
     for root, dirs, files in os.walk(module_root_path):
         for file in files:
             if not file.endswith(".py"):
@@ -206,6 +208,14 @@ def find_all_functions_in_file(file_path: str) -> Dict[str, List[FunctionToOptim
     return functions
 
 
+def is_not_git_module_file(file_abs_path: Path, git_repo: git.Repo) -> bool:
+    try:
+        git_repo.head.commit.tree.join(str(file_abs_path.relative_to(git_repo.working_dir)))
+    except KeyError:
+        return True
+    return False
+
+
 def filter_functions(
     modified_functions: Dict[str, List[FunctionToOptimize]],
     tests_root: str,
@@ -214,13 +224,20 @@ def filter_functions(
     module_root: str,
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
     # Remove any functions that we don't want to optimize
-    filtered_modified_functions = {}
-    functions_count = 0
-    test_functions_removed_count = 0
-    site_packages_removed_count = 0
-    ignore_paths_removed_count = 0
-    malformed_paths_count = 0
-    non_module_functions_removed_count = 0
+    is_git_repo = True
+    try:
+        git_repo: git.Repo = git.Repo(module_root, search_parent_directories=True)
+    except git.InvalidGitRepositoryError:
+        is_git_repo = False
+    filtered_modified_functions: Dict[str, List[FunctionToOptimize]] = {}
+    functions_count: int = 0
+    test_functions_removed_count: int = 0
+    non_module_functions_removed_count: int = 0
+    non_git_module_file_functions_removed_count: int = 0
+    site_packages_removed_count: int = 0
+    ignore_paths_removed_count: int = 0
+    malformed_paths_count: int = 0
+    # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path, functions in modified_functions.items():
         if file_path.startswith(tests_root + os.sep):
             test_functions_removed_count += len(functions)
@@ -236,6 +253,10 @@ def filter_functions(
         if not file_path.startswith(module_root + os.sep):
             non_module_functions_removed_count += len(functions)
             continue
+        # Remove non-git-module functions (which includes submodule functions)
+        if is_git_repo and is_not_git_module_file(Path(file_path), git_repo):
+            non_git_module_file_functions_removed_count += len(functions)
+            continue
         try:
             ast.parse(f"import {module_name_from_file_path(file_path, project_root)}")
         except SyntaxError:
@@ -244,21 +265,24 @@ def filter_functions(
         filtered_modified_functions[file_path] = functions
         functions_count += len(functions)
     if (
-        test_functions_removed_count > 0
+        non_git_module_file_functions_removed_count > 0
+        or test_functions_removed_count > 0
         or site_packages_removed_count > 0
         or ignore_paths_removed_count > 0
         or malformed_paths_count > 0
         or non_module_functions_removed_count > 0
     ):
         logging.info(
-            f"Ignoring {test_functions_removed_count} test functions, {site_packages_removed_count} site-packages functions, "
-            f"{malformed_paths_count} non-importable file paths, {non_module_functions_removed_count} functions outside module-root"
-            f" and {ignore_paths_removed_count} files from ignored paths"
+            f"Ignoring {test_functions_removed_count} test function{'s' if test_functions_removed_count != 1 else ''}, "
+            f"{site_packages_removed_count} site-package function{'s' if site_packages_removed_count != 1 else ''}, "
+            f"{malformed_paths_count} non-importable file path{'s' if malformed_paths_count != 1 else ''}, "
+            f"{non_module_functions_removed_count} function"
+            f"{'s' if non_module_functions_removed_count != 1 else ''} outside module-root, "
+            f"{non_git_module_file_functions_removed_count} non-module function"
+            f"{'s' if non_git_module_file_functions_removed_count != 1 else ''}, and "
+            f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths"
         )
-    for path in list(filtered_modified_functions.keys()):
-        if len(filtered_modified_functions[path]) == 0:
-            del filtered_modified_functions[path]
-    return filtered_modified_functions, functions_count
+    return {k: v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 
 def function_has_return_statement(function_node: Union[FunctionDef, AsyncFunctionDef]) -> bool:
