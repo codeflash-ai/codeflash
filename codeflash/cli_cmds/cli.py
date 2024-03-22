@@ -21,7 +21,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG, format=LOGGING_FORMAT, stream=sys.stdout)
     if args.version:
-        logging.info(f"CodeFlash version {version}")
+        logging.info(f"Codeflash version {version}")
         exit()
     if "command" in args and args.command == "init":
         init_codeflash()
@@ -64,7 +64,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
     assert not (
         env_utils.get_pr_number() is not None and not env_utils.ensure_codeflash_api_key()
     ), (
-        "CodeFlash API key not found. When running in a Github Actions Context, provide the "
+        "Codeflash API key not found. When running in a Github Actions Context, provide the "
         "'CODEFLASH_API_KEY' environment variable as a secret.\n"
         "You can add a secret by going to your repository's settings page, then clicking 'Secrets' in the left sidebar.\n"
         "Then, click 'New repository secret' and add your api key with the variable name CODEFLASH_API_KEY.\n"
@@ -104,9 +104,9 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
                 raise Exception
         except Exception as e:
             logging.error(
-                f"Could not find the CodeFlash GitHub App installed on the repository {owner}/{repo} or the GitHub"
+                f"Could not find the Codeflash GitHub App installed on the repository {owner}/{repo} or the GitHub"
                 f" account linked to your CODEFLASH_API_KEY does not have access to the repository {owner}/{repo}. "
-                "Please install the CodeFlash GitHub App on your repository to use --all."
+                "Please install the Codeflash GitHub App on your repository to use --all."
                 " Instructions at https://app.codeflash.ai \n"
                 "Exiting..."
             )

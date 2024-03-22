@@ -12,7 +12,7 @@ def main():
     major_minor_version = ".".join(map(str, version[:2]))
 
     # Define the pattern to search for and the replacement string for the version
-    version_pattern = re.compile(r"(Licensed Work:\s+CodeFlash Client version\s+)(0\.\d+)(\.x)")
+    version_pattern = re.compile(r"(Licensed Work:\s+Codeflash Client version\s+)(0\.\d+)(\.x)")
     version_replacement = r"\g<1>" + major_minor_version + r".x"
 
     # Read the LICENSE file

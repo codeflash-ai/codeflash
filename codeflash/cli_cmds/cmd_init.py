@@ -46,7 +46,7 @@ class SetupInfo:
 def init_codeflash() -> None:
     try:
         click.echo(CODEFLASH_LOGO)
-        click.echo(f"⚡️ Welcome to CodeFlash! Let's get you set up.{LF}")
+        click.echo(f"⚡️ Welcome to Codeflash! Let's get you set up.{LF}")
 
         did_add_new_key = prompt_api_key()
 
@@ -60,7 +60,7 @@ def init_codeflash() -> None:
 
         click.echo(
             f"{LF}"
-            f"⚡️ CodeFlash is now set up! You can now run:{LF}"
+            f"⚡️ Codeflash is now set up! You can now run:{LF}"
             f"    codeflash --file <path-to-file> --function <function-name> to optimize a function within a file{LF}"
             f"    codeflash --file <path-to-file> to optimize all functions in a file{LF}"
             f"    codeflash --all to optimize all functions in all files in the module you selected ({setup_info.module_root}){LF}"
@@ -197,7 +197,7 @@ def collect_setup_info() -> SetupInfo:
     ph("cli-test-framework-provided", {"test_framework": test_framework})
 
     # Ask for paths to ignore and update the setup_info dictionary
-    # ignore_paths_input = click.prompt("Are there any paths CodeFlash should ignore? (comma-separated, no spaces)",
+    # ignore_paths_input = click.prompt("Are there any paths Codeflash should ignore? (comma-separated, no spaces)",
     #                                   default='', show_default=False)
     # ignore_paths = ignore_paths_input.split(',') if ignore_paths_input else [f'tests{os.pathsep}']
     ignore_paths: list[str] = []
@@ -326,16 +326,16 @@ def check_for_toml_or_setup_file() -> Optional[str]:
 
 def apologize_and_exit() -> NoReturn:
     click.echo(
-        "💡 If you're having trouble, see https://app.codeflash.ai/app/getting-started for further help getting started with CodeFlash!"
+        "💡 If you're having trouble, see https://app.codeflash.ai/app/getting-started for further help getting started with Codeflash!"
     )
     click.echo("👋 Exiting...")
     sys.exit(1)
 
 
-# Ask if the user wants CodeFlash to optimize new GitHub PRs
+# Ask if the user wants Codeflash to optimize new GitHub PRs
 def prompt_github_action(setup_info: SetupInfo) -> None:
     optimize_yes = inquirer.confirm(
-        message="Do you want CodeFlash to automatically optimize new Github PRs when they're opened (recommended)?",
+        message="Do you want Codeflash to automatically optimize new Github PRs when they're opened (recommended)?",
         default=True,
     )
     ph("cli-github-optimization-choice", {"optimize_prs": optimize_yes})
@@ -403,7 +403,7 @@ def prompt_github_action(setup_info: SetupInfo) -> None:
             click.pause()
             click.echo()
             click.echo(
-                f"🚀 CodeFlash is now configured to automatically optimize new Github PRs!{LF}"
+                f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
             )
             ph("cli-github-workflow-created")
         else:
@@ -411,7 +411,7 @@ def prompt_github_action(setup_info: SetupInfo) -> None:
             ph("cli-github-workflow-skipped")
 
 
-# Create or update the pyproject.toml file with the CodeFlash dependency & configuration
+# Create or update the pyproject.toml file with the Codeflash dependency & configuration
 def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     toml_path = os.path.join(os.getcwd(), "pyproject.toml")
     try:
@@ -435,10 +435,10 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     tool_section["codeflash"] = codeflash_section
     pyproject_data["tool"] = tool_section
 
-    click.echo(f"Writing CodeFlash configuration ...\r", nl=False)
+    click.echo(f"Writing Codeflash configuration ...\r", nl=False)
     with open(toml_path, "w", encoding="utf8") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
-    click.echo(f"✅ Added CodeFlash configuration to {toml_path}")
+    click.echo(f"✅ Added Codeflash configuration to {toml_path}")
     click.echo()
 
 
@@ -486,7 +486,7 @@ def enter_api_key_and_save_to_rc() -> None:
     api_key = ""
     while api_key == "":
         api_key = click.prompt(
-            f"Enter your CodeFlash API key{' [or press Enter to open your API key page]' if not browser_launched else ''}",
+            f"Enter your Codeflash API key{' [or press Enter to open your API key page]' if not browser_launched else ''}",
             hide_input=False,
             default="",
             type=CFAPIKeyType(),
@@ -497,7 +497,7 @@ def enter_api_key_and_save_to_rc() -> None:
         else:
             if not browser_launched:
                 click.echo(
-                    f"Opening your CodeFlash API key page. Grab a key from there!{LF}"
+                    f"Opening your Codeflash API key page. Grab a key from there!{LF}"
                     "You can also open this link manually: https://app.codeflash.ai/app/apikeys"
                 )
                 click.launch("https://app.codeflash.ai/app/apikeys")
@@ -569,7 +569,7 @@ def run_end_to_end_test(setup_info: SetupInfo) -> None:
     click.echo(f"{LF}🗑️ Deleted {bubble_sort_path}")
 
     if process.returncode == 0:
-        click.echo(f"{LF}✅ End-to-end test passed. CodeFlash has been correctly set up!")
+        click.echo(f"{LF}✅ End-to-end test passed. Codeflash has been correctly set up!")
     else:
         click.echo(
             f"{LF}❌ End-to-end test failed. Please check the logs above, and take a look at https://app.codeflash.ai/app/getting-started for help and troubleshooting."
