@@ -280,7 +280,9 @@ class Optimizer:
                     optimized_runtimes = dict()
                     correctness = dict()
 
-                    for i, (optimized_code, explanation) in enumerate(optimizations):
+                    for i, (optimization_id, optimized_code, explanation) in enumerate(
+                        optimizations
+                    ):
                         j = i + 1
                         if optimized_code is None:
                             continue
@@ -337,11 +339,15 @@ class Optimizer:
                             generated_tests_path=generated_tests_path,
                             best_runtime_until_now=best_runtime,
                         )
-                        optimized_runtimes[i] = best_test_runtime
-                        speedups[i] = (original_runtime - best_test_runtime) / best_test_runtime
-                        correctness[i] = success
+                        optimized_runtimes[optimization_id] = best_test_runtime
+                        speedups[optimization_id] = None
+                        correctness[optimization_id] = success
 
                         if success:
+                            speedups[optimization_id] = (
+                                original_runtime - best_test_runtime
+                            ) / best_test_runtime
+
                             logging.info(
                                 f"Candidate runtime measured over {times_run} run{'s' if times_run > 1 else ''}: "
                                 f"{humanize_runtime(best_test_runtime)}, speedup ratio = "
@@ -378,8 +384,8 @@ class Optimizer:
                     log_results(
                         function_trace_id=function_trace_id,
                         speedup=speedups,
-                        original_timing=original_runtime,
-                        optimized_timing=optimized_runtimes,
+                        original_runtime=original_runtime,
+                        optimized_runtime=optimized_runtimes,
                         correctness=correctness,
                     )
 

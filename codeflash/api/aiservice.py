@@ -86,10 +86,10 @@ def optimize_python_code(
 
 def log_results(
     function_trace_id: str,
-    speedup: Optional[Dict[int, float]],
-    original_timing: Optional[float],
-    optimized_timing: Optional[Dict[int, float]],
-    correctness: Optional[Dict[int, bool]],
+    speedup: Optional[Dict[str, float]],
+    original_runtime: Optional[float],
+    optimized_runtime: Optional[Dict[str, float]],
+    correctness: Optional[Dict[str, bool]],
 ):
     """
     Log features to the database.
@@ -104,8 +104,8 @@ def log_results(
     payload = {
         "id": function_trace_id,
         "speedup": speedup,
-        "original_timing": original_timing,
-        "optimized_timing": optimized_timing,
+        "original_timing": original_runtime,
+        "optimized_timing": optimized_runtime,
         "correctness": correctness,
     }
     try:
