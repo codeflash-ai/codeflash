@@ -13,6 +13,7 @@ from typing import Tuple, Union
 import libcst as cst
 
 from codeflash.api.aiservice import optimize_python_code
+from codeflash.api.aiservice import log_results
 from codeflash.cli_cmds.cli import process_cmd_args
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
 from codeflash.code_utils import env_utils
@@ -62,6 +63,7 @@ from codeflash.verification.verification_utils import (
     TestConfig,
 )
 from codeflash.verification.verifier import generate_tests
+import uuid
 
 
 def parse_args() -> Namespace:
@@ -174,6 +176,7 @@ class Optimizer:
                 with open(path, "r", encoding="utf8") as f:
                     original_code = f.read()
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
+                    function_trace_id = str(uuid.uuid4())
                     function_name = (
                         function_to_optimize.function_name
                         if function_to_optimize.parents == []
@@ -273,6 +276,10 @@ class Optimizer:
                     # TODO: Postprocess the optimized function to include the original docstring and such
 
                     best_optimization = []
+                    speedups = dict()
+                    optimized_runtimes = dict()
+                    correctness = dict()
+
                     for i, (optimized_code, explanation) in enumerate(optimizations):
                         j = i + 1
                         if optimized_code is None:
@@ -330,6 +337,9 @@ class Optimizer:
                             generated_tests_path=generated_tests_path,
                             best_runtime_until_now=best_runtime,
                         )
+                        optimized_runtimes[i] = best_test_runtime
+                        speedups[i] = (original_runtime - best_test_runtime) / best_test_runtime
+                        correctness[i] = success
 
                         if success:
                             logging.info(
@@ -364,6 +374,15 @@ class Optimizer:
                                 f.write(original_dependent_code[module_abspath])
                         logging.info("----------------")
                     logging.info(f"Best optimization: {best_optimization[0:2]}")
+
+                    log_results(
+                        function_trace_id=function_trace_id,
+                        speedup=speedups,
+                        original_timing=original_runtime,
+                        optimized_timing=optimized_runtimes,
+                        correctness=correctness,
+                    )
+
                     if best_optimization:
                         optimizations_found += 1
                         logging.info(f"Best candidate:\n{best_optimization[0]}")

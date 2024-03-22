@@ -84,6 +84,36 @@ def optimize_python_code(
         return [(None, None)]
 
 
+def log_results(
+    function_trace_id: str,
+    speedup: Optional[Dict[int, float]],
+    original_timing: Optional[float],
+    optimized_timing: Optional[Dict[int, float]],
+    correctness: Optional[Dict[int, bool]],
+):
+    """
+    Log features to the database.
+
+    Parameters:
+    - function_trace_id (str): The UUID.
+    - speedup (Optional[Dict[str, float]]): The speedup.
+    - original_timing (Optional[Dict[str, float]]): The original timing.
+    - optimized_timing (Optional[Dict[str, float]]): The optimized timing.
+    - correctness (Optional[Dict[str, bool]]): Whether the optimized code is correct.
+    """
+    payload = {
+        "id": function_trace_id,
+        "speedup": speedup,
+        "original_timing": original_timing,
+        "optimized_timing": optimized_timing,
+        "correctness": correctness,
+    }
+    try:
+        response = make_ai_service_request("/log_features", payload=payload, timeout=5)
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error logging features: {e}")
+
+
 def generate_regression_tests(
     source_code_being_tested: str,
     function_to_optimize: FunctionToOptimize,
