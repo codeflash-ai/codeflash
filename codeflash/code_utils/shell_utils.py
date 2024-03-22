@@ -11,7 +11,7 @@ if os.name == "nt":  # Windows
     SHELL_RC_EXPORT_PATTERN = re.compile(r"^set CODEFLASH_API_KEY=(cf-.*)$", re.M)
     SHELL_RC_EXPORT_PREFIX = f"set CODEFLASH_API_KEY="
 else:
-    SHELL_RC_EXPORT_PATTERN = re.compile(r'^export CODEFLASH_API_KEY="?(cf-[^"]*)"?$', re.M)
+    SHELL_RC_EXPORT_PATTERN = re.compile(r'^export CODEFLASH_API_KEY="?(cf-[^\s"]+)"?$', re.M)
     SHELL_RC_EXPORT_PREFIX = f"export CODEFLASH_API_KEY="
 
 
