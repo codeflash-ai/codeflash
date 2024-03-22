@@ -310,7 +310,6 @@ def check_for_toml_or_setup_file() -> Optional[str]:
                 # Check if the pyproject.toml file was created
                 if os.path.exists(pyproject_toml_path):
                     click.echo(f"✅ Created a pyproject.toml file at {pyproject_toml_path}")
-                    click.pause()
                 ph("cli-created-pyproject-toml")
             except IOError as e:
                 click.echo(
