@@ -86,27 +86,27 @@ def optimize_python_code(
 
 def log_results(
     function_trace_id: str,
-    speedup: Optional[Dict[str, float]],
+    speedup_ratio: Optional[Dict[str, float]],
     original_runtime: Optional[float],
     optimized_runtime: Optional[Dict[str, float]],
-    correctness: Optional[Dict[str, bool]],
+    is_correct: Optional[Dict[str, bool]],
 ):
     """
     Log features to the database.
 
     Parameters:
     - function_trace_id (str): The UUID.
-    - speedup (Optional[Dict[str, float]]): The speedup.
-    - original_timing (Optional[Dict[str, float]]): The original timing.
-    - optimized_timing (Optional[Dict[str, float]]): The optimized timing.
-    - correctness (Optional[Dict[str, bool]]): Whether the optimized code is correct.
+    - speedup_ratio (Optional[Dict[str, float]]): The speedup.
+    - original_runtime (Optional[Dict[str, float]]): The original runtime.
+    - optimized_runtime (Optional[Dict[str, float]]): The optimized runtime.
+    - is_correct (Optional[Dict[str, bool]]): Whether the optimized code is correct.
     """
     payload = {
-        "id": function_trace_id,
-        "speedup": speedup,
-        "original_timing": original_runtime,
-        "optimized_timing": optimized_runtime,
-        "correctness": correctness,
+        "trace_id": function_trace_id,
+        "speedup_ratio": speedup_ratio,
+        "original_runtime": original_runtime,
+        "optimized_runtime": optimized_runtime,
+        "is_correct": is_correct,
     }
     try:
         response = make_ai_service_request("/log_features", payload=payload, timeout=5)

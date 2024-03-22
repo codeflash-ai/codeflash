@@ -276,9 +276,9 @@ class Optimizer:
                     # TODO: Postprocess the optimized function to include the original docstring and such
 
                     best_optimization = []
-                    speedups = dict()
+                    speedup_ratios = dict()
                     optimized_runtimes = dict()
-                    correctness = dict()
+                    is_correct = dict()
 
                     for i, (optimization_id, optimized_code, explanation) in enumerate(
                         optimizations
@@ -340,11 +340,11 @@ class Optimizer:
                             best_runtime_until_now=best_runtime,
                         )
                         optimized_runtimes[optimization_id] = best_test_runtime
-                        speedups[optimization_id] = None
-                        correctness[optimization_id] = success
+                        speedup_ratios[optimization_id] = None
+                        is_correct[optimization_id] = success
 
                         if success:
-                            speedups[optimization_id] = (
+                            speedup_ratios[optimization_id] = (
                                 original_runtime - best_test_runtime
                             ) / best_test_runtime
 
@@ -383,10 +383,10 @@ class Optimizer:
 
                     log_results(
                         function_trace_id=function_trace_id,
-                        speedup=speedups,
+                        speedup_ratio=speedup_ratios,
                         original_runtime=original_runtime,
                         optimized_runtime=optimized_runtimes,
-                        correctness=correctness,
+                        is_correct=is_correct,
                     )
 
                     if best_optimization:
