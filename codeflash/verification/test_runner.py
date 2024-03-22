@@ -1,4 +1,5 @@
 import subprocess
+from typing import Tuple, Optional
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 
@@ -6,12 +7,12 @@ from codeflash.code_utils.code_utils import get_run_tmp_file
 def run_tests(
     test_path,
     test_framework: str,
-    cwd: str = None,
-    test_env=None,
-    pytest_timeout: int = None,
+    cwd: Optional[str] = None,
+    test_env: Optional[dict[str, str]] = None,
+    pytest_timeout: Optional[int] = None,
     pytest_cmd: str = "pytest",
     verbose: bool = False,
-) -> (str, subprocess.CompletedProcess):
+) -> Tuple[str, subprocess.CompletedProcess]:
     assert test_framework in ["pytest", "unittest"]
     if test_framework == "pytest":
         result_file_path = get_run_tmp_file("pytest_results.xml")
