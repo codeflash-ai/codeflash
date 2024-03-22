@@ -16,7 +16,6 @@ from codeflash.code_utils.code_utils import (
     path_belongs_to_site_packages,
     module_name_from_file_path,
 )
-from codeflash.code_utils.env_utils import ensure_git_repo
 from codeflash.code_utils.git_utils import get_git_diff
 from codeflash.verification.verification_utils import TestConfig
 
@@ -225,7 +224,11 @@ def filter_functions(
     module_root: str,
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
     # Remove any functions that we don't want to optimize
-    is_git_repo: bool = ensure_git_repo(module_root)
+    is_git_repo = True
+    try:
+        git_repo: git.Repo = git.Repo(module_root)
+    except git.InvalidGitRepositoryError:
+        is_git_repo = False
     filtered_modified_functions: Dict[str, List[FunctionToOptimize]] = {}
     functions_count: int = 0
     test_functions_removed_count: int = 0
@@ -251,7 +254,7 @@ def filter_functions(
             non_module_functions_removed_count += len(functions)
             continue
         # Remove non-git-module functions (which includes submodule functions)
-        if is_git_repo and is_not_git_module_file(Path(file_path), git.Repo(module_root)):
+        if is_git_repo and is_not_git_module_file(Path(file_path), git_repo):
             non_git_module_file_functions_removed_count += len(functions)
             continue
         try:
@@ -270,11 +273,11 @@ def filter_functions(
         or non_module_functions_removed_count > 0
     ):
         logging.info(
-            f"Ignoring {test_functions_removed_count} test function{'s' if test_functions_removed_count != 1 else ''}"
+            f"Ignoring {test_functions_removed_count} test function{'s' if test_functions_removed_count != 1 else ''}, "
             f"{site_packages_removed_count} site-package function{'s' if site_packages_removed_count != 1 else ''}, "
             f"{malformed_paths_count} non-importable file path{'s' if malformed_paths_count != 1 else ''}, "
             f"{non_module_functions_removed_count} function"
-            f"{'s' if non_module_functions_removed_count != 1 else ''} outside module-root"
+            f"{'s' if non_module_functions_removed_count != 1 else ''} outside module-root, "
             f"{non_git_module_file_functions_removed_count} non-module function"
             f"{'s' if non_git_module_file_functions_removed_count != 1 else ''}, and "
             f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths"
