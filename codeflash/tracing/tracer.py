@@ -85,7 +85,7 @@ class Tracer:
             file.write(replay_test)
 
         logging.info(
-            f"CodeFlash: Function Traced successfully and replay test created! Path - {test_file_path}"
+            f"Codeflash: Function Traced successfully and replay test created! Path - {test_file_path}"
         )
 
     def trace_callback(self, frame: Any, event: str, arg: Any) -> None:
