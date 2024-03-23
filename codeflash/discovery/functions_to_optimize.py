@@ -226,7 +226,7 @@ def filter_functions(
     # Remove any functions that we don't want to optimize
     is_git_repo = True
     try:
-        git_repo: git.Repo = git.Repo(module_root)
+        git_repo: git.Repo = git.Repo(module_root, search_parent_directories=True)
     except git.InvalidGitRepositoryError:
         is_git_repo = False
     filtered_modified_functions: Dict[str, List[FunctionToOptimize]] = {}
