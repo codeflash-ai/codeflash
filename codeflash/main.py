@@ -6,14 +6,15 @@ import concurrent.futures
 import logging
 import os
 import pathlib
+import uuid
 from argparse import ArgumentParser, SUPPRESS, Namespace
 from collections import defaultdict
 from typing import Tuple, Union
 
 import libcst as cst
 
-from codeflash.api.aiservice import optimize_python_code
 from codeflash.api.aiservice import log_results
+from codeflash.api.aiservice import optimize_python_code
 from codeflash.cli_cmds.cli import process_cmd_args
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
 from codeflash.code_utils import env_utils
@@ -63,7 +64,6 @@ from codeflash.verification.verification_utils import (
     TestConfig,
 )
 from codeflash.verification.verifier import generate_tests
-import uuid
 
 
 def parse_args() -> Namespace:
@@ -248,6 +248,7 @@ class Optimizer:
                         function_to_optimize,
                         dependent_functions,
                         module_path,
+                        function_trace_id,
                     )
                     if not success:
                         continue
@@ -280,7 +281,7 @@ class Optimizer:
                     optimized_runtimes = dict()
                     is_correct = dict()
 
-                    for i, (optimization_id, optimized_code, explanation) in enumerate(
+                    for i, (optimized_code, explanation, optimization_id) in enumerate(
                         optimizations
                     ):
                         j = i + 1
@@ -541,6 +542,7 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         dependent_functions: list[Tuple[Source, str, str]],
         module_path: str,
+        function_trace_id: str,
     ):
         generated_original_test_source = None
         instrumented_test_source = None
@@ -552,10 +554,12 @@ class Optimizer:
                 function_to_optimize,
                 [definition[0].full_name for definition in dependent_functions],
                 module_path,
+                function_trace_id,
             )
             future_optimization = executor.submit(
                 optimize_python_code,
                 code_to_optimize_with_dependents,
+                function_trace_id,
                 N_CANDIDATES,
             )
 
@@ -874,6 +878,7 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         dependent_function_names: list[str],
         module_path: str,
+        function_trace_id: str,
     ) -> Union[Tuple[str, str], None]:
         tests = generate_tests(
             source_code_being_tested=source_code_being_tested,
@@ -883,6 +888,7 @@ class Optimizer:
             test_cfg=self.test_cfg,
             test_timeout=INDIVIDUAL_TEST_TIMEOUT,
             use_cached_tests=self.args.use_cached_tests,
+            function_trace_id=function_trace_id,
         )
         if tests is None:
             logging.error(
