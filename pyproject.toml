@@ -74,6 +74,17 @@ warn_required_dynamic_aliases = true
 line-length = 100
 target-version = ['py312']
 
+[tool.ruff.lint.flake8-type-checking]
+strict = true
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
+runtime-evaluated-decorators = ["pydantic.validate_call"]
+
+[tool.ruff.lint.pep8-naming]
+classmethod-decorators = [
+    # Allow Pydantic's `@validator` decorator to trigger class method treatment.
+    "pydantic.validator",
+]
+
 [tool.poetry-dynamic-versioning]
 enable = true
 style = "pep440"
