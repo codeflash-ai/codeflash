@@ -1,9 +1,6 @@
 import ast
 import logging
-from typing import Optional
 from collections import deque
-import ast
-import logging
 from typing import Optional
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -14,7 +11,7 @@ def get_code(function_to_optimize: FunctionToOptimize) -> Optional[str]:
     file_path = function_to_optimize.file_path
     class_skeleton = []
 
-    def find_target(node_list: list[ast.AST], name_parts) -> Optional[ast.AST]:
+    def find_target(node_list: list[ast.AST], name_parts: list[str]) -> Optional[ast.AST]:
         target_node = None
         for node in node_list:
             if (

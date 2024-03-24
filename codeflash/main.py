@@ -8,7 +8,7 @@ import os
 import pathlib
 from argparse import ArgumentParser, SUPPRESS, Namespace
 from collections import defaultdict
-from typing import Tuple, Union
+from typing import IO, Tuple, Union
 
 import libcst as cst
 
@@ -136,9 +136,11 @@ class Optimizer:
             logging.error("No git repository detected and user aborted run. Exiting...")
             exit(1)
 
+        file_to_funcs_to_optimize: dict[str, list[FunctionToOptimize]]
+        num_optimizable_functions: int
         (
             file_to_funcs_to_optimize,
-            num_modified_functions,
+            num_optimizable_functions,
         ) = get_functions_to_optimize_by_file(
             optimize_all=self.args.all,
             file=self.args.file,
@@ -149,32 +151,35 @@ class Optimizer:
             module_root=self.args.module_root,
         )
 
-        test_files_created = set()
-        instrumented_unittests_created = set()
-        optimizations_found = 0
+        test_files_created: set[str] = set()
+        instrumented_unittests_created: set[str] = set()
+        optimizations_found: int = 0
 
-        function_iterator_count = 0
+        function_iterator_count: int = 0
         try:
-            ph("cli-optimize-functions-to-optimize", {"num_functions": num_modified_functions})
-            if num_modified_functions == 0:
+            ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
+            if num_optimizable_functions == 0:
                 logging.info("No functions found to optimize. Exiting...")
                 return
             logging.info(f"Discovering existing unit tests in {self.test_cfg.tests_root} ...")
             function_to_tests: dict[str, list[TestsInFile]] = discover_unit_tests(self.test_cfg)
-            num_discovered_tests = sum([len(value) for value in function_to_tests.values()])
+            num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
             logging.info(
                 f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}"
             )
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
+            path: str
             for path in file_to_funcs_to_optimize:
                 logging.info(f"Examining file {path} ...")
                 # TODO: Sequence the functions one goes through intelligently. If we are optimizing f(g(x)),
                 #  then we might want to first optimize f rather than g because optimizing f would already
                 #  optimize g as it is a dependency
+                f: IO[str]
                 with open(path, "r", encoding="utf8") as f:
-                    original_code = f.read()
+                    original_code: str = f.read()
+                function_to_optimize: FunctionToOptimize
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
-                    function_name = (
+                    function_name: str = (
                         function_to_optimize.function_name
                         if function_to_optimize.parents == []
                         else ".".join(
@@ -186,7 +191,7 @@ class Optimizer:
                     )
                     function_iterator_count += 1
                     logging.info(
-                        f"Optimizing function {function_iterator_count} of {num_modified_functions} - {function_name}"
+                        f"Optimizing function {function_iterator_count} of {num_optimizable_functions} - {function_name}"
                     )
                     winning_test_results = None
                     # remove leftovers from previous run
@@ -441,8 +446,8 @@ class Optimizer:
                         )
                         if self.args.all or env_utils.get_pr_number():
                             # Reverting to original code, because optimizing functions in a sequence can lead to
-                            #  a. Error propagation, where error in one function can cause the next optimization to fail
-                            #  b. Performance estimates become unstable, as the runtime of an optimization might be
+                            #  a) Error propagation, where error in one function can cause the next optimization to fail
+                            #  b) Performance estimates become unstable, as the runtime of an optimization might be
                             #     dependent on the runtime of the previous optimization
                             with open(path, "w", encoding="utf8") as f:
                                 f.write(original_code)
@@ -617,7 +622,7 @@ class Optimizer:
                     test_env, generated_tests_path, TestType.GENERATED_REGRESSION, 0
                 )
 
-                # TODO: Implement the logic to disregard the timing info of the tests that ERRORed out. That is remove test cases that failed to run.
+                # TODO: Implement the logic to disregard the timing info of the tests that errored out. That is remove test cases that failed to run.
 
                 if not original_gen_results and len(instrumented_existing_test_timing) == 0:
                     logging.warning(
@@ -870,7 +875,7 @@ class Optimizer:
         return generated_original_test_source, instrumented_test_source
 
 
-def main():
+def main() -> None:
     """Entry point for the codeflash command-line interface."""
     Optimizer(parse_args()).run()
 

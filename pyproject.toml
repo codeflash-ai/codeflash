@@ -61,7 +61,7 @@ show_absolute_path = true
 show_column_numbers = true
 show_error_context = true
 strict = true
-verbosity = 3
+verbosity = 0
 warn_unreachable = true
 plugins = [
     "pydantic.mypy"
@@ -75,6 +75,17 @@ warn_required_dynamic_aliases = true
 [tool.black]
 line-length = 100
 target-version = ['py312']
+
+[tool.ruff.lint.flake8-type-checking]
+strict = true
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
+runtime-evaluated-decorators = ["pydantic.validate_call"]
+
+[tool.ruff.lint.pep8-naming]
+classmethod-decorators = [
+    # Allow Pydantic's `@validator` decorator to trigger class method treatment.
+    "pydantic.validator",
+]
 
 [tool.poetry-dynamic-versioning]
 enable = true
