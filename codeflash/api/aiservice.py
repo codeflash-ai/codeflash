@@ -4,6 +4,7 @@ import os
 from typing import Any, Dict, List, Tuple, Optional
 
 import requests
+from pydantic.dataclasses import dataclass
 from pydantic.json import pydantic_encoder
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
@@ -45,9 +46,19 @@ def make_ai_service_request(
     return response
 
 
-def optimize_python_code(
-    source_code: str, trace_id: str, num_variants: int = 10
-) -> List[Tuple[Optional[str], Optional[str], Optional[str]]]:
+@dataclass(frozen=True)
+class Optimization:
+    source_code: str
+    explanation: str
+    optimization_id: str
+
+
+@dataclass(frozen=True)
+class Optimizations:
+    optimizations: List[Optimization]
+
+
+def optimize_python_code(source_code: str, trace_id: str, num_variants: int = 10) -> Optimizations:
     """
     Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -65,15 +76,21 @@ def optimize_python_code(
     except requests.exceptions.RequestException as e:
         logging.error(f"Error generating optimized candidates: {e}")
         ph("cli-optimize-error-caught", {"error": str(e)})
-        return [(None, None, None)]
+        return Optimizations(optimizations=[])
 
     if response.status_code == 200:
         optimizations = response.json()["optimizations"]
         logging.info(f"Generated {len(optimizations)} candidates.")
-        return [
-            (opt["source_code"], opt["explanation"], opt["optimization_id"])
-            for opt in optimizations
-        ]
+        return Optimizations(
+            [
+                Optimization(
+                    source_code=opt["source_code"],
+                    explanation=opt["explanation"],
+                    optimization_id=opt["optimization_id"],
+                )
+                for opt in optimizations
+            ]
+        )
     else:
         try:
             error = response.json()["error"]
@@ -84,7 +101,7 @@ def optimize_python_code(
             "cli-optimize-error-response",
             {"response_status_code": response.status_code, "error": error},
         )
-        return [(None, None, None)]
+        return Optimizations(optimizations=[])
 
 
 def log_results(
@@ -93,7 +110,7 @@ def log_results(
     original_runtime: Optional[float],
     optimized_runtime: Optional[Dict[str, float]],
     is_correct: Optional[Dict[str, bool]],
-):
+) -> None:
     """
     Log features to the database.
 

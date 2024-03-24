@@ -281,11 +281,9 @@ class Optimizer:
                     optimized_runtimes = dict()
                     is_correct = dict()
 
-                    for i, (optimized_code, explanation, optimization_id) in enumerate(
-                        optimizations
-                    ):
+                    for i, optimization in enumerate(optimizations):
                         j = i + 1
-                        if optimized_code is None:
+                        if optimization.source_code is None:
                             continue
                         # remove left overs from previous run
                         pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.bin")).unlink(
@@ -295,11 +293,11 @@ class Optimizer:
                             missing_ok=True
                         )
                         logging.info("Optimized candidate:")
-                        logging.info(optimized_code)
+                        logging.info(optimization.source_code)
                         try:
                             replace_function_definitions_in_module(
                                 [function_name],
-                                optimized_code,
+                                optimization.source_code,
                                 path,
                                 preexisting_functions,
                             )
@@ -309,7 +307,7 @@ class Optimizer:
                             ) in dependent_functions_by_module_abspath.items():
                                 replace_function_definitions_in_module(
                                     list(qualified_names),
-                                    optimized_code,
+                                    optimization.source_code,
                                     module_abspath,
                                     [],
                                 )
@@ -340,12 +338,12 @@ class Optimizer:
                             generated_tests_path=generated_tests_path,
                             best_runtime_until_now=best_runtime,
                         )
-                        optimized_runtimes[optimization_id] = best_test_runtime
-                        speedup_ratios[optimization_id] = None
-                        is_correct[optimization_id] = success
+                        optimized_runtimes[optimization.optimization_id] = best_test_runtime
+                        speedup_ratios[optimization.optimization_id] = None
+                        is_correct[optimization.optimization_id] = success
 
                         if success:
-                            speedup_ratios[optimization_id] = (
+                            speedup_ratios[optimization.optimization_id] = (
                                 original_runtime - best_test_runtime
                             ) / best_test_runtime
 
@@ -368,8 +366,8 @@ class Optimizer:
                                     f"{((original_runtime - best_test_runtime) / best_test_runtime)}"
                                 )
                                 best_optimization = [
-                                    optimized_code,
-                                    explanation,
+                                    optimization.source_code,
+                                    optimization.explanation,
                                     dependent_functions,
                                 ]
                                 best_runtime = best_test_runtime
@@ -578,7 +576,7 @@ class Optimizer:
         else:
             logging.error("/!\\ NO TESTS GENERATED for %s", function_to_optimize.function_name)
             success = False
-        if len(optimizations) == 1 and optimizations[0][0] is None:
+        if len(optimizations.optimizations) == 0:
             logging.error(
                 "/!\\ NO OPTIMIZATIONS GENERATED for %s",
                 function_to_optimize.function_name,
