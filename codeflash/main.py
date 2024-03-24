@@ -6,12 +6,14 @@ import concurrent.futures
 import logging
 import os
 import pathlib
+import uuid
 from argparse import ArgumentParser, SUPPRESS, Namespace
 from collections import defaultdict
 from typing import IO, Tuple, Union
 
 import libcst as cst
 
+from codeflash.api.aiservice import log_results
 from codeflash.api.aiservice import optimize_python_code
 from codeflash.cli_cmds.cli import process_cmd_args
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
@@ -179,6 +181,7 @@ class Optimizer:
                     original_code: str = f.read()
                 function_to_optimize: FunctionToOptimize
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
+                    function_trace_id: str = str(uuid.uuid4())
                     function_name: str = (
                         function_to_optimize.function_name
                         if function_to_optimize.parents == []
@@ -250,6 +253,7 @@ class Optimizer:
                         function_to_optimize,
                         dependent_functions,
                         module_path,
+                        function_trace_id,
                     )
                     if not success:
                         continue
@@ -278,9 +282,13 @@ class Optimizer:
                     # TODO: Postprocess the optimized function to include the original docstring and such
 
                     best_optimization = []
-                    for i, (optimized_code, explanation) in enumerate(optimizations):
+                    speedup_ratios = dict()
+                    optimized_runtimes = dict()
+                    is_correct = dict()
+
+                    for i, optimization in enumerate(optimizations.optimizations):
                         j = i + 1
-                        if optimized_code is None:
+                        if optimization.source_code is None:
                             continue
                         # remove left overs from previous run
                         pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.bin")).unlink(
@@ -290,11 +298,11 @@ class Optimizer:
                             missing_ok=True
                         )
                         logging.info("Optimized candidate:")
-                        logging.info(optimized_code)
+                        logging.info(optimization.source_code)
                         try:
                             replace_function_definitions_in_module(
                                 [function_name],
-                                optimized_code,
+                                optimization.source_code,
                                 path,
                                 preexisting_functions,
                             )
@@ -304,7 +312,7 @@ class Optimizer:
                             ) in dependent_functions_by_module_abspath.items():
                                 replace_function_definitions_in_module(
                                     list(qualified_names),
-                                    optimized_code,
+                                    optimization.source_code,
                                     module_abspath,
                                     [],
                                 )
@@ -335,8 +343,15 @@ class Optimizer:
                             generated_tests_path=generated_tests_path,
                             best_runtime_until_now=best_runtime,
                         )
+                        optimized_runtimes[optimization.optimization_id] = best_test_runtime
+                        speedup_ratios[optimization.optimization_id] = None
+                        is_correct[optimization.optimization_id] = success
 
                         if success:
+                            speedup_ratios[optimization.optimization_id] = (
+                                original_runtime - best_test_runtime
+                            ) / best_test_runtime
+
                             logging.info(
                                 f"Candidate runtime measured over {times_run} run{'s' if times_run > 1 else ''}: "
                                 f"{humanize_runtime(best_test_runtime)}, speedup ratio = "
@@ -356,8 +371,8 @@ class Optimizer:
                                     f"{((original_runtime - best_test_runtime) / best_test_runtime)}"
                                 )
                                 best_optimization = [
-                                    optimized_code,
-                                    explanation,
+                                    optimization.source_code,
+                                    optimization.explanation,
                                     dependent_functions,
                                 ]
                                 best_runtime = best_test_runtime
@@ -369,6 +384,15 @@ class Optimizer:
                                 f.write(original_dependent_code[module_abspath])
                         logging.info("----------------")
                     logging.info(f"Best optimization: {best_optimization[0:2]}")
+
+                    log_results(
+                        function_trace_id=function_trace_id,
+                        speedup_ratio=speedup_ratios,
+                        original_runtime=original_runtime,
+                        optimized_runtime=optimized_runtimes,
+                        is_correct=is_correct,
+                    )
+
                     if best_optimization:
                         optimizations_found += 1
                         logging.info(f"Best candidate:\n{best_optimization[0]}")
@@ -521,6 +545,7 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         dependent_functions: list[Tuple[Source, str, str]],
         module_path: str,
+        function_trace_id: str,
     ):
         generated_original_test_source = None
         instrumented_test_source = None
@@ -532,10 +557,12 @@ class Optimizer:
                 function_to_optimize,
                 [definition[0].full_name for definition in dependent_functions],
                 module_path,
+                function_trace_id,
             )
             future_optimization = executor.submit(
                 optimize_python_code,
                 code_to_optimize_with_dependents,
+                function_trace_id,
                 N_CANDIDATES,
             )
 
@@ -554,7 +581,7 @@ class Optimizer:
         else:
             logging.error("/!\\ NO TESTS GENERATED for %s", function_to_optimize.function_name)
             success = False
-        if len(optimizations) == 1 and optimizations[0][0] is None:
+        if len(optimizations.optimizations) == 0:
             logging.error(
                 "/!\\ NO OPTIMIZATIONS GENERATED for %s",
                 function_to_optimize.function_name,
@@ -854,6 +881,7 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         dependent_function_names: list[str],
         module_path: str,
+        function_trace_id: str,
     ) -> Union[Tuple[str, str], None]:
         tests = generate_tests(
             source_code_being_tested=source_code_being_tested,
@@ -863,6 +891,7 @@ class Optimizer:
             test_cfg=self.test_cfg,
             test_timeout=INDIVIDUAL_TEST_TIMEOUT,
             use_cached_tests=self.args.use_cached_tests,
+            function_trace_id=function_trace_id,
         )
         if tests is None:
             logging.error(
