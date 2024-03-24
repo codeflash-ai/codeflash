@@ -286,7 +286,7 @@ class Optimizer:
                     optimized_runtimes = dict()
                     is_correct = dict()
 
-                    for i, optimization in enumerate(optimizations):
+                    for i, optimization in enumerate(optimizations.optimizations):
                         j = i + 1
                         if optimization.source_code is None:
                             continue
