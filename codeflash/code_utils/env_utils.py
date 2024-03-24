@@ -15,13 +15,13 @@ def get_codeflash_api_key() -> Optional[str]:
     api_key = os.environ.get("CODEFLASH_API_KEY") or read_api_key_from_shell_config()
     if not api_key:
         raise EnvironmentError(
-            "I didn't find a CodeFlash API key in your environment.\n"
+            "I didn't find a Codeflash API key in your environment.\n"
             + "You can generate one at https://app.codeflash.ai/app/apikeys,\n"
             + "then set it as a CODEFLASH_API_KEY environment variable."
         )
     if not api_key.startswith("cf-"):
         raise EnvironmentError(
-            f"Your CodeFlash API key seems to be invalid. It should start with a 'cf-' prefix; I found '{api_key}' instead.\n"
+            f"Your Codeflash API key seems to be invalid. It should start with a 'cf-' prefix; I found '{api_key}' instead.\n"
             + "You can generate one at https://app.codeflash.ai/app/apikeys,\n"
             + "then set it as a CODEFLASH_API_KEY environment variable."
         )
@@ -33,7 +33,7 @@ def ensure_codeflash_api_key() -> bool:
         get_codeflash_api_key()
     except EnvironmentError as e:
         logging.error(
-            "CodeFlash API key not found in your environment.\n"
+            "Codeflash API key not found in your environment.\n"
             + "You can generate one at https://app.codeflash.ai/app/apikeys,\n"
             + "then set it as a CODEFLASH_API_KEY environment variable."
         )
@@ -59,7 +59,7 @@ def get_pr_number() -> Optional[int]:
 def ensure_pr_number() -> bool:
     if not get_pr_number():
         raise EnvironmentError(
-            f"CODEFLASH_PR_NUMBER not found in environment variables; make sure the Github Action is setting this so CodeFlash can comment on the right PR"
+            f"CODEFLASH_PR_NUMBER not found in environment variables; make sure the Github Action is setting this so Codeflash can comment on the right PR"
         )
     return True
 

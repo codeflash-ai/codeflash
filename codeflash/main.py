@@ -107,7 +107,7 @@ def parse_args() -> Namespace:
         action="store_true",
         help="Use cached tests from a specified file for debugging.",
     )
-    parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose logs")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose debug logs")
     parser.add_argument("--version", action="store_true", help="Print the version of codeflash")
     args: Namespace = parser.parse_args()
     return process_cmd_args(args)
@@ -832,6 +832,12 @@ class Optimizer:
             verbose=True,
             test_env=test_env,
         )
+        if run_result.returncode != 0:
+            logging.debug(
+                f"Nonzero return code {run_result.returncode} when running tests in {test_file}.\n"
+                f"stdout: {run_result.stdout}\n"
+                f"stderr: {run_result.stderr}\n"
+            )
         unittest_results = parse_test_results(
             test_xml_path=result_file_path,
             test_py_path=test_file,

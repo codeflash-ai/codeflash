@@ -2,13 +2,15 @@
 [tool.poetry]
 name = "codeflash"
 version = "0.0.0" # Determined by poetry-dynamic-versioning during `poetry build`
-description = "A Code Performance Optimization Library"
+description = "Client for codeflash.ai - automatic code performance optimization, powered by AI"
+license = "BSL-1.1"
 authors = ["CodeFlash Inc. <contact@codeflash.ai>"]
 homepage = "https://codeflash.ai"
 readme = "README.md"
 packages = [
     { include = "codeflash" },
 ]
+keywords = ["codeflash", "performance", "optimization", "ai", "code", "machine learning", "LLM"]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
