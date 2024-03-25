@@ -181,6 +181,7 @@ class Optimizer:
                     original_code: str = f.read()
                 function_to_optimize: FunctionToOptimize
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
+                    ph("cli-optimize-function-start")
                     function_trace_id: str = str(uuid.uuid4())
                     function_name: str = (
                         function_to_optimize.function_name
