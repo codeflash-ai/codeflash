@@ -1,3 +1,4 @@
+import ast
 import os.path
 import pathlib
 import pytest
@@ -11,6 +12,7 @@ from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestType
 from codeflash.verification.test_runner import run_tests
 from codeflash.verification.verification_utils import TestConfig
+from codeflash.code_utils.instrument_existing_tests import InjectPerfOnly
 
 
 def test_perfinjector_bubble_sort():
@@ -1373,3 +1375,25 @@ class TestPigLatin(unittest.TestCase):
     assert test_results[5].did_pass == True
 
     os.remove(test_path)
+
+
+def test_update_line_node():
+    injectperf = InjectPerfOnly("sorter", "code_to_optimize.tests.pytest.test_bubble_sort")
+    node = ast.Assign(
+        targets=[ast.Name(id="output", ctx=ast.Store())],
+        value=ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id="sort", ctx=ast.Load()),
+                attr="sorter",
+                ctx=ast.Load(),
+                lineno=2,
+                col_offset=1,
+            ),
+            args=[ast.Name(id="input", ctx=ast.Load())],
+            keywords=[],
+        ),
+        lineno=1,
+        col_offset=1,
+    )
+
+    assert len(injectperf.update_line_node(node, "test_sort", "0", None)) > 0

@@ -72,7 +72,7 @@ def parse_config_file(config_file_path=None):
         "imports-cmd": "isort",
     }
     bool_keys = {
-        "enable-analytics": True,
+        "disable-telemetry": False,
     }
 
     for key in float_keys:
@@ -103,7 +103,7 @@ def parse_config_file(config_file_path=None):
     assert config["test-framework"] in [
         "pytest",
         "unittest",
-    ], "In pyproject.toml CodeFlash only supports the 'test-framework' as pytest and unittest."
+    ], "In pyproject.toml, Codeflash only supports the 'test-framework' as pytest and unittest."
     for key in list(config.keys()):
         if "-" in key:
             config[key.replace("-", "_")] = config[key]

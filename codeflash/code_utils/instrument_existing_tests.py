@@ -37,13 +37,19 @@ class InjectPerfOnly(ast.NodeTransformer):
                 call_node = node
         if call_node is None:
             return [test_node]
+
+        if hasattr(call_node.func, "id"):
+            function_id = call_node.func.id
+        else:
+            function_id = call_node.func.attr
+
         updated_nodes = [
             ast.Assign(
                 targets=[ast.Name(id="codeflash_return_value", ctx=ast.Store())],
                 value=ast.Call(
                     func=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
                     args=[
-                        ast.Name(id=call_node.func.id, ctx=ast.Load()),
+                        ast.Name(id=function_id, ctx=ast.Load()),
                         ast.Constant(value=self.module_path),
                         ast.Constant(value=test_class_name or None),
                         ast.Constant(value=node_name),

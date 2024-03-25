@@ -22,6 +22,7 @@ def generate_tests(
     test_cfg: TestConfig,
     test_timeout: int,
     use_cached_tests: bool,
+    function_trace_id: str,
 ) -> Optional[Tuple[str, str]]:
     # TODO: Sometimes this recreates the original Class definition. This overrides and messes up the original
     #  class import. Remove the recreation of the class definition
@@ -50,6 +51,7 @@ def generate_tests(
             test_module_path=test_module_path,
             test_framework=test_cfg.test_framework,
             test_timeout=test_timeout,
+            trace_id=function_trace_id,
         )
         if response and isinstance(response, tuple) and len(response) == 2:
             generated_test_source, instrumented_test_source = response
