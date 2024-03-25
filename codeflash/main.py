@@ -129,7 +129,7 @@ class Optimizer:
         )
 
     def run(self) -> None:
-        ph("cli-optimize-run-start", {"args": self.args.__dict__})
+        ph("cli-optimize-run-start")
         logging.info(CODEFLASH_LOGO)
         logging.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
