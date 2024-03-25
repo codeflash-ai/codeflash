@@ -1,11 +1,12 @@
 import ast
-import jedi
 import logging
 import os
+from typing import NoReturn, Union
+
+import jedi
 import tiktoken
 from jedi.api.classes import Name
 from pydantic.dataclasses import dataclass
-from typing import NoReturn, Union
 
 from codeflash.code_utils.code_extractor import get_code_no_skeleton, get_code
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
@@ -83,9 +84,12 @@ def get_type_annotation_context(
                                     follow_builtin_imports=False,
                                 )
                             except Exception as e:
-                                logging.error(
-                                    f"Error while getting definition for {name.full_name}: {e}"
-                                )
+                                if hasattr(name, "full_name"):
+                                    logging.error(
+                                        f"Error while getting definition for {name.full_name}: {e}"
+                                    )
+                                else:
+                                    logging.error(f"Error while getting definition: {e}")
                                 definition = []
                             if definition:  # TODO can be multiple definitions
                                 definition_path = str(definition[0].module_path)
