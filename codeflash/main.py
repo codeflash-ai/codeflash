@@ -393,6 +393,7 @@ class Optimizer:
                         optimized_runtime=optimized_runtimes,
                         is_correct=is_correct,
                     )
+                    ph("cli-optimize-function-finished")
 
                     if best_optimization:
                         optimizations_found += 1
