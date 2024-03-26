@@ -3,8 +3,7 @@ import logging
 import os
 import random
 from _ast import ClassDef, FunctionDef, AsyncFunctionDef
-from pathlib import Path
-from typing import Dict, Optional, List, Tuple, Union, Any
+from typing import Dict, Optional, List, Tuple, Union
 
 import git
 import libcst as cst
@@ -177,7 +176,7 @@ def get_functions_within_git_diff() -> Dict[str, List[FunctionToOptimize]]:
 
 
 def get_all_files_and_functions(module_root_path: str) -> Dict[str, List[FunctionToOptimize]]:
-    functions: dict[Any, Any] = {}
+    functions: Dict[str, List[FunctionToOptimize]] = {}
     for root, dirs, files in os.walk(module_root_path):
         for file in files:
             if not file.endswith(".py"):
@@ -208,12 +207,18 @@ def find_all_functions_in_file(file_path: str) -> Dict[str, List[FunctionToOptim
     return functions
 
 
-def is_not_git_module_file(file_abs_path: Path, git_repo: git.Repo) -> bool:
+def is_git_repo(file_path: str) -> bool:
     try:
-        git_repo.head.commit.tree.join(str(file_abs_path.relative_to(git_repo.working_dir)))
-    except KeyError:
+        git.Repo(file_path, search_parent_directories=True)
         return True
-    return False
+    except git.InvalidGitRepositoryError:
+        return False
+
+
+def ignored_submodule_paths(git_repo: git.Repo) -> List[str]:
+    return [
+        os.path.realpath(submodule.module().working_tree_dir) for submodule in git_repo.submodules
+    ]
 
 
 def filter_functions(
@@ -223,20 +228,22 @@ def filter_functions(
     project_root: str,
     module_root: str,
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
-    # Remove any functions that we don't want to optimize
-    is_git_repo = True
-    try:
-        git_repo: git.Repo = git.Repo(module_root, search_parent_directories=True)
-    except git.InvalidGitRepositoryError:
-        is_git_repo = False
+    # Remove any function that we don't want to optimize
+
+    # Ignore files with submodule path
+    submodule_paths = []
+    if is_git_repo(module_root):
+        submodule_paths = ignored_submodule_paths(
+            git.Repo(module_root, search_parent_directories=True)
+        )
     filtered_modified_functions: Dict[str, List[FunctionToOptimize]] = {}
     functions_count: int = 0
     test_functions_removed_count: int = 0
-    non_module_functions_removed_count: int = 0
-    non_git_module_file_functions_removed_count: int = 0
+    non_modules_removed_count: int = 0
     site_packages_removed_count: int = 0
     ignore_paths_removed_count: int = 0
     malformed_paths_count: int = 0
+    submodule_ignored_paths_count: int = 0
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path, functions in modified_functions.items():
         if file_path.startswith(tests_root + os.sep):
@@ -247,15 +254,16 @@ def filter_functions(
         ):
             ignore_paths_removed_count += 1
             continue
+        if file_path in submodule_paths or any(
+            file_path.startswith(submodule_path + os.sep) for submodule_path in submodule_paths
+        ):
+            submodule_ignored_paths_count += 1
+            continue
         if path_belongs_to_site_packages(file_path):
             site_packages_removed_count += len(functions)
             continue
         if not file_path.startswith(module_root + os.sep):
-            non_module_functions_removed_count += len(functions)
-            continue
-        # Remove non-git-module functions (which includes submodule functions)
-        if is_git_repo and is_not_git_module_file(Path(file_path), git_repo):
-            non_git_module_file_functions_removed_count += len(functions)
+            non_modules_removed_count += len(functions)
             continue
         try:
             ast.parse(f"import {module_name_from_file_path(file_path, project_root)}")
@@ -264,24 +272,17 @@ def filter_functions(
             continue
         filtered_modified_functions[file_path] = functions
         functions_count += len(functions)
-    if (
-        non_git_module_file_functions_removed_count > 0
-        or test_functions_removed_count > 0
-        or site_packages_removed_count > 0
-        or ignore_paths_removed_count > 0
-        or malformed_paths_count > 0
-        or non_module_functions_removed_count > 0
-    ):
-        logging.info(
-            f"Ignoring {test_functions_removed_count} test function{'s' if test_functions_removed_count != 1 else ''}, "
-            f"{site_packages_removed_count} site-package function{'s' if site_packages_removed_count != 1 else ''}, "
-            f"{malformed_paths_count} non-importable file path{'s' if malformed_paths_count != 1 else ''}, "
-            f"{non_module_functions_removed_count} function"
-            f"{'s' if non_module_functions_removed_count != 1 else ''} outside module-root, "
-            f"{non_git_module_file_functions_removed_count} non-module function"
-            f"{'s' if non_git_module_file_functions_removed_count != 1 else ''}, and "
-            f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths"
-        )
+    log_info = {
+        f"{test_functions_removed_count} test function{'s' if test_functions_removed_count != 1 else ''}": test_functions_removed_count,
+        f"{site_packages_removed_count} site-package function{'s' if site_packages_removed_count != 1 else ''}": site_packages_removed_count,
+        f"{malformed_paths_count} non-importable file path{'s' if malformed_paths_count != 1 else ''}": malformed_paths_count,
+        f"{non_modules_removed_count} function{'s' if non_modules_removed_count != 1 else ''} outside module-root": non_modules_removed_count,
+        f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths": ignore_paths_removed_count,
+        f"{submodule_ignored_paths_count} file{'s' if submodule_ignored_paths_count != 1 else ''} from ignored submodules": submodule_ignored_paths_count,
+    }
+    log_string: str
+    if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
+        logging.info(f"Ignoring:\n{log_string}")
     return {k: v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 
