@@ -4,7 +4,7 @@ import os
 import random
 from _ast import ClassDef, FunctionDef, AsyncFunctionDef
 from pathlib import Path
-from typing import Dict, Optional, List, Tuple, Union, Any
+from typing import Dict, Optional, List, Tuple, Union
 
 import git
 import libcst as cst
@@ -177,7 +177,7 @@ def get_functions_within_git_diff() -> Dict[str, List[FunctionToOptimize]]:
 
 
 def get_all_files_and_functions(module_root_path: str) -> Dict[str, List[FunctionToOptimize]]:
-    functions: dict[Any, Any] = {}
+    functions: Dict[str, List[FunctionToOptimize]] = {}
     for root, dirs, files in os.walk(module_root_path):
         for file in files:
             if not file.endswith(".py"):
@@ -208,6 +208,14 @@ def find_all_functions_in_file(file_path: str) -> Dict[str, List[FunctionToOptim
     return functions
 
 
+def is_git_repo(file_path: str) -> bool:
+    try:
+        git.Repo(file_path, search_parent_directories=True)
+        return True
+    except git.InvalidGitRepositoryError:
+        return False
+
+
 def is_not_git_module_file(file_abs_path: Path, git_repo: git.Repo) -> bool:
     try:
         git_repo.head.commit.tree.join(str(file_abs_path.relative_to(git_repo.working_dir)))
@@ -223,17 +231,18 @@ def filter_functions(
     project_root: str,
     module_root: str,
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
-    # Remove any functions that we don't want to optimize
-    is_git_repo = True
-    try:
-        git_repo: git.Repo = git.Repo(module_root, search_parent_directories=True)
-    except git.InvalidGitRepositoryError:
-        is_git_repo = False
+    # Remove any function that we don't want to optimize
+    # is_git_repo = True
+    # try:
+    #     git_repo: git.Repo = git.Repo(module_root, search_parent_directories=True)
+    # except git.InvalidGitRepositoryError:
+    #     is_git_repo = False
     filtered_modified_functions: Dict[str, List[FunctionToOptimize]] = {}
     functions_count: int = 0
     test_functions_removed_count: int = 0
     non_module_functions_removed_count: int = 0
-    non_git_module_file_functions_removed_count: int = 0
+    # non_git_module_file_functions_removed_count: int = 0
+    git_submodule_file_functions_removed_count: int = 0
     site_packages_removed_count: int = 0
     ignore_paths_removed_count: int = 0
     malformed_paths_count: int = 0
@@ -253,10 +262,26 @@ def filter_functions(
         if not file_path.startswith(module_root + os.sep):
             non_module_functions_removed_count += len(functions)
             continue
+        # Temporary fix to disable submodule file optimization to support our simultaneous git and no git process.
+        if is_git_repo(file_path):
+            git_repo: git.Repo = git.Repo(module_root, search_parent_directories=True)
+            file_path_object = Path(file_path)
+            file_in_submodule: bool = False
+            for submodule in git_repo.submodules:
+                if is_not_git_module_file(file_path_object, submodule.module()):
+                    continue
+                else:
+                    file_in_submodule = True
+                    git_submodule_file_functions_removed_count += len(functions)
+                    break
+            if file_in_submodule:
+                continue
         # Remove non-git-module functions (which includes submodule functions)
-        if is_git_repo and is_not_git_module_file(Path(file_path), git_repo):
-            non_git_module_file_functions_removed_count += len(functions)
-            continue
+        # This code is The Way, but it needs to be pulled for now to support our current workflow
+        # (simultaneously git and not git).
+        # if is_git_repo and is_not_git_module_file(Path(file_path), git_repo):
+        #     non_git_module_file_functions_removed_count += len(functions)
+        #     continue
         try:
             ast.parse(f"import {module_name_from_file_path(file_path, project_root)}")
         except SyntaxError:
@@ -265,7 +290,8 @@ def filter_functions(
         filtered_modified_functions[file_path] = functions
         functions_count += len(functions)
     if (
-        non_git_module_file_functions_removed_count > 0
+        # non_git_module_file_functions_removed_count > 0
+        git_submodule_file_functions_removed_count > 0
         or test_functions_removed_count > 0
         or site_packages_removed_count > 0
         or ignore_paths_removed_count > 0
@@ -278,8 +304,10 @@ def filter_functions(
             f"{malformed_paths_count} non-importable file path{'s' if malformed_paths_count != 1 else ''}, "
             f"{non_module_functions_removed_count} function"
             f"{'s' if non_module_functions_removed_count != 1 else ''} outside module-root, "
-            f"{non_git_module_file_functions_removed_count} non-module function"
-            f"{'s' if non_git_module_file_functions_removed_count != 1 else ''}, and "
+            # f"{non_git_module_file_functions_removed_count} non-module function"
+            f"{git_submodule_file_functions_removed_count} submodule function"
+            f"{'s' if git_submodule_file_functions_removed_count != 1 else ''}, and "
+            # f"{'s' if non_git_module_file_functions_removed_count != 1 else ''}, and "
             f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths"
         )
     return {k: v for k, v in filtered_modified_functions.items() if v}, functions_count
