@@ -229,8 +229,9 @@ def filter_functions(
     # Remove any function that we don't want to optimize
 
     # Ignore files with submodule path
+    submodule_paths = []
     if is_git_repo(module_root):
-        ignore_paths += ignored_submodule_paths(
+        submodule_paths = ignored_submodule_paths(
             git.Repo(module_root, search_parent_directories=True)
         )
     filtered_modified_functions: Dict[str, List[FunctionToOptimize]] = {}
@@ -240,6 +241,7 @@ def filter_functions(
     site_packages_removed_count: int = 0
     ignore_paths_removed_count: int = 0
     malformed_paths_count: int = 0
+    submodule_ignored_paths_count: int = 0
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path, functions in modified_functions.items():
         if file_path.startswith(tests_root + os.sep):
@@ -249,6 +251,11 @@ def filter_functions(
             file_path.startswith(ignore_path + os.sep) for ignore_path in ignore_paths
         ):
             ignore_paths_removed_count += 1
+            continue
+        if file_path in submodule_paths or any(
+            file_path.startswith(submodule_path + os.sep) for submodule_path in submodule_paths
+        ):
+            submodule_ignored_paths_count += 1
             continue
         if path_belongs_to_site_packages(file_path):
             site_packages_removed_count += len(functions)
@@ -269,6 +276,7 @@ def filter_functions(
         f"{malformed_paths_count} non-importable file path{'s' if malformed_paths_count != 1 else ''}": malformed_paths_count,
         f"{non_modules_removed_count} function{'s' if non_modules_removed_count != 1 else ''} outside module-root": non_modules_removed_count,
         f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths": ignore_paths_removed_count,
+        f"{submodule_ignored_paths_count} file{'s' if submodule_ignored_paths_count != 1 else ''} from ignored submodules": submodule_ignored_paths_count,
     }
     log_string: str
     if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
