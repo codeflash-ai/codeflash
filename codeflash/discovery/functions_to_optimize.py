@@ -3,7 +3,6 @@ import logging
 import os
 import random
 from _ast import ClassDef, FunctionDef, AsyncFunctionDef
-from pathlib import Path
 from typing import Dict, Optional, List, Tuple, Union
 
 import git
@@ -216,12 +215,8 @@ def is_git_repo(file_path: str) -> bool:
         return False
 
 
-def is_not_git_module_file(file_abs_path: Path, git_repo: git.Repo) -> bool:
-    try:
-        git_repo.head.commit.tree.join(str(file_abs_path.relative_to(git_repo.working_dir)))
-    except KeyError:
-        return True
-    return False
+def ignored_submodule_paths(git_repo: git.Repo) -> List[str]:
+    return [submodule.module().working_tree_dir for submodule in git_repo.submodules]
 
 
 def filter_functions(
@@ -232,17 +227,16 @@ def filter_functions(
     module_root: str,
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
     # Remove any function that we don't want to optimize
-    # is_git_repo = True
-    # try:
-    #     git_repo: git.Repo = git.Repo(module_root, search_parent_directories=True)
-    # except git.InvalidGitRepositoryError:
-    #     is_git_repo = False
+
+    # Ignore files with submodule path
+    if is_git_repo(module_root):
+        ignore_paths += ignored_submodule_paths(
+            git.Repo(module_root, search_parent_directories=True)
+        )
     filtered_modified_functions: Dict[str, List[FunctionToOptimize]] = {}
     functions_count: int = 0
     test_functions_removed_count: int = 0
-    non_module_functions_removed_count: int = 0
-    # non_git_module_file_functions_removed_count: int = 0
-    git_submodule_file_functions_removed_count: int = 0
+    non_modules_removed_count: int = 0
     site_packages_removed_count: int = 0
     ignore_paths_removed_count: int = 0
     malformed_paths_count: int = 0
@@ -260,28 +254,8 @@ def filter_functions(
             site_packages_removed_count += len(functions)
             continue
         if not file_path.startswith(module_root + os.sep):
-            non_module_functions_removed_count += len(functions)
+            non_modules_removed_count += len(functions)
             continue
-        # Temporary fix to disable submodule file optimization to support our simultaneous git and no git process.
-        if is_git_repo(file_path):
-            git_repo: git.Repo = git.Repo(module_root, search_parent_directories=True)
-            file_path_object = Path(file_path)
-            file_in_submodule: bool = False
-            for submodule in git_repo.submodules:
-                if is_not_git_module_file(file_path_object, submodule.module()):
-                    continue
-                else:
-                    file_in_submodule = True
-                    git_submodule_file_functions_removed_count += len(functions)
-                    break
-            if file_in_submodule:
-                continue
-        # Remove non-git-module functions (which includes submodule functions)
-        # This code is The Way, but it needs to be pulled for now to support our current workflow
-        # (simultaneously git and not git).
-        # if is_git_repo and is_not_git_module_file(Path(file_path), git_repo):
-        #     non_git_module_file_functions_removed_count += len(functions)
-        #     continue
         try:
             ast.parse(f"import {module_name_from_file_path(file_path, project_root)}")
         except SyntaxError:
@@ -289,27 +263,16 @@ def filter_functions(
             continue
         filtered_modified_functions[file_path] = functions
         functions_count += len(functions)
-    if (
-        # non_git_module_file_functions_removed_count > 0
-        git_submodule_file_functions_removed_count > 0
-        or test_functions_removed_count > 0
-        or site_packages_removed_count > 0
-        or ignore_paths_removed_count > 0
-        or malformed_paths_count > 0
-        or non_module_functions_removed_count > 0
-    ):
-        logging.info(
-            f"Ignoring {test_functions_removed_count} test function{'s' if test_functions_removed_count != 1 else ''}, "
-            f"{site_packages_removed_count} site-package function{'s' if site_packages_removed_count != 1 else ''}, "
-            f"{malformed_paths_count} non-importable file path{'s' if malformed_paths_count != 1 else ''}, "
-            f"{non_module_functions_removed_count} function"
-            f"{'s' if non_module_functions_removed_count != 1 else ''} outside module-root, "
-            # f"{non_git_module_file_functions_removed_count} non-module function"
-            f"{git_submodule_file_functions_removed_count} submodule function"
-            f"{'s' if git_submodule_file_functions_removed_count != 1 else ''}, and "
-            # f"{'s' if non_git_module_file_functions_removed_count != 1 else ''}, and "
-            f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths"
-        )
+    log_info = {
+        f"{test_functions_removed_count} test function{'s' if test_functions_removed_count != 1 else ''}": test_functions_removed_count,
+        f"{site_packages_removed_count} site-package function{'s' if site_packages_removed_count != 1 else ''}": site_packages_removed_count,
+        f"{malformed_paths_count} non-importable file path{'s' if malformed_paths_count != 1 else ''}": malformed_paths_count,
+        f"{non_modules_removed_count} function{'s' if non_modules_removed_count != 1 else ''} outside module-root": non_modules_removed_count,
+        f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths": ignore_paths_removed_count,
+    }
+    log_string: str
+    if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
+        logging.info(f"Ignoring:\n{log_string}")
     return {k: v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 

@@ -5,7 +5,7 @@ from codeflash.discovery.functions_to_optimize import (
 )
 
 
-def test_function_eligible_for_optimization():
+def test_function_eligible_for_optimization() -> None:
     function = """def test_function_eligible_for_optimization():
     a = 5
     return a**2
