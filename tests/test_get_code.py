@@ -71,6 +71,9 @@ class BubbleSortClass:
     def __init__(self):
         pass
 
+    def __call__(self):
+        pass
+
     def sorter(self, arr):
         for i in range(len(arr)):
             for j in range(len(arr) - 1):
@@ -86,6 +89,8 @@ class BubbleSortClass:
     """
     expected = """class BubbleSortClass:
     def __init__(self):
+        pass
+    def __call__(self):
         pass
     def sorter(self, arr):
         for i in range(len(arr)):
