@@ -25,7 +25,7 @@ def get_code(function_to_optimize: FunctionToOptimize) -> Optional[str]:
                 # using Type Guards as we move to 3.10+.
                 # We will cover the Type Alias case on the backend since it's a 3.12 feature.
                 (
-                    isinstance(node, Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef])
+                    isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
                     and node.name == name_parts[0]
                 )
                 # The next two cases cover type aliases in pre-3.12 syntax, where only single assignment is allowed.
@@ -58,7 +58,7 @@ def get_code(function_to_optimize: FunctionToOptimize) -> Optional[str]:
                 # Collect all dunder methods.
                 cnode_name: str
                 if (
-                    isinstance(cnode, Union[ast.FunctionDef, ast.AsyncFunctionDef])
+                    isinstance(cnode, (ast.FunctionDef, ast.AsyncFunctionDef))
                     and len(cnode_name := cnode.name) > 4
                     and cnode_name.isascii()
                     and cnode_name.startswith("__")
@@ -106,7 +106,7 @@ def get_code(function_to_optimize: FunctionToOptimize) -> Optional[str]:
         ["".join(lines[s_lineno - 1 : e_lineno]) for (s_lineno, e_lineno) in class_skeleton]
     )
     if (
-        isinstance(target_node, Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef])
+        isinstance(target_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
         and target_node.decorator_list
     ):
         target_code = "".join(
@@ -137,7 +137,7 @@ def get_code_no_skeleton(file_path: str, target_name: str) -> Optional[str]:
     while stack:
         node = stack.pop()
         if (
-            isinstance(node, Union[ast.FunctionDef, ast.AsyncFunctionDef])
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
             and node.name == name_parts[-1]
         ):
             target_node = node
