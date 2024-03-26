@@ -81,7 +81,7 @@ def comparator(orig: Any, new: Any) -> bool:
             return False
         try:
             return np.allclose(orig, new, equal_nan=True)
-        except Exception as e:
+        except Exception:
             # fails at "ufunc 'isfinite' not supported for the input types"
             return np.all([comparator(x, y) for x, y in zip(orig, new)])
 
@@ -117,12 +117,12 @@ def comparator(orig: Any, new: Any) -> bool:
     try:
         if HAS_NUMPY and np.isnan(orig):
             return np.isnan(new)
-    except Exception as e:
+    except Exception:
         pass
     try:
         if HAS_NUMPY and np.isinf(orig):
             return np.isinf(new)
-    except Exception as e:
+    except Exception:
         pass
 
     if isinstance(orig, (datetime.datetime, datetime.date, datetime.timedelta)):
@@ -133,7 +133,7 @@ def comparator(orig: Any, new: Any) -> bool:
     try:
         if hasattr(orig, "__eq__") and str(type(orig.__eq__)) == "<class 'method'>":
             return orig == new
-    except Exception as e:
+    except Exception:
         pass
 
     # TODO : Add other types here
