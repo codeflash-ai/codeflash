@@ -216,7 +216,9 @@ def is_git_repo(file_path: str) -> bool:
 
 
 def ignored_submodule_paths(git_repo: git.Repo) -> List[str]:
-    return [submodule.module().working_tree_dir for submodule in git_repo.submodules]
+    return [
+        os.path.realpath(submodule.module().working_tree_dir) for submodule in git_repo.submodules
+    ]
 
 
 def filter_functions(
