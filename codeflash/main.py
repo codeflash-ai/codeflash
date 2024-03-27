@@ -179,6 +179,13 @@ class Optimizer:
                 f: IO[str]
                 with open(path, "r", encoding="utf8") as f:
                     original_code: str = f.read()
+                should_format = True
+                if (
+                    format_code(self.args.formatter_cmd, self.args.imports_cmd, should_format, path)
+                    != original_code
+                ):
+                    should_format = False
+
                 function_to_optimize: FunctionToOptimize
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
                     function_trace_id: str = str(uuid.uuid4())
@@ -424,10 +431,15 @@ class Optimizer:
                         )
                         logging.info(f"Explanation: \n{explanation_final.to_console_string()}")
 
-                        new_code = format_code(self.args.formatter_cmd, self.args.imports_cmd, path)
+                        new_code = format_code(
+                            self.args.formatter_cmd, self.args.imports_cmd, should_format, path
+                        )
                         new_dependent_code: dict[str, str] = {
                             module_abspath: format_code(
-                                self.args.formatter_cmd, self.args.imports_cmd, module_abspath
+                                self.args.formatter_cmd,
+                                self.args.imports_cmd,
+                                should_format,
+                                module_abspath,
                             )
                             for module_abspath in dependent_functions_by_module_abspath.keys()
                         }

@@ -3,8 +3,11 @@ import os.path
 import subprocess
 
 
-def format_code(formatter_cmd: str, imports_cmd: str, path: str) -> str:
+def format_code(formatter_cmd: str, imports_cmd: str, should_format: bool, path: str) -> str:
     # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
+    if imports_cmd.lower() == "disabled":
+        should_format = False
+
     if formatter_cmd.lower() == "disabled":
         with open(path, "r", encoding="utf8") as f:
             new_code = f.read()
@@ -23,14 +26,19 @@ def format_code(formatter_cmd: str, imports_cmd: str, path: str) -> str:
     else:
         logging.error(f"Failed to format code with {formatter_cmd}")
 
-    result = subprocess.run(
-        imports_cmd_list + [path], stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
-    if result.returncode == 0:
-        logging.info("OK")
-    else:
-        logging.error(f"Failed to sort imports with {imports_cmd}")
+    if should_format:
+        # Deduplicate and sort imports
+        result = subprocess.run(
+            imports_cmd_list + [path], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        if result.returncode != 0:
+            logging.error(f"Failed to sort imports with {imports_cmd}")
 
-    with open(path, "r", encoding="utf8") as f:
-        new_code = f.read()
-    return new_code
+        with open(path, "r", encoding="utf8") as f:
+            new_code = f.read()
+        return new_code
+    else:
+        # Return original code
+        with open(path, "r", encoding="utf8") as f:
+            code = f.read()
+        return code
