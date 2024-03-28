@@ -26,10 +26,10 @@ def read_api_key_from_shell_config() -> Optional[str]:
         return None
 
 
-def get_shell_rc_path() -> str:
+def get_shell_rc_path() -> Path:
     """Get the path to the user's shell configuration file."""
     if os.name == "nt":  # on Windows, we use a batch file in the user's home directory
-        return str(Path.home() / "codeflash_env.bat")
+        return Path.home() / "codeflash_env.bat"
     else:
         shell = os.environ.get("SHELL", "/bin/bash").split("/")[-1]
         shell_rc_filename = {
@@ -41,12 +41,16 @@ def get_shell_rc_path() -> str:
         }.get(
             shell, ".bashrc"
         )  # map each shell to its config file and default to .bashrc
-        return str(Path.home() / shell_rc_filename)
+        return Path.home() / shell_rc_filename
+
+
+def get_api_key_export_line(api_key: str) -> str:
+    return f"{SHELL_RC_EXPORT_PREFIX}{api_key}"
 
 
 def save_api_key_to_rc(api_key) -> Result[str, str]:
     shell_rc_path = get_shell_rc_path()
-    api_key_line = f"{SHELL_RC_EXPORT_PREFIX}{api_key}"
+    api_key_line = get_api_key_export_line(api_key)
     try:
         with open(shell_rc_path, "r+", encoding="utf8") as shell_file:
             shell_contents = shell_file.read()
@@ -69,7 +73,7 @@ def save_api_key_to_rc(api_key) -> Result[str, str]:
             shell_file.seek(0)
             shell_file.write(updated_shell_contents)
             shell_file.truncate()
-        return Success(f"✅ {action} {shell_rc_path}.")
+        return Success(f"✅ {action} {shell_rc_path}")
     except PermissionError:
         return Failure(
             f"💡 I tried adding your Codeflash API key to {shell_rc_path} - but seems like I don't have permissions to do so.{LF}"
@@ -77,6 +81,7 @@ def save_api_key_to_rc(api_key) -> Result[str, str]:
         )
     except FileNotFoundError:
         return Failure(
-            f"💡 I couldn't find your shell configuration file at {shell_rc_path}.{LF}"
-            f"Please create it and add the following line:{LF}{LF}{api_key_line}{LF}"
+            f"💡 I went to save your Codeflash API key to {shell_rc_path}, but noticed that it doesn't exist.{LF}"
+            f"To ensure your Codeflash API key is automatically loaded into your environment at startup, you can create {shell_rc_path} and add the following line:{LF}"
+            f"{LF}{api_key_line}{LF}",
         )
