@@ -129,7 +129,7 @@ class Optimizer:
         )
 
     def run(self) -> None:
-        ph("cli-optimize-run-start", {"args": self.args.__dict__})
+        ph("cli-optimize-run-start")
         logging.info(CODEFLASH_LOGO)
         logging.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
@@ -189,6 +189,7 @@ class Optimizer:
                 function_to_optimize: FunctionToOptimize
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
                     function_trace_id: str = str(uuid.uuid4())
+                    ph("cli-optimize-function-start", {"function_trace_id": function_trace_id})
                     function_name: str = (
                         function_to_optimize.function_name
                         if function_to_optimize.parents == []
@@ -399,6 +400,7 @@ class Optimizer:
                         optimized_runtime=optimized_runtimes,
                         is_correct=is_correct,
                     )
+                    ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
                     if best_optimization:
                         optimizations_found += 1
@@ -457,6 +459,7 @@ class Optimizer:
                         ph(
                             "cli-optimize-success",
                             {
+                                "function_trace_id": function_trace_id,
                                 "speedup_x": explanation_final.speedup_x,
                                 "speedup_pct": explanation_final.speedup_pct,
                                 "best_runtime": explanation_final.best_runtime_ns,

@@ -6,9 +6,10 @@ from argparse import Namespace
 import git
 
 from codeflash.api.cfapi import check_github_app_installed_on_repo
-from codeflash.cli_cmds.cmd_init import init_codeflash
+from codeflash.cli_cmds.cmd_init import init_codeflash, apologize_and_exit
 from codeflash.cli_cmds.logging_config import LOGGING_FORMAT
 from codeflash.code_utils import env_utils
+from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.git_utils import (
     get_repo_owner_and_name,
@@ -34,7 +35,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
         args.file = os.path.realpath(args.file)
 
     try:
-        pyproject_config = parse_config_file(args.config_file)
+        pyproject_config, pyproject_file_path = parse_config_file(args.config_file)
     except ValueError as e:
         logging.error(e.args[0])
         exit(1)
@@ -73,13 +74,21 @@ def process_cmd_args(args: Namespace) -> Namespace:
         "Exiting..."
     )
     if hasattr(args, "ignore_paths") and args.ignore_paths is not None:
+        normalized_ignore_paths = []
         for path in args.ignore_paths:
             assert os.path.exists(
                 path
             ), f"ignore-paths config must be a valid path. Path {path} does not exist"
+            normalized_ignore_paths.append(os.path.realpath(path))
+        args.ignore_paths = normalized_ignore_paths
     # Project root path is one level above the specified directory, because that's where the module can be imported from
     args.module_root = os.path.realpath(args.module_root)
-    args.project_root = os.path.realpath(os.path.join(args.module_root, ".."))
+    # If module-root is "." then all imports are relatives to it.
+    # in this case, the ".." becomes outside project scope, causing issues with un-importable paths
+    if os.path.dirname(pyproject_file_path) == args.module_root:
+        args.project_root = args.module_root
+    else:
+        args.project_root = os.path.realpath(os.path.join(args.module_root, ".."))
     args.tests_root = os.path.realpath(args.tests_root)
     args = handle_optimize_all_arg_parsing(args)
     return args
@@ -95,7 +104,7 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
                 "I couldn't find a git repository in the current directory. "
                 "I need a git repository to run --all and open PRs for optimizations. Exiting..."
             )
-            exit(1)
+            apologize_and_exit()
         owner, repo = get_repo_owner_and_name(git_repo)
         try:
             response = check_github_app_installed_on_repo(owner, repo)
@@ -107,12 +116,11 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
         except Exception as e:
             logging.error(
                 f"Could not find the Codeflash GitHub App installed on the repository {owner}/{repo} or the GitHub"
-                f" account linked to your CODEFLASH_API_KEY does not have access to the repository {owner}/{repo}. "
-                "Please install the Codeflash GitHub App on your repository to use --all."
-                " Instructions at https://app.codeflash.ai \n"
-                "Exiting..."
+                f" account linked to your CODEFLASH_API_KEY does not have access to the repository {owner}/{repo}.{LF}"
+                "Please install the Codeflash GitHub App on your repository to use --all. You can install it by going to "
+                f"https://github.com/settings/installations/{LF}"
             )
-            exit(1)
+            apologize_and_exit()
     if not hasattr(args, "all"):
         setattr(args, "all", None)
     elif args.all == "":

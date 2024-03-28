@@ -1,13 +1,8 @@
 import os
-from typing import List
 
 import tomlkit
 
 from codeflash.code_utils.config_consts import MIN_IMPROVEMENT_THRESHOLD
-
-
-def supported_config_keys() -> List[str]:
-    return ["test-framework", "tests-root", "module-root"]
 
 
 def find_pyproject_toml(config_file=None):
@@ -39,13 +34,13 @@ def find_pyproject_toml(config_file=None):
 
 
 def parse_config_file(config_file_path=None):
-    config_file = find_pyproject_toml(config_file_path)
+    config_file_path = find_pyproject_toml(config_file_path)
     try:
-        with open(config_file, "rb") as f:
+        with open(config_file_path, "rb") as f:
             data = tomlkit.parse(f.read())
     except tomlkit.exceptions.ParseError as e:
         raise ValueError(
-            f"Error while parsing the config file {config_file}. Please recheck the file for syntax errors. Error: {e}"
+            f"Error while parsing the config file {config_file_path}. Please recheck the file for syntax errors. Error: {e}"
         )
 
     try:
@@ -54,7 +49,7 @@ def parse_config_file(config_file_path=None):
         config = tool["codeflash"]
     except tomlkit.exceptions.NonExistentKey:
         raise ValueError(
-            f"Could not find the 'codeflash' block in the config file {config_file}. "
+            f"Could not find the 'codeflash' block in the config file {config_file_path}. "
             f"Please run 'codeflash init' to create the config file."
         )
     assert isinstance(config, dict)
@@ -92,11 +87,13 @@ def parse_config_file(config_file_path=None):
             config[key] = bool_keys[key]
     for key in path_keys:
         if key in config:
-            config[key] = os.path.join(os.path.dirname(config_file), config[key])
+            config[key] = os.path.join(os.path.dirname(config_file_path), config[key])
 
     for key in path_list_keys:
         if key in config:
-            config[key] = [os.path.join(os.path.dirname(config_file), path) for path in config[key]]
+            config[key] = [
+                os.path.join(os.path.dirname(config_file_path), path) for path in config[key]
+            ]
         else:  # Default to empty list
             config[key] = []
 
@@ -109,4 +106,4 @@ def parse_config_file(config_file_path=None):
             config[key.replace("-", "_")] = config[key]
             del config[key]
 
-    return config
+    return config, config_file_path
