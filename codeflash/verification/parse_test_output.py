@@ -7,6 +7,7 @@ import subprocess
 from collections import defaultdict
 from typing import Optional
 
+import sentry_sdk
 from junitparser.xunit2 import JUnitXml
 
 from codeflash.code_utils.code_utils import (
@@ -161,6 +162,14 @@ def parse_test_xml(
             if test_module_path.endswith("__perfinstrumented"):
                 test_module_path = test_module_path[: -len("__perfinstrumented")]
             test_function = testcase.name
+            if test_function is None:
+                with sentry_sdk.push_scope() as scope:
+                    xml_file_contents = open(test_xml_file_path).read()
+                    scope.set_extra("file", xml_file_contents)
+                    sentry_sdk.capture_message(
+                        f"testcase.name is None in parse_test_xml for testcase {repr(testcase)} in file {xml_file_contents}"
+                    )
+                continue
             # Parse test timing
             # system_out_content = ""
             # for system_out in testcase.system_out:
