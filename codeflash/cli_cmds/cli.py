@@ -35,7 +35,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
         args.file = os.path.realpath(args.file)
 
     try:
-        pyproject_config = parse_config_file(args.config_file)
+        pyproject_config, pyproject_file_path = parse_config_file(args.config_file)
     except ValueError as e:
         logging.error(e.args[0])
         exit(1)
@@ -79,7 +79,12 @@ def process_cmd_args(args: Namespace) -> Namespace:
             ), f"ignore-paths config must be a valid path. Path {path} does not exist"
     # Project root path is one level above the specified directory, because that's where the module can be imported from
     args.module_root = os.path.realpath(args.module_root)
-    args.project_root = os.path.realpath(os.path.join(args.module_root, ".."))
+    # If module-root is "." then all imports are relatives to it.
+    # in this case, the ".." becomes outside project scope, causing issues with un-importable paths
+    if os.path.dirname(pyproject_file_path) == args.module_root:
+        args.project_root = args.module_root
+    else:
+        args.project_root = os.path.realpath(os.path.join(args.module_root, ".."))
     args.tests_root = os.path.realpath(args.tests_root)
     args = handle_optimize_all_arg_parsing(args)
     return args
@@ -87,7 +92,6 @@ def process_cmd_args(args: Namespace) -> Namespace:
 
 def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
     if hasattr(args, "all"):
-        # Ensure that the user can actually open PRs on the repo.
         try:
             git_repo = git.Repo(search_parent_directories=True)
         except git.exc.InvalidGitRepositoryError:
@@ -99,9 +103,7 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
         owner, repo = get_repo_owner_and_name(git_repo)
         try:
             response = check_github_app_installed_on_repo(owner, repo)
-            if response.ok and response.text == "true":
-                pass
-            else:
+            if not response.ok or response.text != "true":
                 logging.error(f"Error: {response.text}")
                 raise Exception
         except Exception as e:
@@ -115,7 +117,6 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
     if not hasattr(args, "all"):
         setattr(args, "all", None)
     elif args.all == "":
-        # The default behavior of --all is to optimize everything in args.module_root
         args.all = args.module_root
     else:
         args.all = os.path.realpath(args.all)
