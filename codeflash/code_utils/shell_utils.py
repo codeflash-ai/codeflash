@@ -81,6 +81,7 @@ def save_api_key_to_rc(api_key) -> Result[str, str]:
         )
     except FileNotFoundError:
         return Failure(
-            f"💡 I couldn't find your shell configuration file at {shell_rc_path}.{LF}"
-            f"Please create it and add the following line:{LF}{LF}{api_key_line}{LF}"
+            f"💡 I went to save your Codeflash API key to {shell_rc_path}, but noticed that it doesn't exist.{LF}"
+            f"To ensure your Codeflash API key is automatically loaded into your environment at startup, you can create {shell_rc_path} and add the following line:{LF}"
+            f"{LF}{api_key_line}{LF}",
         )

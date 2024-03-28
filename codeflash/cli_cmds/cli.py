@@ -95,7 +95,7 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
                 "I couldn't find a git repository in the current directory. "
                 "I need a git repository to run --all and open PRs for optimizations. Exiting..."
             )
-            exit(1)
+            apologize_and_exit()
         owner, repo = get_repo_owner_and_name(git_repo)
         try:
             response = check_github_app_installed_on_repo(owner, repo)

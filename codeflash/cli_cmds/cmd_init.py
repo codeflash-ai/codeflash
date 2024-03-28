@@ -22,7 +22,6 @@ from codeflash.code_utils.git_utils import get_github_secrets_page_url
 from codeflash.code_utils.shell_utils import (
     save_api_key_to_rc,
     get_shell_rc_path,
-    get_api_key_export_line,
 )
 from codeflash.telemetry.posthog import ph
 from codeflash.version import __version__ as version
@@ -506,25 +505,16 @@ def enter_api_key_and_save_to_rc() -> None:
                 click.launch("https://app.codeflash.ai/app/apikeys")
                 browser_launched = True  # This does not work on remote consoles
     shell_rc_path = get_shell_rc_path()
-    if not shell_rc_path.exists():
-        create_shell_file = click.confirm(
-            f"💡 I went to save your Codeflash API key to {shell_rc_path}, but noticed that it doesn't exist. Do you want me to create it?",
-            default=True,
-        )
-        if create_shell_file:
-            shell_rc_path.touch()
-            click.echo(f"✅ Created {shell_rc_path}")
-            result = save_api_key_to_rc(api_key)
-            if is_successful(result):
-                click.echo(result.unwrap())
-            else:
-                click.echo(result.failure())
-                click.pause()
-        else:
-            click.echo(
-                f"💡 Okay, to ensure your Codeflash API key is automatically loaded into your environment at startup, you can create {shell_rc_path} and add the following line:"
-            )
-            click.echo(f"{LF}{get_api_key_export_line(api_key)}{LF}")
+    if not shell_rc_path.exists() and os.name == "nt":
+        # On Windows, create a batch file in the user's home directory (not auto-run, just used to store api key)
+        shell_rc_path.touch()
+        click.echo(f"✅ Created {shell_rc_path}")
+    result = save_api_key_to_rc(api_key)
+    if is_successful(result):
+        click.echo(result.unwrap())
+    else:
+        click.echo(result.failure())
+        click.pause()
 
     os.environ["CODEFLASH_API_KEY"] = api_key
 
