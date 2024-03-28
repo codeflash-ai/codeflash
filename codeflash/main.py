@@ -33,7 +33,7 @@ from codeflash.code_utils.config_consts import (
     MAX_TEST_FUNCTION_RUNS,
     MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS,
 )
-from codeflash.code_utils.formatter import format_code
+from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import (
     inject_profiling_into_existing_test,
 )
@@ -179,12 +179,12 @@ class Optimizer:
                 f: IO[str]
                 with open(path, "r", encoding="utf8") as f:
                     original_code: str = f.read()
-                should_format = True
+                should_sort_imports = True
                 if (
-                    format_code(self.args.formatter_cmd, self.args.imports_cmd, should_format, path)
+                    sort_imports(self.args.imports_sort_cmd, should_sort_imports, path)
                     != original_code
                 ):
-                    should_format = False
+                    should_sort_imports = False
 
                 function_to_optimize: FunctionToOptimize
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
@@ -432,13 +432,16 @@ class Optimizer:
                         logging.info(f"Explanation: \n{explanation_final.to_console_string()}")
 
                         new_code = format_code(
-                            self.args.formatter_cmd, self.args.imports_cmd, should_format, path
+                            self.args.formatter_cmd,
+                            self.args.imports_sort_cmd,
+                            should_sort_imports,
+                            path,
                         )
                         new_dependent_code: dict[str, str] = {
                             module_abspath: format_code(
                                 self.args.formatter_cmd,
-                                self.args.imports_cmd,
-                                should_format,
+                                self.args.imports_sort_cmd,
+                                should_sort_imports,
                                 module_abspath,
                             )
                             for module_abspath in dependent_functions_by_module_abspath.keys()

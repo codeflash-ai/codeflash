@@ -69,7 +69,7 @@ def parse_config_file(config_file_path=None):
     str_keys = {
         "pytest-cmd": "pytest",
         "formatter-cmd": "black",
-        "imports-cmd": "isort",
+        "imports-sort-cmd": "isort",
     }
     bool_keys = {
         "disable-telemetry": False,

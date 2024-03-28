@@ -47,7 +47,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
         "pytest_cmd",
         "formatter_cmd",
         "disable_telemetry",
-        "imports_cmd"
+        "imports_sort_cmd",
     ]
     for key in supported_keys:
         if key in pyproject_config:
