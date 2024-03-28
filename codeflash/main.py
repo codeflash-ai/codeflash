@@ -181,8 +181,8 @@ class Optimizer:
                     original_code: str = f.read()
                 function_to_optimize: FunctionToOptimize
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
-                    ph("cli-optimize-function-start")
                     function_trace_id: str = str(uuid.uuid4())
+                    ph("cli-optimize-function-start", {"function_trace_id": function_trace_id})
                     function_name: str = (
                         function_to_optimize.function_name
                         if function_to_optimize.parents == []
@@ -393,7 +393,7 @@ class Optimizer:
                         optimized_runtime=optimized_runtimes,
                         is_correct=is_correct,
                     )
-                    ph("cli-optimize-function-finished")
+                    ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
                     if best_optimization:
                         optimizations_found += 1
@@ -442,6 +442,7 @@ class Optimizer:
                         ph(
                             "cli-optimize-success",
                             {
+                                "function_trace_id": function_trace_id,
                                 "speedup_x": explanation_final.speedup_x,
                                 "speedup_pct": explanation_final.speedup_pct,
                                 "best_runtime": explanation_final.best_runtime_ns,
