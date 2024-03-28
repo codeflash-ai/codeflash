@@ -1,7 +1,7 @@
 import ast
 import logging
 import os
-from typing import NoReturn, Union
+from typing import Union
 
 import jedi
 import tiktoken
@@ -18,8 +18,8 @@ def belongs_to_class(name: Name, class_name: str) -> bool:
     Check if the given name belongs to the specified class.
     """
     if name.full_name and name.full_name.startswith(name.module_name):
-        subname = name.full_name[len(name.module_name) + 1 :]
-        class_prefix = f"{class_name}."
+        subname: str = name.full_name[len(name.module_name) + 1 :]
+        class_prefix: str = f"{class_name}."
         return subname.startswith(class_prefix)
     return False
 
@@ -29,7 +29,7 @@ def belongs_to_function(name: Name, function_name: str) -> bool:
     Check if the given name belongs to the specified function
     """
     if name.full_name and name.full_name.startswith(name.module_name):
-        subname = name.full_name.replace(name.module_name, "", 1)
+        subname: str = name.full_name.replace(name.module_name, "", 1)
     else:
         return False
     # The name is defined inside the function or is the function itself
@@ -37,7 +37,7 @@ def belongs_to_function(name: Name, function_name: str) -> bool:
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
-class Source:
+class Source:  # type: ignore[misc]
     full_name: str
     definition: Name
     source_code: str
@@ -56,26 +56,29 @@ def get_type_annotation_context(
         logging.error(f"get_type_annotation_context - Syntax error in code: {e}")
         return []
     sources: list[tuple[Source, str, str]] = []
-    ast_parents: list[str] = []
+    ast_parents: list[FunctionParent] = []
 
     def visit_children(
-        node: Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module], node_parents
-    ) -> NoReturn:
+        node: Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module],
+        node_parents: list[FunctionParent],
+    ) -> None:
+        child: Union[ast.AST, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module]
         for child in ast.iter_child_nodes(node):
             visit(child, node_parents)
 
     def visit(
         node: Union[ast.AST, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module],
-        node_parents: list[Union[FunctionParent, str]],
-    ) -> NoReturn:
+        node_parents: list[FunctionParent],
+    ) -> None:
         if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if node.name == function_name and node_parents == function.parents:
+                    arg: ast.arg
                     for arg in node.args.args:
                         if arg.annotation and hasattr(arg.annotation, "id"):
-                            name = arg.annotation.id
-                            line_no = arg.annotation.lineno
-                            col_no = arg.annotation.col_offset
+                            name: str = arg.annotation.id
+                            line_no: int = arg.annotation.lineno
+                            col_no: int = arg.annotation.col_offset
                             try:
                                 definition: list[Name] = jedi_script.goto(
                                     line=line_no,
@@ -83,13 +86,13 @@ def get_type_annotation_context(
                                     follow_imports=True,
                                     follow_builtin_imports=False,
                                 )
-                            except Exception as e:
+                            except Exception as ex:
                                 if hasattr(name, "full_name"):
                                     logging.error(
-                                        f"Error while getting definition for {name.full_name}: {e}"
+                                        f"Error while getting definition for {name.full_name}: {ex}"
                                     )
                                 else:
-                                    logging.error(f"Error while getting definition: {e}")
+                                    logging.error(f"Error while getting definition: {ex}")
                                 definition = []
                             if definition:  # TODO can be multiple definitions
                                 definition_path = str(definition[0].module_path)
@@ -122,7 +125,7 @@ def get_type_annotation_context(
                                             )
                                         )
             if not isinstance(node, ast.Module):
-                node_parents.append(node.name)
+                node_parents.append(FunctionParent(node.name, type(node).__name__))
             visit_children(node, node_parents)
             if not isinstance(node, ast.Module):
                 node_parents.pop()
