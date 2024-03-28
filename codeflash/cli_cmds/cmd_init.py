@@ -133,8 +133,7 @@ def collect_setup_info() -> SetupInfo:
     module_subdir_options = valid_module_subdirs + [curdir_option]
 
     module_root_answer = inquirer.list_input(
-        message=f"Which Python module do you want me to optimize going forward?{LF}"
-        + "(This is usually the top-most directory where all your Python source code is located)",
+        message=f"Which Python module do you want me to optimize going forward? (Usually the top-most directory with all of your Python source code)",
         choices=module_subdir_options,
         default=(
             project_name if project_name in module_subdir_options else module_subdir_options[0]
@@ -514,7 +513,7 @@ def enter_api_key_and_save_to_rc() -> None:
         )
         if create_shell_file:
             shell_rc_path.touch()
-            click.echo(f"✅ Created the shell configuration file at {shell_rc_path}.")
+            click.echo(f"✅ Created {shell_rc_path}")
             result = save_api_key_to_rc(api_key)
             if is_successful(result):
                 click.echo(result.unwrap())

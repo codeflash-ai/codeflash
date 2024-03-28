@@ -73,7 +73,7 @@ def save_api_key_to_rc(api_key) -> Result[str, str]:
             shell_file.seek(0)
             shell_file.write(updated_shell_contents)
             shell_file.truncate()
-        return Success(f"✅ {action} {shell_rc_path}.")
+        return Success(f"✅ {action} {shell_rc_path}")
     except PermissionError:
         return Failure(
             f"💡 I tried adding your Codeflash API key to {shell_rc_path} - but seems like I don't have permissions to do so.{LF}"
