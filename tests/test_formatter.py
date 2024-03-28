@@ -68,3 +68,60 @@ def test_sort_imports_without_formatting():
     )
     os.remove(tmp_path)
     assert new_code == "import os\nimport sys\nimport unittest\n"
+
+
+def test_dedup_and_sort_imports_deduplicates():
+    original_code = b"""
+import os
+import sys
+
+
+def foo():
+    return os.path.join(sys.path[0], 'bar')
+"""
+
+    expected = """
+import os
+import sys
+
+
+def foo():
+    return os.path.join(sys.path[0], 'bar')
+"""
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        tmp.write(original_code)
+        tmp_path = tmp.name
+
+    actual = sort_imports(imports_sort_cmd="isort", should_sort_imports=True, path=tmp_path)
+
+    assert actual == expected
+
+
+def test_dedup_and_sort_imports_sorts_and_deduplicates():
+    original_code = b"""
+import os
+import sys
+import json
+import os
+
+
+def foo():
+    return os.path.join(sys.path[0], 'bar')
+"""
+
+    expected = """
+import json
+import os
+import sys
+
+
+def foo():
+    return os.path.join(sys.path[0], 'bar')
+"""
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        tmp.write(original_code)
+        tmp_path = tmp.name
+
+    actual = sort_imports(imports_sort_cmd="isort", should_sort_imports=True, path=tmp_path)
+
+    assert actual == expected

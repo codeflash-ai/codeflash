@@ -1,6 +1,7 @@
 import logging
 import os.path
 import subprocess
+import isort
 
 
 def format_code(
@@ -43,14 +44,9 @@ def sort_imports(imports_sort_cmd: str, should_sort_imports: bool, path: str) ->
             code = f.read()
         return code
 
-    imports_cmd_list = [chunk for chunk in imports_sort_cmd.split(" ") if chunk != ""]
     if should_sort_imports:
         # Deduplicate and sort imports
-        result = subprocess.run(
-            imports_cmd_list + [path], stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        if result.returncode != 0:
-            logging.error(f"Failed to sort imports with {imports_sort_cmd}")
+        isort.file(path)
 
         with open(path, "r", encoding="utf8") as f:
             new_code = f.read()
