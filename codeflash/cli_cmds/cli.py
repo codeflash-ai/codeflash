@@ -6,9 +6,10 @@ from argparse import Namespace
 import git
 
 from codeflash.api.cfapi import check_github_app_installed_on_repo
-from codeflash.cli_cmds.cmd_init import init_codeflash
+from codeflash.cli_cmds.cmd_init import init_codeflash, apologize_and_exit
 from codeflash.cli_cmds.logging_config import LOGGING_FORMAT
 from codeflash.code_utils import env_utils
+from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.git_utils import (
     get_repo_owner_and_name,
@@ -102,7 +103,7 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
                 "I couldn't find a git repository in the current directory. "
                 "I need a git repository to run --all and open PRs for optimizations. Exiting..."
             )
-            exit(1)
+            apologize_and_exit()
         owner, repo = get_repo_owner_and_name(git_repo)
         try:
             response = check_github_app_installed_on_repo(owner, repo)
@@ -114,12 +115,11 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
         except Exception as e:
             logging.error(
                 f"Could not find the Codeflash GitHub App installed on the repository {owner}/{repo} or the GitHub"
-                f" account linked to your CODEFLASH_API_KEY does not have access to the repository {owner}/{repo}. "
-                "Please install the Codeflash GitHub App on your repository to use --all."
-                " Instructions at https://app.codeflash.ai \n"
-                "Exiting..."
+                f" account linked to your CODEFLASH_API_KEY does not have access to the repository {owner}/{repo}.{LF}"
+                "Please install the Codeflash GitHub App on your repository to use --all. You can install it by going to "
+                f"https://github.com/settings/installations/{LF}"
             )
-            exit(1)
+            apologize_and_exit()
     if not hasattr(args, "all"):
         setattr(args, "all", None)
     elif args.all == "":
