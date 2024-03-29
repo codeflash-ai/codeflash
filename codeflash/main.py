@@ -18,7 +18,7 @@ from codeflash.api.aiservice import optimize_python_code
 from codeflash.cli_cmds.cli import process_cmd_args
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_extractor import get_code
+from codeflash.code_utils.code_extractor import extract_code
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
@@ -53,11 +53,11 @@ from codeflash.telemetry import posthog
 from codeflash.telemetry.posthog import ph
 from codeflash.telemetry.sentry import init_sentry
 from codeflash.verification.equivalence import compare_results
-from codeflash.verification.parse_test_output import (
+from codeflash.verification.parse_test_output import parse_test_results
+from codeflash.verification.test_results import (
+    TestResults,
     TestType,
-    parse_test_results,
 )
-from codeflash.verification.test_results import TestResults
 from codeflash.verification.test_runner import run_tests
 from codeflash.verification.verification_utils import (
     get_test_file_path,
@@ -205,7 +205,7 @@ class Optimizer:
                     pathlib.Path(get_run_tmp_file("test_return_values_0.sqlite")).unlink(
                         missing_ok=True
                     )
-                    code_to_optimize = get_code(function_to_optimize)
+                    code_to_optimize = extract_code(function_to_optimize)
                     if code_to_optimize is None:
                         logging.error("Could not find function to optimize.")
                         continue
@@ -221,6 +221,9 @@ class Optimizer:
                     ) = get_constrained_function_context_and_dependent_functions(
                         function_to_optimize, self.args.project_root, code_to_optimize
                     )
+                    if code_to_optimize_with_dependents is None:
+                        logging.error("Could not find function with dependents to optimize.")
+                        continue
                     preexisting_functions.extend(
                         [fn[0].full_name.split(".")[-1] for fn in dependent_functions]
                     )
