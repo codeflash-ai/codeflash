@@ -1,7 +1,7 @@
 import ast
 import logging
 import os
-from typing import Union
+from typing import Optional, Union
 
 import jedi
 import tiktoken
@@ -211,7 +211,7 @@ def get_constrained_function_context_and_dependent_functions(
     project_root_path: str,
     code_to_optimize: str,
     max_tokens: int = MAX_PROMPT_TOKENS,
-) -> tuple[str, list[tuple[Source, str, str]]]:
+) -> tuple[Optional[str], list[tuple[Source, str, str]]]:
     # TODO: Not just do static analysis, but also find the datatypes of function arguments by running the existing
     #  unittests and inspecting the arguments to resolve the real definitions and dependencies.
     dependent_functions: list[tuple[Source, str, str]] = get_function_variables_definitions(
@@ -234,4 +234,12 @@ def get_constrained_function_context_and_dependent_functions(
         else:
             break
     logging.debug("FINAL OPTIMIZATION CONTEXT TOKENS LENGTH:", context_len)
-    return "\n".join(context_list) + "\n" + code_to_optimize, dependent_functions
+    full_edited_code: str = "\n".join(context_list) + "\n" + code_to_optimize
+    try:
+        compile(full_edited_code, "full_edited_code", "exec")
+    except SyntaxError as e:
+        logging.error(
+            f"get_constrained_function_context_and_dependent_functions - Syntax error in full extracted code: {e}"
+        )
+        return None, dependent_functions
+    return full_edited_code, dependent_functions

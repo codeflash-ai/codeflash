@@ -157,3 +157,13 @@ def get_code_no_skeleton(file_path: str, target_name: str) -> Optional[str]:
         target_code = "".join(lines[target_node.lineno - 1 : target_node.end_lineno])
 
     return target_code
+
+
+def extract_code(function_to_optimize: FunctionToOptimize) -> Optional[str]:
+    edited_code: str = get_code(function_to_optimize)
+    try:
+        compile(edited_code, "edited_code", "exec")
+    except SyntaxError as e:
+        logging.error(f"extract_code - Syntax error in extracted optimization candidate code: {e}")
+        return None
+    return edited_code
