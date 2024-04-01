@@ -87,12 +87,15 @@ def parse_config_file(config_file_path=None):
             config[key] = bool_keys[key]
     for key in path_keys:
         if key in config:
-            config[key] = os.path.join(os.path.dirname(config_file_path), config[key])
+            config[key] = os.path.realpath(
+                os.path.join(os.path.dirname(config_file_path), config[key])
+            )
 
     for key in path_list_keys:
         if key in config:
             config[key] = [
-                os.path.join(os.path.dirname(config_file_path), path) for path in config[key]
+                os.path.realpath(os.path.join(os.path.dirname(config_file_path), path))
+                for path in config[key]
             ]
         else:  # Default to empty list
             config[key] = []
