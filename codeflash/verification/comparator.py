@@ -4,6 +4,8 @@ import logging
 import math
 from typing import Any
 
+import sentry_sdk
+
 try:
     import numpy as np
 
@@ -144,4 +146,5 @@ def comparator(orig: Any, new: Any) -> bool:
         return True
     except RecursionError as e:
         logging.error(f"RecursionError while comparing objects: {e}")
+        sentry_sdk.capture_exception(e)
         return False
