@@ -8,8 +8,10 @@ import time
 from collections import defaultdict
 from typing import Any, Dict, Optional
 
+from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.code_utils.config_parser import parse_config_file
+from codeflash.discovery.functions_to_optimize import filter_functions, FunctionToOptimize
 from codeflash.tracing.replay_test import create_trace_replay_test
 from codeflash.verification.verification_utils import get_test_file_path
 
@@ -41,6 +43,16 @@ class Tracer:
         self.function_count = defaultdict(int)
         self.max_function_count = 30
         self.config, found_config_path = parse_config_file(config_file_path)
+        self.project_root = project_root_from_module_root(
+            self.config["module_root"], found_config_path
+        )
+        # profilers = {
+        #     "call": profile_call,
+        #     "return": profile_return,
+        #     "c_call": profile_c_call,
+        #     "c_return": profile_c_return,
+        #     "c_exception": profile_c_exception,
+        # }
 
         assert (
             "test_framework" in self.config
@@ -94,22 +106,44 @@ class Tracer:
             return None
 
         code = frame.f_code
-        if self.function_count[code.co_name] >= self.max_function_count:
+        function_qualified_name = code.co_filename + ":" + code.co_name
+
+        if function_qualified_name not in self.function_count:
+            # seeing this function for the first time
+            _, filtered_functions_count = filter_functions(
+                modified_functions={
+                    code.co_filename: [
+                        FunctionToOptimize(
+                            function_name=code.co_name, file_path=code.co_filename, parents=[]
+                        )
+                    ]
+                },
+                tests_root=self.config["tests_root"],
+                ignore_paths=self.config["ignore_paths"],
+                project_root=self.project_root,
+                module_root=self.config["module_root"],
+                disable_logs=True,
+            )
+            if filtered_functions_count == 0:
+                # we don't want to trace this function because it cannot be optimized
+                return
+
+        if self.function_count[function_qualified_name] >= self.max_function_count:
             return
-        self.function_count[code.co_name] += 1
+        self.function_count[function_qualified_name] += 1
         if self.functions:
             if code.co_name not in self.functions:
                 return None
 
-        #         # TODO: Also check if this function arguments are unique from the values logged earlier
+        # TODO: Also check if this function arguments are unique from the values logged earlier
         elif not self.flag:
             self.flag = True
             return
-        if code.co_name in self.function_filenames:
-            assert self.function_filenames[code.co_name] == code.co_filename, (
-                f"Function {code.co_name} is defined in multiple files. "
-                f"Can only trace a unique function name at the moment. Aborting..."
-            )
+        # if code.co_name in self.function_filenames:
+        #     assert self.function_filenames[code.co_name] == code.co_filename, (
+        #         f"Function {code.co_name} is defined in multiple files. "
+        #         f"Can only trace a unique function name at the moment. Aborting..."
+        #     )
         else:
             self.function_filenames[code.co_name] = code.co_filename
 
