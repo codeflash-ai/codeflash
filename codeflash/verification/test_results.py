@@ -37,7 +37,7 @@ class InvocationId:
         return f"{self.test_module_path}:{self.test_class_name or ''}.{self.test_function_name}:{self.function_getting_tested}:{self.iteration_id}"
 
     @staticmethod
-    def from_str_id(string_id: str):
+    def from_str_id(string_id: str, iteration_id: Optional[str] = None) -> "InvocationId":
         components = string_id.split(":")
         assert len(components) == 4
         second_components = components[1].split(".")
@@ -52,7 +52,7 @@ class InvocationId:
             test_class_name=test_class_name,
             test_function_name=test_function_name,
             function_getting_tested=components[2],
-            iteration_id=components[3],
+            iteration_id=iteration_id if iteration_id else components[3],
         )
 
 

@@ -37,7 +37,7 @@ def parse_test_return_values_bin(
             if not len_next:
                 return test_results
             len_next = int.from_bytes(len_next, byteorder="big")
-            encoded_invocation_id = file.read(len_next).decode("ascii")
+            encoded_test_name = file.read(len_next).decode("ascii")
             len_next = file.read(8)
             duration = int.from_bytes(len_next, byteorder="big")
             len_next = file.read(4)
@@ -49,13 +49,16 @@ def parse_test_return_values_bin(
             except Exception as e:
                 logging.error(f"Failed to load pickle file. Exception: {e}")
                 return test_results
+            len_next = file.read(4)
+            len_next = int.from_bytes(len_next, byteorder="big")
+            invocation_id = file.read(len_next).decode("ascii")
             # TODO : Remove the fully loaded unpickled object from the test_results.
             #  replace it with a link to the pickle object. Load it only on demand.
             #  The problem is that the unpickled object might be huge. This could cause codeflash to crash
             #  due to out-of-memory. Plus as we fill memory, the benchmarking results will get skewed.
             test_results.add(
                 FunctionTestInvocation(
-                    id=InvocationId.from_str_id(encoded_invocation_id),
+                    id=InvocationId.from_str_id(encoded_test_name, invocation_id),
                     file_name=test_file_path,
                     did_pass=True,
                     runtime=duration,
