@@ -39,7 +39,7 @@ class Tracer:
         self.function_modules: Dict[str, str] = {}
         self.function_filenames: Dict[str, str] = {}
         self.function_count = defaultdict(int)
-        self.max_function_count = 50
+        self.max_function_count = 30
         self.config, found_config_path = parse_config_file(config_file_path)
 
         assert (
@@ -94,23 +94,24 @@ class Tracer:
             return None
 
         code = frame.f_code
+        if self.function_count[code.co_name] >= self.max_function_count:
+            return
+        self.function_count[code.co_name] += 1
         if self.functions:
             if code.co_name not in self.functions:
                 return None
-            if self.function_count[code.co_name] >= self.max_function_count:
-                return
-            self.function_count[code.co_name] += 1
-            if code.co_name in self.function_filenames:
-                assert self.function_filenames[code.co_name] == code.co_filename, (
-                    f"Function {code.co_name} is defined in multiple files. "
-                    f"Can only trace a unique function name at the moment. Aborting..."
-                )
-            else:
-                self.function_filenames[code.co_name] = code.co_filename
+
         #         # TODO: Also check if this function arguments are unique from the values logged earlier
         elif not self.flag:
             self.flag = True
             return
+        if code.co_name in self.function_filenames:
+            assert self.function_filenames[code.co_name] == code.co_filename, (
+                f"Function {code.co_name} is defined in multiple files. "
+                f"Can only trace a unique function name at the moment. Aborting..."
+            )
+        else:
+            self.function_filenames[code.co_name] = code.co_filename
 
         project_root = os.path.realpath(os.path.join(self.config["module_root"], ".."))
         self.function_modules[code.co_name] = module_name_from_file_path(
