@@ -6,13 +6,12 @@ import sqlite3
 import sys
 import time
 from collections import defaultdict
-from typing import Any, Dict, List, Optional
-
-from codeflash.validation.validation_utils import get_test_file_path
+from typing import Any, Dict, Optional
 
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.tracing.replay_test import create_trace_replay_test
+from codeflash.verification.verification_utils import get_test_file_path
 
 
 class Tracer:
@@ -24,10 +23,12 @@ class Tracer:
     def __init__(
         self,
         output: str = "script.trace",
-        functions: List[str] = [],
+        functions=None,
         disable: bool = False,
         config_file_path: Optional[str] = None,
     ) -> None:
+        if functions is None:
+            functions = []
         self.disable = disable
         self.con = None
         self.flag = (
@@ -39,7 +40,7 @@ class Tracer:
         self.function_filenames: Dict[str, str] = {}
         self.function_count = defaultdict(int)
         self.max_function_count = 50
-        self.config = parse_config_file(config_file_path)
+        self.config, found_config_path = parse_config_file(config_file_path)
 
         assert (
             "test_framework" in self.config

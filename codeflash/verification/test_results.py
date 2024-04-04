@@ -163,7 +163,8 @@ class TestResults:
             if other_test_result is None:
                 return False
 
-            sys.setrecursionlimit(5000)
+            if original_recursion_limit < 5000:
+                sys.setrecursionlimit(5000)
             if (
                 test_result.file_name != other_test_result.file_name
                 or test_result.did_pass != other_test_result.did_pass

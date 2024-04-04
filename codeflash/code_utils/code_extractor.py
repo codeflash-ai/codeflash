@@ -1,23 +1,27 @@
+from __future__ import annotations
+
 import ast
 import logging
 from collections import deque
-from typing import Optional, Union
+from typing import Optional
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 
-def get_code(function_to_optimize: FunctionToOptimize) -> Optional[str]:
-    """Returns the code for a class or function in a file."""
-    file_path: str = function_to_optimize.file_path
-    class_skeleton: list[tuple[int, int]] = []
+def get_code(functions_to_optimize: list[FunctionToOptimize]) -> Optional[str]:
+    """Returns the code for a class or functions in a file."""
+    file_path: str = functions_to_optimize[0].file_path
+    class_skeleton: set[tuple[int, int]] = set()
+    target_code: str = ""
 
     def find_target(
-        node_list: list[ast.stmt], name_parts: Union[tuple[str, str], tuple[str]]
+        node_list: list[ast.stmt],
+        name_parts: tuple[str, str] | tuple[str],
     ) -> Optional[ast.AST]:
         target: Optional[
-            Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Assign, ast.AnnAssign]
+            ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Assign | ast.AnnAssign
         ] = None
-        node: Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Assign, ast.AnnAssign]
+        node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Assign | ast.AnnAssign
 
         for node in node_list:
             if (
@@ -48,12 +52,12 @@ def get_code(function_to_optimize: FunctionToOptimize) -> Optional[str]:
             return target
 
         if isinstance(target, ast.ClassDef):
-            class_skeleton.append((target.lineno, target.lineno))
+            class_skeleton.add((target.lineno, target.lineno))
             cbody = target.body
             if isinstance(cbody[0], ast.expr):  # Is a docstring
-                class_skeleton.append((cbody[0].lineno, cbody[0].end_lineno))
+                class_skeleton.add((cbody[0].lineno, cbody[0].end_lineno))
                 cbody = cbody[1:]
-                cnode: Union[ast.FunctionDef, ast.AsyncFunctionDef]
+                cnode: ast.FunctionDef | ast.AsyncFunctionDef
             for cnode in cbody:
                 # Collect all dunder methods.
                 cnode_name: str
@@ -64,70 +68,72 @@ def get_code(function_to_optimize: FunctionToOptimize) -> Optional[str]:
                     and cnode_name.startswith("__")
                     and cnode_name.endswith("__")
                 ):
-                    class_skeleton.append((cnode.lineno, cnode.end_lineno))
+                    class_skeleton.add((cnode.lineno, cnode.end_lineno))
 
             return find_target(target.body, name_parts[1:])
 
         return None
 
-    with open(file_path, "r", encoding="utf8") as file:
+    with open(file_path, encoding="utf8") as file:
         source_code = file.read()
     try:
         module_node = ast.parse(source_code)
     except SyntaxError as e:
-        logging.error(f"get_code - Syntax error in code: {e}")
+        logging.exception(f"get_code - Syntax error in code: {e}")
         return None
-    if len(function_to_optimize.parents) == 1:
-        if function_to_optimize.parents[0].type == "ClassDef":
-            qualified_name_parts: Union[tuple[str, str], tuple[str]] = (
-                function_to_optimize.parents[0].name,
-                function_to_optimize.function_name,
-            )
+    # Get the source code lines for the target node
+    lines = source_code.splitlines(keepends=True)
+    if len(functions_to_optimize[0].parents) == 1:
+        if (
+            functions_to_optimize[0].parents[0].type == "ClassDef"
+        ):  # All functions_to_optimize functions are methods of the same class.
+            qualified_name_parts_list: list[tuple[str, str] | tuple[str]] = [
+                (fto.parents[0].name, fto.function_name) for fto in functions_to_optimize
+            ]
+
         else:
             logging.error(
-                f"Error: get_code does not support nesting function in functions: {function_to_optimize.parents}"
+                f"Error: get_code does not support nesting function in functions: {functions_to_optimize[0].parents}",
             )
             return None
-    elif len(function_to_optimize.parents) == 0:
-        qualified_name_parts = (function_to_optimize.function_name,)
+    elif len(functions_to_optimize[0].parents) == 0:
+        qualified_name_parts_list = [(functions_to_optimize[0].function_name,)]
     else:
         logging.error(
             "Error: get_code does not support more than one level of nesting for now. "
-            f"Parents: {function_to_optimize.parents}"
+            f"Parents: {functions_to_optimize[0].parents}",
         )
         return None
-    target_node = find_target(module_node.body, qualified_name_parts)
-    if target_node is None:
-        return None
+    for qualified_name_parts in qualified_name_parts_list:
+        target_node: Optional[ast.AST] = find_target(module_node.body, qualified_name_parts)
+        if target_node is None:
+            continue
 
-    # Get the source code lines for the target node
-    lines = source_code.splitlines(keepends=True)
+        if (
+            isinstance(target_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            and target_node.decorator_list
+        ):
+            target_code += "".join(
+                lines[target_node.decorator_list[0].lineno - 1 : target_node.end_lineno],
+            )
+        else:
+            target_code += "".join(lines[target_node.lineno - 1 : target_node.end_lineno])
+    class_list: list[tuple[int, int]] = sorted(list(class_skeleton))
     class_code = "".join(
-        ["".join(lines[s_lineno - 1 : e_lineno]) for (s_lineno, e_lineno) in class_skeleton]
+        ["".join(lines[s_lineno - 1 : e_lineno]) for (s_lineno, e_lineno) in class_list],
     )
-    if (
-        isinstance(target_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-        and target_node.decorator_list
-    ):
-        target_code = "".join(
-            lines[target_node.decorator_list[0].lineno - 1 : target_node.end_lineno]
-        )
-    else:
-        target_code = "".join(lines[target_node.lineno - 1 : target_node.end_lineno])
-
     return class_code + target_code
 
 
 def get_code_no_skeleton(file_path: str, target_name: str) -> Optional[str]:
     """Returns the code for a function in a file. Irrespective of class skeleton."""
-
-    with open(file_path, "r", encoding="utf8") as file:
+    with open(file_path, encoding="utf8") as file:
         source_code = file.read()
 
     try:
         module_node = ast.parse(source_code)
     except SyntaxError as e:
-        logging.error(f"get_code_no_skeleton - Syntax error in code: {e}")
+        logging.exception(f"get_code_no_skeleton - Syntax error in code: {e}")
         return None
 
     name_parts = target_name.split(".")
@@ -151,9 +157,23 @@ def get_code_no_skeleton(file_path: str, target_name: str) -> Optional[str]:
     lines = source_code.splitlines(keepends=True)
     if hasattr(target_node, "decorator_list") and target_node.decorator_list:
         target_code = "".join(
-            lines[target_node.decorator_list[0].lineno - 1 : target_node.end_lineno]
+            lines[target_node.decorator_list[0].lineno - 1 : target_node.end_lineno],
         )
     else:
         target_code = "".join(lines[target_node.lineno - 1 : target_node.end_lineno])
 
     return target_code
+
+
+def extract_code(functions_to_optimize: list[FunctionToOptimize]) -> Optional[str]:
+    edited_code: Optional[str] = get_code(functions_to_optimize)
+    if edited_code is None:
+        return None
+    try:
+        compile(edited_code, "edited_code", "exec")
+    except SyntaxError as e:
+        logging.exception(
+            f"extract_code - Syntax error in extracted optimization candidate code: {e}",
+        )
+        return None
+    return edited_code

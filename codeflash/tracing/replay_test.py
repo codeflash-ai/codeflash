@@ -61,6 +61,7 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
 from codeflash.validation.comparators import comparator
 """
 
+    # TODO: Module can have "-" character if the module-root is ".". Need to handle that case
     function_imports = [
         f"from {module} import {function_name} as {get_function_alias(module, function_name)}"
         for module, function_name in functions
@@ -124,6 +125,6 @@ def _create_pytest_trace_replay_test(trace_file: str, functions: List[Tuple[str,
             ),
             "    ",
         )
-        test_template += f"def test_{function_name_alias}():\n{formatted_test_body}\n"
+        test_template += f"\ndef test_{function_name_alias}():\n{formatted_test_body}\n"
 
     return test_template
