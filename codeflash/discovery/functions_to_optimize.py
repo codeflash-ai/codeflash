@@ -227,6 +227,7 @@ def filter_functions(
     ignore_paths: List[str],
     project_root: str,
     module_root: str,
+    disable_logs: bool = False,
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
     # Remove any function that we don't want to optimize
 
@@ -272,17 +273,19 @@ def filter_functions(
             continue
         filtered_modified_functions[file_path] = functions
         functions_count += len(functions)
-    log_info = {
-        f"{test_functions_removed_count} test function{'s' if test_functions_removed_count != 1 else ''}": test_functions_removed_count,
-        f"{site_packages_removed_count} site-package function{'s' if site_packages_removed_count != 1 else ''}": site_packages_removed_count,
-        f"{malformed_paths_count} non-importable file path{'s' if malformed_paths_count != 1 else ''}": malformed_paths_count,
-        f"{non_modules_removed_count} function{'s' if non_modules_removed_count != 1 else ''} outside module-root": non_modules_removed_count,
-        f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths": ignore_paths_removed_count,
-        f"{submodule_ignored_paths_count} file{'s' if submodule_ignored_paths_count != 1 else ''} from ignored submodules": submodule_ignored_paths_count,
-    }
-    log_string: str
-    if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
-        logging.info(f"Ignoring:\n{log_string}")
+    if not disable_logs:
+        log_info = {
+            f"{test_functions_removed_count} test function{'s' if test_functions_removed_count != 1 else ''}": test_functions_removed_count,
+            f"{site_packages_removed_count} site-package function{'s' if site_packages_removed_count != 1 else ''}": site_packages_removed_count,
+            f"{malformed_paths_count} non-importable file path{'s' if malformed_paths_count != 1 else ''}": malformed_paths_count,
+            f"{non_modules_removed_count} function{'s' if non_modules_removed_count != 1 else ''} outside module-root": non_modules_removed_count,
+            f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths": ignore_paths_removed_count,
+            f"{submodule_ignored_paths_count} file{'s' if submodule_ignored_paths_count != 1 else ''} from ignored submodules": submodule_ignored_paths_count,
+        }
+        log_string: str
+        if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
+            logging.info(f"Ignoring:\n{log_string}")
+
     return {k: v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 
