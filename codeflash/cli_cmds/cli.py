@@ -96,6 +96,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
 
 def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
     if hasattr(args, "all"):
+        # Ensure that the user can actually open PRs on the repo.
         try:
             git_repo = git.Repo(search_parent_directories=True)
         except git.exc.InvalidGitRepositoryError:
