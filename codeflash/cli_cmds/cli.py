@@ -122,6 +122,7 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
     if not hasattr(args, "all"):
         setattr(args, "all", None)
     elif args.all == "":
+        # The default behavior of --all is to optimize everything in args.module_root
         args.all = args.module_root
     else:
         args.all = os.path.realpath(args.all)
