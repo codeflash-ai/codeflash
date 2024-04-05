@@ -58,7 +58,7 @@ def create_trace_replay_test(
     imports = f"""import pickle
 import {test_framework}
 from codeflash.tracing.replay_test import get_next_arg_and_return
-from codeflash.validation.comparators import comparator
+from codeflash.verification.comparator import comparator
 """
 
     # TODO: Module can have "-" character if the module-root is ".". Need to handle that case
