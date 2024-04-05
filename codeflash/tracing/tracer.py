@@ -46,7 +46,7 @@ class Tracer:
         self.project_root = project_root_from_module_root(
             self.config["module_root"], found_config_path
         )
-        self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>"}
+        self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>"}
         self.file_being_called_from: str = str(
             os.path.basename(sys._getframe().f_back.f_code.co_filename).replace(".", "_")
         )
@@ -99,7 +99,7 @@ class Tracer:
         else:
             function_path = self.file_being_called_from
         test_file_path = get_test_file_path(
-            self.config["tests_root"], function_path, test_type="replay"
+            test_dir=self.config["tests_root"], function_name=function_path, test_type="replay"
         )
         with open(test_file_path, "w", encoding="utf8") as file:
             file.write(replay_test)
@@ -110,7 +110,7 @@ class Tracer:
 
     def trace_callback(self, frame: Any, event: str, arg: Any) -> None:
         if event not in ["call", "return"]:
-            return None
+            return
 
         code = frame.f_code
 

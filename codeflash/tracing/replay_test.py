@@ -51,7 +51,10 @@ def get_function_alias(module: str, function_name: str) -> str:
 
 
 def create_trace_replay_test(
-    trace_file: str, functions: List[Tuple[str, str]], test_framework: str = "pytest"
+    trace_file: str,
+    functions: List[Tuple[str, str]],
+    test_framework: str = "pytest",
+    max_run_count=30,
 ) -> str:
     assert test_framework in ["pytest", "unittest"]
 
@@ -79,7 +82,7 @@ from codeflash.verification.comparator import comparator
 def _create_unittest_trace_replay_test(trace_file: str, functions: List[Tuple[str, str]]) -> str:
     test_function_body = textwrap.dedent(
         """\
-        for arg_val_pkl, return_val_pkl in get_next_arg_and_return('{trace_file}', '{orig_function_name}', 3):
+        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(r'{trace_file}', '{orig_function_name}', 3):
             args = pickle.loads(arg_val_pkl)
             return_val = pickle.loads(return_val_pkl)
             ret = {function_name}(**args)
@@ -106,7 +109,7 @@ def _create_unittest_trace_replay_test(trace_file: str, functions: List[Tuple[st
 def _create_pytest_trace_replay_test(trace_file: str, functions: List[Tuple[str, str]]) -> str:
     test_function_body = textwrap.dedent(
         """\
-        for arg_val_pkl, return_val_pkl in get_next_arg_and_return('{trace_file}', '{orig_function_name}', 3):
+        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(r'{trace_file}', '{orig_function_name}', 3):
             args = pickle.loads(arg_val_pkl)
             return_val = pickle.loads(return_val_pkl)
             ret = {function_name}(**args)
