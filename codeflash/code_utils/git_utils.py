@@ -71,11 +71,8 @@ def get_remote_url(repo: Optional[Repo] = None) -> str:
 
 
 def get_repo_owner_and_name(repo: Optional[Repo] = None) -> tuple[str, str]:
-    remote_url = (
-        get_remote_url(repo).rstrip(".git")
-        if get_remote_url(repo).endswith(".git")
-        else get_remote_url(repo)
-    )
+    remote_url = get_remote_url(repo)  # call only once
+    remote_url = remote_url.rstrip(".git") if remote_url.endswith(".git") else remote_url
     split_url = remote_url.split("/")
     repo_owner_with_github, repo_name = split_url[-2], split_url[-1]
     repo_owner = (
