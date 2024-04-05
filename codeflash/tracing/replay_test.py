@@ -4,16 +4,18 @@ import textwrap
 from collections import defaultdict
 from typing import Any, Dict, Generator, List, Tuple
 
+from codeflash.tracing.tracing_utils import FunctionModules
+
 
 def get_next_arg_and_return(
-    trace_file: str, function_name: str, num_to_get: int = 3
+    trace_file: str, function_name: str, file_name: str, num_to_get: int = 3
 ) -> Generator[Tuple[Any, Any], None, None]:
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
     limit = num_to_get * 2 + 100
     data = cur.execute(
-        "SELECT * FROM events WHERE function = ? ORDER BY time_ns ASC LIMIT ?",
-        (function_name, limit),
+        "SELECT * FROM events WHERE function = ? AND filename = ? ORDER BY time_ns ASC LIMIT ?",
+        (function_name, file_name, limit),
     ).fetchall()
 
     counts = 0
@@ -52,7 +54,7 @@ def get_function_alias(module: str, function_name: str) -> str:
 
 def create_trace_replay_test(
     trace_file: str,
-    functions: List[Tuple[str, str]],
+    functions: List[FunctionModules],
     test_framework: str = "pytest",
     max_run_count=30,
 ) -> str:
@@ -66,23 +68,29 @@ from codeflash.verification.comparator import comparator
 
     # TODO: Module can have "-" character if the module-root is ".". Need to handle that case
     function_imports = [
-        f"from {module} import {function_name} as {get_function_alias(module, function_name)}"
-        for module, function_name in functions
+        f"from {function.module_name} import {function.function_name} as {get_function_alias(function.module_name, function.function_name)}"
+        for function in functions
     ]
     imports += "\n".join(function_imports)
 
     if test_framework == "unittest":
-        return imports + _create_unittest_trace_replay_test(trace_file, functions)
+        return imports + _create_unittest_trace_replay_test(
+            trace_file, functions, max_run_count=max_run_count
+        )
     elif test_framework == "pytest":
-        return imports + _create_pytest_trace_replay_test(trace_file, functions)
+        return imports + _create_pytest_trace_replay_test(
+            trace_file, functions, max_run_count=max_run_count
+        )
     else:
         raise ValueError("Invalid test framework")
 
 
-def _create_unittest_trace_replay_test(trace_file: str, functions: List[Tuple[str, str]]) -> str:
+def _create_unittest_trace_replay_test(
+    trace_file: str, functions: List[FunctionModules], max_run_count
+) -> str:
     test_function_body = textwrap.dedent(
         """\
-        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(r'{trace_file}', '{orig_function_name}', 3):
+        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(r'{trace_file}', '{orig_function_name}', '{file_name}', {max_run_count}):
             args = pickle.loads(arg_val_pkl)
             return_val = pickle.loads(return_val_pkl)
             ret = {function_name}(**args)
@@ -91,13 +99,15 @@ def _create_unittest_trace_replay_test(trace_file: str, functions: List[Tuple[st
     )
 
     test_template = "\nclass TestTracedFunctions(unittest.TestCase):\n"
-    for module, function_name in functions:
-        function_name_alias = get_function_alias(module, function_name)
+    for func in functions:
+        function_name_alias = get_function_alias(func.module_name, func.function_name)
         formatted_test_body = textwrap.indent(
             test_function_body.format(
                 trace_file=trace_file,
                 function_name=function_name_alias,
-                orig_function_name=function_name,
+                file_name=func.file_name,
+                orig_function_name=func.function_name,
+                max_run_count=max_run_count,
             ),
             "        ",
         )
@@ -106,10 +116,12 @@ def _create_unittest_trace_replay_test(trace_file: str, functions: List[Tuple[st
     return test_template
 
 
-def _create_pytest_trace_replay_test(trace_file: str, functions: List[Tuple[str, str]]) -> str:
+def _create_pytest_trace_replay_test(
+    trace_file: str, functions: List[FunctionModules], max_run_count
+) -> str:
     test_function_body = textwrap.dedent(
         """\
-        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(r'{trace_file}', '{orig_function_name}', 3):
+        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(r'{trace_file}', '{orig_function_name}', '{file_name}', {max_run_count}):
             args = pickle.loads(arg_val_pkl)
             return_val = pickle.loads(return_val_pkl)
             ret = {function_name}(**args)
@@ -118,13 +130,15 @@ def _create_pytest_trace_replay_test(trace_file: str, functions: List[Tuple[str,
     )
 
     test_template = ""
-    for module, function_name in functions:
-        function_name_alias = get_function_alias(module, function_name)
+    for func in functions:
+        function_name_alias = get_function_alias(func.module_name, func.function_name)
         formatted_test_body = textwrap.indent(
             test_function_body.format(
                 trace_file=trace_file,
                 function_name=function_name_alias,
-                orig_function_name=function_name,
+                orig_function_name=func.function_name,
+                file_name=func.file_name,
+                max_run_count=max_run_count,
             ),
             "    ",
         )

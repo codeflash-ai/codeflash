@@ -6,13 +6,14 @@ import sqlite3
 import sys
 import time
 from collections import defaultdict
-from typing import Any, Dict, Optional
+from typing import Any, Optional, List
 
 from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.discovery.functions_to_optimize import filter_functions, FunctionToOptimize
 from codeflash.tracing.replay_test import create_trace_replay_test
+from codeflash.tracing.tracing_utils import FunctionModules
 from codeflash.verification.verification_utils import get_test_file_path
 
 
@@ -38,8 +39,7 @@ class Tracer:
         )
         self.output_file = os.path.abspath(output)
         self.functions = functions
-        self.function_modules: Dict[str, str] = {}
-        self.function_filenames: Dict[str, str] = {}
+        self.function_modules: List[FunctionModules] = []
         self.function_count = defaultdict(int)
         self.max_function_count = 30
         self.config, found_config_path = parse_config_file(config_file_path)
@@ -48,15 +48,10 @@ class Tracer:
         )
         self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>"}
         self.file_being_called_from: str = str(
-            os.path.basename(sys._getframe().f_back.f_code.co_filename).replace(".", "_")
+            os.path.basename(os.path.realpath(sys._getframe().f_back.f_code.co_filename)).replace(
+                ".", "_"
+            )
         )
-        # profilers = {
-        #     "call": profile_call,
-        #     "return": profile_return,
-        #     "c_call": profile_c_call,
-        #     "c_return": profile_c_return,
-        #     "c_exception": profile_c_exception,
-        # }
 
         assert (
             "test_framework" in self.config
@@ -86,13 +81,11 @@ class Tracer:
 
         self.con.close()
 
-        module_function = [
-            (module, function_name) for function_name, module in self.function_modules.items()
-        ]
         replay_test = create_trace_replay_test(
             trace_file=self.output_file,
-            functions=module_function,
+            functions=self.function_modules,
             test_framework=self.config["test_framework"],
+            max_run_count=self.max_function_count,
         )
         if self.functions:
             function_path = "_".join(self.functions)
@@ -118,17 +111,18 @@ class Tracer:
             return
         if code.co_name == "__exit__" and code.co_filename == os.path.realpath(__file__):
             return
-        print(code.co_name, code.co_filename)
+        file_name = os.path.realpath(code.co_filename)
+        print(code.co_name, file_name)
 
-        function_qualified_name = code.co_filename + ":" + code.co_name
+        function_qualified_name = file_name + ":" + code.co_name
 
         if function_qualified_name not in self.function_count:
             # seeing this function for the first time
             _, non_filtered_functions_count = filter_functions(
                 modified_functions={
-                    code.co_filename: [
+                    file_name: [
                         FunctionToOptimize(
-                            function_name=code.co_name, file_path=code.co_filename, parents=[]
+                            function_name=code.co_name, file_path=file_name, parents=[]
                         )
                     ]
                 },
@@ -141,6 +135,15 @@ class Tracer:
             if non_filtered_functions_count == 0:
                 # we don't want to trace this function because it cannot be optimized
                 return
+            self.function_modules.append(
+                FunctionModules(
+                    function_name=code.co_name,
+                    file_name=file_name,
+                    module_name=module_name_from_file_path(
+                        file_name, project_root=self.project_root
+                    ),
+                )
+            )
 
         if self.function_count[function_qualified_name] >= self.max_function_count:
             return
@@ -153,13 +156,7 @@ class Tracer:
         elif not self.flag:
             self.flag = True
             return
-        else:
-            self.function_filenames[code.co_name] = code.co_filename
 
-        project_root = os.path.realpath(os.path.join(self.config["module_root"], ".."))
-        self.function_modules[code.co_name] = module_name_from_file_path(
-            code.co_filename, project_root=project_root
-        )
         cur = self.con.cursor()
 
         t_ns = time.perf_counter_ns()
@@ -173,7 +170,7 @@ class Tracer:
             (
                 event,
                 code.co_name,
-                code.co_filename,
+                file_name,
                 frame.f_lineno,
                 frame.f_back.__hash__(),
                 t_ns,
