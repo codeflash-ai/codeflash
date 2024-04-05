@@ -46,6 +46,10 @@ class Tracer:
         self.project_root = project_root_from_module_root(
             self.config["module_root"], found_config_path
         )
+        self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>"}
+        self.file_being_called_from: str = str(
+            os.path.basename(sys._getframe().f_back.f_code.co_filename).replace(".", "_")
+        )
         # profilers = {
         #     "call": profile_call,
         #     "return": profile_return,
@@ -90,7 +94,10 @@ class Tracer:
             functions=module_function,
             test_framework=self.config["test_framework"],
         )
-        function_path = "_".join([func for _, func in module_function])
+        if self.functions:
+            function_path = "_".join(self.functions)
+        else:
+            function_path = self.file_being_called_from
         test_file_path = get_test_file_path(
             self.config["tests_root"], function_path, test_type="replay"
         )
@@ -107,7 +114,9 @@ class Tracer:
 
         code = frame.f_code
 
-        if code.co_name in {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>"}:
+        if code.co_name in self.ignored_functions:
+            return
+        if code.co_name == "__exit__" and code.co_filename == os.path.realpath(__file__):
             return
         print(code.co_name, code.co_filename)
 

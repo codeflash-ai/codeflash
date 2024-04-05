@@ -3,6 +3,7 @@ import logging
 import os
 import random
 from _ast import ClassDef, FunctionDef, AsyncFunctionDef
+from functools import lru_cache
 from typing import Dict, Optional, List, Tuple, Union
 
 import git
@@ -215,11 +216,16 @@ def is_git_repo(file_path: str) -> bool:
         return False
 
 
-def ignored_submodule_paths(git_repo: git.Repo) -> List[str]:
-    return [
-        os.path.realpath(os.path.join(git_repo.working_tree_dir, submodule.path))
-        for submodule in git_repo.submodules
-    ]
+@lru_cache(maxsize=None)
+def ignored_submodule_paths(module_root) -> List[str]:
+    if is_git_repo(module_root):
+        git_repo = git.Repo(module_root, search_parent_directories=True)
+        return [
+            os.path.realpath(os.path.join(git_repo.working_tree_dir, submodule.path))
+            for submodule in git_repo.submodules
+        ]
+    else:
+        return []
 
 
 def filter_functions(
@@ -233,15 +239,7 @@ def filter_functions(
     # Remove any function that we don't want to optimize
 
     # Ignore files with submodule path, cache the submodule paths
-    if not hasattr(filter_functions, "submodule_paths"):
-        if is_git_repo(module_root):
-            filter_functions.submodule_paths = ignored_submodule_paths(
-                git.Repo(module_root, search_parent_directories=True)
-            )
-
-        else:
-            filter_functions.submodule_paths = []
-    submodule_paths = filter_functions.submodule_paths
+    submodule_paths = ignored_submodule_paths(module_root)
 
     filtered_modified_functions: Dict[str, List[FunctionToOptimize]] = {}
     functions_count: int = 0
