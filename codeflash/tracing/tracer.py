@@ -106,11 +106,16 @@ class Tracer:
             return None
 
         code = frame.f_code
+
+        if code.co_name in {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>"}:
+            return
+        print(code.co_name, code.co_filename)
+
         function_qualified_name = code.co_filename + ":" + code.co_name
 
         if function_qualified_name not in self.function_count:
             # seeing this function for the first time
-            _, filtered_functions_count = filter_functions(
+            _, non_filtered_functions_count = filter_functions(
                 modified_functions={
                     code.co_filename: [
                         FunctionToOptimize(
@@ -124,7 +129,7 @@ class Tracer:
                 module_root=self.config["module_root"],
                 disable_logs=True,
             )
-            if filtered_functions_count == 0:
+            if non_filtered_functions_count == 0:
                 # we don't want to trace this function because it cannot be optimized
                 return
 
@@ -139,11 +144,6 @@ class Tracer:
         elif not self.flag:
             self.flag = True
             return
-        # if code.co_name in self.function_filenames:
-        #     assert self.function_filenames[code.co_name] == code.co_filename, (
-        #         f"Function {code.co_name} is defined in multiple files. "
-        #         f"Can only trace a unique function name at the moment. Aborting..."
-        #     )
         else:
             self.function_filenames[code.co_name] = code.co_filename
 

@@ -232,12 +232,17 @@ def filter_functions(
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
     # Remove any function that we don't want to optimize
 
-    # Ignore files with submodule path
-    submodule_paths = []
-    if is_git_repo(module_root):
-        submodule_paths = ignored_submodule_paths(
-            git.Repo(module_root, search_parent_directories=True)
-        )
+    # Ignore files with submodule path, cache the submodule paths
+    if not hasattr(filter_functions, "submodule_paths"):
+        if is_git_repo(module_root):
+            filter_functions.submodule_paths = ignored_submodule_paths(
+                git.Repo(module_root, search_parent_directories=True)
+            )
+
+        else:
+            filter_functions.submodule_paths = []
+    submodule_paths = filter_functions.submodule_paths
+
     filtered_modified_functions: Dict[str, List[FunctionToOptimize]] = {}
     functions_count: int = 0
     test_functions_removed_count: int = 0
