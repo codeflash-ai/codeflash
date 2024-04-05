@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from enum import Enum
 from typing import Optional, Iterator, List
 
@@ -156,10 +157,14 @@ class TestResults:
             return False
         if len(self) != len(other):
             return False
+        original_recursion_limit = sys.getrecursionlimit()
         for test_result in self:
             other_test_result = other.get_by_id(test_result.id)
             if other_test_result is None:
                 return False
+
+            if original_recursion_limit < 5000:
+                sys.setrecursionlimit(5000)
             if (
                 test_result.file_name != other_test_result.file_name
                 or test_result.did_pass != other_test_result.did_pass
@@ -168,5 +173,7 @@ class TestResults:
                 or test_result.test_type != other_test_result.test_type
                 or not comparator(test_result.return_value, other_test_result.return_value)
             ):
+                sys.setrecursionlimit(original_recursion_limit)
                 return False
+        sys.setrecursionlimit(original_recursion_limit)
         return True

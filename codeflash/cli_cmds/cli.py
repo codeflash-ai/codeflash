@@ -48,6 +48,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
         "pytest_cmd",
         "formatter_cmd",
         "disable_telemetry",
+        "imports_sort_cmd",
     ]
     for key in supported_keys:
         if key in pyproject_config:
@@ -73,10 +74,13 @@ def process_cmd_args(args: Namespace) -> Namespace:
         "Exiting..."
     )
     if hasattr(args, "ignore_paths") and args.ignore_paths is not None:
+        normalized_ignore_paths = []
         for path in args.ignore_paths:
             assert os.path.exists(
                 path
             ), f"ignore-paths config must be a valid path. Path {path} does not exist"
+            normalized_ignore_paths.append(os.path.realpath(path))
+        args.ignore_paths = normalized_ignore_paths
     # Project root path is one level above the specified directory, because that's where the module can be imported from
     args.module_root = os.path.realpath(args.module_root)
     # If module-root is "." then all imports are relatives to it.

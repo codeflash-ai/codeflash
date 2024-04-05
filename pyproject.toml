@@ -34,6 +34,7 @@ inquirer = ">=3.0.0"
 sentry-sdk = "^1.40.6"
 parameterized = ">=0.9.0"
 returns = "^0.22.0"
+isort = "5.13.2"
 
 [tool.poetry.group.dev]
 optional = true
@@ -49,32 +50,31 @@ script = "codeflash/update_license_version.py"
 [tool.poetry.scripts]
 codeflash = "codeflash.main:main"
 
-
 [tool.mypy]
-disallow_any_decorated = true
-disallow_any_explicit = true
-disallow_any_expr = true
-disallow_any_unimported = true
-disallow_subclassing_any = true
 pretty = true
 show_absolute_path = true
 show_column_numbers = true
 show_error_context = true
 strict = true
-verbosity = 0
 warn_unreachable = true
 plugins = [
     "pydantic.mypy"
 ]
+
+[[tool.mypy.overrides]]
+module = [
+    "jedi",
+    "jedi.api.classes"
+]
+ignore_missing_imports = true
 
 [tool.pydantic-mypy]
 init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
 
-[tool.black]
-line-length = 100
-target-version = ['py312']
+[tool.ruff.lint]
+select = ["ALL"]
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true
@@ -86,6 +86,17 @@ classmethod-decorators = [
     # Allow Pydantic's `@validator` decorator to trigger class method treatment.
     "pydantic.validator",
 ]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.format]
+docstring-code-format = true
+
+
+[tool.black]
+line-length = 100
+target-version = ['py312']
 
 [tool.poetry-dynamic-versioning]
 enable = true
@@ -114,4 +125,3 @@ ignore-paths = []
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.2.0,<2.0.0"]
 build-backend = "poetry_dynamic_versioning.backend"
-

@@ -427,6 +427,9 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         apologize_and_exit()
 
     codeflash_section = tomlkit.table()
+    codeflash_section.add(
+        tomlkit.comment("All paths are relative to this pyproject.toml's directory.")
+    )
     codeflash_section["module-root"] = setup_info.module_root
     codeflash_section["tests-root"] = setup_info.tests_root
     codeflash_section["test-framework"] = setup_info.test_framework

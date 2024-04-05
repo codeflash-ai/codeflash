@@ -68,7 +68,7 @@ def test_function_context_includes_type_annotation_dataclass():
 def test_function_context_custom_datatype():
     project_path = pathlib.Path(__file__).parent.parent.resolve() / "code_to_optimize"
     file_path = project_path / "math_utils.py"
-    code = get_code(FunctionToOptimize("cosine_similarity", str(file_path), []))
+    code = get_code([FunctionToOptimize("cosine_similarity", str(file_path), [])])
     assert code is not None
     a, dependent_functions = get_constrained_function_context_and_dependent_functions(
         FunctionToOptimize("cosine_similarity", str(file_path), []),
