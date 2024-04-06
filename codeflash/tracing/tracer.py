@@ -67,7 +67,7 @@ class Tracer:
         cur = self.con.cursor()
         # TODO: Check out if we need to export the function test name as well
         cur.execute(
-            "CREATE TABLE events(type TEXT, function TEXT, filename TEXT, line_number INTEGER, "
+            "CREATE TABLE events(type TEXT, function TEXT, classname TEXT, filename TEXT, line_number INTEGER, "
             "last_frame_address INTEGER, time_ns INTEGER, arg BLOB, locals BLOB)"
         )
         sys.setprofile(self.trace_callback)
@@ -106,13 +106,16 @@ class Tracer:
             return
 
         code = frame.f_code
+        # TODO : It currently doesn't log the last return call from the first function
+        print(code.co_name, code.co_filename)
 
         if code.co_name in self.ignored_functions:
             return
         if code.co_name == "__exit__" and code.co_filename == os.path.realpath(__file__):
             return
         file_name = os.path.realpath(code.co_filename)
-        print(code.co_name, file_name)
+        # print(code.co_name, file_name)
+        # print(arg)
 
         function_qualified_name = file_name + ":" + code.co_name
 
@@ -147,7 +150,8 @@ class Tracer:
 
         if self.function_count[function_qualified_name] >= self.max_function_count:
             return
-        self.function_count[function_qualified_name] += 1
+        if event == "return":
+            self.function_count[function_qualified_name] += 1
         if self.functions:
             if code.co_name not in self.functions:
                 return None
@@ -156,6 +160,13 @@ class Tracer:
         elif not self.flag:
             self.flag = True
             return
+        class_name = None
+        if (
+            "self" in frame.f_locals
+            and hasattr(frame.f_locals["self"], "__class__")
+            and hasattr(frame.f_locals["self"].__class__, "__name__")
+        ):
+            class_name = frame.f_locals["self"].__class__.__name__
 
         cur = self.con.cursor()
 
@@ -166,10 +177,11 @@ class Tracer:
         except (TypeError, pickle.PicklingError, AttributeError):
             return
         cur.execute(
-            "INSERT INTO events VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO events VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 event,
                 code.co_name,
+                class_name,
                 file_name,
                 frame.f_lineno,
                 frame.f_back.__hash__(),
