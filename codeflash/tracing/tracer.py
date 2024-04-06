@@ -8,6 +8,8 @@ import time
 from collections import defaultdict
 from typing import Any, Optional, List
 
+import isort
+
 from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.code_utils.config_parser import parse_config_file
@@ -94,6 +96,7 @@ class Tracer:
         test_file_path = get_test_file_path(
             test_dir=self.config["tests_root"], function_name=function_path, test_type="replay"
         )
+        replay_test = isort.code(replay_test)
         with open(test_file_path, "w", encoding="utf8") as file:
             file.write(replay_test)
 

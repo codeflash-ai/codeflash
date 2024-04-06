@@ -2,21 +2,33 @@ import logging
 import sqlite3
 import textwrap
 from collections import defaultdict
-from typing import Any, Dict, Generator, List, Tuple
+from typing import Any, Dict, Generator, List, Tuple, Optional
 
 from codeflash.tracing.tracing_utils import FunctionModules
 
 
 def get_next_arg_and_return(
-    trace_file: str, function_name: str, file_name: str, num_to_get: int = 3
+    trace_file: str,
+    function_name: str,
+    file_name: str,
+    class_name: Optional[str] = None,
+    num_to_get: int = 3,
 ) -> Generator[Tuple[Any, Any], None, None]:
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
-    limit = num_to_get * 2 + 100
-    data = cur.execute(
-        "SELECT * FROM events WHERE function = ? AND filename = ? ORDER BY time_ns ASC LIMIT ?",
-        (function_name, file_name, limit),
-    ).fetchall()
+    limit = (
+        num_to_get * 2 + 100
+    )  # we may have to get more than num_to_get*2 to get num_to_get valid pairs
+    if class_name is not None:
+        data = cur.execute(
+            "SELECT * FROM events WHERE function = ? AND filename = ? AND classname = ? ORDER BY time_ns ASC LIMIT ?",
+            (function_name, file_name, class_name, limit),
+        ).fetchall()
+    else:
+        data = cur.execute(
+            "SELECT * FROM events WHERE function = ? AND filename = ? ORDER BY time_ns ASC LIMIT ?",
+            (function_name, file_name, limit),
+        ).fetchall()
 
     counts = 0
     matched_arg_return: Dict[int, List[Any]] = defaultdict(list)
@@ -119,6 +131,16 @@ def _create_unittest_trace_replay_test(
             "        ",
         )
         test_template += f"    def test_{function_name_alias}(self):\n{formatted_test_body}\n"
+
+    test_class_method_body = textwrap.dedent(
+        """\
+        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(r'{trace_file}', '{orig_function_name}', '{file_name}', {max_run_count}):
+            args = pickle.loads(arg_val_pkl)
+            return_val = pickle.loads(return_val_pkl)
+            ret = {class_name}.{method_name}(**args)
+            self.assertTrue(comparator(return_val, ret))
+    """
+    )
 
     return test_template
 
