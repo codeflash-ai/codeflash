@@ -91,86 +91,64 @@ from codeflash.verification.comparator import comparator
             )
 
     imports += "\n".join(function_imports)
-
-    if test_framework == "unittest":
-        return imports + _create_unittest_trace_replay_test(
-            trace_file, functions, max_run_count=max_run_count
-        )
-    elif test_framework == "pytest":
-        return imports + _create_pytest_trace_replay_test(
-            trace_file, functions, max_run_count=max_run_count
-        )
-    else:
-        raise ValueError("Invalid test framework")
-
-
-def _create_unittest_trace_replay_test(
-    trace_file: str, functions: List[FunctionModules], max_run_count
-) -> str:
     test_function_body = textwrap.dedent(
         """\
-        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(r'{trace_file}', '{orig_function_name}', '{file_name}', {max_run_count}):
+        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(trace_file=r'{trace_file}', function_name='{orig_function_name}', file_name='{file_name}', num_to_get={max_run_count}):
             args = pickle.loads(arg_val_pkl)
             return_val = pickle.loads(return_val_pkl)
             ret = {function_name}(**args)
-            self.assertTrue(comparator(return_val, ret))
-    """
+            """
+        + """self.assertTrue(comparator(return_val, ret))
+        """
+        if test_framework == "unittest"
+        else """assert comparator(return_val, ret)
+        """
     )
-
-    test_template = "\nclass TestTracedFunctions(unittest.TestCase):\n"
-    for func in functions:
-        function_name_alias = get_function_alias(func.module_name, func.function_name)
-        formatted_test_body = textwrap.indent(
-            test_function_body.format(
-                trace_file=trace_file,
-                function_name=function_name_alias,
-                file_name=func.file_name,
-                orig_function_name=func.function_name,
-                max_run_count=max_run_count,
-            ),
-            "        ",
-        )
-        test_template += f"    def test_{function_name_alias}(self):\n{formatted_test_body}\n"
-
     test_class_method_body = textwrap.dedent(
         """\
-        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(r'{trace_file}', '{orig_function_name}', '{file_name}', {max_run_count}):
+        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(trace_file=r'{trace_file}', function_name='{orig_function_name}', file_name='{file_name}', class_name='{class_name}', num_to_get={max_run_count}):
             args = pickle.loads(arg_val_pkl)
             return_val = pickle.loads(return_val_pkl)
-            ret = {class_name}.{method_name}(**args)
-            self.assertTrue(comparator(return_val, ret))
-    """
+            ret = {class_name_alias}.{method_name}(**args)
+            """
+        + """self.assertTrue(comparator(return_val, ret))
+        """
+        if test_framework == "unittest"
+        else """assert comparator(return_val, ret)
+        """
     )
-
-    return test_template
-
-
-def _create_pytest_trace_replay_test(
-    trace_file: str, functions: List[FunctionModules], max_run_count
-) -> str:
-    test_function_body = textwrap.dedent(
-        """\
-        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(r'{trace_file}', '{orig_function_name}', '{file_name}', {max_run_count}):
-            args = pickle.loads(arg_val_pkl)
-            return_val = pickle.loads(return_val_pkl)
-            ret = {function_name}(**args)
-            assert comparator(return_val, ret)
-    """
-    )
-
-    test_template = ""
+    if test_framework == "unittest":
+        self = "self"
+        test_template = "\nclass TestTracedFunctions(unittest.TestCase):\n"
+    else:
+        test_template = ""
+        self = ""
     for func in functions:
-        function_name_alias = get_function_alias(func.module_name, func.function_name)
-        formatted_test_body = textwrap.indent(
-            test_function_body.format(
+        if func.class_name is None:
+            alias = get_function_alias(func.module_name, func.function_name)
+            test_body = test_function_body.format(
                 trace_file=trace_file,
-                function_name=function_name_alias,
+                function_name=alias,
+                file_name=func.file_name,
+                orig_function_name=func.function_name,
+                max_run_count=max_run_count,
+            )
+        else:
+            alias = get_function_alias(func.module_name, func.class_name)
+            test_body = test_class_method_body.format(
+                trace_file=trace_file,
                 orig_function_name=func.function_name,
                 file_name=func.file_name,
+                class_name_alias=alias,
+                class_name=func.class_name,
+                method_name=func.function_name,
                 max_run_count=max_run_count,
-            ),
-            "    ",
+            )
+        formatted_test_body = textwrap.indent(
+            test_body,
+            "        ",
         )
-        test_template += f"\ndef test_{function_name_alias}():\n{formatted_test_body}\n"
 
-    return test_template
+        test_template += f"    def test_{alias}({self}):\n{formatted_test_body}\n"
+
+    return imports + test_template
