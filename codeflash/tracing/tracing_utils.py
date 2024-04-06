@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import dataclasses
 
 
@@ -6,4 +8,4 @@ class FunctionModules:
     function_name: str
     file_name: str
     module_name: str
-    class_name: str = None
+    class_name: Optional[str] = None

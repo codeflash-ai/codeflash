@@ -67,10 +67,17 @@ from codeflash.verification.comparator import comparator
 """
 
     # TODO: Module can have "-" character if the module-root is ".". Need to handle that case
-    function_imports = [
-        f"from {function.module_name} import {function.function_name} as {get_function_alias(function.module_name, function.function_name)}"
-        for function in functions
-    ]
+    function_imports = []
+    for function in functions:
+        if function.class_name:
+            function_imports.append(
+                f"from {function.module_name} import {function.class_name} as {get_function_alias(function.module_name, function.class_name)}"
+            )
+        else:
+            function_imports.append(
+                f"from {function.module_name} import {function.function_name} as {get_function_alias(function.module_name, function.function_name)}"
+            )
+
     imports += "\n".join(function_imports)
 
     if test_framework == "unittest":

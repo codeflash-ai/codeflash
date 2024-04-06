@@ -116,6 +116,13 @@ class Tracer:
         file_name = os.path.realpath(code.co_filename)
         # print(code.co_name, file_name)
         # print(arg)
+        class_name = None
+        if (
+            "self" in frame.f_locals
+            and hasattr(frame.f_locals["self"], "__class__")
+            and hasattr(frame.f_locals["self"].__class__, "__name__")
+        ):
+            class_name = frame.f_locals["self"].__class__.__name__
 
         function_qualified_name = file_name + ":" + code.co_name
 
@@ -145,6 +152,7 @@ class Tracer:
                     module_name=module_name_from_file_path(
                         file_name, project_root=self.project_root
                     ),
+                    class_name=class_name,
                 )
             )
 
@@ -160,13 +168,6 @@ class Tracer:
         elif not self.flag:
             self.flag = True
             return
-        class_name = None
-        if (
-            "self" in frame.f_locals
-            and hasattr(frame.f_locals["self"], "__class__")
-            and hasattr(frame.f_locals["self"].__class__, "__name__")
-        ):
-            class_name = frame.f_locals["self"].__class__.__name__
 
         cur = self.con.cursor()
 
