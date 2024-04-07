@@ -112,9 +112,7 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
         owner, repo = get_repo_owner_and_name(git_repo)
         try:
             response = check_github_app_installed_on_repo(owner, repo)
-            if response.ok and response.text == "true":
-                pass
-            else:
+            if not response.ok or response.text != "true":
                 logging.error(f"Error: {response.text}")
                 raise Exception
         except Exception as e:

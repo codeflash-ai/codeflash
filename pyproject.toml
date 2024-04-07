@@ -75,6 +75,7 @@ warn_required_dynamic_aliases = true
 
 [tool.ruff.lint]
 select = ["ALL"]
+unfixable = ["F401"]
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true
