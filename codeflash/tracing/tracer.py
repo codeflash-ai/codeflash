@@ -128,6 +128,13 @@ class Tracer:
             class_name = frame.f_locals["self"].__class__.__name__
 
         function_qualified_name = file_name + ":" + code.co_name
+        if not self.flag:
+            # ignore the first call to trace_callback due to return from Tracer __enter__
+            self.flag = True
+            return
+        if self.functions:
+            if code.co_name not in self.functions:
+                return None
 
         if function_qualified_name not in self.function_count:
             # seeing this function for the first time
@@ -163,14 +170,8 @@ class Tracer:
             return
         if event == "return":
             self.function_count[function_qualified_name] += 1
-        if self.functions:
-            if code.co_name not in self.functions:
-                return None
 
         # TODO: Also check if this function arguments are unique from the values logged earlier
-        elif not self.flag:
-            self.flag = True
-            return
 
         cur = self.con.cursor()
 

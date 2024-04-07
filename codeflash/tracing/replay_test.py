@@ -93,7 +93,7 @@ from codeflash.verification.comparator import comparator
     imports += "\n".join(function_imports)
     test_function_body = textwrap.dedent(
         """\
-        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(trace_file=r'{trace_file}', function_name='{orig_function_name}', file_name='{file_name}', num_to_get={max_run_count}):
+        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(trace_file=r'{trace_file}', function_name='{orig_function_name}', file_name=r'{file_name}', num_to_get={max_run_count}):
             args = pickle.loads(arg_val_pkl)
             return_val = pickle.loads(return_val_pkl)
             ret = {function_name}(**args)
@@ -106,7 +106,7 @@ from codeflash.verification.comparator import comparator
     )
     test_class_method_body = textwrap.dedent(
         """\
-        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(trace_file=r'{trace_file}', function_name='{orig_function_name}', file_name='{file_name}', class_name='{class_name}', num_to_get={max_run_count}):
+        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(trace_file=r'{trace_file}', function_name='{orig_function_name}', file_name=r'{file_name}', class_name='{class_name}', num_to_get={max_run_count}):
             args = pickle.loads(arg_val_pkl)
             return_val = pickle.loads(return_val_pkl)
             ret = {class_name_alias}.{method_name}(**args)
