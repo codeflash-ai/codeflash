@@ -83,6 +83,13 @@ class Tracer:
 
         self.con.close()
 
+        # filter any functions where we did not capture the return
+        self.function_modules = [
+            function
+            for function in self.function_modules
+            if self.function_count[function.file_name + ":" + function.function_name] > 0
+        ]
+
         replay_test = create_trace_replay_test(
             trace_file=self.output_file,
             functions=self.function_modules,
@@ -117,8 +124,6 @@ class Tracer:
         if code.co_name == "__exit__" and code.co_filename == os.path.realpath(__file__):
             return
         file_name = os.path.realpath(code.co_filename)
-        # print(code.co_name, file_name)
-        # print(arg)
         class_name = None
         if (
             "self" in frame.f_locals
@@ -168,8 +173,6 @@ class Tracer:
 
         if self.function_count[function_qualified_name] >= self.max_function_count:
             return
-        if event == "return":
-            self.function_count[function_qualified_name] += 1
 
         # TODO: Also check if this function arguments are unique from the values logged earlier
 
@@ -179,7 +182,8 @@ class Tracer:
         try:
             local_vars = pickle.dumps(frame.f_locals, protocol=pickle.HIGHEST_PROTOCOL)
             arg = pickle.dumps(arg, protocol=pickle.HIGHEST_PROTOCOL)
-        except (TypeError, pickle.PicklingError, AttributeError):
+        except (TypeError, pickle.PicklingError, AttributeError) as e:
+            logging.info(f"Error in pickling arguments or local variables - {e}")
             return
         cur.execute(
             "INSERT INTO events VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -196,3 +200,5 @@ class Tracer:
             ),
         )
         self.con.commit()
+        if event == "return":
+            self.function_count[function_qualified_name] += 1

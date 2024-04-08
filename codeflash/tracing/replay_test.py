@@ -36,15 +36,15 @@ def get_next_arg_and_return(
         if counts >= num_to_get:
             break
 
-        event_type, frame_address = val[0], val[4]
+        event_type, frame_address = val[0], val[5]
         if event_type == "call":
-            matched_arg_return[frame_address].append(val[7])
+            matched_arg_return[frame_address].append(val[8])
             if len(matched_arg_return[frame_address]) > 1:
                 logging.warning(
                     f"Pre-existing call to the function {function_name} with same frame address."
                 )
         elif event_type == "return":
-            matched_arg_return[frame_address].append(val[6])
+            matched_arg_return[frame_address].append(val[7])
             arg_return_length = len(matched_arg_return[frame_address])
             if arg_return_length > 2:
                 logging.warning(
@@ -134,12 +134,13 @@ from codeflash.verification.comparator import comparator
                 max_run_count=max_run_count,
             )
         else:
-            alias = get_function_alias(func.module_name, func.class_name)
+            class_name_alias = get_function_alias(func.module_name, func.class_name)
+            alias = get_function_alias(func.module_name, func.class_name + "_" + func.function_name)
             test_body = test_class_method_body.format(
                 trace_file=trace_file,
                 orig_function_name=func.function_name,
                 file_name=func.file_name,
-                class_name_alias=alias,
+                class_name_alias=class_name_alias,
                 class_name=func.class_name,
                 method_name=func.function_name,
                 max_run_count=max_run_count,
