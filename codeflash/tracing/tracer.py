@@ -43,7 +43,7 @@ class Tracer:
         self.functions = functions
         self.function_modules: List[FunctionModules] = []
         self.function_count = defaultdict(int)
-        self.max_function_count = 30
+        self.max_function_count = 100
         self.config, found_config_path = parse_config_file(config_file_path)
         self.project_root = project_root_from_module_root(
             self.config["module_root"], found_config_path
@@ -117,7 +117,7 @@ class Tracer:
 
         code = frame.f_code
         # TODO : It currently doesn't log the last return call from the first function
-        print(code.co_name, code.co_filename)
+        # print(code.co_name, code.co_filename)
 
         if code.co_name in self.ignored_functions:
             return

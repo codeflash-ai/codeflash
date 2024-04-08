@@ -68,7 +68,7 @@ def create_trace_replay_test(
     trace_file: str,
     functions: List[FunctionModules],
     test_framework: str = "pytest",
-    max_run_count=30,
+    max_run_count=100,
 ) -> str:
     assert test_framework in ["pytest", "unittest"]
 
