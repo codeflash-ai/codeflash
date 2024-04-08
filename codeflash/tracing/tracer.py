@@ -124,13 +124,6 @@ class Tracer:
         if code.co_name == "__exit__" and code.co_filename == os.path.realpath(__file__):
             return
         file_name = os.path.realpath(code.co_filename)
-        class_name = None
-        if (
-            "self" in frame.f_locals
-            and hasattr(frame.f_locals["self"], "__class__")
-            and hasattr(frame.f_locals["self"].__class__, "__name__")
-        ):
-            class_name = frame.f_locals["self"].__class__.__name__
 
         function_qualified_name = file_name + ":" + code.co_name
         if not self.flag:
@@ -140,6 +133,14 @@ class Tracer:
         if self.functions:
             if code.co_name not in self.functions:
                 return None
+
+        class_name = None
+        if (
+            "self" in frame.f_locals
+            and hasattr(frame.f_locals["self"], "__class__")
+            and hasattr(frame.f_locals["self"].__class__, "__name__")
+        ):
+            class_name = frame.f_locals["self"].__class__.__name__
 
         if function_qualified_name not in self.function_count:
             # seeing this function for the first time
@@ -170,6 +171,7 @@ class Tracer:
                     class_name=class_name,
                 )
             )
+            self.function_count[function_qualified_name] = 0
 
         if self.function_count[function_qualified_name] >= self.max_function_count:
             return
@@ -183,7 +185,7 @@ class Tracer:
             local_vars = pickle.dumps(frame.f_locals, protocol=pickle.HIGHEST_PROTOCOL)
             arg = pickle.dumps(arg, protocol=pickle.HIGHEST_PROTOCOL)
         except (TypeError, pickle.PicklingError, AttributeError) as e:
-            logging.info(f"Error in pickling arguments or local variables - {e}")
+            # logging.info(f"Error in pickling arguments or local variables - {e}")
             return
         cur.execute(
             "INSERT INTO events VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
