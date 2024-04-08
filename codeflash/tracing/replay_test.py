@@ -98,11 +98,13 @@ from codeflash.verification.comparator import comparator
             return_val = pickle.loads(return_val_pkl)
             ret = {function_name}(**args)
             """
-        + """self.assertTrue(comparator(return_val, ret))
+        + (
+            """self.assertTrue(comparator(return_val, ret))
         """
-        if test_framework == "unittest"
-        else """assert comparator(return_val, ret)
+            if test_framework == "unittest"
+            else """assert comparator(return_val, ret)
         """
+        )
     )
     test_class_method_body = textwrap.dedent(
         """\
@@ -111,11 +113,13 @@ from codeflash.verification.comparator import comparator
             return_val = pickle.loads(return_val_pkl)
             ret = {class_name_alias}.{method_name}(**args)
             """
-        + """self.assertTrue(comparator(return_val, ret))
+        + (
+            """self.assertTrue(comparator(return_val, ret))
         """
-        if test_framework == "unittest"
-        else """assert comparator(return_val, ret)
+            if test_framework == "unittest"
+            else """assert comparator(return_val, ret)
         """
+        )
     )
     if test_framework == "unittest":
         self = "self"
@@ -147,9 +151,10 @@ from codeflash.verification.comparator import comparator
             )
         formatted_test_body = textwrap.indent(
             test_body,
-            "        ",
+            "        " if test_framework == "unittest" else "    ",
         )
 
-        test_template += f"    def test_{alias}({self}):\n{formatted_test_body}\n"
+        test_template += "    " if test_framework == "unittest" else ""
+        test_template += f"def test_{alias}({self}):\n{formatted_test_body}\n"
 
-    return imports + test_template
+    return imports + "\n" + test_template
