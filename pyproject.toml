@@ -119,7 +119,7 @@ initial-content = """
 [tool.codeflash]
 module-root = "codeflash"
 tests-root = "tests"
-test-framework = "unittest"
+test-framework = "pytest"
 ignore-paths = []
 
 
