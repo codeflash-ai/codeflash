@@ -88,7 +88,13 @@ class Tracer:
         self.function_modules = [
             function
             for function in self.function_modules
-            if self.function_count[function.file_name + ":" + function.function_name] > 0
+            if self.function_count[
+                function.file_name
+                + ":"
+                + (function.class_name + ":" if function.class_name else "")
+                + function.function_name
+            ]
+            > 0
         ]
 
         replay_test = create_trace_replay_test(
@@ -126,7 +132,6 @@ class Tracer:
             return
         file_name = os.path.realpath(code.co_filename)
 
-        function_qualified_name = file_name + ":" + code.co_name
         if not self.flag:
             # ignore the first call to trace_callback due to return from Tracer __enter__
             self.flag = True
@@ -143,8 +148,13 @@ class Tracer:
         ):
             class_name = frame.f_locals["self"].__class__.__name__
 
+        function_qualified_name = (
+            file_name + ":" + (class_name + ":" if class_name else "") + code.co_name
+        )
+
         if function_qualified_name not in self.function_count:
             # seeing this function for the first time
+            self.function_count[function_qualified_name] = 0
             _, non_filtered_functions_count = filter_functions(
                 modified_functions={
                     file_name: [
@@ -172,7 +182,6 @@ class Tracer:
                     class_name=class_name,
                 )
             )
-            self.function_count[function_qualified_name] = 0
 
         if self.function_count[function_qualified_name] >= self.max_function_count:
             return
