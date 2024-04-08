@@ -72,6 +72,7 @@ class Tracer:
             "CREATE TABLE events(type TEXT, function TEXT, classname TEXT, filename TEXT, line_number INTEGER, "
             "last_frame_address INTEGER, time_ns INTEGER, arg BLOB, locals BLOB)"
         )
+        logging.info("Codeflash: Tracing started!")
         sys.setprofile(self.trace_callback)
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -108,7 +109,7 @@ class Tracer:
             file.write(replay_test)
 
         logging.info(
-            f"Codeflash: Function Traced successfully and replay test created! Path - {test_file_path}"
+            f"Codeflash: Traced successful and replay test created! Path - {test_file_path}"
         )
 
     def trace_callback(self, frame: Any, event: str, arg: Any) -> None:
