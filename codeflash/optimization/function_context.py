@@ -107,7 +107,7 @@ def get_type_annotation_context(
                                                 node_parents[:-1],
                                             ),
                                         ],
-                                    )
+                                    )[0]
                                     if source_code:
                                         sources.append(
                                             (

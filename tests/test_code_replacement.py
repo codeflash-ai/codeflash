@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 
 from codeflash.code_utils.code_replacer import replace_functions_in_file
@@ -47,11 +49,13 @@ print("Hello world")
 
     function_name: str = "NewClass.new_function"
     preexisting_functions: list[str] = ["new_function"]
+    immutable_methods: set[tuple[str, str]] = {("NewClass", "__init__")}
     new_code: str = replace_functions_in_file(
         original_code,
         [function_name],
         optim_code,
         preexisting_functions,
+        immutable_methods,
     )
     assert new_code == expected
 
@@ -65,7 +69,7 @@ def totally_new_function(value):
 
 def other_function(st):
     return(st * 2)
-    
+
 class NewClass:
     def __init__(self, name):
         self.name = name
@@ -105,8 +109,13 @@ print("Hello world")
 
     function_name: str = "NewClass.new_function"
     preexisting_functions: list[str] = ["new_function", "other_function"]
+    immutable_methods: set[tuple[str, str]] = {("NewClass", "__init__")}
     new_code: str = replace_functions_in_file(
-        original_code, [function_name], optim_code, preexisting_functions
+        original_code,
+        [function_name],
+        optim_code,
+        preexisting_functions,
+        immutable_methods,
     )
     assert new_code == expected
 
@@ -161,8 +170,13 @@ print("Salut monde")
 
     function_names: list[str] = ["module.other_function"]
     preexisting_functions: list[str] = []
+    immutable_methods: set[tuple[str, str]] = set()
     new_code: str = replace_functions_in_file(
-        original_code, function_names, optim_code, preexisting_functions
+        original_code,
+        function_names,
+        optim_code,
+        preexisting_functions,
+        immutable_methods,
     )
     assert new_code == expected
 
@@ -173,7 +187,7 @@ from typing import Optional
 
 def totally_new_function(value):
     return value
-    
+
 def yet_another_function(values):
     return len(values) + 2
 
@@ -208,6 +222,7 @@ import libcst as cst
 from typing import Mandatory
 
 print("Au revoir")
+
 def yet_another_function(values):
     return len(values) + 2
 
@@ -219,8 +234,13 @@ print("Salut monde")
 
     function_names: list[str] = ["module.yet_another_function", "module.other_function"]
     preexisting_functions: list[str] = []
+    immutable_methods: set[tuple[str, str]] = set()
     new_code: str = replace_functions_in_file(
-        original_code, function_names, optim_code, preexisting_functions
+        original_code,
+        function_names,
+        optim_code,
+        preexisting_functions,
+        immutable_methods,
     )
     assert new_code == expected
 
@@ -232,7 +252,7 @@ def test_test_libcst_code_replacement5() -> None:
 
 def badsort(ploc):
     donothing(ploc)
-    
+
 def supersort(doink):
     for i in range(len(doink)):
         fix(doink, i)
@@ -256,7 +276,7 @@ def sorter_deps(arr):
 
 def badsort(ploc):
     donothing(ploc)
-    
+
 def supersort(doink):
     for i in range(len(doink)):
         fix(doink, i)
@@ -264,8 +284,13 @@ def supersort(doink):
 
     function_names: list[str] = ["sorter_deps"]
     preexisting_functions: list[str] = ["sorter_deps"]
+    immutable_methods: set[tuple[str, str]] = set()
     new_code: str = replace_functions_in_file(
-        original_code, function_names, optim_code, preexisting_functions
+        original_code,
+        function_names,
+        optim_code,
+        preexisting_functions,
+        immutable_methods,
     )
     assert new_code == expected
 
@@ -343,11 +368,16 @@ print("Not cool")
         ["other_function"],
         optim_code,
         ["other_function", "yet_another_function", "blob"],
+        set(),
     )
     assert new_main_code == expected_main
 
     new_dependent_code: str = replace_functions_in_file(
-        original_code_dependent, ["blob"], optim_code, []
+        original_code_dependent,
+        ["blob"],
+        optim_code,
+        [],
+        set(),
     )
     assert new_dependent_code == expected_dependent
 
@@ -537,8 +567,17 @@ class CacheConfig(BaseConfig):
         "__init__",
         "from_config",
     ]
+    immutable_methods: set[tuple[str, str]] = {
+        ("CacheSimilarityEvalConfig", "__init__"),
+        ("CacheConfig", "__init__"),
+        ("CacheInitConfig", "__init__"),
+    }
     new_code: str = replace_functions_in_file(
-        original_code, function_names, optim_code, preexisting_functions
+        original_code,
+        function_names,
+        optim_code,
+        preexisting_functions,
+        immutable_methods,
     )
     assert new_code == expected
 
@@ -603,7 +642,12 @@ def test_test_libcst_code_replacement8() -> None:
     preexisting_functions: list[str] = [
         "_hamming_distance",
     ]
+    immutable_methods: set[tuple[str, str]] = set()
     new_code: str = replace_functions_in_file(
-        original_code, function_names, optim_code, preexisting_functions
+        original_code,
+        function_names,
+        optim_code,
+        preexisting_functions,
+        immutable_methods,
     )
     assert new_code == expected
