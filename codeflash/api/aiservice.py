@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import platform
+from functools import lru_cache
 from typing import Any, Dict, List, Tuple, Optional
 
 import requests
@@ -12,11 +13,13 @@ from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.telemetry.posthog import ph
 
-if os.environ.get("AIS_SERVER", default="prod").lower() == "local":
-    AI_SERVICE_BASE_URL = "http://localhost:8000/"
-    logging.info(f"Using local AI Service at {AI_SERVICE_BASE_URL}.")
-else:
-    AI_SERVICE_BASE_URL = "https://app.codeflash.ai"
+
+@lru_cache(maxsize=1)
+def get_aiservice_base_url() -> str:
+    if os.environ.get("AIS_SERVER", default="prod").lower() == "local":
+        logging.info(f"Using local AI Service at http://localhost:8000/")
+        return "http://localhost:8000/"
+    return "https://app.codeflash.ai"
 
 
 def make_ai_service_request(
@@ -33,7 +36,7 @@ def make_ai_service_request(
     :param timeout: The timeout for the request.
     :return: The response object from the API.
     """
-    url = f"{AI_SERVICE_BASE_URL}/ai{endpoint}"
+    url = f"{get_aiservice_base_url()}/ai{endpoint}"
     ai_service_headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
     if method.upper() == "POST":
         json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
