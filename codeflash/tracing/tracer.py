@@ -192,8 +192,12 @@ class Tracer:
 
         t_ns = time.perf_counter_ns()
         try:
+            # pickling can be a recursive operator, so we need to increase the recursion limit
+            original_recursion_limit = sys.getrecursionlimit()
+            sys.setrecursionlimit(20000)
             local_vars = pickle.dumps(frame.f_locals, protocol=pickle.HIGHEST_PROTOCOL)
             arg = pickle.dumps(arg, protocol=pickle.HIGHEST_PROTOCOL)
+            sys.setrecursionlimit(original_recursion_limit)
         except (TypeError, pickle.PicklingError, AttributeError) as e:
             # logging.info(f"Error in pickling arguments or local variables - {e}")
             return
