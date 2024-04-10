@@ -78,7 +78,7 @@ def optimize_python_code(source_code: str, trace_id: str, num_variants: int = 10
         "source_code": source_code,
         "num_variants": num_variants,
         "trace_id": trace_id,
-        "python_version_tuple": platform.python_version_tuple(),
+        "python_version": platform.python_version(),
     }
     logging.info("Generating optimized candidates ...")
     try:
