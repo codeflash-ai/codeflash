@@ -1,24 +1,36 @@
-from typing import List, Union, Optional, IO
+from __future__ import annotations
+
+from typing import IO
 
 import libcst as cst
-from libcst import SimpleStatementLine, FunctionDef
+from libcst import FunctionDef
 
 
 class OptimFunctionCollector(cst.CSTVisitor):
     METADATA_DEPENDENCIES = (cst.metadata.ParentNodeProvider,)
 
-    def __init__(self, function_name: str, preexisting_functions: Optional[List[str]] = None):
+    def __init__(
+        self,
+        function_name: str,
+        class_name: str | None,
+        contextual_functions: set[tuple[str, str]],
+        preexisting_functions: list[str] | None = None,
+    ) -> None:
         super().__init__()
         if preexisting_functions is None:
             preexisting_functions = []
         self.function_name = function_name
-        self.optim_body: Union[FunctionDef, None] = None
+        self.class_name = class_name
+        self.optim_body: FunctionDef | None = None
         self.optim_new_class_functions: list[cst.FunctionDef] = []
         self.optim_new_functions: list[cst.FunctionDef] = []
-        self.optim_imports: List[Union[cst.Import, cst.ImportFrom]] = []
+        self.optim_imports: list[cst.SimpleStatementLine] = []
         self.preexisting_functions = preexisting_functions
+        self.contextual_functions = contextual_functions.union(
+            {(self.class_name, self.function_name)},
+        )
 
-    def visit_FunctionDef(self, node: cst.FunctionDef):
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
         parent = self.get_metadata(cst.metadata.ParentNodeProvider, node)
         parent2 = None
         try:
@@ -39,17 +51,19 @@ class OptimFunctionCollector(cst.CSTVisitor):
             self.optim_new_functions.append(node)
 
     def visit_ClassDef_body(self, node: cst.ClassDef) -> None:
-        for class_node in node.body.body:
-            if isinstance(class_node, cst.FunctionDef) and class_node.name.value not in [
-                "__init__",
-                self.function_name,
-            ]:
-                self.optim_new_class_functions.append(class_node)
+        for child_node in node.body.body:
+            if (
+                isinstance(child_node, cst.FunctionDef)
+                and (
+                    node.name.value,
+                    child_node.name.value,
+                )
+                not in self.contextual_functions
+            ):
+                self.optim_new_class_functions.append(child_node)
 
-    def leave_SimpleStatementLine(self, original_node: "SimpleStatementLine") -> None:
-        if isinstance(original_node.body[0], cst.Import):
-            self.optim_imports.append(original_node)
-        elif isinstance(original_node.body[0], cst.ImportFrom):
+    def leave_SimpleStatementLine(self, original_node: cst.SimpleStatementLine) -> None:
+        if isinstance(original_node.body[0], (cst.Import, cst.ImportFrom)):
             self.optim_imports.append(original_node)
 
 
@@ -58,11 +72,11 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         self,
         function_name: str,
         optim_body: cst.FunctionDef,
-        optim_new_class_functions: List[cst.FunctionDef],
-        optim_imports: List[Union[cst.Import, cst.ImportFrom]],
-        optim_new_functions,
-        class_name=None,
-    ):
+        optim_new_class_functions: list[cst.FunctionDef],
+        optim_imports: list[cst.SimpleStatementLine],
+        optim_new_functions: list[cst.FunctionDef],
+        class_name: str | None = None,
+    ) -> None:
         super().__init__()
         self.function_name = function_name
         self.optim_body = optim_body
@@ -77,7 +91,9 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         return False
 
     def leave_FunctionDef(
-        self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef
+        self,
+        original_node: cst.FunctionDef,
+        updated_node: cst.FunctionDef,
     ) -> cst.FunctionDef:
         if original_node.name.value == self.function_name and (
             self.depth == 0 or (self.depth == 1 and self.in_class)
@@ -93,7 +109,9 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         return self.in_class
 
     def leave_ClassDef(
-        self, original_node: cst.ClassDef, updated_node: cst.ClassDef
+        self,
+        original_node: cst.ClassDef,
+        updated_node: cst.ClassDef,
     ) -> cst.ClassDef:
         self.depth -= 1
         if self.in_class and (self.depth == 0) and (original_node.name.value == self.class_name):
@@ -101,7 +119,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
             return updated_node.with_changes(
                 body=updated_node.body.with_changes(
                     body=(list(updated_node.body.body) + self.optim_new_class_functions),
-                )
+                ),
             )
         return updated_node
 
@@ -123,7 +141,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
                     *node.body[: max_function_index + 1],
                     *self.optim_new_functions,
                     *node.body[max_function_index + 1 :],
-                )
+                ),
             )
         elif class_index is not None:
             node = node.with_changes(
@@ -131,7 +149,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
                     *node.body[: class_index + 1],
                     *self.optim_new_functions,
                     *node.body[class_index + 1 :],
-                )
+                ),
             )
         else:
             node = node.with_changes(body=(*self.optim_new_functions, *node.body))
@@ -165,6 +183,7 @@ def replace_functions_in_file(
     original_function_names: list[str],
     optimized_code: str,
     preexisting_functions: list[str],
+    contextual_functions: set[tuple[str, str]],
 ) -> str:
     parsed_function_names = []
     for original_function_name in original_function_names:
@@ -179,14 +198,19 @@ def replace_functions_in_file(
     module = cst.metadata.MetadataWrapper(cst.parse_module(optimized_code))
 
     for i, (function_name, class_name) in enumerate(parsed_function_names):
-        visitor = OptimFunctionCollector(function_name, preexisting_functions)
-        visited = module.visit(visitor)
+        visitor = OptimFunctionCollector(
+            function_name,
+            class_name,
+            contextual_functions,
+            preexisting_functions,
+        )
+        module.visit(visitor)
 
         if visitor.optim_body is None and not preexisting_functions:
             continue
-        elif visitor.optim_body is None:
+        if visitor.optim_body is None:
             raise ValueError(f"Did not find the function {function_name} in the optimized code")
-        optim_imports = [] if i > 0 else visitor.optim_imports
+        optim_imports: list[cst.SimpleStatementLine] = [] if i > 0 else visitor.optim_imports
 
         transformer = OptimFunctionReplacer(
             visitor.function_name,
@@ -208,15 +232,17 @@ def replace_function_definitions_in_module(
     optimized_code: str,
     module_abspath: str,
     preexisting_functions: list[str],
+    contextual_functions: set[tuple[str, str]],
 ) -> None:
     file: IO[str]
-    with open(module_abspath, "r", encoding="utf8") as file:
+    with open(module_abspath, encoding="utf8") as file:
         source_code: str = file.read()
     new_code: str = replace_functions_in_file(
         source_code,
         function_names,
         optimized_code,
         preexisting_functions,
+        contextual_functions,
     )
     with open(module_abspath, "w", encoding="utf8") as file:
         file.write(new_code)
