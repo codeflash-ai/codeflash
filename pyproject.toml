@@ -76,6 +76,7 @@ warn_required_dynamic_aliases = true
 [tool.ruff.lint]
 select = ["ALL"]
 unfixable = ["F401"]
+ignore = ["ANN101"]
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true
@@ -119,7 +120,7 @@ initial-content = """
 [tool.codeflash]
 module-root = "codeflash"
 tests-root = "tests"
-test-framework = "unittest"
+test-framework = "pytest"
 ignore-paths = []
 
 

@@ -2,6 +2,8 @@
 solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 """
 
+from __future__ import annotations
+
 import concurrent.futures
 import logging
 import os
@@ -9,7 +11,7 @@ import pathlib
 import uuid
 from argparse import SUPPRESS, ArgumentParser, Namespace
 from collections import defaultdict
-from typing import IO, Tuple, Union
+from typing import IO, Dict, Tuple, Union
 
 import libcst as cst
 
@@ -212,7 +214,9 @@ class Optimizer:
                     pathlib.Path(get_run_tmp_file("test_return_values_0.sqlite")).unlink(
                         missing_ok=True,
                     )
-                    code_to_optimize = extract_code([function_to_optimize])
+                    code_to_optimize, contextual_dunder_methods = extract_code(
+                        [function_to_optimize],
+                    )
                     if code_to_optimize is None:
                         logging.error("Could not find function to optimize.")
                         continue
@@ -247,18 +251,13 @@ class Optimizer:
                             for df in dependent_methods
                         ]
                         if len(optimizable_methods) > 1:
-                            code_to_optimize_with_dependents = (
-                                dependent_code + "\n" + extract_code(optimizable_methods)
+                            code_to_optimize, contextual_dunder_methods = extract_code(
+                                optimizable_methods,
                             )
-                        else:
-                            code_to_optimize_with_dependents = (
-                                dependent_code + "\n" + code_to_optimize
-                            )
-                    else:
-                        code_to_optimize_with_dependents = dependent_code + "\n" + code_to_optimize
-                    if code_to_optimize_with_dependents is None:
-                        logging.error("Could not find function with dependents to optimize.")
-                        continue
+                            if code_to_optimize is None:
+                                logging.error("Could not find function to optimize.")
+                                continue
+                    code_to_optimize_with_dependents = dependent_code + "\n" + code_to_optimize
                 preexisting_functions.extend(
                     [fn[0].full_name.split(".")[-1] for fn in dependent_functions],
                 )
@@ -323,7 +322,7 @@ class Optimizer:
                 # TODO: Postprocess the optimized function to include the original docstring and such
 
                 best_optimization = []
-                speedup_ratios = dict()
+                speedup_ratios: Dict[str, float | None] = dict()
                 optimized_runtimes = dict()
                 is_correct = dict()
 
@@ -346,6 +345,7 @@ class Optimizer:
                             optimization.source_code,
                             path,
                             preexisting_functions,
+                            contextual_dunder_methods,
                         )
                         for (
                             module_abspath,
@@ -356,6 +356,7 @@ class Optimizer:
                                 optimization.source_code,
                                 module_abspath,
                                 [],
+                                contextual_dunder_methods,
                             )
                     except (
                         ValueError,
@@ -445,6 +446,7 @@ class Optimizer:
                         optimized_code,
                         path,
                         preexisting_functions,
+                        contextual_dunder_methods,
                     )
                     for (
                         module_abspath,
@@ -455,6 +457,7 @@ class Optimizer:
                             optimized_code,
                             module_abspath,
                             [],
+                            contextual_dunder_methods,
                         )
                     explanation_final = Explanation(
                         raw_explanation_message=best_optimization[1],

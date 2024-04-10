@@ -10,7 +10,7 @@ from codeflash.optimization.function_context import (
 
 
 class CustomType:
-    def __init__(self):
+    def __init__(self) -> None:
         self.name = None
         self.data: List[int] = []
 
@@ -21,19 +21,19 @@ class CustomDataClass:
     data: List[int] = field(default_factory=list)
 
 
-def function_to_optimize(data: CustomType):
+def function_to_optimize(data: CustomType) -> CustomType:
     name = data.name
     data.data.sort()
     return data
 
 
-def function_to_optimize2(data: CustomDataClass):
+def function_to_optimize2(data: CustomDataClass) -> CustomDataClass:
     name = data.name
     data.data.sort()
     return data
 
 
-def test_function_context_includes_type_annotation():
+def test_function_context_includes_type_annotation() -> None:
     file_path = pathlib.Path(__file__).resolve()
     a, dependent_functions = get_constrained_function_context_and_dependent_functions(
         FunctionToOptimize("function_to_optimize", str(file_path), []),
@@ -49,7 +49,7 @@ def test_function_context_includes_type_annotation():
     assert dependent_functions[0][0].full_name == "CustomType"
 
 
-def test_function_context_includes_type_annotation_dataclass():
+def test_function_context_includes_type_annotation_dataclass() -> None:
     file_path = pathlib.Path(__file__).resolve()
     a, dependent_functions = get_constrained_function_context_and_dependent_functions(
         FunctionToOptimize("function_to_optimize2", str(file_path), []),
@@ -65,11 +65,14 @@ def test_function_context_includes_type_annotation_dataclass():
     assert dependent_functions[0][0].full_name == "CustomDataClass"
 
 
-def test_function_context_custom_datatype():
+def test_function_context_custom_datatype() -> None:
     project_path = pathlib.Path(__file__).parent.parent.resolve() / "code_to_optimize"
     file_path = project_path / "math_utils.py"
-    code = get_code([FunctionToOptimize("cosine_similarity", str(file_path), [])])
+    code, contextual_dunder_methods = get_code(
+        [FunctionToOptimize("cosine_similarity", str(file_path), [])],
+    )
     assert code is not None
+    assert contextual_dunder_methods == set()
     a, dependent_functions = get_constrained_function_context_and_dependent_functions(
         FunctionToOptimize("cosine_similarity", str(file_path), []),
         str(project_path),
