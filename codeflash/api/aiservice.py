@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import platform
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from pydantic.dataclasses import dataclass
@@ -25,8 +25,7 @@ def make_ai_service_request(
     payload: Optional[Dict[str, Any]] = None,
     timeout: float = None,
 ) -> requests.Response:
-    """
-    Make an API request to the given endpoint on the AI service.
+    """Make an API request to the given endpoint on the AI service.
     :param endpoint: The endpoint to call, e.g., "/optimize".
     :param method: The HTTP method to use ('GET' or 'POST').
     :param payload: Optional JSON payload to include in the POST request body.
@@ -39,7 +38,10 @@ def make_ai_service_request(
         json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
         ai_service_headers["Content-Type"] = "application/json"
         response = requests.post(
-            url, data=json_payload, headers=ai_service_headers, timeout=timeout
+            url,
+            data=json_payload,
+            headers=ai_service_headers,
+            timeout=timeout,
         )
     else:
         response = requests.get(url, headers=ai_service_headers, timeout=timeout)
@@ -60,27 +62,29 @@ class Optimizations:
 
 
 def optimize_python_code(source_code: str, trace_id: str, num_variants: int = 10) -> Optimizations:
-    """
-    Optimize the given python code for performance by making a request to the Django endpoint.
+    """Optimize the given python code for performance by making a request to the Django endpoint.
 
-    Parameters:
+    Parameters
+    ----------
     - source_code (str): The python code to optimize.
     - num_variants (int): Number of optimization variants to generate. Default is 10.
 
-    Returns:
+    Returns
+    -------
     - List[Tuple[str, str]]: A list of tuples where the first element is the optimized code and the second is the explanation.
+
     """
     payload = {
         "source_code": source_code,
         "num_variants": num_variants,
         "trace_id": trace_id,
-        "python_version": platform.python_version(),
+        "python_version_tuple": platform.python_version_tuple(),
     }
-    logging.info(f"Generating optimized candidates ...")
+    logging.info("Generating optimized candidates ...")
     try:
         response = make_ai_service_request("/optimize", payload=payload, timeout=600)
     except requests.exceptions.RequestException as e:
-        logging.error(f"Error generating optimized candidates: {e}")
+        logging.exception(f"Error generating optimized candidates: {e}")
         ph("cli-optimize-error-caught", {"error": str(e)})
         return Optimizations(optimizations=[])
 
@@ -95,12 +99,12 @@ def optimize_python_code(source_code: str, trace_id: str, num_variants: int = 10
                     optimization_id=opt["optimization_id"],
                 )
                 for opt in optimizations
-            ]
+            ],
         )
     else:
         try:
             error = response.json()["error"]
-        except Exception as e:
+        except Exception:
             error = response.text
         logging.error(f"Error generating optimized candidates: {response.status_code} - {error}")
         ph(
@@ -117,15 +121,16 @@ def log_results(
     optimized_runtime: Optional[Dict[str, float]],
     is_correct: Optional[Dict[str, bool]],
 ) -> None:
-    """
-    Log features to the database.
+    """Log features to the database.
 
-    Parameters:
+    Parameters
+    ----------
     - function_trace_id (str): The UUID.
     - speedup_ratio (Optional[Dict[str, float]]): The speedup.
     - original_runtime (Optional[Dict[str, float]]): The original runtime.
     - optimized_runtime (Optional[Dict[str, float]]): The optimized runtime.
     - is_correct (Optional[Dict[str, bool]]): Whether the optimized code is correct.
+
     """
     payload = {
         "trace_id": function_trace_id,
@@ -137,7 +142,7 @@ def log_results(
     try:
         make_ai_service_request("/log_features", payload=payload, timeout=5)
     except requests.exceptions.RequestException as e:
-        logging.error(f"Error logging features: {e}")
+        logging.exception(f"Error logging features: {e}")
 
 
 def generate_regression_tests(
@@ -150,10 +155,10 @@ def generate_regression_tests(
     test_timeout: int,
     trace_id: str,
 ) -> Optional[Tuple[str, str]]:
-    """
-    Generate regression tests for the given function by making a request to the Django endpoint.
+    """Generate regression tests for the given function by making a request to the Django endpoint.
 
-    Parameters:
+    Parameters
+    ----------
     - source_code_being_tested (str): The source code of the function being tested.
     - function_to_optimize (FunctionToOptimize): The function to optimize.
     - dependent_function_names (list[Source]): List of dependent function names.
@@ -162,8 +167,10 @@ def generate_regression_tests(
     - test_framework (str): The test framework to use, e.g., "pytest".
     - test_timeout (int): The timeout for each test in seconds.
 
-    Returns:
+    Returns
+    -------
     - Dict[str, str] | None: The generated regression tests and instrumented tests, or None if an error occurred.
+
     """
     assert test_framework in [
         "pytest",
@@ -178,12 +185,12 @@ def generate_regression_tests(
         "test_framework": test_framework,
         "test_timeout": test_timeout,
         "trace_id": trace_id,
-        "python_version": platform.python_version(),
+        "python_version_tuple": platform.python_version_tuple(),
     }
     try:
         response = make_ai_service_request("/testgen", payload=payload, timeout=600)
     except requests.exceptions.RequestException as e:
-        logging.error(f"Error generating tests: {e}")
+        logging.exception(f"Error generating tests: {e}")
         ph("cli-testgen-error-caught", {"error": str(e)})
         return None
 
@@ -202,8 +209,8 @@ def generate_regression_tests(
                 {"response_status_code": response.status_code, "error": error},
             )
             return None
-        except Exception as e:
-            logging.error(f"Error generating tests: {response.status_code} - {response.text}")
+        except Exception:
+            logging.exception(f"Error generating tests: {response.status_code} - {response.text}")
             ph(
                 "cli-testgen-error-response",
                 {"response_status_code": response.status_code, "error": response.text},
