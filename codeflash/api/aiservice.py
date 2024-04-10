@@ -185,7 +185,7 @@ def generate_regression_tests(
         "test_framework": test_framework,
         "test_timeout": test_timeout,
         "trace_id": trace_id,
-        "python_version_tuple": platform.python_version_tuple(),
+        "python_version": platform.python_version(),
     }
     try:
         response = make_ai_service_request("/testgen", payload=payload, timeout=600)
