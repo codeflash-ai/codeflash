@@ -13,7 +13,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
         self,
         function_name: str,
         class_name: str | None,
-        immutable_methods: set[tuple[str, str]],
+        contextual_functions: set[tuple[str, str]],
         preexisting_functions: list[str] | None = None,
     ) -> None:
         super().__init__()
@@ -26,7 +26,9 @@ class OptimFunctionCollector(cst.CSTVisitor):
         self.optim_new_functions: list[cst.FunctionDef] = []
         self.optim_imports: list[cst.SimpleStatementLine] = []
         self.preexisting_functions = preexisting_functions
-        self.immutable_methods = immutable_methods.union({(self.class_name, self.function_name)})
+        self.contextual_functions = contextual_functions.union(
+            {(self.class_name, self.function_name)},
+        )
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
         parent = self.get_metadata(cst.metadata.ParentNodeProvider, node)
@@ -56,7 +58,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
                     node.name.value,
                     child_node.name.value,
                 )
-                not in self.immutable_methods
+                not in self.contextual_functions
             ):
                 self.optim_new_class_functions.append(child_node)
 
@@ -181,7 +183,7 @@ def replace_functions_in_file(
     original_function_names: list[str],
     optimized_code: str,
     preexisting_functions: list[str],
-    immutable_methods: set[tuple[str, str]],
+    contextual_functions: set[tuple[str, str]],
 ) -> str:
     parsed_function_names = []
     for original_function_name in original_function_names:
@@ -199,7 +201,7 @@ def replace_functions_in_file(
         visitor = OptimFunctionCollector(
             function_name,
             class_name,
-            immutable_methods,
+            contextual_functions,
             preexisting_functions,
         )
         module.visit(visitor)
@@ -230,7 +232,7 @@ def replace_function_definitions_in_module(
     optimized_code: str,
     module_abspath: str,
     preexisting_functions: list[str],
-    immutable_methods: set[tuple[str, str]],
+    contextual_functions: set[tuple[str, str]],
 ) -> None:
     file: IO[str]
     with open(module_abspath, encoding="utf8") as file:
@@ -240,7 +242,7 @@ def replace_function_definitions_in_module(
         function_names,
         optimized_code,
         preexisting_functions,
-        immutable_methods,
+        contextual_functions,
     )
     with open(module_abspath, "w", encoding="utf8") as file:
         file.write(new_code)

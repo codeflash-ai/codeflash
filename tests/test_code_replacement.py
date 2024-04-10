@@ -49,13 +49,13 @@ print("Hello world")
 
     function_name: str = "NewClass.new_function"
     preexisting_functions: list[str] = ["new_function"]
-    immutable_methods: set[tuple[str, str]] = {("NewClass", "__init__")}
+    contextual_functions: set[tuple[str, str]] = {("NewClass", "__init__")}
     new_code: str = replace_functions_in_file(
         original_code,
         [function_name],
         optim_code,
         preexisting_functions,
-        immutable_methods,
+        contextual_functions,
     )
     assert new_code == expected
 
@@ -109,13 +109,13 @@ print("Hello world")
 
     function_name: str = "NewClass.new_function"
     preexisting_functions: list[str] = ["new_function", "other_function"]
-    immutable_methods: set[tuple[str, str]] = {("NewClass", "__init__")}
+    contextual_functions: set[tuple[str, str]] = {("NewClass", "__init__")}
     new_code: str = replace_functions_in_file(
         original_code,
         [function_name],
         optim_code,
         preexisting_functions,
-        immutable_methods,
+        contextual_functions,
     )
     assert new_code == expected
 
@@ -170,13 +170,13 @@ print("Salut monde")
 
     function_names: list[str] = ["module.other_function"]
     preexisting_functions: list[str] = []
-    immutable_methods: set[tuple[str, str]] = set()
+    contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_in_file(
         original_code,
         function_names,
         optim_code,
         preexisting_functions,
-        immutable_methods,
+        contextual_functions,
     )
     assert new_code == expected
 
@@ -234,13 +234,13 @@ print("Salut monde")
 
     function_names: list[str] = ["module.yet_another_function", "module.other_function"]
     preexisting_functions: list[str] = []
-    immutable_methods: set[tuple[str, str]] = set()
+    contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_in_file(
         original_code,
         function_names,
         optim_code,
         preexisting_functions,
-        immutable_methods,
+        contextual_functions,
     )
     assert new_code == expected
 
@@ -284,13 +284,13 @@ def supersort(doink):
 
     function_names: list[str] = ["sorter_deps"]
     preexisting_functions: list[str] = ["sorter_deps"]
-    immutable_methods: set[tuple[str, str]] = set()
+    contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_in_file(
         original_code,
         function_names,
         optim_code,
         preexisting_functions,
-        immutable_methods,
+        contextual_functions,
     )
     assert new_code == expected
 
@@ -567,7 +567,7 @@ class CacheConfig(BaseConfig):
         "__init__",
         "from_config",
     ]
-    immutable_methods: set[tuple[str, str]] = {
+    contextual_functions: set[tuple[str, str]] = {
         ("CacheSimilarityEvalConfig", "__init__"),
         ("CacheConfig", "__init__"),
         ("CacheInitConfig", "__init__"),
@@ -577,7 +577,7 @@ class CacheConfig(BaseConfig):
         function_names,
         optim_code,
         preexisting_functions,
-        immutable_methods,
+        contextual_functions,
     )
     assert new_code == expected
 
@@ -642,12 +642,68 @@ def test_test_libcst_code_replacement8() -> None:
     preexisting_functions: list[str] = [
         "_hamming_distance",
     ]
-    immutable_methods: set[tuple[str, str]] = set()
+    contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_in_file(
         original_code,
         function_names,
         optim_code,
         preexisting_functions,
-        immutable_methods,
+        contextual_functions,
+    )
+    assert new_code == expected
+
+
+def test_test_libcst_code_replacement9() -> None:
+    optim_code = """import libcst as cst
+from typing import Optional
+
+def totally_new_function(value):
+    return value
+
+class NewClass:
+    def __init__(self, name):
+        self.name = str(name)
+    def __call__(self, value):
+        return self.name
+    def new_function2(value):
+        return value
+    """
+
+    original_code = """class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+
+print("Hello world")
+"""
+    expected = """import libcst as cst
+from typing import Optional
+class NewClass:
+    def __init__(self, name):
+        self.name = str(name)
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return value
+
+def totally_new_function(value):
+    return value
+
+print("Hello world")
+"""
+
+    function_name: str = "NewClass.__init__"
+    preexisting_functions: list[str] = ["__init__", "__call__"]
+    contextual_functions: set[tuple[str, str]] = {
+        ("NewClass", "__init__"),
+        ("NewClass", "__call__"),
+    }
+    new_code: str = replace_functions_in_file(
+        original_code,
+        [function_name],
+        optim_code,
+        preexisting_functions,
+        contextual_functions,
     )
     assert new_code == expected
