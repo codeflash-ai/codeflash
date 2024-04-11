@@ -5,9 +5,10 @@ import pathlib
 import uuid
 from argparse import Namespace
 from collections import defaultdict
-from typing import IO, Dict, Tuple, Union
+from typing import IO, Dict, Tuple, Union, Optional
 
 import libcst as cst
+from pydantic import BaseModel
 
 from codeflash.api.aiservice import log_results, optimize_python_code
 from codeflash.code_utils import env_utils
@@ -50,6 +51,12 @@ from codeflash.verification.test_results import TestResults, TestType
 from codeflash.verification.test_runner import run_tests
 from codeflash.verification.verification_utils import TestConfig, get_test_file_path
 from codeflash.verification.verifier import generate_tests
+
+
+class BestOptimization(BaseModel):
+    source_code: str
+    explanation: str
+    dependent_functions: list[Tuple[Source, str, str]]
 
 
 class Optimizer:
@@ -252,7 +259,7 @@ class Optimizer:
                 logging.info("Optimizing code ...")
                 # TODO: Postprocess the optimized function to include the original docstring and such
 
-                best_optimization = []
+                best_optimization: Optional[BestOptimization] = None
                 speedup_ratios: Dict[str, float | None] = dict()
                 optimized_runtimes = dict()
                 is_correct = dict()
@@ -343,11 +350,11 @@ class Optimizer:
                                 f"{humanize_runtime(best_test_runtime)}, ratio = "
                                 f"{((original_runtime - best_test_runtime) / best_test_runtime)}",
                             )
-                            best_optimization = [
-                                optimization.source_code,
-                                optimization.explanation,
-                                dependent_functions,
-                            ]
+                            best_optimization = BestOptimization(
+                                source_code=optimization.source_code,
+                                explanation=optimization.explanation,
+                                dependent_functions=dependent_functions,
+                            )
                             best_runtime = best_test_runtime
                             winning_test_results = best_test_results
                     with open(path, "w", encoding="utf8") as f:
@@ -356,8 +363,6 @@ class Optimizer:
                         with open(module_abspath, "w", encoding="utf8") as f:
                             f.write(original_dependent_code[module_abspath])
                     logging.info("----------------")
-                logging.info(f"Best optimization: {best_optimization[0:2]}")
-
                 log_results(
                     function_trace_id=function_trace_id,
                     speedup_ratio=speedup_ratios,
@@ -369,9 +374,11 @@ class Optimizer:
 
                 if best_optimization:
                     optimizations_found += 1
-                    logging.info(f"Best candidate:\n{best_optimization[0]}")
+                    logging.info(
+                        f"Best candidate:\n{best_optimization.source_code}, {best_optimization.explanation}"
+                    )
 
-                    optimized_code = best_optimization[0]
+                    optimized_code = best_optimization.source_code
                     replace_function_definitions_in_module(
                         [function_name],
                         optimized_code,
@@ -391,7 +398,7 @@ class Optimizer:
                             contextual_dunder_methods,
                         )
                     explanation_final = Explanation(
-                        raw_explanation_message=best_optimization[1],
+                        raw_explanation_message=best_optimization.explanation,
                         winning_test_results=winning_test_results,
                         original_runtime_ns=original_runtime,
                         best_runtime_ns=best_runtime,
