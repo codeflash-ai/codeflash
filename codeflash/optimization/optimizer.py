@@ -5,40 +5,42 @@ import pathlib
 import uuid
 from argparse import Namespace
 from collections import defaultdict
-from typing import IO, Dict, Tuple, Union, Optional
+from typing import IO, Dict, List, Optional, Tuple, Union
 
 import libcst as cst
 from pydantic import BaseModel
+from returns.pipeline import is_successful
+from returns.result import Failure, Result, Success
 
 from codeflash.api.aiservice import log_results, optimize_python_code
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import extract_code
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
-    get_run_tmp_file,
     get_all_function_names,
+    get_run_tmp_file,
     module_name_from_file_path,
 )
 from codeflash.code_utils.config_consts import (
-    N_CANDIDATES,
+    INDIVIDUAL_TEST_TIMEOUT,
     MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS,
+    MAX_FUNCTION_TEST_SECONDS,
     MAX_TEST_FUNCTION_RUNS,
     MAX_TEST_RUN_ITERATIONS,
-    MAX_FUNCTION_TEST_SECONDS,
-    INDIVIDUAL_TEST_TIMEOUT,
+    N_CANDIDATES,
 )
-from codeflash.code_utils.formatter import sort_imports, format_code
+from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import TestsInFile, discover_unit_tests
 from codeflash.discovery.functions_to_optimize import (
+    FunctionParent,
     FunctionToOptimize,
     get_functions_to_optimize_by_file,
-    FunctionParent,
 )
 from codeflash.optimization.function_context import (
-    get_constrained_function_context_and_dependent_functions,
     Source,
+    get_constrained_function_context_and_dependent_functions,
 )
 from codeflash.result.create_pr import check_create_pr
 from codeflash.result.explanation import Explanation
@@ -57,6 +59,13 @@ class BestOptimization(BaseModel):
     source_code: str
     explanation: str
     dependent_functions: list[Tuple[Source, str, str]]
+
+
+class CodeOptimizationContext(BaseModel):
+    code_to_optimize_with_dependents: str
+    contextual_dunder_methods: set[tuple[str, str]]
+    dependent_functions: List[Tuple[Source, str, str]]
+    preexisting_functions: List[str]
 
 
 class Optimizer:
@@ -137,62 +146,21 @@ class Optimizer:
                     )
                     winning_test_results = None
                     self.cleanup_leftover_test_return_values()
-                    code_to_optimize, contextual_dunder_methods = extract_code(
-                        [function_to_optimize],
-                    )
-                    if code_to_optimize is None:
-                        logging.error("Could not find function to optimize.")
+                    result = self.extract_code_to_optimize_with_dependents(function_to_optimize)
+                    if not is_successful(result):
+                        logging.error(result.failure())
                         continue
-
-                    success, preexisting_functions = get_all_function_names(code_to_optimize)
-                    if not success:
-                        logging.error("Error in parsing the code, skipping optimization.")
-                        continue
-
-                    dependent_code, dependent_functions = (
-                        get_constrained_function_context_and_dependent_functions(
-                            function_to_optimize,
-                            self.args.project_root,
-                            code_to_optimize,
-                        )
-                    )
-                    if function_to_optimize.parents:
-                        function_class = function_to_optimize.parents[0].name
-                        dependent_methods = [
-                            df
-                            for df in dependent_functions
-                            if df[2].count(".") > 0 and df[2].split(".")[0] == function_class
-                        ]
-                        optimizable_methods = [function_to_optimize] + [
-                            FunctionToOptimize(
-                                df[2].split(".")[0],
-                                "",
-                                [FunctionParent(df[2].split(".")[0], "ClassDef")],
-                                None,
-                                None,
-                            )
-                            for df in dependent_methods
-                        ]
-                        if len(optimizable_methods) > 1:
-                            code_to_optimize, contextual_dunder_methods = extract_code(
-                                optimizable_methods,
-                            )
-                            if code_to_optimize is None:
-                                logging.error("Could not find function to optimize.")
-                                continue
-                    code_to_optimize_with_dependents = dependent_code + "\n" + code_to_optimize
-                    preexisting_functions.extend(
-                        [fn[0].full_name.split(".")[-1] for fn in dependent_functions],
-                    )
+                    else:
+                        code_context = result.unwrap()
                     dependent_functions_by_module_abspath = defaultdict(set)
-                    for _, module_abspath, qualified_name in dependent_functions:
+                    for _, module_abspath, qualified_name in code_context.dependent_functions:
                         dependent_functions_by_module_abspath[module_abspath].add(qualified_name)
                     original_dependent_code = {}
                     for module_abspath in dependent_functions_by_module_abspath.keys():
                         with open(module_abspath, encoding="utf8") as f:
                             dependent_code = f.read()
                             original_dependent_code[module_abspath] = dependent_code
-                    logging.info(f"Code to be optimized:\n{code_to_optimize_with_dependents}")
+                    logging.info(f"Code to be optimized:\n{code_context.code_to_optimize_with_dependents}")
                     module_path = module_name_from_file_path(path, self.args.project_root)
 
                     instrumented_unittests_created_for_function = self.prepare_existing_tests(
@@ -210,9 +178,9 @@ class Optimizer:
                         instrumented_test_source,
                         optimizations,
                     ) = self.generate_tests_and_optimizations(
-                        code_to_optimize_with_dependents,
+                        code_context.code_to_optimize_with_dependents,
                         function_to_optimize,
-                        dependent_functions,
+                        code_context.dependent_functions,
                         module_path,
                         function_trace_id,
                     )
@@ -267,8 +235,8 @@ class Optimizer:
                                 [qualified_function_name],
                                 optimization.source_code,
                                 path,
-                                preexisting_functions,
-                                contextual_dunder_methods,
+                                code_context.preexisting_functions,
+                                code_context.contextual_dunder_methods,
                             )
                             for (
                                 module_abspath,
@@ -279,7 +247,7 @@ class Optimizer:
                                     optimization.source_code,
                                     module_abspath,
                                     [],
-                                    contextual_dunder_methods,
+                                    code_context.contextual_dunder_methods,
                                 )
                         except (
                             ValueError,
@@ -338,7 +306,7 @@ class Optimizer:
                                 best_optimization = BestOptimization(
                                     source_code=optimization.source_code,
                                     explanation=optimization.explanation,
-                                    dependent_functions=dependent_functions,
+                                    dependent_functions=code_context.dependent_functions,
                                 )
                                 best_runtime = best_test_runtime
                                 winning_test_results = best_test_results
@@ -368,8 +336,8 @@ class Optimizer:
                             [qualified_function_name],
                             optimized_code,
                             path,
-                            preexisting_functions,
-                            contextual_dunder_methods,
+                            code_context.preexisting_functions,
+                            code_context.contextual_dunder_methods,
                         )
                         for (
                             module_abspath,
@@ -380,7 +348,7 @@ class Optimizer:
                                 optimized_code,
                                 module_abspath,
                                 [],
-                                contextual_dunder_methods,
+                                code_context.contextual_dunder_methods,
                             )
                         explanation_final = Explanation(
                             raw_explanation_message=best_optimization.explanation,
@@ -474,6 +442,58 @@ class Optimizer:
                 pathlib.Path(test_file).unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
+
+    def extract_code_to_optimize_with_dependents(
+        self, function_to_optimize: FunctionToOptimize
+    ) -> Result[CodeOptimizationContext, str]:
+        code_to_optimize, contextual_dunder_methods = extract_code(
+            [function_to_optimize],
+        )
+        if code_to_optimize is None:
+            return Failure("Could not find function to optimize.")
+        success, preexisting_functions = get_all_function_names(code_to_optimize)
+        if not success:
+            return Failure("Error in parsing the code, skipping optimization.")
+        dependent_code, dependent_functions = get_constrained_function_context_and_dependent_functions(
+            function_to_optimize,
+            self.args.project_root,
+            code_to_optimize,
+        )
+        if function_to_optimize.parents:
+            function_class = function_to_optimize.parents[0].name
+            dependent_methods = [
+                df
+                for df in dependent_functions
+                if df[2].count(".") > 0 and df[2].split(".")[0] == function_class
+            ]
+            optimizable_methods = [function_to_optimize] + [
+                FunctionToOptimize(
+                    df[2].split(".")[0],
+                    "",
+                    [FunctionParent(df[2].split(".")[0], "ClassDef")],
+                    None,
+                    None,
+                )
+                for df in dependent_methods
+            ]
+            if len(optimizable_methods) > 1:
+                code_to_optimize, contextual_dunder_methods = extract_code(
+                    optimizable_methods,
+                )
+                if code_to_optimize is None:
+                    return Failure("Could not find function to optimize.")
+        code_to_optimize_with_dependents = dependent_code + "\n" + code_to_optimize
+        preexisting_functions.extend(
+            [fn[0].full_name.split(".")[-1] for fn in dependent_functions],
+        )
+        return Success(
+            CodeOptimizationContext(
+                code_to_optimize_with_dependents=code_to_optimize_with_dependents,
+                contextual_dunder_methods=contextual_dunder_methods,
+                dependent_functions=dependent_functions,
+                preexisting_functions=preexisting_functions,
+            )
+        )
 
     def cleanup_leftover_test_return_values(self):
         # remove leftovers from previous run
