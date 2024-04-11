@@ -2,8 +2,8 @@ import ast
 import logging
 import os
 import random
-from _ast import ClassDef, FunctionDef, AsyncFunctionDef
-from typing import Dict, Optional, List, Tuple, Union
+from _ast import AsyncFunctionDef, ClassDef, FunctionDef
+from typing import Dict, List, Optional, Tuple, Union
 
 import git
 import libcst as cst
@@ -11,10 +11,7 @@ from libcst import CSTNode
 from libcst.metadata import CodeRange
 from pydantic.dataclasses import dataclass
 
-from codeflash.code_utils.code_utils import (
-    path_belongs_to_site_packages,
-    module_name_from_file_path,
-)
+from codeflash.code_utils.code_utils import module_name_from_file_path, path_belongs_to_site_packages
 from codeflash.code_utils.git_utils import get_git_diff
 from codeflash.verification.verification_utils import TestConfig
 
@@ -45,9 +42,7 @@ class FunctionVisitor(cst.CSTVisitor):
             ast_parents: list[FunctionParent] = []
             while parents is not None:
                 if isinstance(parents, (cst.FunctionDef, cst.ClassDef)):
-                    ast_parents.append(
-                        FunctionParent(parents.name.value, parents.__class__.__name__)
-                    )
+                    ast_parents.append(FunctionParent(parents.name.value, parents.__class__.__name__))
                 parents = self.get_metadata(cst.metadata.ParentNodeProvider, parents, default=None)
             self.functions.append(
                 FunctionToOptimize(
@@ -234,9 +229,7 @@ def filter_functions(
     # Ignore files with submodule path
     submodule_paths = []
     if is_git_repo(module_root):
-        submodule_paths = ignored_submodule_paths(
-            git.Repo(module_root, search_parent_directories=True)
-        )
+        submodule_paths = ignored_submodule_paths(git.Repo(module_root, search_parent_directories=True))
     filtered_modified_functions: Dict[str, List[FunctionToOptimize]] = {}
     functions_count: int = 0
     test_functions_removed_count: int = 0

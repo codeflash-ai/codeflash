@@ -5,7 +5,7 @@ import pathlib
 import uuid
 from argparse import Namespace
 from collections import defaultdict
-from typing import IO, Tuple, Union
+from typing import IO, Dict, Tuple, Union
 
 import libcst as cst
 
@@ -116,10 +116,7 @@ class Optimizer:
                 with open(path, encoding="utf8") as f:
                     original_code: str = f.read()
                 should_sort_imports = True
-                if (
-                    sort_imports(self.args.imports_sort_cmd, should_sort_imports, path)
-                    != original_code
-                ):
+                if sort_imports(self.args.imports_sort_cmd, should_sort_imports, path) != original_code:
                     should_sort_imports = False
 
                 function_to_optimize: FunctionToOptimize
@@ -148,7 +145,9 @@ class Optimizer:
                     pathlib.Path(get_run_tmp_file("test_return_values_0.sqlite")).unlink(
                         missing_ok=True,
                     )
-                    code_to_optimize = extract_code([function_to_optimize])
+                    code_to_optimize, contextual_dunder_methods = extract_code(
+                        [function_to_optimize],
+                    )
                     if code_to_optimize is None:
                         logging.error("Could not find function to optimize.")
                         continue
@@ -183,18 +182,13 @@ class Optimizer:
                             for df in dependent_methods
                         ]
                         if len(optimizable_methods) > 1:
-                            code_to_optimize_with_dependents = (
-                                dependent_code + "\n" + extract_code(optimizable_methods)
+                            code_to_optimize, contextual_dunder_methods = extract_code(
+                                optimizable_methods,
                             )
-                        else:
-                            code_to_optimize_with_dependents = (
-                                dependent_code + "\n" + code_to_optimize
-                            )
-                    else:
+                            if code_to_optimize is None:
+                                logging.error("Could not find function to optimize.")
+                                continue
                         code_to_optimize_with_dependents = dependent_code + "\n" + code_to_optimize
-                    if code_to_optimize_with_dependents is None:
-                        logging.error("Could not find function with dependents to optimize.")
-                        continue
                 preexisting_functions.extend(
                     [fn[0].full_name.split(".")[-1] for fn in dependent_functions],
                 )
@@ -259,7 +253,7 @@ class Optimizer:
                 # TODO: Postprocess the optimized function to include the original docstring and such
 
                 best_optimization = []
-                speedup_ratios = dict()
+                speedup_ratios: Dict[str, float | None] = dict()
                 optimized_runtimes = dict()
                 is_correct = dict()
 
@@ -282,6 +276,7 @@ class Optimizer:
                             optimization.source_code,
                             path,
                             preexisting_functions,
+                            contextual_dunder_methods,
                         )
                         for (
                             module_abspath,
@@ -292,6 +287,7 @@ class Optimizer:
                                 optimization.source_code,
                                 module_abspath,
                                 [],
+                                contextual_dunder_methods,
                             )
                     except (
                         ValueError,
@@ -381,6 +377,7 @@ class Optimizer:
                         optimized_code,
                         path,
                         preexisting_functions,
+                        contextual_dunder_methods,
                     )
                     for (
                         module_abspath,
@@ -391,6 +388,7 @@ class Optimizer:
                             optimized_code,
                             module_abspath,
                             [],
+                            contextual_dunder_methods,
                         )
                     explanation_final = Explanation(
                         raw_explanation_message=best_optimization[1],
@@ -557,11 +555,7 @@ class Optimizer:
 
             future_tests_result = future_tests.result()
             optimizations = future_optimization.result()
-        if (
-            future_tests_result
-            and isinstance(future_tests_result, tuple)
-            and len(future_tests_result) == 2
-        ):
+        if future_tests_result and isinstance(future_tests_result, tuple) and len(future_tests_result) == 2:
             (
                 generated_original_test_source,
                 instrumented_test_source,
