@@ -107,6 +107,19 @@ class FunctionToOptimize:
             f"{'.' if self.parents else ''}{self.function_name}"
         )
 
+    @property
+    def qualified_name(self):
+        return (
+            self.function_name
+            if self.parents == []
+            else ".".join(
+                [
+                    self.parents[0].name,
+                    self.function_name,
+                ],
+            )
+        )
+
 
 def get_functions_to_optimize_by_file(
     optimize_all: str,
