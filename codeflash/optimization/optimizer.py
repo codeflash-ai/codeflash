@@ -55,6 +55,12 @@ from codeflash.verification.verification_utils import TestConfig, get_test_file_
 from codeflash.verification.verifier import generate_tests
 
 
+class OriginalCodeBaseline(BaseModel):
+    generated_test_results: TestResults
+    overall_test_results: Optional[TestResults]
+    runtime: int
+
+
 class TestsAndOptimizationsResult(BaseModel):
     generated_original_test_source: str
     instrumented_test_source: str
@@ -152,11 +158,11 @@ class Optimizer:
                     )
                     winning_test_results = None
                     self.cleanup_leftover_test_return_values()
-                    c_o_result = self.get_code_optimization_context(function_to_optimize)
-                    if not is_successful(c_o_result):
-                        logging.error(c_o_result.failure())
+                    ctx_result = self.get_code_optimization_context(function_to_optimize)
+                    if not is_successful(ctx_result):
+                        logging.error(ctx_result.failure())
                         continue
-                    code_context = c_o_result.unwrap()
+                    code_context = ctx_result.unwrap()
                     dependent_functions_by_module_abspath = defaultdict(set)
                     for _, module_abspath, qualified_name in code_context.dependent_functions:
                         dependent_functions_by_module_abspath[module_abspath].add(qualified_name)
@@ -177,17 +183,17 @@ class Optimizer:
                         instrumented_unittests_created_for_function,
                     )
 
-                    t_o_result = self.generate_tests_and_optimizations(
+                    tests_result = self.generate_tests_and_optimizations(
                         code_context.code_to_optimize_with_dependents,
                         function_to_optimize,
                         code_context.dependent_functions,
                         module_path,
                         function_trace_id,
                     )
-                    if not is_successful(t_o_result):
-                        logging.error(t_o_result.failure())
+                    if not is_successful(tests_result):
+                        logging.error(tests_result.failure())
                         continue
-                    tests_and_optimizations: TestsAndOptimizationsResult = t_o_result.unwrap()
+                    tests_and_optimizations: TestsAndOptimizationsResult = tests_result.unwrap()
 
                     generated_tests_path = get_test_file_path(
                         self.args.tests_root,
@@ -198,19 +204,16 @@ class Optimizer:
                         file.write(tests_and_optimizations.instrumented_test_source)
 
                     test_files_created.add(generated_tests_path)
-                    (
-                        success,
-                        original_gen_results,
-                        overall_original_test_results,
-                        original_runtime,
-                    ) = self.establish_original_code_baseline(
+                    baseline_result = self.establish_original_code_baseline(
                         qualified_function_name,
                         instrumented_unittests_created_for_function,
                         generated_tests_path,
                     )
-                    if not success:
+                    if not is_successful(baseline_result):
+                        logging.error(baseline_result.failure())
                         continue
-                    best_runtime = original_runtime  # The fastest code runtime until now
+                    original_code_baseline: OriginalCodeBaseline = baseline_result.unwrap()
+                    best_runtime = original_code_baseline.runtime  # The fastest code runtime until now
                     logging.info("Optimizing code ...")
                     # TODO: Postprocess the optimized function to include the original docstring and such
 
@@ -273,8 +276,8 @@ class Optimizer:
                         ) = self.run_optimized_candidate(
                             optimization_index=j,
                             instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
-                            overall_original_test_results=overall_original_test_results,
-                            original_gen_results=original_gen_results,
+                            overall_original_test_results=original_code_baseline.overall_test_results,
+                            original_gen_results=original_code_baseline.generated_test_results,
                             generated_tests_path=generated_tests_path,
                             best_runtime_until_now=best_runtime,
                         )
@@ -284,16 +287,16 @@ class Optimizer:
 
                         if success:
                             speedup_ratios[optimization.optimization_id] = (
-                                original_runtime - best_test_runtime
+                                original_code_baseline.runtime - best_test_runtime
                             ) / best_test_runtime
 
                             logging.info(
                                 f"Candidate runtime measured over {times_run} run{'s' if times_run > 1 else ''}: "
                                 f"{humanize_runtime(best_test_runtime)}, speedup ratio = "
-                                f"{((original_runtime - best_test_runtime) / best_test_runtime):.3f}",
+                                f"{((original_code_baseline.runtime - best_test_runtime) / best_test_runtime):.3f}",
                             )
                             if (
-                                ((original_runtime - best_test_runtime) / best_test_runtime)
+                                ((original_code_baseline.runtime - best_test_runtime) / best_test_runtime)
                                 > self.args.minimum_performance_gain
                             ) and best_test_runtime < best_runtime:
                                 logging.info(
@@ -301,9 +304,9 @@ class Optimizer:
                                 )
 
                                 logging.info(
-                                    f"Original runtime: {humanize_runtime(original_runtime)} Best test runtime: "
+                                    f"Original runtime: {humanize_runtime(original_code_baseline.runtime)} Best test runtime: "
                                     f"{humanize_runtime(best_test_runtime)}, ratio = "
-                                    f"{((original_runtime - best_test_runtime) / best_test_runtime)}",
+                                    f"{((original_code_baseline.runtime - best_test_runtime) / best_test_runtime)}",
                                 )
                                 best_optimization = BestOptimization(
                                     source_code=optimization.source_code,
@@ -321,7 +324,7 @@ class Optimizer:
                     log_results(
                         function_trace_id=function_trace_id,
                         speedup_ratio=speedup_ratios,
-                        original_runtime=original_runtime,
+                        original_runtime=original_code_baseline.runtime,
                         optimized_runtime=optimized_runtimes,
                         is_correct=is_correct,
                     )
@@ -355,7 +358,7 @@ class Optimizer:
                         explanation_final = Explanation(
                             raw_explanation_message=best_optimization.explanation,
                             winning_test_results=winning_test_results,
-                            original_runtime_ns=original_runtime,
+                            original_runtime_ns=original_code_baseline.runtime,
                             best_runtime_ns=best_runtime,
                             function_name=qualified_function_name,
                             path=path,
@@ -601,7 +604,7 @@ class Optimizer:
         function_name: str,
         instrumented_unittests_created_for_function: set[str],
         generated_tests_path: str,
-    ):
+    ) -> Result[OriginalCodeBaseline, str]:
         original_runtime = None
         best_runtime = None
         original_gen_results = None
@@ -707,11 +710,18 @@ class Optimizer:
                 "Failed to run the tests for the original function, skipping optimization",
             )
             success = False
-        if success:
-            logging.info(
-                f"Original code runtime measured over {times_run} run{'s' if times_run > 1 else ''}: {humanize_runtime(original_runtime)}",
-            )
-        return success, original_gen_results, overall_original_test_results, best_runtime
+        if not success:
+            return Failure("Failed to establish a baseline for the original code.")
+        logging.info(
+            f"Original code runtime measured over {times_run} run{'s' if times_run > 1 else ''}: {humanize_runtime(original_runtime)}",
+        )
+        return Success(
+            OriginalCodeBaseline(
+                generated_test_results=original_gen_results,
+                overall_test_results=overall_original_test_results,
+                runtime=best_runtime,
+            ),
+        )
 
     def run_optimized_candidate(
         self,
