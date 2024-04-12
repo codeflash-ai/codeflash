@@ -71,6 +71,8 @@ class FunctionTestInvocation:
 class TestResults(BaseModel):
     test_results: List[FunctionTestInvocation] = []
 
+    def __init__(self, test_results: Optional[List[FunctionTestInvocation]] = None, **kwargs):
+        super().__init__(test_results=test_results or [], **kwargs)
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
         self.test_results.append(function_test_invocation)
