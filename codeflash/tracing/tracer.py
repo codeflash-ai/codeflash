@@ -9,7 +9,6 @@ from collections import defaultdict
 from typing import Any, Optional, List
 
 import isort
-
 from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.code_utils.config_parser import parse_config_file
@@ -194,11 +193,11 @@ class Tracer:
         try:
             # pickling can be a recursive operator, so we need to increase the recursion limit
             original_recursion_limit = sys.getrecursionlimit()
-            sys.setrecursionlimit(20000)
+            sys.setrecursionlimit(10000)
             local_vars = pickle.dumps(frame.f_locals, protocol=pickle.HIGHEST_PROTOCOL)
             arg = pickle.dumps(arg, protocol=pickle.HIGHEST_PROTOCOL)
             sys.setrecursionlimit(original_recursion_limit)
-        except (TypeError, pickle.PicklingError, AttributeError) as e:
+        except (TypeError, pickle.PicklingError, AttributeError, RecursionError) as e:
             # logging.info(f"Error in pickling arguments or local variables - {e}")
             return
         cur.execute(
