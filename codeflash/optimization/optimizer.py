@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from returns.pipeline import is_successful
 from returns.result import Failure, Result, Success
 
-from codeflash.api.aiservice import log_results, optimize_python_code
+from codeflash.api.aiservice import Optimization, log_results, optimize_python_code
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import extract_code
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
@@ -53,6 +53,12 @@ from codeflash.verification.test_results import TestResults, TestType
 from codeflash.verification.test_runner import run_tests
 from codeflash.verification.verification_utils import TestConfig, get_test_file_path
 from codeflash.verification.verifier import generate_tests
+
+
+class TestsAndOptimizationsResult(BaseModel):
+    generated_original_test_source: str
+    instrumented_test_source: str
+    optimizations: List[Optimization]
 
 
 class BestOptimization(BaseModel):
@@ -146,12 +152,11 @@ class Optimizer:
                     )
                     winning_test_results = None
                     self.cleanup_leftover_test_return_values()
-                    result = self.extract_code_to_optimize_with_dependents(function_to_optimize)
-                    if not is_successful(result):
-                        logging.error(result.failure())
+                    c_o_result = self.get_code_optimization_context(function_to_optimize)
+                    if not is_successful(c_o_result):
+                        logging.error(c_o_result.failure())
                         continue
-                    else:
-                        code_context = result.unwrap()
+                    code_context = c_o_result.unwrap()
                     dependent_functions_by_module_abspath = defaultdict(set)
                     for _, module_abspath, qualified_name in code_context.dependent_functions:
                         dependent_functions_by_module_abspath[module_abspath].add(qualified_name)
@@ -163,7 +168,7 @@ class Optimizer:
                     logging.info(f"Code to be optimized:\n{code_context.code_to_optimize_with_dependents}")
                     module_path = module_name_from_file_path(path, self.args.project_root)
 
-                    instrumented_unittests_created_for_function = self.prepare_existing_tests(
+                    instrumented_unittests_created_for_function = self.instrument_existing_tests(
                         function_name=qualified_function_name,
                         module_path=module_path,
                         function_to_tests=function_to_tests,
@@ -172,20 +177,17 @@ class Optimizer:
                         instrumented_unittests_created_for_function,
                     )
 
-                    (
-                        success,
-                        generated_original_test_source,
-                        instrumented_test_source,
-                        optimizations,
-                    ) = self.generate_tests_and_optimizations(
+                    t_o_result = self.generate_tests_and_optimizations(
                         code_context.code_to_optimize_with_dependents,
                         function_to_optimize,
                         code_context.dependent_functions,
                         module_path,
                         function_trace_id,
                     )
-                    if not success:
+                    if not is_successful(t_o_result):
+                        logging.error(t_o_result.failure())
                         continue
+                    tests_and_optimizations: TestsAndOptimizationsResult = t_o_result.unwrap()
 
                     generated_tests_path = get_test_file_path(
                         self.args.tests_root,
@@ -193,7 +195,7 @@ class Optimizer:
                         0,
                     )
                     with open(generated_tests_path, "w", encoding="utf8") as file:
-                        file.write(instrumented_test_source)
+                        file.write(tests_and_optimizations.instrumented_test_source)
 
                     test_files_created.add(generated_tests_path)
                     (
@@ -217,7 +219,7 @@ class Optimizer:
                     optimized_runtimes = dict()
                     is_correct = dict()
 
-                    for i, optimization in enumerate(optimizations.optimizations):
+                    for i, optimization in enumerate(tests_and_optimizations.optimizations):
                         j = i + 1
                         if optimization.source_code is None:
                             continue
@@ -328,7 +330,7 @@ class Optimizer:
                     if best_optimization:
                         optimizations_found += 1
                         logging.info(
-                            f"Best candidate:\n{best_optimization.source_code}, {best_optimization.explanation}"
+                            f"Best candidate:\n{best_optimization.source_code}, {best_optimization.explanation}",
                         )
 
                         optimized_code = best_optimization.source_code
@@ -377,7 +379,7 @@ class Optimizer:
                         }
                         logging.info(
                             f"Optimization was validated for correctness by running the following tests - "
-                            f"\n{generated_original_test_source}",
+                            f"\n{tests_and_optimizations.generated_original_test_source}",
                         )
 
                         logging.info(f"⚡️ Optimization successful! 📄 {qualified_function_name} in {path}")
@@ -413,7 +415,7 @@ class Optimizer:
                             new_code=new_dependent_code | {path: new_code},
                             explanation=explanation_final,
                             existing_tests_source=existing_tests,
-                            generated_original_test_source=generated_original_test_source,
+                            generated_original_test_source=tests_and_optimizations.generated_original_test_source,
                         )
                         if self.args.all or env_utils.get_pr_number():
                             # Reverting to original code, because optimizing functions in a sequence can lead to
@@ -443,8 +445,9 @@ class Optimizer:
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
 
-    def extract_code_to_optimize_with_dependents(
-        self, function_to_optimize: FunctionToOptimize
+    def get_code_optimization_context(
+        self,
+        function_to_optimize: FunctionToOptimize,
     ) -> Result[CodeOptimizationContext, str]:
         code_to_optimize, contextual_dunder_methods = extract_code(
             [function_to_optimize],
@@ -492,7 +495,7 @@ class Optimizer:
                 contextual_dunder_methods=contextual_dunder_methods,
                 dependent_functions=dependent_functions,
                 preexisting_functions=preexisting_functions,
-            )
+            ),
         )
 
     def cleanup_leftover_test_return_values(self):
@@ -504,7 +507,7 @@ class Optimizer:
             missing_ok=True,
         )
 
-    def prepare_existing_tests(
+    def instrument_existing_tests(
         self,
         function_name: str,
         module_path: str,
@@ -554,10 +557,9 @@ class Optimizer:
         dependent_functions: list[Tuple[Source, str, str]],
         module_path: str,
         function_trace_id: str,
-    ):
+    ) -> Result[TestsAndOptimizationsResult, str]:
         generated_original_test_source = None
         instrumented_test_source = None
-        success = True
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             future_tests = executor.submit(
                 self.generate_and_instrument_tests,
@@ -575,7 +577,7 @@ class Optimizer:
             )
 
             future_tests_result = future_tests.result()
-            optimizations = future_optimization.result()
+            optimizations: List[Optimization] = future_optimization.result()
         if future_tests_result and isinstance(future_tests_result, tuple) and len(future_tests_result) == 2:
             (
                 generated_original_test_source,
@@ -583,19 +585,15 @@ class Optimizer:
             ) = future_tests_result
 
         else:
-            logging.error("/!\\ NO TESTS GENERATED for %s", function_to_optimize.function_name)
-            success = False
-        if len(optimizations.optimizations) == 0:
-            logging.error(
-                "/!\\ NO OPTIMIZATIONS GENERATED for %s",
-                function_to_optimize.function_name,
-            )
-            success = False
-        return (
-            success,
-            generated_original_test_source,
-            instrumented_test_source,
-            optimizations,
+            return Failure(f"/!\\ NO TESTS GENERATED for {function_to_optimize.function_name}")
+        if not optimizations:
+            return Failure(f"/!\\ NO OPTIMIZATIONS GENERATED for {function_to_optimize.function_name}")
+        return Success(
+            TestsAndOptimizationsResult(
+                generated_original_test_source=generated_original_test_source,
+                instrumented_test_source=instrumented_test_source,
+                optimizations=optimizations,
+            ),
         )
 
     def establish_original_code_baseline(

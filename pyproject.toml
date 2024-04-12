@@ -43,6 +43,7 @@ optional = true
 ipython = "^8.12.0"
 mypy = "^1.9.0"
 ruff = "^0.3.5"
+ruff-lsp = "^0.0.53"
 
 
 [tool.poetry.build]
@@ -95,11 +96,6 @@ line-length = 110
 
 [tool.ruff.format]
 docstring-code-format = true
-
-
-[tool.black]
-line-length = 110
-target-version = ['py312']
 
 [tool.poetry-dynamic-versioning]
 enable = true

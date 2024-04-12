@@ -17,7 +17,7 @@ from codeflash.telemetry.posthog import ph
 @lru_cache(maxsize=1)
 def get_aiservice_base_url() -> str:
     if os.environ.get("AIS_SERVER", default="prod").lower() == "local":
-        logging.info(f"Using local AI Service at http://localhost:8000/")
+        logging.info("Using local AI Service at http://localhost:8000/")
         return "http://localhost:8000/"
     return "https://app.codeflash.ai"
 
@@ -59,12 +59,7 @@ class Optimization:
     optimization_id: str
 
 
-@dataclass(frozen=True)
-class Optimizations:
-    optimizations: List[Optimization]
-
-
-def optimize_python_code(source_code: str, trace_id: str, num_variants: int = 10) -> Optimizations:
+def optimize_python_code(source_code: str, trace_id: str, num_variants: int = 10) -> List[Optimization]:
     """Optimize the given python code for performance by making a request to the Django endpoint.
 
     Parameters
@@ -74,7 +69,7 @@ def optimize_python_code(source_code: str, trace_id: str, num_variants: int = 10
 
     Returns
     -------
-    - List[Tuple[str, str]]: A list of tuples where the first element is the optimized code and the second is the explanation.
+    - List[Optimization]: A list of Optimization objects.
 
     """
     payload = {
@@ -89,32 +84,29 @@ def optimize_python_code(source_code: str, trace_id: str, num_variants: int = 10
     except requests.exceptions.RequestException as e:
         logging.exception(f"Error generating optimized candidates: {e}")
         ph("cli-optimize-error-caught", {"error": str(e)})
-        return Optimizations(optimizations=[])
+        return []
 
     if response.status_code == 200:
-        optimizations = response.json()["optimizations"]
-        logging.info(f"Generated {len(optimizations)} candidates.")
-        return Optimizations(
-            [
-                Optimization(
-                    source_code=opt["source_code"],
-                    explanation=opt["explanation"],
-                    optimization_id=opt["optimization_id"],
-                )
-                for opt in optimizations
-            ],
-        )
-    else:
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logging.error(f"Error generating optimized candidates: {response.status_code} - {error}")
-        ph(
-            "cli-optimize-error-response",
-            {"response_status_code": response.status_code, "error": error},
-        )
-        return Optimizations(optimizations=[])
+        optimizations_json = response.json()["optimizations"]
+        logging.info(f"Generated {len(optimizations_json)} candidates.")
+        return [
+            Optimization(
+                source_code=opt["source_code"],
+                explanation=opt["explanation"],
+                optimization_id=opt["optimization_id"],
+            )
+            for opt in optimizations_json
+        ]
+    try:
+        error = response.json()["error"]
+    except Exception:
+        error = response.text
+    logging.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+    ph(
+        "cli-optimize-error-response",
+        {"response_status_code": response.status_code, "error": error},
+    )
+    return []
 
 
 def log_results(
