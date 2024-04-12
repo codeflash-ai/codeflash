@@ -55,6 +55,12 @@ from codeflash.verification.verification_utils import TestConfig, get_test_file_
 from codeflash.verification.verifier import generate_tests
 
 
+class OptimizedCandidateResult(BaseModel):
+    times_run: int
+    best_test_runtime: int
+    best_test_results: TestResults
+
+
 class OriginalCodeBaseline(BaseModel):
     generated_test_results: TestResults
     overall_test_results: Optional[TestResults]
@@ -268,12 +274,7 @@ class Optimizer:
                                     f.write(original_dependent_code[module_abspath])
                             continue
 
-                        (
-                            success,
-                            times_run,
-                            best_test_runtime,
-                            best_test_results,
-                        ) = self.run_optimized_candidate(
+                        run_results = self.run_optimized_candidate(
                             optimization_index=j,
                             instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
                             overall_original_test_results=original_code_baseline.overall_test_results,
@@ -281,17 +282,21 @@ class Optimizer:
                             generated_tests_path=generated_tests_path,
                             best_runtime_until_now=best_runtime,
                         )
-                        optimized_runtimes[optimization.optimization_id] = best_test_runtime
-                        speedup_ratios[optimization.optimization_id] = None
-                        is_correct[optimization.optimization_id] = success
-
-                        if success:
+                        if not is_successful(run_results):
+                            optimized_runtimes[optimization.optimization_id] = None
+                            is_correct[optimization.optimization_id] = False
+                            speedup_ratios[optimization.optimization_id] = None
+                        else:
+                            candidate_result: OptimizedCandidateResult = run_results.unwrap()
+                            best_test_runtime = candidate_result.best_test_runtime
+                            optimized_runtimes[optimization.optimization_id] = best_test_runtime
+                            is_correct[optimization.optimization_id] = True
                             speedup_ratios[optimization.optimization_id] = (
                                 original_code_baseline.runtime - best_test_runtime
                             ) / best_test_runtime
 
                             logging.info(
-                                f"Candidate runtime measured over {times_run} run{'s' if times_run > 1 else ''}: "
+                                f"Candidate runtime measured over {candidate_result.times_run} run{'s' if candidate_result.times_run > 1 else ''}: "
                                 f"{humanize_runtime(best_test_runtime)}, speedup ratio = "
                                 f"{((original_code_baseline.runtime - best_test_runtime) / best_test_runtime):.3f}",
                             )
@@ -314,7 +319,7 @@ class Optimizer:
                                     dependent_functions=code_context.dependent_functions,
                                 )
                                 best_runtime = best_test_runtime
-                                winning_test_results = best_test_results
+                                winning_test_results = candidate_result.best_test_results
                         with open(path, "w", encoding="utf8") as f:
                             f.write(original_code)
                         for module_abspath in dependent_functions_by_module_abspath.keys():
@@ -731,7 +736,7 @@ class Optimizer:
         original_gen_results: TestResults,
         generated_tests_path: str,
         best_runtime_until_now: int,
-    ):
+    ) -> Result[OptimizedCandidateResult, str]:
         success = True
         best_test_runtime = None
         best_test_results = None
@@ -854,11 +859,14 @@ class Optimizer:
         if not (equal_results and times_run > 0):
             success = False
 
-        return (
-            success,
-            times_run,
-            best_test_runtime,
-            best_test_results,
+        if not success:
+            return Failure("Failed to run the optimized candidate.")
+        return Success(
+            OptimizedCandidateResult(
+                times_run=times_run,
+                best_test_runtime=best_test_runtime,
+                best_test_results=best_test_results,
+            ),
         )
 
     def run_and_parse_tests(
