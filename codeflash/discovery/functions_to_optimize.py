@@ -2,9 +2,9 @@ import ast
 import logging
 import os
 import random
-from _ast import ClassDef, FunctionDef, AsyncFunctionDef
+from _ast import AsyncFunctionDef, ClassDef, FunctionDef
 from functools import lru_cache
-from typing import Dict, Optional, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import git
 import libcst as cst
@@ -13,8 +13,8 @@ from libcst.metadata import CodeRange
 from pydantic.dataclasses import dataclass
 
 from codeflash.code_utils.code_utils import (
-    path_belongs_to_site_packages,
     module_name_from_file_path,
+    path_belongs_to_site_packages,
 )
 from codeflash.code_utils.git_utils import get_git_diff
 from codeflash.verification.verification_utils import TestConfig
@@ -47,7 +47,7 @@ class FunctionVisitor(cst.CSTVisitor):
             while parents is not None:
                 if isinstance(parents, (cst.FunctionDef, cst.ClassDef)):
                     ast_parents.append(
-                        FunctionParent(parents.name.value, parents.__class__.__name__)
+                        FunctionParent(parents.name.value, parents.__class__.__name__),
                     )
                 parents = self.get_metadata(cst.metadata.ParentNodeProvider, parents, default=None)
             self.functions.append(
@@ -57,7 +57,7 @@ class FunctionVisitor(cst.CSTVisitor):
                     parents=list(reversed(ast_parents)),
                     starting_line=pos.start.line,
                     ending_line=pos.end.line,
-                )
+                ),
             )
 
 
@@ -72,8 +72,10 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
         if function_has_return_statement(node):
             self.functions.append(
                 FunctionToOptimize(
-                    function_name=node.name, file_path=self.file_path, parents=self.ast_path[:]
-                )
+                    function_name=node.name,
+                    file_path=self.file_path,
+                    parents=self.ast_path[:],
+                ),
             )
         # Continue visiting the body of the function to find nested functions
         self.generic_visit(node)
@@ -138,14 +140,18 @@ def get_functions_to_optimize_by_file(
             if found_function is None:
                 raise ValueError(
                     f"Function {only_function_name} not found in file {file} or"
-                    f" the function does not have a 'return' statement."
+                    f" the function does not have a 'return' statement.",
                 )
             functions[file] = [found_function]
     else:
         logging.info("Finding all functions modified in the current git diff ...")
         functions = get_functions_within_git_diff()
     filtered_modified_functions, functions_count = filter_functions(
-        functions, test_cfg.tests_root, ignore_paths, project_root, module_root
+        functions,
+        test_cfg.tests_root,
+        ignore_paths,
+        project_root,
+        module_root,
     )
     logging.info("Found %d functions to optimize", functions_count)
     return filtered_modified_functions, functions_count
@@ -157,12 +163,12 @@ def get_functions_within_git_diff() -> Dict[str, List[FunctionToOptimize]]:
     for path in modified_lines:
         if not os.path.exists(path):
             continue
-        with open(path, "r", encoding="utf8") as f:
+        with open(path, encoding="utf8") as f:
             file_content = f.read()
             try:
                 wrapper = cst.metadata.MetadataWrapper(cst.parse_module(file_content))
             except Exception as e:
-                logging.error(e)
+                logging.exception(e)
                 continue
             function_lines = FunctionVisitor(file_path=path)
             wrapper.visit(function_lines)
@@ -196,11 +202,11 @@ def get_all_files_and_functions(module_root_path: str) -> Dict[str, List[Functio
 
 def find_all_functions_in_file(file_path: str) -> Dict[str, List[FunctionToOptimize]]:
     functions: Dict[str, List[FunctionToOptimize]] = {}
-    with open(file_path, "r", encoding="utf8") as f:
+    with open(file_path, encoding="utf8") as f:
         try:
             ast_module = ast.parse(f.read())
         except Exception as e:
-            logging.error(e)
+            logging.exception(e)
             return functions
         function_name_visitor = FunctionWithReturnStatement(file_path)
         function_name_visitor.visit(ast_module)
@@ -226,6 +232,54 @@ def ignored_submodule_paths(module_root) -> List[str]:
         ]
     else:
         return []
+
+
+class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
+    def __init__(
+        self,
+        file_name: str,
+        function_or_method_name: str,
+        class_name: Optional[str] = None,
+    ) -> None:
+        self.file_name = file_name
+        self.class_name = class_name
+        self.function_name = function_or_method_name
+        self.is_top_level = False
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        if node.name == self.function_name:
+            self.is_top_level = True
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        # iterate over the class methods
+        for body_node in node.body:
+            if (
+                isinstance(body_node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and body_node.name == self.function_name
+            ):
+                self.is_top_level = True
+                return
+        return
+
+
+def is_function_or_method_top_level(
+    file_name: str,
+    function_or_method_name: str,
+    class_name: Optional[str] = None,
+) -> bool:
+    with open(file_name, encoding="utf8") as file:
+        try:
+            ast_module = ast.parse(file.read())
+        except Exception as e:
+            logging.exception(e)
+            return False
+    visitor = TopLevelFunctionOrMethodVisitor(
+        file_name=file_name,
+        function_or_method_name=function_or_method_name,
+        class_name=class_name,
+    )
+    visitor.visit(ast_module)
+    return visitor.is_top_level
 
 
 def filter_functions(

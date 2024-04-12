@@ -2,8 +2,9 @@ import logging
 import sqlite3
 import textwrap
 from collections import defaultdict
-from typing import Any, Dict, Generator, List, Tuple, Optional
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
+from codeflash.discovery.functions_to_optimize import is_function_or_method_top_level
 from codeflash.tracing.tracing_utils import FunctionModules
 
 
@@ -41,14 +42,14 @@ def get_next_arg_and_return(
             matched_arg_return[frame_address].append(val[8])
             if len(matched_arg_return[frame_address]) > 1:
                 logging.warning(
-                    f"Pre-existing call to the function {function_name} with same frame address."
+                    f"Pre-existing call to the function {function_name} with same frame address.",
                 )
         elif event_type == "return":
             matched_arg_return[frame_address].append(val[7])
             arg_return_length = len(matched_arg_return[frame_address])
             if arg_return_length > 2:
                 logging.warning(
-                    f"Pre-existing return to the function {function_name} with same frame address."
+                    f"Pre-existing return to the function {function_name} with same frame address.",
                 )
             elif arg_return_length == 1:
                 logging.warning(f"No call before return for {function_name}!")
@@ -81,13 +82,20 @@ from codeflash.verification.comparator import comparator
     # TODO: Module can have "-" character if the module-root is ".". Need to handle that case
     function_imports = []
     for function in functions:
+        if not is_function_or_method_top_level(
+            file_name=function.file_name,
+            function_or_method_name=function.function_name,
+            class_name=function.class_name,
+        ):
+            # can't be imported and run in the replay test
+            continue
         if function.class_name:
             function_imports.append(
-                f"from {function.module_name} import {function.class_name} as {get_function_alias(function.module_name, function.class_name)}"
+                f"from {function.module_name} import {function.class_name} as {get_function_alias(function.module_name, function.class_name)}",
             )
         else:
             function_imports.append(
-                f"from {function.module_name} import {function.function_name} as {get_function_alias(function.module_name, function.function_name)}"
+                f"from {function.module_name} import {function.function_name} as {get_function_alias(function.module_name, function.function_name)}",
             )
 
     imports += "\n".join(function_imports)
@@ -104,7 +112,7 @@ from codeflash.verification.comparator import comparator
             if test_framework == "unittest"
             else """assert comparator(return_val, ret)
         """
-        )
+        ),
     )
     test_class_method_body = textwrap.dedent(
         """\
@@ -119,7 +127,7 @@ from codeflash.verification.comparator import comparator
             if test_framework == "unittest"
             else """assert comparator(return_val, ret)
         """
-        )
+        ),
     )
     if test_framework == "unittest":
         self = "self"
