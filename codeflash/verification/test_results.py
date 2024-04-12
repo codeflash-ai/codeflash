@@ -71,9 +71,6 @@ class FunctionTestInvocation:
 class TestResults(BaseModel):
     test_results: List[FunctionTestInvocation] = []
 
-    def __init__(self, test_results: Optional[List[FunctionTestInvocation]] = None, **kwargs):
-        super().__init__(test_results=test_results or [], **kwargs)
-
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
         self.test_results.append(function_test_invocation)
 
@@ -150,7 +147,7 @@ class TestResults(BaseModel):
     def __bool__(self) -> bool:
         return bool(self.test_results)
 
-    def __eq__(self, other: TestResults):
+    def __eq__(self, other: object) -> bool:
         # Unordered comparison
         if type(self) != type(other):
             return False

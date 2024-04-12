@@ -1,15 +1,15 @@
 from codeflash.verification.parse_test_output import merge_test_results
 from codeflash.verification.test_results import (
-    TestType,
-    InvocationId,
     FunctionTestInvocation,
+    InvocationId,
     TestResults,
+    TestType,
 )
 
 
 def test_merge_test_results_1():
     test_results_xml = TestResults(
-        [
+        test_results=[
             FunctionTestInvocation(
                 id=InvocationId(
                     test_module_path="code_to_optimize.tests.unittest.test_bubble_sort",
@@ -55,11 +55,11 @@ def test_merge_test_results_1():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
             ),
-        ]
+        ],
     )
 
     test_results_bin = TestResults(
-        [
+        test_results=[
             FunctionTestInvocation(
                 id=InvocationId(
                     test_module_path="code_to_optimize.tests.unittest.test_bubble_sort",
@@ -105,11 +105,11 @@ def test_merge_test_results_1():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
             ),
-        ]
+        ],
     )
 
     expected_merged_results = TestResults(
-        [
+        test_results=[
             FunctionTestInvocation(
                 id=InvocationId(
                     test_module_path="code_to_optimize.tests.unittest.test_bubble_sort",
@@ -155,7 +155,7 @@ def test_merge_test_results_1():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
             ),
-        ]
+        ],
     )
     merged_results = merge_test_results(
         xml_test_results=test_results_xml,
@@ -165,7 +165,7 @@ def test_merge_test_results_1():
     assert merged_results == expected_merged_results
 
     test_results_xml_single = TestResults(
-        [
+        test_results=[
             FunctionTestInvocation(
                 id=InvocationId(
                     test_module_path="code_to_optimize.tests.unittest.test_bubble_sort",
@@ -181,7 +181,7 @@ def test_merge_test_results_1():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
             ),
-        ]
+        ],
     )
 
     merged_results = merge_test_results(
@@ -201,15 +201,15 @@ def test_merge_test_results_1():
     assert merged_results == test_results_xml_single
 
     merged_results = merge_test_results(
-        xml_test_results=TestResults(), bin_test_results=test_results_bin, test_framework="unittest"
+        xml_test_results=TestResults(),
+        bin_test_results=test_results_bin,
+        test_framework="unittest",
     )
 
-    assert (
-        merged_results == TestResults()
-    )  # XML Results should always have better coverage than bin results
+    assert merged_results == TestResults()  # XML Results should always have better coverage than bin results
 
     test_results_xml_pytest = TestResults(
-        [
+        test_results=[
             FunctionTestInvocation(
                 id=InvocationId(
                     test_module_path="code_to_optimize.tests.unittest.test_bubble_sort",
@@ -225,11 +225,11 @@ def test_merge_test_results_1():
                 test_type=TestType.GENERATED_REGRESSION,
                 return_value=None,
             ),
-        ]
+        ],
     )
 
     test_results_bin_pytest = TestResults(
-        [
+        test_results=[
             FunctionTestInvocation(
                 id=InvocationId(
                     test_module_path="code_to_optimize.tests.unittest.test_bubble_sort",
@@ -260,7 +260,7 @@ def test_merge_test_results_1():
                 test_type=TestType.GENERATED_REGRESSION,
                 return_value=[3],
             ),
-        ]
+        ],
     )
 
     merged_results = merge_test_results(
