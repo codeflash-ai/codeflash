@@ -27,6 +27,7 @@ def make_ai_service_request(
     method: str = "POST",
     payload: Optional[Dict[str, Any]] = None,
     timeout: float = None,
+    aiservice_base_url: str = get_aiservice_base_url(),
 ) -> requests.Response:
     """Make an API request to the given endpoint on the AI service.
     :param endpoint: The endpoint to call, e.g., "/optimize".
@@ -35,7 +36,7 @@ def make_ai_service_request(
     :param timeout: The timeout for the request.
     :return: The response object from the API.
     """
-    url = f"{get_aiservice_base_url()}/ai{endpoint}"
+    url = f"{aiservice_base_url}/ai{endpoint}"
     ai_service_headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
     if method.upper() == "POST":
         json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
@@ -59,7 +60,12 @@ class Optimization:
     optimization_id: str
 
 
-def optimize_python_code(source_code: str, trace_id: str, num_variants: int = 10) -> List[Optimization]:
+def optimize_python_code(
+    source_code: str,
+    trace_id: str,
+    num_variants: int = 10,
+    prod_or_local="prod",
+) -> List[Optimization]:
     """Optimize the given python code for performance by making a request to the Django endpoint.
 
     Parameters
@@ -80,7 +86,18 @@ def optimize_python_code(source_code: str, trace_id: str, num_variants: int = 10
     }
     logging.info("Generating optimized candidates ...")
     try:
-        response = make_ai_service_request("/optimize", payload=payload, timeout=600)
+        if prod_or_local == "prod":
+            aiservice_base_url = get_aiservice_base_url()
+        elif prod_or_local == "local":
+            aiservice_base_url = "http://localhost:8000"
+        else:
+            raise Exception("Invalid prod_or_local value. Must be 'prod' or 'local'")
+        response = make_ai_service_request(
+            "/optimize",
+            payload=payload,
+            timeout=600,
+            aiservice_base_url=aiservice_base_url,
+        )
     except requests.exceptions.RequestException as e:
         logging.exception(f"Error generating optimized candidates: {e}")
         ph("cli-optimize-error-caught", {"error": str(e)})
