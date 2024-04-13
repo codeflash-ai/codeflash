@@ -1,13 +1,13 @@
 import datetime
 import decimal
-import pytest
 
+import pytest
 from codeflash.verification.comparator import comparator
 from codeflash.verification.equivalence import compare_results
 from codeflash.verification.test_results import (
-    TestResults,
     FunctionTestInvocation,
     InvocationId,
+    TestResults,
     TestType,
 )
 
@@ -262,7 +262,6 @@ def test_scipy():
         assert comparator(v, w)
     except ImportError:
         print("Should run tests with numpy installed to test more thoroughly")
-        pass
 
 
 def test_pandas():
@@ -282,19 +281,19 @@ def test_pandas():
         {
             "a": [datetime.datetime(2020, 2, 2, 2, 2, 2), datetime.datetime(2020, 2, 2, 2, 2, 2)],
             "b": [4, 5],
-        }
+        },
     )
     al = pd.DataFrame(
         {
             "a": [datetime.datetime(2020, 2, 2, 2, 2, 2), datetime.datetime(2020, 2, 2, 2, 2, 2)],
             "b": [4, 5],
-        }
+        },
     )
     am = pd.DataFrame(
         {
             "a": [datetime.datetime(2020, 2, 2, 2, 2, 2), datetime.datetime(2020, 2, 2, 2, 2, 3)],
             "b": [4, 5],
-        }
+        },
     )
     assert comparator(ak, al)
     assert not comparator(ak, am)
@@ -396,7 +395,8 @@ def test_custom_object():
     c = TestClass2(5)
     assert not comparator(a, b)
     assert comparator(
-        b, c
+        b,
+        c,
     )  # This is a fallback to True right now since we don't know how to compare them. This can be improved later
 
     class TestClass3(TestClass):
@@ -412,7 +412,7 @@ def test_custom_object():
 
 def test_compare_results_fn():
     original_results = TestResults(
-        [
+        test_results=[
             FunctionTestInvocation(
                 id=InvocationId(
                     test_module_path="test_module_path",
@@ -427,12 +427,12 @@ def test_compare_results_fn():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=5,
-            )
-        ]
+            ),
+        ],
     )
 
     new_results_1 = TestResults(
-        [
+        test_results=[
             FunctionTestInvocation(
                 id=InvocationId(
                     test_module_path="test_module_path",
@@ -447,14 +447,14 @@ def test_compare_results_fn():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=5,
-            )
-        ]
+            ),
+        ],
     )
 
     assert compare_results(original_results, new_results_1)
 
     new_results_2 = TestResults(
-        [
+        test_results=[
             FunctionTestInvocation(
                 id=InvocationId(
                     test_module_path="test_module_path",
@@ -469,14 +469,14 @@ def test_compare_results_fn():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=[5],
-            )
-        ]
+            ),
+        ],
     )
 
     assert not compare_results(original_results, new_results_2)
 
     new_results_3 = TestResults(
-        [
+        test_results=[
             FunctionTestInvocation(
                 id=InvocationId(
                     test_module_path="test_module_path",
@@ -507,7 +507,7 @@ def test_compare_results_fn():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=5,
             ),
-        ]
+        ],
     )
 
     assert not compare_results(original_results, new_results_3)

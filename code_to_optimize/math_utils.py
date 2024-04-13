@@ -1,4 +1,5 @@
 """Math utils."""
+
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -15,7 +16,7 @@ def cosine_similarity(X: Matrix, Y: Matrix) -> np.ndarray:
     if X.shape[1] != Y.shape[1]:
         raise ValueError(
             f"Number of columns in X and Y must be the same. X has shape {X.shape} "
-            f"and Y has shape {Y.shape}."
+            f"and Y has shape {Y.shape}.",
         )
 
     X_norm = np.linalg.norm(X, axis=1)
@@ -34,14 +35,17 @@ def cosine_similarity_top_k(
     """Row-wise cosine similarity with optional top-k and score threshold filtering.
 
     Args:
+    ----
         X: Matrix.
         Y: Matrix, same width as X.
         top_k: Max number of results to return.
         score_threshold: Minimum cosine similarity of results.
 
     Returns:
+    -------
         Tuple of two lists. First contains two-tuples of indices (X_idx, Y_idx),
             second contains corresponding cosine similarities.
+
     """
     if len(X) == 0 or len(Y) == 0:
         return [], []
