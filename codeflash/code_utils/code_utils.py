@@ -7,12 +7,10 @@ from typing import List, Optional, Tuple, Union
 
 
 def module_name_from_file_path(file_path: str, project_root: str) -> str:
-    import os
-
     relative_path = os.path.relpath(file_path, project_root)
     module_path = relative_path.replace(os.sep, ".")
-    if module_path.endswith(".py"):
-        module_path = module_path.rsplit(".", 1)[0]
+    if module_path.lower().endswith(".py"):
+        module_path = module_path[:-3]
     return module_path
 
 
@@ -23,9 +21,8 @@ def file_path_from_module_name(module_name: str, project_root: str) -> str:
 
 def ellipsis_in_ast(module: ast.AST) -> bool:
     for node in ast.walk(module):
-        if isinstance(node, ast.Constant):
-            if node.value == ...:
-                return True
+        if isinstance(node, ast.Constant) and node.value == ...:
+            return True
     return False
 
 
