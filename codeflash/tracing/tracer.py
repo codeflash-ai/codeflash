@@ -6,21 +6,21 @@ import sqlite3
 import sys
 import time
 from collections import defaultdict
-from typing import Any, Optional, List
+from typing import Any, List, Optional
 
 import isort
+
 from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.code_utils.config_parser import parse_config_file
-from codeflash.discovery.functions_to_optimize import filter_functions, FunctionToOptimize
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize, filter_functions
 from codeflash.tracing.replay_test import create_trace_replay_test
 from codeflash.tracing.tracing_utils import FunctionModules
 from codeflash.verification.verification_utils import get_test_file_path
 
 
 class Tracer:
-    """
-    Use this class as a 'with' context manager to trace a function call,
+    """Use this class as a 'with' context manager to trace a function call,
     input arguments, and return value.
     """
 
@@ -45,13 +45,15 @@ class Tracer:
         self.max_function_count = 100
         self.config, found_config_path = parse_config_file(config_file_path)
         self.project_root = project_root_from_module_root(
-            self.config["module_root"], found_config_path
+            self.config["module_root"],
+            found_config_path,
         )
         self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>"}
         self.file_being_called_from: str = str(
             os.path.basename(os.path.realpath(sys._getframe().f_back.f_code.co_filename)).replace(
-                ".", "_"
-            )
+                ".",
+                "_",
+            ),
         )
 
         assert (
@@ -69,7 +71,7 @@ class Tracer:
         # TODO: Check out if we need to export the function test name as well
         cur.execute(
             "CREATE TABLE events(type TEXT, function TEXT, classname TEXT, filename TEXT, line_number INTEGER, "
-            "last_frame_address INTEGER, time_ns INTEGER, arg BLOB, locals BLOB)"
+            "last_frame_address INTEGER, time_ns INTEGER, arg BLOB, locals BLOB)",
         )
         logging.info("Codeflash: Tracing started!")
         sys.setprofile(self.trace_callback)
@@ -107,14 +109,16 @@ class Tracer:
         else:
             function_path = self.file_being_called_from
         test_file_path = get_test_file_path(
-            test_dir=self.config["tests_root"], function_name=function_path, test_type="replay"
+            test_dir=self.config["tests_root"],
+            function_name=function_path,
+            test_type="replay",
         )
         replay_test = isort.code(replay_test)
         with open(test_file_path, "w", encoding="utf8") as file:
             file.write(replay_test)
 
         logging.info(
-            f"Codeflash: Traced successful and replay test created! Path - {test_file_path}"
+            f"Codeflash: Traced successful and replay test created! Path - {test_file_path}",
         )
 
     def trace_callback(self, frame: Any, event: str, arg: Any) -> None:
@@ -137,7 +141,7 @@ class Tracer:
             return
         if self.functions:
             if code.co_name not in self.functions:
-                return None
+                return
 
         class_name = None
         if (
@@ -158,9 +162,11 @@ class Tracer:
                 modified_functions={
                     file_name: [
                         FunctionToOptimize(
-                            function_name=code.co_name, file_path=file_name, parents=[]
-                        )
-                    ]
+                            function_name=code.co_name,
+                            file_path=file_name,
+                            parents=[],
+                        ),
+                    ],
                 },
                 tests_root=self.config["tests_root"],
                 ignore_paths=self.config["ignore_paths"],
@@ -176,10 +182,11 @@ class Tracer:
                     function_name=code.co_name,
                     file_name=file_name,
                     module_name=module_name_from_file_path(
-                        file_name, project_root=self.project_root
+                        file_name,
+                        project_root=self.project_root,
                     ),
                     class_name=class_name,
-                )
+                ),
             )
 
         if self.function_count[function_qualified_name] >= self.max_function_count:
@@ -197,7 +204,7 @@ class Tracer:
             local_vars = pickle.dumps(frame.f_locals, protocol=pickle.HIGHEST_PROTOCOL)
             arg = pickle.dumps(arg, protocol=pickle.HIGHEST_PROTOCOL)
             sys.setrecursionlimit(original_recursion_limit)
-        except (TypeError, pickle.PicklingError, AttributeError, RecursionError) as e:
+        except (TypeError, pickle.PicklingError, AttributeError, RecursionError):
             # logging.info(f"Error in pickling arguments or local variables - {e}")
             return
         cur.execute(

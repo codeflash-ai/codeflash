@@ -103,14 +103,14 @@ from codeflash.verification.comparator import comparator
         """\
         for arg_val_pkl, return_val_pkl in get_next_arg_and_return(trace_file=r'{trace_file}', function_name='{orig_function_name}', file_name=r'{file_name}', num_to_get={max_run_count}):
             args = pickle.loads(arg_val_pkl)
-            return_val = pickle.loads(return_val_pkl)
+            traced_return_val = pickle.loads(return_val_pkl)
             ret = {function_name}(**args)
             """
         + (
-            """self.assertTrue(comparator(return_val, ret))
+            """self.assertTrue(comparator(traced_return_val, ret))
         """
             if test_framework == "unittest"
-            else """assert comparator(return_val, ret)
+            else """assert comparator(traced_return_val, ret)
         """
         ),
     )
@@ -118,14 +118,14 @@ from codeflash.verification.comparator import comparator
         """\
         for arg_val_pkl, return_val_pkl in get_next_arg_and_return(trace_file=r'{trace_file}', function_name='{orig_function_name}', file_name=r'{file_name}', class_name='{class_name}', num_to_get={max_run_count}):
             args = pickle.loads(arg_val_pkl)
-            return_val = pickle.loads(return_val_pkl)
+            traced_return_val = pickle.loads(return_val_pkl){filter_variables}
             ret = {class_name_alias}.{method_name}(**args)
             """
         + (
-            """self.assertTrue(comparator(return_val, ret))
+            """self.assertTrue(comparator(traced_return_val, ret))
         """
             if test_framework == "unittest"
-            else """assert comparator(return_val, ret)
+            else """assert comparator(traced_return_val, ret)
         """
         ),
     )
@@ -148,6 +148,10 @@ from codeflash.verification.comparator import comparator
         else:
             class_name_alias = get_function_alias(func.module_name, func.class_name)
             alias = get_function_alias(func.module_name, func.class_name + "_" + func.function_name)
+            if func.function_name == "__init__":
+                filter_variables = "\n    args.pop('__class__', None)"
+            else:
+                filter_variables = ""
             test_body = test_class_method_body.format(
                 trace_file=trace_file,
                 orig_function_name=func.function_name,
@@ -156,6 +160,7 @@ from codeflash.verification.comparator import comparator
                 class_name=func.class_name,
                 method_name=func.function_name,
                 max_run_count=max_run_count,
+                filter_variables=filter_variables,
             )
         formatted_test_body = textwrap.indent(
             test_body,
