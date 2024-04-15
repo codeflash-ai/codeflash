@@ -5,7 +5,7 @@ import pickle
 import sqlite3
 import sys
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from typing import Any, List, Optional
 
 import isort
@@ -42,6 +42,7 @@ class Tracer:
         self.functions = functions
         self.function_modules: List[FunctionModules] = []
         self.function_count = defaultdict(int)
+        self.ignored_qualified_functions = set()
         self.max_function_count = 100
         self.config, found_config_path = parse_config_file(config_file_path)
         self.project_root = project_root_from_module_root(
@@ -55,6 +56,7 @@ class Tracer:
                 "_",
             ),
         )
+        self.profiling_info = defaultdict(Counter)
 
         assert (
             "test_framework" in self.config
@@ -120,11 +122,18 @@ class Tracer:
         logging.info(
             f"Codeflash: Traced successful and replay test created! Path - {test_file_path}",
         )
+        for key, value in self.profiling_info.items():
+            logging.info(
+                f"Profiling info - {key} - count - {value['count']} - time - {value['time']/1e6}ms"
+            )
 
     def trace_callback(self, frame: Any, event: str, arg: Any) -> None:
+        t1 = time.perf_counter_ns()
         if event not in ["call", "return"]:
             return
-
+        t2 = time.perf_counter_ns()
+        self.profiling_info["early_return"].update(count=1, time=t2 - t1)
+        t3 = time.perf_counter_ns()
         code = frame.f_code
         # TODO : It currently doesn't log the last return call from the first function
         # print(code.co_name, code.co_filename)
@@ -133,8 +142,11 @@ class Tracer:
             return
         if code.co_name == "__exit__" and code.co_filename == os.path.realpath(__file__):
             return
-        file_name = os.path.realpath(code.co_filename)
-
+        t4 = time.perf_counter_ns()
+        self.profiling_info["ignored_functions"].update(count=1, time=t4 - t3)
+        t5 = time.perf_counter_ns()
+        # file_name = os.path.realpath(code.co_filename)
+        file_name = code.co_filename
         if not self.flag:
             # ignore the first call to trace_callback due to return from Tracer __enter__
             self.flag = True
@@ -142,6 +154,9 @@ class Tracer:
         if self.functions:
             if code.co_name not in self.functions:
                 return
+        t6 = time.perf_counter_ns()
+        self.profiling_info["flag_functions"].update(count=1, time=t6 - t5)
+        t7 = time.perf_counter_ns()
 
         class_name = None
         if (
@@ -150,14 +165,21 @@ class Tracer:
             and hasattr(frame.f_locals["self"].__class__, "__name__")
         ):
             class_name = frame.f_locals["self"].__class__.__name__
+        t8 = time.perf_counter_ns()
+        self.profiling_info["class_name"].update(count=1, time=t8 - t7)
+        t9 = time.perf_counter_ns()
+        if not os.path.exists(file_name):
+            return
 
         function_qualified_name = (
             file_name + ":" + (class_name + ":" if class_name else "") + code.co_name
         )
+        if function_qualified_name in self.ignored_qualified_functions:
+            return
 
         if function_qualified_name not in self.function_count:
             # seeing this function for the first time
-            self.function_count[function_qualified_name] = 0
+
             _, non_filtered_functions_count = filter_functions(
                 modified_functions={
                     file_name: [
@@ -176,6 +198,9 @@ class Tracer:
             )
             if non_filtered_functions_count == 0:
                 # we don't want to trace this function because it cannot be optimized
+                self.ignored_qualified_functions.add(function_qualified_name)
+                t10 = time.perf_counter_ns()
+                self.profiling_info["filter_functions"].update(count=1, time=t10 - t9)
                 return
             self.function_modules.append(
                 FunctionModules(
@@ -191,22 +216,39 @@ class Tracer:
 
         if self.function_count[function_qualified_name] >= self.max_function_count:
             return
+        t10 = time.perf_counter_ns()
+        self.profiling_info["filter_functions"].update(count=1, time=t10 - t9)
+        t11 = time.perf_counter_ns()
 
         # TODO: Also check if this function arguments are unique from the values logged earlier
 
         cur = self.con.cursor()
 
         t_ns = time.perf_counter_ns()
+        self.profiling_info["con.cursor"].update(count=1, time=t_ns - t11)
+        t12 = time.perf_counter_ns()
         try:
             # pickling can be a recursive operator, so we need to increase the recursion limit
             original_recursion_limit = sys.getrecursionlimit()
             sys.setrecursionlimit(10000)
-            local_vars = pickle.dumps(frame.f_locals, protocol=pickle.HIGHEST_PROTOCOL)
-            arg = pickle.dumps(arg, protocol=pickle.HIGHEST_PROTOCOL)
+            if event == "call":
+                local_vars = pickle.dumps(frame.f_locals, protocol=pickle.HIGHEST_PROTOCOL)
+                arg = None
+            else:
+                # return
+                local_vars = None
+                arg = pickle.dumps(arg, protocol=pickle.HIGHEST_PROTOCOL)
             sys.setrecursionlimit(original_recursion_limit)
-        except (TypeError, pickle.PicklingError, AttributeError, RecursionError):
-            # logging.info(f"Error in pickling arguments or local variables - {e}")
+        except (TypeError, pickle.PicklingError, AttributeError, RecursionError) as e:
+            logging.info(
+                f"Error in pickling arguments or local variables - {function_qualified_name} , {e}"
+            )
+            # print("frame.f_locals", frame.f_locals)
+            # print("arg", arg)
             return
+        t13 = time.perf_counter_ns()
+        self.profiling_info["pickle.dumps"].update(count=1, time=t13 - t12)
+        t14 = time.perf_counter_ns()
         cur.execute(
             "INSERT INTO events VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
@@ -222,5 +264,7 @@ class Tracer:
             ),
         )
         self.con.commit()
+        t15 = time.perf_counter_ns()
+        self.profiling_info["cur.execute"].update(count=1, time=t15 - t14)
         if event == "return":
             self.function_count[function_qualified_name] += 1
