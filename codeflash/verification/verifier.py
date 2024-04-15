@@ -2,7 +2,7 @@ import ast
 import logging
 from typing import Optional, Tuple
 
-from codeflash.api.aiservice import generate_regression_tests
+from codeflash.api.aiservice import AiServiceClient
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.verification.verification_utils import (
@@ -14,6 +14,7 @@ from codeflash.verification.verification_utils import (
 
 
 def generate_tests(
+    aiservice_client: AiServiceClient,
     source_code_being_tested: str,
     function_to_optimize: FunctionToOptimize,
     dependent_function_names: list[str],
@@ -34,7 +35,8 @@ def generate_tests(
         instrumented_test_source = module.CACHED_INSTRUMENTED_TESTS
         path = get_run_tmp_file("").replace("\\", "\\\\")  # Escape backslash for windows paths
         instrumented_test_source = instrumented_test_source.replace(
-            "{codeflash_run_tmp_dir_client_side}", path
+            "{codeflash_run_tmp_dir_client_side}",
+            path,
         )
         logging.info(f"Using cached tests from {module_path}.CACHED_TESTS")
     else:
@@ -42,7 +44,7 @@ def generate_tests(
             get_test_file_path(test_cfg.tests_root, function_to_optimize.function_name, 0),
             test_cfg.project_root_path,
         )
-        response = generate_regression_tests(
+        response = aiservice_client.generate_regression_tests(
             source_code_being_tested=source_code_being_tested,
             function_to_optimize=function_to_optimize,
             dependent_function_names=dependent_function_names,
@@ -56,7 +58,8 @@ def generate_tests(
             generated_test_source, instrumented_test_source = response
             path = get_run_tmp_file("").replace("\\", "\\\\")  # Escape backslash for windows paths
             instrumented_test_source = instrumented_test_source.replace(
-                "{codeflash_run_tmp_dir_client_side}", path
+                "{codeflash_run_tmp_dir_client_side}",
+                path,
             )
         else:
             logging.error(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")
@@ -77,7 +80,7 @@ def merge_unit_tests(unit_test_source: str, inspired_unit_tests: str, test_frame
         inspired_unit_tests_ast = ast.parse(inspired_unit_tests)
         unit_test_source_ast = ast.parse(unit_test_source)
     except SyntaxError as e:
-        logging.error(f"Syntax error in code: {e}")
+        logging.exception(f"Syntax error in code: {e}")
         return unit_test_source
     import_list: list[ast.stmt] = list()
     modified_ast = ModifyInspiredTests(import_list, test_framework).visit(inspired_unit_tests_ast)

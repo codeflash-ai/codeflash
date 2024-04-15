@@ -12,7 +12,11 @@ from pydantic import BaseModel
 from returns.pipeline import is_successful
 from returns.result import Failure, Result, Success
 
-from codeflash.api.aiservice import Optimization, log_results, optimize_python_code
+from codeflash.api.aiservice import (
+    AiServiceClient,
+    LocalAiServiceClient,
+    OptimizedCandidate,
+)
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import extract_code
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
@@ -56,8 +60,8 @@ from codeflash.verification.verifier import generate_tests
 
 
 class OptimizationSet(BaseModel):
-    control: List[Optimization]
-    experiment: Optional[List[Optimization]]
+    control: List[OptimizedCandidate]
+    experiment: Optional[List[OptimizedCandidate]]
 
 
 class OptimizedCandidateResult(BaseModel):
@@ -102,6 +106,9 @@ class Optimizer:
             test_framework=args.test_framework,
             pytest_cmd=args.pytest_cmd,
         )
+
+        self.aiservice_client = AiServiceClient()
+        self.local_aiservice_client = LocalAiServiceClient()
 
     def run(self) -> None:
         should_run_experiment = True
@@ -190,7 +197,7 @@ class Optimizer:
                         instrumented_unittests_created_for_function,
                     )
 
-                    tests_result = self.generate_tests_and_optimizations(
+                    generated_results = self.generate_tests_and_optimizations(
                         code_context.code_to_optimize_with_dependents,
                         function_to_optimize,
                         code_context.dependent_functions,
@@ -198,11 +205,11 @@ class Optimizer:
                         function_trace_id,
                         run_experiment=should_run_experiment,
                     )
-                    if not is_successful(tests_result):
-                        logging.error(tests_result.failure())
+                    if not is_successful(generated_results):
+                        logging.error(generated_results.failure())
                         continue
-                    tests_result_tuple: Tuple[GeneratedTests, OptimizationSet] = tests_result.unwrap()
-                    generated_tests, optimizations_set = tests_result_tuple
+                    tests_and_opts: Tuple[GeneratedTests, OptimizationSet] = generated_results.unwrap()
+                    generated_tests, optimizations_set = tests_and_opts
 
                     generated_tests_path = get_test_file_path(
                         self.args.tests_root,
@@ -336,7 +343,7 @@ class Optimizer:
                                 dependent_functions_by_module_abspath,
                             )
                             logging.info("----------------")
-                        log_results(
+                        self.aiservice_client.log_results(
                             function_trace_id=function_trace_id[:-4] + f"EXP{u}"
                             if should_run_experiment
                             else function_trace_id,
@@ -643,23 +650,21 @@ class Optimizer:
                 function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id,
             )
             future_optimization = executor.submit(
-                optimize_python_code,
+                self.aiservice_client.optimize_python_code,
                 code_to_optimize_with_dependents,
                 function_trace_id,
                 N_CANDIDATES,
-                "prod",
             )
             if run_experiment:
                 future_optimization_exp = executor.submit(
-                    optimize_python_code,
+                    self.local_aiservice_client.optimize_python_code,
                     code_to_optimize_with_dependents,
                     function_trace_id[:-4] + "EXP1" if run_experiment else function_trace_id,
                     N_CANDIDATES,
-                    "local",
                 )
 
             future_tests_result = future_tests.result()
-            optimizations: List[Optimization] = future_optimization.result()
+            optimizations: List[OptimizedCandidate] = future_optimization.result()
 
             optimizations_exp = future_optimization_exp.result() if run_experiment else None
 
@@ -992,6 +997,7 @@ class Optimizer:
         function_trace_id: str,
     ) -> Union[Tuple[str, str], None]:
         tests = generate_tests(
+            self.aiservice_client,
             source_code_being_tested=source_code_being_tested,
             function_to_optimize=function_to_optimize,
             dependent_function_names=dependent_function_names,
