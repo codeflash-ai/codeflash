@@ -3,8 +3,9 @@ from __future__ import annotations
 import logging
 import sys
 from enum import Enum
-from typing import Optional, Iterator, List
+from typing import Iterator, List, Optional
 
+from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 
 from codeflash.verification.comparator import comparator
@@ -37,7 +38,7 @@ class InvocationId:
         return f"{self.test_module_path}:{self.test_class_name or ''}.{self.test_function_name}:{self.function_getting_tested}:{self.iteration_id}"
 
     @staticmethod
-    def from_str_id(string_id: str, iteration_id: Optional[str] = None) -> "InvocationId":
+    def from_str_id(string_id: str, iteration_id: Optional[str] = None) -> InvocationId:
         components = string_id.split(":")
         assert len(components) == 4
         second_components = components[1].split(".")
@@ -67,18 +68,13 @@ class FunctionTestInvocation:
     return_value: Optional[object]  # The return value of the function invocation
 
 
-class TestResults:
-    test_results: list[FunctionTestInvocation]
-
-    def __init__(self, test_results=None):
-        if test_results is None:
-            test_results = []
-        self.test_results = test_results
+class TestResults(BaseModel):
+    test_results: List[FunctionTestInvocation] = []
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
         self.test_results.append(function_test_invocation)
 
-    def merge(self, other: "TestResults") -> None:
+    def merge(self, other: TestResults) -> None:
         self.test_results.extend(other.test_results)
 
     def get_by_id(self, invocation_id: InvocationId) -> Optional[FunctionTestInvocation]:
@@ -114,7 +110,7 @@ class TestResults:
             [
                 f"{test_type.to_name()}- (Passed: {report[test_type]['passed']}, Failed: {report[test_type]['failed']})"
                 for test_type in TestType
-            ]
+            ],
         )
 
     def total_passed_runtime(self) -> int:
@@ -126,7 +122,7 @@ class TestResults:
                 result.runtime
                 for result in self.test_results
                 if (result.did_pass and result.runtime is not None)
-            ]
+            ],
         )
         return timing
 
@@ -151,7 +147,7 @@ class TestResults:
     def __bool__(self) -> bool:
         return bool(self.test_results)
 
-    def __eq__(self, other: TestResults):
+    def __eq__(self, other: object) -> bool:
         # Unordered comparison
         if type(self) != type(other):
             return False

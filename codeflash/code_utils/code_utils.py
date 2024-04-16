@@ -3,7 +3,7 @@ import logging
 import os
 import site
 from tempfile import TemporaryDirectory
-from typing import Optional, List, Union, Tuple
+from typing import List, Optional, Tuple, Union
 
 
 def module_name_from_file_path(file_path: str, project_root: str) -> str:
@@ -21,9 +21,8 @@ def file_path_from_module_name(module_name: str, project_root: str) -> str:
 
 def ellipsis_in_ast(module: ast.AST) -> bool:
     for node in ast.walk(module):
-        if isinstance(node, ast.Constant):
-            if node.value == ...:
-                return True
+        if isinstance(node, ast.Constant) and node.value == ...:
+            return True
     return False
 
 
@@ -36,13 +35,13 @@ def get_imports_from_file(
         sum([file_path is not None, file_string is not None, file_ast is not None]) == 1
     ), "Must provide exactly one of file_path, file_string, or file_ast"
     if file_path:
-        with open(file_path, "r", encoding="utf8") as file:
+        with open(file_path, encoding="utf8") as file:
             file_string = file.read()
     if file_ast is None:
         try:
             file_ast = ast.parse(file_string)
         except SyntaxError as e:
-            logging.error(f"Syntax error in code: {e}")
+            logging.exception(f"Syntax error in code: {e}")
             return []
     imports = []
     for node in ast.walk(file_ast):
@@ -55,7 +54,7 @@ def get_all_function_names(code: str) -> Tuple[bool, List[str]]:
     try:
         module = ast.parse(code)
     except SyntaxError as e:
-        logging.error(f"Syntax error in code: {e}")
+        logging.exception(f"Syntax error in code: {e}")
         return False, []
 
     function_names = []
@@ -73,8 +72,5 @@ def get_run_tmp_file(file_path: str) -> str:
 
 def path_belongs_to_site_packages(file_path: str) -> bool:
     return any(  # The definition is not part of a site-package Python library
-        [
-            file_path.startswith(site_package_path + os.sep)
-            for site_package_path in site.getsitepackages()
-        ]
+        [file_path.startswith(site_package_path + os.sep) for site_package_path in site.getsitepackages()],
     )

@@ -43,6 +43,8 @@ optional = true
 [tool.poetry.group.dev.dependencies]
 ipython = "^8.12.0"
 mypy = "^1.9.0"
+ruff = "^0.3.5"
+ruff-lsp = "^0.0.53"
 
 
 [tool.poetry.build]
@@ -77,6 +79,7 @@ warn_required_dynamic_aliases = true
 [tool.ruff.lint]
 select = ["ALL"]
 unfixable = ["F401"]
+ignore = ["ANN101", "S101", "D103","G004", "FIX002"]
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true
@@ -90,15 +93,10 @@ classmethod-decorators = [
 ]
 
 [tool.ruff]
-line-length = 100
+line-length = 110
 
 [tool.ruff.format]
 docstring-code-format = true
-
-
-[tool.black]
-line-length = 100
-target-version = ['py312']
 
 [tool.poetry-dynamic-versioning]
 enable = true

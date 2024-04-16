@@ -1,17 +1,16 @@
 import ast
 import logging
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 
 from codeflash.api.aiservice import generate_regression_tests
-from codeflash.code_utils.code_utils import get_run_tmp_file
-from codeflash.code_utils.code_utils import module_name_from_file_path
+from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.verification.verification_utils import (
     ModifyInspiredTests,
-    get_test_file_path,
     TestConfig,
+    delete_multiple_if_name_main,
+    get_test_file_path,
 )
-from codeflash.verification.verification_utils import delete_multiple_if_name_main
 
 
 def generate_tests(
@@ -60,9 +59,7 @@ def generate_tests(
                 "{codeflash_run_tmp_dir_client_side}", path
             )
         else:
-            logging.error(
-                f"Failed to generate and instrument tests for {function_to_optimize.function_name}"
-            )
+            logging.error(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")
             return None
 
     # TODO: Add support for inspired tests

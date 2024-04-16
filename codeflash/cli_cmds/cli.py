@@ -1,13 +1,12 @@
 import logging
 import os
-import sys
-from argparse import Namespace
+from argparse import Namespace, ArgumentParser, SUPPRESS
 
 import git
 
 from codeflash.api.cfapi import check_github_app_installed_on_repo
+from codeflash.cli_cmds import logging_config
 from codeflash.cli_cmds.cmd_init import init_codeflash, apologize_and_exit
-from codeflash.cli_cmds.logging_config import LOGGING_FORMAT
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
@@ -18,9 +17,60 @@ from codeflash.code_utils.git_utils import (
 from codeflash.version import __version__ as version
 
 
+def parse_args() -> Namespace:
+    parser = ArgumentParser()
+    parser.add_argument("command", nargs="?", help="The command to run (e.g., 'init')")
+    parser.add_argument("--file", help="Try to optimize only this file")
+    parser.add_argument(
+        "--function",
+        help="Try to optimize only this function within the given file path",
+    )
+    parser.add_argument(
+        "--all",
+        help="Try to optimize all functions. Can take a really long time. Can pass an optional starting directory to"
+        " optimize code from. If no args specified (just --all), will optimize all code in the project.",
+        nargs="?",
+        const="",
+        default=SUPPRESS,
+    )
+    parser.add_argument(
+        "--module-root",
+        type=str,
+        help="Path to the project's Python module that you want to optimize."
+        " This is the top-level root directory where all the Python source code is located.",
+    )
+    parser.add_argument(
+        "--tests-root",
+        type=str,
+        help="Path to the test directory of the project, where all the tests are located.",
+    )
+    parser.add_argument("--test-framework", choices=["pytest", "unittest"], default="pytest")
+    parser.add_argument(
+        "--config-file",
+        type=str,
+        help="Path to the pyproject.toml with codeflash configs.",
+    )
+    parser.add_argument(
+        "--pytest-cmd",
+        type=str,
+        help="Command that codeflash will use to run pytest. If not specified, codeflash will use 'pytest'",
+    )
+    parser.add_argument(
+        "--use-cached-tests",
+        action="store_true",
+        help="Use cached tests from a specified file for debugging.",
+    )
+    parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose debug logs")
+    parser.add_argument("--version", action="store_true", help="Print the version of codeflash")
+    args: Namespace = parser.parse_args()
+    return process_cmd_args(args)
+
+
 def process_cmd_args(args: Namespace) -> Namespace:
     if args.verbose:
-        logging.basicConfig(level=logging.DEBUG, format=LOGGING_FORMAT, stream=sys.stdout)
+        logging_config.set(logging.DEBUG)
+    else:
+        logging_config.set(logging.INFO)
     if args.version:
         logging.info(f"Codeflash version {version}")
         exit()
