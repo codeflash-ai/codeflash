@@ -73,7 +73,7 @@ def create_trace_replay_test(
 ) -> str:
     assert test_framework in ["pytest", "unittest"]
 
-    imports = f"""import pickle
+    imports = f"""import dill as pickle
 import {test_framework}
 from codeflash.tracing.replay_test import get_next_arg_and_return
 from codeflash.verification.comparator import comparator

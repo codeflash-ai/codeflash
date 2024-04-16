@@ -1,13 +1,13 @@
 import logging
 import os
 import pathlib
-import pickle
 import sqlite3
 import sys
 import time
 from collections import Counter, defaultdict
 from typing import Any, List, Optional
 
+import dill as pickle
 import isort
 
 from codeflash.cli_cmds.cli import project_root_from_module_root
@@ -240,11 +240,9 @@ class Tracer:
                 arg = pickle.dumps(arg, protocol=pickle.HIGHEST_PROTOCOL)
             sys.setrecursionlimit(original_recursion_limit)
         except (TypeError, pickle.PicklingError, AttributeError, RecursionError) as e:
-            logging.info(
-                f"Error in pickling arguments or local variables - {function_qualified_name} , {e}"
-            )
-            # print("frame.f_locals", frame.f_locals)
-            # print("arg", arg)
+            logging.info(f"Error in pickling {event} - {function_qualified_name} , {e}")
+            # TODO: If this branch hits then its possible there are no paired arg, return values in the replay test.
+            #  Filter them out
             return
         t13 = time.perf_counter_ns()
         self.profiling_info["pickle.dumps"].update(count=1, time=t13 - t12)
