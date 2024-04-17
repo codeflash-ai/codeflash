@@ -29,12 +29,22 @@ class Tracer:
 
     def __init__(
         self,
-        output: str = "script.trace",
-        functions=None,
+        output: str = "codeflash.trace",
+        functions: Optional[List[str]] = None,
         disable: bool = False,
         config_file_path: Optional[str] = None,
         max_function_count: int = 100,
+        timeout: int = None,  # seconds
     ) -> None:
+        """
+        :param output: The path to the output trace file
+        :param functions: List of functions to trace. If None, trace all functions
+        :param disable: Disable the tracer if True
+        :param config_file_path: Path to the pyproject.toml file, if None then it will be auto-discovered
+        :param max_function_count: Maximum number of times to trace one function
+        :param timeout: Timeout in seconds for the tracer, if the traced code takes more than this time, then tracing
+                    stops and normal execution continues. If this is None then no timeout applies
+        """
         if functions is None:
             functions = []
         self.disable = disable
@@ -68,6 +78,9 @@ class Tracer:
                 "_",
             ),
         )
+        self.start_time = None
+        assert timeout is None or timeout > 0, "Timeout should be greater than 0"
+        self.timeout = timeout
         self.profiling_info = defaultdict(Counter)
 
         assert (
@@ -90,6 +103,7 @@ class Tracer:
             "last_frame_address INTEGER, time_ns INTEGER, arg BLOB, locals BLOB)",
         )
         logging.info("Codeflash: Tracing started!")
+        self.start_time = time.time()
         sys.setprofile(self.trace_callback)
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -145,6 +159,13 @@ class Tracer:
         t1 = time.perf_counter_ns()
         if event not in ["call", "return"]:
             return
+        if self.timeout is not None:
+            if (time.time() - self.start_time) > self.timeout:
+                sys.setprofile(None)
+                logging.warning(
+                    f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds."
+                )
+                return
         t2 = time.perf_counter_ns()
         self.profiling_info["early_return"].update(count=1, time=t2 - t1)
         t3 = time.perf_counter_ns()
