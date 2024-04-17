@@ -90,6 +90,13 @@ class Tracer:
     def __enter__(self) -> None:
         if self.disable:
             return
+        if getattr(Tracer, "used_once", False):
+            logging.warning(
+                "Codeflash: Tracer can only be used once per program run. "
+                "Please only enable the Tracer once. Skipping tracing this section."
+            )
+            return
+        Tracer.used_once = True
 
         if pathlib.Path(self.output_file).exists():
             logging.info("Codeflash: Removing existing trace file")
@@ -107,11 +114,11 @@ class Tracer:
         sys.setprofile(self.trace_callback)
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        sys.setprofile(None)
-        # TODO: Check if the self.disable condition can be moved before the sys.setprofile call.
-        #  Currently, it is below to see if the self.disable check doesn't add extra steps in the tracing
         if self.disable:
             return
+        if getattr(Tracer, "used_once", False):
+            return
+        sys.setprofile(None)
 
         self.con.close()
 
