@@ -33,6 +33,7 @@ class Tracer:
         functions=None,
         disable: bool = False,
         config_file_path: Optional[str] = None,
+        max_function_count: int = 100,
     ) -> None:
         if functions is None:
             functions = []
@@ -46,7 +47,7 @@ class Tracer:
             f"{os.path.realpath(__file__)}:Tracer:__exit__",
             f"{os.path.realpath(__file__)}:Tracer:__enter__",
         }
-        self.max_function_count = 100
+        self.max_function_count = max_function_count
         self.config, found_config_path = parse_config_file(config_file_path)
         self.project_root = project_root_from_module_root(
             self.config["module_root"],
@@ -132,7 +133,7 @@ class Tracer:
         with open(test_file_path, "w", encoding="utf8") as file:
             file.write(replay_test)
 
-        logging.info(
+        print(
             f"Codeflash: Traced successful and replay test created! Path - {test_file_path}",
         )
         for key, value in self.profiling_info.items():
