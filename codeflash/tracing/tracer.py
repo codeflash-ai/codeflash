@@ -13,7 +13,10 @@ import isort
 from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.code_utils.config_parser import parse_config_file
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize, filter_functions
+from codeflash.discovery.functions_to_optimize import (
+    FunctionToOptimize,
+    filter_functions,
+)
 from codeflash.tracing.replay_test import create_trace_replay_test
 from codeflash.tracing.tracing_utils import FunctionModules
 from codeflash.verification.verification_utils import get_test_file_path
@@ -35,23 +38,31 @@ class Tracer:
             functions = []
         self.disable = disable
         self.con = None
-        self.flag = (
-            False  # To ignore the first call to trace_callback due to return from trace_callback
-        )
         self.output_file = os.path.abspath(output)
         self.functions = functions
         self.function_modules: List[FunctionModules] = []
         self.function_count = defaultdict(int)
-        self.ignored_qualified_functions = set()
+        self.ignored_qualified_functions = {
+            f"{os.path.realpath(__file__)}:Tracer:__exit__",
+            f"{os.path.realpath(__file__)}:Tracer:__enter__",
+        }
         self.max_function_count = 100
         self.config, found_config_path = parse_config_file(config_file_path)
         self.project_root = project_root_from_module_root(
             self.config["module_root"],
             found_config_path,
         )
-        self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>"}
+        self.ignored_functions = {
+            "<listcomp>",
+            "<genexpr>",
+            "<dictcomp>",
+            "<setcomp>",
+            "<lambda>",
+        }
         self.file_being_called_from: str = str(
-            os.path.basename(os.path.realpath(sys._getframe().f_back.f_code.co_filename)).replace(
+            os.path.basename(
+                os.path.realpath(sys._getframe().f_back.f_code.co_filename)
+            ).replace(
                 ".",
                 "_",
             ),
@@ -66,6 +77,8 @@ class Tracer:
         if self.disable:
             return
 
+        if pathlib.Path(self.output_file).exists():
+            logging.info("Codeflash: Removing existing trace file")
         pathlib.Path(self.output_file).unlink(missing_ok=True)
 
         self.con = sqlite3.connect(self.output_file)
@@ -135,29 +148,17 @@ class Tracer:
         self.profiling_info["early_return"].update(count=1, time=t2 - t1)
         t3 = time.perf_counter_ns()
         code = frame.f_code
+        file_name = code.co_filename
         # TODO : It currently doesn't log the last return call from the first function
         # print(code.co_name, code.co_filename)
 
         if code.co_name in self.ignored_functions:
             return
-        if code.co_name == "__exit__" and code.co_filename == os.path.realpath(__file__):
-            return
-        t4 = time.perf_counter_ns()
-        self.profiling_info["ignored_functions"].update(count=1, time=t4 - t3)
-        t5 = time.perf_counter_ns()
-        # file_name = os.path.realpath(code.co_filename)
-        file_name = code.co_filename
-        if not self.flag:
-            # ignore the first call to trace_callback due to return from Tracer __enter__
-            self.flag = True
+        if not os.path.exists(file_name):
             return
         if self.functions:
             if code.co_name not in self.functions:
                 return
-        t6 = time.perf_counter_ns()
-        self.profiling_info["flag_functions"].update(count=1, time=t6 - t5)
-        t7 = time.perf_counter_ns()
-
         class_name = None
         if (
             "self" in frame.f_locals
@@ -165,21 +166,20 @@ class Tracer:
             and hasattr(frame.f_locals["self"].__class__, "__name__")
         ):
             class_name = frame.f_locals["self"].__class__.__name__
-        t8 = time.perf_counter_ns()
-        self.profiling_info["class_name"].update(count=1, time=t8 - t7)
-        t9 = time.perf_counter_ns()
-        if not os.path.exists(file_name):
-            return
 
         function_qualified_name = (
             file_name + ":" + (class_name + ":" if class_name else "") + code.co_name
         )
         if function_qualified_name in self.ignored_qualified_functions:
+            # print(function_qualified_name)
             return
+        t4 = time.perf_counter_ns()
+        self.profiling_info["ignored_functions"].update(count=1, time=t4 - t3)
+        t9 = time.perf_counter_ns()
 
         if function_qualified_name not in self.function_count:
             # seeing this function for the first time
-
+            self.function_count[function_qualified_name] = 0
             _, non_filtered_functions_count = filter_functions(
                 modified_functions={
                     file_name: [
@@ -213,8 +213,10 @@ class Tracer:
                     class_name=class_name,
                 ),
             )
-
-        if self.function_count[function_qualified_name] >= self.max_function_count:
+        elif self.function_count[function_qualified_name] >= self.max_function_count:
+            # ignore if we have already traced this function enough times
+            self.ignored_qualified_functions.add(function_qualified_name)
+            del self.function_count[function_qualified_name]  # save memory
             return
         t10 = time.perf_counter_ns()
         self.profiling_info["filter_functions"].update(count=1, time=t10 - t9)
@@ -232,7 +234,9 @@ class Tracer:
             original_recursion_limit = sys.getrecursionlimit()
             sys.setrecursionlimit(10000)
             if event == "call":
-                local_vars = pickle.dumps(frame.f_locals, protocol=pickle.HIGHEST_PROTOCOL)
+                local_vars = pickle.dumps(
+                    frame.f_locals, protocol=pickle.HIGHEST_PROTOCOL
+                )
                 arg = None
             else:
                 # return
@@ -240,7 +244,6 @@ class Tracer:
                 arg = pickle.dumps(arg, protocol=pickle.HIGHEST_PROTOCOL)
             sys.setrecursionlimit(original_recursion_limit)
         except (TypeError, pickle.PicklingError, AttributeError, RecursionError) as e:
-            logging.info(f"Error in pickling {event} - {function_qualified_name} , {e}")
             # TODO: If this branch hits then its possible there are no paired arg, return values in the replay test.
             #  Filter them out
             return
