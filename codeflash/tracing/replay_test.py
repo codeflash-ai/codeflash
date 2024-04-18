@@ -17,9 +17,7 @@ def get_next_arg_and_return(
 ) -> Generator[Tuple[Any, Any], None, None]:
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
-    limit = (
-        num_to_get * 2 + 100
-    )  # we may have to get more than num_to_get*2 to get num_to_get valid pairs
+    limit = num_to_get * 2 + 100  # we may have to get more than num_to_get*2 to get num_to_get valid pairs
     if class_name is not None:
         data = cur.execute(
             "SELECT * FROM events WHERE function = ? AND filename = ? AND classname = ? ORDER BY time_ns ASC LIMIT ?",
@@ -136,6 +134,13 @@ from codeflash.verification.comparator import comparator
         test_template = ""
         self = ""
     for func in functions:
+        if not is_function_or_method_top_level(
+            file_name=func.file_name,
+            function_or_method_name=func.function_name,
+            class_name=func.class_name,
+        ):
+            # can't be imported and run in the replay test
+            continue
         if func.class_name is None:
             alias = get_function_alias(func.module_name, func.function_name)
             test_body = test_function_body.format(
