@@ -696,7 +696,7 @@ class Optimizer:
             future_optimization = executor.submit(
                 self.aiservice_client.optimize_python_code,
                 code_to_optimize_with_dependents,
-                function_trace_id,
+                function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id,
                 N_CANDIDATES,
             )
             if run_experiment:
