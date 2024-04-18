@@ -1,18 +1,18 @@
 import ast
 import os.path
 import pathlib
-import pytest
 import sys
 import tempfile
 
+import pytest
+
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import INDIVIDUAL_TEST_TIMEOUT
-from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
+from codeflash.code_utils.instrument_existing_tests import InjectPerfOnly, inject_profiling_into_existing_test
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestType
 from codeflash.verification.test_runner import run_tests
 from codeflash.verification.verification_utils import TestConfig
-from codeflash.code_utils.instrument_existing_tests import InjectPerfOnly
 
 
 def test_perfinjector_bubble_sort():
@@ -86,7 +86,7 @@ class TestPigLatin(unittest.TestCase):
         f.write(code)
         f.flush()
         success, new_test = inject_profiling_into_existing_test(
-            f.name, "sorter", os.path.dirname(f.name)
+            f.name, "sorter", os.path.dirname(f.name),
         )
         assert success
         assert new_test == expected.format(
@@ -161,7 +161,7 @@ def test_prepare_image_for_yolo():
         f.flush()
 
         success, new_test = inject_profiling_into_existing_test(
-            f.name, "prepare_image_for_yolo", os.path.dirname(f.name)
+            f.name, "prepare_image_for_yolo", os.path.dirname(f.name),
         )
         assert success
         assert new_test == expected.format(

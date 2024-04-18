@@ -114,7 +114,7 @@ def comparator(orig: Any, new: Any) -> bool:
             return orig.equals(new)
 
         if HAS_PANDAS and isinstance(
-            orig, (pandas.CategoricalDtype, pandas.Interval, pandas.Period)
+            orig, (pandas.CategoricalDtype, pandas.Interval, pandas.Period),
         ):
             return orig == new
 
@@ -145,6 +145,6 @@ def comparator(orig: Any, new: Any) -> bool:
         logging.warning(f"Unknown comparator input type: {type(orig)}")
         return True
     except RecursionError as e:
-        logging.error(f"RecursionError while comparing objects: {e}")
+        logging.exception(f"RecursionError while comparing objects: {e}")
         sentry_sdk.capture_exception(e)
         return False
