@@ -55,7 +55,7 @@ def create_trace_replay_test(
 ) -> str:
     assert test_framework in ["pytest", "unittest"]
 
-    imports = f"""import pickle
+    imports = f"""import dill as pickle
 import {test_framework}
 from codeflash.tracing.replay_test import get_next_arg_and_return
 from codeflash.validation.comparators import comparator
@@ -76,7 +76,9 @@ from codeflash.validation.comparators import comparator
         raise ValueError("Invalid test framework")
 
 
-def _create_unittest_trace_replay_test(trace_file: str, functions: List[Tuple[str, str]]) -> str:
+def _create_unittest_trace_replay_test(
+    trace_file: str, functions: List[Tuple[str, str]]
+) -> str:
     test_function_body = textwrap.dedent(
         """\
         for arg_val_pkl, return_val_pkl in get_next_arg_and_return('{trace_file}', '{orig_function_name}', 3):
@@ -98,12 +100,16 @@ def _create_unittest_trace_replay_test(trace_file: str, functions: List[Tuple[st
             ),
             "        ",
         )
-        test_template += f"    def test_{function_name_alias}(self):\n{formatted_test_body}\n"
+        test_template += (
+            f"    def test_{function_name_alias}(self):\n{formatted_test_body}\n"
+        )
 
     return test_template
 
 
-def _create_pytest_trace_replay_test(trace_file: str, functions: List[Tuple[str, str]]) -> str:
+def _create_pytest_trace_replay_test(
+    trace_file: str, functions: List[Tuple[str, str]]
+) -> str:
     test_function_body = textwrap.dedent(
         """\
         for arg_val_pkl, return_val_pkl in get_next_arg_and_return('{trace_file}', '{orig_function_name}', 3):

@@ -13,7 +13,9 @@ class ReplaceCallNodeWithName(ast.NodeTransformer):
     def visit_Call(self, node: ast.Call):
         if isinstance(node, ast.Call) and (
             (hasattr(node.func, "id") and node.func.id == self.only_function_name)
-            or (hasattr(node.func, "attr") and node.func.attr == self.only_function_name)
+            or (
+                hasattr(node.func, "attr") and node.func.attr == self.only_function_name
+            )
         ):
             return ast.Name(id=self.new_variable_name, ctx=ast.Load())
         self.generic_visit(node)
@@ -32,7 +34,10 @@ class InjectPerfOnly(ast.NodeTransformer):
         for node in ast.walk(test_node):
             if isinstance(node, ast.Call) and (
                 (hasattr(node.func, "id") and node.func.id == self.only_function_name)
-                or (hasattr(node.func, "attr") and node.func.attr == self.only_function_name)
+                or (
+                    hasattr(node.func, "attr")
+                    and node.func.attr == self.only_function_name
+                )
             ):
                 call_node = node
         if call_node is None:
@@ -79,7 +84,10 @@ class InjectPerfOnly(ast.NodeTransformer):
         for node in ast.walk(line_node):
             if isinstance(node, ast.Call) and (
                 (hasattr(node.func, "id") and node.func.id == self.only_function_name)
-                or (hasattr(node.func, "attr") and node.func.attr == self.only_function_name)
+                or (
+                    hasattr(node.func, "attr")
+                    and node.func.attr == self.only_function_name
+                )
             ):
                 return True
         return False
@@ -92,7 +100,9 @@ class InjectPerfOnly(ast.NodeTransformer):
 
         return node
 
-    def visit_FunctionDef(self, node: ast.FunctionDef, test_class_name: Optional[str] = None):
+    def visit_FunctionDef(
+        self, node: ast.FunctionDef, test_class_name: Optional[str] = None
+    ):
         if node.name.startswith("test_"):
             node.body = (
                 [
@@ -200,7 +210,10 @@ class InjectPerfOnly(ast.NodeTransformer):
                         for internal_node in ast.walk(compound_line_node):
                             if self.is_target_function_line(internal_node):
                                 line_node.body[j : j + 1] = self.update_line_node(
-                                    internal_node, node.name, str(i) + "_" + str(j), test_class_name
+                                    internal_node,
+                                    node.name,
+                                    str(i) + "_" + str(j),
+                                    test_class_name,
                                 )
                                 break
                         j -= 1
@@ -230,7 +243,9 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
                     self.imported_as_function_name = alias.asname
 
 
-def inject_profiling_into_existing_test(test_path, function_name, root_path) -> Tuple[bool, str]:
+def inject_profiling_into_existing_test(
+    test_path, function_name, root_path
+) -> Tuple[bool, str]:
     with open(test_path, "r", encoding="utf8") as f:
         test_code = f.read()
     try:
@@ -249,9 +264,11 @@ def inject_profiling_into_existing_test(test_path, function_name, root_path) -> 
         ast.Import(names=[ast.alias(name="gc")]),
         ast.Import(names=[ast.alias(name="os")]),
         ast.Import(names=[ast.alias(name="sqlite3")]),
-        ast.Import(names=[ast.alias(name="pickle")]),
+        ast.Import(names=[ast.alias(name="dill", asname="pickle")]),
     ]
-    tree.body = new_imports + [create_wrapper_function(function_name, module_path)] + tree.body
+    tree.body = (
+        new_imports + [create_wrapper_function(function_name, module_path)] + tree.body
+    )
 
     return True, ast.unparse(tree)
 
@@ -284,15 +301,18 @@ def create_wrapper_function(function_name, module_path):
                 value=ast.JoinedStr(
                     values=[
                         ast.FormattedValue(
-                            value=ast.Name(id="test_module_name", ctx=ast.Load()), conversion=-1
+                            value=ast.Name(id="test_module_name", ctx=ast.Load()),
+                            conversion=-1,
                         ),
                         ast.Constant(value=":"),
                         ast.FormattedValue(
-                            value=ast.Name(id="test_class_name", ctx=ast.Load()), conversion=-1
+                            value=ast.Name(id="test_class_name", ctx=ast.Load()),
+                            conversion=-1,
                         ),
                         ast.Constant(value=":"),
                         ast.FormattedValue(
-                            value=ast.Name(id="test_name", ctx=ast.Load()), conversion=-1
+                            value=ast.Name(id="test_name", ctx=ast.Load()),
+                            conversion=-1,
                         ),
                         ast.Constant(value=":"),
                         ast.FormattedValue(
@@ -401,7 +421,8 @@ def create_wrapper_function(function_name, module_path):
                         ),
                         ast.Constant(value="_"),
                         ast.FormattedValue(
-                            value=ast.Name(id="codeflash_test_index", ctx=ast.Load()), conversion=-1
+                            value=ast.Name(id="codeflash_test_index", ctx=ast.Load()),
+                            conversion=-1,
                         ),
                     ]
                 ),
@@ -436,8 +457,16 @@ def create_wrapper_function(function_name, module_path):
                 targets=[ast.Name(id="return_value", ctx=ast.Store())],
                 value=ast.Call(
                     func=ast.Name(id="wrapped", ctx=ast.Load()),
-                    args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
-                    keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+                    args=[
+                        ast.Starred(
+                            value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load()
+                        )
+                    ],
+                    keywords=[
+                        ast.keyword(
+                            arg=None, value=ast.Name(id="kwargs", ctx=ast.Load())
+                        )
+                    ],
                 ),
                 lineno=lineno + 11,
             ),
@@ -478,7 +507,9 @@ def create_wrapper_function(function_name, module_path):
                         ctx=ast.Load(),
                     ),
                     args=[
-                        ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)"),
+                        ast.Constant(
+                            value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)"
+                        ),
                         ast.Tuple(
                             elts=[
                                 ast.Name(id="test_module_name", ctx=ast.Load()),
@@ -516,7 +547,9 @@ def create_wrapper_function(function_name, module_path):
                 ),
                 lineno=lineno + 15,
             ),
-            ast.Return(value=ast.Name(id="return_value", ctx=ast.Load()), lineno=lineno + 16),
+            ast.Return(
+                value=ast.Name(id="return_value", ctx=ast.Load()), lineno=lineno + 16
+            ),
         ],
         lineno=lineno,
         decorator_list=[],

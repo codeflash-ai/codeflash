@@ -1,12 +1,13 @@
 import logging
 import os
 import pathlib
-import pickle
 import sqlite3
 import sys
 import time
 from collections import defaultdict
 from typing import Any, Dict, Optional
+
+import dill as pickle
 
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.code_utils.config_parser import parse_config_file
@@ -31,9 +32,7 @@ class Tracer:
             functions = []
         self.disable = disable
         self.con = None
-        self.flag = (
-            False  # To ignore the first call to trace_callback due to return from trace_callback
-        )
+        self.flag = False  # To ignore the first call to trace_callback due to return from trace_callback
         self.output_file = os.path.abspath(output)
         self.functions = functions
         self.function_modules: Dict[str, str] = {}
@@ -71,7 +70,8 @@ class Tracer:
         self.con.close()
 
         module_function = [
-            (module, function_name) for function_name, module in self.function_modules.items()
+            (module, function_name)
+            for function_name, module in self.function_modules.items()
         ]
         replay_test = create_trace_replay_test(
             trace_file=self.output_file,
