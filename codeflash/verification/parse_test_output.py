@@ -1,12 +1,12 @@
 import logging
 import os
 import pathlib
-import pickle
 import sqlite3
 import subprocess
 from collections import defaultdict
 from typing import Optional
 
+import dill as pickle
 import sentry_sdk
 from junitparser.xunit2 import JUnitXml
 
@@ -25,7 +25,10 @@ from codeflash.verification.verification_utils import TestConfig
 
 
 def parse_test_return_values_bin(
-    file_location: str, test_framework: str, test_type: TestType, test_file_path: str,
+    file_location: str,
+    test_framework: str,
+    test_type: TestType,
+    test_file_path: str,
 ) -> TestResults:
     test_results = TestResults()
     if not os.path.exists(file_location):
@@ -205,7 +208,9 @@ def parse_test_xml(
 
 
 def merge_test_results(
-    xml_test_results: TestResults, bin_test_results: TestResults, test_framework: str,
+    xml_test_results: TestResults,
+    bin_test_results: TestResults,
+    test_framework: str,
 ) -> TestResults:
     merged_test_results = TestResults()
 
@@ -216,9 +221,7 @@ def merge_test_results(
     for result in xml_test_results:
         if test_framework == "pytest":
             if "[" in result.id.test_function_name:  # handle parameterized test
-                test_function_name = result.id.test_function_name[
-                    : result.id.test_function_name.index("[")
-                ]
+                test_function_name = result.id.test_function_name[: result.id.test_function_name.index("[")]
             else:
                 test_function_name = result.id.test_function_name
 
@@ -231,11 +234,7 @@ def merge_test_results(
                 test_function_name = new_test_function_name
 
         grouped_xml_results[
-            result.id.test_module_path
-            + ":"
-            + (result.id.test_class_name or "")
-            + ":"
-            + test_function_name
+            result.id.test_module_path + ":" + (result.id.test_class_name or "") + ":" + test_function_name
         ].add(result)
     for result in bin_test_results:
         grouped_bin_results[
@@ -350,6 +349,8 @@ def parse_test_results(
     )
 
     merged_results = merge_test_results(
-        test_results_xml, test_results_bin_file, test_config.test_framework,
+        test_results_xml,
+        test_results_bin_file,
+        test_config.test_framework,
     )
     return merged_results

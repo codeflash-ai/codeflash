@@ -26,7 +26,11 @@ class InjectPerfOnly(ast.NodeTransformer):
         self.module_path = module_path
 
     def update_line_node(
-        self, test_node, node_name, index: str, test_class_name: Optional[str] = None,
+        self,
+        test_node,
+        node_name,
+        index: str,
+        test_class_name: Optional[str] = None,
     ):
         call_node = None
         for node in ast.walk(test_node):
@@ -126,7 +130,8 @@ class InjectPerfOnly(ast.NodeTransformer):
                                         ),
                                         ast.FormattedValue(
                                             value=ast.Name(
-                                                id="codeflash_iteration", ctx=ast.Load(),
+                                                id="codeflash_iteration",
+                                                ctx=ast.Load(),
                                             ),
                                             conversion=-1,
                                         ),
@@ -200,13 +205,19 @@ class InjectPerfOnly(ast.NodeTransformer):
                         for internal_node in ast.walk(compound_line_node):
                             if self.is_target_function_line(internal_node):
                                 line_node.body[j : j + 1] = self.update_line_node(
-                                    internal_node, node.name, str(i) + "_" + str(j), test_class_name,
+                                    internal_node,
+                                    node.name,
+                                    str(i) + "_" + str(j),
+                                    test_class_name,
                                 )
                                 break
                         j -= 1
                 elif self.is_target_function_line(line_node):
                     node.body[i : i + 1] = self.update_line_node(
-                        line_node, node.name, str(i), test_class_name,
+                        line_node,
+                        node.name,
+                        str(i),
+                        test_class_name,
                     )
                 i -= 1
         return node
@@ -249,7 +260,7 @@ def inject_profiling_into_existing_test(test_path, function_name, root_path) -> 
         ast.Import(names=[ast.alias(name="gc")]),
         ast.Import(names=[ast.alias(name="os")]),
         ast.Import(names=[ast.alias(name="sqlite3")]),
-        ast.Import(names=[ast.alias(name="pickle")]),
+        ast.Import(names=[ast.alias(name="dill", asname="pickle")]),
     ]
     tree.body = new_imports + [create_wrapper_function(function_name, module_path)] + tree.body
 
@@ -284,19 +295,23 @@ def create_wrapper_function(function_name, module_path):
                 value=ast.JoinedStr(
                     values=[
                         ast.FormattedValue(
-                            value=ast.Name(id="test_module_name", ctx=ast.Load()), conversion=-1,
+                            value=ast.Name(id="test_module_name", ctx=ast.Load()),
+                            conversion=-1,
                         ),
                         ast.Constant(value=":"),
                         ast.FormattedValue(
-                            value=ast.Name(id="test_class_name", ctx=ast.Load()), conversion=-1,
+                            value=ast.Name(id="test_class_name", ctx=ast.Load()),
+                            conversion=-1,
                         ),
                         ast.Constant(value=":"),
                         ast.FormattedValue(
-                            value=ast.Name(id="test_name", ctx=ast.Load()), conversion=-1,
+                            value=ast.Name(id="test_name", ctx=ast.Load()),
+                            conversion=-1,
                         ),
                         ast.Constant(value=":"),
                         ast.FormattedValue(
-                            value=ast.Name(id="line_id", ctx=ast.Load()), conversion=-1,
+                            value=ast.Name(id="line_id", ctx=ast.Load()),
+                            conversion=-1,
                         ),
                     ],
                 ),
@@ -397,11 +412,13 @@ def create_wrapper_function(function_name, module_path):
                 value=ast.JoinedStr(
                     values=[
                         ast.FormattedValue(
-                            value=ast.Name(id="line_id", ctx=ast.Load()), conversion=-1,
+                            value=ast.Name(id="line_id", ctx=ast.Load()),
+                            conversion=-1,
                         ),
                         ast.Constant(value="_"),
                         ast.FormattedValue(
-                            value=ast.Name(id="codeflash_test_index", ctx=ast.Load()), conversion=-1,
+                            value=ast.Name(id="codeflash_test_index", ctx=ast.Load()),
+                            conversion=-1,
                         ),
                     ],
                 ),

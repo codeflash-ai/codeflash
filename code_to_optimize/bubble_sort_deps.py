@@ -10,7 +10,7 @@ def sorter_deps(arr):
     return arr
 
 
-CACHED_TESTS = """import pickle
+CACHED_TESTS = """import dill as pickle
 import os
 def _log__test__values(values, duration, test_name):
     iteration = os.environ["CODEFLASH_TEST_ITERATION"]

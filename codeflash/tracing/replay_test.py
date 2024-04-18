@@ -6,7 +6,9 @@ from typing import Any, Dict, Generator, List, Tuple
 
 
 def get_next_arg_and_return(
-    trace_file: str, function_name: str, num_to_get: int = 3,
+    trace_file: str,
+    function_name: str,
+    num_to_get: int = 3,
 ) -> Generator[Tuple[Any, Any], None, None]:
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
@@ -51,11 +53,13 @@ def get_function_alias(module: str, function_name: str) -> str:
 
 
 def create_trace_replay_test(
-    trace_file: str, functions: List[Tuple[str, str]], test_framework: str = "pytest",
+    trace_file: str,
+    functions: List[Tuple[str, str]],
+    test_framework: str = "pytest",
 ) -> str:
     assert test_framework in ["pytest", "unittest"]
 
-    imports = f"""import pickle
+    imports = f"""import dill as pickle
 import {test_framework}
 from codeflash.tracing.replay_test import get_next_arg_and_return
 from codeflash.validation.comparators import comparator
