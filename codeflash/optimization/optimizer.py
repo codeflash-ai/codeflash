@@ -172,7 +172,6 @@ class Optimizer:
                         function_to_optimize,
                         function_to_tests,
                         original_code,
-                        path,
                         should_run_experiment,
                     )
                     if is_successful(best_optimization):
@@ -199,7 +198,6 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         function_to_tests: Dict[str, List[TestsInFile]],
         original_code: str,
-        path: str,
         should_run_experiment: bool,
     ) -> Result[BestOptimization, str]:
         function_trace_id: str = str(uuid.uuid4())
@@ -218,7 +216,7 @@ class Optimizer:
                 dependent_code = f.read()
                 original_dependent_code[module_abspath] = dependent_code
         logging.info(f"Code to be optimized:\n{code_context.code_to_optimize_with_dependents}")
-        module_path = module_name_from_file_path(path, self.args.project_root)
+        module_path = module_name_from_file_path(function_to_optimize.file_path, self.args.project_root)
         instrumented_unittests_created_for_function = self.instrument_existing_tests(
             function_to_optimize=function_to_optimize,
             function_to_tests=function_to_tests,
@@ -270,7 +268,6 @@ class Optimizer:
                 original_code,
                 original_code_baseline,
                 original_dependent_code,
-                path,
                 function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
             )
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
@@ -286,7 +283,7 @@ class Optimizer:
                     original_runtime_ns=original_code_baseline.runtime,
                     best_runtime_ns=best_optimization.runtime,
                     function_name=function_to_optimize.qualified_name,
-                    path=path,
+                    path=function_to_optimize.file_path,
                 )
 
                 self.log_successful_optimization(
@@ -335,7 +332,7 @@ class Optimizer:
                     self.write_code_and_dependents(
                         original_code,
                         original_dependent_code,
-                        path,
+                        function_to_optimize.file_path,
                         dependent_functions_by_module_abspath,
                     )
         # Delete all the generated tests to not cause any clutter.
@@ -355,7 +352,6 @@ class Optimizer:
         original_code: str,
         original_code_baseline: OriginalCodeBaseline,
         original_dependent_code: Dict[str, str],
-        path: str,
         function_trace_id: str,
     ) -> Optional[BestOptimization]:
         best_optimization: Optional[BestOptimization] = None
@@ -382,7 +378,7 @@ class Optimizer:
                 replace_function_definitions_in_module(
                     [function_to_optimize.qualified_name],
                     candidate.source_code,
-                    path,
+                    function_to_optimize.file_path,
                     code_context.preexisting_functions,
                     code_context.contextual_dunder_methods,
                 )
@@ -407,7 +403,7 @@ class Optimizer:
                 self.write_code_and_dependents(
                     original_code,
                     original_dependent_code,
-                    path,
+                    function_to_optimize.file_path,
                     dependent_functions_by_module_abspath,
                 )
                 continue
@@ -460,7 +456,7 @@ class Optimizer:
             self.write_code_and_dependents(
                 original_code,
                 original_dependent_code,
-                path,
+                function_to_optimize.file_path,
                 dependent_functions_by_module_abspath,
             )
             logging.info("----------------")
