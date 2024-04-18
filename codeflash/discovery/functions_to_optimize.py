@@ -51,7 +51,7 @@ class FunctionVisitor(cst.CSTVisitor):
                     parents=list(reversed(ast_parents)),
                     starting_line=pos.start.line,
                     ending_line=pos.end.line,
-                )
+                ),
             )
 
 
@@ -66,8 +66,10 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
         if function_has_return_statement(node):
             self.functions.append(
                 FunctionToOptimize(
-                    function_name=node.name, file_path=self.file_path, parents=self.ast_path[:]
-                )
+                    function_name=node.name,
+                    file_path=self.file_path,
+                    parents=self.ast_path[:],
+                ),
             )
         # Continue visiting the body of the function to find nested functions
         self.generic_visit(node)
@@ -109,16 +111,10 @@ class FunctionToOptimize:
 
     @property
     def qualified_name(self):
-        return (
-            self.function_name
-            if self.parents == []
-            else ".".join(
-                [
-                    self.parents[0].name,
-                    self.function_name,
-                ],
-            )
-        )
+        return self.function_name if self.parents == [] else f"{self.parents[0].name}.{self.function_name}"
+
+    def qualified_name_with_modules_from_root(self, project_root_path: str) -> str:
+        return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
 
 
 def get_functions_to_optimize_by_file(
@@ -145,14 +141,18 @@ def get_functions_to_optimize_by_file(
             if found_function is None:
                 raise ValueError(
                     f"Function {only_function_name} not found in file {file} or"
-                    f" the function does not have a 'return' statement."
+                    f" the function does not have a 'return' statement.",
                 )
             functions[file] = [found_function]
     else:
         logging.info("Finding all functions modified in the current git diff ...")
         functions = get_functions_within_git_diff()
     filtered_modified_functions, functions_count = filter_functions(
-        functions, test_cfg.tests_root, ignore_paths, project_root, module_root
+        functions,
+        test_cfg.tests_root,
+        ignore_paths,
+        project_root,
+        module_root,
     )
     logging.info("Found %d functions to optimize", functions_count)
     return filtered_modified_functions, functions_count
@@ -164,12 +164,12 @@ def get_functions_within_git_diff() -> Dict[str, List[FunctionToOptimize]]:
     for path in modified_lines:
         if not os.path.exists(path):
             continue
-        with open(path, "r", encoding="utf8") as f:
+        with open(path, encoding="utf8") as f:
             file_content = f.read()
             try:
                 wrapper = cst.metadata.MetadataWrapper(cst.parse_module(file_content))
             except Exception as e:
-                logging.error(e)
+                logging.exception(e)
                 continue
             function_lines = FunctionVisitor(file_path=path)
             wrapper.visit(function_lines)
@@ -203,11 +203,11 @@ def get_all_files_and_functions(module_root_path: str) -> Dict[str, List[Functio
 
 def find_all_functions_in_file(file_path: str) -> Dict[str, List[FunctionToOptimize]]:
     functions: Dict[str, List[FunctionToOptimize]] = {}
-    with open(file_path, "r", encoding="utf8") as f:
+    with open(file_path, encoding="utf8") as f:
         try:
             ast_module = ast.parse(f.read())
         except Exception as e:
-            logging.error(e)
+            logging.exception(e)
             return functions
         function_name_visitor = FunctionWithReturnStatement(file_path)
         function_name_visitor.visit(ast_module)

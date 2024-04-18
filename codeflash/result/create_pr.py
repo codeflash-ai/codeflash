@@ -16,11 +16,10 @@ from codeflash.result.explanation import Explanation
 
 
 def existing_tests_source_for(
-    qualified_function_name: str,
-    module_path: str,
+    function_qualified_name_with_modules_from_root: str,
     function_to_tests: Dict[str, List[TestsInFile]],
 ) -> str:
-    test_files = function_to_tests.get(module_path + "." + qualified_function_name)
+    test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
     existing_tests = ""
     if test_files:
         for test_file in test_files:

@@ -15,8 +15,7 @@ from codeflash.verification.verification_utils import get_test_file_path
 
 
 class Tracer:
-    """
-    Use this class as a 'with' context manager to trace a function call,
+    """Use this class as a 'with' context manager to trace a function call,
     input arguments, and return value.
     """
 
@@ -31,9 +30,7 @@ class Tracer:
             functions = []
         self.disable = disable
         self.con = None
-        self.flag = (
-            False  # To ignore the first call to trace_callback due to return from trace_callback
-        )
+        self.flag = False  # To ignore the first call to trace_callback due to return from trace_callback
         self.output_file = os.path.abspath(output)
         self.functions = functions
         self.function_modules: Dict[str, str] = {}
@@ -57,7 +54,7 @@ class Tracer:
         # TODO: Check out if we need to export the function test name as well
         cur.execute(
             "CREATE TABLE events(type TEXT, function TEXT, filename TEXT, line_number INTEGER, "
-            "last_frame_address INTEGER, time_ns INTEGER, arg BLOB, locals BLOB)"
+            "last_frame_address INTEGER, time_ns INTEGER, arg BLOB, locals BLOB)",
         )
         sys.setprofile(self.trace_callback)
 
@@ -70,9 +67,7 @@ class Tracer:
 
         self.con.close()
 
-        module_function = [
-            (module, function_name) for function_name, module in self.function_modules.items()
-        ]
+        module_function = [(module, function_name) for function_name, module in self.function_modules.items()]
         replay_test = create_trace_replay_test(
             trace_file=self.output_file,
             functions=module_function,
@@ -80,23 +75,25 @@ class Tracer:
         )
         function_path = "_".join([func for _, func in module_function])
         test_file_path = get_test_file_path(
-            self.config["tests_root"], function_path, test_type="replay"
+            self.config["tests_root"],
+            function_path,
+            test_type="replay",
         )
         with open(test_file_path, "w", encoding="utf8") as file:
             file.write(replay_test)
 
         logging.info(
-            f"Codeflash: Function Traced successfully and replay test created! Path - {test_file_path}"
+            f"Codeflash: Function Traced successfully and replay test created! Path - {test_file_path}",
         )
 
     def trace_callback(self, frame: Any, event: str, arg: Any) -> None:
         if event not in ["call", "return"]:
-            return None
+            return
 
         code = frame.f_code
         if self.functions:
             if code.co_name not in self.functions:
-                return None
+                return
             if self.function_count[code.co_name] >= self.max_function_count:
                 return
             self.function_count[code.co_name] += 1
@@ -114,7 +111,8 @@ class Tracer:
 
         project_root = os.path.realpath(os.path.join(self.config["module_root"], ".."))
         self.function_modules[code.co_name] = module_name_from_file_path(
-            code.co_filename, project_root=project_root
+            code.co_filename,
+            project_root_path=project_root,
         )
         cur = self.con.cursor()
 
