@@ -11,25 +11,25 @@ def find_pyproject_toml(config_file=None):
     if config_file is not None:
         if not config_file.lower().endswith(".toml"):
             raise ValueError(
-                f"Config file {config_file} is not a valid toml file. Please recheck the path to pyproject.toml"
+                f"Config file {config_file} is not a valid toml file. Please recheck the path to pyproject.toml",
             )
         if not os.path.exists(config_file):
             raise ValueError(
-                f"Config file {config_file} does not exist. Please recheck the path to pyproject.toml"
+                f"Config file {config_file} does not exist. Please recheck the path to pyproject.toml",
             )
         return config_file
 
     else:
         dir_path = os.getcwd()
 
-        while not os.path.dirname(dir_path) == dir_path:
+        while os.path.dirname(dir_path) != dir_path:
             config_file = os.path.join(dir_path, "pyproject.toml")
             if os.path.exists(config_file):
                 return config_file
             # Search for pyproject.toml in the parent directories
             dir_path = os.path.dirname(dir_path)
         raise ValueError(
-            f"Could not find pyproject.toml in the current directory {os.getcwd()} or any of the parent directories. Please create it by running `poetry init`, or pass the path to pyproject.toml with the --config-file argument."
+            f"Could not find pyproject.toml in the current directory {os.getcwd()} or any of the parent directories. Please create it by running `poetry init`, or pass the path to pyproject.toml with the --config-file argument.",
         )
 
 
@@ -40,7 +40,7 @@ def parse_config_file(config_file_path=None):
             data = tomlkit.parse(f.read())
     except tomlkit.exceptions.ParseError as e:
         raise ValueError(
-            f"Error while parsing the config file {config_file_path}. Please recheck the file for syntax errors. Error: {e}"
+            f"Error while parsing the config file {config_file_path}. Please recheck the file for syntax errors. Error: {e}",
         )
 
     try:
@@ -50,7 +50,7 @@ def parse_config_file(config_file_path=None):
     except tomlkit.exceptions.NonExistentKey:
         raise ValueError(
             f"Could not find the 'codeflash' block in the config file {config_file_path}. "
-            f"Please run 'codeflash init' to create the config file."
+            f"Please run 'codeflash init' to create the config file.",
         )
     assert isinstance(config, dict)
 
@@ -88,7 +88,7 @@ def parse_config_file(config_file_path=None):
     for key in path_keys:
         if key in config:
             config[key] = os.path.realpath(
-                os.path.join(os.path.dirname(config_file_path), config[key])
+                os.path.join(os.path.dirname(config_file_path), config[key]),
             )
 
     for key in path_list_keys:

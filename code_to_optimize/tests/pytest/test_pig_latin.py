@@ -1,4 +1,4 @@
-import pickle
+import dill as pickle
 
 from code_to_optimize.pig_latin import pig_latin
 
@@ -25,8 +25,12 @@ def test_pig_latin_single_consonant():
 
 
 def test_pig_latin_multiple_consonants():
-    log_test_values(pig_latin("string"), "pig_latin_test_pig_latin_multiple_consonants_0")
-    log_test_values(pig_latin("glove"), "pig_latin_test_pig_latin_multiple_consonants_1")
+    log_test_values(
+        pig_latin("string"), "pig_latin_test_pig_latin_multiple_consonants_0"
+    )
+    log_test_values(
+        pig_latin("glove"), "pig_latin_test_pig_latin_multiple_consonants_1"
+    )
 
 
 def test_pig_latin_capital_letters():
@@ -35,9 +39,12 @@ def test_pig_latin_capital_letters():
 
 
 def test_pig_latin_multiple_words():
-    log_test_values(pig_latin("The quick brown fox"), "pig_latin_test_pig_latin_multiple_words_0")
     log_test_values(
-        pig_latin("Python is a fun language"), "pig_latin_test_pig_latin_multiple_words_1"
+        pig_latin("The quick brown fox"), "pig_latin_test_pig_latin_multiple_words_0"
+    )
+    log_test_values(
+        pig_latin("Python is a fun language"),
+        "pig_latin_test_pig_latin_multiple_words_1",
     )
 
 
@@ -51,7 +58,9 @@ def test_pig_latin_spaces_input():
 
 def test_pig_latin_non_alphabetic():
     log_test_values(pig_latin("123"), "pig_latin_test_pig_latin_non_alphabetic_0")
-    log_test_values(pig_latin("Hello, world!"), "pig_latin_test_pig_latin_non_alphabetic_1")
+    log_test_values(
+        pig_latin("Hello, world!"), "pig_latin_test_pig_latin_non_alphabetic_1"
+    )
 
 
 def test_pig_latin_non_ascii():
@@ -60,8 +69,12 @@ def test_pig_latin_non_ascii():
 
 
 def test_pig_latin_hyphenated_words():
-    log_test_values(pig_latin("sister-in-law"), "pig_latin_test_pig_latin_hyphenated_words_0")
-    log_test_values(pig_latin("self-driving car"), "pig_latin_test_pig_latin_hyphenated_words_1")
+    log_test_values(
+        pig_latin("sister-in-law"), "pig_latin_test_pig_latin_hyphenated_words_0"
+    )
+    log_test_values(
+        pig_latin("self-driving car"), "pig_latin_test_pig_latin_hyphenated_words_1"
+    )
 
 
 def test_pig_latin_contractions():
@@ -71,7 +84,9 @@ def test_pig_latin_contractions():
 
 def test_pig_latin_apostrophes():
     log_test_values(pig_latin("don't"), "pig_latin_test_pig_latin_apostrophes_0")
-    log_test_values(pig_latin("rock 'n' roll"), "pig_latin_test_pig_latin_apostrophes_1")
+    log_test_values(
+        pig_latin("rock 'n' roll"), "pig_latin_test_pig_latin_apostrophes_1"
+    )
 
 
 def test_pig_latin_non_letter():

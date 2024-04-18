@@ -1,12 +1,13 @@
 import logging
 import os
 import pathlib
-import pickle
 import sqlite3
 import sys
 import time
 from collections import defaultdict
 from typing import Any, Dict, Optional
+
+import dill as pickle
 
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.code_utils.config_parser import parse_config_file

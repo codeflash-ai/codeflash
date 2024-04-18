@@ -4,7 +4,7 @@ import re
 import subprocess
 import sys
 import time
-from typing import Optional, NoReturn
+from typing import NoReturn, Optional
 
 import click
 import inquirer
@@ -20,8 +20,8 @@ from codeflash.code_utils.env_utils import (
 )
 from codeflash.code_utils.git_utils import get_github_secrets_page_url
 from codeflash.code_utils.shell_utils import (
-    save_api_key_to_rc,
     get_shell_rc_path,
+    save_api_key_to_rc,
 )
 from codeflash.telemetry.posthog import ph
 from codeflash.version import __version__ as version
@@ -69,11 +69,11 @@ def init_codeflash() -> None:
             f"    codeflash --all to optimize all functions in all files in the module you selected ({setup_info.module_root}){LF}"
             # f"    codeflash --pr <pr-number> to optimize a PR{LF}"
             f"-or-{LF}"
-            f"    codeflash --help to see all options{LF}"
+            f"    codeflash --help to see all options{LF}",
         )
         if did_add_new_key:
             click.echo(
-                "🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
+                "🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!",
             )
             click.echo("Or run the following command to reload:")
             if os.name == "nt":
@@ -101,7 +101,7 @@ def collect_setup_info() -> SetupInfo:
     # Check if the cwd is writable
     if not os.access(curdir, os.W_OK):
         click.echo(
-            f"❌ The current directory isn't writable, please check your folder permissions and try again.{LF}"
+            f"❌ The current directory isn't writable, please check your folder permissions and try again.{LF}",
         )
         click.echo("It's likely you don't have write permissions for this folder.")
         sys.exit(1)
@@ -132,7 +132,7 @@ def collect_setup_info() -> SetupInfo:
     module_subdir_options = valid_module_subdirs + [curdir_option]
 
     module_root_answer = inquirer.list_input(
-        message=f"Which Python module do you want me to optimize going forward? (Usually the top-most directory with all of your Python source code)",
+        message="Which Python module do you want me to optimize going forward? (Usually the top-most directory with all of your Python source code)",
         choices=module_subdir_options,
         default=(
             project_name if project_name in module_subdir_options else module_subdir_options[0]
@@ -172,7 +172,7 @@ def collect_setup_info() -> SetupInfo:
                     exists=True,
                     normalize_to_absolute_path=True,
                 ),
-            ]
+            ],
         )
         tests_root = (
             custom_tests_root_answer["path"] if custom_tests_root_answer else apologize_and_exit()
@@ -224,7 +224,7 @@ def detect_test_framework(curdir, tests_root) -> Optional[str]:
     for pytest_file in pytest_files:
         file_path = os.path.join(curdir, pytest_file)
         if os.path.exists(file_path):
-            with open(file_path, "r", encoding="utf8") as file:
+            with open(file_path, encoding="utf8") as file:
                 contents = file.read()
                 if pytest_config_patterns[pytest_file] in contents:
                     test_framework = "pytest"
@@ -234,7 +234,7 @@ def detect_test_framework(curdir, tests_root) -> Optional[str]:
         # Check if any python files contain a class that inherits from unittest.TestCase
         for filename in os.listdir(tests_root):
             if filename.endswith(".py"):
-                with open(os.path.join(tests_root, filename), "r", encoding="utf8") as file:
+                with open(os.path.join(tests_root, filename), encoding="utf8") as file:
                     contents = file.read()
                     try:
                         node = ast.parse(contents)
@@ -265,38 +265,38 @@ def check_for_toml_or_setup_file() -> Optional[str]:
     project_name = None
     if os.path.exists(pyproject_toml_path):
         try:
-            with open(pyproject_toml_path, "r", encoding="utf8") as f:
+            with open(pyproject_toml_path, encoding="utf8") as f:
                 pyproject_toml_content = f.read()
             project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]
             click.echo(f"✅ I found a pyproject.toml for your project {project_name}.")
             ph("cli-pyproject-toml-found-name")
-        except Exception as e:
-            click.echo(f"✅ I found a pyproject.toml for your project.")
+        except Exception:
+            click.echo("✅ I found a pyproject.toml for your project.")
             ph("cli-pyproject-toml-found")
     else:
         if os.path.exists(setup_py_path):
-            with open(setup_py_path, "r", encoding="utf8") as f:
+            with open(setup_py_path, encoding="utf8") as f:
                 setup_py_content = f.read()
             project_name_match = re.search(
-                r"setup\s*\([^)]*?name\s*=\s*['\"](.*?)['\"]", setup_py_content, re.DOTALL
+                r"setup\s*\([^)]*?name\s*=\s*['\"](.*?)['\"]", setup_py_content, re.DOTALL,
             )
             if project_name_match:
                 project_name = project_name_match.group(1)
                 click.echo(f"✅ Found setup.py for your project {project_name}")
                 ph("cli-setup-py-found-name")
             else:
-                click.echo(f"✅ Found setup.py.")
+                click.echo("✅ Found setup.py.")
                 ph("cli-setup-py-found")
         click.echo(
             f"💡 I couldn't find a pyproject.toml in the current directory ({curdir}).{LF}"
             f"(make sure you're running `codeflash init` from your project's root directory!){LF}"
-            f"I need this file to store my configuration settings."
+            f"I need this file to store my configuration settings.",
         )
         ph("cli-no-pyproject-toml-or-setup-py")
 
         # Create a pyproject.toml file because it doesn't exist
         create_toml = inquirer.confirm(
-            f"Do you want me to create a pyproject.toml file in the current directory?",
+            "Do you want me to create a pyproject.toml file in the current directory?",
             default=True,
             show_default=False,
         )
@@ -314,9 +314,9 @@ def check_for_toml_or_setup_file() -> Optional[str]:
                     click.echo(f"✅ Created a pyproject.toml file at {pyproject_toml_path}")
                     click.pause()
                 ph("cli-created-pyproject-toml")
-            except IOError as e:
+            except OSError:
                 click.echo(
-                    "❌ Failed to create pyproject.toml. Please check your disk permissions and available space."
+                    "❌ Failed to create pyproject.toml. Please check your disk permissions and available space.",
                 )
                 apologize_and_exit()
         else:
@@ -328,7 +328,7 @@ def check_for_toml_or_setup_file() -> Optional[str]:
 
 def apologize_and_exit() -> NoReturn:
     click.echo(
-        "💡 If you're having trouble, see https://app.codeflash.ai/app/getting-started for further help getting started with Codeflash!"
+        "💡 If you're having trouble, see https://app.codeflash.ai/app/getting-started for further help getting started with Codeflash!",
     )
     click.echo("👋 Exiting...")
     sys.exit(1)
@@ -363,10 +363,10 @@ def prompt_github_action(setup_info: SetupInfo) -> None:
             python_version_string = f" {py_version.major}.{py_version.minor}"
 
             optimize_yml_content = read_text(
-                "codeflash.cli_cmds.workflows", "codeflash-optimize.yaml"
+                "codeflash.cli_cmds.workflows", "codeflash-optimize.yaml",
             )
             optimize_yml_content = optimize_yml_content.replace(
-                " {{ python_version }}", python_version_string
+                " {{ python_version }}", python_version_string,
             )
             with open(optimize_yaml_path, "w", encoding="utf8") as optimize_yml_file:
                 optimize_yml_file.write(optimize_yml_content)
@@ -400,12 +400,12 @@ def prompt_github_action(setup_info: SetupInfo) -> None:
             click.launch(optimize_yaml_path)
             click.echo(
                 "📝 I opened the workflow file in your editor! You'll need to edit the steps that install the right Python "
-                + f"version and any project dependencies. See the comments in the file for more details.{LF}"
+                + f"version and any project dependencies. See the comments in the file for more details.{LF}",
             )
             click.pause()
             click.echo()
             click.echo(
-                f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
+                f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}",
             )
             ph("cli-github-workflow-created")
         else:
@@ -417,18 +417,18 @@ def prompt_github_action(setup_info: SetupInfo) -> None:
 def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     toml_path = os.path.join(os.getcwd(), "pyproject.toml")
     try:
-        with open(toml_path, "r", encoding="utf8") as pyproject_file:
+        with open(toml_path, encoding="utf8") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
         click.echo(
             f"I couldn't find a pyproject.toml in the current directory.{LF}"
-            f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
+            f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file.",
         )
         apologize_and_exit()
 
     codeflash_section = tomlkit.table()
     codeflash_section.add(
-        tomlkit.comment("All paths are relative to this pyproject.toml's directory.")
+        tomlkit.comment("All paths are relative to this pyproject.toml's directory."),
     )
     codeflash_section["module-root"] = setup_info.module_root
     codeflash_section["tests-root"] = setup_info.tests_root
@@ -440,7 +440,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     tool_section["codeflash"] = codeflash_section
     pyproject_data["tool"] = tool_section
 
-    click.echo(f"Writing Codeflash configuration ...\r", nl=False)
+    click.echo("Writing Codeflash configuration ...\r", nl=False)
     with open(toml_path, "w", encoding="utf8") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
     click.echo(f"✅ Added Codeflash configuration to {toml_path}")
@@ -466,7 +466,7 @@ class CFAPIKeyType(click.ParamType):
 def prompt_api_key() -> bool:
     try:
         existing_api_key = get_codeflash_api_key()
-    except EnvironmentError:
+    except OSError:
         existing_api_key = None
     if existing_api_key:
         display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
@@ -499,14 +499,13 @@ def enter_api_key_and_save_to_rc() -> None:
         ).strip()
         if api_key:
             break
-        else:
-            if not browser_launched:
-                click.echo(
-                    f"Opening your Codeflash API key page. Grab a key from there!{LF}"
-                    "You can also open this link manually: https://app.codeflash.ai/app/apikeys"
-                )
-                click.launch("https://app.codeflash.ai/app/apikeys")
-                browser_launched = True  # This does not work on remote consoles
+        elif not browser_launched:
+            click.echo(
+                f"Opening your Codeflash API key page. Grab a key from there!{LF}"
+                "You can also open this link manually: https://app.codeflash.ai/app/apikeys",
+            )
+            click.launch("https://app.codeflash.ai/app/apikeys")
+            browser_launched = True  # This does not work on remote consoles
     shell_rc_path = get_shell_rc_path()
     if not shell_rc_path.exists() and os.name == "nt":
         # On Windows, create a batch file in the user's home directory (not auto-run, just used to store api key)
@@ -581,5 +580,5 @@ def run_end_to_end_test(setup_info: SetupInfo) -> None:
         click.echo(f"{LF}✅ End-to-end test passed. Codeflash has been correctly set up!")
     else:
         click.echo(
-            f"{LF}❌ End-to-end test failed. Please check the logs above, and take a look at https://app.codeflash.ai/app/getting-started for help and troubleshooting."
+            f"{LF}❌ End-to-end test failed. Please check the logs above, and take a look at https://app.codeflash.ai/app/getting-started for help and troubleshooting.",
         )

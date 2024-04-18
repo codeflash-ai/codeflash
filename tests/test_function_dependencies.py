@@ -1,7 +1,7 @@
 import pathlib
 from dataclasses import dataclass
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize, FunctionParent
+from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 from codeflash.optimization.function_context import get_function_variables_definitions
 
 

@@ -1,18 +1,17 @@
 import ast
 import os.path
 import pathlib
-import pytest
 import sys
 import tempfile
 
+import pytest
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import INDIVIDUAL_TEST_TIMEOUT
-from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
+from codeflash.code_utils.instrument_existing_tests import InjectPerfOnly, inject_profiling_into_existing_test
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestType
 from codeflash.verification.test_runner import run_tests
 from codeflash.verification.verification_utils import TestConfig
-from codeflash.code_utils.instrument_existing_tests import InjectPerfOnly
 
 
 def test_perfinjector_bubble_sort():
@@ -39,7 +38,7 @@ class TestPigLatin(unittest.TestCase):
 import gc
 import os
 import sqlite3
-import pickle
+import dill as pickle
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -86,7 +85,9 @@ class TestPigLatin(unittest.TestCase):
         f.write(code)
         f.flush()
         success, new_test = inject_profiling_into_existing_test(
-            f.name, "sorter", os.path.dirname(f.name)
+            f.name,
+            "sorter",
+            os.path.dirname(f.name),
         )
         assert success
         assert new_test == expected.format(
@@ -96,7 +97,7 @@ class TestPigLatin(unittest.TestCase):
 
 
 def test_perfinjector_only_replay_test():
-    code = """import pickle
+    code = """import dill as pickle
 import pytest
 from codeflash.tracing.replay_test import get_next_arg_and_return
 from codeflash.validation.equivalence import compare_results
@@ -112,7 +113,7 @@ def test_prepare_image_for_yolo():
 import gc
 import os
 import sqlite3
-import pickle
+import dill as pickle
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -132,7 +133,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
-import pickle
+import dill as pickle
 import pytest
 from codeflash.tracing.replay_test import get_next_arg_and_return
 from codeflash.validation.equivalence import compare_results
@@ -161,7 +162,9 @@ def test_prepare_image_for_yolo():
         f.flush()
 
         success, new_test = inject_profiling_into_existing_test(
-            f.name, "prepare_image_for_yolo", os.path.dirname(f.name)
+            f.name,
+            "prepare_image_for_yolo",
+            os.path.dirname(f.name),
         )
         assert success
         assert new_test == expected.format(
@@ -187,7 +190,7 @@ def test_sort():
 import gc
 import os
 import sqlite3
-import pickle
+import dill as pickle
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -275,10 +278,7 @@ def test_sort():
     assert test_results[0].id.iteration_id == "5_0"
     assert test_results[0].id.test_class_name == None
     assert test_results[0].id.test_function_name == "test_sort"
-    assert (
-        test_results[0].id.test_module_path
-        == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
-    )
+    assert test_results[0].id.test_module_path == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
     assert test_results[0].runtime > 0
     assert test_results[0].did_pass == True
 
@@ -286,10 +286,7 @@ def test_sort():
     assert test_results[1].id.iteration_id == "8_0"
     assert test_results[1].id.test_class_name == None
     assert test_results[1].id.test_function_name == "test_sort"
-    assert (
-        test_results[1].id.test_module_path
-        == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
-    )
+    assert test_results[1].id.test_module_path == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
     assert test_results[1].runtime > 0
     assert test_results[1].did_pass == True
 
@@ -317,7 +314,7 @@ def test_sort_parametrized(input, expected_output):
 import gc
 import os
 import sqlite3
-import pickle
+import dill as pickle
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -457,7 +454,7 @@ def test_sort_parametrized_loop(input, expected_output):
 import gc
 import os
 import sqlite3
-import pickle
+import dill as pickle
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -628,7 +625,7 @@ def test_sort():
 import gc
 import os
 import sqlite3
-import pickle
+import dill as pickle
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -718,8 +715,7 @@ def test_sort():
     assert test_results[0].id.test_class_name == None
     assert test_results[0].id.test_function_name == "test_sort"
     assert (
-        test_results[0].id.test_module_path
-        == "tests.pytest.test_perfinjector_bubble_sort_loop_results_temp"
+        test_results[0].id.test_module_path == "tests.pytest.test_perfinjector_bubble_sort_loop_results_temp"
     )
     assert test_results[0].runtime > 0
     assert test_results[0].did_pass == True
@@ -729,8 +725,7 @@ def test_sort():
     assert test_results[1].id.test_class_name == None
     assert test_results[1].id.test_function_name == "test_sort"
     assert (
-        test_results[1].id.test_module_path
-        == "tests.pytest.test_perfinjector_bubble_sort_loop_results_temp"
+        test_results[1].id.test_module_path == "tests.pytest.test_perfinjector_bubble_sort_loop_results_temp"
     )
     assert test_results[1].runtime > 0
     assert test_results[1].did_pass == True
@@ -740,8 +735,7 @@ def test_sort():
     assert test_results[2].id.test_class_name == None
     assert test_results[2].id.test_function_name == "test_sort"
     assert (
-        test_results[2].id.test_module_path
-        == "tests.pytest.test_perfinjector_bubble_sort_loop_results_temp"
+        test_results[2].id.test_module_path == "tests.pytest.test_perfinjector_bubble_sort_loop_results_temp"
     )
     assert test_results[2].runtime > 0
     assert test_results[2].did_pass == True
@@ -774,7 +768,7 @@ class TestPigLatin(unittest.TestCase):
 import gc
 import os
 import sqlite3
-import pickle
+import dill as pickle
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -928,7 +922,7 @@ class TestPigLatin(unittest.TestCase):
 import gc
 import os
 import sqlite3
-import pickle
+import dill as pickle
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -1070,7 +1064,7 @@ class TestPigLatin(unittest.TestCase):
 import gc
 import os
 import sqlite3
-import pickle
+import dill as pickle
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -1220,7 +1214,7 @@ class TestPigLatin(unittest.TestCase):
 import gc
 import os
 import sqlite3
-import pickle
+import dill as pickle
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
