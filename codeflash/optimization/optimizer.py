@@ -115,7 +115,7 @@ class Optimizer:
         self.instrumented_unittests_created: set[str] = set()
 
     def run(self) -> None:
-        should_run_experiment = True
+        should_run_experiment = os.getenv("CODEFLASH_RUN_EXPERIMENT", "false").lower() == "true"
         ph("cli-optimize-run-start")
         logging.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
