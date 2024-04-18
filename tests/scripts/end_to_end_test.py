@@ -60,7 +60,7 @@ def main():
         stdout,
     )
     num_unit_tests = int(unit_test_search.group(1))
-    assert num_unit_tests > 0, f"Could not find existing unit tests"
+    assert num_unit_tests > 0, "Could not find existing unit tests"
 
 
 if __name__ == "__main__":

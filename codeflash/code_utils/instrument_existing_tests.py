@@ -2,7 +2,7 @@ import ast
 from _ast import ClassDef
 from typing import Any, Optional, Tuple
 
-from codeflash.code_utils.code_utils import module_name_from_file_path, get_run_tmp_file
+from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 
 
 class ReplaceCallNodeWithName(ast.NodeTransformer):
@@ -26,7 +26,7 @@ class InjectPerfOnly(ast.NodeTransformer):
         self.module_path = module_path
 
     def update_line_node(
-        self, test_node, node_name, index: str, test_class_name: Optional[str] = None
+        self, test_node, node_name, index: str, test_class_name: Optional[str] = None,
     ):
         call_node = None
         for node in ast.walk(test_node):
@@ -122,17 +122,17 @@ class InjectPerfOnly(ast.NodeTransformer):
                                 ast.JoinedStr(
                                     values=[
                                         ast.Constant(
-                                            value=f"{get_run_tmp_file('test_return_values_')}"
+                                            value=f"{get_run_tmp_file('test_return_values_')}",
                                         ),
                                         ast.FormattedValue(
                                             value=ast.Name(
-                                                id="codeflash_iteration", ctx=ast.Load()
+                                                id="codeflash_iteration", ctx=ast.Load(),
                                             ),
                                             conversion=-1,
                                         ),
                                         ast.Constant(value=".sqlite"),
-                                    ]
-                                )
+                                    ],
+                                ),
                             ],
                             keywords=[],
                         ),
@@ -164,8 +164,8 @@ class InjectPerfOnly(ast.NodeTransformer):
                                 ast.Constant(
                                     value="CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT,"
                                     " test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT,"
-                                    " iteration_id TEXT, runtime INTEGER, return_value BLOB)"
-                                )
+                                    " iteration_id TEXT, runtime INTEGER, return_value BLOB)",
+                                ),
                             ],
                             keywords=[],
                         ),
@@ -184,8 +184,8 @@ class InjectPerfOnly(ast.NodeTransformer):
                             ),
                             args=[],
                             keywords=[],
-                        )
-                    )
+                        ),
+                    ),
                 ]
             )
             i = len(node.body) - 1
@@ -200,15 +200,14 @@ class InjectPerfOnly(ast.NodeTransformer):
                         for internal_node in ast.walk(compound_line_node):
                             if self.is_target_function_line(internal_node):
                                 line_node.body[j : j + 1] = self.update_line_node(
-                                    internal_node, node.name, str(i) + "_" + str(j), test_class_name
+                                    internal_node, node.name, str(i) + "_" + str(j), test_class_name,
                                 )
                                 break
                         j -= 1
-                else:
-                    if self.is_target_function_line(line_node):
-                        node.body[i : i + 1] = self.update_line_node(
-                            line_node, node.name, str(i), test_class_name
-                        )
+                elif self.is_target_function_line(line_node):
+                    node.body[i : i + 1] = self.update_line_node(
+                        line_node, node.name, str(i), test_class_name,
+                    )
                 i -= 1
         return node
 
@@ -216,7 +215,8 @@ class InjectPerfOnly(ast.NodeTransformer):
 class FunctionImportedAsVisitor(ast.NodeVisitor):
     """This checks if a function has been imported as an alias. We only care about the alias then.
     from numpy import array as np_array
-    np_array is what we want"""
+    np_array is what we want
+    """
 
     def __init__(self, original_function_name):
         self.original_function_name = original_function_name
@@ -226,12 +226,12 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
     def visit_ImportFrom(self, node: ast.ImportFrom):
         for alias in node.names:
             if alias.name == self.original_function_name:
-                if hasattr(alias, "asname") and not alias.asname is None:
+                if hasattr(alias, "asname") and alias.asname is not None:
                     self.imported_as_function_name = alias.asname
 
 
 def inject_profiling_into_existing_test(test_path, function_name, root_path) -> Tuple[bool, str]:
-    with open(test_path, "r", encoding="utf8") as f:
+    with open(test_path, encoding="utf8") as f:
         test_code = f.read()
     try:
         tree = ast.parse(test_code)
@@ -284,21 +284,21 @@ def create_wrapper_function(function_name, module_path):
                 value=ast.JoinedStr(
                     values=[
                         ast.FormattedValue(
-                            value=ast.Name(id="test_module_name", ctx=ast.Load()), conversion=-1
+                            value=ast.Name(id="test_module_name", ctx=ast.Load()), conversion=-1,
                         ),
                         ast.Constant(value=":"),
                         ast.FormattedValue(
-                            value=ast.Name(id="test_class_name", ctx=ast.Load()), conversion=-1
+                            value=ast.Name(id="test_class_name", ctx=ast.Load()), conversion=-1,
                         ),
                         ast.Constant(value=":"),
                         ast.FormattedValue(
-                            value=ast.Name(id="test_name", ctx=ast.Load()), conversion=-1
+                            value=ast.Name(id="test_name", ctx=ast.Load()), conversion=-1,
                         ),
                         ast.Constant(value=":"),
                         ast.FormattedValue(
-                            value=ast.Name(id="line_id", ctx=ast.Load()), conversion=-1
+                            value=ast.Name(id="line_id", ctx=ast.Load()), conversion=-1,
                         ),
-                    ]
+                    ],
                 ),
                 lineno=lineno + 1,
             ),
@@ -321,11 +321,11 @@ def create_wrapper_function(function_name, module_path):
                                 value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
                                 attr="index",
                                 ctx=ast.Store(),
-                            )
+                            ),
                         ],
                         value=ast.Dict(keys=[], values=[]),
                         lineno=lineno + 3,
-                    )
+                    ),
                 ],
                 orelse=[],
                 lineno=lineno + 2,
@@ -339,7 +339,7 @@ def create_wrapper_function(function_name, module_path):
                             value=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
                             attr="index",
                             ctx=ast.Load(),
-                        )
+                        ),
                     ],
                 ),
                 body=[
@@ -356,7 +356,7 @@ def create_wrapper_function(function_name, module_path):
                         op=ast.Add(),
                         value=ast.Constant(value=1),
                         lineno=lineno + 5,
-                    )
+                    ),
                 ],
                 orelse=[
                     ast.Assign(
@@ -369,11 +369,11 @@ def create_wrapper_function(function_name, module_path):
                                 ),
                                 slice=ast.Name(id="test_id", ctx=ast.Load()),
                                 ctx=ast.Store(),
-                            )
+                            ),
                         ],
                         value=ast.Constant(value=0),
                         lineno=lineno + 6,
-                    )
+                    ),
                 ],
                 lineno=lineno + 4,
             ),
@@ -397,13 +397,13 @@ def create_wrapper_function(function_name, module_path):
                 value=ast.JoinedStr(
                     values=[
                         ast.FormattedValue(
-                            value=ast.Name(id="line_id", ctx=ast.Load()), conversion=-1
+                            value=ast.Name(id="line_id", ctx=ast.Load()), conversion=-1,
                         ),
                         ast.Constant(value="_"),
                         ast.FormattedValue(
-                            value=ast.Name(id="codeflash_test_index", ctx=ast.Load()), conversion=-1
+                            value=ast.Name(id="codeflash_test_index", ctx=ast.Load()), conversion=-1,
                         ),
-                    ]
+                    ],
                 ),
                 lineno=lineno + 8,
             ),

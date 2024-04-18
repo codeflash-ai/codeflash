@@ -19,10 +19,9 @@ else:
 
 
 def make_cfapi_request(
-    endpoint: str, method: str, payload: Optional[Dict[str, Any]] = None
+    endpoint: str, method: str, payload: Optional[Dict[str, Any]] = None,
 ) -> requests.Response:
-    """
-    Make an HTTP request using the specified method, URL, headers, and JSON payload.
+    """Make an HTTP request using the specified method, URL, headers, and JSON payload.
     :param endpoint: The endpoint URL to send the request to.
     :param method: The HTTP method to use ('GET', 'POST', etc.).
     :param payload: Optional JSON payload to include in the POST request body.
@@ -41,8 +40,7 @@ def make_cfapi_request(
 
 @lru_cache(maxsize=1)
 def get_user_id() -> Optional[str]:
-    """
-    Retrieve the user's userid by making a request to the /cfapi/cli-get-user endpoint.
+    """Retrieve the user's userid by making a request to the /cfapi/cli-get-user endpoint.
     :return: The userid or None if the request fails.
     """
     response = make_cfapi_request(endpoint="/cli-get-user", method="GET")
@@ -50,7 +48,7 @@ def get_user_id() -> Optional[str]:
         return response.text
     else:
         logging.error(
-            f"Failed to look up your userid; is your CF API key valid? ({response.reason})"
+            f"Failed to look up your userid; is your CF API key valid? ({response.reason})",
         )
         return None
 
@@ -64,8 +62,7 @@ def suggest_changes(
     existing_tests: str,
     generated_tests: str,
 ) -> Response:
-    """
-    Suggest changes to a pull request.
+    """Suggest changes to a pull request.
     Will make a review suggestion when possible;
     or create a new dependent pull request with the suggested changes.
     :param owner: The owner of the repository.
@@ -98,8 +95,7 @@ def create_pr(
     existing_tests: str,
     generated_tests: str,
 ) -> Response:
-    """
-    Create a pull request, targeting the specified branch. (usually 'main')
+    """Create a pull request, targeting the specified branch. (usually 'main')
     :param owner: The owner of the repository.
     :param repo: The name of the repository.
     :param base_branch: The base branch to target.
@@ -122,8 +118,7 @@ def create_pr(
 
 
 def check_github_app_installed_on_repo(owner: str, repo: str) -> Response:
-    """
-    Check if the Codeflash GitHub App is installed on the specified repository.
+    """Check if the Codeflash GitHub App is installed on the specified repository.
     :param owner: The owner of the repository.
     :param repo: The name of the repository.
     :return: The response object.

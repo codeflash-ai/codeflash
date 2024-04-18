@@ -10,7 +10,7 @@ def test_unit_test_discovery_pytest():
     project_path = pathlib.Path(__file__).parent.parent.resolve() / "code_to_optimize"
     tests_path = project_path / "tests" / "pytest"
     test_config = TestConfig(
-        tests_root=str(tests_path), project_root_path=str(project_path), test_framework="pytest"
+        tests_root=str(tests_path), project_root_path=str(project_path), test_framework="pytest",
     )
     tests = discover_unit_tests(test_config)
     assert len(tests) > 0
@@ -21,7 +21,7 @@ def test_unit_test_discovery_unittest():
     project_path = pathlib.Path(__file__).parent.parent.resolve() / "code_to_optimize"
     test_path = project_path / "tests" / "unittest"
     test_config = TestConfig(
-        tests_root=str(project_path), project_root_path=str(project_path), test_framework="unittest"
+        tests_root=str(project_path), project_root_path=str(project_path), test_framework="unittest",
     )
     os.chdir(str(project_path))
     tests = discover_unit_tests(test_config)
@@ -47,7 +47,7 @@ def test_discover_tests_pytest_with_temp_dir_root():
 
         # Create a TestConfig with the temporary directory as the root
         test_config = TestConfig(
-            tests_root=str(tmpdirname), project_root_path=str(tmpdirname), test_framework="pytest"
+            tests_root=str(tmpdirname), project_root_path=str(tmpdirname), test_framework="pytest",
         )
 
         # Discover tests
@@ -110,7 +110,7 @@ def test_discover_tests_pytest_with_multi_level_dirs():
 
         # Create a TestConfig with the temporary directory as the root
         test_config = TestConfig(
-            tests_root=str(tmpdirname), project_root_path=str(tmpdirname), test_framework="pytest"
+            tests_root=str(tmpdirname), project_root_path=str(tmpdirname), test_framework="pytest",
         )
 
         # Discover tests
@@ -120,10 +120,10 @@ def test_discover_tests_pytest_with_multi_level_dirs():
         assert len(discovered_tests) == 3
         assert discovered_tests["root_code.root_function"][0].test_file == str(root_test_file_path)
         assert discovered_tests["level1_code.level1_function"][0].test_file == str(
-            level1_test_file_path
+            level1_test_file_path,
         )
         assert discovered_tests["level2_code.level2_function"][0].test_file == str(
-            level2_test_file_path
+            level2_test_file_path,
         )
 
 
@@ -194,7 +194,7 @@ def test_discover_tests_pytest_dirs():
 
         # Create a TestConfig with the temporary directory as the root
         test_config = TestConfig(
-            tests_root=str(tmpdirname), project_root_path=str(tmpdirname), test_framework="pytest"
+            tests_root=str(tmpdirname), project_root_path=str(tmpdirname), test_framework="pytest",
         )
 
         # Discover tests
@@ -204,13 +204,13 @@ def test_discover_tests_pytest_dirs():
         assert len(discovered_tests) == 4
         assert discovered_tests["root_code.root_function"][0].test_file == str(root_test_file_path)
         assert discovered_tests["level1_code.level1_function"][0].test_file == str(
-            level1_test_file_path
+            level1_test_file_path,
         )
         assert discovered_tests["level2_code.level2_function"][0].test_file == str(
-            level2_test_file_path
+            level2_test_file_path,
         )
         assert discovered_tests["level3_code.level3_function"][0].test_file == str(
-            level3_test_file_path
+            level3_test_file_path,
         )
 
 
@@ -219,7 +219,7 @@ def test_discover_tests_pytest_with_class():
         # Create a code file with a class
         code_file_path = pathlib.Path(tmpdirname) / "some_class_code.py"
         code_file_content = (
-            "class SomeClass:\n" "    def some_method(self):\n" "        return True\n"
+            "class SomeClass:\n    def some_method(self):\n        return True\n"
         )
         code_file_path.write_text(code_file_content)
 
@@ -235,7 +235,7 @@ def test_discover_tests_pytest_with_class():
 
         # Create a TestConfig with the temporary directory as the root
         test_config = TestConfig(
-            tests_root=str(tmpdirname), project_root_path=str(tmpdirname), test_framework="pytest"
+            tests_root=str(tmpdirname), project_root_path=str(tmpdirname), test_framework="pytest",
         )
 
         # Discover tests
@@ -244,7 +244,7 @@ def test_discover_tests_pytest_with_class():
         # Check if the test class and method are discovered
         assert len(discovered_tests) == 1
         assert discovered_tests["some_class_code.SomeClass.some_method"][0].test_file == str(
-            test_file_path
+            test_file_path,
         )
 
 
@@ -277,7 +277,7 @@ def test_discover_tests_with_code_in_dir_and_test_in_subdir():
 
         # Create a TestConfig with the code directory as the root
         test_config = TestConfig(
-            tests_root=str(test_subdir), project_root_path=str(tmpdirname), test_framework="pytest"
+            tests_root=str(test_subdir), project_root_path=str(tmpdirname), test_framework="pytest",
         )
 
         # Discover tests
