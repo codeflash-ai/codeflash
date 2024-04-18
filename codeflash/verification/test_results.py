@@ -15,12 +15,14 @@ class TestType(Enum):
     EXISTING_UNIT_TEST = 1
     INSPIRED_REGRESSION = 2
     GENERATED_REGRESSION = 3
+    REPLAY_TEST = 4
 
     def to_name(self) -> str:
         names = {
             TestType.EXISTING_UNIT_TEST: "⚙️ Existing Unit Tests",
             TestType.INSPIRED_REGRESSION: "🎨 Inspired Regression Tests",
             TestType.GENERATED_REGRESSION: "🌀 Generated Regression Tests",
+            TestType.REPLAY_TEST: "Replay Tests",
         }
         return names[self]
 
@@ -77,7 +79,9 @@ class TestResults(BaseModel):
     def merge(self, other: TestResults) -> None:
         self.test_results.extend(other.test_results)
 
-    def get_by_id(self, invocation_id: InvocationId) -> Optional[FunctionTestInvocation]:
+    def get_by_id(
+        self, invocation_id: InvocationId
+    ) -> Optional[FunctionTestInvocation]:
         return next((r for r in self.test_results if r.id == invocation_id), None)
 
     def get_all_ids(self) -> List[InvocationId]:
@@ -116,7 +120,9 @@ class TestResults(BaseModel):
     def total_passed_runtime(self) -> int:
         for result in self.test_results:
             if result.did_pass and result.runtime is None:
-                logging.debug(f"Ignoring test case that passed but had no runtime -> {result.id}")
+                logging.debug(
+                    f"Ignoring test case that passed but had no runtime -> {result.id}"
+                )
         timing = sum(
             [
                 result.runtime
@@ -167,7 +173,9 @@ class TestResults(BaseModel):
                 or test_result.runtime != other_test_result.runtime
                 or test_result.test_framework != other_test_result.test_framework
                 or test_result.test_type != other_test_result.test_type
-                or not comparator(test_result.return_value, other_test_result.return_value)
+                or not comparator(
+                    test_result.return_value, other_test_result.return_value
+                )
             ):
                 sys.setrecursionlimit(original_recursion_limit)
                 return False

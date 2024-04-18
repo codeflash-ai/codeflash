@@ -17,7 +17,9 @@ def get_next_arg_and_return(
 ) -> Generator[Tuple[Any, Any], None, None]:
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
-    limit = num_to_get * 2 + 100  # we may have to get more than num_to_get*2 to get num_to_get valid pairs
+    limit = (
+        num_to_get * 2 + 100
+    )  # we may have to get more than num_to_get*2 to get num_to_get valid pairs
     if class_name is not None:
         data = cur.execute(
             "SELECT * FROM events WHERE function = ? AND filename = ? AND classname = ? ORDER BY time_ns ASC LIMIT ?",
@@ -97,6 +99,11 @@ from codeflash.verification.comparator import comparator
             )
 
     imports += "\n".join(function_imports)
+    functions_to_optimize = [
+        function.function_name
+        for function in functions
+        if function.function_name != "__init__"
+    ]
     test_function_body = textwrap.dedent(
         """\
         for arg_val_pkl, return_val_pkl in get_next_arg_and_return(trace_file=r'{trace_file}', function_name='{orig_function_name}', file_name=r'{file_name}', num_to_get={max_run_count}):
@@ -152,7 +159,9 @@ from codeflash.verification.comparator import comparator
             )
         else:
             class_name_alias = get_function_alias(func.module_name, func.class_name)
-            alias = get_function_alias(func.module_name, func.class_name + "_" + func.function_name)
+            alias = get_function_alias(
+                func.module_name, func.class_name + "_" + func.function_name
+            )
             if func.function_name == "__init__":
                 filter_variables = "\n    args.pop('__class__', None)"
             else:
@@ -175,4 +184,6 @@ from codeflash.verification.comparator import comparator
         test_template += "    " if test_framework == "unittest" else ""
         test_template += f"def test_{alias}({self}):\n{formatted_test_body}\n"
 
-    return imports + "\n" + test_template
+    return (
+        imports + "\n" + f"functions = {functions_to_optimize}" + "\n" + test_template
+    )

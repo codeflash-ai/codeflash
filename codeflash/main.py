@@ -15,7 +15,8 @@ def main() -> None:
     """Entry point for the codeflash command-line interface."""
     logging.basicConfig(level=logging.INFO, format=LOGGING_FORMAT, stream=sys.stdout)
     logging.info(CODEFLASH_LOGO)
-    optimizer.run_with_args(parse_args())
+    # optimizer.run_with_args(parse_args())
+    optimizer.run_from_replay_test(parse_args())
 
 
 if __name__ == "__main__":
