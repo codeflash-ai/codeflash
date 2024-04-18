@@ -36,8 +36,7 @@ class Tracer:
         max_function_count: int = 100,
         timeout: int = None,  # seconds
     ) -> None:
-        """
-        :param output: The path to the output trace file
+        """:param output: The path to the output trace file
         :param functions: List of functions to trace. If None, trace all functions
         :param disable: Disable the tracer if True
         :param config_file_path: Path to the pyproject.toml file, if None then it will be auto-discovered
@@ -72,7 +71,7 @@ class Tracer:
         }
         self.file_being_called_from: str = str(
             os.path.basename(
-                os.path.realpath(sys._getframe().f_back.f_code.co_filename)
+                os.path.realpath(sys._getframe().f_back.f_code.co_filename),
             ).replace(
                 ".",
                 "_",
@@ -93,8 +92,9 @@ class Tracer:
         if getattr(Tracer, "used_once", False):
             logging.warning(
                 "Codeflash: Tracer can only be used once per program run. "
-                "Please only enable the Tracer once. Skipping tracing this section."
+                "Please only enable the Tracer once. Skipping tracing this section.",
             )
+            self.disable = True
             return
         Tracer.used_once = True
 
@@ -115,8 +115,6 @@ class Tracer:
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         if self.disable:
-            return
-        if getattr(Tracer, "used_once", False):
             return
         sys.setprofile(None)
 
@@ -159,7 +157,7 @@ class Tracer:
         )
         for key, value in self.profiling_info.items():
             logging.info(
-                f"Profiling info - {key} - count - {value['count']} - time - {value['time']/1e6}ms"
+                f"Profiling info - {key} - count - {value['count']} - time - {value['time']/1e6}ms",
             )
 
     def trace_callback(self, frame: Any, event: str, arg: Any) -> None:
@@ -170,7 +168,7 @@ class Tracer:
             if (time.time() - self.start_time) > self.timeout:
                 sys.setprofile(None)
                 logging.warning(
-                    f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds."
+                    f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds.",
                 )
                 return
         t2 = time.perf_counter_ns()
@@ -196,9 +194,7 @@ class Tracer:
         ):
             class_name = frame.f_locals["self"].__class__.__name__
 
-        function_qualified_name = (
-            file_name + ":" + (class_name + ":" if class_name else "") + code.co_name
-        )
+        function_qualified_name = file_name + ":" + (class_name + ":" if class_name else "") + code.co_name
         if function_qualified_name in self.ignored_qualified_functions:
             # print(function_qualified_name)
             return
@@ -264,7 +260,8 @@ class Tracer:
             sys.setrecursionlimit(10000)
             if event == "call":
                 local_vars = pickle.dumps(
-                    frame.f_locals, protocol=pickle.HIGHEST_PROTOCOL
+                    frame.f_locals,
+                    protocol=pickle.HIGHEST_PROTOCOL,
                 )
                 arg = None
             else:
@@ -272,7 +269,7 @@ class Tracer:
                 local_vars = None
                 arg = pickle.dumps(arg, protocol=pickle.HIGHEST_PROTOCOL)
             sys.setrecursionlimit(original_recursion_limit)
-        except (TypeError, pickle.PicklingError, AttributeError, RecursionError) as e:
+        except (TypeError, pickle.PicklingError, AttributeError, RecursionError):
             # TODO: If this branch hits then its possible there are no paired arg, return values in the replay test.
             #  Filter them out
             return
