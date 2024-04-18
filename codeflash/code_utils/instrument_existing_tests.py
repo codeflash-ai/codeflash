@@ -96,11 +96,7 @@ class InjectPerfOnly(ast.NodeTransformer):
 
         return node
 
-    def visit_FunctionDef(
-        self,
-        node: ast.FunctionDef,
-        test_class_name: Optional[str] = None,
-    ):
+    def visit_FunctionDef(self, node: ast.FunctionDef, test_class_name: Optional[str] = None):
         if node.name.startswith("test_"):
             node.body = (
                 [
@@ -245,11 +241,7 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
                     self.imported_as_function_name = alias.asname
 
 
-def inject_profiling_into_existing_test(
-    test_path,
-    function_name,
-    root_path,
-) -> Tuple[bool, str]:
+def inject_profiling_into_existing_test(test_path, function_name, root_path) -> Tuple[bool, str]:
     with open(test_path, encoding="utf8") as f:
         test_code = f.read()
     try:
@@ -461,18 +453,8 @@ def create_wrapper_function(function_name, module_path):
                 targets=[ast.Name(id="return_value", ctx=ast.Store())],
                 value=ast.Call(
                     func=ast.Name(id="wrapped", ctx=ast.Load()),
-                    args=[
-                        ast.Starred(
-                            value=ast.Name(id="args", ctx=ast.Load()),
-                            ctx=ast.Load(),
-                        ),
-                    ],
-                    keywords=[
-                        ast.keyword(
-                            arg=None,
-                            value=ast.Name(id="kwargs", ctx=ast.Load()),
-                        ),
-                    ],
+                    args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
+                    keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
                 ),
                 lineno=lineno + 11,
             ),
@@ -513,9 +495,7 @@ def create_wrapper_function(function_name, module_path):
                         ctx=ast.Load(),
                     ),
                     args=[
-                        ast.Constant(
-                            value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        ),
+                        ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)"),
                         ast.Tuple(
                             elts=[
                                 ast.Name(id="test_module_name", ctx=ast.Load()),
@@ -553,10 +533,7 @@ def create_wrapper_function(function_name, module_path):
                 ),
                 lineno=lineno + 15,
             ),
-            ast.Return(
-                value=ast.Name(id="return_value", ctx=ast.Load()),
-                lineno=lineno + 16,
-            ),
+            ast.Return(value=ast.Name(id="return_value", ctx=ast.Load()), lineno=lineno + 16),
         ],
         lineno=lineno,
         decorator_list=[],

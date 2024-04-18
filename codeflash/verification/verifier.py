@@ -34,7 +34,7 @@ def generate_tests(
         instrumented_test_source = module.CACHED_INSTRUMENTED_TESTS
         path = get_run_tmp_file("").replace("\\", "\\\\")  # Escape backslash for windows paths
         instrumented_test_source = instrumented_test_source.replace(
-            "{codeflash_run_tmp_dir_client_side}", path
+            "{codeflash_run_tmp_dir_client_side}", path,
         )
         logging.info(f"Using cached tests from {module_path}.CACHED_TESTS")
     else:
@@ -56,7 +56,7 @@ def generate_tests(
             generated_test_source, instrumented_test_source = response
             path = get_run_tmp_file("").replace("\\", "\\\\")  # Escape backslash for windows paths
             instrumented_test_source = instrumented_test_source.replace(
-                "{codeflash_run_tmp_dir_client_side}", path
+                "{codeflash_run_tmp_dir_client_side}", path,
             )
         else:
             logging.error(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")
@@ -77,7 +77,7 @@ def merge_unit_tests(unit_test_source: str, inspired_unit_tests: str, test_frame
         inspired_unit_tests_ast = ast.parse(inspired_unit_tests)
         unit_test_source_ast = ast.parse(unit_test_source)
     except SyntaxError as e:
-        logging.error(f"Syntax error in code: {e}")
+        logging.exception(f"Syntax error in code: {e}")
         return unit_test_source
     import_list: list[ast.stmt] = list()
     modified_ast = ModifyInspiredTests(import_list, test_framework).visit(inspired_unit_tests_ast)

@@ -15,7 +15,7 @@ def test_function_eligible_for_optimization() -> None:
         f.write(function)
         f.flush()
         functions_found = find_all_functions_in_file(f.name)
-    assert "test_function_eligible_for_optimization" == functions_found[f.name][0].function_name
+    assert functions_found[f.name][0].function_name == "test_function_eligible_for_optimization"
 
     # Has no return statement
     function = """def test_function_not_eligible_for_optimization():

@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 from posthog import Posthog
 
@@ -10,8 +10,7 @@ _posthog = None
 
 
 def initialize_posthog(enabled: bool) -> None:
-    """
-    Enable or disable PostHog.
+    """Enable or disable PostHog.
     :param enabled: Whether to enable PostHog.
     """
     if not enabled:
@@ -26,8 +25,7 @@ def initialize_posthog(enabled: bool) -> None:
 
 
 def ph(event: str, properties: Optional[Dict[str, Any]] = None) -> None:
-    """
-    Log an event to PostHog.
+    """Log an event to PostHog.
     :param event: The name of the event.
     :param properties: A dictionary of properties to attach to the event.
     """

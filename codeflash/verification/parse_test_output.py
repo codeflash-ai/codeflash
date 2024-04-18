@@ -132,9 +132,7 @@ def parse_test_xml(
     try:
         xml = JUnitXml.fromfile(test_xml_file_path)
     except Exception as e:
-        logging.warning(
-            f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}",
-        )
+        logging.warning(f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}")
         return test_results
 
     for suite in xml:
@@ -160,10 +158,7 @@ def parse_test_xml(
 
             assert os.path.exists(file_name), f"File {file_name} doesn't exist."
             result = testcase.is_passed  # TODO: See for the cases of ERROR and SKIPPED
-            test_module_path = module_name_from_file_path(
-                file_name,
-                test_config.project_root_path,
-            )
+            test_module_path = module_name_from_file_path(file_name, test_config.project_root_path)
             test_class = None
             if class_name is not None and class_name.startswith(test_module_path):
                 test_class = class_name[
@@ -346,12 +341,12 @@ def parse_test_results(
 
     # We Probably want to remove deleting this file here later, because we want to preserve the reference to the
     # pickle blob in the test_results
-    pathlib.Path(
-        get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
-    ).unlink(missing_ok=True)
-    pathlib.Path(
-        get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite"),
-    ).unlink(missing_ok=True)
+    pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin")).unlink(
+        missing_ok=True,
+    )
+    pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite")).unlink(
+        missing_ok=True,
+    )
 
     merged_results = merge_test_results(
         test_results_xml,
