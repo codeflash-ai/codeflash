@@ -6,7 +6,9 @@ from typing import Any, Dict, Generator, List, Tuple
 
 
 def get_next_arg_and_return(
-    trace_file: str, function_name: str, num_to_get: int = 3
+    trace_file: str,
+    function_name: str,
+    num_to_get: int = 3,
 ) -> Generator[Tuple[Any, Any], None, None]:
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
@@ -27,14 +29,14 @@ def get_next_arg_and_return(
             matched_arg_return[frame_address].append(val[7])
             if len(matched_arg_return[frame_address]) > 1:
                 logging.warning(
-                    f"Pre-existing call to the function {function_name} with same frame address."
+                    f"Pre-existing call to the function {function_name} with same frame address.",
                 )
         elif event_type == "return":
             matched_arg_return[frame_address].append(val[6])
             arg_return_length = len(matched_arg_return[frame_address])
             if arg_return_length > 2:
                 logging.warning(
-                    f"Pre-existing return to the function {function_name} with same frame address."
+                    f"Pre-existing return to the function {function_name} with same frame address.",
                 )
             elif arg_return_length == 1:
                 logging.warning(f"No call before return for {function_name}!")
@@ -51,7 +53,9 @@ def get_function_alias(module: str, function_name: str) -> str:
 
 
 def create_trace_replay_test(
-    trace_file: str, functions: List[Tuple[str, str]], test_framework: str = "pytest"
+    trace_file: str,
+    functions: List[Tuple[str, str]],
+    test_framework: str = "pytest",
 ) -> str:
     assert test_framework in ["pytest", "unittest"]
 
@@ -77,7 +81,8 @@ from codeflash.validation.comparators import comparator
 
 
 def _create_unittest_trace_replay_test(
-    trace_file: str, functions: List[Tuple[str, str]]
+    trace_file: str,
+    functions: List[Tuple[str, str]],
 ) -> str:
     test_function_body = textwrap.dedent(
         """\
@@ -86,7 +91,7 @@ def _create_unittest_trace_replay_test(
             return_val = pickle.loads(return_val_pkl)
             ret = {function_name}(**args)
             self.assertTrue(comparator(return_val, ret))
-    """
+    """,
     )
 
     test_template = "\nclass TestTracedFunctions(unittest.TestCase):\n"
@@ -108,7 +113,8 @@ def _create_unittest_trace_replay_test(
 
 
 def _create_pytest_trace_replay_test(
-    trace_file: str, functions: List[Tuple[str, str]]
+    trace_file: str,
+    functions: List[Tuple[str, str]],
 ) -> str:
     test_function_body = textwrap.dedent(
         """\
@@ -117,7 +123,7 @@ def _create_pytest_trace_replay_test(
             return_val = pickle.loads(return_val_pkl)
             ret = {function_name}(**args)
             assert comparator(return_val, ret)
-    """
+    """,
     )
 
     test_template = ""

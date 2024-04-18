@@ -11,21 +11,24 @@ import sentry_sdk
 from junitparser.xunit2 import JUnitXml
 
 from codeflash.code_utils.code_utils import (
-    module_name_from_file_path,
     get_run_tmp_file,
+    module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.verification.test_results import (
-    TestResults,
     FunctionTestInvocation,
-    TestType,
     InvocationId,
+    TestResults,
+    TestType,
 )
 from codeflash.verification.verification_utils import TestConfig
 
 
 def parse_test_return_values_bin(
-    file_location: str, test_framework: str, test_type: TestType, test_file_path: str
+    file_location: str,
+    test_framework: str,
+    test_type: TestType,
+    test_file_path: str,
 ) -> TestResults:
     test_results = TestResults()
     if not os.path.exists(file_location):
@@ -47,7 +50,7 @@ def parse_test_return_values_bin(
             try:
                 test_pickle = pickle.loads(file.read(len_next))
             except Exception as e:
-                logging.error(f"Failed to load pickle file. Exception: {e}")
+                logging.exception(f"Failed to load pickle file. Exception: {e}")
                 return test_results
             len_next = file.read(4)
             len_next = int.from_bytes(len_next, byteorder="big")
@@ -65,7 +68,7 @@ def parse_test_return_values_bin(
                     test_framework=test_framework,
                     test_type=test_type,
                     return_value=test_pickle,
-                )
+                ),
             )
             # Hardcoding the test result to True because the test did execute and we are only interested in the return values,
             # the did_pass comes from the xml results file
@@ -104,7 +107,7 @@ def parse_sqlite_test_results(
                 test_framework=test_config.test_framework,
                 test_type=test_type,
                 return_value=None,
-            )
+            ),
         )
         # return_value is only None temporarily as this is only being used for the existing tests. This should generalize
         # to read the return_value from the sqlite file as well.
@@ -130,7 +133,7 @@ def parse_test_xml(
         xml = JUnitXml.fromfile(test_xml_file_path)
     except Exception as e:
         logging.warning(
-            f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}"
+            f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}",
         )
         return test_results
 
@@ -138,7 +141,7 @@ def parse_test_xml(
         for testcase in suite:
             class_name = testcase.classname
             file_name = suite._elem.attrib.get(
-                "file"
+                "file",
             )  # file_path_from_module_name(generated_tests_path, test_config.project_root_path)
             if (
                 file_name == f"unittest{os.sep}loader.py"
@@ -147,10 +150,10 @@ def parse_test_xml(
                 and suite.tests == 1
             ):
                 # This means that the test failed to load, so we don't want to crash on it
-                logging.info(f"Test failed to load, skipping it.")
+                logging.info("Test failed to load, skipping it.")
                 if run_result is not None:
                     logging.info(
-                        f"Test log - STDOUT : {run_result.stdout.decode()} \n STDERR : {run_result.stderr.decode()}"
+                        f"Test log - STDOUT : {run_result.stdout.decode()} \n STDERR : {run_result.stderr.decode()}",
                     )
                 return test_results
             file_name = test_py_file_path
@@ -158,7 +161,8 @@ def parse_test_xml(
             assert os.path.exists(file_name), f"File {file_name} doesn't exist."
             result = testcase.is_passed  # TODO: See for the cases of ERROR and SKIPPED
             test_module_path = module_name_from_file_path(
-                file_name, test_config.project_root_path
+                file_name,
+                test_config.project_root_path,
             )
             test_class = None
             if class_name is not None and class_name.startswith(test_module_path):
@@ -174,7 +178,7 @@ def parse_test_xml(
                     xml_file_contents = open(test_xml_file_path).read()
                     scope.set_extra("file", xml_file_contents)
                     sentry_sdk.capture_message(
-                        f"testcase.name is None in parse_test_xml for testcase {repr(testcase)} in file {xml_file_contents}"
+                        f"testcase.name is None in parse_test_xml for testcase {testcase!r} in file {xml_file_contents}",
                     )
                 continue
             # Parse test timing
@@ -197,19 +201,21 @@ def parse_test_xml(
                     did_pass=result,
                     test_type=test_type,
                     return_value=None,
-                )
+                ),
             )
     if len(test_results) == 0:
         logging.info(f"Test '{test_py_file_path}' failed to run, skipping it")
         if run_result is not None:
             logging.info(
-                f"Test log - STDOUT : {run_result.stdout.decode()} \n STDERR : {run_result.stderr.decode()}"
+                f"Test log - STDOUT : {run_result.stdout.decode()} \n STDERR : {run_result.stderr.decode()}",
             )
     return test_results
 
 
 def merge_test_results(
-    xml_test_results: TestResults, bin_test_results: TestResults, test_framework: str
+    xml_test_results: TestResults,
+    bin_test_results: TestResults,
+    test_framework: str,
 ) -> TestResults:
     merged_test_results = TestResults()
 
@@ -220,26 +226,20 @@ def merge_test_results(
     for result in xml_test_results:
         if test_framework == "pytest":
             if "[" in result.id.test_function_name:  # handle parameterized test
-                test_function_name = result.id.test_function_name[
-                    : result.id.test_function_name.index("[")
-                ]
+                test_function_name = result.id.test_function_name[: result.id.test_function_name.index("[")]
             else:
                 test_function_name = result.id.test_function_name
 
         if test_framework == "unittest":
             test_function_name = result.id.test_function_name
             is_parameterized, new_test_function_name, _ = discover_parameters_unittest(
-                test_function_name
+                test_function_name,
             )
             if is_parameterized:  # handle parameterized test
                 test_function_name = new_test_function_name
 
         grouped_xml_results[
-            result.id.test_module_path
-            + ":"
-            + (result.id.test_class_name or "")
-            + ":"
-            + test_function_name
+            result.id.test_module_path + ":" + (result.id.test_class_name or "") + ":" + test_function_name
         ].add(result)
     for result in bin_test_results:
         grouped_bin_results[
@@ -270,7 +270,7 @@ def merge_test_results(
                         did_pass=xml_result.did_pass,
                         test_type=xml_result.test_type,
                         return_value=result_bin.return_value,
-                    )
+                    ),
                 )
         else:
             for i in range(len(bin_results.test_results)):
@@ -294,7 +294,7 @@ def merge_test_results(
                         did_pass=bin_result.did_pass,
                         test_type=bin_result.test_type,
                         return_value=bin_result.return_value,
-                    )
+                    ),
                 )
 
     return merged_test_results
@@ -325,10 +325,10 @@ def parse_test_results(
                 test_file_path=test_py_path,
             )
         except AttributeError as e:
-            logging.error(e)
+            logging.exception(e)
             test_results_bin_file = TestResults()
             pathlib.Path(
-                get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin")
+                get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
             ).unlink(missing_ok=True)
     elif test_type == TestType.EXISTING_UNIT_TEST:
         try:
@@ -339,7 +339,7 @@ def parse_test_results(
                 test_config=test_config,
             )
         except AttributeError as e:
-            logging.error(e)
+            logging.exception(e)
             test_results_bin_file = TestResults()
     else:
         raise ValueError(f"Invalid test type: {test_type}")
@@ -347,13 +347,15 @@ def parse_test_results(
     # We Probably want to remove deleting this file here later, because we want to preserve the reference to the
     # pickle blob in the test_results
     pathlib.Path(
-        get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin")
+        get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
     ).unlink(missing_ok=True)
     pathlib.Path(
-        get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite")
+        get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite"),
     ).unlink(missing_ok=True)
 
     merged_results = merge_test_results(
-        test_results_xml, test_results_bin_file, test_config.test_framework
+        test_results_xml,
+        test_results_bin_file,
+        test_config.test_framework,
     )
     return merged_results
