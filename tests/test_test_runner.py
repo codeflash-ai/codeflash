@@ -27,7 +27,7 @@ class TestUnittestRunnerSorter(unittest.TestCase):
 """
     cur_dir_path = os.path.dirname(os.path.abspath(__file__))
     config = TestConfig(
-        tests_root=cur_dir_path, project_root_path=cur_dir_path, test_framework="unittest"
+        tests_root=cur_dir_path, project_root_path=cur_dir_path, test_framework="unittest",
     )
 
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
@@ -56,7 +56,7 @@ def test_sort():
 """
     cur_dir_path = os.path.dirname(os.path.abspath(__file__))
     config = TestConfig(
-        tests_root=cur_dir_path, project_root_path=cur_dir_path, test_framework="pytest"
+        tests_root=cur_dir_path, project_root_path=cur_dir_path, test_framework="pytest",
     )
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         fp.write(code.encode("utf-8"))

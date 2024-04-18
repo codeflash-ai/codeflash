@@ -1,5 +1,5 @@
 import subprocess
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 
@@ -28,7 +28,7 @@ def run_tests(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd=cwd,
-            env=test_env,
+            env=test_env, check=False,
         )
     elif test_framework == "unittest":
         result_file_path = get_run_tmp_file("unittest_results.xml")
@@ -40,7 +40,7 @@ def run_tests(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd=cwd,
-            env=test_env,
+            env=test_env, check=False,
         )
     else:
         raise ValueError("Invalid test framework -- I only support Pytest and Unittest currently.")

@@ -9,13 +9,13 @@ from unidiff import PatchSet
 
 
 def get_git_diff(
-    repo_directory: str = os.getcwd(), uncommitted_changes: bool = False
+    repo_directory: str = os.getcwd(), uncommitted_changes: bool = False,
 ) -> dict[str, list[int]]:
     repository = git.Repo(repo_directory, search_parent_directories=True)
     commit = repository.head.commit
     if uncommitted_changes:
         uni_diff_text = repository.git.diff(
-            None, "HEAD", ignore_blank_lines=True, ignore_space_at_eol=True
+            None, "HEAD", ignore_blank_lines=True, ignore_space_at_eol=True,
         )
     else:
         uni_diff_text = repository.git.diff(
@@ -54,8 +54,7 @@ def get_git_diff(
 
 
 def get_current_branch(repo: Optional[Repo] = None) -> str:
-    """
-    Returns the name of the current branch in the given repository.
+    """Returns the name of the current branch in the given repository.
 
     :param repo: An optional Repo object. If not provided, the function will
                  search for a repository in the current and parent directories.

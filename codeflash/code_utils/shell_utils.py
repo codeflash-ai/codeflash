@@ -9,16 +9,16 @@ from codeflash.code_utils.compat import LF
 
 if os.name == "nt":  # Windows
     SHELL_RC_EXPORT_PATTERN = re.compile(r"^set CODEFLASH_API_KEY=(cf-.*)$", re.M)
-    SHELL_RC_EXPORT_PREFIX = f"set CODEFLASH_API_KEY="
+    SHELL_RC_EXPORT_PREFIX = "set CODEFLASH_API_KEY="
 else:
     SHELL_RC_EXPORT_PATTERN = re.compile(r'^export CODEFLASH_API_KEY="?(cf-[^\s"]+)"?$', re.M)
-    SHELL_RC_EXPORT_PREFIX = f"export CODEFLASH_API_KEY="
+    SHELL_RC_EXPORT_PREFIX = "export CODEFLASH_API_KEY="
 
 
 def read_api_key_from_shell_config() -> Optional[str]:
     try:
         shell_rc_path = get_shell_rc_path()
-        with open(shell_rc_path, "r", encoding="utf8") as shell_rc:
+        with open(shell_rc_path, encoding="utf8") as shell_rc:
             shell_contents = shell_rc.read()
             matches = SHELL_RC_EXPORT_PATTERN.findall(shell_contents)
             return matches[-1] if matches else None
@@ -39,7 +39,7 @@ def get_shell_rc_path() -> Path:
             "tcsh": ".cshrc",
             "dash": ".profile",
         }.get(
-            shell, ".bashrc"
+            shell, ".bashrc",
         )  # map each shell to its config file and default to .bashrc
         return Path.home() / shell_rc_filename
 
@@ -62,7 +62,7 @@ def save_api_key_to_rc(api_key) -> Result[str, str]:
             if existing_api_key:
                 # Replace the existing API key line
                 updated_shell_contents = re.sub(
-                    SHELL_RC_EXPORT_PATTERN, api_key_line, shell_contents
+                    SHELL_RC_EXPORT_PATTERN, api_key_line, shell_contents,
                 )
                 action = "Updated CODEFLASH_API_KEY in"
             else:
@@ -77,7 +77,7 @@ def save_api_key_to_rc(api_key) -> Result[str, str]:
     except PermissionError:
         return Failure(
             f"💡 I tried adding your Codeflash API key to {shell_rc_path} - but seems like I don't have permissions to do so.{LF}"
-            f"You'll need to open it yourself and add the following line:{LF}{LF}{api_key_line}{LF}"
+            f"You'll need to open it yourself and add the following line:{LF}{LF}{api_key_line}{LF}",
         )
     except FileNotFoundError:
         return Failure(

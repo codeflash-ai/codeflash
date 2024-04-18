@@ -5,7 +5,7 @@ from pydantic.dataclasses import dataclass
 
 
 def get_test_file_path(
-    test_dir: str, function_name: str, iteration: int = 0, test_type: str = "unit"
+    test_dir: str, function_name: str, iteration: int = 0, test_type: str = "unit",
 ) -> str:
     assert test_type in ["unit", "inspired", "replay"]
     function_name = function_name.replace(".", "_")
@@ -39,11 +39,9 @@ class ModifyInspiredTests(ast.NodeTransformer):
 
     def visit_Import(self, node: ast.Import):
         self.import_list.append(node)
-        return None
 
     def visit_ImportFrom(self, node: ast.ImportFrom):
         self.import_list.append(node)
-        return None
 
     def visit_ClassDef(self, node: ast.ClassDef):
         if self.test_framework != "unittest":

@@ -30,7 +30,7 @@ class TestsInFile:
     def from_pytest_stdout_line_co(cls, module: str, function: str, directory: str):
         absolute_test_path = os.path.join(directory, module)
         assert os.path.exists(
-            absolute_test_path
+            absolute_test_path,
         ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
         return cls(
             test_file=absolute_test_path,
@@ -44,7 +44,7 @@ class TestsInFile:
         parts = line.split("::")
         absolute_test_path = os.path.join(pytest_rootdir, parts[0])
         assert os.path.exists(
-            absolute_test_path
+            absolute_test_path,
         ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
         if len(parts) == 3:
             return cls(
@@ -121,7 +121,7 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     pytest_result = subprocess.run(
         pytest_cmd_list + [f"{tests_root}", "--co", "-q", "-m", "not skip"],
         stdout=subprocess.PIPE,
-        cwd=project_root,
+        cwd=project_root, check=False,
     )
 
     pytest_stdout = pytest_result.stdout.decode("utf-8")
@@ -185,7 +185,7 @@ def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
                                 {
                                     "test_function": details.test_function,
                                     "test_suite_name": details.test_suite_name,
-                                }
+                                },
                             )
                 else:
                     details = get_test_details(test)
@@ -194,7 +194,7 @@ def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
                             {
                                 "test_function": details.test_function,
                                 "test_suite_name": details.test_suite_name,
-                            }
+                            },
                         )
     return process_test_files(file_to_test_map, cfg)
 
@@ -208,7 +208,7 @@ def discover_parameters_unittest(function_name: str):
 
 
 def process_test_files(
-    file_to_test_map: Dict[str, List[Dict[str, str]]], cfg: TestConfig
+    file_to_test_map: Dict[str, List[Dict[str, str]]], cfg: TestConfig,
 ) -> Dict[str, List[TestsInFile]]:
     project_root_path = cfg.project_root_path
     test_framework = cfg.test_framework
@@ -231,10 +231,9 @@ def process_test_files(
                         parameters = re.split(r"\[|\]", function)[1]
                         if name.name == function_name and name.type == "function":
                             test_functions.add(TestFunction(name.name, None, parameters))
-                    else:
-                        if name.name == function and name.type == "function":
-                            test_functions.add(TestFunction(name.name, None, None))
-                            break
+                    elif name.name == function and name.type == "function":
+                        test_functions.add(TestFunction(name.name, None, None))
+                        break
             if test_framework == "unittest":
                 functions_to_search = [elem["test_function"] for elem in functions]
                 test_suites = [elem["test_suite_name"] for elem in functions]
@@ -254,7 +253,7 @@ def process_test_files(
 
                                 if is_parameterized and new_function == def_name.name:
                                     test_functions.add(
-                                        TestFunction(def_name.name, name.name, parameters)
+                                        TestFunction(def_name.name, name.name, parameters),
                                     )
                                 elif function == def_name.name:
                                     test_functions.add(TestFunction(def_name.name, name.name, None))
@@ -282,7 +281,7 @@ def process_test_files(
                         follow_builtin_imports=False,
                     )
                 except Exception as e:
-                    logging.error(str(e))
+                    logging.exception(str(e))
                     continue
                 if definition and definition[0].type == "function":
                     definition_path = str(definition[0].module_path)
@@ -298,7 +297,7 @@ def process_test_files(
                                 scope_test_function += "_" + scope_parameters
 
                         function_to_test_map[definition[0].full_name].append(
-                            TestsInFile(test_file, None, scope_test_function, scope_test_suite)
+                            TestsInFile(test_file, None, scope_test_function, scope_test_suite),
                         )
     deduped_function_to_test_map = {}
     for function, tests in function_to_test_map.items():
@@ -307,7 +306,7 @@ def process_test_files(
 
 
 def parse_pytest_stdout(
-    pytest_stdout: str, pytest_rootdir: str, tests_root: str, parse_type: ParseType
+    pytest_stdout: str, pytest_rootdir: str, tests_root: str, parse_type: ParseType,
 ) -> List[TestsInFile]:
     test_results = []
     if parse_type == ParseType.Q:
@@ -384,7 +383,7 @@ def parse_pytest_stdout(
                 function = function.group(1)
                 try:
                     test_result = TestsInFile.from_pytest_stdout_line_co(
-                        module, function, directory
+                        module, function, directory,
                     )
                     test_results.append(test_result)
                 except ValueError as e:
