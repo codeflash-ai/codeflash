@@ -265,13 +265,11 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         # iterate over the class methods
-        for body_node in node.body:
-            if (
-                isinstance(body_node, (ast.FunctionDef, ast.AsyncFunctionDef))
-                and body_node.name == self.function_name
-            ):
-                self.is_top_level = True
-                return
+        if node.name == self.class_name:
+            for body_node in node.body:
+                if isinstance(body_node, ast.FunctionDef) and body_node.name == self.function_name:
+                    self.is_top_level = True
+                    return
         return
 
 
