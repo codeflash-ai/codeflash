@@ -6,7 +6,7 @@ import subprocess
 import unittest
 from collections import defaultdict
 from enum import Enum
-from typing import Dict, List, Optional, Tuple, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 import jedi
 from pydantic.dataclasses import dataclass
@@ -147,14 +147,14 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     parse_type = ParseType.Q
     if "rootdir: " not in pytest_stdout:
         pytest_rootdir = get_pytest_rootdir_only(
-            pytest_cmd_list, tests_root, project_root
+            pytest_cmd_list, tests_root, project_root,
         )
     else:
         rootdir_re = re.compile(r"^rootdir:\s?(\S*)", re.MULTILINE)
         pytest_rootdir_match = rootdir_re.search(pytest_stdout)
         if not pytest_rootdir_match:
             raise ValueError(
-                f"Could not find rootdir in pytest output for {tests_root}"
+                f"Could not find rootdir in pytest output for {tests_root}",
             )
         pytest_rootdir = pytest_rootdir_match.group(1)
         parse_type = ParseType.CO
@@ -200,7 +200,7 @@ def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
                     for test_2 in test._tests:
                         if not hasattr(test_2, "_testMethodName"):
                             logging.warning(
-                                f"Didn't find tests for {test_2}"
+                                f"Didn't find tests for {test_2}",
                             )  # it goes deeper?
                             continue
                         details = get_test_details(test_2)
@@ -281,7 +281,7 @@ def process_test_files(
                                     )
                                 elif function == def_name.name:
                                     test_functions.add(
-                                        TestFunction(def_name.name, name.name, None)
+                                        TestFunction(def_name.name, name.name, None),
                                     )
 
         test_functions_list = list(test_functions)
@@ -341,7 +341,7 @@ def parse_pytest_stdout(
                 break
             try:
                 test_result = TestsInFile.from_pytest_stdout_line_q(
-                    line, pytest_rootdir
+                    line, pytest_rootdir,
                 )
                 test_results.append(test_result)
             except ValueError as e:
@@ -400,7 +400,7 @@ def parse_pytest_stdout(
                 module = module_list[0]
 
             while len(directory) > 0 and not os.path.exists(
-                os.path.join(directory, module)
+                os.path.join(directory, module),
             ):
                 directory = os.path.dirname(directory)
 

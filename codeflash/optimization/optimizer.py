@@ -3,11 +3,11 @@ import concurrent.futures
 import logging
 import os
 import pathlib
+import runpy
 import uuid
 from argparse import Namespace
 from collections import defaultdict
 from typing import IO, Dict, List, Optional, Tuple, Union
-import runpy
 
 import libcst as cst
 from pydantic import BaseModel
@@ -38,8 +38,8 @@ from codeflash.code_utils.instrument_existing_tests import (
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import (
     TestsInFile,
-    discover_unit_tests,
     discover_replay_tests,
+    discover_unit_tests,
 )
 from codeflash.discovery.functions_to_optimize import (
     FunctionParent,
@@ -145,13 +145,13 @@ class Optimizer:
                 logging.info("No functions found to optimize. Exiting...")
                 return
             logging.info(
-                f"Discovering existing unit tests in {self.test_cfg.tests_root} ..."
+                f"Discovering existing unit tests in {self.test_cfg.tests_root} ...",
             )
             function_to_tests: dict[str, list[TestsInFile]] = discover_unit_tests(
-                self.test_cfg
+                self.test_cfg,
             )
             num_discovered_tests: int = sum(
-                [len(value) for value in function_to_tests.values()]
+                [len(value) for value in function_to_tests.values()],
             )
             logging.info(
                 f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}",
@@ -181,7 +181,7 @@ class Optimizer:
                     winning_test_results = None
                     self.cleanup_leftover_test_return_values()
                     ctx_result = self.get_code_optimization_context(
-                        function_to_optimize
+                        function_to_optimize,
                     )
                     if not is_successful(ctx_result):
                         logging.error(ctx_result.failure())
@@ -194,7 +194,7 @@ class Optimizer:
                         qualified_name,
                     ) in code_context.dependent_functions:
                         dependent_functions_by_module_abspath[module_abspath].add(
-                            qualified_name
+                            qualified_name,
                         )
                     original_dependent_code = {}
                     for module_abspath in dependent_functions_by_module_abspath.keys():
@@ -202,10 +202,10 @@ class Optimizer:
                             dependent_code = f.read()
                             original_dependent_code[module_abspath] = dependent_code
                     logging.info(
-                        f"Code to be optimized:\n{code_context.code_to_optimize_with_dependents}"
+                        f"Code to be optimized:\n{code_context.code_to_optimize_with_dependents}",
                     )
                     module_path = module_name_from_file_path(
-                        path, self.args.project_root
+                        path, self.args.project_root,
                     )
 
                     instrumented_unittests_created_for_function = (
@@ -265,19 +265,19 @@ class Optimizer:
                     is_correct = dict()
 
                     for i, optimization in enumerate(
-                        tests_and_optimizations.optimizations
+                        tests_and_optimizations.optimizations,
                     ):
                         j = i + 1
                         if optimization.source_code is None:
                             continue
                         # remove left overs from previous run
                         pathlib.Path(
-                            get_run_tmp_file(f"test_return_values_{j}.bin")
+                            get_run_tmp_file(f"test_return_values_{j}.bin"),
                         ).unlink(
                             missing_ok=True,
                         )
                         pathlib.Path(
-                            get_run_tmp_file(f"test_return_values_{j}.sqlite")
+                            get_run_tmp_file(f"test_return_values_{j}.sqlite"),
                         ).unlink(
                             missing_ok=True,
                         )
@@ -412,7 +412,7 @@ class Optimizer:
                         )
                         logging.info(f"📈 {explanation.perf_improvement_line}")
                         logging.info(
-                            f"Explanation: \n{explanation.to_console_string()}"
+                            f"Explanation: \n{explanation.to_console_string()}",
                         )
                         logging.info(
                             f"Optimization was validated for correctness by running the following tests - "
@@ -719,11 +719,11 @@ class Optimizer:
 
         else:
             return Failure(
-                f"/!\\ NO TESTS GENERATED for {function_to_optimize.function_name}"
+                f"/!\\ NO TESTS GENERATED for {function_to_optimize.function_name}",
             )
         if not optimizations:
             return Failure(
-                f"/!\\ NO OPTIMIZATIONS GENERATED for {function_to_optimize.function_name}"
+                f"/!\\ NO OPTIMIZATIONS GENERATED for {function_to_optimize.function_name}",
             )
         return Success(
             TestsAndOptimizationsResult(
@@ -932,7 +932,7 @@ class Optimizer:
                             is None
                             or test_invocation.did_pass
                             != overall_original_test_results.get_by_id(
-                                test_invocation.id
+                                test_invocation.id,
                             ).did_pass
                         ):
                             logging.info("Results did not match.")
@@ -969,7 +969,7 @@ class Optimizer:
                     break
 
                 test_runtime = test_results.total_passed_runtime() + sum(
-                    instrumented_test_timing
+                    instrumented_test_timing,
                 )
 
                 if test_runtime == 0:
@@ -998,12 +998,12 @@ class Optimizer:
                 break
 
         pathlib.Path(
-            get_run_tmp_file(f"test_return_values_{optimization_index}.bin")
+            get_run_tmp_file(f"test_return_values_{optimization_index}.bin"),
         ).unlink(
             missing_ok=True,
         )
         pathlib.Path(
-            get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite")
+            get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite"),
         ).unlink(
             missing_ok=True,
         )
@@ -1117,7 +1117,7 @@ def run_from_replay_test(args: Namespace) -> None:
     # Check for return statement in each function's code
     for function, file_path in file_paths_to_optimize.items():
         function_name = function.split(".")[-1]
-        with open(file_path, "r") as file:
+        with open(file_path) as file:
             source = file.read()
             tree = ast.parse(source)
             for node in ast.walk(tree):

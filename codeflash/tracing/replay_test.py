@@ -160,7 +160,7 @@ from codeflash.verification.comparator import comparator
         else:
             class_name_alias = get_function_alias(func.module_name, func.class_name)
             alias = get_function_alias(
-                func.module_name, func.class_name + "_" + func.function_name
+                func.module_name, func.class_name + "_" + func.function_name,
             )
             if func.function_name == "__init__":
                 filter_variables = "\n    args.pop('__class__', None)"

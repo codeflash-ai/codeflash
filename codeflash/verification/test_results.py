@@ -80,7 +80,7 @@ class TestResults(BaseModel):
         self.test_results.extend(other.test_results)
 
     def get_by_id(
-        self, invocation_id: InvocationId
+        self, invocation_id: InvocationId,
     ) -> Optional[FunctionTestInvocation]:
         return next((r for r in self.test_results if r.id == invocation_id), None)
 
@@ -121,7 +121,7 @@ class TestResults(BaseModel):
         for result in self.test_results:
             if result.did_pass and result.runtime is None:
                 logging.debug(
-                    f"Ignoring test case that passed but had no runtime -> {result.id}"
+                    f"Ignoring test case that passed but had no runtime -> {result.id}",
                 )
         timing = sum(
             [
@@ -174,7 +174,7 @@ class TestResults(BaseModel):
                 or test_result.test_framework != other_test_result.test_framework
                 or test_result.test_type != other_test_result.test_type
                 or not comparator(
-                    test_result.return_value, other_test_result.return_value
+                    test_result.return_value, other_test_result.return_value,
                 )
             ):
                 sys.setrecursionlimit(original_recursion_limit)
