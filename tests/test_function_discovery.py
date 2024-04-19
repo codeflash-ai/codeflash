@@ -2,7 +2,7 @@ import tempfile
 
 from codeflash.discovery.functions_to_optimize import (
     find_all_functions_in_file,
-    is_function_or_method_top_level,
+    inspect_top_level_functions_or_methods,
 )
 
 
@@ -50,8 +50,9 @@ class A:
     """,
         )
         f.flush()
-        assert is_function_or_method_top_level(f.name, "functionA")
-        assert not is_function_or_method_top_level(f.name, "functionB")
-        assert is_function_or_method_top_level(f.name, "functionC", class_name="A")
-        assert not is_function_or_method_top_level(f.name, "functionD", class_name="A")
-        assert not is_function_or_method_top_level(f.name, "functionF", class_name="E")
+        assert inspect_top_level_functions_or_methods(f.name, "functionA").is_top_level
+        assert not inspect_top_level_functions_or_methods(f.name, "functionB").is_top_level
+        assert inspect_top_level_functions_or_methods(f.name, "functionC", class_name="A").is_top_level
+        assert not inspect_top_level_functions_or_methods(f.name, "functionD", class_name="A").is_top_level
+        assert not inspect_top_level_functions_or_methods(f.name, "functionF", class_name="E").is_top_level
+        assert not inspect_top_level_functions_or_methods(f.name, "functionA").has_args

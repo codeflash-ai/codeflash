@@ -2,7 +2,6 @@ import datetime
 import decimal
 
 import pytest
-
 from codeflash.verification.comparator import comparator
 from codeflash.verification.equivalence import compare_results
 from codeflash.verification.test_results import (
