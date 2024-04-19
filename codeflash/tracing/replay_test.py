@@ -1,10 +1,15 @@
+from __future__ import annotations
+
 import logging
 import sqlite3
 import textwrap
 from collections import defaultdict
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
-from codeflash.discovery.functions_to_optimize import is_function_or_method_top_level
+from codeflash.discovery.functions_to_optimize import (
+    FunctionProperties,
+    inspect_top_level_functions_or_methods,
+)
 from codeflash.tracing.tracing_utils import FunctionModules
 
 
@@ -17,9 +22,7 @@ def get_next_arg_and_return(
 ) -> Generator[Tuple[Any, Any], None, None]:
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
-    limit = (
-        num_to_get * 2 + 100
-    )  # we may have to get more than num_to_get*2 to get num_to_get valid pairs
+    limit = num_to_get * 2 + 100  # we may have to get more than num_to_get*2 to get num_to_get valid pairs
     if class_name is not None:
         data = cur.execute(
             "SELECT * FROM events WHERE function = ? AND filename = ? AND classname = ? ORDER BY time_ns ASC LIMIT ?",
@@ -80,13 +83,17 @@ from codeflash.verification.comparator import comparator
 """
 
     # TODO: Module can have "-" character if the module-root is ".". Need to handle that case
-    function_imports = []
-    for function in functions:
-        if not is_function_or_method_top_level(
+    function_properties: list[FunctionProperties] = [
+        inspect_top_level_functions_or_methods(
             file_name=function.file_name,
             function_or_method_name=function.function_name,
             class_name=function.class_name,
-        ):
+        )
+        for function in functions
+    ]
+    function_imports = []
+    for function, function_property in zip(functions, function_properties):
+        if not function_property.is_top_level:
             # can't be imported and run in the replay test
             continue
         if function.class_name:
@@ -100,16 +107,14 @@ from codeflash.verification.comparator import comparator
 
     imports += "\n".join(function_imports)
     functions_to_optimize = [
-        function.function_name
-        for function in functions
-        if function.function_name != "__init__"
+        function.function_name for function in functions if function.function_name != "__init__"
     ]
     test_function_body = textwrap.dedent(
         """\
         for arg_val_pkl, return_val_pkl in get_next_arg_and_return(trace_file=r'{trace_file}', function_name='{orig_function_name}', file_name=r'{file_name}', num_to_get={max_run_count}):
             args = pickle.loads(arg_val_pkl)
             traced_return_val = pickle.loads(return_val_pkl)
-            ret = {function_name}(**args)
+            ret = {function_name}({args})
             """
         + (
             """self.assertTrue(comparator(traced_return_val, ret))
@@ -140,12 +145,8 @@ from codeflash.verification.comparator import comparator
     else:
         test_template = ""
         self = ""
-    for func in functions:
-        if not is_function_or_method_top_level(
-            file_name=func.file_name,
-            function_or_method_name=func.function_name,
-            class_name=func.class_name,
-        ):
+    for func, func_property in zip(functions, function_properties):
+        if not func_property.is_top_level:
             # can't be imported and run in the replay test
             continue
         if func.class_name is None:
@@ -156,16 +157,15 @@ from codeflash.verification.comparator import comparator
                 file_name=func.file_name,
                 orig_function_name=func.function_name,
                 max_run_count=max_run_count,
+                args="**args" if func_property.has_args else "",
             )
         else:
             class_name_alias = get_function_alias(func.module_name, func.class_name)
             alias = get_function_alias(
-                func.module_name, func.class_name + "_" + func.function_name,
+                func.module_name,
+                func.class_name + "_" + func.function_name,
             )
-            if func.function_name == "__init__":
-                filter_variables = "\n    args.pop('__class__', None)"
-            else:
-                filter_variables = ""
+            filter_variables = "\n    args.pop('__class__', None)" if func.function_name == "__init__" else ""
             test_body = test_class_method_body.format(
                 trace_file=trace_file,
                 orig_function_name=func.function_name,
@@ -184,6 +184,4 @@ from codeflash.verification.comparator import comparator
         test_template += "    " if test_framework == "unittest" else ""
         test_template += f"def test_{alias}({self}):\n{formatted_test_body}\n"
 
-    return (
-        imports + "\n" + f"functions = {functions_to_optimize}" + "\n" + test_template
-    )
+    return imports + "\n" + f"functions = {functions_to_optimize}" + "\n" + test_template

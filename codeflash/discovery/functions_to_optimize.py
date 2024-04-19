@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import ast
 import logging
 import os
@@ -18,6 +20,12 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.code_utils.git_utils import get_git_diff
 from codeflash.verification.verification_utils import TestConfig
+
+
+@dataclass(frozen=True)
+class FunctionProperties:
+    is_top_level: bool
+    has_args: bool | None
 
 
 class ReturnStatementVisitor(cst.CSTVisitor):
@@ -258,10 +266,20 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
         self.class_name = class_name
         self.function_name = function_or_method_name
         self.is_top_level = False
+        self.function_has_args = None
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         if node.name == self.function_name:
             self.is_top_level = True
+            self.function_has_args = any(
+                (
+                    bool(node.args.args),
+                    bool(node.args.kwonlyargs),
+                    bool(node.args.kwarg),
+                    bool(node.args.posonlyargs),
+                    bool(node.args.vararg),
+                ),
+            )
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         # iterate over the class methods
@@ -273,11 +291,11 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
         return
 
 
-def is_function_or_method_top_level(
+def inspect_top_level_functions_or_methods(
     file_name: str,
     function_or_method_name: str,
     class_name: Optional[str] = None,
-) -> bool:
+) -> FunctionProperties:
     with open(file_name, encoding="utf8") as file:
         try:
             ast_module = ast.parse(file.read())
@@ -290,7 +308,7 @@ def is_function_or_method_top_level(
         class_name=class_name,
     )
     visitor.visit(ast_module)
-    return visitor.is_top_level
+    return FunctionProperties(is_top_level=visitor.is_top_level, has_args=visitor.function_has_args)
 
 
 def filter_functions(
