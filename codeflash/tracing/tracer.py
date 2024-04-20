@@ -266,8 +266,8 @@ class Tracer:
                 arg = None
             else:
                 # return
-                local_vars = None
                 arg = pickle.dumps(arg, protocol=pickle.HIGHEST_PROTOCOL)
+                local_vars = None
             sys.setrecursionlimit(original_recursion_limit)
         except (TypeError, pickle.PicklingError, AttributeError, RecursionError):
             # we retry with dill if pickle fails. It's slower but more comprehensive
