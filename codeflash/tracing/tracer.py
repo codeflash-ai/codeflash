@@ -1,13 +1,14 @@
 import logging
 import os
 import pathlib
+import pickle
 import sqlite3
 import sys
 import time
 from collections import Counter, defaultdict
 from typing import Any, List, Optional
 
-import dill as pickle
+import dill
 import isort
 
 from codeflash.cli_cmds.cli import project_root_from_module_root
@@ -80,6 +81,7 @@ class Tracer:
         self.start_time = None
         assert timeout is None or timeout > 0, "Timeout should be greater than 0"
         self.timeout = timeout
+        self.next_insert = 1000
         self.profiling_info = defaultdict(Counter)
 
         assert (
@@ -99,17 +101,18 @@ class Tracer:
         Tracer.used_once = True
 
         if pathlib.Path(self.output_file).exists():
-            logging.info("Codeflash: Removing existing trace file")
+            print("Codeflash: Removing existing trace file")
         pathlib.Path(self.output_file).unlink(missing_ok=True)
 
         self.con = sqlite3.connect(self.output_file)
         cur = self.con.cursor()
+        cur.execute("""PRAGMA synchronous = OFF""")
         # TODO: Check out if we need to export the function test name as well
         cur.execute(
             "CREATE TABLE events(type TEXT, function TEXT, classname TEXT, filename TEXT, line_number INTEGER, "
             "last_frame_address INTEGER, time_ns INTEGER, arg BLOB, locals BLOB)",
         )
-        logging.info("Codeflash: Tracing started!")
+        print("Codeflash: Tracing started!")
         self.start_time = time.time()
         sys.setprofile(self.trace_callback)
 
@@ -117,7 +120,7 @@ class Tracer:
         if self.disable:
             return
         sys.setprofile(None)
-
+        self.con.commit()
         self.con.close()
 
         # filter any functions where we did not capture the return
@@ -139,10 +142,7 @@ class Tracer:
             test_framework=self.config["test_framework"],
             max_run_count=self.max_function_count,
         )
-        if self.functions:
-            function_path = "_".join(self.functions)
-        else:
-            function_path = self.file_being_called_from
+        function_path = "_".join(self.functions) if self.functions else self.file_being_called_from
         test_file_path = get_test_file_path(
             test_dir=self.config["tests_root"],
             function_name=function_path,
@@ -156,7 +156,7 @@ class Tracer:
             f"Codeflash: Traced successful and replay test created! Path - {test_file_path}",
         )
         for key, value in self.profiling_info.items():
-            logging.info(
+            print(
                 f"Profiling info - {key} - count - {value['count']} - time - {value['time']/1e6}ms",
             )
 
@@ -254,9 +254,9 @@ class Tracer:
         t_ns = time.perf_counter_ns()
         self.profiling_info["con.cursor"].update(count=1, time=t_ns - t11)
         t12 = time.perf_counter_ns()
+        original_recursion_limit = sys.getrecursionlimit()
         try:
             # pickling can be a recursive operator, so we need to increase the recursion limit
-            original_recursion_limit = sys.getrecursionlimit()
             sys.setrecursionlimit(10000)
             if event == "call":
                 local_vars = pickle.dumps(
@@ -270,9 +270,25 @@ class Tracer:
                 arg = pickle.dumps(arg, protocol=pickle.HIGHEST_PROTOCOL)
             sys.setrecursionlimit(original_recursion_limit)
         except (TypeError, pickle.PicklingError, AttributeError, RecursionError):
-            # TODO: If this branch hits then its possible there are no paired arg, return values in the replay test.
-            #  Filter them out
-            return
+            # we retry with dill if pickle fails. It's slower but more comprehensive
+            try:
+                if event == "call":
+                    local_vars = dill.dumps(
+                        frame.f_locals,
+                        protocol=dill.HIGHEST_PROTOCOL,
+                    )
+                    arg = None
+                else:
+                    # return
+                    local_vars = None
+                    arg = dill.dumps(arg, protocol=dill.HIGHEST_PROTOCOL)
+                sys.setrecursionlimit(original_recursion_limit)
+
+            except (TypeError, dill.PicklingError, AttributeError, RecursionError):
+                # give up
+                # TODO: If this branch hits then its possible there are no paired arg, return values in the replay test.
+                #  Filter them out
+                return
         t13 = time.perf_counter_ns()
         self.profiling_info["pickle.dumps"].update(count=1, time=t13 - t12)
         t14 = time.perf_counter_ns()
@@ -290,7 +306,11 @@ class Tracer:
                 local_vars,
             ),
         )
-        self.con.commit()
+        self.next_insert -= 1
+        if self.next_insert == 0:
+            self.next_insert = 1000
+            self.con.commit()
+
         t15 = time.perf_counter_ns()
         self.profiling_info["cur.execute"].update(count=1, time=t15 - t14)
         if event == "return":
