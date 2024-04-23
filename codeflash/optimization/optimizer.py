@@ -249,6 +249,9 @@ class Optimizer:
                     )
                     if not is_successful(baseline_result):
                         logging.error(baseline_result.failure())
+                        pathlib.Path(generated_tests_path).unlink(missing_ok=True)
+                        for instrumented_path in instrumented_unittests_created_for_function:
+                            pathlib.Path(instrumented_path).unlink(missing_ok=True)
                         continue
                     original_code_baseline: OriginalCodeBaseline = (
                         baseline_result.unwrap()
@@ -641,7 +644,7 @@ class Optimizer:
         function_name: str,
         module_path: str,
         function_to_tests: dict[str, list[TestsInFile]],
-    ):
+    ) -> set[str]:
         relevant_test_files_count = 0
         unique_original_test_files = set()
         unique_instrumented_test_files = set()
