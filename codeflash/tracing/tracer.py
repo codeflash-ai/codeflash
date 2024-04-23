@@ -35,7 +35,7 @@ class Tracer:
         disable: bool = False,
         config_file_path: Optional[str] = None,
         max_function_count: int = 100,
-        timeout: int = None,  # seconds
+        timeout: Optional[int] = None,  # seconds
     ) -> None:
         """:param output: The path to the output trace file
         :param functions: List of functions to trace. If None, trace all functions
