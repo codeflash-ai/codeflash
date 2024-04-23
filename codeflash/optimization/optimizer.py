@@ -180,9 +180,7 @@ class Optimizer:
                     )
                     winning_test_results = None
                     self.cleanup_leftover_test_return_values()
-                    ctx_result = self.get_code_optimization_context(
-                        function_to_optimize,
-                    )
+                    ctx_result = self.get_code_optimization_context(function_to_optimize)
                     if not is_successful(ctx_result):
                         logging.error(ctx_result.failure())
                         continue
@@ -205,15 +203,14 @@ class Optimizer:
                         f"Code to be optimized:\n{code_context.code_to_optimize_with_dependents}",
                     )
                     module_path = module_name_from_file_path(
-                        path, self.args.project_root,
+                        path,
+                        self.args.project_root,
                     )
 
-                    instrumented_unittests_created_for_function = (
-                        self.instrument_existing_tests(
-                            function_name=function_to_optimize.qualified_name,
-                            module_path=module_path,
-                            function_to_tests=function_to_tests,
-                        )
+                    instrumented_unittests_created_for_function = self.instrument_existing_tests(
+                        function_name=function_to_optimize.qualified_name,
+                        module_path=module_path,
+                        function_to_tests=function_to_tests,
                     )
                     instrumented_unittests_created.update(
                         instrumented_unittests_created_for_function,
@@ -229,9 +226,7 @@ class Optimizer:
                     if not is_successful(tests_result):
                         logging.error(tests_result.failure())
                         continue
-                    tests_and_optimizations: TestsAndOptimizationsResult = (
-                        tests_result.unwrap()
-                    )
+                    tests_and_optimizations: TestsAndOptimizationsResult = tests_result.unwrap()
 
                     generated_tests_path = get_test_file_path(
                         self.args.tests_root,
@@ -253,12 +248,8 @@ class Optimizer:
                         for instrumented_path in instrumented_unittests_created_for_function:
                             pathlib.Path(instrumented_path).unlink(missing_ok=True)
                         continue
-                    original_code_baseline: OriginalCodeBaseline = (
-                        baseline_result.unwrap()
-                    )
-                    best_runtime = (
-                        original_code_baseline.runtime
-                    )  # The fastest code runtime until now
+                    original_code_baseline: OriginalCodeBaseline = baseline_result.unwrap()
+                    best_runtime = original_code_baseline.runtime  # The fastest code runtime until now
                     logging.info("Optimizing code ...")
                     # TODO: Postprocess the optimized function to include the original docstring and such
 
@@ -333,13 +324,9 @@ class Optimizer:
                             is_correct[optimization.optimization_id] = False
                             speedup_ratios[optimization.optimization_id] = None
                         else:
-                            candidate_result: OptimizedCandidateResult = (
-                                run_results.unwrap()
-                            )
+                            candidate_result: OptimizedCandidateResult = run_results.unwrap()
                             best_test_runtime = candidate_result.best_test_runtime
-                            optimized_runtimes[
-                                optimization.optimization_id
-                            ] = best_test_runtime
+                            optimized_runtimes[optimization.optimization_id] = best_test_runtime
                             is_correct[optimization.optimization_id] = True
                             speedup_ratios[optimization.optimization_id] = (
                                 original_code_baseline.runtime - best_test_runtime
@@ -351,10 +338,7 @@ class Optimizer:
                                 f"{((original_code_baseline.runtime - best_test_runtime) / best_test_runtime):.3f}",
                             )
                             if (
-                                (
-                                    (original_code_baseline.runtime - best_test_runtime)
-                                    / best_test_runtime
-                                )
+                                ((original_code_baseline.runtime - best_test_runtime) / best_test_runtime)
                                 > self.args.minimum_performance_gain
                             ) and best_test_runtime < best_runtime:
                                 logging.info(
@@ -372,9 +356,7 @@ class Optimizer:
                                     dependent_functions=code_context.dependent_functions,
                                 )
                                 best_runtime = best_test_runtime
-                                winning_test_results = (
-                                    candidate_result.best_test_results
-                                )
+                                winning_test_results = candidate_result.best_test_results
                         self.write_code_and_dependents(
                             original_code,
                             original_dependent_code,
@@ -524,10 +506,7 @@ class Optimizer:
         original_code: str,
     ) -> Tuple[str, Dict[str, str]]:
         should_sort_imports = True
-        if (
-            sort_imports(self.args.imports_sort_cmd, should_sort_imports, path)
-            != original_code
-        ):
+        if sort_imports(self.args.imports_sort_cmd, should_sort_imports, path) != original_code:
             should_sort_imports = False
 
         new_code = format_code(
@@ -710,24 +689,16 @@ class Optimizer:
 
             future_tests_result = future_tests.result()
             optimizations: List[Optimization] = future_optimization.result()
-        if (
-            future_tests_result
-            and isinstance(future_tests_result, tuple)
-            and len(future_tests_result) == 2
-        ):
+        if future_tests_result and isinstance(future_tests_result, tuple) and len(future_tests_result) == 2:
             (
                 generated_original_test_source,
                 instrumented_test_source,
             ) = future_tests_result
 
         else:
-            return Failure(
-                f"/!\\ NO TESTS GENERATED for {function_to_optimize.function_name}",
-            )
+            return Failure(f"/!\\ NO TESTS GENERATED for {function_to_optimize.function_name}")
         if not optimizations:
-            return Failure(
-                f"/!\\ NO OPTIMIZATIONS GENERATED for {function_to_optimize.function_name}",
-            )
+            return Failure(f"/!\\ NO OPTIMIZATIONS GENERATED for {function_to_optimize.function_name}")
         return Success(
             TestsAndOptimizationsResult(
                 generated_original_test_source=generated_original_test_source,
@@ -799,10 +770,7 @@ class Optimizer:
 
                 # TODO: Implement the logic to disregard the timing info of the tests that errored out. That is remove test cases that failed to run.
 
-                if (
-                    not original_gen_results
-                    and len(instrumented_existing_test_timing) == 0
-                ):
+                if not original_gen_results and len(instrumented_existing_test_timing) == 0:
                     logging.warning(
                         f"Couldn't run any tests for original function {function_name}. SKIPPING OPTIMIZING THIS FUNCTION.",
                     )
@@ -819,11 +787,8 @@ class Optimizer:
                         f"original generated tests results -> {original_gen_results.get_test_pass_fail_report()}",
                     )
 
-                original_total_runtime_iter = (
-                    original_gen_results.total_passed_runtime()
-                    + sum(
-                        instrumented_existing_test_timing,
-                    )
+                original_total_runtime_iter = original_gen_results.total_passed_runtime() + sum(
+                    instrumented_existing_test_timing,
                 )
                 if original_total_runtime_iter == 0:
                     logging.warning(
@@ -837,10 +802,7 @@ class Optimizer:
                     logging.info(
                         f"Original overall test results = {TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}",
                     )
-                if (
-                    original_runtime is None
-                    or original_total_runtime_iter < original_runtime
-                ):
+                if original_runtime is None or original_total_runtime_iter < original_runtime:
                     original_runtime = best_runtime = original_total_runtime_iter
                     overall_original_test_results = original_test_results_iter
                 cumulative_test_runs += 1
@@ -912,9 +874,7 @@ class Optimizer:
 
                 optimized_test_results_iter = TestResults()
                 instrumented_test_timing = []
-                for (
-                    instrumented_test_file
-                ) in instrumented_unittests_created_for_function:
+                for instrumented_test_file in instrumented_unittests_created_for_function:
                     unittest_results_optimized = self.run_and_parse_tests(
                         test_env,
                         instrumented_test_file,
@@ -931,12 +891,9 @@ class Optimizer:
                     )
                     for test_invocation in optimized_test_results_iter:
                         if (
-                            overall_original_test_results.get_by_id(test_invocation.id)
-                            is None
+                            overall_original_test_results.get_by_id(test_invocation.id) is None
                             or test_invocation.did_pass
-                            != overall_original_test_results.get_by_id(
-                                test_invocation.id,
-                            ).did_pass
+                            != overall_original_test_results.get_by_id(test_invocation.id).did_pass
                         ):
                             logging.info("Results did not match.")
                             logging.info(
@@ -971,9 +928,7 @@ class Optimizer:
                     do_break = True
                     break
 
-                test_runtime = test_results.total_passed_runtime() + sum(
-                    instrumented_test_timing,
-                )
+                test_runtime = test_results.total_passed_runtime() + sum(instrumented_test_timing)
 
                 if test_runtime == 0:
                     logging.warning(
@@ -990,9 +945,7 @@ class Optimizer:
                 times_run += 1
             if first_run:
                 first_run = False
-            if best_test_runtime is not None and (
-                best_test_runtime > 3 * best_runtime_until_now
-            ):
+            if best_test_runtime is not None and (best_test_runtime > 3 * best_runtime_until_now):
                 # If after 5 runs, the optimized candidate is taking 3 times longer than the best code until now,
                 # then it is not a good optimization. Early exit to save time.
                 success = True
@@ -1000,14 +953,10 @@ class Optimizer:
             if do_break:
                 break
 
-        pathlib.Path(
-            get_run_tmp_file(f"test_return_values_{optimization_index}.bin"),
-        ).unlink(
+        pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.bin")).unlink(
             missing_ok=True,
         )
-        pathlib.Path(
-            get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite"),
-        ).unlink(
+        pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite")).unlink(
             missing_ok=True,
         )
         if not (equal_results and times_run > 0):

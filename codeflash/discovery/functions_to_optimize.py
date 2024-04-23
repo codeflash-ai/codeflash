@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import ast
 import logging
 import os
@@ -25,7 +23,7 @@ from codeflash.verification.verification_utils import TestConfig
 @dataclass(frozen=True)
 class FunctionProperties:
     is_top_level: bool
-    has_args: bool | None
+    has_args: Optional[bool]
 
 
 class ReturnStatementVisitor(cst.CSTVisitor):
