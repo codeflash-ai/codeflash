@@ -78,15 +78,23 @@ class Tracer:
                 "_",
             ),
         )
-        self.start_time = None
+
         assert timeout is None or timeout > 0, "Timeout should be greater than 0"
         self.timeout = timeout
         self.next_insert = 1000
         self.profiling_info = defaultdict(Counter)
 
+        # Profiler variables
+        self.bias = 0  # calibration constant
+        self.timings = {}
+        self.cur = None
+        self.start_time = None
+        self.timer = time.process_time_ns
+
         assert (
             "test_framework" in self.config
         ), "Please specify 'test-framework' in pyproject.toml config file"
+        self.t = self.timer()
 
     def __enter__(self) -> None:
         if self.disable:
@@ -161,6 +169,15 @@ class Tracer:
             )
 
     def trace_callback(self, frame: Any, event: str, arg: Any) -> None:
+        timer = self.timer
+        t = timer() - self.t - self.bias
+        if event == "c_call":
+            self.c_func_name = arg.__name__
+
+        if self.dispatch[event](self, frame, t):
+            self.t = timer()
+        else:
+            self.t = timer() - t  # put back unrecorded delta
         t1 = time.perf_counter_ns()
         if event not in ["call", "return"]:
             return
@@ -315,3 +332,92 @@ class Tracer:
         self.profiling_info["cur.execute"].update(count=1, time=t15 - t14)
         if event == "return":
             self.function_count[function_qualified_name] += 1
+
+    def trace_dispatch_call(self, frame, t):
+        if self.cur and frame.f_back is not self.cur[-2]:
+            rpt, rit, ret, rfn, rframe, rcur = self.cur
+            if not isinstance(rframe, Tracer.fake_frame):
+                assert rframe.f_back is frame.f_back, (
+                    "Bad call",
+                    rfn,
+                    rframe,
+                    rframe.f_back,
+                    frame,
+                    frame.f_back,
+                )
+                self.trace_dispatch_return(rframe, 0)
+                assert self.cur is None or frame.f_back is self.cur[-2], ("Bad call", self.cur[-3])
+        fcode = frame.f_code
+        fn = (fcode.co_filename, fcode.co_firstlineno, fcode.co_name)
+        self.cur = (t, 0, 0, fn, frame, self.cur)
+        timings = self.timings
+        if fn in timings:
+            cc, ns, tt, ct, callers = timings[fn]
+            timings[fn] = cc, ns + 1, tt, ct, callers
+        else:
+            timings[fn] = 0, 0, 0, 0, {}
+        return 1
+
+    def trace_dispatch_exception(self, frame, t):
+        rpt, rit, ret, rfn, rframe, rcur = self.cur
+        if (rframe is not frame) and rcur:
+            return self.trace_dispatch_return(rframe, t)
+        self.cur = rpt, rit + t, ret, rfn, rframe, rcur
+        return 1
+
+    def trace_dispatch_c_call(self, frame, t):
+        fn = ("", 0, self.c_func_name)
+        self.cur = (t, 0, 0, fn, frame, self.cur)
+        timings = self.timings
+        if fn in timings:
+            cc, ns, tt, ct, callers = timings[fn]
+            timings[fn] = cc, ns + 1, tt, ct, callers
+        else:
+            timings[fn] = 0, 0, 0, 0, {}
+        return 1
+
+    def trace_dispatch_return(self, frame, t):
+        if frame is not self.cur[-2]:
+            assert frame is self.cur[-2].f_back, ("Bad return", self.cur[-3])
+            self.trace_dispatch_return(self.cur[-2], 0)
+
+        # Prefix "r" means part of the Returning or exiting frame.
+        # Prefix "p" means part of the Previous or Parent or older frame.
+
+        rpt, rit, ret, rfn, frame, rcur = self.cur
+        rit = rit + t
+        frame_total = rit + ret
+
+        ppt, pit, pet, pfn, pframe, pcur = rcur
+        self.cur = ppt, pit + rpt, pet + frame_total, pfn, pframe, pcur
+
+        timings = self.timings
+        cc, ns, tt, ct, callers = timings[rfn]
+        if not ns:
+            # This is the only occurrence of the function on the stack.
+            # Else this is a (directly or indirectly) recursive call, and
+            # its cumulative time will get updated when the topmost call to
+            # it returns.
+            ct = ct + frame_total
+            cc = cc + 1
+
+        if pfn in callers:
+            callers[pfn] = callers[pfn] + 1  # hack: gather more
+            # stats such as the amount of time added to ct courtesy
+            # of this specific call, and the contribution to cc
+            # courtesy of this call.
+        else:
+            callers[pfn] = 1
+
+        timings[rfn] = cc, ns - 1, tt + rit, ct, callers
+
+        return 1
+
+    dispatch = {
+        "call": trace_dispatch_call,
+        "exception": trace_dispatch_exception,
+        "return": trace_dispatch_return,
+        "c_call": trace_dispatch_c_call,
+        "c_exception": trace_dispatch_return,  # the C function returned
+        "c_return": trace_dispatch_return,
+    }
