@@ -26,10 +26,7 @@ import isort
 from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.code_utils.config_parser import parse_config_file
-from codeflash.discovery.functions_to_optimize import (
-    FunctionToOptimize,
-    filter_functions,
-)
+from codeflash.discovery.functions_to_optimize import filter_files_optimized
 from codeflash.tracing.replay_test import create_trace_replay_test
 from codeflash.tracing.tracing_utils import FunctionModules
 from codeflash.verification.verification_utils import get_test_file_path
@@ -239,23 +236,13 @@ class Tracer:
         if function_qualified_name not in self.function_count:
             # seeing this function for the first time
             self.function_count[function_qualified_name] = 0
-            _, non_filtered_functions_count = filter_functions(
-                modified_functions={
-                    file_name: [
-                        FunctionToOptimize(
-                            function_name=code.co_name,
-                            file_path=file_name,
-                            parents=[],
-                        ),
-                    ],
-                },
+            non_filtered_files_count = filter_files_optimized(
+                file_paths=[file_name],
                 tests_root=self.config["tests_root"],
                 ignore_paths=self.config["ignore_paths"],
-                project_root=self.project_root,
                 module_root=self.config["module_root"],
-                disable_logs=True,
             )
-            if non_filtered_functions_count == 0:
+            if non_filtered_files_count == 0:
                 # we don't want to trace this function because it cannot be optimized
                 self.ignored_qualified_functions.add(function_qualified_name)
                 t10 = time.perf_counter_ns()
