@@ -1,3 +1,14 @@
+# Copyright 2024 CodeFlash Inc. All rights reserved.
+#
+# Licensed under the Business Source License version 1.1.
+# License source can be found in the LICENSE file.
+#
+# This file includes work covered by the following copyright and permission notices:
+#
+#  Copyright Python Software Foundation
+#  Licensed under the Apache License, Version 2.0 (the "License").
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
 import logging
 import marshal
 import os
