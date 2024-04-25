@@ -1,4 +1,5 @@
 import logging
+import marshal
 import os
 import pathlib
 import pickle
@@ -90,7 +91,8 @@ class Tracer:
         self.cur = None
         self.start_time = None
         self.timer = time.process_time_ns
-
+        self.profile_stats_file = "codeflash.stats"
+        self.simulate_call("profiler")
         assert (
             "test_framework" in self.config
         ), "Please specify 'test-framework' in pyproject.toml config file"
@@ -121,6 +123,8 @@ class Tracer:
             "last_frame_address INTEGER, time_ns INTEGER, arg BLOB, locals BLOB)",
         )
         print("Codeflash: Tracing started!")
+        frame = sys._getframe(0)  # Get this frame and simulate a call to it
+        self.dispatch["call"](self, frame, 0)
         self.start_time = time.time()
         sys.setprofile(self.trace_callback)
 
@@ -130,6 +134,10 @@ class Tracer:
         sys.setprofile(None)
         self.con.commit()
         self.con.close()
+
+        self.print_stats("tottime")
+
+        self.dump_stats(self.profile_stats_file)
 
         # filter any functions where we did not capture the return
         self.function_modules = [
@@ -160,9 +168,7 @@ class Tracer:
         with open(test_file_path, "w", encoding="utf8") as file:
             file.write(replay_test)
 
-        print(
-            f"Codeflash: Traced successful and replay test created! Path - {test_file_path}",
-        )
+        print(f"Codeflash: Traced successful and replay test created! Path - {test_file_path}")
         for key, value in self.profiling_info.items():
             print(
                 f"Profiling info - {key} - count - {value['count']} - time - {value['time']/1e6}ms",
@@ -334,6 +340,7 @@ class Tracer:
             self.function_count[function_qualified_name] += 1
 
     def trace_dispatch_call(self, frame, t):
+        # print("trace_dispatch_call", self.cur)
         if self.cur and frame.f_back is not self.cur[-2]:
             rpt, rit, ret, rfn, rframe, rcur = self.cur
             if not isinstance(rframe, Tracer.fake_frame):
@@ -356,9 +363,11 @@ class Tracer:
             timings[fn] = cc, ns + 1, tt, ct, callers
         else:
             timings[fn] = 0, 0, 0, 0, {}
+        # print("trace_dispatch_callreturn", self.cur)
         return 1
 
     def trace_dispatch_exception(self, frame, t):
+        # print("trace_dispatch_exception", self.cur)
         rpt, rit, ret, rfn, rframe, rcur = self.cur
         if (rframe is not frame) and rcur:
             return self.trace_dispatch_return(rframe, t)
@@ -366,6 +375,7 @@ class Tracer:
         return 1
 
     def trace_dispatch_c_call(self, frame, t):
+        # print("trace_dispatch_c_call", self.cur)
         fn = ("", 0, self.c_func_name)
         self.cur = (t, 0, 0, fn, frame, self.cur)
         timings = self.timings
@@ -377,7 +387,9 @@ class Tracer:
         return 1
 
     def trace_dispatch_return(self, frame, t):
+        # print("trace_dispatch_return", self.cur)
         if frame is not self.cur[-2]:
+            print(self.cur[-2], self.cur[-2].f_back)
             assert frame is self.cur[-2].f_back, ("Bad return", self.cur[-3])
             self.trace_dispatch_return(self.cur[-2], 0)
 
@@ -421,3 +433,62 @@ class Tracer:
         "c_exception": trace_dispatch_return,  # the C function returned
         "c_return": trace_dispatch_return,
     }
+
+    class fake_code:
+        def __init__(self, filename, line, name):
+            self.co_filename = filename
+            self.co_line = line
+            self.co_name = name
+            self.co_firstlineno = 0
+
+        def __repr__(self):
+            return repr((self.co_filename, self.co_line, self.co_name))
+
+    class fake_frame:
+        def __init__(self, code, prior):
+            self.f_code = code
+            self.f_back = prior
+
+    def simulate_call(self, name):
+        code = self.fake_code("profiler", 0, name)
+        if self.cur:
+            pframe = self.cur[-2]
+        else:
+            pframe = None
+        frame = self.fake_frame(code, pframe)
+        self.dispatch["call"](self, frame, 0)
+
+    def simulate_cmd_complete(self):
+        get_time = self.timer
+        t = get_time() - self.t
+        while self.cur[-1]:
+            # We *can* cause assertion errors here if
+            # dispatch_trace_return checks for a frame match!
+            self.dispatch["return"](self, self.cur[-2], t)
+            t = 0
+        self.t = get_time() - t
+
+    def print_stats(self, sort=-1):
+        import pstats
+
+        if not isinstance(sort, tuple):
+            sort = (sort,)
+        pstats.Stats(self).strip_dirs().sort_stats(*sort).print_stats()
+
+    def dump_stats(self, file):
+        with open(file, "wb") as f:
+            self.create_stats()
+            marshal.dump(self.stats, f)
+
+    def create_stats(self):
+        self.simulate_cmd_complete()
+        self.snapshot_stats()
+
+    def snapshot_stats(self):
+        self.stats = {}
+        for func, (cc, ns, tt, ct, callers) in self.timings.items():
+            callers = callers.copy()
+            nc = 0
+            for callcnt in callers.values():
+                nc += callcnt
+            self.stats[func] = cc, nc, tt / 10e6, ct / 10e6, callers
