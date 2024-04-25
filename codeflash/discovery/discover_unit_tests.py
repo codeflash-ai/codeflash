@@ -93,16 +93,20 @@ def discover_replay_tests(
     cfg: TestConfig,
 ) -> Tuple[Dict[str, List[TestsInFile]], Set[str]]:
     tests = discover_unit_tests(cfg)
-    replay_tests = {}
-    replay_files = set()
-    for function, test_files in tests.items():
-        for test_file in test_files:
-            if "__replay_test" in test_file.test_file:
-                if function not in replay_tests:
-                    replay_tests[function] = []
-
-                replay_tests[function].append(test_file)
-                replay_files.add(test_file.test_file)
+    replay_tests = {
+        function: [
+            test_file
+            for test_file in test_files
+            if "__replay_test" in test_file.test_file
+        ]
+        for function, test_files in tests.items()
+    }
+    replay_files = {
+        test_file.test_file
+        for test_files in tests.values()
+        for test_file in test_files
+        if "__replay_test" in test_file.test_file
+    }
 
     return replay_tests, replay_files
 
