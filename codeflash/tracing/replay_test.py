@@ -1,22 +1,38 @@
+from __future__ import annotations
+
 import logging
 import sqlite3
 import textwrap
 from collections import defaultdict
-from typing import Any, Dict, Generator, List, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple
+
+from codeflash.discovery.functions_to_optimize import (
+    FunctionProperties,
+    inspect_top_level_functions_or_methods,
+)
+from codeflash.tracing.tracing_utils import FunctionModules
 
 
 def get_next_arg_and_return(
     trace_file: str,
     function_name: str,
+    file_name: str,
+    class_name: Optional[str] = None,
     num_to_get: int = 3,
 ) -> Generator[Tuple[Any, Any], None, None]:
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
-    limit = num_to_get * 2 + 100
-    data = cur.execute(
-        "SELECT * FROM events WHERE function = ? ORDER BY time_ns ASC LIMIT ?",
-        (function_name, limit),
-    ).fetchall()
+    limit = num_to_get * 2 + 100  # we may have to get more than num_to_get*2 to get num_to_get valid pairs
+    if class_name is not None:
+        data = cur.execute(
+            "SELECT * FROM events WHERE function = ? AND filename = ? AND classname = ? ORDER BY time_ns ASC LIMIT ?",
+            (function_name, file_name, class_name, limit),
+        ).fetchall()
+    else:
+        data = cur.execute(
+            "SELECT * FROM events WHERE function = ? AND filename = ? ORDER BY time_ns ASC LIMIT ?",
+            (function_name, file_name, limit),
+        ).fetchall()
 
     counts = 0
     matched_arg_return: Dict[int, List[Any]] = defaultdict(list)
@@ -24,15 +40,15 @@ def get_next_arg_and_return(
         if counts >= num_to_get:
             break
 
-        event_type, frame_address = val[0], val[4]
+        event_type, frame_address = val[0], val[5]
         if event_type == "call":
-            matched_arg_return[frame_address].append(val[7])
+            matched_arg_return[frame_address].append(val[8])
             if len(matched_arg_return[frame_address]) > 1:
                 logging.warning(
                     f"Pre-existing call to the function {function_name} with same frame address.",
                 )
         elif event_type == "return":
-            matched_arg_return[frame_address].append(val[6])
+            matched_arg_return[frame_address].append(val[7])
             arg_return_length = len(matched_arg_return[frame_address])
             if arg_return_length > 2:
                 logging.warning(
@@ -54,81 +70,118 @@ def get_function_alias(module: str, function_name: str) -> str:
 
 def create_trace_replay_test(
     trace_file: str,
-    functions: List[Tuple[str, str]],
+    functions: List[FunctionModules],
     test_framework: str = "pytest",
+    max_run_count=100,
 ) -> str:
     assert test_framework in ["pytest", "unittest"]
 
     imports = f"""import dill as pickle
 import {test_framework}
 from codeflash.tracing.replay_test import get_next_arg_and_return
-from codeflash.validation.comparators import comparator
+from codeflash.verification.comparator import comparator
 """
 
     # TODO: Module can have "-" character if the module-root is ".". Need to handle that case
-    function_imports = [
-        f"from {module} import {function_name} as {get_function_alias(module, function_name)}"
-        for module, function_name in functions
+    function_properties: list[FunctionProperties] = [
+        inspect_top_level_functions_or_methods(
+            file_name=function.file_name,
+            function_or_method_name=function.function_name,
+            class_name=function.class_name,
+        )
+        for function in functions
     ]
+    function_imports = []
+    for function, function_property in zip(functions, function_properties):
+        if not function_property.is_top_level:
+            # can't be imported and run in the replay test
+            continue
+        if function.class_name:
+            function_imports.append(
+                f"from {function.module_name} import {function.class_name} as {get_function_alias(function.module_name, function.class_name)}",
+            )
+        else:
+            function_imports.append(
+                f"from {function.module_name} import {function.function_name} as {get_function_alias(function.module_name, function.function_name)}",
+            )
+
     imports += "\n".join(function_imports)
-
+    functions_to_optimize = [
+        function.function_name for function in functions if function.function_name != "__init__"
+    ]
+    test_function_body = textwrap.dedent(
+        """\
+        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(trace_file=r'{trace_file}', function_name='{orig_function_name}', file_name=r'{file_name}', num_to_get={max_run_count}):
+            args = pickle.loads(arg_val_pkl)
+            traced_return_val = pickle.loads(return_val_pkl)
+            ret = {function_name}({args})
+            """
+        + (
+            """self.assertTrue(comparator(traced_return_val, ret))
+        """
+            if test_framework == "unittest"
+            else """assert comparator(traced_return_val, ret)
+        """
+        ),
+    )
+    test_class_method_body = textwrap.dedent(
+        """\
+        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(trace_file=r'{trace_file}', function_name='{orig_function_name}', file_name=r'{file_name}', class_name='{class_name}', num_to_get={max_run_count}):
+            args = pickle.loads(arg_val_pkl)
+            traced_return_val = pickle.loads(return_val_pkl){filter_variables}
+            ret = {class_name_alias}.{method_name}(**args)
+            """
+        + (
+            """self.assertTrue(comparator(traced_return_val, ret))
+        """
+            if test_framework == "unittest"
+            else """assert comparator(traced_return_val, ret)
+        """
+        ),
+    )
     if test_framework == "unittest":
-        return imports + _create_unittest_trace_replay_test(trace_file, functions)
-    elif test_framework == "pytest":
-        return imports + _create_pytest_trace_replay_test(trace_file, functions)
+        self = "self"
+        test_template = "\nclass TestTracedFunctions(unittest.TestCase):\n"
     else:
-        raise ValueError("Invalid test framework")
-
-
-def _create_unittest_trace_replay_test(trace_file: str, functions: List[Tuple[str, str]]) -> str:
-    test_function_body = textwrap.dedent(
-        """\
-        for arg_val_pkl, return_val_pkl in get_next_arg_and_return('{trace_file}', '{orig_function_name}', 3):
-            args = pickle.loads(arg_val_pkl)
-            return_val = pickle.loads(return_val_pkl)
-            ret = {function_name}(**args)
-            self.assertTrue(comparator(return_val, ret))
-    """,
-    )
-
-    test_template = "\nclass TestTracedFunctions(unittest.TestCase):\n"
-    for module, function_name in functions:
-        function_name_alias = get_function_alias(module, function_name)
-        formatted_test_body = textwrap.indent(
-            test_function_body.format(
+        test_template = ""
+        self = ""
+    for func, func_property in zip(functions, function_properties):
+        if not func_property.is_top_level:
+            # can't be imported and run in the replay test
+            continue
+        if func.class_name is None:
+            alias = get_function_alias(func.module_name, func.function_name)
+            test_body = test_function_body.format(
                 trace_file=trace_file,
-                function_name=function_name_alias,
-                orig_function_name=function_name,
-            ),
-            "        ",
-        )
-        test_template += f"    def test_{function_name_alias}(self):\n{formatted_test_body}\n"
-
-    return test_template
-
-
-def _create_pytest_trace_replay_test(trace_file: str, functions: List[Tuple[str, str]]) -> str:
-    test_function_body = textwrap.dedent(
-        """\
-        for arg_val_pkl, return_val_pkl in get_next_arg_and_return('{trace_file}', '{orig_function_name}', 3):
-            args = pickle.loads(arg_val_pkl)
-            return_val = pickle.loads(return_val_pkl)
-            ret = {function_name}(**args)
-            assert comparator(return_val, ret)
-    """,
-    )
-
-    test_template = ""
-    for module, function_name in functions:
-        function_name_alias = get_function_alias(module, function_name)
-        formatted_test_body = textwrap.indent(
-            test_function_body.format(
+                function_name=alias,
+                file_name=func.file_name,
+                orig_function_name=func.function_name,
+                max_run_count=max_run_count,
+                args="**args" if func_property.has_args else "",
+            )
+        else:
+            class_name_alias = get_function_alias(func.module_name, func.class_name)
+            alias = get_function_alias(
+                func.module_name,
+                func.class_name + "_" + func.function_name,
+            )
+            filter_variables = "\n    args.pop('__class__', None)" if func.function_name == "__init__" else ""
+            test_body = test_class_method_body.format(
                 trace_file=trace_file,
-                function_name=function_name_alias,
-                orig_function_name=function_name,
-            ),
-            "    ",
+                orig_function_name=func.function_name,
+                file_name=func.file_name,
+                class_name_alias=class_name_alias,
+                class_name=func.class_name,
+                method_name=func.function_name,
+                max_run_count=max_run_count,
+                filter_variables=filter_variables,
+            )
+        formatted_test_body = textwrap.indent(
+            test_body,
+            "        " if test_framework == "unittest" else "    ",
         )
-        test_template += f"\ndef test_{function_name_alias}():\n{formatted_test_body}\n"
 
-    return test_template
+        test_template += "    " if test_framework == "unittest" else ""
+        test_template += f"def test_{alias}({self}):\n{formatted_test_body}\n"
+
+    return imports + "\n" + f"functions = {functions_to_optimize}" + "\n" + test_template

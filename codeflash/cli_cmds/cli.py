@@ -135,13 +135,17 @@ def process_cmd_args(args: Namespace) -> Namespace:
     args.module_root = os.path.realpath(args.module_root)
     # If module-root is "." then all imports are relatives to it.
     # in this case, the ".." becomes outside project scope, causing issues with un-importable paths
-    if os.path.dirname(pyproject_file_path) == args.module_root:
-        args.project_root = args.module_root
-    else:
-        args.project_root = os.path.realpath(os.path.join(args.module_root, ".."))
+    args.project_root = project_root_from_module_root(args.module_root, pyproject_file_path)
     args.tests_root = os.path.realpath(args.tests_root)
     args = handle_optimize_all_arg_parsing(args)
     return args
+
+
+def project_root_from_module_root(module_root: str, pyproject_file_path: str) -> str:
+    if os.path.dirname(pyproject_file_path) == module_root:
+        return module_root
+    else:
+        return os.path.realpath(os.path.join(module_root, ".."))
 
 
 def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:

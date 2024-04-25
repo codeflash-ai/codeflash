@@ -6,7 +6,7 @@ import subprocess
 import unittest
 from collections import defaultdict
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set, Tuple
 
 import jedi
 from pydantic.dataclasses import dataclass
@@ -89,6 +89,28 @@ def discover_unit_tests(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     return discover_tests(cfg)
 
 
+def discover_replay_tests(
+    cfg: TestConfig,
+) -> Tuple[Dict[str, List[TestsInFile]], Set[str]]:
+    tests = discover_unit_tests(cfg)
+    replay_tests = {
+        function: [
+            test_file
+            for test_file in test_files
+            if "__replay_test" in test_file.test_file
+        ]
+        for function, test_files in tests.items()
+    }
+    replay_files = {
+        test_file.test_file
+        for test_files in tests.values()
+        for test_file in test_files
+        if "__replay_test" in test_file.test_file
+    }
+
+    return replay_tests, replay_files
+
+
 def get_pytest_rootdir_only(pytest_cmd_list, tests_root, project_root) -> str:
     # Ref - https://docs.pytest.org/en/stable/reference/customize.html#initialization-determining-rootdir-and-configfile
     # A very hacky solution that only runs the --co mode until we see the rootdir print and then it just kills the
@@ -128,12 +150,16 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
 
     parse_type = ParseType.Q
     if "rootdir: " not in pytest_stdout:
-        pytest_rootdir = get_pytest_rootdir_only(pytest_cmd_list, tests_root, project_root)
+        pytest_rootdir = get_pytest_rootdir_only(
+            pytest_cmd_list, tests_root, project_root,
+        )
     else:
         rootdir_re = re.compile(r"^rootdir:\s?(\S*)", re.MULTILINE)
         pytest_rootdir_match = rootdir_re.search(pytest_stdout)
         if not pytest_rootdir_match:
-            raise ValueError(f"Could not find rootdir in pytest output for {tests_root}")
+            raise ValueError(
+                f"Could not find rootdir in pytest output for {tests_root}",
+            )
         pytest_rootdir = pytest_rootdir_match.group(1)
         parse_type = ParseType.CO
 
@@ -177,7 +203,9 @@ def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
                 if not hasattr(test, "_testMethodName") and hasattr(test, "_tests"):
                     for test_2 in test._tests:
                         if not hasattr(test_2, "_testMethodName"):
-                            logging.warning(f"Didn't find tests for {test_2}")  # it goes deeper?
+                            logging.warning(
+                                f"Didn't find tests for {test_2}",
+                            )  # it goes deeper?
                             continue
                         details = get_test_details(test_2)
                         if details is not None:
@@ -256,7 +284,9 @@ def process_test_files(
                                         TestFunction(def_name.name, name.name, parameters),
                                     )
                                 elif function == def_name.name:
-                                    test_functions.add(TestFunction(def_name.name, name.name, None))
+                                    test_functions.add(
+                                        TestFunction(def_name.name, name.name, None),
+                                    )
 
         test_functions_list = list(test_functions)
         test_functions_raw = [elem.function_name for elem in test_functions_list]
@@ -314,7 +344,9 @@ def parse_pytest_stdout(
             if line.startswith("==") or line.startswith("\n") or line == "":
                 break
             try:
-                test_result = TestsInFile.from_pytest_stdout_line_q(line, pytest_rootdir)
+                test_result = TestsInFile.from_pytest_stdout_line_q(
+                    line, pytest_rootdir,
+                )
                 test_results.append(test_result)
             except ValueError as e:
                 logging.warning(str(e))
@@ -371,7 +403,9 @@ def parse_pytest_stdout(
 
                 module = module_list[0]
 
-            while len(directory) > 0 and not os.path.exists(os.path.join(directory, module)):
+            while len(directory) > 0 and not os.path.exists(
+                os.path.join(directory, module),
+            ):
                 directory = os.path.dirname(directory)
 
             if len(directory) == 0:
