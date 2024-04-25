@@ -11,7 +11,7 @@ def get_test_file_path(
     function_name = function_name.replace(".", "_")
     path = os.path.join(test_dir, f"test_{function_name}__{test_type}_test_{iteration}.py")
     if os.path.exists(path):
-        return get_test_file_path(test_dir, function_name, iteration + 1)
+        return get_test_file_path(test_dir, function_name, iteration + 1, test_type)
     return path
 
 

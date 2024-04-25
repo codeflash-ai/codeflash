@@ -3,6 +3,7 @@ import logging
 import os
 import random
 from _ast import AsyncFunctionDef, ClassDef, FunctionDef
+from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
 
 import git
@@ -11,9 +12,18 @@ from libcst import CSTNode
 from libcst.metadata import CodeRange
 from pydantic.dataclasses import dataclass
 
-from codeflash.code_utils.code_utils import module_name_from_file_path, path_belongs_to_site_packages
+from codeflash.code_utils.code_utils import (
+    module_name_from_file_path,
+    path_belongs_to_site_packages,
+)
 from codeflash.code_utils.git_utils import get_git_diff
 from codeflash.verification.verification_utils import TestConfig
+
+
+@dataclass(frozen=True)
+class FunctionProperties:
+    is_top_level: bool
+    has_args: Optional[bool]
 
 
 class ReturnStatementVisitor(cst.CSTVisitor):
@@ -42,7 +52,9 @@ class FunctionVisitor(cst.CSTVisitor):
             ast_parents: list[FunctionParent] = []
             while parents is not None:
                 if isinstance(parents, (cst.FunctionDef, cst.ClassDef)):
-                    ast_parents.append(FunctionParent(parents.name.value, parents.__class__.__name__))
+                    ast_parents.append(
+                        FunctionParent(parents.name.value, parents.__class__.__name__),
+                    )
                 parents = self.get_metadata(cst.metadata.ParentNodeProvider, parents, default=None)
             self.functions.append(
                 FunctionToOptimize(
@@ -223,11 +235,72 @@ def is_git_repo(file_path: str) -> bool:
         return False
 
 
-def ignored_submodule_paths(git_repo: git.Repo) -> List[str]:
-    return [
-        os.path.realpath(os.path.join(git_repo.working_tree_dir, submodule.path))
-        for submodule in git_repo.submodules
-    ]
+@lru_cache(maxsize=None)
+def ignored_submodule_paths(module_root) -> List[str]:
+    if is_git_repo(module_root):
+        git_repo = git.Repo(module_root, search_parent_directories=True)
+        return [
+            os.path.realpath(os.path.join(git_repo.working_tree_dir, submodule.path))
+            for submodule in git_repo.submodules
+        ]
+    else:
+        return []
+
+
+class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
+    def __init__(
+        self,
+        file_name: str,
+        function_or_method_name: str,
+        class_name: Optional[str] = None,
+    ) -> None:
+        self.file_name = file_name
+        self.class_name = class_name
+        self.function_name = function_or_method_name
+        self.is_top_level = False
+        self.function_has_args = None
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        if node.name == self.function_name:
+            self.is_top_level = True
+            self.function_has_args = any(
+                (
+                    bool(node.args.args),
+                    bool(node.args.kwonlyargs),
+                    bool(node.args.kwarg),
+                    bool(node.args.posonlyargs),
+                    bool(node.args.vararg),
+                ),
+            )
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        # iterate over the class methods
+        if node.name == self.class_name:
+            for body_node in node.body:
+                if isinstance(body_node, ast.FunctionDef) and body_node.name == self.function_name:
+                    self.is_top_level = True
+                    return
+        return
+
+
+def inspect_top_level_functions_or_methods(
+    file_name: str,
+    function_or_method_name: str,
+    class_name: Optional[str] = None,
+) -> FunctionProperties:
+    with open(file_name, encoding="utf8") as file:
+        try:
+            ast_module = ast.parse(file.read())
+        except Exception as e:
+            logging.exception(e)
+            return False
+    visitor = TopLevelFunctionOrMethodVisitor(
+        file_name=file_name,
+        function_or_method_name=function_or_method_name,
+        class_name=class_name,
+    )
+    visitor.visit(ast_module)
+    return FunctionProperties(is_top_level=visitor.is_top_level, has_args=visitor.function_has_args)
 
 
 def filter_functions(
@@ -236,13 +309,13 @@ def filter_functions(
     ignore_paths: List[str],
     project_root: str,
     module_root: str,
+    disable_logs: bool = False,
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
     # Remove any function that we don't want to optimize
 
-    # Ignore files with submodule path
-    submodule_paths = []
-    if is_git_repo(module_root):
-        submodule_paths = ignored_submodule_paths(git.Repo(module_root, search_parent_directories=True))
+    # Ignore files with submodule path, cache the submodule paths
+    submodule_paths = ignored_submodule_paths(module_root)
+
     filtered_modified_functions: Dict[str, List[FunctionToOptimize]] = {}
     functions_count: int = 0
     test_functions_removed_count: int = 0
@@ -279,17 +352,19 @@ def filter_functions(
             continue
         filtered_modified_functions[file_path] = functions
         functions_count += len(functions)
-    log_info = {
-        f"{test_functions_removed_count} test function{'s' if test_functions_removed_count != 1 else ''}": test_functions_removed_count,
-        f"{site_packages_removed_count} site-package function{'s' if site_packages_removed_count != 1 else ''}": site_packages_removed_count,
-        f"{malformed_paths_count} non-importable file path{'s' if malformed_paths_count != 1 else ''}": malformed_paths_count,
-        f"{non_modules_removed_count} function{'s' if non_modules_removed_count != 1 else ''} outside module-root": non_modules_removed_count,
-        f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths": ignore_paths_removed_count,
-        f"{submodule_ignored_paths_count} file{'s' if submodule_ignored_paths_count != 1 else ''} from ignored submodules": submodule_ignored_paths_count,
-    }
-    log_string: str
-    if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
-        logging.info(f"Ignoring:\n{log_string}")
+    if not disable_logs:
+        log_info = {
+            f"{test_functions_removed_count} test function{'s' if test_functions_removed_count != 1 else ''}": test_functions_removed_count,
+            f"{site_packages_removed_count} site-package function{'s' if site_packages_removed_count != 1 else ''}": site_packages_removed_count,
+            f"{malformed_paths_count} non-importable file path{'s' if malformed_paths_count != 1 else ''}": malformed_paths_count,
+            f"{non_modules_removed_count} function{'s' if non_modules_removed_count != 1 else ''} outside module-root": non_modules_removed_count,
+            f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths": ignore_paths_removed_count,
+            f"{submodule_ignored_paths_count} file{'s' if submodule_ignored_paths_count != 1 else ''} from ignored submodules": submodule_ignored_paths_count,
+        }
+        log_string: str
+        if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
+            logging.info(f"Ignoring:\n{log_string}")
+
     return {k: v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 
