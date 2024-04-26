@@ -375,36 +375,33 @@ def filter_functions(
 
 
 def filter_files_optimized(
-    file_paths: List[str],
+    file_path: str,
     tests_root: str,
     ignore_paths: List[str],
     module_root: str,
-) -> int:
+) -> bool:
     """Optimized version of the filter_functions function above.
     Takes in file paths and returns the count of files that are to be optimized.
     """
     submodule_paths = None
-    file_path_count: int = 0
-    for file_path in file_paths:
-        if file_path.startswith(tests_root + os.sep):
-            continue
-        if file_path in ignore_paths or any(
-            file_path.startswith(ignore_path + os.sep) for ignore_path in ignore_paths
-        ):
-            continue
-        if path_belongs_to_site_packages(file_path):
-            continue
-        if not file_path.startswith(module_root + os.sep):
-            continue
-        if submodule_paths is None:
-            submodule_paths = ignored_submodule_paths(module_root)
-        if file_path in submodule_paths or any(
-            file_path.startswith(submodule_path + os.sep) for submodule_path in submodule_paths
-        ):
-            continue
-        file_path_count += 1
+    if file_path.startswith(tests_root + os.sep):
+        return False
+    if file_path in ignore_paths or any(
+        file_path.startswith(ignore_path + os.sep) for ignore_path in ignore_paths
+    ):
+        return False
+    if path_belongs_to_site_packages(file_path):
+        return False
+    if not file_path.startswith(module_root + os.sep):
+        return False
+    if submodule_paths is None:
+        submodule_paths = ignored_submodule_paths(module_root)
+    if file_path in submodule_paths or any(
+        file_path.startswith(submodule_path + os.sep) for submodule_path in submodule_paths
+    ):
+        return False
 
-    return file_path_count
+    return True
 
 
 def function_has_return_statement(function_node: Union[FunctionDef, AsyncFunctionDef]) -> bool:

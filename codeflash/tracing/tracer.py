@@ -242,13 +242,13 @@ class Tracer:
         if function_qualified_name not in self.function_count:
             # seeing this function for the first time
             self.function_count[function_qualified_name] = 0
-            non_filtered_files_count = filter_files_optimized(
-                file_paths=[file_name],
+            file_valid = filter_files_optimized(
+                file_path=file_name,
                 tests_root=self.config["tests_root"],
                 ignore_paths=self.config["ignore_paths"],
                 module_root=self.config["module_root"],
             )
-            if non_filtered_files_count == 0:
+            if not file_valid:
                 # we don't want to trace this function because it cannot be optimized
                 self.ignored_qualified_functions.add(function_qualified_name)
                 t10 = time.perf_counter_ns()
