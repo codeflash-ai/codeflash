@@ -128,7 +128,7 @@ class Tracer:
         # TODO: Check out if we need to export the function test name as well
         cur.execute(
             "CREATE TABLE events(type TEXT, function TEXT, classname TEXT, filename TEXT, line_number INTEGER, "
-            "last_frame_address INTEGER, time_ns INTEGER, arg BLOB, locals BLOB)",
+            "last_frame_address INTEGER, time_ns INTEGER, args BLOB)",
         )
         print("Codeflash: Tracing started!")
         frame = sys._getframe(0)  # Get this frame and simulate a call to it
@@ -303,7 +303,7 @@ class Tracer:
         self.profiling_info["pickle.dumps"].update(count=1, time=t13 - t12)
         t14 = time.perf_counter_ns()
         cur.execute(
-            "INSERT INTO events VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO events VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 event,
                 code.co_name,
@@ -312,7 +312,6 @@ class Tracer:
                 frame.f_lineno,
                 frame.f_back.__hash__(),
                 t_ns,
-                None,
                 local_vars,
             ),
         )
