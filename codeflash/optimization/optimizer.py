@@ -71,6 +71,7 @@ class OptimizedCandidateResult(BaseModel):
 
 class OriginalCodeBaseline(BaseModel):
     generated_test_results: TestResults
+    existing_test_results: TestResults
     overall_test_results: Optional[TestResults]
     runtime: int
 
@@ -315,6 +316,7 @@ class Optimizer:
                             optimization_index=j,
                             instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
                             overall_original_test_results=original_code_baseline.overall_test_results,
+                            existing_test_results=original_code_baseline.existing_test_results,
                             original_gen_results=original_code_baseline.generated_test_results,
                             generated_tests_path=generated_tests_path,
                             best_runtime_until_now=best_runtime,
@@ -745,6 +747,7 @@ class Optimizer:
                     break
                 instrumented_existing_test_timing = []
                 original_test_results_iter = TestResults()
+                existing_test_results = TestResults()
                 for test_file in instrumented_unittests_created_for_function:
                     unittest_results = self.run_and_parse_tests(
                         test_env,
@@ -755,6 +758,7 @@ class Optimizer:
 
                     timing = unittest_results.total_passed_runtime()
                     original_test_results_iter.merge(unittest_results)
+                    existing_test_results.merge(unittest_results)
                     instrumented_existing_test_timing.append(timing)
                 if i == 0 and first_run:
                     logging.info(
@@ -826,6 +830,7 @@ class Optimizer:
         return Success(
             OriginalCodeBaseline(
                 generated_test_results=original_gen_results,
+                existing_test_results=existing_test_results,
                 overall_test_results=overall_original_test_results,
                 runtime=best_runtime,
             ),
@@ -836,6 +841,7 @@ class Optimizer:
         optimization_index: int,
         instrumented_unittests_created_for_function: set[str],
         overall_original_test_results: TestResults,
+        existing_test_results: TestResults,
         original_gen_results: TestResults,
         generated_tests_path: str,
         best_runtime_until_now: int,
@@ -889,11 +895,17 @@ class Optimizer:
                     logging.info(
                         f"optimized existing unit tests result -> {optimized_test_results_iter.get_test_pass_fail_report()}",
                     )
+                    equal_return_values = compare_results(
+                        existing_test_results, optimized_test_results_iter
+                    )
                     for test_invocation in optimized_test_results_iter:
                         if (
                             overall_original_test_results.get_by_id(test_invocation.id) is None
                             or test_invocation.did_pass
-                            != overall_original_test_results.get_by_id(test_invocation.id).did_pass
+                            != overall_original_test_results.get_by_id(
+                                test_invocation.id
+                            ).did_pass
+                            or not equal_return_values
                         ):
                             logging.info("Results did not match.")
                             logging.info(
