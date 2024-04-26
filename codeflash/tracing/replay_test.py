@@ -23,17 +23,17 @@ def get_next_arg_and_return(
     limit = num_to_get * 2 + 10  # we may have to get more than num_to_get*2 to get num_to_get valid pairs
     if class_name is not None:
         cursor = cur.execute(
-            "SELECT * FROM events WHERE function = ? AND filename = ? AND classname = ? ORDER BY time_ns ASC LIMIT ?",
+            "SELECT * FROM function_calls WHERE function = ? AND filename = ? AND classname = ? ORDER BY time_ns ASC LIMIT ?",
             (function_name, file_name, class_name, limit),
         )
     else:
         cursor = cur.execute(
-            "SELECT * FROM events WHERE function = ? AND filename = ? ORDER BY time_ns ASC LIMIT ?",
+            "SELECT * FROM function_calls WHERE function = ? AND filename = ? ORDER BY time_ns ASC LIMIT ?",
             (function_name, file_name, limit),
         )
 
     counts = 0
-    while val := cursor.fetchone() is not None:
+    while (val := cursor.fetchone()) is not None:
         if counts >= num_to_get:
             break
 
@@ -98,7 +98,7 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
     test_class_method_body = textwrap.dedent(
         """\
         for arg_val_pkl in get_next_arg_and_return(trace_file=r"{trace_file}", function_name="{orig_function_name}", file_name=r"{file_name}", class_name="{class_name}", num_to_get={max_run_count}):
-            args = pickle.loads(arg_val_pkl)
+            args = pickle.loads(arg_val_pkl){filter_variables}
             ret = {class_name_alias}.{method_name}(**args)
             """,
     )

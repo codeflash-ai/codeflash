@@ -127,8 +127,8 @@ class Tracer:
         cur.execute("""PRAGMA synchronous = OFF""")
         # TODO: Check out if we need to export the function test name as well
         cur.execute(
-            "CREATE TABLE events(type TEXT, function TEXT, classname TEXT, filename TEXT, line_number INTEGER, "
-            "last_frame_address INTEGER, time_ns INTEGER, args BLOB)",
+            "CREATE TABLE function_calls(type TEXT, function TEXT, classname TEXT, filename TEXT, "
+            "line_number INTEGER, last_frame_address INTEGER, time_ns INTEGER, args BLOB)",
         )
         print("Codeflash: Tracing started!")
         frame = sys._getframe(0)  # Get this frame and simulate a call to it
@@ -141,11 +141,23 @@ class Tracer:
             return
         sys.setprofile(None)
         self.con.commit()
-        self.con.close()
 
         self.print_stats("tottime")
 
-        self.dump_stats(self.profile_stats_file)
+        self.create_stats()
+        cur = self.con.cursor()
+        cur.execute(
+            "CREATE TABLE pstats (filename TEXT, line_number INTEGER, function TEXT, "
+            "call_count_nonrecursive INTEGER, num_callers INTEGER, total_time_ns INTEGER, "
+            "cumulative_time_ns INTEGER, callers BLOB)",
+        )
+        for func, (cc, nc, tt, ct, callers) in self.stats.items():
+            cur.execute(
+                "INSERT INTO pstats VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (func[0], func[1], func[2], cc, nc, tt, ct, pickle.dumps(callers)),
+            )
+        self.con.commit()
+        self.con.close()
 
         # filter any functions where we did not capture the return
         self.function_modules = [
@@ -303,7 +315,7 @@ class Tracer:
         self.profiling_info["pickle.dumps"].update(count=1, time=t13 - t12)
         t14 = time.perf_counter_ns()
         cur.execute(
-            "INSERT INTO events VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 event,
                 code.co_name,
@@ -475,4 +487,4 @@ class Tracer:
             nc = 0
             for callcnt in callers.values():
                 nc += callcnt
-            self.stats[func] = cc, nc, tt / 10e6, ct / 10e6, callers
+            self.stats[func] = cc, nc, tt, ct, callers
