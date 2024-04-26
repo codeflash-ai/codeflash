@@ -47,7 +47,7 @@ def calculate_validity(df):
 from scipy.stats import gmean
 
 
-def calculate_performance(df, perf_threshold=1.05):
+def calculate_performance(df, perf_threshold=0.05):
     # Extract the best speedup ratio from the speedup_ratio dictionary, accounting for empty dictionaries
     def get_best_correct_speedup_ratio(speedup_ratios, is_correct):
         correct_speedup_ratios = (
@@ -73,17 +73,17 @@ def calculate_performance(df, perf_threshold=1.05):
     # Filter out the rows where a valid candidate above the perf threshold was found
     valid_candidates_above_thres = df[(df["best_speedup_ratio"] >= perf_threshold)]
 
-    # Calculate the average speedup ratio of the PR
+    # (1) Calculate the average speedup ratio of the PR
     pr_gain = valid_candidates_above_thres["best_speedup_ratio"].mean()
 
-    # Calculate the geometric mean of the PR speedup ratio with ref=1x
-    pr_geom_mean = gmean(valid_candidates_above_thres["best_speedup_ratio"])
+    # (1a) Calculate the geometric mean of the PR speedup ratio with ref=1x
+    pr_geom_mean = gmean(valid_candidates_above_thres["best_speedup_ratio"] + 1)
 
-    # Calculate the mean average speedup ratio of all the valid candidates
+    # (2) Calculate the mean average speedup ratio of all the valid candidates
     mean_average_percentage_gain_all = df["best_speedup_ratio"].mean()
 
-    # Calculate the geometric mean of all candidates speedup ratio with ref=1x
-    all_candidates_geom_mean = gmean(df["best_speedup_ratio"].dropna())
+    # (2a) Calculate the geometric mean of all candidates speedup ratio with ref=1x
+    all_candidates_geom_mean = gmean(df["best_speedup_ratio"].dropna() + 1)
 
     def calculate_time_saved_for_row(row):
         if row["optimized_runtime"] is not None and row["is_correct"] is not None:
@@ -98,7 +98,7 @@ def calculate_performance(df, perf_threshold=1.05):
             return row["original_runtime"] - min(correct_runtimes)
         return None
 
-    # The average time saved in a PR given that a valid candidate was found above the perf threshold.
+    # (3) The average time saved in a PR given that a valid candidate was found above the perf threshold.
     pr_time_saved = (
         valid_candidates_above_thres.apply(
             lambda row: calculate_time_saved_for_row(row),
@@ -108,7 +108,7 @@ def calculate_performance(df, perf_threshold=1.05):
         .mean()
     )
 
-    # Calculate the mean average time saved for all the valid candidates
+    # (4) Calculate the mean average time saved for all the valid candidates
     all_candidates_time_saved = (
         df.apply(
             lambda row: calculate_time_saved_for_row(row),
