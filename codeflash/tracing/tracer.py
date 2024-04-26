@@ -232,6 +232,12 @@ class Tracer:
         t4 = time.perf_counter_ns()
         self.profiling_info["ignored_functions"].update(count=1, time=t4 - t3)
         t9 = time.perf_counter_ns()
+        if event == "return":
+            self.function_count[function_qualified_name] += 1
+            if self.function_count[function_qualified_name] >= self.max_function_count:
+                self.ignored_qualified_functions.add(function_qualified_name)
+                del self.function_count[function_qualified_name]  # save memory
+            return
 
         if function_qualified_name not in self.function_count:
             # seeing this function for the first time
@@ -259,11 +265,6 @@ class Tracer:
                     class_name=class_name,
                 ),
             )
-        elif self.function_count[function_qualified_name] >= self.max_function_count:
-            # ignore if we have already traced this function enough times
-            self.ignored_qualified_functions.add(function_qualified_name)
-            del self.function_count[function_qualified_name]  # save memory
-            return
         t10 = time.perf_counter_ns()
         self.profiling_info["filter_functions"].update(count=1, time=t10 - t9)
         t11 = time.perf_counter_ns()
@@ -279,30 +280,18 @@ class Tracer:
         try:
             # pickling can be a recursive operator, so we need to increase the recursion limit
             sys.setrecursionlimit(10000)
-            if event == "call":
-                local_vars = pickle.dumps(
-                    frame.f_locals,
-                    protocol=pickle.HIGHEST_PROTOCOL,
-                )
-                arg = None
-            else:
-                # return
-                arg = pickle.dumps(arg, protocol=pickle.HIGHEST_PROTOCOL)
-                local_vars = None
+            local_vars = pickle.dumps(
+                frame.f_locals,
+                protocol=pickle.HIGHEST_PROTOCOL,
+            )
             sys.setrecursionlimit(original_recursion_limit)
         except (TypeError, pickle.PicklingError, AttributeError, RecursionError):
             # we retry with dill if pickle fails. It's slower but more comprehensive
             try:
-                if event == "call":
-                    local_vars = dill.dumps(
-                        frame.f_locals,
-                        protocol=dill.HIGHEST_PROTOCOL,
-                    )
-                    arg = None
-                else:
-                    # return
-                    local_vars = None
-                    arg = dill.dumps(arg, protocol=dill.HIGHEST_PROTOCOL)
+                local_vars = dill.dumps(
+                    frame.f_locals,
+                    protocol=dill.HIGHEST_PROTOCOL,
+                )
                 sys.setrecursionlimit(original_recursion_limit)
 
             except (TypeError, dill.PicklingError, AttributeError, RecursionError):
@@ -323,7 +312,7 @@ class Tracer:
                 frame.f_lineno,
                 frame.f_back.__hash__(),
                 t_ns,
-                arg,
+                None,
                 local_vars,
             ),
         )
@@ -334,8 +323,6 @@ class Tracer:
 
         t15 = time.perf_counter_ns()
         self.profiling_info["cur.execute"].update(count=1, time=t15 - t14)
-        if event == "return":
-            self.function_count[function_qualified_name] += 1
 
     def trace_dispatch_call(self, frame, t):
         # print("trace_dispatch_call", self.cur)
