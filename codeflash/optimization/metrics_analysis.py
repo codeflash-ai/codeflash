@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import pandas as pd
 from pandas import DataFrame
@@ -147,9 +147,12 @@ def paired_comparison(
     return paired_results
 
 
-def augment_with_best_correct_speedup_ratio(df):
+def augment_with_best_correct_speedup_ratio(df: DataFrame) -> DataFrame:
     # Extract the best speedup ratio from the speedup_ratio dictionary, accounting for empty dictionaries
-    def get_best_correct_speedup_ratio(speedup_ratios, is_correct):
+    def get_best_correct_speedup_ratio(
+        speedup_ratios: Dict[str, float],
+        is_correct: Dict[str, bool],
+    ) -> Optional[float]:
         correct_speedup_ratios = (
             {uuid: ratio for uuid, ratio in speedup_ratios.items() if is_correct.get(uuid)}
             if speedup_ratios is not None
