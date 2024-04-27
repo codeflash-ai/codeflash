@@ -9,7 +9,6 @@
 #  Licensed under the Apache License, Version 2.0 (the "License").
 #  http://www.apache.org/licenses/LICENSE-2.0
 #
-import logging
 import marshal
 import os
 import pathlib
@@ -115,7 +114,7 @@ class Tracer:
         if self.disable:
             return
         if getattr(Tracer, "used_once", False):
-            logging.warning(
+            print(
                 "Codeflash: Tracer can only be used once per program run. "
                 "Please only enable the Tracer once. Skipping tracing this section.",
             )
@@ -215,7 +214,7 @@ class Tracer:
         if self.timeout is not None:
             if (time.time() - self.start_time) > self.timeout:
                 sys.setprofile(None)
-                logging.warning(
+                print(
                     f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds.",
                 )
                 return
