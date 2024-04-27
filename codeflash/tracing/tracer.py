@@ -56,7 +56,12 @@ class Tracer:
         """
         if functions is None:
             functions = []
+        if os.environ.get("CODEFLASH_TRACER_DISABLE", "0") == "1":
+            print("Codeflash: Tracer disabled by environment variable CODEFLASH_TRACER_DISABLE")
+            disable = True
         self.disable = disable
+        if self.disable:
+            return
         self.con = None
         self.output_file = os.path.abspath(output)
         self.functions = functions
