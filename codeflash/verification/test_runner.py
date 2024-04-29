@@ -12,8 +12,12 @@ def run_tests(
     pytest_timeout: Optional[int] = None,
     pytest_cmd: str = "pytest",
     verbose: bool = False,
+    test_function: Optional[str] = None,
 ) -> Tuple[str, subprocess.CompletedProcess]:
     assert test_framework in ["pytest", "unittest"]
+    if test_function and "__replay_test" in test_path:
+        test_path = test_path + "::" + test_function
+
     if test_framework == "pytest":
         result_file_path = get_run_tmp_file("pytest_results.xml")
         pytest_cmd_list = [chunk for chunk in pytest_cmd.split(" ") if chunk != ""]
@@ -28,7 +32,9 @@ def run_tests(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd=cwd,
-            env=test_env, check=False,
+            env=test_env,
+            check=False,
+            timeout=600,
         )
     elif test_framework == "unittest":
         result_file_path = get_run_tmp_file("unittest_results.xml")

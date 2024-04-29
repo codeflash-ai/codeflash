@@ -242,6 +242,7 @@ class Optimizer:
                         function_to_optimize.qualified_name,
                         instrumented_unittests_created_for_function,
                         generated_tests_path,
+                        function_to_tests[module_path + "." + self.args.function],
                     )
                     if not is_successful(baseline_result):
                         logging.error(baseline_result.failure())
@@ -320,6 +321,9 @@ class Optimizer:
                             original_gen_results=original_code_baseline.generated_test_results,
                             generated_tests_path=generated_tests_path,
                             best_runtime_until_now=best_runtime,
+                            tests_in_file=function_to_tests[
+                                module_path + "." + self.args.function
+                            ],
                         )
                         if not is_successful(run_results):
                             optimized_runtimes[optimization.optimization_id] = None
@@ -714,6 +718,7 @@ class Optimizer:
         function_name: str,
         instrumented_unittests_created_for_function: set[str],
         generated_tests_path: str,
+        tests_in_file: List[TestsInFile],
     ) -> Result[OriginalCodeBaseline, str]:
         original_runtime = None
         best_runtime = None
@@ -754,6 +759,7 @@ class Optimizer:
                         test_file,
                         TestType.EXISTING_UNIT_TEST,
                         0,
+                        tests_in_file[0].test_function,
                     )
 
                     timing = unittest_results.total_passed_runtime()
@@ -845,6 +851,7 @@ class Optimizer:
         original_gen_results: TestResults,
         generated_tests_path: str,
         best_runtime_until_now: int,
+        tests_in_file: list[TestsInFile],
     ) -> Result[OptimizedCandidateResult, str]:
         success = True
         best_test_runtime = None
@@ -886,6 +893,7 @@ class Optimizer:
                         instrumented_test_file,
                         TestType.EXISTING_UNIT_TEST,
                         optimization_index,
+                        tests_in_file[0].test_function,
                     )
                     timing = unittest_results_optimized.total_passed_runtime()
                     optimized_test_results_iter.merge(unittest_results_optimized)
@@ -990,6 +998,7 @@ class Optimizer:
         test_file: str,
         test_type: TestType,
         optimization_iteration: int,
+        test_function: Optional[str] = None,
     ) -> TestResults:
         result_file_path, run_result = run_tests(
             test_file,
@@ -999,6 +1008,7 @@ class Optimizer:
             pytest_cmd=self.test_cfg.pytest_cmd,
             verbose=True,
             test_env=test_env,
+            test_function=test_function,
         )
         if run_result.returncode != 0:
             logging.debug(
