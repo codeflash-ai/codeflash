@@ -734,6 +734,7 @@ class Optimizer:
         #  if they are different, then we can't optimize this function because it is a non-deterministic function
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = str(0)
+        test_env["CODEFLASH_TRACER_DISABLE"] = "1"
         if "PYTHONPATH" not in test_env:
             test_env["PYTHONPATH"] = self.args.project_root
         else:
@@ -862,6 +863,7 @@ class Optimizer:
         times_run = 0
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_index)
+        test_env["CODEFLASH_TRACER_DISABLE"] = "1"
         if "PYTHONPATH" not in test_env:
             test_env["PYTHONPATH"] = self.args.project_root
         else:
@@ -904,14 +906,15 @@ class Optimizer:
                         f"optimized existing unit tests result -> {optimized_test_results_iter.get_test_pass_fail_report()}",
                     )
                     equal_return_values = compare_results(
-                        existing_test_results, optimized_test_results_iter
+                        existing_test_results,
+                        optimized_test_results_iter,
                     )
                     for test_invocation in optimized_test_results_iter:
                         if (
                             overall_original_test_results.get_by_id(test_invocation.id) is None
                             or test_invocation.did_pass
                             != overall_original_test_results.get_by_id(
-                                test_invocation.id
+                                test_invocation.id,
                             ).did_pass
                             or not equal_return_values
                         ):
