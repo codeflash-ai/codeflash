@@ -1081,14 +1081,27 @@ def run_from_replay_test(args: Namespace) -> None:
     file_paths_to_optimize = {}
     for function in functions_to_optimize:
         parts = function.split(".")
-        if parts[-2][0].isupper():  # Check if there is a class name in the path
-            file_path_parts = parts[:-2]
-            function = parts[-2] + "." + parts[-1]
+        module_path_parts = parts[:-1]  # Exclude the function or method name
+        function_name = parts[-1]
+        # Check if the second-to-last part is a class name
+        class_name = (
+            module_path_parts[-1]
+            if module_path_parts
+            and is_class_defined_in_file(
+                module_path_parts[-1],
+                os.path.join(args.project_root, *module_path_parts[:-1]) + ".py",
+            )
+            else None
+        )
+        if class_name:
+            # If there is a class name, append it to the module path
+            function = class_name + "." + function_name
+            file_path_parts = module_path_parts[:-1]  # Exclude the class name
         else:
-            file_path_parts = parts[:-1]
-            function = parts[-1]
-
+            function = function_name
+            file_path_parts = module_path_parts
         file_path = os.path.join(args.project_root, *file_path_parts) + ".py"
+
         file_paths_to_optimize[function] = file_path
 
     # Check for return statement in each function's code
@@ -1107,3 +1120,15 @@ def run_from_replay_test(args: Namespace) -> None:
                             optimizer.run()
                             break
                     break
+
+
+def is_class_defined_in_file(class_name: str, file_path: str) -> bool:
+    if not os.path.exists(file_path):
+        return False
+    with open(file_path, "r") as file:
+        source = file.read()
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == class_name:
+            return True
+    return False
