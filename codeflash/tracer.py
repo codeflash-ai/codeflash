@@ -9,6 +9,8 @@
 #  Licensed under the Apache License, Version 2.0 (the "License").
 #  http://www.apache.org/licenses/LICENSE-2.0
 #
+import importlib.machinery
+import io
 import marshal
 import os
 import pathlib
@@ -82,6 +84,7 @@ class Tracer:
             "<dictcomp>",
             "<setcomp>",
             "<lambda>",
+            "<module>",
         }
         self.file_being_called_from: str = str(
             os.path.basename(
@@ -96,6 +99,7 @@ class Tracer:
         self.timeout = timeout
         self.next_insert = 1000
         self.profiling_info = defaultdict(Counter)
+        self.trace_count = 0
 
         # Profiler variables
         self.bias = 0  # calibration constant
@@ -103,7 +107,6 @@ class Tracer:
         self.cur = None
         self.start_time = None
         self.timer = time.process_time_ns
-        self.profile_stats_file = "codeflash.stats"
         self.simulate_call("profiler")
         assert (
             "test_framework" in self.config
@@ -146,9 +149,8 @@ class Tracer:
         sys.setprofile(None)
         self.con.commit()
 
-        self.print_stats("tottime")
-
         self.create_stats()
+        self.print_stats("tottime")
         cur = self.con.cursor()
         cur.execute(
             "CREATE TABLE pstats (filename TEXT, line_number INTEGER, function TEXT, "
@@ -192,7 +194,9 @@ class Tracer:
         with open(test_file_path, "w", encoding="utf8") as file:
             file.write(replay_test)
 
-        print(f"Codeflash: Traced successful and replay test created! Path - {test_file_path}")
+        print(
+            f"Codeflash: Traced {self.trace_count} functions successful and replay test created! Path - {test_file_path}",
+        )
         for key, value in self.profiling_info.items():
             print(
                 f"Profiling info - {key} - count - {value['count']} - time - {value['time']/1e6}ms",
@@ -240,7 +244,7 @@ class Tracer:
             and hasattr(frame.f_locals["self"].__class__, "__name__")
         ):
             class_name = frame.f_locals["self"].__class__.__name__
-
+        file_name = os.path.realpath(file_name)
         function_qualified_name = file_name + ":" + (class_name + ":" if class_name else "") + code.co_name
         if function_qualified_name in self.ignored_qualified_functions:
             # print(function_qualified_name)
@@ -331,6 +335,7 @@ class Tracer:
                 local_vars,
             ),
         )
+        self.trace_count += 1
         self.next_insert -= 1
         if self.next_insert == 0:
             self.next_insert = 1000
@@ -389,7 +394,7 @@ class Tracer:
     def trace_dispatch_return(self, frame, t):
         # print("trace_dispatch_return", self.cur)
         if frame is not self.cur[-2]:
-            print(self.cur[-2], self.cur[-2].f_back)
+            # print(self.cur[-2], self.cur[-2].f_back)
             assert frame is self.cur[-2].f_back, ("Bad return", self.cur[-3])
             self.trace_dispatch_return(self.cur[-2], 0)
 
@@ -492,3 +497,93 @@ class Tracer:
             for callcnt in callers.values():
                 nc += callcnt
             self.stats[func] = cc, nc, tt, ct, callers
+
+    def runctx(self, cmd, globals, locals):
+        self.__enter__()
+        try:
+            exec(cmd, globals, locals)
+        finally:
+            self.__exit__(None, None, None)
+        return self
+
+
+def main():
+    import os
+    from argparse import ArgumentParser
+
+    parser = ArgumentParser()
+    parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", required=True)
+    parser.add_argument("--functions", help="Trace only these functions", nargs="+", default=None)
+    parser.add_argument(
+        "--max-function-count",
+        help="Maximum number of inputs for one function to include in the trace.",
+        type=int,
+        default=100,
+    )
+    parser.add_argument(
+        "--timeout",
+        help="Timeout in seconds for the tracer, if the traced code takes more than this time, then tracing stops and normal execution continues.",
+        type=float,
+        default=None,
+    )
+    parser.add_argument(
+        "-m",
+        action="store_true",
+        dest="module",
+        help="Trace a library module",
+        default=False,
+    )
+
+    if not sys.argv[1:]:
+        parser.print_usage()
+        sys.exit(2)
+
+    args, unknown_args = parser.parse_known_args()
+    sys.argv[:] = unknown_args
+
+    # The script that we're profiling may chdir, so capture the absolute path
+    # to the output file at startup.
+    if args.outfile is not None:
+        args.outfile = os.path.abspath(args.outfile)
+
+    if len(unknown_args) > 0:
+        if args.module:
+            import runpy
+
+            code = "run_module(modname, run_name='__main__')"
+            globs = {
+                "run_module": runpy.run_module,
+                "modname": unknown_args[0],
+            }
+        else:
+            progname = unknown_args[0]
+            sys.path.insert(0, os.path.dirname(progname))
+            with io.open_code(progname) as fp:
+                code = compile(fp.read(), progname, "exec")
+            spec = importlib.machinery.ModuleSpec(name="__main__", loader=None, origin=progname)
+            globs = {
+                "__spec__": spec,
+                "__file__": spec.origin,
+                "__name__": spec.name,
+                "__package__": None,
+                "__cached__": None,
+            }
+        try:
+            Tracer(
+                output=args.outfile,
+                functions=args.functions,
+                max_function_count=args.max_function_count,
+                timeout=args.timeout,
+            ).runctx(code, globs, None)
+
+        except BrokenPipeError as exc:
+            # Prevent "Exception ignored" during interpreter shutdown.
+            sys.stdout = None
+            sys.exit(exc.errno)
+    else:
+        parser.print_usage()
+    return parser
+
+
+if __name__ == "__main__":
+    main()
