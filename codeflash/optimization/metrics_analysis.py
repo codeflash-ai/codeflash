@@ -174,12 +174,22 @@ def paired_comparison_coverage(
         if len(group) == 2:
             model_a_row = group[group["trace_id"].str.endswith(model_a_suffix)]
             model_b_row = group[group["trace_id"].str.endswith(model_b_suffix)]
-            model_a_success_count = sum(
-                1 for runtime in model_a_row["optimized_runtime"].values[0].values() if runtime is not None
-            )
-            model_b_success_count = sum(
-                1 for runtime in model_b_row["optimized_runtime"].values[0].values() if runtime is not None
-            )
+            if model_a_row["optimized_runtime"].values[0] is None:
+                model_a_success_count = 0
+            else:
+                model_a_success_count = sum(
+                    1
+                    for runtime in model_a_row["optimized_runtime"].values[0].values()
+                    if runtime is not None
+                )
+            if model_b_row["optimized_runtime"].values[0] is None:
+                model_b_success_count = 0
+            else:
+                model_b_success_count = sum(
+                    1
+                    for runtime in model_b_row["optimized_runtime"].values[0].values()
+                    if runtime is not None
+                )
 
             if model_a_success_count > model_b_success_count:
                 paired_coverage_results["model_a_more_successful"] += 1
@@ -192,7 +202,11 @@ def paired_comparison_coverage(
     # Implement coverage calculations here
 
 
-def paired_comparison_validity(df: DataFrame) -> Dict[str, Any]:
+def paired_comparison_validity(
+    df: DataFrame,
+    model_a_suffix: str = "EXP0",
+    model_b_suffix: str = "EXP1",
+) -> Dict[str, Any]:
     # Paired - Calculate the percentage of runs where model A generated more, equal, or less valid candidates than model B
     paired_validity_results = {
         "model_a_more_valid": 0,
@@ -202,10 +216,16 @@ def paired_comparison_validity(df: DataFrame) -> Dict[str, Any]:
     grouped = df.groupby(df["trace_id"].str[:-4])
     for _, group in grouped:
         if len(group) == 2:
-            model_a_row = group[group["trace_id"].str.endswith("EXP0")]
-            model_b_row = group[group["trace_id"].str.endswith("EXP1")]
-            model_a_valid_count = sum(model_a_row["is_correct"].values[0].values())
-            model_b_valid_count = sum(model_b_row["is_correct"].values[0].values())
+            model_a_row = group[group["trace_id"].str.endswith(model_a_suffix)]
+            model_b_row = group[group["trace_id"].str.endswith(model_b_suffix)]
+            if model_a_row["is_correct"].values[0] is None:
+                model_a_valid_count = 0
+            else:
+                model_a_valid_count = sum(model_a_row["is_correct"].values[0].values())
+            if model_b_row["is_correct"].values[0] is None:
+                model_b_valid_count = 0
+            else:
+                model_b_valid_count = sum(model_b_row["is_correct"].values[0].values())
 
             if model_a_valid_count > model_b_valid_count:
                 paired_validity_results["model_a_more_valid"] += 1
@@ -300,8 +320,8 @@ def main() -> None:
     exp1_coverage_metrics = calculate_coverage(exp1_df)
 
     paired_performance_metrics = paired_comparison_performance(df)
-    # paired_validity_metrics = paired_comparison_validity(df)
-    # paired_coverage_metrics = paired_comparison_coverage(df)
+    paired_validity_metrics = paired_comparison_validity(df)
+    paired_coverage_metrics = paired_comparison_coverage(df)
 
     # Combine metrics into a DataFrame
     metrics_df = pd.DataFrame(
