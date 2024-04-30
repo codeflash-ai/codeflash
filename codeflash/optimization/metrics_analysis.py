@@ -41,9 +41,27 @@ def process_column_pairs(df: DataFrame, column_name: str) -> DataFrame:
     return new_df
 
 
-def calculate_validity(df: DataFrame) -> Dict[str, Any]:
-    # Implement validity calculations here
-    pass
+def calculate_validity(df: DataFrame, perf_threshold: float = 0.05) -> Dict[str, Any]:
+    # Calculate the percentage of valid PRs given that the original function run succeeded
+    successful_runs = df[(~df["original_runtime"].isna())]
+    successful_runs_above_thres = successful_runs[
+        successful_runs["best_correct_speedup_ratio"] >= perf_threshold
+    ]
+    valid_prs = len(successful_runs_above_thres)
+    percent_valid_pr = (
+        valid_prs / len(successful_runs_above_thres) * 100 if len(successful_runs_above_thres) > 0 else 0
+    )
+
+    # Calculate the percentage of valid candidates generated given that original function run succeeded
+    valid_candidates = successful_runs[successful_runs["is_correct"].apply(lambda x: any(x.values()))]
+    percent_valid_candidates = (
+        len(valid_candidates) / len(successful_runs) * 100 if len(successful_runs) > 0 else 0
+    )
+
+    return {
+        "percent_valid_pr": percent_valid_pr,
+        "percent_valid_candidates": percent_valid_candidates,
+    }
 
 
 def calculate_performance(df: DataFrame, perf_threshold: float = 0.05) -> Dict[str, Any]:
@@ -106,11 +124,99 @@ def calculate_performance(df: DataFrame, perf_threshold: float = 0.05) -> Dict[s
 
 
 def calculate_coverage(df: DataFrame) -> Dict[str, Any]:
+    successful_runs = df[~df["original_runtime"].isna()]
+
+    def calculate_percent_optimization_successful_runs(opt_runs: Dict[str, Optional[float]]) -> float:
+        if opt_runs is None:
+            return 0.0
+        total_runs = len(opt_runs)
+        successful_optimization_runs = sum(1 for runtime in opt_runs.values() if runtime is not None)
+        return successful_optimization_runs / total_runs * 100 if total_runs > 0 else 0.0
+
+    df["percent_successful_optimization_runs"] = df["optimized_runtime"].apply(
+        calculate_percent_optimization_successful_runs,
+    )
+
+    total_optimizations = sum(len(runs) for runs in successful_runs["optimized_runtime"] if runs is not None)
+    successful_optimizations = sum(
+        len([runtime for runtime in runs.values() if runtime is not None])
+        for runs in successful_runs["optimized_runtime"]
+        if runs is not None
+    )
+
+    average_percent_successful_optimization_runs = df["percent_successful_optimization_runs"].mean()
+
+    percent_successful_optimizations = (
+        successful_optimizations / total_optimizations * 100 if total_optimizations > 0 else 0
+    )
+
+    percent_successful_original_runs = len(successful_runs) / len(df) * 100
+
+    return {
+        "average_percent_successful_optimization_runs": average_percent_successful_optimization_runs,
+        "percent_successful_optimizations": percent_successful_optimizations,
+        "percent_successful_original_runs": percent_successful_original_runs,
+    }
+
+
+def paired_comparison_coverage(
+    df: DataFrame,
+    model_a_suffix: str = "EXP0",
+    model_b_suffix: str = "EXP1",
+) -> Dict[str, Any]:
+    paired_coverage_results = {
+        "model_a_more_successful": 0,
+        "equal_successful": 0,
+        "model_b_more_successful": 0,
+    }
+    grouped = df.groupby(df["trace_id"].str[:-4])
+    for _, group in grouped:
+        if len(group) == 2:
+            model_a_row = group[group["trace_id"].str.endswith(model_a_suffix)]
+            model_b_row = group[group["trace_id"].str.endswith(model_b_suffix)]
+            model_a_success_count = sum(
+                1 for runtime in model_a_row["optimized_runtime"].values[0].values() if runtime is not None
+            )
+            model_b_success_count = sum(
+                1 for runtime in model_b_row["optimized_runtime"].values[0].values() if runtime is not None
+            )
+
+            if model_a_success_count > model_b_success_count:
+                paired_coverage_results["model_a_more_successful"] += 1
+            elif model_a_success_count < model_b_success_count:
+                paired_coverage_results["model_b_more_successful"] += 1
+            else:
+                paired_coverage_results["equal_successful"] += 1
+    return paired_coverage_results
+
     # Implement coverage calculations here
-    pass
 
 
-def paired_comparison(
+def paired_comparison_validity(df: DataFrame) -> Dict[str, Any]:
+    # Paired - Calculate the percentage of runs where model A generated more, equal, or less valid candidates than model B
+    paired_validity_results = {
+        "model_a_more_valid": 0,
+        "equal_valid": 0,
+        "model_b_more_valid": 0,
+    }
+    grouped = df.groupby(df["trace_id"].str[:-4])
+    for _, group in grouped:
+        if len(group) == 2:
+            model_a_row = group[group["trace_id"].str.endswith("EXP0")]
+            model_b_row = group[group["trace_id"].str.endswith("EXP1")]
+            model_a_valid_count = sum(model_a_row["is_correct"].values[0].values())
+            model_b_valid_count = sum(model_b_row["is_correct"].values[0].values())
+
+            if model_a_valid_count > model_b_valid_count:
+                paired_validity_results["model_a_more_valid"] += 1
+            elif model_a_valid_count < model_b_valid_count:
+                paired_validity_results["model_b_more_valid"] += 1
+            else:
+                paired_validity_results["equal_valid"] += 1
+    return paired_validity_results
+
+
+def paired_comparison_performance(
     df: DataFrame,
     model_a_suffix: str = "EXP0",
     model_b_suffix: str = "EXP1",
@@ -185,23 +291,36 @@ def main() -> None:
     exp0_df = df[df["trace_id"].str.endswith("EXP0")]
     exp1_df = df[df["trace_id"].str.endswith("EXP1")]
 
+    # Calculate metrics for each experiment
     exp0_performance_metrics = calculate_performance(exp0_df)
     exp1_performance_metrics = calculate_performance(exp1_df)
+    exp0_validity_metrics = calculate_validity(exp0_df)
+    exp1_validity_metrics = calculate_validity(exp1_df)
+    exp0_coverage_metrics = calculate_coverage(exp0_df)
+    exp1_coverage_metrics = calculate_coverage(exp1_df)
 
-    if (
-        exp0_performance_metrics["geometric_mean_gain_pr"]
-        > exp1_performance_metrics["geometric_mean_gain_pr"]
-    ):
-        print("EXP0 has a higher geometric mean gain.")
-    else:
-        print("EXP1 has a higher geometric mean gain.")
+    paired_performance_metrics = paired_comparison_performance(df)
+    # paired_validity_metrics = paired_comparison_validity(df)
+    # paired_coverage_metrics = paired_comparison_coverage(df)
 
-    paired_metrics = paired_comparison(df)
-    print("Paired Metrics:", paired_metrics)
+    # Combine metrics into a DataFrame
+    metrics_df = pd.DataFrame(
+        {
+            "EXP0": {
+                **exp0_performance_metrics,
+                **exp0_validity_metrics,
+                **exp0_coverage_metrics,
+            },
+            "EXP1": {
+                **exp1_performance_metrics,
+                **exp1_validity_metrics,
+                **exp1_coverage_metrics,
+            },
+        },
+    ).T  # Transpose to have experiments as rows and metrics as columns
 
-    # Output the metrics
-    print("EXP0 Performance Metrics:", exp0_performance_metrics)
-    print("EXP1 Performance Metrics:", exp1_performance_metrics)
+    # Output the combined metrics DataFrame
+    print(metrics_df)
 
 
 if __name__ == "__main__":
