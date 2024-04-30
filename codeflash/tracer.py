@@ -478,7 +478,7 @@ class Tracer:
 
         if not isinstance(sort, tuple):
             sort = (sort,)
-        pstats.Stats(self).strip_dirs().sort_stats(*sort).print_stats()
+        pstats.Stats(self).strip_dirs().sort_stats(*sort).print_stats(15)
 
     def dump_stats(self, file):
         with open(file, "wb") as f:
@@ -513,7 +513,7 @@ def main():
 
     parser = ArgumentParser()
     parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", required=True)
-    parser.add_argument("--functions", help="Trace only these functions", nargs="+", default=None)
+    parser.add_argument("--only-functions", help="Trace only these functions", nargs="+", default=None)
     parser.add_argument(
         "--max-function-count",
         help="Maximum number of inputs for one function to include in the trace.",
@@ -521,7 +521,7 @@ def main():
         default=100,
     )
     parser.add_argument(
-        "--timeout",
+        "--tracer-timeout",
         help="Timeout in seconds for the tracer, if the traced code takes more than this time, then tracing stops and normal execution continues.",
         type=float,
         default=None,
@@ -571,9 +571,9 @@ def main():
         try:
             Tracer(
                 output=args.outfile,
-                functions=args.functions,
+                functions=args.only_functions,
                 max_function_count=args.max_function_count,
-                timeout=args.timeout,
+                timeout=args.tracer_timeout,
             ).runctx(code, globs, None)
 
         except BrokenPipeError as exc:
