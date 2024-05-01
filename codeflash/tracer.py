@@ -511,7 +511,7 @@ def main():
     import os
     from argparse import ArgumentParser
 
-    parser = ArgumentParser()
+    parser = ArgumentParser(allow_abbrev=False)
     parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", required=True)
     parser.add_argument("--only-functions", help="Trace only these functions", nargs="+", default=None)
     parser.add_argument(
