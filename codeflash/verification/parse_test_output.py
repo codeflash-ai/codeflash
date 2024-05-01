@@ -85,12 +85,15 @@ def parse_sqlite_test_results(
     if not os.path.exists(sqlite_file_path):
         logging.warning(f"No test results for {sqlite_file_path} found.")
         return test_results
-    db = sqlite3.connect(sqlite_file_path)
-    cur = db.cursor()
-    data = cur.execute(
-        "SELECT test_module_path , test_class_name , test_function_name , "
-        "function_getting_tested , iteration_id , runtime, return_value  FROM test_results",
-    ).fetchall()
+    try:
+        db = sqlite3.connect(sqlite_file_path)
+        cur = db.cursor()
+        data = cur.execute(
+            "SELECT test_module_path , test_class_name , test_function_name , "
+            "function_getting_tested , iteration_id , runtime, return_value  FROM test_results",
+        ).fetchall()
+    finally:
+        db.close()
     for val in data:
         test_results.add(
             FunctionTestInvocation(
