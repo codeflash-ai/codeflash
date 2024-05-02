@@ -73,7 +73,9 @@ class X:
     def functionA():
         return True
     def functionB():
-        return False""",
+        return False
+def functionA():
+    return True""",
         )
         f.flush()
         test_config = TestConfig(tests_root="tests", project_root_path=".", test_framework="pytest")
@@ -107,3 +109,17 @@ class X:
             assert functions[file][0].qualified_name == "X.functionA"
             assert functions[file][0].function_name == "functionA"
             assert functions[file][0].top_level_parent_name == "X"
+
+        functions, functions_count = get_functions_to_optimize_by_file(
+            optimize_all=None,
+            file=f.name,
+            function="functionA",
+            test_cfg=test_config,
+            ignore_paths=[""],
+            project_root=os.path.dirname(f.name),
+            module_root=os.path.dirname(f.name),
+        )
+        assert len(functions) == 1
+        for file in functions:
+            assert functions[file][0].qualified_name == "functionA"
+            assert functions[file][0].function_name == "functionA"
