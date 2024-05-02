@@ -162,7 +162,7 @@ def get_functions_to_optimize_by_file(
                 class_name = None
                 only_function_name = split_function[0]
             found_function = None
-            for fn in functions[file]:
+            for fn in functions.get(file, []):
                 if only_function_name == fn.function_name and (
                     class_name is None or class_name == fn.top_level_parent_name
                 ):
