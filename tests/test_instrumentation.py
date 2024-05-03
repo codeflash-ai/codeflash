@@ -4,10 +4,13 @@ import pathlib
 import sys
 import tempfile
 
-import pytest
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import INDIVIDUAL_TEST_TIMEOUT
-from codeflash.code_utils.instrument_existing_tests import InjectPerfOnly, inject_profiling_into_existing_test
+from codeflash.code_utils.instrument_existing_tests import (
+    FunctionImportedAsVisitor,
+    InjectPerfOnly,
+    inject_profiling_into_existing_test,
+)
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestType
 from codeflash.verification.test_runner import run_tests
@@ -1391,3 +1394,28 @@ def test_update_line_node():
     )
 
     assert len(injectperf.update_line_node(node, "test_sort", "0", None)) > 0
+
+
+def test_class_method_imported_as():
+    code = """import functionA
+import moduleB as module_B
+from module import functionB as function_B
+import class_name_B
+from nuitka.nodes.ImportNodes import ExpressionBuiltinImport as nuitka_nodes_ImportNodes_ExpressionBuiltinImport
+"""
+    tree = ast.parse(code)
+    visitor = FunctionImportedAsVisitor("functionA")
+    visitor.visit(tree)
+    assert visitor.imported_as == "functionA"
+
+    visitor = FunctionImportedAsVisitor("functionB")
+    visitor.visit(tree)
+    assert visitor.imported_as == "function_B"
+
+    visitor = FunctionImportedAsVisitor("ExpressionBuiltinImport.method_name")
+    visitor.visit(tree)
+    assert visitor.imported_as == "nuitka_nodes_ImportNodes_ExpressionBuiltinImport.method_name"
+
+    visitor = FunctionImportedAsVisitor("class_name_B")
+    visitor.visit(tree)
+    assert visitor.imported_as == "class_name_B"

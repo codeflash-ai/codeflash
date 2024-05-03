@@ -229,16 +229,24 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
     np_array is what we want
     """
 
-    def __init__(self, original_function_name):
-        self.original_function_name = original_function_name
-        self.imported_as_function_name = original_function_name
+    def __init__(self, qualified_name: str):
+        self.split_qualified_name = qualified_name.split(".")
+        assert len(self.split_qualified_name) <= 2, "Only support functions in the format module.function"
+        self.imported_as = qualified_name
+        self.to_match = self.split_qualified_name[0]
+        try:
+            self.optional_method_name = self.split_qualified_name[1]
+        except IndexError:
+            self.optional_method_name = None
 
     # TODO: Validate if the function imported is actually from the right module
     def visit_ImportFrom(self, node: ast.ImportFrom):
         for alias in node.names:
-            if alias.name == self.original_function_name:
+            if alias.name == self.to_match:
                 if hasattr(alias, "asname") and alias.asname is not None:
-                    self.imported_as_function_name = alias.asname
+                    self.imported_as = alias.asname + (
+                        "." + self.optional_method_name if self.optional_method_name else ""
+                    )
 
 
 def inject_profiling_into_existing_test(test_path, function_name, root_path) -> Tuple[bool, str]:
@@ -250,10 +258,11 @@ def inject_profiling_into_existing_test(test_path, function_name, root_path) -> 
         print(f"Syntax error in code: {e}")
         return False, None
     # TODO: Pass the full name of function here, otherwise we can run into namespace clashes
+    module_path = module_name_from_file_path(test_path, root_path)
     import_visitor = FunctionImportedAsVisitor(function_name)
     import_visitor.visit(tree)
-    function_name = import_visitor.imported_as_function_name
-    module_path = module_name_from_file_path(test_path, root_path)
+    function_name = import_visitor.imported_as
+
     tree = InjectPerfOnly(function_name, module_path).visit(tree)
     new_imports = [
         ast.Import(names=[ast.alias(name="time")]),
