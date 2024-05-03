@@ -313,6 +313,14 @@ class Optimizer:
                             )
                             continue
 
+                        # Run generated tests if at least one of them passed
+                        run_generated_tests = False
+                        if original_code_baseline.generated_test_results:
+                            for test_result in original_code_baseline.generated_test_results.test_results:
+                                if test_result.did_pass:
+                                    run_generated_tests = True
+                                    break
+
                         run_results = self.run_optimized_candidate(
                             optimization_index=j,
                             instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
@@ -324,6 +332,7 @@ class Optimizer:
                             tests_in_file=function_to_tests[
                                 module_path + "." + self.args.function
                             ],
+                            run_generated_tests=run_generated_tests,
                         )
                         if not is_successful(run_results):
                             optimized_runtimes[optimization.optimization_id] = None
@@ -453,7 +462,7 @@ class Optimizer:
                         new_code_combined = new_dependent_code.copy()
                         new_code_combined[explanation.path] = new_code
                         check_create_pr(
-                            optimize_all=self.args.all,
+                            optimize_all=True,
                             original_code=original_code_combined,
                             new_code=new_code_combined,
                             explanation=explanation,
@@ -798,9 +807,11 @@ class Optimizer:
                         f"original generated tests results -> {original_gen_results.get_test_pass_fail_report()}",
                     )
 
-                original_total_runtime_iter = original_gen_results.total_passed_runtime() + sum(
-                    instrumented_existing_test_timing,
-                )
+                if not original_gen_results:
+                    original_total_runtime_iter = sum(instrumented_existing_test_timing)
+                else:
+                    original_total_runtime_iter = (original_gen_results.total_passed_runtime() + sum(instrumented_existing_test_timing))
+
                 if original_total_runtime_iter == 0:
                     logging.warning(
                         "The overall test runtime of the original function is 0, couldn't run tests.",
@@ -824,7 +835,7 @@ class Optimizer:
             if do_break:
                 break
 
-        if times_run == 0:
+        if times_run == 0 and original_runtime is None:
             logging.warning(
                 "Failed to run the tests for the original function, skipping optimization",
             )
@@ -853,6 +864,7 @@ class Optimizer:
         generated_tests_path: str,
         best_runtime_until_now: int,
         tests_in_file: list[TestsInFile],
+        run_generated_tests: bool,
     ) -> Result[OptimizedCandidateResult, str]:
         success = True
         best_test_runtime = None
@@ -929,29 +941,33 @@ class Optimizer:
                         do_break = True
                         break
 
-                test_results = self.run_and_parse_tests(
-                    test_env,
-                    generated_tests_path,
-                    TestType.GENERATED_REGRESSION,
-                    optimization_index,
-                )
+                test_results = None
+                if run_generated_tests:
+                    test_results = self.run_and_parse_tests(
+                        test_env,
+                        generated_tests_path,
+                        TestType.GENERATED_REGRESSION,
+                        optimization_index,
+                    )
 
-                if first_run and test_index == 0:
+                if test_results and first_run and test_index == 0:
                     logging.info(
                         f"generated test_results optimized -> {test_results.get_test_pass_fail_report()}",
                     )
-                    if test_results:
-                        if compare_results(original_gen_results, test_results):
-                            equal_results = True
-                            logging.info("Results matched!")
-                        else:
-                            logging.info("Results did not match.")
-                            equal_results = False
+                    if compare_results(original_gen_results, test_results):
+                        equal_results = True
+                        logging.info("Results matched!")
+                    else:
+                        logging.info("Results did not match.")
+                        equal_results = False
                 if not equal_results:
                     do_break = True
                     break
 
-                test_runtime = test_results.total_passed_runtime() + sum(instrumented_test_timing)
+                if not test_results:
+                    test_runtime = sum(instrumented_test_timing)
+                else:
+                    test_runtime = test_results.total_passed_runtime() + sum(instrumented_test_timing)
 
                 if test_runtime == 0:
                     logging.warning(
@@ -960,7 +976,8 @@ class Optimizer:
                     do_break = True
                     break
                 if best_test_runtime is None or test_runtime < best_test_runtime:
-                    optimized_test_results_iter.merge(test_results)
+                    if test_results:
+                        optimized_test_results_iter.merge(test_results)
                     best_test_runtime = test_runtime
                     best_test_results = optimized_test_results_iter
                 cumulative_test_runs += 1
@@ -1116,6 +1133,7 @@ def run_from_replay_test(args: Namespace) -> None:
                         if isinstance(sub_node, ast.Return):
                             args.file = file_path
                             args.function = function
+                            args.all = False
                             optimizer = Optimizer(args)
                             optimizer.run()
                             break
