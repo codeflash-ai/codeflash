@@ -11,11 +11,19 @@ class ReplaceCallNodeWithName(ast.NodeTransformer):
         self.new_variable_name = new_variable_name
 
     def visit_Call(self, node: ast.Call):
-        if isinstance(node, ast.Call) and (
-            (hasattr(node.func, "id") and node.func.id == self.only_function_name)
-            or (hasattr(node.func, "attr") and node.func.attr == self.only_function_name)
-        ):
-            return ast.Name(id=self.new_variable_name, ctx=ast.Load())
+        if isinstance(node, ast.Call):
+            if hasattr(node.func, "id"):
+                function_name = node.func.id
+
+            if hasattr(node.func, "attr"):
+                function_name = node.func.attr
+
+            if hasattr(node.func, "value") and hasattr(node.func.value, "id"):
+                function_name = node.func.value.id + "." + function_name
+
+            if function_name == self.only_function_name:
+                return ast.Name(id=self.new_variable_name, ctx=ast.Load())
+
         self.generic_visit(node)
         return node
 
@@ -33,12 +41,21 @@ class InjectPerfOnly(ast.NodeTransformer):
         test_class_name: Optional[str] = None,
     ):
         call_node = None
+        function_name = ""
         for node in ast.walk(test_node):
-            if isinstance(node, ast.Call) and (
-                (hasattr(node.func, "id") and node.func.id == self.only_function_name)
-                or (hasattr(node.func, "attr") and node.func.attr == self.only_function_name)
-            ):
-                call_node = node
+            if isinstance(node, ast.Call):
+                if hasattr(node.func, "id"):
+                    function_name = node.func.id
+
+                if hasattr(node.func, "attr"):
+                    function_name = node.func.attr
+
+                if hasattr(node.func, "value") and hasattr(node.func.value, "id"):
+                    function_name = node.func.value.id + "." + function_name
+
+                if function_name == self.only_function_name:
+                    call_node = node
+
         if call_node is None:
             return [test_node]
 
@@ -53,7 +70,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                 value=ast.Call(
                     func=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
                     args=[
-                        ast.Name(id=function_id, ctx=ast.Load()),
+                        ast.Name(id=function_name, ctx=ast.Load()),
                         ast.Constant(value=self.module_path),
                         ast.Constant(value=test_class_name or None),
                         ast.Constant(value=node_name),
@@ -81,11 +98,19 @@ class InjectPerfOnly(ast.NodeTransformer):
 
     def is_target_function_line(self, line_node):
         for node in ast.walk(line_node):
-            if isinstance(node, ast.Call) and (
-                (hasattr(node.func, "id") and node.func.id == self.only_function_name)
-                or (hasattr(node.func, "attr") and node.func.attr == self.only_function_name)
-            ):
-                return True
+            if isinstance(node, ast.Call):
+                if hasattr(node.func, "id"):
+                    function_name = node.func.id
+
+                if hasattr(node.func, "attr"):
+                    function_name = node.func.attr
+
+                if hasattr(node.func, "value") and hasattr(node.func.value, "id"):
+                    function_name = node.func.value.id + "." + function_name
+
+                if function_name == self.only_function_name:
+                    return True
+
         return False
 
     def visit_ClassDef(self, node: ClassDef) -> Any:
