@@ -48,9 +48,7 @@ def calculate_validity(df: DataFrame, perf_threshold: float = 0.05) -> Dict[str,
         successful_runs["best_correct_speedup_ratio"] >= perf_threshold
     ]
     valid_prs = len(successful_runs_above_thres)
-    percent_valid_pr = (
-        valid_prs / len(successful_runs_above_thres) * 100 if len(successful_runs_above_thres) > 0 else 0
-    )
+    percent_valid_pr = (valid_prs / len(df)) * 100
 
     # Calculate the percentage of valid candidates generated given that original function run succeeded
     valid_candidates = successful_runs[successful_runs["is_correct"].apply(lambda x: any(x.values()))]
@@ -337,7 +335,7 @@ def main() -> None:
                 **exp1_coverage_metrics,
             },
         },
-    ).T  # Transpose to have experiments as rows and metrics as columns
+    )  # Transpose to have experiments as rows and metrics as columns
 
     # Output the combined metrics DataFrame
     print(metrics_df)

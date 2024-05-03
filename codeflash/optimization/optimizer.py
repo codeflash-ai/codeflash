@@ -123,7 +123,7 @@ class Optimizer:
         self.instrumented_unittests_created: set[str] = set()
 
     def run(self) -> None:
-        should_run_experiment = os.getenv("CODEFLASH_RUN_EXPERIMENT", "false").lower() == "true"
+        experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         ph("cli-optimize-run-start")
         logging.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
@@ -189,7 +189,7 @@ class Optimizer:
                         function_to_optimize,
                         function_to_tests,
                         original_code,
-                        should_run_experiment,
+                        experiment_id,
                     )
                     if is_successful(best_optimization):
                         optimizations_found += 1
@@ -215,8 +215,9 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         function_to_tests: Dict[str, List[TestsInFile]],
         original_code: str,
-        should_run_experiment: bool,
+        experiment_id: Optional[str],
     ) -> Result[BestOptimization, str]:
+        should_run_experiment = experiment_id is not None
         function_trace_id: str = str(uuid.uuid4())
         ph("cli-optimize-function-start", {"function_trace_id": function_trace_id})
         self.cleanup_leftover_test_return_values()
@@ -289,6 +290,7 @@ class Optimizer:
                 original_code_baseline,
                 original_dependent_code,
                 function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
+                experiment_id=experiment_id,
             )
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
@@ -373,6 +375,7 @@ class Optimizer:
         original_code_baseline: OriginalCodeBaseline,
         original_dependent_code: Dict[str, str],
         function_trace_id: str,
+        experiment_id: Optional[str] = None,
     ) -> Optional[BestOptimization]:
         best_optimization: Optional[BestOptimization] = None
         best_runtime_until_now = original_code_baseline.runtime  # The fastest code runtime until now
@@ -486,6 +489,7 @@ class Optimizer:
             original_runtime=original_code_baseline.runtime,
             optimized_runtime=optimized_runtimes,
             is_correct=is_correct,
+            experiment_id=experiment_id,
         )
         return best_optimization
 

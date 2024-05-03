@@ -121,6 +121,7 @@ class AiServiceClient:
         original_runtime: Optional[float],
         optimized_runtime: Optional[Dict[str, float]],
         is_correct: Optional[Dict[str, bool]],
+        experiment_id: Optional[str],
     ) -> None:
         """Log features to the database.
 
@@ -139,6 +140,7 @@ class AiServiceClient:
             "original_runtime": original_runtime,
             "optimized_runtime": optimized_runtime,
             "is_correct": is_correct,
+            "experiment_id": experiment_id,
         }
         try:
             self.make_ai_service_request("/log_features", payload=payload, timeout=5)
