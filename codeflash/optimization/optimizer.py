@@ -329,9 +329,7 @@ class Optimizer:
                             original_gen_results=original_code_baseline.generated_test_results,
                             generated_tests_path=generated_tests_path,
                             best_runtime_until_now=best_runtime,
-                            tests_in_file=function_to_tests[
-                                module_path + "." + self.args.function
-                            ],
+                            tests_in_file=function_to_tests[module_path + "." + self.args.function],
                             run_generated_tests=run_generated_tests,
                         )
                         if not is_successful(run_results):
@@ -438,6 +436,7 @@ class Optimizer:
                             function_to_optimize.qualified_name,
                             module_path,
                             function_to_tests,
+                            tests_root=self.test_cfg.tests_root,
                         )
 
                         self.replace_function_and_dependents_with_optimized_code(
@@ -810,7 +809,9 @@ class Optimizer:
                 if not original_gen_results:
                     original_total_runtime_iter = sum(instrumented_existing_test_timing)
                 else:
-                    original_total_runtime_iter = (original_gen_results.total_passed_runtime() + sum(instrumented_existing_test_timing))
+                    original_total_runtime_iter = original_gen_results.total_passed_runtime() + sum(
+                        instrumented_existing_test_timing
+                    )
 
                 if original_total_runtime_iter == 0:
                     logging.warning(
@@ -1143,7 +1144,7 @@ def run_from_replay_test(args: Namespace) -> None:
 def is_class_defined_in_file(class_name: str, file_path: str) -> bool:
     if not os.path.exists(file_path):
         return False
-    with open(file_path, "r") as file:
+    with open(file_path) as file:
         source = file.read()
     tree = ast.parse(source)
     for node in ast.walk(tree):

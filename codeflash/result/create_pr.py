@@ -19,15 +19,13 @@ def existing_tests_source_for(
     qualified_function_name: str,
     module_path: str,
     function_to_tests: Dict[str, List[TestsInFile]],
+    tests_root: str,
 ) -> str:
     test_files = function_to_tests.get(module_path + "." + qualified_function_name)
     existing_tests = ""
     if test_files:
         for test_file in test_files:
-            with open(test_file.test_file, encoding="utf8") as f:
-                new_test = "".join(f.readlines())
-                if new_test not in existing_tests:
-                    existing_tests += new_test
+            existing_tests += "- " + os.path.relpath(test_file.test_file, tests_root) + "\n"
     return existing_tests
 
 
