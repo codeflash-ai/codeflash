@@ -7,18 +7,18 @@ from scipy.stats import gmean
 from sqlalchemy import create_engine
 
 
-def load_data(database_uri: str = os.environ.get("DATABASE_URL")) -> DataFrame:
+def load_data(experiment_id: str, database_uri: str = os.environ.get("DATABASE_URL")) -> DataFrame:
     engine = create_engine(database_uri)
     with engine.connect() as connection:
         query = """
             SELECT * FROM optimization_features
             WHERE (trace_id LIKE %s OR trace_id LIKE %s)
-            AND created_at BETWEEN %s AND %s
+            AND experiment_id = %s
         """
         return pd.read_sql_query(
             query,
             connection,
-            params=("%EXP0", "%EXP1", "2024-04-18 05:51:17.050279+00", "2024-04-18 17:30:53.843066+00"),
+            params=("%EXP0", "%EXP1", experiment_id),
         )
 
 
@@ -301,7 +301,7 @@ def augment_with_best_correct_speedup_ratio(df: DataFrame) -> DataFrame:
 
 
 def main() -> None:
-    df = load_data()
+    df = load_data("cotprompt0424")
     df = process_column_pairs(df, "metadata")
     df = process_column_pairs(df, "test_framework")
     df = process_column_pairs(df, "generated_test")
