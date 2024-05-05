@@ -9,6 +9,7 @@ from argparse import Namespace
 from collections import defaultdict
 from typing import IO, Dict, List, Optional, Tuple, Union
 
+import isort
 import libcst as cst
 from pydantic import BaseModel
 from returns.pipeline import is_successful
@@ -31,7 +32,7 @@ from codeflash.code_utils.config_consts import (
     MAX_TEST_RUN_ITERATIONS,
     N_CANDIDATES,
 )
-from codeflash.code_utils.formatter import format_code, sort_imports
+from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.instrument_existing_tests import (
     inject_profiling_into_existing_test,
 )
@@ -520,7 +521,7 @@ class Optimizer:
         original_code: str,
     ) -> Tuple[str, Dict[str, str]]:
         should_sort_imports = True
-        if sort_imports(self.args.imports_sort_cmd, should_sort_imports, path) != original_code:
+        if isort.code(original_code) != original_code:
             should_sort_imports = False
 
         new_code = format_code(
@@ -810,7 +811,7 @@ class Optimizer:
                     original_total_runtime_iter = sum(instrumented_existing_test_timing)
                 else:
                     original_total_runtime_iter = original_gen_results.total_passed_runtime() + sum(
-                        instrumented_existing_test_timing
+                        instrumented_existing_test_timing,
                     )
 
                 if original_total_runtime_iter == 0:
