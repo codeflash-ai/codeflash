@@ -51,8 +51,11 @@ def sort_imports(imports_sort_cmd: str, should_sort_imports: bool, path: str) ->
             code = f.read()
         return code
 
-    # Deduplicate and sort imports
-    isort.file(path)
+    try:
+        # Deduplicate and sort imports
+        isort.file(path)
+    except Exception as e:
+        logging.exception(f"Failed to sort imports with isort for {path}: {e}")
 
     with open(path, encoding="utf8") as f:
         new_code = f.read()
