@@ -136,7 +136,7 @@ class FunctionToOptimize:
 
 
 def get_functions_to_optimize_by_file(
-    optimize_all: str,
+    optimize_all: Optional[str],
     file: Optional[str],
     function: Optional[str],
     test_cfg: TestConfig,
@@ -151,10 +151,21 @@ def get_functions_to_optimize_by_file(
         logging.info("Finding all functions in the file '%s' ...", file)
         functions = find_all_functions_in_file(file)
         if function is not None:
-            only_function_name = function.split(".")[-1]
+            split_function = function.split(".")
+            if len(split_function) > 2:
+                raise ValueError(
+                    "Function name should be in the format 'function_name' or 'class_name.function_name'",
+                )
+            if len(split_function) == 2:
+                class_name, only_function_name = split_function
+            else:
+                class_name = None
+                only_function_name = split_function[0]
             found_function = None
-            for fn in functions[file]:
-                if only_function_name == fn.function_name:
+            for fn in functions.get(file, []):
+                if only_function_name == fn.function_name and (
+                    class_name is None or class_name == fn.top_level_parent_name
+                ):
                     found_function = fn
             if found_function is None:
                 raise ValueError(
@@ -336,7 +347,7 @@ def filter_functions(
             test_functions_removed_count += len(functions)
             continue
         if file_path in ignore_paths or any(
-            file_path.startswith(ignore_path + os.sep) for ignore_path in ignore_paths
+            file_path.startswith(ignore_path + os.sep) for ignore_path in ignore_paths if ignore_path
         ):
             ignore_paths_removed_count += 1
             continue
