@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 
 import pandas as pd
 from pandas import DataFrame
-from scipy.stats import gmean
+from scipy.stats import hmean
 from sqlalchemy import create_engine
 
 
@@ -67,16 +67,16 @@ def calculate_performance(df: DataFrame, perf_threshold: float = 0.05) -> Dict[s
     valid_candidates_above_thres = df[(df["best_correct_speedup_ratio"] >= perf_threshold)]
 
     # (1) Calculate the average speedup ratio of the PR
-    pr_gain = valid_candidates_above_thres["best_correct_speedup_ratio"].mean()
+    average_percentage_gain_pr = valid_candidates_above_thres["best_correct_speedup_ratio"].mean() * 100
 
-    # (1a) Calculate the geometric mean of the PR speedup ratio with ref=1x
-    pr_geom_mean = gmean(valid_candidates_above_thres["best_correct_speedup_ratio"] + 1)
+    # (1a) Calculate the harmonic mean of the PR speedup ratio with ref=1x
+    harmonic_mean_gain_pr = hmean(valid_candidates_above_thres["best_correct_speedup_ratio"] + 1)
 
     # (2) Calculate the mean average speedup ratio of all the valid candidates
-    mean_average_percentage_gain_all = df["best_correct_speedup_ratio"].mean()
+    mean_average_percentage_gain_all = df["best_correct_speedup_ratio"].mean() * 100
 
-    # (2a) Calculate the geometric mean of all candidates speedup ratio with ref=1x
-    all_candidates_geom_mean = gmean(df["best_correct_speedup_ratio"].dropna() + 1)
+    # (2a) Calculate the harmonic mean of all candidates speedup ratio with ref=1x
+    harmonic_mean_gain_all = hmean(df["best_correct_speedup_ratio"].dropna() + 1)
 
     def calculate_time_saved_for_row(row: pd.Series):
         if row["optimized_runtime"] is not None and row["is_correct"] is not None:
@@ -112,10 +112,10 @@ def calculate_performance(df: DataFrame, perf_threshold: float = 0.05) -> Dict[s
     )
 
     return {
-        "average_percentage_gain_pr": pr_gain,
-        "geometric_mean_gain_pr": pr_geom_mean,
+        "average_percentage_gain_pr": average_percentage_gain_pr,
+        "harmonic_mean_gain_pr": harmonic_mean_gain_pr,
         "mean_average_percentage_gain_all": mean_average_percentage_gain_all,
-        "geometric_mean_gain_all": all_candidates_geom_mean,
+        "harmonic_mean_gain_all": harmonic_mean_gain_all,
         "average_time_saved_pr": pr_time_saved,
         "mean_average_time_saved_all": all_candidates_time_saved,
     }
