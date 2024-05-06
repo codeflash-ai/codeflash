@@ -240,3 +240,43 @@ def non():
             ("BubbleSortClass", "__init__"),
             ("BubbleSortClass", "__call__"),
         }
+
+
+def test_get_code_multiline_class_def() -> None:
+    code = """class StatementAssignmentVariableConstantMutable(
+    StatementAssignmentVariableMixin, StatementAssignmentVariableConstantMutableBase
+):
+    kind = "STATEMENT_ASSIGNMENT_VARIABLE_CONSTANT_MUTABLE"
+
+    def postInitNode(self):
+        self.variable_trace = None
+        self.inplace_suspect = None
+
+    def computeStatement(self, trace_collection):
+        return self, None, None
+
+    @staticmethod
+    def hasVeryTrustedValue():
+        return False
+"""
+    expected = """class StatementAssignmentVariableConstantMutable(
+    StatementAssignmentVariableMixin, StatementAssignmentVariableConstantMutableBase
+):
+    def computeStatement(self, trace_collection):
+        return self, None, None
+"""
+    with tempfile.NamedTemporaryFile("w") as f:
+        f.write(code)
+        f.flush()
+
+        new_code, contextual_dunder_methods = get_code(
+            [
+                FunctionToOptimize(
+                    "computeStatement",
+                    f.name,
+                    [FunctionParent("StatementAssignmentVariableConstantMutable", "ClassDef")],
+                ),
+            ],
+        )
+        assert new_code == expected
+        assert contextual_dunder_methods == set()

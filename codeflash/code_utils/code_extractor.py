@@ -20,14 +20,9 @@ def get_code(
         node_list: list[ast.stmt],
         name_parts: tuple[str, str] | tuple[str],
     ) -> ast.AST | None:
-        target: (
-            ast.FunctionDef
-            | ast.AsyncFunctionDef
-            | ast.ClassDef
-            | ast.Assign
-            | ast.AnnAssign
-            | None
-        ) = None
+        target: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Assign | ast.AnnAssign | None = (
+            None
+        )
         node: ast.stmt
         for node in node_list:
             if (
@@ -58,7 +53,7 @@ def get_code(
             return target
 
         if isinstance(target, ast.ClassDef):
-            class_skeleton.add((target.lineno, target.lineno))
+            class_skeleton.add((target.lineno, target.body[0].lineno - 1))
             cbody = target.body
             if isinstance(cbody[0], ast.expr):  # Is a docstring
                 class_skeleton.add((cbody[0].lineno, cbody[0].end_lineno))
@@ -150,10 +145,7 @@ def get_code_no_skeleton(file_path: str, target_name: str) -> str | None:
 
     while stack:
         node = stack.pop()
-        if (
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == name_parts[-1]
-        ):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name_parts[-1]:
             target_node = node
             break
         stack.extend(list(ast.iter_child_nodes(node)))
