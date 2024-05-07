@@ -21,6 +21,7 @@ def main():
         str(test_root),
         "--module-root",
         str(module_root),
+        "--no-pr",
     ]
     process = subprocess.Popen(
         command,
@@ -50,9 +51,7 @@ def main():
     assert (
         improvement_pct > 30000
     ), f"Performance improvement percentage was {improvement_pct}, which was not above 30,000%"
-    assert (
-        improvement_x > 300
-    ), f"Performance improvement rate was {improvement_x}x, which was not above 300x"
+    assert improvement_x > 300, f"Performance improvement rate was {improvement_x}x, which was not above 300x"
 
     # Check for the line indicating the number of discovered existing unit tests
     unit_test_search = re.search(
