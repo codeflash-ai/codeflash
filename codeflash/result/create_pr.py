@@ -30,7 +30,6 @@ def existing_tests_source_for(
 
 
 def check_create_pr(
-    optimize_all: bool,
     original_code: dict[str, str],
     new_code: dict[str, str],
     explanation: Explanation,
@@ -74,8 +73,7 @@ def check_create_pr(
                 f"Optimization was successful, but I failed to suggest changes to PR #{pr_number}."
                 f" Response from server was: {response.text}",
             )
-
-    elif optimize_all:
+    else:
         logging.info("Creating a new PR with the optimized code...")
         owner, repo = get_repo_owner_and_name()
 

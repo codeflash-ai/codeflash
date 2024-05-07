@@ -243,7 +243,7 @@ class Optimizer:
                         function_to_optimize.qualified_name,
                         instrumented_unittests_created_for_function,
                         generated_tests_path,
-                        function_to_tests[module_path + "." + self.args.function],
+                        function_to_tests[module_path + "." + function_to_optimize.qualified_name],
                     )
                     if not is_successful(baseline_result):
                         logging.error(baseline_result.failure())
@@ -330,7 +330,9 @@ class Optimizer:
                             original_gen_results=original_code_baseline.generated_test_results,
                             generated_tests_path=generated_tests_path,
                             best_runtime_until_now=best_runtime,
-                            tests_in_file=function_to_tests[module_path + "." + self.args.function],
+                            tests_in_file=function_to_tests[
+                                module_path + "." + function_to_optimize.qualified_name
+                            ],
                             run_generated_tests=run_generated_tests,
                         )
                         if not is_successful(run_results):
@@ -461,25 +463,25 @@ class Optimizer:
                         original_code_combined[explanation.path] = original_code
                         new_code_combined = new_dependent_code.copy()
                         new_code_combined[explanation.path] = new_code
-                        check_create_pr(
-                            optimize_all=True,
-                            original_code=original_code_combined,
-                            new_code=new_code_combined,
-                            explanation=explanation,
-                            existing_tests_source=existing_tests,
-                            generated_original_test_source=tests_and_optimizations.generated_original_test_source,
-                        )
-                        if self.args.all or env_utils.get_pr_number():
-                            # Reverting to original code, because optimizing functions in a sequence can lead to
-                            #  a) Error propagation, where error in one function can cause the next optimization to fail
-                            #  b) Performance estimates become unstable, as the runtime of an optimization might be
-                            #     dependent on the runtime of the previous optimization
-                            self.write_code_and_dependents(
-                                original_code,
-                                original_dependent_code,
-                                path,
-                                dependent_functions_by_module_abspath,
+                        if not self.args.no_pr:
+                            check_create_pr(
+                                original_code=original_code_combined,
+                                new_code=new_code_combined,
+                                explanation=explanation,
+                                existing_tests_source=existing_tests,
+                                generated_original_test_source=tests_and_optimizations.generated_original_test_source,
                             )
+                            if self.args.all or env_utils.get_pr_number():
+                                # Reverting to original code, because optimizing functions in a sequence can lead to
+                                #  a) Error propagation, where error in one function can cause the next optimization to fail
+                                #  b) Performance estimates become unstable, as the runtime of an optimization might be
+                                #     dependent on the runtime of the previous optimization
+                                self.write_code_and_dependents(
+                                    original_code,
+                                    original_dependent_code,
+                                    path,
+                                    dependent_functions_by_module_abspath,
+                                )
                     # Delete all the generated tests to not cause any clutter.
                     pathlib.Path(generated_tests_path).unlink(missing_ok=True)
                     for test_paths in instrumented_unittests_created_for_function:
