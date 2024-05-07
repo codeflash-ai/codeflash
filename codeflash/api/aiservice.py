@@ -5,7 +5,6 @@ import platform
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
-from overrides import overrides
 from pydantic.dataclasses import dataclass
 from pydantic.json import pydantic_encoder
 
@@ -222,6 +221,5 @@ class AiServiceClient:
 
 
 class LocalAiServiceClient(AiServiceClient):
-    @overrides
     def get_aiservice_base_url(self) -> str:
         return "http://localhost:8000/"
