@@ -243,7 +243,7 @@ class Optimizer:
                         function_to_optimize.qualified_name,
                         instrumented_unittests_created_for_function,
                         generated_tests_path,
-                        function_to_tests[module_path + "." + function_to_optimize.qualified_name],
+                        function_to_tests.get(module_path + "." + function_to_optimize.qualified_name, []),
                     )
                     if not is_successful(baseline_result):
                         logging.error(baseline_result.failure())
@@ -330,9 +330,9 @@ class Optimizer:
                             original_gen_results=original_code_baseline.generated_test_results,
                             generated_tests_path=generated_tests_path,
                             best_runtime_until_now=best_runtime,
-                            tests_in_file=function_to_tests[
-                                module_path + "." + function_to_optimize.qualified_name
-                            ],
+                            tests_in_file=function_to_tests.get(
+                                module_path + "." + function_to_optimize.qualified_name, []
+                            ),
                             run_generated_tests=run_generated_tests,
                         )
                         if not is_successful(run_results):
