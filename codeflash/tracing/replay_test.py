@@ -88,16 +88,19 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
     functions_to_optimize = [
         function.function_name for function in functions if function.function_name != "__init__"
     ]
+    metadata = f"""functions = {functions_to_optimize}
+trace_file_path = r"{trace_file}"
+"""
     test_function_body = textwrap.dedent(
         """\
-        for arg_val_pkl in get_next_arg_and_return(trace_file=r"{trace_file}", function_name="{orig_function_name}", file_name=r"{file_name}", num_to_get={max_run_count}):
+        for arg_val_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_name=r"{file_name}", num_to_get={max_run_count}):
             args = pickle.loads(arg_val_pkl)
             ret = {function_name}({args})
             """,
     )
     test_class_method_body = textwrap.dedent(
         """\
-        for arg_val_pkl in get_next_arg_and_return(trace_file=r"{trace_file}", function_name="{orig_function_name}", file_name=r"{file_name}", class_name="{class_name}", num_to_get={max_run_count}):
+        for arg_val_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_name=r"{file_name}", class_name="{class_name}", num_to_get={max_run_count}):
             args = pickle.loads(arg_val_pkl){filter_variables}
             ret = {class_name_alias}.{method_name}(**args)
             """,
@@ -115,7 +118,6 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
         if func.class_name is None:
             alias = get_function_alias(func.module_name, func.function_name)
             test_body = test_function_body.format(
-                trace_file=trace_file,
                 function_name=alias,
                 file_name=func.file_name,
                 orig_function_name=func.function_name,
@@ -130,7 +132,6 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
             )
             filter_variables = '\n    args.pop("__class__", None)' if func.function_name == "__init__" else ""
             test_body = test_class_method_body.format(
-                trace_file=trace_file,
                 orig_function_name=func.function_name,
                 file_name=func.file_name,
                 class_name_alias=class_name_alias,
@@ -147,4 +148,4 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
         test_template += "    " if test_framework == "unittest" else ""
         test_template += f"def test_{alias}({self}):\n{formatted_test_body}\n"
 
-    return imports + "\n" + f"functions = {functions_to_optimize}" + "\n" + test_template
+    return imports + "\n" + metadata + "\n" + test_template
