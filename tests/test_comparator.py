@@ -1,6 +1,8 @@
+import dataclasses
 import datetime
 import decimal
 
+import pydantic
 import pytest
 from codeflash.verification.comparator import comparator
 from codeflash.verification.equivalence import compare_results
@@ -408,6 +410,55 @@ def test_custom_object():
     c = TestClass3(5)
     assert not comparator(a, b)
     assert comparator(b, c)
+
+    @dataclasses.dataclass
+    class InventoryItem:
+        """Class for keeping track of an item in inventory."""
+
+        name: str
+        unit_price: float
+        quantity_on_hand: int = 0
+
+        def total_cost(self) -> float:
+            return self.unit_price * self.quantity_on_hand
+
+    a = InventoryItem(name="widget", unit_price=3.0, quantity_on_hand=10)
+    b = InventoryItem(name="widget", unit_price=3.0, quantity_on_hand=10)
+    c = InventoryItem(name="widget", unit_price=3.0, quantity_on_hand=11)
+
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    @pydantic.dataclasses.dataclass
+    class InventoryItemPydantic:
+        """Class for keeping track of an item in inventory."""
+
+        name: str
+        unit_price: float
+        quantity_on_hand: int = 0
+
+        def total_cost(self) -> float:
+            return self.unit_price * self.quantity_on_hand
+
+    a = InventoryItemPydantic(name="widget", unit_price=3.0, quantity_on_hand=10)
+    b = InventoryItemPydantic(name="widget", unit_price=3.0, quantity_on_hand=10)
+    c = InventoryItemPydantic(name="widget", unit_price=3.0, quantity_on_hand=11)
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    class InventoryItemBasePydantic(pydantic.BaseModel):
+        name: str
+        unit_price: float
+        quantity_on_hand: int = 0
+
+        def total_cost(self) -> float:
+            return self.unit_price * self.quantity_on_hand
+
+    a = InventoryItemBasePydantic(name="widget", unit_price=3.0, quantity_on_hand=10)
+    b = InventoryItemBasePydantic(name="widget", unit_price=3.0, quantity_on_hand=10)
+    c = InventoryItemBasePydantic(name="widget", unit_price=3.0, quantity_on_hand=11)
+    assert comparator(a, b)
+    assert not comparator(a, c)
 
 
 def test_compare_results_fn():
