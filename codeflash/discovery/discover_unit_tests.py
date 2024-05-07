@@ -95,11 +95,7 @@ def discover_replay_tests(
 ) -> Tuple[Dict[str, List[TestsInFile]], Set[str]]:
     tests = discover_unit_tests(cfg)
     replay_tests = {
-        function: [
-            test_file
-            for test_file in test_files
-            if "__replay_test" in test_file.test_file
-        ]
+        function: [test_file for test_file in test_files if "__replay_test" in test_file.test_file]
         for function, test_files in tests.items()
     }
     replay_files = {
@@ -153,7 +149,9 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     parse_type = ParseType.Q
     if "rootdir: " not in pytest_stdout:
         pytest_rootdir = get_pytest_rootdir_only(
-            pytest_cmd_list, tests_root, project_root,
+            pytest_cmd_list,
+            tests_root,
+            project_root,
         )
     else:
         rootdir_re = re.compile(r"^rootdir:\s?(\S*)", re.MULTILINE)
@@ -328,7 +326,12 @@ def process_test_files(
                                 scope_test_function += "[" + scope_parameters + "]"
                             if test_framework == "unittest":
                                 scope_test_function += "_" + scope_parameters
-                        qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{definition[0].name}"
+                        full_name_without_module_prefix = definition[0].full_name.replace(
+                            definition[0].module_name + ".",
+                            "",
+                            1,
+                        )
+                        qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
                         function_to_test_map[qualified_name_with_modules_from_root].append(
                             TestsInFile(test_file, None, scope_test_function, scope_test_suite),
                         )
@@ -351,7 +354,8 @@ def parse_pytest_stdout(
                 break
             try:
                 test_result = TestsInFile.from_pytest_stdout_line_q(
-                    line, pytest_rootdir,
+                    line,
+                    pytest_rootdir,
                 )
                 test_results.append(test_result)
             except ValueError as e:

@@ -10,7 +10,9 @@ def test_unit_test_discovery_pytest():
     project_path = pathlib.Path(__file__).parent.parent.resolve() / "code_to_optimize"
     tests_path = project_path / "tests" / "pytest"
     test_config = TestConfig(
-        tests_root=str(tests_path), project_root_path=str(project_path), test_framework="pytest",
+        tests_root=str(tests_path),
+        project_root_path=str(project_path),
+        test_framework="pytest",
     )
     tests = discover_unit_tests(test_config)
     assert len(tests) > 0
@@ -21,7 +23,9 @@ def test_unit_test_discovery_unittest():
     project_path = pathlib.Path(__file__).parent.parent.resolve() / "code_to_optimize"
     test_path = project_path / "tests" / "unittest"
     test_config = TestConfig(
-        tests_root=str(project_path), project_root_path=str(project_path), test_framework="unittest",
+        tests_root=str(project_path),
+        project_root_path=str(project_path),
+        test_framework="unittest",
     )
     os.chdir(str(project_path))
     tests = discover_unit_tests(test_config)
@@ -47,7 +51,9 @@ def test_discover_tests_pytest_with_temp_dir_root():
 
         # Create a TestConfig with the temporary directory as the root
         test_config = TestConfig(
-            tests_root=str(tmpdirname), project_root_path=str(tmpdirname), test_framework="pytest",
+            tests_root=str(tmpdirname),
+            project_root_path=str(tmpdirname),
+            test_framework="pytest",
         )
 
         # Discover tests
@@ -110,7 +116,9 @@ def test_discover_tests_pytest_with_multi_level_dirs():
 
         # Create a TestConfig with the temporary directory as the root
         test_config = TestConfig(
-            tests_root=str(tmpdirname), project_root_path=str(tmpdirname), test_framework="pytest",
+            tests_root=str(tmpdirname),
+            project_root_path=str(tmpdirname),
+            test_framework="pytest",
         )
 
         # Discover tests
@@ -119,10 +127,10 @@ def test_discover_tests_pytest_with_multi_level_dirs():
         # Check if the test files at all levels are discovered
         assert len(discovered_tests) == 3
         assert discovered_tests["root_code.root_function"][0].test_file == str(root_test_file_path)
-        assert discovered_tests["level1_code.level1_function"][0].test_file == str(
+        assert discovered_tests["level1.level1_code.level1_function"][0].test_file == str(
             level1_test_file_path,
         )
-        assert discovered_tests["level2_code.level2_function"][0].test_file == str(
+        assert discovered_tests["level1.level2.level2_code.level2_function"][0].test_file == str(
             level2_test_file_path,
         )
 
@@ -194,7 +202,9 @@ def test_discover_tests_pytest_dirs():
 
         # Create a TestConfig with the temporary directory as the root
         test_config = TestConfig(
-            tests_root=str(tmpdirname), project_root_path=str(tmpdirname), test_framework="pytest",
+            tests_root=str(tmpdirname),
+            project_root_path=str(tmpdirname),
+            test_framework="pytest",
         )
 
         # Discover tests
@@ -203,13 +213,13 @@ def test_discover_tests_pytest_dirs():
         # Check if the test files at all levels are discovered
         assert len(discovered_tests) == 4
         assert discovered_tests["root_code.root_function"][0].test_file == str(root_test_file_path)
-        assert discovered_tests["level1_code.level1_function"][0].test_file == str(
+        assert discovered_tests["level1.level1_code.level1_function"][0].test_file == str(
             level1_test_file_path,
         )
-        assert discovered_tests["level2_code.level2_function"][0].test_file == str(
+        assert discovered_tests["level1.level2.level2_code.level2_function"][0].test_file == str(
             level2_test_file_path,
         )
-        assert discovered_tests["level3_code.level3_function"][0].test_file == str(
+        assert discovered_tests["level1.level3.level3_code.level3_function"][0].test_file == str(
             level3_test_file_path,
         )
 
@@ -218,9 +228,7 @@ def test_discover_tests_pytest_with_class():
     with tempfile.TemporaryDirectory() as tmpdirname:
         # Create a code file with a class
         code_file_path = pathlib.Path(tmpdirname) / "some_class_code.py"
-        code_file_content = (
-            "class SomeClass:\n    def some_method(self):\n        return True\n"
-        )
+        code_file_content = "class SomeClass:\n    def some_method(self):\n        return True\n"
         code_file_path.write_text(code_file_content)
 
         # Create a test file with a test class and a test method
@@ -235,7 +243,9 @@ def test_discover_tests_pytest_with_class():
 
         # Create a TestConfig with the temporary directory as the root
         test_config = TestConfig(
-            tests_root=str(tmpdirname), project_root_path=str(tmpdirname), test_framework="pytest",
+            tests_root=str(tmpdirname),
+            project_root_path=str(tmpdirname),
+            test_framework="pytest",
         )
 
         # Discover tests
@@ -244,6 +254,46 @@ def test_discover_tests_pytest_with_class():
         # Check if the test class and method are discovered
         assert len(discovered_tests) == 1
         assert discovered_tests["some_class_code.SomeClass.some_method"][0].test_file == str(
+            test_file_path,
+        )
+
+
+def test_discover_tests_pytest_with_double_nested_directories():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # Create nested directories
+        nested_dir = pathlib.Path(tmpdirname) / "nested" / "more_nested"
+        nested_dir.mkdir(parents=True)
+
+        # Create a code file with a class in the nested directory
+        code_file_path = nested_dir / "nested_class_code.py"
+        code_file_content = "class NestedClass:\n    def nested_method(self):\n        return True\n"
+        code_file_path.write_text(code_file_content)
+
+        # Create a test file with a test class and a test method in the nested directory
+        test_file_path = nested_dir / "test_nested_class.py"
+        test_file_content = (
+            "from nested_class_code import NestedClass\n\n"
+            "def test_nested_method():\n"
+            "    instance = NestedClass()\n"
+            "    assert instance.nested_method() is True\n"
+        )
+        test_file_path.write_text(test_file_content)
+
+        # Create a TestConfig with the temporary directory as the root
+        test_config = TestConfig(
+            tests_root=str(tmpdirname),
+            project_root_path=str(tmpdirname),
+            test_framework="pytest",
+        )
+
+        # Discover tests
+        discovered_tests = discover_unit_tests(test_config)
+
+        # Check if the test class and method are discovered
+        assert len(discovered_tests) == 1
+        assert discovered_tests["nested.more_nested.nested_class_code.NestedClass.nested_method"][
+            0
+        ].test_file == str(
             test_file_path,
         )
 
@@ -277,7 +327,9 @@ def test_discover_tests_with_code_in_dir_and_test_in_subdir():
 
         # Create a TestConfig with the code directory as the root
         test_config = TestConfig(
-            tests_root=str(test_subdir), project_root_path=str(tmpdirname), test_framework="pytest",
+            tests_root=str(test_subdir),
+            project_root_path=str(tmpdirname),
+            test_framework="pytest",
         )
 
         # Discover tests
@@ -285,4 +337,43 @@ def test_discover_tests_with_code_in_dir_and_test_in_subdir():
 
         # Check if the test file is discovered and associated with the code file
         assert len(discovered_tests) == 1
-        assert discovered_tests["some_code.some_function"][0].test_file == str(test_file_path)
+        assert discovered_tests["code.some_code.some_function"][0].test_file == str(test_file_path)
+
+
+def test_discover_tests_pytest_with_nested_class():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # Create a code file with a nested class
+        code_file_path = pathlib.Path(tmpdirname) / "nested_class_code.py"
+        code_file_content = (
+            "class OuterClass:\n"
+            "    class InnerClass:\n"
+            "        def inner_method(self):\n"
+            "            return True\n"
+        )
+        code_file_path.write_text(code_file_content)
+
+        # Create a test file with a test for the nested class method
+        test_file_path = pathlib.Path(tmpdirname) / "test_nested_class.py"
+        test_file_content = (
+            "from nested_class_code import OuterClass\n\n"
+            "def test_inner_method():\n"
+            "    instance = OuterClass.InnerClass()\n"
+            "    assert instance.inner_method() is True\n"
+        )
+        test_file_path.write_text(test_file_content)
+
+        # Create a TestConfig with the temporary directory as the root
+        test_config = TestConfig(
+            tests_root=str(tmpdirname),
+            project_root_path=str(tmpdirname),
+            test_framework="pytest",
+        )
+
+        # Discover tests
+        discovered_tests = discover_unit_tests(test_config)
+
+        # Check if the test for the nested class method is discovered
+        assert len(discovered_tests) == 1
+        assert discovered_tests["nested_class_code.OuterClass.InnerClass.inner_method"][0].test_file == str(
+            test_file_path,
+        )

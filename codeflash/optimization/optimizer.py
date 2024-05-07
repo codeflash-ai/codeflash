@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import ast
 import concurrent.futures
 import logging
@@ -91,7 +93,7 @@ class GeneratedTests(BaseModel):
 
 class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
-    dependent_functions: list[Tuple[Source, str, str]]
+    dependent_functions: list[tuple[Source, str, str]]
     runtime: int
     winning_test_results: TestResults
 
@@ -684,11 +686,7 @@ class Optimizer:
                 )
                 if not success:
                     continue
-                new_test_path = (
-                    os.path.splitext(tests_in_file.test_file)[0]
-                    + "__perfinstrumented"
-                    + os.path.splitext(tests_in_file.test_file)[1]
-                )
+                new_test_path = f"{os.path.splitext(tests_in_file.test_file)[0]}__perfinstrumented{os.path.splitext(tests_in_file.test_file)[1]}"
                 with open(new_test_path, "w", encoding="utf8") as f:
                     f.write(injected_test)
                 unique_instrumented_test_files.add(new_test_path)
