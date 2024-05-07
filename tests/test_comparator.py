@@ -387,17 +387,17 @@ def test_custom_object():
     assert not comparator(a, c)
 
     class TestClass2:
-        def __init__(self, value):
-            self.value = value
+        def __init__(self, value1, value2=6):
+            self.value1 = value1
+            self.value2 = value2
 
     a = TestClass(5)
-    b = TestClass2(5)
-    c = TestClass2(5)
+    b = TestClass2(5, 6)
+    c = TestClass2(5, 7)
+    d = TestClass2(5, 6)
     assert not comparator(a, b)
-    assert comparator(
-        b,
-        c,
-    )  # This is a fallback to True right now since we don't know how to compare them. This can be improved later
+    assert not comparator(b, c)
+    assert comparator(b, d)
 
     class TestClass3(TestClass):
         def print(self):
