@@ -24,7 +24,9 @@ def format_code(
     logging.info(f"Formatting code with {formatter_cmd} ...")
     # black currently does not have a stable public API, so we are using the CLI
     # the main problem is custom config parsing https://github.com/psf/black/issues/779
-    assert os.path.exists(path), f"File {path} does not exist. Cannot format the file. Exiting..."
+    assert os.path.exists(
+        path
+    ), f"File {path} does not exist. Cannot format the file. Exiting..."
     result = subprocess.run(
         formatter_cmd_list + [path],
         stdout=subprocess.PIPE,
@@ -46,17 +48,17 @@ def format_code(
 
 
 def sort_imports(imports_sort_cmd: str, should_sort_imports: bool, path: str) -> str:
-    if imports_sort_cmd.lower() == "disabled" or not should_sort_imports:
+    try:
         with open(path, encoding="utf8") as f:
             code = f.read()
-        return code
 
-    try:
-        # Deduplicate and sort imports
-        isort.file(path)
+        if imports_sort_cmd.lower() == "disabled" or not should_sort_imports:
+            return code
+
+        # Deduplicate and sort imports, modify the code in memory, not on disk
+        sorted_code = isort.code(code)
     except Exception as e:
         logging.exception(f"Failed to sort imports with isort for {path}: {e}")
+        return code  # Fall back to original code if isort fails
 
-    with open(path, encoding="utf8") as f:
-        new_code = f.read()
-    return new_code
+    return sorted_code
