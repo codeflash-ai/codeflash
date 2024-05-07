@@ -251,7 +251,7 @@ class Optimizer:
         )
         if not is_successful(generated_results):
             return Failure(generated_results.failure())
-        tests_and_opts: Tuple[GeneratedTests, OptimizationSet] = generated_results.unwrap()
+        tests_and_opts: tuple[GeneratedTests, OptimizationSet] = generated_results.unwrap()
         generated_tests, optimizations_set = tests_and_opts
         generated_tests_path = get_test_file_path(
             self.args.tests_root,
@@ -275,7 +275,9 @@ class Optimizer:
         logging.info("Optimizing code ...")
         # TODO: Postprocess the optimized function to include the original docstring and such
 
-        for candidates in (optimizations_set.control, optimizations_set.experiment):
+        for u, candidates in enumerate(
+            [optimizations_set.control, optimizations_set.experiment],
+        ):
             if candidates is None:
                 continue
             best_optimization = self.determine_best_candidate(
@@ -288,7 +290,7 @@ class Optimizer:
                 original_code,
                 original_code_baseline,
                 original_dependent_code,
-                function_trace_id,
+                function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
             )
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
@@ -371,7 +373,7 @@ class Optimizer:
         instrumented_unittests_created_for_function: set[str],
         original_code: str,
         original_code_baseline: OriginalCodeBaseline,
-        original_dependent_code: Dict[str, str],  # noqa: UP006
+        original_dependent_code: dict[str, str],
         function_trace_id: str,
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
@@ -710,12 +712,12 @@ class Optimizer:
                 function_to_optimize,
                 [definition[0].full_name for definition in dependent_functions],
                 module_path,
-                function_trace_id,
+                function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id,
             )
             future_optimization_candidates = executor.submit(
                 self.aiservice_client.optimize_python_code,
                 code_to_optimize_with_dependents,
-                function_trace_id,
+                function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id,
                 N_CANDIDATES,
                 ExperimentMetadata(id=self.experiment_id, group="control"),
             )
@@ -723,7 +725,7 @@ class Optimizer:
                 future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
                     code_to_optimize_with_dependents,
-                    function_trace_id,
+                    function_trace_id[:-4] + "EXP1" if run_experiment else function_trace_id,
                     N_CANDIDATES,
                     ExperimentMetadata(id=self.experiment_id, group="experiment"),
                 )
