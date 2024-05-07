@@ -71,6 +71,8 @@ def get_run_tmp_file(file_path: str) -> str:
 
 
 def path_belongs_to_site_packages(file_path: str) -> bool:
-    return any(  # The definition is not part of a site-package Python library
-        file_path.startswith(site_package_path + os.sep) for site_package_path in site.getsitepackages()
-    )
+    site_packages = site.getsitepackages()
+    for site_package_path in site_packages:
+        if file_path.startswith(site_package_path + os.sep):
+            return True
+    return False
