@@ -195,7 +195,7 @@ class Tracer:
             file.write(replay_test)
 
         print(
-            f"Codeflash: Traced {self.trace_count} functions successful and replay test created! Path - {test_file_path}",
+            f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}",
         )
         for key, value in self.profiling_info.items():
             print(
