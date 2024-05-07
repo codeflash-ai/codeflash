@@ -1,16 +1,21 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
 import platform
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import requests
 from pydantic.dataclasses import dataclass
 from pydantic.json import pydantic_encoder
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.telemetry.posthog import ph
+
+if TYPE_CHECKING:
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.models.ExperimentMetadata import ExperimentMetadata
 
 
 @dataclass(frozen=True)
@@ -26,7 +31,7 @@ class AiServiceClient:
         self.headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
 
     def get_aiservice_base_url(self) -> str:
-        if os.environ.get("AIS_SERVER", default="prod").lower() == "local":
+        if os.environ.get("CODEFLASH_AIS_SERVER", default="prod").lower() == "local":
             logging.info("Using local AI Service at http://localhost:8000/")
             return "http://localhost:8000/"
         return "https://app.codeflash.ai"
@@ -39,6 +44,7 @@ class AiServiceClient:
         timeout: float = None,
     ) -> requests.Response:
         """Make an API request to the given endpoint on the AI service.
+
         :param endpoint: The endpoint to call, e.g., "/optimize".
         :param method: The HTTP method to use ('GET' or 'POST').
         :param payload: Optional JSON payload to include in the POST request body.
@@ -59,8 +65,9 @@ class AiServiceClient:
         self,
         source_code: str,
         trace_id: str,
-        num_variants: int = 10,
-    ) -> List[OptimizedCandidate]:
+        num_candidates: int = 10,
+        experiment_metadata: ExperimentMetadata | None = None,
+    ) -> list[OptimizedCandidate]:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
         Parameters
@@ -75,9 +82,10 @@ class AiServiceClient:
         """
         payload = {
             "source_code": source_code,
-            "num_variants": num_variants,
+            "num_variants": num_candidates,
             "trace_id": trace_id,
             "python_version": platform.python_version(),
+            "experiment_metadata": experiment_metadata,
         }
         logging.info("Generating optimized candidates ...")
         try:
@@ -116,11 +124,10 @@ class AiServiceClient:
     def log_results(
         self,
         function_trace_id: str,
-        speedup_ratio: Optional[Dict[str, float]],
-        original_runtime: Optional[float],
-        optimized_runtime: Optional[Dict[str, float]],
-        is_correct: Optional[Dict[str, bool]],
-        experiment_id: Optional[str],
+        speedup_ratio: dict[str, float] | None,
+        original_runtime: float | None,
+        optimized_runtime: dict[str, float] | None,
+        is_correct: dict[str, bool] | None,
     ) -> None:
         """Log features to the database.
 
@@ -139,7 +146,6 @@ class AiServiceClient:
             "original_runtime": original_runtime,
             "optimized_runtime": optimized_runtime,
             "is_correct": is_correct,
-            "experiment_id": experiment_id,
         }
         try:
             self.make_ai_service_request("/log_features", payload=payload, timeout=5)

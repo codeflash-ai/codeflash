@@ -9,7 +9,7 @@ import runpy
 import uuid
 from argparse import Namespace
 from collections import defaultdict
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import libcst as cst
 from pydantic import BaseModel
@@ -52,6 +52,7 @@ from codeflash.discovery.functions_to_optimize import (
     FunctionToOptimize,
     get_functions_to_optimize_by_file,
 )
+from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.optimization.function_context import (
     Source,
     get_constrained_function_context_and_dependent_functions,
@@ -119,13 +120,13 @@ class Optimizer:
         )
 
         self.aiservice_client = AiServiceClient()
-        self.local_aiservice_client = LocalAiServiceClient()
+        self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
+        self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
 
         self.test_files_created: set[str] = set()
         self.instrumented_unittests_created: set[str] = set()
 
     def run(self) -> None:
-        experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         ph("cli-optimize-run-start")
         logging.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
@@ -191,7 +192,6 @@ class Optimizer:
                         function_to_optimize,
                         function_to_tests,
                         original_code,
-                        experiment_id,
                     )
                     if is_successful(best_optimization):
                         optimizations_found += 1
@@ -217,9 +217,8 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         function_to_tests: Dict[str, List[TestsInFile]],
         original_code: str,
-        experiment_id: Optional[str],
     ) -> Result[BestOptimization, str]:
-        should_run_experiment = experiment_id is not None
+        should_run_experiment = self.experiment_id is not None
         function_trace_id: str = str(uuid.uuid4())
         ph("cli-optimize-function-start", {"function_trace_id": function_trace_id})
         self.cleanup_leftover_test_return_values()
@@ -276,12 +275,10 @@ class Optimizer:
         logging.info("Optimizing code ...")
         # TODO: Postprocess the optimized function to include the original docstring and such
 
-        for u, candidates in enumerate(
-            [optimizations_set.control, optimizations_set.experiment],
-        ):
+        for candidates in (optimizations_set.control, optimizations_set.experiment):
             if candidates is None:
                 continue
-            best_optimization = self.determine_best_optimization(
+            best_optimization = self.determine_best_candidate(
                 candidates,
                 code_context,
                 dependent_functions_by_module_abspath,
@@ -291,8 +288,7 @@ class Optimizer:
                 original_code,
                 original_code_baseline,
                 original_dependent_code,
-                function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
-                experiment_id=experiment_id,
+                function_trace_id,
             )
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
@@ -365,26 +361,25 @@ class Optimizer:
             pathlib.Path(test_paths).unlink(missing_ok=True)
         return Success(best_optimization)
 
-    def determine_best_optimization(
+    def determine_best_candidate(
         self,
-        candidates: List[OptimizedCandidate],
+        candidates: list[OptimizedCandidate],
         code_context: CodeOptimizationContext,
-        dependent_functions_by_module_abspath: Dict[str, Set[str]],
+        dependent_functions_by_module_abspath: dict[str, set[str]],
         function_to_optimize: FunctionToOptimize,
         generated_tests_path: str,
-        instrumented_unittests_created_for_function: Set[str],
+        instrumented_unittests_created_for_function: set[str],
         original_code: str,
         original_code_baseline: OriginalCodeBaseline,
-        original_dependent_code: Dict[str, str],
+        original_dependent_code: Dict[str, str],  # noqa: UP006
         function_trace_id: str,
-        experiment_id: Optional[str] = None,
-    ) -> Optional[BestOptimization]:
-        best_optimization: Optional[BestOptimization] = None
+    ) -> BestOptimization | None:
+        best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime  # The fastest code runtime until now
 
-        speedup_ratios: Dict[str, float | None] = dict()
-        optimized_runtimes = dict()
-        is_correct = dict()
+        speedup_ratios: dict[str, float | None] = {}
+        optimized_runtimes = {}
+        is_correct = {}
 
         for i, candidate in enumerate(candidates):
             j = i + 1
@@ -491,7 +486,6 @@ class Optimizer:
             original_runtime=original_code_baseline.runtime,
             optimized_runtime=optimized_runtimes,
             is_correct=is_correct,
-            experiment_id=experiment_id,
         )
         return best_optimization
 
@@ -701,11 +695,11 @@ class Optimizer:
         self,
         code_to_optimize_with_dependents: str,
         function_to_optimize: FunctionToOptimize,
-        dependent_functions: list[Tuple[Source, str, str]],
+        dependent_functions: list[tuple[Source, str, str]],
         module_path: str,
         function_trace_id: str,
         run_experiment: bool = False,
-    ) -> Result[Tuple[GeneratedTests, OptimizationSet], str]:
+    ) -> Result[tuple[GeneratedTests, OptimizationSet], str]:
         generated_original_test_source = None
         instrumented_test_source = None
         max_workers = 2 if not run_experiment else 3
@@ -716,26 +710,28 @@ class Optimizer:
                 function_to_optimize,
                 [definition[0].full_name for definition in dependent_functions],
                 module_path,
-                function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id,
+                function_trace_id,
             )
-            future_optimization = executor.submit(
+            future_optimization_candidates = executor.submit(
                 self.aiservice_client.optimize_python_code,
                 code_to_optimize_with_dependents,
-                function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id,
+                function_trace_id,
                 N_CANDIDATES,
+                ExperimentMetadata(id=self.experiment_id, group="control"),
             )
             if run_experiment:
-                future_optimization_exp = executor.submit(
+                future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
                     code_to_optimize_with_dependents,
-                    function_trace_id[:-4] + "EXP1" if run_experiment else function_trace_id,
+                    function_trace_id,
                     N_CANDIDATES,
+                    ExperimentMetadata(id=self.experiment_id, group="experiment"),
                 )
 
             future_tests_result = future_tests.result()
-            optimizations: List[OptimizedCandidate] = future_optimization.result()
+            candidates: list[OptimizedCandidate] = future_optimization_candidates.result()
 
-            optimizations_exp = future_optimization_exp.result() if run_experiment else None
+            candidates_experiment = future_candidates_exp.result() if run_experiment else None
 
         if future_tests_result and isinstance(future_tests_result, tuple) and len(future_tests_result) == 2:
             (
@@ -745,7 +741,7 @@ class Optimizer:
 
         else:
             return Failure(f"/!\\ NO TESTS GENERATED for {function_to_optimize.function_name}")
-        if not optimizations:
+        if not candidates:
             return Failure(f"/!\\ NO OPTIMIZATIONS GENERATED for {function_to_optimize.function_name}")
         return Success(
             (
@@ -754,8 +750,8 @@ class Optimizer:
                     instrumented_test_source=instrumented_test_source,
                 ),
                 OptimizationSet(
-                    control=optimizations,
-                    experiment=optimizations_exp,
+                    control=candidates,
+                    experiment=candidates_experiment,
                 ),
             ),
         )
