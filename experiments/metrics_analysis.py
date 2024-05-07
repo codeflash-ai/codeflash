@@ -13,7 +13,7 @@ def load_data(experiment_id: str, database_uri: str = os.environ.get("DATABASE_U
         query = """
             SELECT * FROM optimization_features
             WHERE (trace_id LIKE %s OR trace_id LIKE %s)
-            AND experiment_id = %s
+            AND experiment_metadata->>'id' = %s
         """
         return pd.read_sql_query(
             query,
