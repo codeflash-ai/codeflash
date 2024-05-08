@@ -719,13 +719,13 @@ class Optimizer:
                 code_to_optimize_with_dependents,
                 function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id,
                 N_CANDIDATES,
-                ExperimentMetadata(id=self.experiment_id, group="control"),
+                ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             )
             if run_experiment:
                 future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
                     code_to_optimize_with_dependents,
-                    function_trace_id[:-4] + "EXP1" if run_experiment else function_trace_id,
+                    function_trace_id[:-4] + "EXP1",
                     N_CANDIDATES,
                     ExperimentMetadata(id=self.experiment_id, group="experiment"),
                 )
