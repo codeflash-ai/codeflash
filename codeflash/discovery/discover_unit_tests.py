@@ -6,7 +6,7 @@ import subprocess
 import unittest
 from collections import defaultdict
 from enum import Enum
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional
 
 import jedi
 from pydantic.dataclasses import dataclass
@@ -28,7 +28,7 @@ class TestsInFile:
 
     @classmethod
     def from_pytest_stdout_line_co(cls, module: str, function: str, directory: str):
-        absolute_test_path = os.path.join(directory, module)
+        absolute_test_path = os.path.normpath(os.path.join(directory, module))
         assert os.path.exists(
             absolute_test_path,
         ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
@@ -42,7 +42,7 @@ class TestsInFile:
     @classmethod
     def from_pytest_stdout_line_q(cls, line: str, pytest_rootdir: str):
         parts = line.split("::")
-        absolute_test_path = os.path.join(pytest_rootdir, parts[0])
+        absolute_test_path = os.path.normpath(os.path.join(pytest_rootdir, parts[0]))
         assert os.path.exists(
             absolute_test_path,
         ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
@@ -95,16 +95,10 @@ def discover_replay_test_functions(
 ) -> List[str]:
     tests = discover_unit_tests(cfg)
     replay_tests = {
-        function: [
-            test_file
-            for test_file in test_files
-            if test_file.test_file == replay_test_file
-        ]
+        function: [test_file for test_file in test_files if test_file.test_file == replay_test_file]
         for function, test_files in tests.items()
     }
-    functions = [
-        function for function, test_files in replay_tests.items() if test_files
-    ]
+    functions = [function for function, test_files in replay_tests.items() if test_files]
 
     return functions
 
@@ -141,7 +135,8 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     pytest_result = subprocess.run(
         pytest_cmd_list + [f"{tests_root}", "--co", "-q", "-m", "not skip"],
         stdout=subprocess.PIPE,
-        cwd=project_root, check=False,
+        cwd=project_root,
+        check=False,
     )
 
     pytest_stdout = pytest_result.stdout.decode("utf-8")
@@ -149,7 +144,9 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     parse_type = ParseType.Q
     if "rootdir: " not in pytest_stdout:
         pytest_rootdir = get_pytest_rootdir_only(
-            pytest_cmd_list, tests_root, project_root,
+            pytest_cmd_list,
+            tests_root,
+            project_root,
         )
     else:
         rootdir_re = re.compile(r"^rootdir:\s?(\S*)", re.MULTILINE)
@@ -185,7 +182,7 @@ def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
         )
 
         _test_module_path = _test_module.replace(".", os.sep)
-        _test_module_path = os.path.join(str(tests_root), _test_module_path) + ".py"
+        _test_module_path = os.path.normpath(os.path.join(str(tests_root), _test_module_path) + ".py")
         if not os.path.exists(_test_module_path):
             return None
         return TestDetails(_test_function, _test_module_path, _test_suite_name)
@@ -234,7 +231,8 @@ def discover_parameters_unittest(function_name: str):
 
 
 def process_test_files(
-    file_to_test_map: Dict[str, List[Dict[str, str]]], cfg: TestConfig,
+    file_to_test_map: Dict[str, List[Dict[str, str]]],
+    cfg: TestConfig,
 ) -> Dict[str, List[TestsInFile]]:
     project_root_path = cfg.project_root_path
     test_framework = cfg.test_framework
@@ -334,7 +332,10 @@ def process_test_files(
 
 
 def parse_pytest_stdout(
-    pytest_stdout: str, pytest_rootdir: str, tests_root: str, parse_type: ParseType,
+    pytest_stdout: str,
+    pytest_rootdir: str,
+    tests_root: str,
+    parse_type: ParseType,
 ) -> List[TestsInFile]:
     test_results = []
     if parse_type == ParseType.Q:
@@ -343,7 +344,8 @@ def parse_pytest_stdout(
                 break
             try:
                 test_result = TestsInFile.from_pytest_stdout_line_q(
-                    line, pytest_rootdir,
+                    line,
+                    pytest_rootdir,
                 )
                 test_results.append(test_result)
             except ValueError as e:
@@ -415,7 +417,9 @@ def parse_pytest_stdout(
                 function = function.group(1)
                 try:
                     test_result = TestsInFile.from_pytest_stdout_line_co(
-                        module, function, directory,
+                        module,
+                        function,
+                        directory,
                     )
                     test_results.append(test_result)
                 except ValueError as e:
