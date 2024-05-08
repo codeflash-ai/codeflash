@@ -114,7 +114,8 @@ def comparator(orig: Any, new: Any) -> bool:
             return orig.equals(new)
 
         if HAS_PANDAS and isinstance(
-            orig, (pandas.CategoricalDtype, pandas.Interval, pandas.Period),
+            orig,
+            (pandas.CategoricalDtype, pandas.Interval, pandas.Period),
         ):
             return orig == new
 
@@ -134,12 +135,18 @@ def comparator(orig: Any, new: Any) -> bool:
             return orig == new
 
         # If the object passed has a user defined __eq__ method, use that
-        # This could fail if the user defined __eq__ is defined with cython
+        # This could fail if the user defined __eq__ is defined with C-extensions
         try:
             if hasattr(orig, "__eq__") and str(type(orig.__eq__)) == "<class 'method'>":
                 return orig == new
         except Exception:
             pass
+
+        # For class objects
+        if hasattr(orig, "__dict__") and hasattr(new, "__dict__"):
+            orig_keys = orig.__dict__
+            new_keys = new.__dict__
+            return comparator(orig_keys, new_keys)
 
         # TODO : Add other types here
         logging.warning(f"Unknown comparator input type: {type(orig)}")
