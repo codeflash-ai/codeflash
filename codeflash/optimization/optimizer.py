@@ -39,7 +39,7 @@ from codeflash.code_utils.instrument_existing_tests import (
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import (
     TestsInFile,
-    discover_replay_tests,
+    discover_replay_test_functions,
     discover_unit_tests,
 )
 from codeflash.discovery.functions_to_optimize import (
@@ -120,18 +120,41 @@ class Optimizer:
 
         file_to_funcs_to_optimize: dict[str, list[FunctionToOptimize]]
         num_optimizable_functions: int
-        (
-            file_to_funcs_to_optimize,
-            num_optimizable_functions,
-        ) = get_functions_to_optimize_by_file(
-            optimize_all=self.args.all,
-            file=self.args.file,
-            function=self.args.function,
-            test_cfg=self.test_cfg,
-            ignore_paths=self.args.ignore_paths,
-            project_root=self.args.project_root,
-            module_root=self.args.module_root,
-        )
+
+        if self.args.replay_test:
+            file_to_funcs_to_optimize = defaultdict(list)
+            num_optimizable_functions = 0
+            # Obtain functions in replay tests from the unit tests
+            replay_functions = discover_replay_test_functions(
+                self.test_cfg, self.args.replay_test
+            )
+            files_to_optimize = self.get_files_of_functions(replay_functions)
+            for function, file_path in files_to_optimize.items():
+                files, num_functions = get_functions_to_optimize_by_file(
+                    optimize_all=self.args.all,
+                    file=file_path,
+                    function=function,
+                    test_cfg=self.test_cfg,
+                    ignore_paths=self.args.ignore_paths,
+                    project_root=self.args.project_root,
+                    module_root=self.args.module_root,
+                )
+                file_to_funcs_to_optimize.update(files)
+                num_optimizable_functions += num_functions
+
+        else:
+            (
+                file_to_funcs_to_optimize,
+                num_optimizable_functions,
+            ) = get_functions_to_optimize_by_file(
+                optimize_all=self.args.all,
+                file=self.args.file,
+                function=self.args.function,
+                test_cfg=self.test_cfg,
+                ignore_paths=self.args.ignore_paths,
+                project_root=self.args.project_root,
+                module_root=self.args.module_root,
+            )
 
         test_files_created: set[str] = set()
         instrumented_unittests_created: set[str] = set()
@@ -1078,70 +1101,50 @@ class Optimizer:
 
         return generated_original_test_source, instrumented_test_source
 
+    def get_files_of_functions(self, replay_functions: List[str]) -> Dict[str, str]:
+        functions_to_optimize = replay_functions
+
+        # Get the absolute file paths for each function, excluding class name if present
+        file_paths_to_optimize = {}
+        for function in functions_to_optimize:
+            parts = function.split(".")
+            module_path_parts = parts[:-1]  # Exclude the function or method name
+            function_name = parts[-1]
+            # Check if the second-to-last part is a class name
+            class_name = (
+                module_path_parts[-1]
+                if module_path_parts
+                and is_class_defined_in_file(
+                    module_path_parts[-1],
+                    os.path.join(self.args.project_root, *module_path_parts[:-1])
+                    + ".py",
+                )
+                else None
+            )
+            if class_name:
+                # If there is a class name, append it to the module path
+                function = class_name + "." + function_name
+                file_path_parts = module_path_parts[:-1]  # Exclude the class name
+            else:
+                function = function_name
+                file_path_parts = module_path_parts
+            file_path = os.path.join(self.args.project_root, *file_path_parts) + ".py"
+
+            with open(file_path) as file:
+                source = file.read()
+                tree = ast.parse(source)
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.FunctionDef) and node.name == function_name:
+                        for sub_node in ast.walk(node):
+                            if isinstance(sub_node, ast.Return):
+                                file_paths_to_optimize[function] = file_path
+
+        return file_paths_to_optimize
+
 
 def run_with_args(args: Namespace) -> None:
     optimizer = Optimizer(args)
     optimizer.run()
-
-
-def run_from_replay_test(args: Namespace) -> None:
-    optimizer = Optimizer(args)
-    replay_tests, test_files = discover_replay_tests(optimizer.test_cfg)
-    functions = []
-    for test_file_path in test_files:
-        test_file_globals = runpy.run_path(test_file_path)
-        if "functions" in test_file_globals:
-            functions.extend(test_file_globals["functions"])
-
-    functions_to_optimize = []
-    for function in replay_tests:
-        if function.split(".")[-1] in functions:
-            functions_to_optimize.append(function)
-
-    # Get the absolute file paths for each function, excluding class name if present
-    file_paths_to_optimize = {}
-    for function in functions_to_optimize:
-        parts = function.split(".")
-        module_path_parts = parts[:-1]  # Exclude the function or method name
-        function_name = parts[-1]
-        # Check if the second-to-last part is a class name
-        class_name = (
-            module_path_parts[-1]
-            if module_path_parts
-            and is_class_defined_in_file(
-                module_path_parts[-1],
-                os.path.join(args.project_root, *module_path_parts[:-1]) + ".py",
-            )
-            else None
-        )
-        if class_name:
-            # If there is a class name, append it to the module path
-            function = class_name + "." + function_name
-            file_path_parts = module_path_parts[:-1]  # Exclude the class name
-        else:
-            function = function_name
-            file_path_parts = module_path_parts
-        file_path = os.path.join(args.project_root, *file_path_parts) + ".py"
-
-        file_paths_to_optimize[function] = file_path
-
-    # Check for return statement in each function's code
-    for function, file_path in file_paths_to_optimize.items():
-        function_name = function.split(".")[-1]
-        with open(file_path) as file:
-            source = file.read()
-            tree = ast.parse(source)
-            for node in ast.walk(tree):
-                if isinstance(node, ast.FunctionDef) and node.name == function_name:
-                    for sub_node in ast.walk(node):
-                        if isinstance(sub_node, ast.Return):
-                            args.file = file_path
-                            args.function = function
-                            args.all = False
-                            optimizer = Optimizer(args)
-                            optimizer.run()
-                            break
-                    break
 
 
 def is_class_defined_in_file(class_name: str, file_path: str) -> bool:

@@ -89,26 +89,24 @@ def discover_unit_tests(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     return discover_tests(cfg)
 
 
-def discover_replay_tests(
+def discover_replay_test_functions(
     cfg: TestConfig,
-) -> Tuple[Dict[str, List[TestsInFile]], Set[str]]:
+    replay_test_file: str,
+) -> List[str]:
     tests = discover_unit_tests(cfg)
     replay_tests = {
         function: [
             test_file
             for test_file in test_files
-            if "__replay_test" in test_file.test_file
+            if test_file.test_file == replay_test_file
         ]
         for function, test_files in tests.items()
     }
-    replay_files = {
-        test_file.test_file
-        for test_files in tests.values()
-        for test_file in test_files
-        if "__replay_test" in test_file.test_file
-    }
+    functions = [
+        function for function, test_files in replay_tests.items() if test_files
+    ]
 
-    return replay_tests, replay_files
+    return functions
 
 
 def get_pytest_rootdir_only(pytest_cmd_list, tests_root, project_root) -> str:
