@@ -11,7 +11,7 @@ from requests import Response
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.github.PrComment import FileDiffContent, PrComment
 
-if os.environ.get("CFAPI_SERVER", default="prod").lower() == "local":
+if os.environ.get("CODEFLASH_CFAPI_SERVER", default="prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
     logging.info(f"Using local CF API at {CFAPI_BASE_URL}.")
 else:
@@ -19,7 +19,9 @@ else:
 
 
 def make_cfapi_request(
-    endpoint: str, method: str, payload: Optional[Dict[str, Any]] = None,
+    endpoint: str,
+    method: str,
+    payload: Optional[Dict[str, Any]] = None,
 ) -> requests.Response:
     """Make an HTTP request using the specified method, URL, headers, and JSON payload.
     :param endpoint: The endpoint URL to send the request to.
