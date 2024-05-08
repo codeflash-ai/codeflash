@@ -61,7 +61,9 @@ def parse_args() -> Namespace:
         help="Use cached tests from a specified file for debugging.",
     )
     parser.add_argument(
-        "--replay-test", type=str, help="Path to replay test to optimize functions from"
+        "--replay-test",
+        type=str,
+        help="Path to replay test to optimize functions from",
     )
     parser.add_argument(
         "--no-pr",
@@ -91,6 +93,10 @@ def process_cmd_args(args: Namespace) -> Namespace:
         if not os.path.exists(args.file):
             raise ValueError(f"File {args.file} does not exist")
         args.file = os.path.realpath(args.file)
+    if args.replay_test:
+        if not os.path.isfile(args.replay_test):
+            raise ValueError(f"Replay test file {args.replay_test} does not exist")
+        args.replay_test = os.path.realpath(args.replay_test)
 
     try:
         pyproject_config, pyproject_file_path = parse_config_file(args.config_file)
@@ -120,6 +126,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
     assert args.tests_root is not None and os.path.isdir(
         args.tests_root,
     ), f"--tests-root {args.tests_root} must be a valid directory"
+
     assert not (env_utils.get_pr_number() is not None and not env_utils.ensure_codeflash_api_key()), (
         "Codeflash API key not found. When running in a Github Actions Context, provide the "
         "'CODEFLASH_API_KEY' environment variable as a secret.\n"
