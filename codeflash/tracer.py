@@ -280,7 +280,7 @@ class Tracer:
                     file_name=file_name,
                     module_name=module_name_from_file_path(
                         file_name,
-                        project_root=self.project_root,
+                        project_root_path=self.project_root,
                     ),
                     class_name=class_name,
                 ),

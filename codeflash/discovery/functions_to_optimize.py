@@ -406,20 +406,25 @@ def filter_files_optimized(
     """
     submodule_paths = None
     if file_path.startswith(tests_root + os.sep):
+        print(f"Ignoring file {file_path} because it is in the tests directory")
         return False
     if file_path in ignore_paths or any(
         file_path.startswith(ignore_path + os.sep) for ignore_path in ignore_paths
     ):
+        print(f"Ignoring file {file_path} because it is in the ignored paths")
         return False
     if path_belongs_to_site_packages(file_path):
+        print(f"Ignoring file {file_path} because it is in the site-packages directory")
         return False
     if not file_path.startswith(module_root + os.sep):
+        print(f"Ignoring file {file_path} because it is outside the module-root")
         return False
     if submodule_paths is None:
         submodule_paths = ignored_submodule_paths(module_root)
     if file_path in submodule_paths or any(
         file_path.startswith(submodule_path + os.sep) for submodule_path in submodule_paths
     ):
+        print(f"Ignoring file {file_path} because it is in the ignored submodules")
         return False
 
     return True
