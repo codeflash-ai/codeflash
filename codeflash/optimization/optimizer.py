@@ -5,7 +5,6 @@ import concurrent.futures
 import logging
 import os
 import pathlib
-import runpy
 import uuid
 from argparse import Namespace
 from collections import defaultdict
@@ -307,6 +306,14 @@ class Optimizer:
         ):
             if candidates is None:
                 continue
+
+            tests_in_file: list[TestsInFile] = function_to_tests.get(
+                function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root),
+                [],
+            )
+
+            only_run_this_test_function = tests_in_file[0].test_function if tests_in_file else None
+
             best_optimization = self.determine_best_candidate(
                 candidates,
                 code_context,
@@ -318,6 +325,7 @@ class Optimizer:
                 original_code_baseline,
                 original_dependent_code,
                 function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
+                only_run_this_test_function,
             )
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
@@ -404,6 +412,7 @@ class Optimizer:
         original_code_baseline: OriginalCodeBaseline,
         original_dependent_code: dict[str, str],
         function_trace_id: str,
+        only_run_this_test_function: Optional[str] = None,
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime  # The fastest code runtime until now
@@ -475,10 +484,7 @@ class Optimizer:
                 original_gen_results=original_code_baseline.generated_test_results,
                 generated_tests_path=generated_tests_path,
                 best_runtime_until_now=best_runtime_until_now,
-                tests_in_file=function_to_tests.get(
-                    module_path + "." + function_to_optimize.qualified_name,
-                    [],
-                ),
+                only_run_this_test_function=only_run_this_test_function,
                 run_generated_tests=run_generated_tests,
             )
             if not is_successful(run_results):
@@ -945,7 +951,7 @@ class Optimizer:
         original_gen_results: TestResults,
         generated_tests_path: str,
         best_runtime_until_now: int,
-        tests_in_file: list[TestsInFile],
+        only_run_this_test_function: Optional[str],
         run_generated_tests: bool,
     ) -> Result[OptimizedCandidateResult, str]:
         success = True
@@ -989,7 +995,7 @@ class Optimizer:
                         instrumented_test_file,
                         TestType.EXISTING_UNIT_TEST,
                         optimization_index,
-                        tests_in_file[0].test_function,
+                        only_run_this_test_function,
                     )
                     timing = unittest_results_optimized.total_passed_runtime()
                     optimized_test_results_iter.merge(unittest_results_optimized)
@@ -1110,7 +1116,7 @@ class Optimizer:
             pytest_cmd=self.test_cfg.pytest_cmd,
             verbose=True,
             test_env=test_env,
-            test_function=test_function,
+            only_run_this_test_function=test_function,
         )
         if run_result.returncode != 0:
             logging.debug(
