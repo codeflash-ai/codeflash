@@ -305,7 +305,7 @@ class Tracer:
                 protocol=pickle.HIGHEST_PROTOCOL,
             )
             sys.setrecursionlimit(original_recursion_limit)
-        except (TypeError, pickle.PicklingError, AttributeError, RecursionError):
+        except (TypeError, pickle.PicklingError, AttributeError, RecursionError, OSError):
             # we retry with dill if pickle fails. It's slower but more comprehensive
             try:
                 local_vars = dill.dumps(
@@ -314,7 +314,7 @@ class Tracer:
                 )
                 sys.setrecursionlimit(original_recursion_limit)
 
-            except (TypeError, dill.PicklingError, AttributeError, RecursionError):
+            except (TypeError, dill.PicklingError, AttributeError, RecursionError, OSError):
                 # give up
                 # TODO: If this branch hits then its possible there are no paired arg, return values in the replay test.
                 #  Filter them out
