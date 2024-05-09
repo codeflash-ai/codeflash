@@ -102,6 +102,22 @@ class FunctionParent:
 
 @dataclass(frozen=True, config=dict(arbitrary_types_allowed=True))
 class FunctionToOptimize:
+    """Represents a function that is a candidate for optimization.
+
+    Attributes
+    ----------
+        function_name: The name of the function.
+        file_path: The absolute file path where the function is located.
+        parents: A list of parent scopes, which could be classes or functions.
+        starting_line: The starting line number of the function in the file.
+        ending_line: The ending line number of the function in the file.
+
+    The qualified_name property provides the full name of the function, including
+    any parent class or function names. The qualified_name_with_modules_from_root
+    method extends this with the module name from the project root.
+
+    """
+
     function_name: str
     file_path: str
     parents: List[FunctionParent]  # List[ClassDef | FunctionDef | AsyncFunctionDef]
@@ -123,16 +139,10 @@ class FunctionToOptimize:
 
     @property
     def qualified_name(self):
-        return (
-            self.function_name
-            if self.parents == []
-            else ".".join(
-                [
-                    self.parents[0].name,
-                    self.function_name,
-                ],
-            )
-        )
+        return self.function_name if self.parents == [] else f"{self.parents[0].name}.{self.function_name}"
+
+    def qualified_name_with_modules_from_root(self, project_root_path: str) -> str:
+        return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
 
 
 def get_functions_to_optimize_by_file(

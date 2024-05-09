@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 import jedi
 from pydantic.dataclasses import dataclass
 
+from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -321,8 +322,13 @@ def process_test_files(
                                 scope_test_function += "[" + scope_parameters + "]"
                             if test_framework == "unittest":
                                 scope_test_function += "_" + scope_parameters
-
-                        function_to_test_map[definition[0].full_name].append(
+                        full_name_without_module_prefix = definition[0].full_name.replace(
+                            definition[0].module_name + ".",
+                            "",
+                            1,
+                        )
+                        qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
+                        function_to_test_map[qualified_name_with_modules_from_root].append(
                             TestsInFile(test_file, None, scope_test_function, scope_test_suite),
                         )
     deduped_function_to_test_map = {}
