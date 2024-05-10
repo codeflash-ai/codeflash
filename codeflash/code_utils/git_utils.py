@@ -31,7 +31,7 @@ def get_git_diff(
     patch_set = PatchSet(StringIO(uni_diff_text))
     change_list: dict[str, list[int]] = {}  # list of changes
     for patched_file in patch_set:
-        file_path: str = patched_file.file_path  # file name
+        file_path: str = patched_file.path  # file name
         if not file_path.endswith(".py"):
             continue
         file_path = os.path.join(repository.working_dir, file_path)
