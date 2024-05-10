@@ -18,7 +18,7 @@ import pickle
 import sqlite3
 import sys
 import time
-from collections import Counter, defaultdict
+from collections import defaultdict
 from typing import Any, List, Optional
 
 import dill
@@ -98,7 +98,6 @@ class Tracer:
         assert timeout is None or timeout > 0, "Timeout should be greater than 0"
         self.timeout = timeout
         self.next_insert = 1000
-        self.profiling_info = defaultdict(Counter)
         self.trace_count = 0
 
         # Profiler variables
@@ -197,12 +196,9 @@ class Tracer:
         print(
             f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}",
         )
-        for key, value in self.profiling_info.items():
-            print(
-                f"Profiling info - {key} - count - {value['count']} - time - {value['time']/1e6}ms",
-            )
 
     def trace_callback(self, frame: Any, event: str, arg: Any) -> None:
+        # profiler section
         timer = self.timer
         t = timer() - self.t - self.bias
         if event == "c_call":
@@ -212,7 +208,8 @@ class Tracer:
             self.t = timer()
         else:
             self.t = timer() - t  # put back unrecorded delta
-        t1 = time.perf_counter_ns()
+
+        # tracer section
         if event not in ["call", "return"]:
             return
         if self.timeout is not None:
@@ -222,13 +219,9 @@ class Tracer:
                     f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds.",
                 )
                 return
-        t2 = time.perf_counter_ns()
-        self.profiling_info["early_return"].update(count=1, time=t2 - t1)
-        t3 = time.perf_counter_ns()
         code = frame.f_code
         file_name = code.co_filename
         # TODO : It currently doesn't log the last return call from the first function
-        # print(code.co_name, code.co_filename)
 
         if code.co_name in self.ignored_functions:
             return
@@ -245,13 +238,9 @@ class Tracer:
         ):
             class_name = frame.f_locals["self"].__class__.__name__
         file_name = os.path.realpath(file_name)
-        function_qualified_name = file_name + ":" + (class_name + ":" if class_name else "") + code.co_name
+        function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
         if function_qualified_name in self.ignored_qualified_functions:
-            # print(function_qualified_name)
             return
-        t4 = time.perf_counter_ns()
-        self.profiling_info["ignored_functions"].update(count=1, time=t4 - t3)
-        t9 = time.perf_counter_ns()
         if event == "return":
             self.function_count[function_qualified_name] += 1
             if self.function_count[function_qualified_name] >= self.max_function_count:
@@ -271,8 +260,6 @@ class Tracer:
             if not file_valid:
                 # we don't want to trace this function because it cannot be optimized
                 self.ignored_qualified_functions.add(function_qualified_name)
-                t10 = time.perf_counter_ns()
-                self.profiling_info["filter_functions"].update(count=1, time=t10 - t9)
                 return
             self.function_modules.append(
                 FunctionModules(
@@ -285,17 +272,12 @@ class Tracer:
                     class_name=class_name,
                 ),
             )
-        t10 = time.perf_counter_ns()
-        self.profiling_info["filter_functions"].update(count=1, time=t10 - t9)
-        t11 = time.perf_counter_ns()
 
         # TODO: Also check if this function arguments are unique from the values logged earlier
 
         cur = self.con.cursor()
 
         t_ns = time.perf_counter_ns()
-        self.profiling_info["con.cursor"].update(count=1, time=t_ns - t11)
-        t12 = time.perf_counter_ns()
         original_recursion_limit = sys.getrecursionlimit()
         try:
             # pickling can be a recursive operator, so we need to increase the recursion limit
@@ -319,9 +301,6 @@ class Tracer:
                 # TODO: If this branch hits then its possible there are no paired arg, return values in the replay test.
                 #  Filter them out
                 return
-        t13 = time.perf_counter_ns()
-        self.profiling_info["pickle.dumps"].update(count=1, time=t13 - t12)
-        t14 = time.perf_counter_ns()
         cur.execute(
             "INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
             (
@@ -341,11 +320,7 @@ class Tracer:
             self.next_insert = 1000
             self.con.commit()
 
-        t15 = time.perf_counter_ns()
-        self.profiling_info["cur.execute"].update(count=1, time=t15 - t14)
-
     def trace_dispatch_call(self, frame, t):
-        # print("trace_dispatch_call", self.cur)
         if self.cur and frame.f_back is not self.cur[-2]:
             rpt, rit, ret, rfn, rframe, rcur = self.cur
             if not isinstance(rframe, Tracer.fake_frame):
@@ -368,11 +343,9 @@ class Tracer:
             timings[fn] = cc, ns + 1, tt, ct, callers
         else:
             timings[fn] = 0, 0, 0, 0, {}
-        # print("trace_dispatch_callreturn", self.cur)
         return 1
 
     def trace_dispatch_exception(self, frame, t):
-        # print("trace_dispatch_exception", self.cur)
         rpt, rit, ret, rfn, rframe, rcur = self.cur
         if (rframe is not frame) and rcur:
             return self.trace_dispatch_return(rframe, t)
@@ -380,7 +353,6 @@ class Tracer:
         return 1
 
     def trace_dispatch_c_call(self, frame, t):
-        # print("trace_dispatch_c_call", self.cur)
         fn = ("", 0, self.c_func_name)
         self.cur = (t, 0, 0, fn, frame, self.cur)
         timings = self.timings
@@ -392,9 +364,7 @@ class Tracer:
         return 1
 
     def trace_dispatch_return(self, frame, t):
-        # print("trace_dispatch_return", self.cur)
         if frame is not self.cur[-2]:
-            # print(self.cur[-2], self.cur[-2].f_back)
             assert frame is self.cur[-2].f_back, ("Bad return", self.cur[-3])
             self.trace_dispatch_return(self.cur[-2], 0)
 
