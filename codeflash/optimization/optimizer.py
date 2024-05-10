@@ -247,7 +247,9 @@ class Optimizer:
         function_trace_id: str = str(uuid.uuid4())
         ph("cli-optimize-function-start", {"function_trace_id": function_trace_id})
         self.cleanup_leftover_test_return_values()
-        ctx_result = self.get_code_optimization_context(function_to_optimize)
+        ctx_result = self.get_code_optimization_context(
+            function_to_optimize, self.args.project_root, original_code
+        )
         if not is_successful(ctx_result):
             return Failure(ctx_result.failure())
         code_context: CodeOptimizationContext = ctx_result.unwrap()
