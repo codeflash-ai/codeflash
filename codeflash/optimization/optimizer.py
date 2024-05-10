@@ -22,7 +22,7 @@ from codeflash.api.aiservice import (
     OptimizedCandidate,
 )
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_extractor import extract_code
+from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     get_all_function_names,
@@ -103,8 +103,8 @@ class BestOptimization(BaseModel):
 class CodeOptimizationContext(BaseModel):
     code_to_optimize_with_dependents: str
     contextual_dunder_methods: set[tuple[str, str]]
-    dependent_functions: List[Tuple[Source, str, str]]
-    preexisting_functions: List[str]
+    dependent_functions: list[tuple[Source, str, str]]
+    preexisting_functions: list[str]
 
 
 class Optimizer:
@@ -152,7 +152,7 @@ class Optimizer:
                 files, num_functions = get_functions_to_optimize_by_file(
                     optimize_all=self.args.all,
                     file=file_path,
-                    function=function,
+                    only_get_this_function=function,
                     test_cfg=self.test_cfg,
                     ignore_paths=self.args.ignore_paths,
                     project_root=self.args.project_root,
@@ -168,7 +168,7 @@ class Optimizer:
             ) = get_functions_to_optimize_by_file(
                 optimize_all=self.args.all,
                 file=self.args.file,
-                function=self.args.function,
+                only_get_this_function=self.args.function,
                 test_cfg=self.test_cfg,
                 ignore_paths=self.args.ignore_paths,
                 project_root=self.args.project_root,
@@ -261,11 +261,22 @@ class Optimizer:
                 original_dependent_code[module_abspath] = dependent_code
         logging.info(f"Code to be optimized:\n{code_context.code_to_optimize_with_dependents}")
         module_path = module_name_from_file_path(function_to_optimize.file_path, self.args.project_root)
+
+        for module_abspath in original_dependent_code:
+            code_context.code_to_optimize_with_dependents = add_needed_imports_from_module(
+                original_dependent_code[module_abspath],
+                code_context.code_to_optimize_with_dependents,
+                module_abspath,
+                function_to_optimize.file_path,
+                self.args.project_root,
+            )
+
         instrumented_unittests_created_for_function = self.instrument_existing_tests(
             function_to_optimize=function_to_optimize,
             function_to_tests=function_to_tests,
         )
         self.instrumented_unittests_created.update(instrumented_unittests_created_for_function)
+
         generated_results = self.generate_tests_and_optimizations(
             code_context.code_to_optimize_with_dependents,
             function_to_optimize,
@@ -340,7 +351,7 @@ class Optimizer:
                     original_runtime_ns=original_code_baseline.runtime,
                     best_runtime_ns=best_optimization.runtime,
                     function_name=function_to_optimize.qualified_name,
-                    path=function_to_optimize.file_path,
+                    file_path=function_to_optimize.file_path,
                 )
 
                 self.log_successful_optimization(
@@ -360,7 +371,7 @@ class Optimizer:
 
                 new_code, new_dependent_code = self.reformat_code_and_dependents(
                     dependent_functions_by_module_abspath,
-                    explanation.path,
+                    explanation.file_path,
                     original_code,
                 )
 
@@ -371,9 +382,9 @@ class Optimizer:
                 )
 
                 original_code_combined = original_dependent_code.copy()
-                original_code_combined[explanation.path] = original_code
+                original_code_combined[explanation.file_path] = original_code
                 new_code_combined = new_dependent_code.copy()
-                new_code_combined[explanation.path] = new_code
+                new_code_combined[explanation.file_path] = new_code
                 if not self.args.no_pr:
                     check_create_pr(
                         optimize_all=self.args.all,
@@ -436,22 +447,26 @@ class Optimizer:
             logging.info(candidate.source_code)
             try:
                 replace_function_definitions_in_module(
-                    [function_to_optimize.qualified_name],
-                    candidate.source_code,
-                    function_to_optimize.file_path,
-                    code_context.preexisting_functions,
-                    code_context.contextual_dunder_methods,
+                    function_names=[function_to_optimize.qualified_name],
+                    optimized_code=candidate.source_code,
+                    file_path_of_module_with_function_to_optimize=function_to_optimize.file_path,
+                    module_abspath=function_to_optimize.file_path,
+                    preexisting_functions=code_context.preexisting_functions,
+                    contextual_functions=code_context.contextual_dunder_methods,
+                    project_root_path=self.args.project_root,
                 )
                 for (
                     module_abspath,
                     qualified_names,
                 ) in dependent_functions_by_module_abspath.items():
                     replace_function_definitions_in_module(
-                        list(qualified_names),
-                        candidate.source_code,
-                        module_abspath,
-                        [],
-                        code_context.contextual_dunder_methods,
+                        function_names=list(qualified_names),
+                        optimized_code=candidate.source_code,
+                        file_path_of_module_with_function_to_optimize=function_to_optimize.file_path,
+                        module_abspath=module_abspath,
+                        preexisting_functions=[],
+                        contextual_functions=code_context.contextual_dunder_methods,
+                        project_root_path=self.args.project_root,
                     )
             except (
                 ValueError,
@@ -549,7 +564,7 @@ class Optimizer:
         generated_tests: GeneratedTests,
     ) -> None:
         logging.info(
-            f"⚡️ Optimization successful! 📄 {function_to_optimize.qualified_name} in {explanation.path}",
+            f"⚡️ Optimization successful! 📄 {function_to_optimize.qualified_name} in {explanation.file_path}",
         )
         logging.info(f"📈 {explanation.perf_improvement_line}")
         logging.info(f"Explanation: \n{explanation.to_console_string()}")
@@ -615,33 +630,39 @@ class Optimizer:
     def replace_function_and_dependents_with_optimized_code(
         self,
         code_context: CodeOptimizationContext,
-        dependent_functions_by_module_abspath: Dict[str, set[str]],
+        dependent_functions_by_module_abspath: dict[str, set[str]],
         explanation: Explanation,
         optimized_code: str,
         qualified_function_name: str,
     ) -> None:
         replace_function_definitions_in_module(
-            [qualified_function_name],
-            optimized_code,
-            explanation.path,
-            code_context.preexisting_functions,
-            code_context.contextual_dunder_methods,
+            function_names=[qualified_function_name],
+            optimized_code=optimized_code,
+            file_path_of_module_with_function_to_optimize=explanation.file_path,
+            module_abspath=explanation.file_path,
+            preexisting_functions=code_context.preexisting_functions,
+            contextual_functions=code_context.contextual_dunder_methods,
+            project_root_path=self.args.project_root,
         )
         for (
             module_abspath,
             qualified_names,
         ) in dependent_functions_by_module_abspath.items():
             replace_function_definitions_in_module(
-                list(qualified_names),
-                optimized_code,
-                module_abspath,
-                [],
-                code_context.contextual_dunder_methods,
+                function_names=list(qualified_names),
+                optimized_code=optimized_code,
+                file_path_of_module_with_function_to_optimize=explanation.file_path,
+                module_abspath=module_abspath,
+                preexisting_functions=[],
+                contextual_functions=code_context.contextual_dunder_methods,
+                project_root_path=self.args.project_root,
             )
 
     def get_code_optimization_context(
         self,
         function_to_optimize: FunctionToOptimize,
+        project_root: str,
+        original_source_code: str,
     ) -> Result[CodeOptimizationContext, str]:
         code_to_optimize, contextual_dunder_methods = extract_code(
             [function_to_optimize],
@@ -683,19 +704,27 @@ class Optimizer:
                 if code_to_optimize is None:
                     return Failure("Could not find function to optimize.")
         code_to_optimize_with_dependents = dependent_code + "\n" + code_to_optimize
+
+        code_to_optimize_with_dependents_and_imports = add_needed_imports_from_module(
+            original_source_code,
+            code_to_optimize_with_dependents,
+            function_to_optimize.file_path,
+            function_to_optimize.file_path,
+            project_root,
+        )
         preexisting_functions.extend(
             [fn[0].full_name.split(".")[-1] for fn in dependent_functions],
         )
         return Success(
             CodeOptimizationContext(
-                code_to_optimize_with_dependents=code_to_optimize_with_dependents,
+                code_to_optimize_with_dependents=code_to_optimize_with_dependents_and_imports,
                 contextual_dunder_methods=contextual_dunder_methods,
                 dependent_functions=dependent_functions,
                 preexisting_functions=preexisting_functions,
             ),
         )
 
-    def cleanup_leftover_test_return_values(self):
+    def cleanup_leftover_test_return_values(self) -> None:
         # remove leftovers from previous run
         pathlib.Path(get_run_tmp_file("test_return_values_0.bin")).unlink(
             missing_ok=True,

@@ -83,7 +83,7 @@ def functionA():
         functions, functions_count = get_functions_to_optimize_by_file(
             optimize_all=None,
             file=f.name,
-            function="A.functionA",
+            only_get_this_function="A.functionA",
             test_cfg=test_config,
             ignore_paths=[""],
             project_root=os.path.dirname(f.name),
@@ -98,7 +98,7 @@ def functionA():
         functions, functions_count = get_functions_to_optimize_by_file(
             optimize_all=None,
             file=f.name,
-            function="X.functionA",
+            only_get_this_function="X.functionA",
             test_cfg=test_config,
             ignore_paths=[""],
             project_root=os.path.dirname(f.name),
@@ -113,7 +113,7 @@ def functionA():
         functions, functions_count = get_functions_to_optimize_by_file(
             optimize_all=None,
             file=f.name,
-            function="functionA",
+            only_get_this_function="functionA",
             test_cfg=test_config,
             ignore_paths=[""],
             project_root=os.path.dirname(f.name),

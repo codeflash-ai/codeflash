@@ -11,7 +11,7 @@ class Explanation:
     original_runtime_ns: int
     best_runtime_ns: int
     function_name: str
-    path: str
+    file_path: str
 
     @property
     def perf_improvement_line(self) -> str:
@@ -36,7 +36,7 @@ class Explanation:
         best_runtime_human = humanize_runtime(self.best_runtime_ns)
 
         explanation = (
-            f"Optimized {self.function_name} in {self.path}\n"
+            f"Optimized {self.function_name} in {self.file_path}\n"
             f"{self.perf_improvement_line}\n"
             f"Runtime went down from {original_runtime_human} to {best_runtime_human} \n\n"
             + "Explanation:\n"
