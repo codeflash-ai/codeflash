@@ -4,10 +4,13 @@ import pathlib
 import sys
 import tempfile
 
-import pytest
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import INDIVIDUAL_TEST_TIMEOUT
-from codeflash.code_utils.instrument_existing_tests import InjectPerfOnly, inject_profiling_into_existing_test
+from codeflash.code_utils.instrument_existing_tests import (
+    FunctionImportedAsVisitor,
+    InjectPerfOnly,
+    inject_profiling_into_existing_test,
+)
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestType
 from codeflash.verification.test_runner import run_tests
@@ -1391,3 +1394,92 @@ def test_update_line_node():
     )
 
     assert len(injectperf.update_line_node(node, "test_sort", "0", None)) > 0
+
+
+def test_class_method_imported_as():
+    code = """import functionA
+import moduleB as module_B
+from module import functionB as function_B
+import class_name_B
+from nuitka.nodes.ImportNodes import ExpressionBuiltinImport as nuitka_nodes_ImportNodes_ExpressionBuiltinImport
+"""
+    tree = ast.parse(code)
+    visitor = FunctionImportedAsVisitor("functionA")
+    visitor.visit(tree)
+    assert visitor.imported_as == "functionA"
+
+    visitor = FunctionImportedAsVisitor("functionB")
+    visitor.visit(tree)
+    assert visitor.imported_as == "function_B"
+
+    visitor = FunctionImportedAsVisitor("ExpressionBuiltinImport.method_name")
+    visitor.visit(tree)
+    assert visitor.imported_as == "nuitka_nodes_ImportNodes_ExpressionBuiltinImport.method_name"
+
+    visitor = FunctionImportedAsVisitor("class_name_B")
+    visitor.visit(tree)
+    assert visitor.imported_as == "class_name_B"
+
+
+def test_class_function_instrumentation():
+    code = """from module import class_name as class_name_A
+
+def test_class_name_A_function_name():
+    ret = class_name_A.function_name(**args)
+"""
+
+    expected = """import time
+import gc
+import os
+import sqlite3
+import dill as pickle
+
+def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
+    if not hasattr(codeflash_wrap, 'index'):
+        codeflash_wrap.index = {{}}
+    if test_id in codeflash_wrap.index:
+        codeflash_wrap.index[test_id] += 1
+    else:
+        codeflash_wrap.index[test_id] = 0
+    codeflash_test_index = codeflash_wrap.index[test_id]
+    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    gc.disable()
+    counter = time.perf_counter_ns()
+    return_value = wrapped(*args, **kwargs)
+    codeflash_duration = time.perf_counter_ns() - counter
+    gc.enable()
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    codeflash_con.commit()
+    return return_value
+from module import class_name as class_name_A
+
+def test_class_name_A_function_name():
+    codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
+    codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
+    codeflash_cur = codeflash_con.cursor()
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    codeflash_return_value = codeflash_wrap(class_name_A.function_name, '{module_path}', None, 'test_class_name_A_function_name', 'class_name_A.function_name', '4', codeflash_cur, codeflash_con, **args)
+    ret = codeflash_return_value
+    codeflash_con.close()"""
+
+    test_path = (
+        pathlib.Path(__file__).parent.resolve()
+        / "../code_to_optimize/tests/pytest/test_class_function_instrumentation_temp.py"
+    )
+    with open(test_path, "w") as f:
+        f.write(code)
+
+    project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+
+    success, new_test = inject_profiling_into_existing_test(
+        test_path,
+        "class_name.function_name",
+        project_root_path,
+    )
+    os.remove(test_path)
+    assert success
+    assert new_test == expected.format(
+        tmp_dir_path=get_run_tmp_file("test_return_values"),
+        module_path="tests.pytest.test_class_function_instrumentation_temp",
+    )

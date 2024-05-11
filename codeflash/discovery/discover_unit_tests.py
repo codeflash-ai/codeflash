@@ -6,7 +6,7 @@ import subprocess
 import unittest
 from collections import defaultdict
 from enum import Enum
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional
 
 import jedi
 from pydantic.dataclasses import dataclass
@@ -29,7 +29,7 @@ class TestsInFile:
 
     @classmethod
     def from_pytest_stdout_line_co(cls, module: str, function: str, directory: str):
-        absolute_test_path = os.path.join(directory, module)
+        absolute_test_path = os.path.normpath(os.path.join(directory, module))
         assert os.path.exists(
             absolute_test_path,
         ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
@@ -43,7 +43,7 @@ class TestsInFile:
     @classmethod
     def from_pytest_stdout_line_q(cls, line: str, pytest_rootdir: str):
         parts = line.split("::")
-        absolute_test_path = os.path.join(pytest_rootdir, parts[0])
+        absolute_test_path = os.path.normpath(os.path.join(pytest_rootdir, parts[0]))
         assert os.path.exists(
             absolute_test_path,
         ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
@@ -90,22 +90,18 @@ def discover_unit_tests(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     return discover_tests(cfg)
 
 
-def discover_replay_tests(
+def discover_replay_test_functions(
     cfg: TestConfig,
-) -> Tuple[Dict[str, List[TestsInFile]], Set[str]]:
+    replay_test_file: str,
+) -> List[str]:
     tests = discover_unit_tests(cfg)
     replay_tests = {
-        function: [test_file for test_file in test_files if "__replay_test" in test_file.test_file]
+        function: [test_file for test_file in test_files if test_file.test_file == replay_test_file]
         for function, test_files in tests.items()
     }
-    replay_files = {
-        test_file.test_file
-        for test_files in tests.values()
-        for test_file in test_files
-        if "__replay_test" in test_file.test_file
-    }
+    functions = [function for function, test_files in replay_tests.items() if test_files]
 
-    return replay_tests, replay_files
+    return functions
 
 
 def get_pytest_rootdir_only(pytest_cmd_list, tests_root, project_root) -> str:
@@ -187,7 +183,7 @@ def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
         )
 
         _test_module_path = _test_module.replace(".", os.sep)
-        _test_module_path = os.path.join(str(tests_root), _test_module_path) + ".py"
+        _test_module_path = os.path.normpath(os.path.join(str(tests_root), _test_module_path) + ".py")
         if not os.path.exists(_test_module_path):
             return None
         return TestDetails(_test_function, _test_module_path, _test_suite_name)

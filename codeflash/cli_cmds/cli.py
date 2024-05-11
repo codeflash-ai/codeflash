@@ -60,6 +60,16 @@ def parse_args() -> Namespace:
         action="store_true",
         help="Use cached tests from a specified file for debugging.",
     )
+    parser.add_argument(
+        "--replay-test",
+        type=str,
+        help="Path to replay test to optimize functions from",
+    )
+    parser.add_argument(
+        "--no-pr",
+        action="store_true",
+        help="Do not create a PR for the optimization, only update the code locally.",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose debug logs")
     parser.add_argument("--version", action="store_true", help="Print the version of codeflash")
     args: Namespace = parser.parse_args()
@@ -83,6 +93,10 @@ def process_cmd_args(args: Namespace) -> Namespace:
         if not os.path.exists(args.file):
             raise ValueError(f"File {args.file} does not exist")
         args.file = os.path.realpath(args.file)
+    if args.replay_test:
+        if not os.path.isfile(args.replay_test):
+            raise ValueError(f"Replay test file {args.replay_test} does not exist")
+        args.replay_test = os.path.realpath(args.replay_test)
 
     try:
         pyproject_config, pyproject_file_path = parse_config_file(args.config_file)
@@ -103,8 +117,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
     for key in supported_keys:
         if key in pyproject_config:
             if (
-                hasattr(args, key.replace("-", "_"))
-                and getattr(args, key.replace("-", "_")) is None
+                hasattr(args, key.replace("-", "_")) and getattr(args, key.replace("-", "_")) is None
             ) or not hasattr(args, key.replace("-", "_")):
                 setattr(args, key.replace("-", "_"), pyproject_config[key])
     assert args.module_root is not None and os.path.isdir(
@@ -113,9 +126,8 @@ def process_cmd_args(args: Namespace) -> Namespace:
     assert args.tests_root is not None and os.path.isdir(
         args.tests_root,
     ), f"--tests-root {args.tests_root} must be a valid directory"
-    assert not (
-        env_utils.get_pr_number() is not None and not env_utils.ensure_codeflash_api_key()
-    ), (
+
+    assert not (env_utils.get_pr_number() is not None and not env_utils.ensure_codeflash_api_key()), (
         "Codeflash API key not found. When running in a Github Actions Context, provide the "
         "'CODEFLASH_API_KEY' environment variable as a secret.\n"
         "You can add a secret by going to your repository's settings page, then clicking 'Secrets' in the left sidebar.\n"
@@ -160,19 +172,20 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
             )
             apologize_and_exit()
         owner, repo = get_repo_owner_and_name(git_repo)
-        try:
-            response = check_github_app_installed_on_repo(owner, repo)
-            if not response.ok or response.text != "true":
-                logging.error(f"Error: {response.text}")
-                raise Exception
-        except Exception:
-            logging.exception(
-                f"Could not find the Codeflash GitHub App installed on the repository {owner}/{repo} or the GitHub"
-                f" account linked to your CODEFLASH_API_KEY does not have access to the repository {owner}/{repo}.{LF}"
-                "Please install the Codeflash GitHub App on your repository to use --all. You can install it by going to "
-                f"https://github.com/settings/installations/{LF}",
-            )
-            apologize_and_exit()
+        if not args.no_pr:
+            try:
+                response = check_github_app_installed_on_repo(owner, repo)
+                if not response.ok or response.text != "true":
+                    logging.error(f"Error: {response.text}")
+                    raise Exception
+            except Exception:
+                logging.exception(
+                    f"Could not find the Codeflash GitHub App installed on the repository {owner}/{repo} or the GitHub"
+                    f" account linked to your CODEFLASH_API_KEY does not have access to the repository {owner}/{repo}.{LF}"
+                    "Please install the Codeflash GitHub App on your repository to use --all. You can install it by going to "
+                    f"https://github.com/settings/installations/{LF}",
+                )
+                apologize_and_exit()
     if not hasattr(args, "all"):
         args.all = None
     elif args.all == "":

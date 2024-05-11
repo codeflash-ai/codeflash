@@ -11,11 +11,19 @@ class ReplaceCallNodeWithName(ast.NodeTransformer):
         self.new_variable_name = new_variable_name
 
     def visit_Call(self, node: ast.Call):
-        if isinstance(node, ast.Call) and (
-            (hasattr(node.func, "id") and node.func.id == self.only_function_name)
-            or (hasattr(node.func, "attr") and node.func.attr == self.only_function_name)
-        ):
-            return ast.Name(id=self.new_variable_name, ctx=ast.Load())
+        if isinstance(node, ast.Call):
+            if hasattr(node.func, "id"):
+                function_name = node.func.id
+
+            if hasattr(node.func, "attr"):
+                function_name = node.func.attr
+
+            if hasattr(node.func, "value") and hasattr(node.func.value, "id"):
+                function_name = node.func.value.id + "." + function_name
+
+            if function_name == self.only_function_name:
+                return ast.Name(id=self.new_variable_name, ctx=ast.Load())
+
         self.generic_visit(node)
         return node
 
@@ -33,12 +41,21 @@ class InjectPerfOnly(ast.NodeTransformer):
         test_class_name: Optional[str] = None,
     ):
         call_node = None
+        function_name = ""
         for node in ast.walk(test_node):
-            if isinstance(node, ast.Call) and (
-                (hasattr(node.func, "id") and node.func.id == self.only_function_name)
-                or (hasattr(node.func, "attr") and node.func.attr == self.only_function_name)
-            ):
-                call_node = node
+            if isinstance(node, ast.Call):
+                if hasattr(node.func, "id"):
+                    function_name = node.func.id
+
+                if hasattr(node.func, "attr"):
+                    function_name = node.func.attr
+
+                if hasattr(node.func, "value") and hasattr(node.func.value, "id"):
+                    function_name = node.func.value.id + "." + function_name
+
+                if function_name == self.only_function_name:
+                    call_node = node
+
         if call_node is None:
             return [test_node]
 
@@ -53,7 +70,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                 value=ast.Call(
                     func=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
                     args=[
-                        ast.Name(id=function_id, ctx=ast.Load()),
+                        ast.Name(id=function_name, ctx=ast.Load()),
                         ast.Constant(value=self.module_path),
                         ast.Constant(value=test_class_name or None),
                         ast.Constant(value=node_name),
@@ -81,11 +98,19 @@ class InjectPerfOnly(ast.NodeTransformer):
 
     def is_target_function_line(self, line_node):
         for node in ast.walk(line_node):
-            if isinstance(node, ast.Call) and (
-                (hasattr(node.func, "id") and node.func.id == self.only_function_name)
-                or (hasattr(node.func, "attr") and node.func.attr == self.only_function_name)
-            ):
-                return True
+            if isinstance(node, ast.Call):
+                if hasattr(node.func, "id"):
+                    function_name = node.func.id
+
+                if hasattr(node.func, "attr"):
+                    function_name = node.func.attr
+
+                if hasattr(node.func, "value") and hasattr(node.func.value, "id"):
+                    function_name = node.func.value.id + "." + function_name
+
+                if function_name == self.only_function_name:
+                    return True
+
         return False
 
     def visit_ClassDef(self, node: ClassDef) -> Any:
@@ -229,16 +254,24 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
     np_array is what we want
     """
 
-    def __init__(self, original_function_name):
-        self.original_function_name = original_function_name
-        self.imported_as_function_name = original_function_name
+    def __init__(self, qualified_name: str):
+        self.split_qualified_name = qualified_name.split(".")
+        assert len(self.split_qualified_name) <= 2, "Only support functions in the format module.function"
+        self.imported_as = qualified_name
+        self.to_match = self.split_qualified_name[0]
+        try:
+            self.optional_method_name = self.split_qualified_name[1]
+        except IndexError:
+            self.optional_method_name = None
 
     # TODO: Validate if the function imported is actually from the right module
     def visit_ImportFrom(self, node: ast.ImportFrom):
         for alias in node.names:
-            if alias.name == self.original_function_name:
+            if alias.name == self.to_match:
                 if hasattr(alias, "asname") and alias.asname is not None:
-                    self.imported_as_function_name = alias.asname
+                    self.imported_as = alias.asname + (
+                        "." + self.optional_method_name if self.optional_method_name else ""
+                    )
 
 
 def inject_profiling_into_existing_test(test_path, function_name, root_path) -> Tuple[bool, str]:
@@ -250,10 +283,11 @@ def inject_profiling_into_existing_test(test_path, function_name, root_path) -> 
         print(f"Syntax error in code: {e}")
         return False, None
     # TODO: Pass the full name of function here, otherwise we can run into namespace clashes
+    module_path = module_name_from_file_path(test_path, root_path)
     import_visitor = FunctionImportedAsVisitor(function_name)
     import_visitor.visit(tree)
-    function_name = import_visitor.imported_as_function_name
-    module_path = module_name_from_file_path(test_path, root_path)
+    function_name = import_visitor.imported_as
+
     tree = InjectPerfOnly(function_name, module_path).visit(tree)
     new_imports = [
         ast.Import(names=[ast.alias(name="time")]),

@@ -85,12 +85,15 @@ def parse_sqlite_test_results(
     if not os.path.exists(sqlite_file_path):
         logging.warning(f"No test results for {sqlite_file_path} found.")
         return test_results
-    db = sqlite3.connect(sqlite_file_path)
-    cur = db.cursor()
-    data = cur.execute(
-        "SELECT test_module_path , test_class_name , test_function_name , "
-        "function_getting_tested , iteration_id , runtime  FROM test_results",
-    ).fetchall()
+    try:
+        db = sqlite3.connect(sqlite_file_path)
+        cur = db.cursor()
+        data = cur.execute(
+            "SELECT test_module_path , test_class_name , test_function_name , "
+            "function_getting_tested , iteration_id , runtime, return_value  FROM test_results",
+        ).fetchall()
+    finally:
+        db.close()
     for val in data:
         test_results.add(
             FunctionTestInvocation(
@@ -106,7 +109,7 @@ def parse_sqlite_test_results(
                 runtime=val[5],
                 test_framework=test_config.test_framework,
                 test_type=test_type,
-                return_value=None,
+                return_value=pickle.loads(val[6]),
             ),
         )
         # return_value is only None temporarily as this is only being used for the existing tests. This should generalize

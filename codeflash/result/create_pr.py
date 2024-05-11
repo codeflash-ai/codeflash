@@ -18,20 +18,17 @@ from codeflash.result.explanation import Explanation
 def existing_tests_source_for(
     function_qualified_name_with_modules_from_root: str,
     function_to_tests: Dict[str, List[TestsInFile]],
+    tests_root: str,
 ) -> str:
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
     existing_tests = ""
     if test_files:
         for test_file in test_files:
-            with open(test_file.test_file, encoding="utf8") as f:
-                new_test = "".join(f.readlines())
-                if new_test not in existing_tests:
-                    existing_tests += new_test
+            existing_tests += "- " + os.path.relpath(test_file.test_file, tests_root) + "\n"
     return existing_tests
 
 
 def check_create_pr(
-    optimize_all: bool,
     original_code: dict[str, str],
     new_code: dict[str, str],
     explanation: Explanation,
@@ -75,8 +72,7 @@ def check_create_pr(
                 f"Optimization was successful, but I failed to suggest changes to PR #{pr_number}."
                 f" Response from server was: {response.text}",
             )
-
-    elif optimize_all:
+    else:
         logging.info("Creating a new PR with the optimized code...")
         owner, repo = get_repo_owner_and_name()
 

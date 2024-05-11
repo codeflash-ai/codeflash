@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import logging
 import sqlite3
 import textwrap
-from collections import defaultdict
-from typing import Any, Dict, Generator, List, Optional, Tuple
+from typing import Any, Generator, List, Optional
 
 from codeflash.discovery.functions_to_optimize import (
     FunctionProperties,
@@ -18,48 +16,30 @@ def get_next_arg_and_return(
     function_name: str,
     file_name: str,
     class_name: Optional[str] = None,
-    num_to_get: int = 3,
-) -> Generator[Tuple[Any, Any], None, None]:
+    num_to_get: int = 25,
+) -> Generator[Any]:
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
-    limit = num_to_get * 2 + 100  # we may have to get more than num_to_get*2 to get num_to_get valid pairs
+    limit = num_to_get * 2 + 10  # we may have to get more than num_to_get*2 to get num_to_get valid pairs
     if class_name is not None:
-        data = cur.execute(
-            "SELECT * FROM events WHERE function = ? AND filename = ? AND classname = ? ORDER BY time_ns ASC LIMIT ?",
+        cursor = cur.execute(
+            "SELECT * FROM function_calls WHERE function = ? AND filename = ? AND classname = ? ORDER BY time_ns ASC LIMIT ?",
             (function_name, file_name, class_name, limit),
-        ).fetchall()
+        )
     else:
-        data = cur.execute(
-            "SELECT * FROM events WHERE function = ? AND filename = ? ORDER BY time_ns ASC LIMIT ?",
+        cursor = cur.execute(
+            "SELECT * FROM function_calls WHERE function = ? AND filename = ? ORDER BY time_ns ASC LIMIT ?",
             (function_name, file_name, limit),
-        ).fetchall()
+        )
 
     counts = 0
-    matched_arg_return: Dict[int, List[Any]] = defaultdict(list)
-    for val in data:
+    while (val := cursor.fetchone()) is not None:
         if counts >= num_to_get:
             break
 
-        event_type, frame_address = val[0], val[5]
+        event_type = val[0]
         if event_type == "call":
-            matched_arg_return[frame_address].append(val[8])
-            if len(matched_arg_return[frame_address]) > 1:
-                logging.warning(
-                    f"Pre-existing call to the function {function_name} with same frame address.",
-                )
-        elif event_type == "return":
-            matched_arg_return[frame_address].append(val[7])
-            arg_return_length = len(matched_arg_return[frame_address])
-            if arg_return_length > 2:
-                logging.warning(
-                    f"Pre-existing return to the function {function_name} with same frame address.",
-                )
-            elif arg_return_length == 1:
-                logging.warning(f"No call before return for {function_name}!")
-            elif arg_return_length == 2:
-                yield matched_arg_return[frame_address]
-                counts += 1
-                del matched_arg_return[frame_address]
+            yield val[7]
         else:
             raise ValueError("Invalid Trace event type")
 
@@ -77,9 +57,8 @@ def create_trace_replay_test(
     assert test_framework in ["pytest", "unittest"]
 
     imports = f"""import dill as pickle
-import {test_framework}
+{"import unittest" if test_framework == "unittest" else ""}
 from codeflash.tracing.replay_test import get_next_arg_and_return
-from codeflash.verification.comparator import comparator
 """
 
     # TODO: Module can have "-" character if the module-root is ".". Need to handle that case
@@ -109,35 +88,22 @@ from codeflash.verification.comparator import comparator
     functions_to_optimize = [
         function.function_name for function in functions if function.function_name != "__init__"
     ]
+    metadata = f"""functions = {functions_to_optimize}
+trace_file_path = r"{trace_file}"
+"""
     test_function_body = textwrap.dedent(
         """\
-        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(trace_file=r'{trace_file}', function_name='{orig_function_name}', file_name=r'{file_name}', num_to_get={max_run_count}):
+        for arg_val_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_name=r"{file_name}", num_to_get={max_run_count}):
             args = pickle.loads(arg_val_pkl)
-            traced_return_val = pickle.loads(return_val_pkl)
             ret = {function_name}({args})
-            """
-        + (
-            """self.assertTrue(comparator(traced_return_val, ret))
-        """
-            if test_framework == "unittest"
-            else """assert comparator(traced_return_val, ret)
-        """
-        ),
+            """,
     )
     test_class_method_body = textwrap.dedent(
         """\
-        for arg_val_pkl, return_val_pkl in get_next_arg_and_return(trace_file=r'{trace_file}', function_name='{orig_function_name}', file_name=r'{file_name}', class_name='{class_name}', num_to_get={max_run_count}):
-            args = pickle.loads(arg_val_pkl)
-            traced_return_val = pickle.loads(return_val_pkl){filter_variables}
+        for arg_val_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_name=r"{file_name}", class_name="{class_name}", num_to_get={max_run_count}):
+            args = pickle.loads(arg_val_pkl){filter_variables}
             ret = {class_name_alias}.{method_name}(**args)
-            """
-        + (
-            """self.assertTrue(comparator(traced_return_val, ret))
-        """
-            if test_framework == "unittest"
-            else """assert comparator(traced_return_val, ret)
-        """
-        ),
+            """,
     )
     if test_framework == "unittest":
         self = "self"
@@ -152,7 +118,6 @@ from codeflash.verification.comparator import comparator
         if func.class_name is None:
             alias = get_function_alias(func.module_name, func.function_name)
             test_body = test_function_body.format(
-                trace_file=trace_file,
                 function_name=alias,
                 file_name=func.file_name,
                 orig_function_name=func.function_name,
@@ -165,9 +130,8 @@ from codeflash.verification.comparator import comparator
                 func.module_name,
                 func.class_name + "_" + func.function_name,
             )
-            filter_variables = "\n    args.pop('__class__', None)" if func.function_name == "__init__" else ""
+            filter_variables = '\n    args.pop("__class__", None)' if func.function_name == "__init__" else ""
             test_body = test_class_method_body.format(
-                trace_file=trace_file,
                 orig_function_name=func.function_name,
                 file_name=func.file_name,
                 class_name_alias=class_name_alias,
@@ -184,4 +148,4 @@ from codeflash.verification.comparator import comparator
         test_template += "    " if test_framework == "unittest" else ""
         test_template += f"def test_{alias}({self}):\n{formatted_test_body}\n"
 
-    return imports + "\n" + f"functions = {functions_to_optimize}" + "\n" + test_template
+    return imports + "\n" + metadata + "\n" + test_template
