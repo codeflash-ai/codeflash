@@ -328,12 +328,12 @@ def parse_test_results(
             pathlib.Path(
                 get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
             ).unlink(missing_ok=True)
-    elif test_type == TestType.EXISTING_UNIT_TEST:
+    elif test_type in [TestType.EXISTING_UNIT_TEST, TestType.REPLAY_TEST]:
         try:
             test_results_bin_file = parse_sqlite_test_results(
                 get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite"),
                 test_py_file_path=test_py_path,
-                test_type=TestType.EXISTING_UNIT_TEST,
+                test_type=test_type,
                 test_config=test_config,
             )
         except AttributeError as e:

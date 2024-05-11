@@ -3,6 +3,7 @@ import logging
 import os
 import random
 from _ast import AsyncFunctionDef, ClassDef, FunctionDef
+from collections import defaultdict
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -13,10 +14,12 @@ from libcst.metadata import CodeRange
 from pydantic.dataclasses import dataclass
 
 from codeflash.code_utils.code_utils import (
+    is_class_defined_in_file,
     module_name_from_file_path,
     path_belongs_to_site_packages,
 )
 from codeflash.code_utils.git_utils import get_git_diff
+from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -126,7 +129,7 @@ class FunctionToOptimize:
 
     # # For "BubbleSort.sorter", returns "BubbleSort"
     # # For "sorter", returns "sorter"
-    # # TODO does not support nested classes or functions
+    # # TODO: does not support nested classes or functions
     @property
     def top_level_parent_name(self) -> str:
         return self.function_name if not self.parents else self.parents[0].name
@@ -145,8 +148,9 @@ class FunctionToOptimize:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
 
 
-def get_functions_to_optimize_by_file(
+def get_functions_to_optimize(
     optimize_all: Optional[str],
+    replay_test: Optional[str],
     file: Optional[str],
     function: Optional[str],
     test_cfg: TestConfig,
@@ -154,9 +158,27 @@ def get_functions_to_optimize_by_file(
     project_root: str,
     module_root: str,
 ) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
+    assert (
+        sum(
+            [  # Ensure only one of the options is provided
+                bool(optimize_all),
+                bool(replay_test),
+                bool(file),
+            ],
+        )
+        == 1
+    ), "Only one of optimize_all, replay_test, or file should be provided"
+    functions: Dict[str, List[FunctionToOptimize]]
     if optimize_all:
         logging.info("Finding all functions in the module '%s' ...", optimize_all)
-        functions: Dict[str, List[FunctionToOptimize]] = get_all_files_and_functions(optimize_all)
+        functions = get_all_files_and_functions(optimize_all)
+    elif replay_test is not None:
+        functions = get_all_replay_test_functions(
+            replay_test=replay_test,
+            test_cfg=test_cfg,
+            project_root_path=project_root,
+        )
+
     elif file is not None:
         logging.info("Finding all functions in the file '%s' ...", file)
         functions = find_all_functions_in_file(file)
@@ -252,6 +274,59 @@ def find_all_functions_in_file(file_path: str) -> Dict[str, List[FunctionToOptim
         function_name_visitor.visit(ast_module)
         functions[file_path] = function_name_visitor.functions
     return functions
+
+
+def get_all_replay_test_functions(
+    replay_test: str,
+    test_cfg: TestConfig,
+    project_root_path: str,
+) -> Dict[str, List[FunctionToOptimize]]:
+    function_tests = discover_unit_tests(test_cfg, discover_only_these_tests=[replay_test])
+    # Get the absolute file paths for each function, excluding class name if present
+    filtered_valid_functions = defaultdict(list)
+    file_to_functions_map = defaultdict(list)
+    # below logic can be cleaned up with a better data structure to store the function paths
+    for function in function_tests:
+        parts = function.split(".")
+        module_path_parts = parts[:-1]  # Exclude the function or method name
+        function_name = parts[-1]
+        # Check if the second-to-last part is a class name
+        class_name = (
+            module_path_parts[-1]
+            if module_path_parts
+            and is_class_defined_in_file(
+                module_path_parts[-1],
+                os.path.join(project_root_path, *module_path_parts[:-1]) + ".py",
+            )
+            else None
+        )
+        if class_name:
+            # If there is a class name, append it to the module path
+            function: str = class_name + "." + function_name
+            file_path_parts = module_path_parts[:-1]  # Exclude the class name
+        else:
+            function: str = function_name
+            file_path_parts = module_path_parts
+        file_path = os.path.join(project_root_path, *file_path_parts) + ".py"
+        file_to_functions_map[file_path].append((function, function_name, class_name))
+    for file_path, functions in file_to_functions_map.items():
+        all_valid_functions: Dict[str, List[FunctionToOptimize]] = find_all_functions_in_file(
+            file_path=file_path,
+        )
+        filtered_list = []
+        for function in functions:
+            function_name, function_name_only, class_name = function
+            filtered_list.extend(
+                [
+                    valid_function
+                    for valid_function in all_valid_functions[file_path]
+                    if valid_function.qualified_name == function_name
+                ],
+            )
+        if len(filtered_list):
+            filtered_valid_functions[file_path] = filtered_list
+
+    return filtered_valid_functions
 
 
 def is_git_repo(file_path: str) -> bool:
