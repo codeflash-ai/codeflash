@@ -166,7 +166,7 @@ def get_functions_to_optimize(
                 bool(file),
             ],
         )
-        == 1
+        <= 1
     ), "Only one of optimize_all, replay_test, or file should be provided"
     functions: Dict[str, List[FunctionToOptimize]]
     if optimize_all:
