@@ -9,13 +9,17 @@ from unidiff import PatchSet
 
 
 def get_git_diff(
-    repo_directory: str = os.getcwd(), uncommitted_changes: bool = False,
+    repo_directory: str = os.getcwd(),
+    uncommitted_changes: bool = False,
 ) -> dict[str, list[int]]:
     repository = git.Repo(repo_directory, search_parent_directories=True)
     commit = repository.head.commit
     if uncommitted_changes:
         uni_diff_text = repository.git.diff(
-            None, "HEAD", ignore_blank_lines=True, ignore_space_at_eol=True,
+            None,
+            "HEAD",
+            ignore_blank_lines=True,
+            ignore_space_at_eol=True,
         )
     else:
         uni_diff_text = repository.git.diff(
@@ -75,9 +79,7 @@ def get_repo_owner_and_name(repo: Optional[Repo] = None) -> tuple[str, str]:
     split_url = remote_url.split("/")
     repo_owner_with_github, repo_name = split_url[-2], split_url[-1]
     repo_owner = (
-        repo_owner_with_github.split(":")[1]
-        if ":" in repo_owner_with_github
-        else repo_owner_with_github
+        repo_owner_with_github.split(":")[1] if ":" in repo_owner_with_github else repo_owner_with_github
     )
     return repo_owner, repo_name
 

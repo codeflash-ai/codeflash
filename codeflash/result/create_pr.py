@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import logging
 import os.path
 import pathlib
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from codeflash.api import cfapi
 from codeflash.code_utils import env_utils
@@ -17,7 +19,7 @@ from codeflash.result.explanation import Explanation
 
 def existing_tests_source_for(
     function_qualified_name_with_modules_from_root: str,
-    function_to_tests: Dict[str, List[TestsInFile]],
+    function_to_tests: Dict[str, list[TestsInFile]],
     tests_root: str,
 ) -> str:
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
@@ -34,13 +36,13 @@ def check_create_pr(
     explanation: Explanation,
     existing_tests_source: str,
     generated_original_test_source: str,
-):
+) -> None:
     pr_number: Optional[int] = env_utils.get_pr_number()
 
     if pr_number is not None:
         logging.info(f"Suggesting changes to PR #{pr_number} ...")
         owner, repo = get_repo_owner_and_name()
-        relative_path = str(pathlib.Path(os.path.relpath(explanation.path, git_root_dir())).as_posix())
+        relative_path = str(pathlib.Path(os.path.relpath(explanation.file_path, git_root_dir())).as_posix())
         response = cfapi.suggest_changes(
             owner=owner,
             repo=repo,
@@ -76,7 +78,7 @@ def check_create_pr(
         logging.info("Creating a new PR with the optimized code...")
         owner, repo = get_repo_owner_and_name()
 
-        relative_path = str(pathlib.Path(os.path.relpath(explanation.path, git_root_dir())).as_posix())
+        relative_path = str(pathlib.Path(os.path.relpath(explanation.file_path, git_root_dir())).as_posix())
         base_branch = get_current_branch()
         response = cfapi.create_pr(
             owner=owner,

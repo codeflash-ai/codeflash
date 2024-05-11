@@ -41,7 +41,7 @@ class ReturnStatementVisitor(cst.CSTVisitor):
 class FunctionVisitor(cst.CSTVisitor):
     METADATA_DEPENDENCIES = (cst.metadata.PositionProvider, cst.metadata.ParentNodeProvider)
 
-    def __init__(self, file_path: str):
+    def __init__(self, file_path: str) -> None:
         super().__init__()
         self.file_path: str = file_path
         self.functions: list[FunctionToOptimize] = []
@@ -152,7 +152,7 @@ def get_functions_to_optimize(
     optimize_all: Optional[str],
     replay_test: Optional[str],
     file: Optional[str],
-    function: Optional[str],
+    only_get_this_function: Optional[str],
     test_cfg: TestConfig,
     ignore_paths: List[str],
     project_root: str,
@@ -182,8 +182,8 @@ def get_functions_to_optimize(
     elif file is not None:
         logging.info("Finding all functions in the file '%s' ...", file)
         functions = find_all_functions_in_file(file)
-        if function is not None:
-            split_function = function.split(".")
+        if only_get_this_function is not None:
+            split_function = only_get_this_function.split(".")
             if len(split_function) > 2:
                 raise ValueError(
                     "Function name should be in the format 'function_name' or 'class_name.function_name'",
@@ -338,7 +338,7 @@ def is_git_repo(file_path: str) -> bool:
 
 
 @lru_cache(maxsize=None)
-def ignored_submodule_paths(module_root) -> List[str]:
+def ignored_submodule_paths(module_root: str) -> list[str]:
     if is_git_repo(module_root):
         git_repo = git.Repo(module_root, search_parent_directories=True)
         return [

@@ -5,6 +5,8 @@ from typing import IO
 import libcst as cst
 from libcst import FunctionDef
 
+from codeflash.code_utils.code_extractor import add_needed_imports_from_module
+
 
 class OptimFunctionCollector(cst.CSTVisitor):
     METADATA_DEPENDENCIES = (cst.metadata.ParentNodeProvider,)
@@ -208,19 +210,27 @@ def replace_functions_in_file(
 def replace_function_definitions_in_module(
     function_names: list[str],
     optimized_code: str,
+    file_path_of_module_with_function_to_optimize: str,
     module_abspath: str,
     preexisting_functions: list[str],
     contextual_functions: set[tuple[str, str]],
+    project_root_path: str,
 ) -> None:
     file: IO[str]
     with open(module_abspath, encoding="utf8") as file:
         source_code: str = file.read()
-    new_code: str = replace_functions_in_file(
-        source_code,
-        function_names,
+    new_code: str = add_needed_imports_from_module(
         optimized_code,
-        preexisting_functions,
-        contextual_functions,
+        replace_functions_in_file(
+            source_code,
+            function_names,
+            optimized_code,
+            preexisting_functions,
+            contextual_functions,
+        ),
+        file_path_of_module_with_function_to_optimize,
+        module_abspath,
+        project_root_path,
     )
     with open(module_abspath, "w", encoding="utf8") as file:
         file.write(new_code)

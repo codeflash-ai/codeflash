@@ -4,7 +4,66 @@ import ast
 import logging
 from collections import deque
 
+import libcst as cst
+from libcst.codemod import CodemodContext
+from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, RemoveImportsVisitor
+from libcst.helpers import ModuleNameAndPackage, calculate_module_and_package
+
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+
+
+def add_needed_imports_from_module(
+    src_module_code: str,
+    dst_module_code: str,
+    src_path: str,
+    dst_path: str,
+    project_root: str,
+) -> str:
+    """Add all needed and used source module code imports to the destination module code, and return it."""
+    src_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, src_path)
+    dst_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, dst_path)
+
+    dst_context: CodemodContext = CodemodContext(
+        filename=src_path,
+        full_module_name=dst_module_and_package.name,
+        full_package_name=dst_module_and_package.package,
+    )
+    gatherer: GatherImportsVisitor = GatherImportsVisitor(
+        CodemodContext(
+            filename=src_path,
+            full_module_name=src_module_and_package.name,
+            full_package_name=src_module_and_package.package,
+        ),
+    )
+    cst.parse_module(src_module_code).visit(gatherer)
+
+    for mod in gatherer.module_imports:
+        AddImportsVisitor.add_needed_import(dst_context, mod)
+        RemoveImportsVisitor.remove_unused_import(dst_context, mod)
+    for mod, obj_seq in gatherer.object_mapping.items():
+        for obj in obj_seq:
+            AddImportsVisitor.add_needed_import(dst_context, mod, obj)
+            RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
+    for mod, asname in gatherer.module_aliases.items():
+        AddImportsVisitor.add_needed_import(dst_context, mod, asname=asname)
+        RemoveImportsVisitor.remove_unused_import(dst_context, mod, asname=asname)
+    for mod, alias_pairs in gatherer.alias_mapping.items():
+        for alias_pair in alias_pairs:
+            AddImportsVisitor.add_needed_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
+            RemoveImportsVisitor.remove_unused_import(
+                dst_context,
+                mod,
+                alias_pair[0],
+                asname=alias_pair[1],
+            )
+
+    return (
+        RemoveImportsVisitor(dst_context)
+        .transform_module(
+            AddImportsVisitor(dst_context).transform_module(cst.parse_module(dst_module_code)),
+        )
+        .code.lstrip("\n")
+    )
 
 
 def get_code(
