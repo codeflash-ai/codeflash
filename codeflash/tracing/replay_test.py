@@ -20,7 +20,9 @@ def get_next_arg_and_return(
 ) -> Generator[Any]:
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
-    limit = num_to_get * 2 + 10  # we may have to get more than num_to_get*2 to get num_to_get valid pairs
+    limit = (
+        num_to_get * 2 + 10
+    )  # we may have to get more than num_to_get*2 to get num_to_get valid pairs (revisit this assumption)
     if class_name is not None:
         cursor = cur.execute(
             "SELECT * FROM function_calls WHERE function = ? AND filename = ? AND classname = ? ORDER BY time_ns ASC LIMIT ?",

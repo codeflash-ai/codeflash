@@ -22,7 +22,7 @@ class TestType(Enum):
             TestType.EXISTING_UNIT_TEST: "⚙️ Existing Unit Tests",
             TestType.INSPIRED_REGRESSION: "🎨 Inspired Regression Tests",
             TestType.GENERATED_REGRESSION: "🌀 Generated Regression Tests",
-            TestType.REPLAY_TEST: "Replay Tests",
+            TestType.REPLAY_TEST: "⏪ Replay Tests",
         }
         return names[self]
 
@@ -80,7 +80,8 @@ class TestResults(BaseModel):
         self.test_results.extend(other.test_results)
 
     def get_by_id(
-        self, invocation_id: InvocationId,
+        self,
+        invocation_id: InvocationId,
     ) -> Optional[FunctionTestInvocation]:
         return next((r for r in self.test_results if r.id == invocation_id), None)
 
@@ -174,7 +175,8 @@ class TestResults(BaseModel):
                 or test_result.test_framework != other_test_result.test_framework
                 or test_result.test_type != other_test_result.test_type
                 or not comparator(
-                    test_result.return_value, other_test_result.return_value,
+                    test_result.return_value,
+                    other_test_result.return_value,
                 )
             ):
                 sys.setrecursionlimit(original_recursion_limit)

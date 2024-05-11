@@ -17,9 +17,6 @@ class ProfileStats(pstats.Stats):
     def create_stats(self):
         self.con = sqlite3.connect(self.trace_file_path)
         cur = self.con.cursor()
-        # CREATE TABLE pstats (filename TEXT, line_number INTEGER, function TEXT, "
-        #    "call_count_nonrecursive INTEGER, num_callers INTEGER, total_time_ns INTEGER, "
-        #    "cumulative_time_ns INTEGER, callers BLOB)
         pdata = cur.execute("SELECT * FROM pstats").fetchall()
         self.con.close()
         time_conversion_factor = {"ns": 1, "us": 1e3, "ms": 1e6, "s": 1e9}[self.time_unit]

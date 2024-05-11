@@ -157,28 +157,6 @@ class OptimFunctionReplacer(cst.CSTTransformer):
             node = node.with_changes(body=(*self.optim_new_functions, *node.body))
         return node
 
-    # TODO: Implement the logic to not duplicate imports. This is supported by libcst, figure out how to use it.
-    # def leave_Module(self, original_node: "Module", updated_node: "Module") -> "Module":
-    #     print(self.context)
-    #     for import_node in self.optim_new_imports:
-    #         # updated_node = updated_node.with_changes(
-    #         #     body=(*updated_node.body, import_node)
-    #         # )
-    #         if isinstance(import_node, cst.Import):
-    #             #print(import_node.names)
-    #             for name in import_node.names:
-    #                 print(name)
-    #                 print(name.asname.name.value)
-    #                 asname = name.asname.name.value if name.asname else None
-    #                 AddImportsVisitor.add_needed_import(self.context, name.name.value, asname=asname)
-    #         if isinstance(import_node, cst.ImportFrom):
-    #             print(import_node)
-    #             for name in import_node.names:
-    #                 asname = name.asname.name.value if name.asname else None
-    #                 AddImportsVisitor.add_needed_import(
-    #                 self.context, module =import_node.module.value,  obj=name.name.value, asname=asname)
-    #     #print(updated_node)
-
 
 def replace_functions_in_file(
     source_code: str,

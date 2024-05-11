@@ -3,7 +3,7 @@ import tempfile
 
 from codeflash.discovery.functions_to_optimize import (
     find_all_functions_in_file,
-    get_functions_to_optimize_by_file,
+    get_functions_to_optimize,
     inspect_top_level_functions_or_methods,
 )
 from codeflash.verification.verification_utils import TestConfig
@@ -80,8 +80,9 @@ def functionA():
         f.flush()
         test_config = TestConfig(tests_root="tests", project_root_path=".", test_framework="pytest")
 
-        functions, functions_count = get_functions_to_optimize_by_file(
+        functions, functions_count = get_functions_to_optimize(
             optimize_all=None,
+            replay_test=None,
             file=f.name,
             only_get_this_function="A.functionA",
             test_cfg=test_config,
@@ -95,8 +96,9 @@ def functionA():
             assert functions[file][0].function_name == "functionA"
             assert functions[file][0].top_level_parent_name == "A"
 
-        functions, functions_count = get_functions_to_optimize_by_file(
+        functions, functions_count = get_functions_to_optimize(
             optimize_all=None,
+            replay_test=None,
             file=f.name,
             only_get_this_function="X.functionA",
             test_cfg=test_config,
@@ -110,8 +112,9 @@ def functionA():
             assert functions[file][0].function_name == "functionA"
             assert functions[file][0].top_level_parent_name == "X"
 
-        functions, functions_count = get_functions_to_optimize_by_file(
+        functions, functions_count = get_functions_to_optimize(
             optimize_all=None,
+            replay_test=None,
             file=f.name,
             only_get_this_function="functionA",
             test_cfg=test_config,

@@ -76,3 +76,15 @@ def path_belongs_to_site_packages(file_path: str) -> bool:
         if file_path.startswith(site_package_path + os.sep):
             return True
     return False
+
+
+def is_class_defined_in_file(class_name: str, file_path: str) -> bool:
+    if not os.path.exists(file_path):
+        return False
+    with open(file_path) as file:
+        source = file.read()
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == class_name:
+            return True
+    return False

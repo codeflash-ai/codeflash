@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import concurrent.futures
 import logging
 import os
@@ -44,13 +43,12 @@ from codeflash.code_utils.instrument_existing_tests import (
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import (
     TestsInFile,
-    discover_replay_test_functions,
     discover_unit_tests,
 )
 from codeflash.discovery.functions_to_optimize import (
     FunctionParent,
     FunctionToOptimize,
-    get_functions_to_optimize_by_file,
+    get_functions_to_optimize,
 )
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.optimization.function_context import (
@@ -139,41 +137,19 @@ class Optimizer:
         file_to_funcs_to_optimize: dict[str, list[FunctionToOptimize]]
         num_optimizable_functions: int
 
-        if self.args.replay_test:
-            file_to_funcs_to_optimize = defaultdict(list)
-            num_optimizable_functions = 0
-            # Obtain functions in replay tests from the unit tests
-            replay_functions = discover_replay_test_functions(
-                self.test_cfg,
-                self.args.replay_test,
-            )
-            files_to_optimize = self.get_files_of_functions(replay_functions)
-            for function, file_path in files_to_optimize.items():
-                files, num_functions = get_functions_to_optimize_by_file(
-                    optimize_all=self.args.all,
-                    file=file_path,
-                    only_get_this_function=function,
-                    test_cfg=self.test_cfg,
-                    ignore_paths=self.args.ignore_paths,
-                    project_root=self.args.project_root,
-                    module_root=self.args.module_root,
-                )
-                file_to_funcs_to_optimize.update(files)
-                num_optimizable_functions += num_functions
-
-        else:
-            (
-                file_to_funcs_to_optimize,
-                num_optimizable_functions,
-            ) = get_functions_to_optimize_by_file(
-                optimize_all=self.args.all,
-                file=self.args.file,
-                only_get_this_function=self.args.function,
-                test_cfg=self.test_cfg,
-                ignore_paths=self.args.ignore_paths,
-                project_root=self.args.project_root,
-                module_root=self.args.module_root,
-            )
+        (
+            file_to_funcs_to_optimize,
+            num_optimizable_functions,
+        ) = get_functions_to_optimize(
+            optimize_all=self.args.all,
+            replay_test=self.args.replay_test,
+            file=self.args.file,
+            function=self.args.function,
+            test_cfg=self.test_cfg,
+            ignore_paths=self.args.ignore_paths,
+            project_root=self.args.project_root,
+            module_root=self.args.module_root,
+        )
 
         optimizations_found: int = 0
 
@@ -325,8 +301,6 @@ class Optimizer:
                 [],
             )
 
-            only_run_this_test_function = tests_in_file[0].test_function if tests_in_file else None
-
             best_optimization = self.determine_best_candidate(
                 candidates,
                 code_context,
@@ -338,7 +312,7 @@ class Optimizer:
                 original_code_baseline,
                 original_dependent_code,
                 function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
-                only_run_this_test_function,
+                tests_in_file,
             )
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
@@ -424,7 +398,7 @@ class Optimizer:
         original_code_baseline: OriginalCodeBaseline,
         original_dependent_code: dict[str, str],
         function_trace_id: str,
-        only_run_this_test_function: Optional[str] = None,
+        only_run_this_test_function: Optional[List[TestsInFile]] = None,
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime  # The fastest code runtime until now
@@ -500,7 +474,7 @@ class Optimizer:
                 original_gen_results=original_code_baseline.generated_test_results,
                 generated_tests_path=generated_tests_path,
                 best_runtime_until_now=best_runtime_until_now,
-                only_run_this_test_function=only_run_this_test_function,
+                tests_in_file=only_run_this_test_function,
                 run_generated_tests=run_generated_tests,
             )
             if not is_successful(run_results):
@@ -880,12 +854,23 @@ class Optimizer:
                 original_test_results_iter = TestResults()
                 existing_test_results = TestResults()
                 for test_file in instrumented_unittests_created_for_function:
+                    relevant_tests_in_file = [
+                        test_in_file
+                        for test_in_file in tests_in_file
+                        if test_in_file.test_file == test_file.replace("__perfinstrumented", "")
+                    ]
+                    is_replay_test = relevant_tests_in_file[0].test_type == TestType.REPLAY_TEST
+                    if is_replay_test and len(relevant_tests_in_file) > 1:
+                        logging.warning(
+                            f"Multiple tests found for the replay test {test_file}. Should not happen",
+                        )
+
                     unittest_results = self.run_and_parse_tests(
                         test_env,
                         test_file,
-                        TestType.EXISTING_UNIT_TEST,
+                        relevant_tests_in_file[0].test_type,
                         0,
-                        tests_in_file[0].test_function,
+                        relevant_tests_in_file[0].test_function if is_replay_test else None,
                     )
 
                     timing = unittest_results.total_passed_runtime()
@@ -981,7 +966,7 @@ class Optimizer:
         original_gen_results: TestResults,
         generated_tests_path: str,
         best_runtime_until_now: int,
-        only_run_this_test_function: Optional[str],
+        tests_in_file: Optional[List[TestsInFile]],
         run_generated_tests: bool,
     ) -> Result[OptimizedCandidateResult, str]:
         success = True
@@ -1020,12 +1005,22 @@ class Optimizer:
                 optimized_test_results_iter = TestResults()
                 instrumented_test_timing = []
                 for instrumented_test_file in instrumented_unittests_created_for_function:
+                    relevant_tests_in_file = [
+                        test_in_file
+                        for test_in_file in tests_in_file
+                        if test_in_file.test_file == instrumented_test_file.replace("__perfinstrumented", "")
+                    ]
+                    is_replay_test = relevant_tests_in_file[0].test_type == TestType.REPLAY_TEST
+                    if is_replay_test and len(relevant_tests_in_file) > 1:
+                        logging.warning(
+                            f"Multiple tests found for the replay test {instrumented_test_file}. Should not happen",
+                        )
                     unittest_results_optimized = self.run_and_parse_tests(
                         test_env,
                         instrumented_test_file,
-                        TestType.EXISTING_UNIT_TEST,
+                        relevant_tests_in_file[0].test_type,
                         optimization_index,
-                        only_run_this_test_function,
+                        relevant_tests_in_file[0].test_function if is_replay_test else None,
                     )
                     timing = unittest_results_optimized.total_passed_runtime()
                     optimized_test_results_iter.merge(unittest_results_optimized)
@@ -1193,58 +1188,7 @@ class Optimizer:
 
         return generated_original_test_source, instrumented_test_source
 
-    def get_files_of_functions(self, replay_functions: List[str]) -> Dict[str, str]:
-        functions_to_optimize = replay_functions
-
-        # Get the absolute file paths for each function, excluding class name if present
-        file_paths_to_optimize = {}
-        for function in functions_to_optimize:
-            parts = function.split(".")
-            module_path_parts = parts[:-1]  # Exclude the function or method name
-            function_name = parts[-1]
-            # Check if the second-to-last part is a class name
-            class_name = (
-                module_path_parts[-1]
-                if module_path_parts
-                and is_class_defined_in_file(
-                    module_path_parts[-1],
-                    os.path.join(self.args.project_root, *module_path_parts[:-1]) + ".py",
-                )
-                else None
-            )
-            if class_name:
-                # If there is a class name, append it to the module path
-                function = class_name + "." + function_name
-                file_path_parts = module_path_parts[:-1]  # Exclude the class name
-            else:
-                function = function_name
-                file_path_parts = module_path_parts
-            file_path = os.path.join(self.args.project_root, *file_path_parts) + ".py"
-
-            with open(file_path) as file:
-                source = file.read()
-                tree = ast.parse(source)
-                for node in ast.walk(tree):
-                    if isinstance(node, ast.FunctionDef) and node.name == function_name:
-                        for sub_node in ast.walk(node):
-                            if isinstance(sub_node, ast.Return):
-                                file_paths_to_optimize[function] = file_path
-
-        return file_paths_to_optimize
-
 
 def run_with_args(args: Namespace) -> None:
     optimizer = Optimizer(args)
     optimizer.run()
-
-
-def is_class_defined_in_file(class_name: str, file_path: str) -> bool:
-    if not os.path.exists(file_path):
-        return False
-    with open(file_path) as file:
-        source = file.read()
-    tree = ast.parse(source)
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and node.name == class_name:
-            return True
-    return False
