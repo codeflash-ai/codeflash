@@ -4,10 +4,11 @@ import concurrent.futures
 import logging
 import os
 import pathlib
+import sys
 import uuid
 from argparse import Namespace
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import isort
 import libcst as cst
@@ -69,8 +70,8 @@ from codeflash.verification.verifier import generate_tests
 
 
 class OptimizationSet(BaseModel):
-    control: List[OptimizedCandidate]
-    experiment: Optional[List[OptimizedCandidate]]
+    control: list[OptimizedCandidate]
+    experiment: list[OptimizedCandidate] | None
 
 
 class OptimizedCandidateResult(BaseModel):
@@ -82,7 +83,7 @@ class OptimizedCandidateResult(BaseModel):
 class OriginalCodeBaseline(BaseModel):
     generated_test_results: TestResults
     existing_test_results: TestResults
-    overall_test_results: Optional[TestResults]
+    overall_test_results: TestResults | None
     runtime: int
 
 
@@ -106,7 +107,7 @@ class CodeOptimizationContext(BaseModel):
 
 
 class Optimizer:
-    def __init__(self, args: Namespace):
+    def __init__(self, args: Namespace) -> None:
         self.args = args
         init_sentry(not args.disable_telemetry)
         posthog.initialize_posthog(not args.disable_telemetry)
@@ -132,7 +133,7 @@ class Optimizer:
             return
         if not env_utils.ensure_git_repo(module_root=self.args.module_root):
             logging.error("No git repository detected and user aborted run. Exiting...")
-            exit(1)
+            sys.exit(1)
 
         file_to_funcs_to_optimize: dict[str, list[FunctionToOptimize]]
         num_optimizable_functions: int
@@ -144,7 +145,7 @@ class Optimizer:
             optimize_all=self.args.all,
             replay_test=self.args.replay_test,
             file=self.args.file,
-            function=self.args.function,
+            only_get_this_function=self.args.function,
             test_cfg=self.test_cfg,
             ignore_paths=self.args.ignore_paths,
             project_root=self.args.project_root,
@@ -178,10 +179,10 @@ class Optimizer:
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
             for path in file_to_funcs_to_optimize:
                 logging.info(f"Examining file {path} ...")
-                # TODO: Sequence the functions one goes through intelligently. If we are optimizing f(g(x)),
-                #  then we might want to first optimize f rather than g because optimizing f would already
-                #  optimize g as it is a dependency
-                with open(path, encoding="utf8") as f:
+                # TODO @afik.cohen: Sequence the functions one goes through intelligently. If we are
+                #  optimizing f(g(x)), then we might want to first optimize f rather than g because optimizing
+                #  f would already optimize g as it is a dependency.
+                with pathlib.Path(path).open(encoding="utf8") as f:
                     original_code: str = f.read()
 
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
@@ -205,7 +206,7 @@ class Optimizer:
             elif self.args.all:
                 logging.info("✨ All functions have been optimized! ✨")
         finally:
-            # TODO: Also revert the file/function being optimized if the process did not succeed
+            # TODO @afik.cohen: Also revert the file/function being optimized if the process did not succeed
             for test_file in self.instrumented_unittests_created:
                 pathlib.Path(test_file).unlink(missing_ok=True)
             for test_file in self.test_files_created:
@@ -216,7 +217,7 @@ class Optimizer:
     def optimize_function(
         self,
         function_to_optimize: FunctionToOptimize,
-        function_to_tests: Dict[str, List[TestsInFile]],
+        function_to_tests: dict[str, list[TestsInFile]],
         original_code: str,
     ) -> Result[BestOptimization, str]:
         should_run_experiment = self.experiment_id is not None
@@ -224,7 +225,9 @@ class Optimizer:
         ph("cli-optimize-function-start", {"function_trace_id": function_trace_id})
         self.cleanup_leftover_test_return_values()
         ctx_result = self.get_code_optimization_context(
-            function_to_optimize, self.args.project_root, original_code
+            function_to_optimize,
+            self.args.project_root,
+            original_code,
         )
         if not is_successful(ctx_result):
             return Failure(ctx_result.failure())
@@ -234,7 +237,7 @@ class Optimizer:
             dependent_functions_by_module_abspath[module_abspath].add(qualified_name)
         original_dependent_code = {}
         for module_abspath in dependent_functions_by_module_abspath:
-            with open(module_abspath, encoding="utf8") as f:
+            with pathlib.Path(module_abspath).open(encoding="utf8") as f:
                 dependent_code = f.read()
                 original_dependent_code[module_abspath] = dependent_code
         logging.info(f"Code to be optimized:\n{code_context.code_to_optimize_with_dependents}")
@@ -272,7 +275,7 @@ class Optimizer:
             function_to_optimize.function_name,
             0,
         )
-        with open(generated_tests_path, "w", encoding="utf8") as file:
+        with pathlib.Path(generated_tests_path).open("w", encoding="utf8") as file:
             file.write(generated_tests.instrumented_test_source)
         self.test_files_created.add(generated_tests_path)
         baseline_result = self.establish_original_code_baseline(
@@ -398,7 +401,7 @@ class Optimizer:
         original_code_baseline: OriginalCodeBaseline,
         original_dependent_code: dict[str, str],
         function_trace_id: str,
-        only_run_this_test_function: Optional[List[TestsInFile]] = None,
+        only_run_this_test_function: list[TestsInFile] | None = None,
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime  # The fastest code runtime until now
@@ -565,22 +568,22 @@ class Optimizer:
     def write_code_and_dependents(
         self,
         original_code: str,
-        original_dependent_code: Dict[str, str],
+        original_dependent_code: dict[str, str],
         path: str,
-        dependent_functions_by_module_abspath: Dict[str, set[str]],
+        dependent_functions_by_module_abspath: dict[str, set[str]],
     ) -> None:
-        with open(path, "w", encoding="utf8") as f:
+        with pathlib.Path(path).open("w", encoding="utf8") as f:
             f.write(original_code)
         for module_abspath in dependent_functions_by_module_abspath:
-            with open(module_abspath, "w", encoding="utf8") as f:
+            with pathlib.Path(module_abspath).open("w", encoding="utf8") as f:
                 f.write(original_dependent_code[module_abspath])
 
     def reformat_code_and_dependents(
         self,
-        dependent_functions_by_module_abspath: Dict[str, set[str]],
+        dependent_functions_by_module_abspath: dict[str, set[str]],
         path: str,
         original_code: str,
-    ) -> Tuple[str, Dict[str, str]]:
+    ) -> tuple[str, dict[str, str]]:
         should_sort_imports = True
         if isort.code(original_code) != original_code:
             should_sort_imports = False
@@ -737,7 +740,7 @@ class Optimizer:
                 if not success:
                     continue
                 new_test_path = f"{os.path.splitext(tests_in_file.test_file)[0]}__perfinstrumented{os.path.splitext(tests_in_file.test_file)[1]}"
-                with open(new_test_path, "w", encoding="utf8") as f:
+                with pathlib.Path(new_test_path).open("w", encoding="utf8") as f:
                     f.write(injected_test)
                 unique_instrumented_test_files.add(new_test_path)
                 unique_original_test_files.add(tests_in_file.test_file)
