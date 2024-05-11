@@ -12,6 +12,7 @@ import jedi
 from pydantic.dataclasses import dataclass
 
 from codeflash.code_utils.code_utils import module_name_from_file_path
+from codeflash.verification.test_results import TestType
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -23,13 +24,18 @@ class ParseType(Enum):
 @dataclass(frozen=True)
 class TestsInFile:
     test_file: str
-    test_class: Optional[str]
+    test_class: Optional[str]  # This might be unused...
     test_function: str
     test_suite: Optional[str]
+    test_type: TestType
 
     @classmethod
     def from_pytest_stdout_line_co(cls, module: str, function: str, directory: str):
         absolute_test_path = os.path.normpath(os.path.join(directory, module))
+        if "__replay_test" in absolute_test_path:
+            test_type = TestType.REPLAY_TEST
+        else:
+            test_type = TestType.EXISTING_UNIT_TEST
         assert os.path.exists(
             absolute_test_path,
         ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
@@ -38,12 +44,17 @@ class TestsInFile:
             test_class=None,
             test_function=function,
             test_suite=None,
+            test_type=test_type,
         )
 
     @classmethod
     def from_pytest_stdout_line_q(cls, line: str, pytest_rootdir: str):
         parts = line.split("::")
         absolute_test_path = os.path.normpath(os.path.join(pytest_rootdir, parts[0]))
+        if "__replay_test" in absolute_test_path:
+            test_type = TestType.REPLAY_TEST
+        else:
+            test_type = TestType.EXISTING_UNIT_TEST
         assert os.path.exists(
             absolute_test_path,
         ), f"Test discovery failed - Test file does not exist {absolute_test_path}"
@@ -53,6 +64,7 @@ class TestsInFile:
                 test_class=parts[1],
                 test_function=parts[2],
                 test_suite=None,
+                test_type=test_type,
             )
         elif len(parts) == 2:
             return cls(
@@ -60,6 +72,7 @@ class TestsInFile:
                 test_class=None,
                 test_function=parts[1],
                 test_suite=None,
+                test_type=test_type,
             )
         else:
             raise ValueError(f"Unexpected pytest result format: {line}")
@@ -70,16 +83,13 @@ class TestFunction:
     function_name: str
     test_suite_name: Optional[str]
     parameters: Optional[str]
+    test_type: TestType
 
 
-@dataclass(frozen=True)
-class TestDetails:
-    test_function: str
-    test_module_path: str
-    test_suite_name: str
-
-
-def discover_unit_tests(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
+def discover_unit_tests(
+    cfg: TestConfig,
+    discover_only_these_tests: Optional[List[str]] = None,
+) -> Dict[str, List[TestsInFile]]:
     test_frameworks = {
         "pytest": discover_tests_pytest,
         "unittest": discover_tests_unittest,
@@ -87,24 +97,10 @@ def discover_unit_tests(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     discover_tests = test_frameworks.get(cfg.test_framework)
     if discover_tests is None:
         raise ValueError(f"Unsupported test framework: {cfg.test_framework}")
-    return discover_tests(cfg)
+    return discover_tests(cfg, discover_only_these_tests)
 
 
-def discover_replay_test_functions(
-    cfg: TestConfig,
-    replay_test_file: str,
-) -> List[str]:
-    tests = discover_unit_tests(cfg)
-    replay_tests = {
-        function: [test_file for test_file in test_files if test_file.test_file == replay_test_file]
-        for function, test_files in tests.items()
-    }
-    functions = [function for function, test_files in replay_tests.items() if test_files]
-
-    return functions
-
-
-def get_pytest_rootdir_only(pytest_cmd_list, tests_root, project_root) -> str:
+def get_pytest_rootdir_only(pytest_cmd_list: List[str], tests_root: str, project_root: str) -> str:
     # Ref - https://docs.pytest.org/en/stable/reference/customize.html#initialization-determining-rootdir-and-configfile
     # A very hacky solution that only runs the --co mode until we see the rootdir print and then it just kills the
     # pytest to save time. We should find better ways to just get the rootdir, one way is to not use the -q flag and
@@ -129,7 +125,10 @@ def get_pytest_rootdir_only(pytest_cmd_list, tests_root, project_root) -> str:
     raise ValueError(f"Could not find rootdir in pytest output for {tests_root}")
 
 
-def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
+def discover_tests_pytest(
+    cfg: TestConfig,
+    discover_only_these_tests: Optional[List[str]] = None,
+) -> Dict[str, List[TestsInFile]]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
     pytest_cmd_list = [chunk for chunk in cfg.pytest_cmd.split(" ") if chunk != ""]
@@ -163,19 +162,23 @@ def discover_tests_pytest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
     file_to_test_map = defaultdict(list)
 
     for test in tests:
-        file_to_test_map[test.test_file].append({"test_function": test.test_function})
+        if discover_only_these_tests and test.test_file not in discover_only_these_tests:
+            continue
+        file_to_test_map[test.test_file].append(test)
     # Within these test files, find the project functions they are referring to and return their names/locations
     return process_test_files(file_to_test_map, cfg)
 
 
-def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
+def discover_tests_unittest(
+    cfg: TestConfig,
+    discover_only_these_tests: Optional[List[str]] = None,
+) -> Dict[str, List[TestsInFile]]:
     tests_root = cfg.tests_root
-    project_root_path = cfg.project_root_path
     loader = unittest.TestLoader()
     tests = loader.discover(str(tests_root))
     file_to_test_map = defaultdict(list)
 
-    def get_test_details(_test) -> Optional[TestDetails]:
+    def get_test_details(_test) -> Optional[TestsInFile]:
         _test_function, _test_module, _test_suite_name = (
             _test._testMethodName,
             _test.__class__.__module__,
@@ -184,9 +187,21 @@ def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
 
         _test_module_path = _test_module.replace(".", os.sep)
         _test_module_path = os.path.normpath(os.path.join(str(tests_root), _test_module_path) + ".py")
-        if not os.path.exists(_test_module_path):
+        if not os.path.exists(_test_module_path) or (
+            discover_only_these_tests and _test_module_path not in discover_only_these_tests
+        ):
             return None
-        return TestDetails(_test_function, _test_module_path, _test_suite_name)
+        if "__replay_test" in _test_module_path:
+            test_type = TestType.REPLAY_TEST
+        else:
+            test_type = TestType.EXISTING_UNIT_TEST
+        return TestsInFile(
+            test_file=_test_module_path,
+            test_suite=_test_suite_name,
+            test_function=_test_function,
+            test_type=test_type,
+            test_class=None,  # TODO: Validate if it is correct to set test_class to None
+        )
 
     for _test_suite in tests._tests:
         for test_suite_2 in _test_suite._tests:
@@ -205,21 +220,11 @@ def discover_tests_unittest(cfg: TestConfig) -> Dict[str, List[TestsInFile]]:
                             continue
                         details = get_test_details(test_2)
                         if details is not None:
-                            file_to_test_map[details.test_module_path].append(
-                                {
-                                    "test_function": details.test_function,
-                                    "test_suite_name": details.test_suite_name,
-                                },
-                            )
+                            file_to_test_map[details.test_file].append(details)
                 else:
                     details = get_test_details(test)
                     if details is not None:
-                        file_to_test_map[details.test_module_path].append(
-                            {
-                                "test_function": details.test_function,
-                                "test_suite_name": details.test_suite_name,
-                            },
-                        )
+                        file_to_test_map[details.test_file].append(details)
     return process_test_files(file_to_test_map, cfg)
 
 
@@ -232,7 +237,7 @@ def discover_parameters_unittest(function_name: str):
 
 
 def process_test_files(
-    file_to_test_map: Dict[str, List[Dict[str, str]]],
+    file_to_test_map: Dict[str, List[TestsInFile]],
     cfg: TestConfig,
 ) -> Dict[str, List[TestsInFile]]:
     project_root_path = cfg.project_root_path
@@ -249,19 +254,22 @@ def process_test_files(
 
         for name in top_level_names:
             if test_framework == "pytest":
-                functions_to_search = [elem["test_function"] for elem in functions]
-                for function in functions_to_search:
+                functions_to_search = [elem.test_function for elem in functions]
+                for i, function in enumerate(functions_to_search):
                     if "[" in function:
                         function_name = re.split(r"\[|\]", function)[0]
                         parameters = re.split(r"\[|\]", function)[1]
                         if name.name == function_name and name.type == "function":
-                            test_functions.add(TestFunction(name.name, None, parameters))
+                            test_functions.add(
+                                TestFunction(name.name, None, parameters, functions[i].test_type),
+                            )
                     elif name.name == function and name.type == "function":
-                        test_functions.add(TestFunction(name.name, None, None))
+                        test_functions.add(TestFunction(name.name, None, None, functions[i].test_type))
                         break
             if test_framework == "unittest":
-                functions_to_search = [elem["test_function"] for elem in functions]
-                test_suites = [elem["test_suite_name"] for elem in functions]
+                functions_to_search = [elem.test_function for elem in functions]
+                test_suites = [elem.test_suite for elem in functions]
+
                 if name.name in test_suites and name.type == "class":
                     for def_name in all_defs:
                         if (
@@ -278,11 +286,16 @@ def process_test_files(
 
                                 if is_parameterized and new_function == def_name.name:
                                     test_functions.add(
-                                        TestFunction(def_name.name, name.name, parameters),
+                                        TestFunction(
+                                            def_name.name,
+                                            name.name,
+                                            parameters,
+                                            functions[0].test_type,
+                                        ),  # A test file must not have more than one test type
                                     )
                                 elif function == def_name.name:
                                     test_functions.add(
-                                        TestFunction(def_name.name, name.name, None),
+                                        TestFunction(def_name.name, name.name, None, functions[0].test_type),
                                     )
 
         test_functions_list = list(test_functions)
@@ -300,6 +313,7 @@ def process_test_files(
                 scope_test_function = test_functions_list[index].function_name
                 scope_test_suite = test_functions_list[index].test_suite_name
                 scope_parameters = test_functions_list[index].parameters
+                test_type = test_functions_list[index].test_type
                 try:
                     definition = script.goto(
                         line=name.line,
@@ -329,7 +343,13 @@ def process_test_files(
                         )
                         qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
                         function_to_test_map[qualified_name_with_modules_from_root].append(
-                            TestsInFile(test_file, None, scope_test_function, scope_test_suite),
+                            TestsInFile(
+                                test_file=test_file,
+                                test_class=None,
+                                test_function=scope_test_function,
+                                test_suite=scope_test_suite,
+                                test_type=test_type,
+                            ),
                         )
     deduped_function_to_test_map = {}
     for function, tests in function_to_test_map.items():
