@@ -389,7 +389,6 @@ class Optimizer:
                 new_code_combined[explanation.file_path] = new_code
                 if not self.args.no_pr:
                     check_create_pr(
-                        optimize_all=self.args.all,
                         original_code=original_code_combined,
                         new_code=new_code_combined,
                         explanation=explanation,
