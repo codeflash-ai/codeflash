@@ -290,9 +290,9 @@ class Optimizer:
                 pathlib.Path(instrumented_path).unlink(missing_ok=True)
             return Failure(baseline_result.failure())
         original_code_baseline: OriginalCodeBaseline = baseline_result.unwrap()
-        logging.info("Optimizing code ...")
         # TODO: Postprocess the optimized function to include the original docstring and such
 
+        best_optimization = None
         for u, candidates in enumerate(
             [optimizations_set.control, optimizations_set.experiment],
         ):
@@ -387,6 +387,8 @@ class Optimizer:
         pathlib.Path(generated_tests_path).unlink(missing_ok=True)
         for test_paths in instrumented_unittests_created_for_function:
             pathlib.Path(test_paths).unlink(missing_ok=True)
+        if not best_optimization:
+            return Failure(f"No best optimizations found for function {function_to_optimize.qualified_name}")
         return Success(best_optimization)
 
     def determine_best_candidate(
@@ -407,9 +409,12 @@ class Optimizer:
         best_runtime_until_now = original_code_baseline.runtime  # The fastest code runtime until now
 
         speedup_ratios: dict[str, float | None] = {}
-        optimized_runtimes = {}
+        optimized_runtimes: dict[str, float | None] = {}
         is_correct = {}
 
+        logging.info(
+            f"Determining best optimized candidate (out of {len(candidates)}) for {function_to_optimize.qualified_name} ...",
+        )
         for i, candidate in enumerate(candidates):
             j = i + 1
             if candidate.source_code is None:
@@ -421,7 +426,7 @@ class Optimizer:
             pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.sqlite")).unlink(
                 missing_ok=True,
             )
-            logging.info("Optimized candidate:")
+            logging.info(f"Optimized candidate {j}/{len(candidates)}")
             logging.info(candidate.source_code)
             try:
                 replace_function_definitions_in_module(
@@ -452,7 +457,7 @@ class Optimizer:
                 cst.ParserSyntaxError,
                 AttributeError,
             ) as e:
-                logging.exception(e)
+                logging.error(e.message)  # noqa: TRY400
                 self.write_code_and_dependents(
                     original_code,
                     original_dependent_code,
@@ -1031,7 +1036,7 @@ class Optimizer:
                 if first_run and test_index == 0:
                     equal_results = True
                     logging.info(
-                        f"optimized existing unit tests result -> {optimized_test_results_iter.get_test_pass_fail_report()}",
+                        f"Existing unit tests results: {optimized_test_results_iter.get_test_pass_fail_report()}",
                     )
                     equal_return_values = compare_results(
                         existing_test_results,
@@ -1046,7 +1051,7 @@ class Optimizer:
                             ).did_pass
                             or not equal_return_values
                         ):
-                            logging.info("Results did not match.")
+                            logging.info("Test results did not match.")
                             logging.info(
                                 f"Test {test_invocation.id} failed on the optimized code. Skipping this optimization",
                             )
@@ -1068,13 +1073,13 @@ class Optimizer:
 
                 if test_results and first_run and test_index == 0:
                     logging.info(
-                        f"generated test_results optimized -> {test_results.get_test_pass_fail_report()}",
+                        f"Generated tests results: {test_results.get_test_pass_fail_report()}",
                     )
                     if compare_results(original_gen_results, test_results):
                         equal_results = True
-                        logging.info("Results matched!")
+                        logging.info("Test results matched!")
                     else:
-                        logging.info("Results did not match.")
+                        logging.info("Test results did not match.")
                         equal_results = False
                 if not equal_results:
                     do_break = True
