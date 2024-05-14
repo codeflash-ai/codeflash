@@ -61,7 +61,7 @@ from codeflash.result.explanation import Explanation
 from codeflash.telemetry import posthog
 from codeflash.telemetry.posthog import ph
 from codeflash.telemetry.sentry import init_sentry
-from codeflash.verification.equivalence import compare_results
+from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestResults, TestType
 from codeflash.verification.test_runner import run_tests
@@ -290,9 +290,9 @@ class Optimizer:
                 pathlib.Path(instrumented_path).unlink(missing_ok=True)
             return Failure(baseline_result.failure())
         original_code_baseline: OriginalCodeBaseline = baseline_result.unwrap()
-        logging.info("Optimizing code ...")
         # TODO: Postprocess the optimized function to include the original docstring and such
 
+        best_optimization = None
         for u, candidates in enumerate(
             [optimizations_set.control, optimizations_set.experiment],
         ):
@@ -387,6 +387,8 @@ class Optimizer:
         pathlib.Path(generated_tests_path).unlink(missing_ok=True)
         for test_paths in instrumented_unittests_created_for_function:
             pathlib.Path(test_paths).unlink(missing_ok=True)
+        if not best_optimization:
+            return Failure(f"No best optimizations found for function {function_to_optimize.qualified_name}")
         return Success(best_optimization)
 
     def determine_best_candidate(
@@ -407,9 +409,12 @@ class Optimizer:
         best_runtime_until_now = original_code_baseline.runtime  # The fastest code runtime until now
 
         speedup_ratios: dict[str, float | None] = {}
-        optimized_runtimes = {}
+        optimized_runtimes: dict[str, float | None] = {}
         is_correct = {}
 
+        logging.info(
+            f"Determining best optimized candidate (out of {len(candidates)}) for {function_to_optimize.qualified_name} ...",
+        )
         for i, candidate in enumerate(candidates):
             j = i + 1
             if candidate.source_code is None:
@@ -421,7 +426,7 @@ class Optimizer:
             pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.sqlite")).unlink(
                 missing_ok=True,
             )
-            logging.info("Optimized candidate:")
+            logging.info(f"Optimized candidate {j}/{len(candidates)}:")
             logging.info(candidate.source_code)
             try:
                 replace_function_definitions_in_module(
@@ -452,7 +457,7 @@ class Optimizer:
                 cst.ParserSyntaxError,
                 AttributeError,
             ) as e:
-                logging.exception(e)
+                logging.error(e)  # noqa: TRY400
                 self.write_code_and_dependents(
                     original_code,
                     original_dependent_code,
@@ -473,8 +478,8 @@ class Optimizer:
                 optimization_index=j,
                 instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
                 overall_original_test_results=original_code_baseline.overall_test_results,
-                existing_test_results=original_code_baseline.existing_test_results,
-                original_gen_results=original_code_baseline.generated_test_results,
+                original_existing_test_results=original_code_baseline.existing_test_results,
+                original_generated_test_results=original_code_baseline.generated_test_results,
                 generated_tests_path=generated_tests_path,
                 best_runtime_until_now=best_runtime_until_now,
                 tests_in_file=only_run_this_test_function,
@@ -820,7 +825,7 @@ class Optimizer:
         function_name: str,
         instrumented_unittests_created_for_function: set[str],
         generated_tests_path: str,
-        tests_in_file: List[TestsInFile],
+        tests_in_file: list[TestsInFile],
     ) -> Result[OriginalCodeBaseline, str]:
         original_runtime = None
         best_runtime = None
@@ -882,7 +887,7 @@ class Optimizer:
                     instrumented_existing_test_timing.append(timing)
                 if i == 0 and first_run:
                     logging.info(
-                        f"original code, existing unit test results -> {original_test_results_iter.get_test_pass_fail_report()}",
+                        f"Existing unit test results for original code: {original_test_results_iter.get_test_pass_fail_report()}",
                     )
 
                 original_gen_results = self.run_and_parse_tests(
@@ -908,7 +913,7 @@ class Optimizer:
                 #  for such a execution that raises an exception should not matter.
                 if i == 0 and first_run:
                     logging.info(
-                        f"original generated tests results -> {original_gen_results.get_test_pass_fail_report()}",
+                        f"Generated tests results for original code: {original_gen_results.get_test_pass_fail_report()}",
                     )
 
                 if not original_gen_results:
@@ -928,7 +933,7 @@ class Optimizer:
                 original_test_results_iter.merge(original_gen_results)
                 if i == 0 and first_run:
                     logging.info(
-                        f"Original overall test results = {TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}",
+                        f"Overall test results for original code: {TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}",
                     )
                 if original_runtime is None or original_total_runtime_iter < original_runtime:
                     original_runtime = best_runtime = original_total_runtime_iter
@@ -965,8 +970,8 @@ class Optimizer:
         optimization_index: int,
         instrumented_unittests_created_for_function: set[str],
         overall_original_test_results: TestResults,
-        existing_test_results: TestResults,
-        original_gen_results: TestResults,
+        original_existing_test_results: TestResults,
+        original_generated_test_results: TestResults,
         generated_tests_path: str,
         best_runtime_until_now: int,
         tests_in_file: Optional[List[TestsInFile]],
@@ -1005,7 +1010,7 @@ class Optimizer:
                     do_break = True
                     break
 
-                optimized_test_results_iter = TestResults()
+                candidate_existing_test_results = TestResults()
                 instrumented_test_timing = []
                 for instrumented_test_file in instrumented_unittests_created_for_function:
                     relevant_tests_in_file = [
@@ -1018,37 +1023,37 @@ class Optimizer:
                         logging.warning(
                             f"Multiple tests found for the replay test {instrumented_test_file}. Should not happen",
                         )
-                    unittest_results_optimized = self.run_and_parse_tests(
+                    candidate_existing_test_result = self.run_and_parse_tests(
                         test_env,
                         instrumented_test_file,
                         relevant_tests_in_file[0].test_type,
                         optimization_index,
                         relevant_tests_in_file[0].test_function if is_replay_test else None,
                     )
-                    timing = unittest_results_optimized.total_passed_runtime()
-                    optimized_test_results_iter.merge(unittest_results_optimized)
+                    timing = candidate_existing_test_result.total_passed_runtime()
+                    candidate_existing_test_results.merge(candidate_existing_test_result)
                     instrumented_test_timing.append(timing)
                 if first_run and test_index == 0:
                     equal_results = True
                     logging.info(
-                        f"optimized existing unit tests result -> {optimized_test_results_iter.get_test_pass_fail_report()}",
+                        f"Existing unit tests results for candidate: {candidate_existing_test_results.get_test_pass_fail_report()}",
                     )
-                    equal_return_values = compare_results(
-                        existing_test_results,
-                        optimized_test_results_iter,
+                    return_values_are_equal = compare_test_results(
+                        original_existing_test_results,
+                        candidate_existing_test_results,
                     )
-                    for test_invocation in optimized_test_results_iter:
+                    for test_invocation in candidate_existing_test_results:
                         if (
                             overall_original_test_results.get_by_id(test_invocation.id) is None
                             or test_invocation.did_pass
                             != overall_original_test_results.get_by_id(
                                 test_invocation.id,
                             ).did_pass
-                            or not equal_return_values
+                            or not return_values_are_equal
                         ):
-                            logging.info("Results did not match.")
+                            logging.info("Test results did not match the test results of the original code.")
                             logging.info(
-                                f"Test {test_invocation.id} failed on the optimized code. Skipping this optimization",
+                                f"Test {test_invocation.id} failed. Skipping this candidate.",
                             )
                             equal_results = False
                             do_break = True
@@ -1057,33 +1062,38 @@ class Optimizer:
                         do_break = True
                         break
 
-                test_results = None
+                candidate_generated_test_results = None
                 if run_generated_tests:
-                    test_results = self.run_and_parse_tests(
+                    candidate_generated_test_results = self.run_and_parse_tests(
                         test_env,
                         generated_tests_path,
                         TestType.GENERATED_REGRESSION,
                         optimization_index,
                     )
 
-                if test_results and first_run and test_index == 0:
+                if candidate_generated_test_results and first_run and test_index == 0:
                     logging.info(
-                        f"generated test_results optimized -> {test_results.get_test_pass_fail_report()}",
+                        f"Generated tests results for candidate: {candidate_generated_test_results.get_test_pass_fail_report()}",
                     )
-                    if compare_results(original_gen_results, test_results):
+                    if compare_test_results(
+                        original_generated_test_results,
+                        candidate_generated_test_results,
+                    ):
                         equal_results = True
-                        logging.info("Results matched!")
+                        logging.info("Test results matched!")
                     else:
-                        logging.info("Results did not match.")
+                        logging.info("Test results did not match the test results of the original code.")
                         equal_results = False
                 if not equal_results:
                     do_break = True
                     break
 
-                if not test_results:
+                if not candidate_generated_test_results:
                     test_runtime = sum(instrumented_test_timing)
                 else:
-                    test_runtime = test_results.total_passed_runtime() + sum(instrumented_test_timing)
+                    test_runtime = candidate_generated_test_results.total_passed_runtime() + sum(
+                        instrumented_test_timing,
+                    )
 
                 if test_runtime == 0:
                     logging.warning(
@@ -1092,10 +1102,10 @@ class Optimizer:
                     do_break = True
                     break
                 if best_test_runtime is None or test_runtime < best_test_runtime:
-                    if test_results:
-                        optimized_test_results_iter.merge(test_results)
+                    if candidate_generated_test_results:
+                        candidate_existing_test_results.merge(candidate_generated_test_results)
                     best_test_runtime = test_runtime
-                    best_test_results = optimized_test_results_iter
+                    best_test_results = candidate_existing_test_results
                 cumulative_test_runs += 1
                 cumulative_test_runtime += test_runtime
                 times_run += 1

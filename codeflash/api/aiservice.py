@@ -34,8 +34,8 @@ class AiServiceClient:
 
     def get_aiservice_base_url(self) -> str:
         if os.environ.get("CODEFLASH_AIS_SERVER", default="prod").lower() == "local":
-            logging.info("Using local AI Service at http://localhost:8000/")
-            return "http://localhost:8000/"
+            logging.info("Using local AI Service at http://localhost:8000")
+            return "http://localhost:8000"
         return "https://app.codeflash.ai"
 
     def make_ai_service_request(
@@ -238,4 +238,4 @@ class AiServiceClient:
 
 class LocalAiServiceClient(AiServiceClient):
     def get_aiservice_base_url(self) -> str:
-        return "http://localhost:8000/"
+        return "http://localhost:8000"

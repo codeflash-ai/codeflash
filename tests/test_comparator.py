@@ -5,7 +5,7 @@ import decimal
 import pydantic
 import pytest
 from codeflash.verification.comparator import comparator
-from codeflash.verification.equivalence import compare_results
+from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.test_results import (
     FunctionTestInvocation,
     InvocationId,
@@ -502,7 +502,7 @@ def test_compare_results_fn():
         ],
     )
 
-    assert compare_results(original_results, new_results_1)
+    assert compare_test_results(original_results, new_results_1)
 
     new_results_2 = TestResults(
         test_results=[
@@ -524,7 +524,7 @@ def test_compare_results_fn():
         ],
     )
 
-    assert not compare_results(original_results, new_results_2)
+    assert not compare_test_results(original_results, new_results_2)
 
     new_results_3 = TestResults(
         test_results=[
@@ -561,6 +561,6 @@ def test_compare_results_fn():
         ],
     )
 
-    assert not compare_results(original_results, new_results_3)
+    assert not compare_test_results(original_results, new_results_3)
 
-    assert not compare_results(TestResults(), TestResults())
+    assert not compare_test_results(TestResults(), TestResults())
