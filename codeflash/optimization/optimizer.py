@@ -837,6 +837,7 @@ class Optimizer:
         generated_tests_elapsed_time = 0.0
 
         # For the original function - run the tests and get the runtime
+        logging.info(f"Establishing original code baseline runtime for {function_name}.")
         # TODO: Compare the function return values over the multiple runs and check if they are any different,
         #  if they are different, then we can't optimize this function because it is a non-deterministic function
         test_env = os.environ.copy()
@@ -850,6 +851,9 @@ class Optimizer:
         cumulative_test_runs = 0
         first_run = True
         do_break = False
+        logging.info(
+            f"Running {len(instrumented_unittests_created_for_function)} tests for {function_name} ..."
+        )
         while (
             cumulative_test_runtime < MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS
             and cumulative_test_runs < MAX_TEST_FUNCTION_RUNS
