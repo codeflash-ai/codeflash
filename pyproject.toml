@@ -92,6 +92,9 @@ classmethod-decorators = [
     "pydantic.validator",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"**/*" = ["D102"]
+
 [tool.ruff]
 line-length = 110
 
