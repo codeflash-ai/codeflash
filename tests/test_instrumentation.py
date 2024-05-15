@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import ast
 import os.path
 import pathlib
@@ -17,7 +19,7 @@ from codeflash.verification.test_runner import run_tests
 from codeflash.verification.verification_utils import TestConfig
 
 
-def test_perfinjector_bubble_sort():
+def test_perfinjector_bubble_sort() -> None:
     code = """import unittest
 
 from code_to_optimize.bubble_sort import sorter
@@ -99,7 +101,7 @@ class TestPigLatin(unittest.TestCase):
         )
 
 
-def test_perfinjector_only_replay_test():
+def test_perfinjector_only_replay_test() -> None:
     code = """import dill as pickle
 import pytest
 from codeflash.tracing.replay_test import get_next_arg_and_return
@@ -176,7 +178,7 @@ def test_prepare_image_for_yolo():
         )
 
 
-def test_perfinjector_bubble_sort_results():
+def test_perfinjector_bubble_sort_results() -> None:
     code = """from code_to_optimize.bubble_sort import sorter
 
 
@@ -279,24 +281,24 @@ def test_sort():
     )
     assert test_results[0].id.function_getting_tested == "sorter"
     assert test_results[0].id.iteration_id == "5_0"
-    assert test_results[0].id.test_class_name == None
+    assert test_results[0].id.test_class_name is None
     assert test_results[0].id.test_function_name == "test_sort"
     assert test_results[0].id.test_module_path == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
     assert test_results[0].runtime > 0
-    assert test_results[0].did_pass == True
+    assert test_results[0].did_pass
 
     assert test_results[1].id.function_getting_tested == "sorter"
     assert test_results[1].id.iteration_id == "8_0"
-    assert test_results[1].id.test_class_name == None
+    assert test_results[1].id.test_class_name is None
     assert test_results[1].id.test_function_name == "test_sort"
     assert test_results[1].id.test_module_path == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
     assert test_results[1].runtime > 0
-    assert test_results[1].did_pass == True
+    assert test_results[1].did_pass
 
     os.remove(test_path)
 
 
-def test_perfinjector_bubble_sort_parametrized_results():
+def test_perfinjector_bubble_sort_parametrized_results() -> None:
     code = """from code_to_optimize.bubble_sort import sorter
 import pytest
 
@@ -401,41 +403,41 @@ def test_sort_parametrized(input, expected_output):
 
     assert test_results[0].id.function_getting_tested == "sorter"
     assert test_results[0].id.iteration_id == "4_0"
-    assert test_results[0].id.test_class_name == None
+    assert test_results[0].id.test_class_name is None
     assert test_results[0].id.test_function_name == "test_sort_parametrized"
     assert (
         test_results[0].id.test_module_path
         == "tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp"
     )
     assert test_results[0].runtime > 0
-    assert test_results[0].did_pass == True
+    assert test_results[0].did_pass
 
     assert test_results[1].id.function_getting_tested == "sorter"
     assert test_results[1].id.iteration_id == "4_1"
-    assert test_results[1].id.test_class_name == None
+    assert test_results[1].id.test_class_name is None
     assert test_results[1].id.test_function_name == "test_sort_parametrized"
     assert (
         test_results[1].id.test_module_path
         == "tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp"
     )
     assert test_results[1].runtime > 0
-    assert test_results[1].did_pass == True
+    assert test_results[1].did_pass
 
     assert test_results[2].id.function_getting_tested == "sorter"
     assert test_results[2].id.iteration_id == "4_2"
-    assert test_results[2].id.test_class_name == None
+    assert test_results[2].id.test_class_name is None
     assert test_results[2].id.test_function_name == "test_sort_parametrized"
     assert (
         test_results[2].id.test_module_path
         == "tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp"
     )
     assert test_results[2].runtime > 0
-    assert test_results[2].did_pass == True
+    assert test_results[2].did_pass
 
     os.remove(test_path)
 
 
-def test_perfinjector_bubble_sort_parametrized_loop_results():
+def test_perfinjector_bubble_sort_parametrized_loop_results() -> None:
     code = """from code_to_optimize.bubble_sort import sorter
 import pytest
 
@@ -543,74 +545,74 @@ def test_sort_parametrized_loop(input, expected_output):
 
     assert test_results[0].id.function_getting_tested == "sorter"
     assert test_results[0].id.iteration_id == "4_0_0"
-    assert test_results[0].id.test_class_name == None
+    assert test_results[0].id.test_class_name is None
     assert test_results[0].id.test_function_name == "test_sort_parametrized_loop"
     assert (
         test_results[0].id.test_module_path
         == "tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp"
     )
     assert test_results[0].runtime > 0
-    assert test_results[0].did_pass == True
+    assert test_results[0].did_pass
 
     assert test_results[1].id.function_getting_tested == "sorter"
     assert test_results[1].id.iteration_id == "4_0_1"
-    assert test_results[1].id.test_class_name == None
+    assert test_results[1].id.test_class_name is None
     assert test_results[1].id.test_function_name == "test_sort_parametrized_loop"
     assert (
         test_results[1].id.test_module_path
         == "tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp"
     )
     assert test_results[1].runtime > 0
-    assert test_results[1].did_pass == True
+    assert test_results[1].did_pass
 
     assert test_results[2].id.function_getting_tested == "sorter"
     assert test_results[2].id.iteration_id == "4_0_2"
-    assert test_results[2].id.test_class_name == None
+    assert test_results[2].id.test_class_name is None
     assert test_results[2].id.test_function_name == "test_sort_parametrized_loop"
     assert (
         test_results[2].id.test_module_path
         == "tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp"
     )
     assert test_results[2].runtime > 0
-    assert test_results[2].did_pass == True
+    assert test_results[2].did_pass
 
     assert test_results[3].id.function_getting_tested == "sorter"
     assert test_results[3].id.iteration_id == "4_0_3"
-    assert test_results[3].id.test_class_name == None
+    assert test_results[3].id.test_class_name is None
     assert test_results[3].id.test_function_name == "test_sort_parametrized_loop"
     assert (
         test_results[3].id.test_module_path
         == "tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp"
     )
     assert test_results[3].runtime > 0
-    assert test_results[3].did_pass == True
+    assert test_results[3].did_pass
 
     assert test_results[4].id.function_getting_tested == "sorter"
     assert test_results[4].id.iteration_id == "4_0_4"
-    assert test_results[4].id.test_class_name == None
+    assert test_results[4].id.test_class_name is None
     assert test_results[4].id.test_function_name == "test_sort_parametrized_loop"
     assert (
         test_results[4].id.test_module_path
         == "tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp"
     )
     assert test_results[4].runtime > 0
-    assert test_results[4].did_pass == True
+    assert test_results[4].did_pass
 
     assert test_results[5].id.function_getting_tested == "sorter"
     assert test_results[5].id.iteration_id == "4_0_5"
-    assert test_results[5].id.test_class_name == None
+    assert test_results[5].id.test_class_name is None
     assert test_results[5].id.test_function_name == "test_sort_parametrized_loop"
     assert (
         test_results[5].id.test_module_path
         == "tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp"
     )
     assert test_results[5].runtime > 0
-    assert test_results[5].did_pass == True
+    assert test_results[5].did_pass
 
     os.remove(test_path)
 
 
-def test_perfinjector_bubble_sort_loop_results():
+def test_perfinjector_bubble_sort_loop_results() -> None:
     code = """from code_to_optimize.bubble_sort import sorter
 
 
@@ -618,7 +620,7 @@ def test_sort():
     inputs = [[5, 4, 3, 2, 1, 0], [5.0, 4.0, 3.0, 2.0, 1.0, 0.0], list(reversed(range(50)))]
     expected_outputs = [[0, 1, 2, 3, 4, 5], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0], list(range(50))]
 
-    for i in range(3):   
+    for i in range(3):
         input = inputs[i]
         expected_output = expected_outputs[i]
         output = sorter(input)
@@ -715,38 +717,38 @@ def test_sort():
 
     assert test_results[0].id.function_getting_tested == "sorter"
     assert test_results[0].id.iteration_id == "6_2_0"
-    assert test_results[0].id.test_class_name == None
+    assert test_results[0].id.test_class_name is None
     assert test_results[0].id.test_function_name == "test_sort"
     assert (
         test_results[0].id.test_module_path == "tests.pytest.test_perfinjector_bubble_sort_loop_results_temp"
     )
     assert test_results[0].runtime > 0
-    assert test_results[0].did_pass == True
+    assert test_results[0].did_pass
 
     assert test_results[1].id.function_getting_tested == "sorter"
     assert test_results[1].id.iteration_id == "6_2_1"
-    assert test_results[1].id.test_class_name == None
+    assert test_results[1].id.test_class_name is None
     assert test_results[1].id.test_function_name == "test_sort"
     assert (
         test_results[1].id.test_module_path == "tests.pytest.test_perfinjector_bubble_sort_loop_results_temp"
     )
     assert test_results[1].runtime > 0
-    assert test_results[1].did_pass == True
+    assert test_results[1].did_pass
 
     assert test_results[2].id.function_getting_tested == "sorter"
     assert test_results[2].id.iteration_id == "6_2_2"
-    assert test_results[2].id.test_class_name == None
+    assert test_results[2].id.test_class_name is None
     assert test_results[2].id.test_function_name == "test_sort"
     assert (
         test_results[2].id.test_module_path == "tests.pytest.test_perfinjector_bubble_sort_loop_results_temp"
     )
     assert test_results[2].runtime > 0
-    assert test_results[2].did_pass == True
+    assert test_results[2].did_pass
 
     os.remove(test_path)
 
 
-def test_perfinjector_bubble_sort_unittest_results():
+def test_perfinjector_bubble_sort_unittest_results() -> None:
     code = """import unittest
 
 from code_to_optimize.bubble_sort import sorter
@@ -874,7 +876,7 @@ class TestPigLatin(unittest.TestCase):
         == "tests.unittest.test_perfinjector_bubble_sort_unittest_results_temp"
     )
     assert test_results[0].runtime > 0
-    assert test_results[0].did_pass == True
+    assert test_results[0].did_pass
 
     assert test_results[1].id.function_getting_tested == "sorter"
     assert test_results[1].id.iteration_id == "8_0"
@@ -885,7 +887,7 @@ class TestPigLatin(unittest.TestCase):
         == "tests.unittest.test_perfinjector_bubble_sort_unittest_results_temp"
     )
     assert test_results[1].runtime > 0
-    assert test_results[1].did_pass == True
+    assert test_results[1].did_pass
 
     assert test_results[2].id.function_getting_tested == "sorter"
     assert test_results[2].id.iteration_id == "11_0"
@@ -896,12 +898,12 @@ class TestPigLatin(unittest.TestCase):
         == "tests.unittest.test_perfinjector_bubble_sort_unittest_results_temp"
     )
     assert test_results[2].runtime > 0
-    assert test_results[2].did_pass == True
+    assert test_results[2].did_pass
 
     os.remove(test_path)
 
 
-def test_perfinjector_bubble_sort_unittest_parametrized_results():
+def test_perfinjector_bubble_sort_unittest_parametrized_results() -> None:
     code = """import unittest
 from parameterized import parameterized
 
@@ -1019,7 +1021,7 @@ class TestPigLatin(unittest.TestCase):
         == "tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_results_temp"
     )
     assert test_results[0].runtime > 0
-    assert test_results[0].did_pass == True
+    assert test_results[0].did_pass
 
     assert test_results[1].id.function_getting_tested == "sorter"
     assert test_results[1].id.iteration_id == "4_1"
@@ -1030,7 +1032,7 @@ class TestPigLatin(unittest.TestCase):
         == "tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_results_temp"
     )
     assert test_results[1].runtime > 0
-    assert test_results[1].did_pass == True
+    assert test_results[1].did_pass
 
     assert test_results[2].id.function_getting_tested == "sorter"
     assert test_results[2].id.iteration_id == "4_2"
@@ -1041,12 +1043,12 @@ class TestPigLatin(unittest.TestCase):
         == "tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_results_temp"
     )
     assert test_results[2].runtime > 0
-    assert test_results[2].did_pass == True
+    assert test_results[2].did_pass
 
     os.remove(test_path)
 
 
-def test_perfinjector_bubble_sort_unittest_loop_results():
+def test_perfinjector_bubble_sort_unittest_loop_results() -> None:
     code = """import unittest
 
 from code_to_optimize.bubble_sort import sorter
@@ -1056,7 +1058,7 @@ class TestPigLatin(unittest.TestCase):
     def test_sort(self):
         inputs = [[5, 4, 3, 2, 1, 0], [5.0, 4.0, 3.0, 2.0, 1.0, 0.0], list(reversed(range(50)))]
         expected_outputs = [[0, 1, 2, 3, 4, 5], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0], list(range(50))]
-        
+
         for i in range(3):
             input = inputs[i]
             expected_output = expected_outputs[i]
@@ -1165,7 +1167,7 @@ class TestPigLatin(unittest.TestCase):
         == "tests.unittest.test_perfinjector_bubble_sort_unittest_loop_results_temp"
     )
     assert test_results[0].runtime > 0
-    assert test_results[0].did_pass == True
+    assert test_results[0].did_pass
 
     assert test_results[1].id.function_getting_tested == "sorter"
     assert test_results[1].id.iteration_id == "6_2_1"
@@ -1176,7 +1178,7 @@ class TestPigLatin(unittest.TestCase):
         == "tests.unittest.test_perfinjector_bubble_sort_unittest_loop_results_temp"
     )
     assert test_results[1].runtime > 0
-    assert test_results[1].did_pass == True
+    assert test_results[1].did_pass
 
     assert test_results[2].id.function_getting_tested == "sorter"
     assert test_results[2].id.iteration_id == "6_2_2"
@@ -1187,12 +1189,11 @@ class TestPigLatin(unittest.TestCase):
         == "tests.unittest.test_perfinjector_bubble_sort_unittest_loop_results_temp"
     )
     assert test_results[2].runtime > 0
-    assert test_results[2].did_pass == True
-
+    assert test_results[2].did_pass
     os.remove(test_path)
 
 
-def test_perfinjector_bubble_sort_unittest_parametrized_loop_results():
+def test_perfinjector_bubble_sort_unittest_parametrized_loop_results() -> None:
     code = """import unittest
 from parameterized import parameterized
 
@@ -1314,7 +1315,7 @@ class TestPigLatin(unittest.TestCase):
         == "tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp"
     )
     assert test_results[0].runtime > 0
-    assert test_results[0].did_pass == True
+    assert test_results[0].did_pass
 
     assert test_results[1].id.function_getting_tested == "sorter"
     assert test_results[1].id.iteration_id == "4_0_1"
@@ -1325,7 +1326,7 @@ class TestPigLatin(unittest.TestCase):
         == "tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp"
     )
     assert test_results[1].runtime > 0
-    assert test_results[1].did_pass == True
+    assert test_results[1].did_pass
 
     assert test_results[2].id.function_getting_tested == "sorter"
     assert test_results[2].id.iteration_id == "4_0_2"
@@ -1336,7 +1337,7 @@ class TestPigLatin(unittest.TestCase):
         == "tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp"
     )
     assert test_results[2].runtime > 0
-    assert test_results[2].did_pass == True
+    assert test_results[2].did_pass
 
     assert test_results[3].id.function_getting_tested == "sorter"
     assert test_results[3].id.iteration_id == "4_0_3"
@@ -1347,7 +1348,7 @@ class TestPigLatin(unittest.TestCase):
         == "tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp"
     )
     assert test_results[3].runtime > 0
-    assert test_results[3].did_pass == True
+    assert test_results[3].did_pass
 
     assert test_results[4].id.function_getting_tested == "sorter"
     assert test_results[4].id.iteration_id == "4_0_4"
@@ -1358,7 +1359,7 @@ class TestPigLatin(unittest.TestCase):
         == "tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp"
     )
     assert test_results[4].runtime > 0
-    assert test_results[4].did_pass == True
+    assert test_results[4].did_pass
 
     assert test_results[5].id.function_getting_tested == "sorter"
     assert test_results[5].id.iteration_id == "4_0_5"
@@ -1369,12 +1370,12 @@ class TestPigLatin(unittest.TestCase):
         == "tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp"
     )
     assert test_results[5].runtime > 0
-    assert test_results[5].did_pass == True
+    assert test_results[5].did_pass
 
     os.remove(test_path)
 
 
-def test_update_line_node():
+def test_update_line_node() -> None:
     injectperf = InjectPerfOnly("sorter", "code_to_optimize.tests.pytest.test_bubble_sort")
     node = ast.Assign(
         targets=[ast.Name(id="output", ctx=ast.Store())],
@@ -1396,7 +1397,7 @@ def test_update_line_node():
     assert len(injectperf.update_line_node(node, "test_sort", "0", None)) > 0
 
 
-def test_class_method_imported_as():
+def test_class_method_imported_as() -> None:
     code = """import functionA
 import moduleB as module_B
 from module import functionB as function_B
@@ -1421,7 +1422,7 @@ from nuitka.nodes.ImportNodes import ExpressionBuiltinImport as nuitka_nodes_Imp
     assert visitor.imported_as == "class_name_B"
 
 
-def test_class_function_instrumentation():
+def test_class_function_instrumentation() -> None:
     code = """from module import class_name as class_name_A
 
 def test_class_name_A_function_name():
@@ -1482,4 +1483,75 @@ def test_class_name_A_function_name():
     assert new_test == expected.format(
         tmp_dir_path=get_run_tmp_file("test_return_values"),
         module_path="tests.pytest.test_class_function_instrumentation_temp",
+    )
+
+
+def test_wrong_function_instrumentation() -> None:
+    code = """from codeflash.result.common_tags import find_common_tags
+
+
+def test_common_tags_1():
+    articles_1 = [1, 2, 3]
+
+    assert find_common_tags(articles_1) == set(1, 2)
+
+    articles_2 = [1, 2]
+
+    assert find_common_tags(articles_2) == set(1)
+"""
+
+    expected = """import time
+import gc
+import os
+import sqlite3
+import dill as pickle
+
+def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
+    if not hasattr(codeflash_wrap, 'index'):
+        codeflash_wrap.index = {{}}
+    if test_id in codeflash_wrap.index:
+        codeflash_wrap.index[test_id] += 1
+    else:
+        codeflash_wrap.index[test_id] = 0
+    codeflash_test_index = codeflash_wrap.index[test_id]
+    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    gc.disable()
+    counter = time.perf_counter_ns()
+    return_value = wrapped(*args, **kwargs)
+    codeflash_duration = time.perf_counter_ns() - counter
+    gc.enable()
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    codeflash_con.commit()
+    return return_value
+from codeflash.result.common_tags import find_common_tags
+
+def test_common_tags_1():
+    codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
+    codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
+    codeflash_cur = codeflash_con.cursor()
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    articles_1 = [1, 2, 3]
+    codeflash_return_value = codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '5', codeflash_cur, codeflash_con, articles_1)
+    assert codeflash_return_value == set(1, 2)
+    articles_2 = [1, 2]
+    codeflash_return_value = codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '7', codeflash_cur, codeflash_con, articles_2)
+    assert codeflash_return_value == set(1)
+    codeflash_con.close()"""
+
+    test_path = (
+        pathlib.Path(__file__).parent.resolve()
+        / "../code_to_optimize/tests/pytest/test_wrong_function_instrumentation_temp.py"
+    )
+    with open(test_path, "w") as f:
+        f.write(code)
+
+    tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+    project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+
+    success, new_test = inject_profiling_into_existing_test(test_path, "find_common_tags", project_root_path)
+    assert success
+    assert new_test == expected.format(
+        module_path="tests.pytest.test_wrong_function_instrumentation_temp",
+        tmp_dir_path=get_run_tmp_file("test_return_values"),
     )
