@@ -208,22 +208,21 @@ class AiServiceClient:
             response_json = response.json()
             logging.info(f"Generated tests for function {function_to_optimize.function_name}")
             return response_json["generated_tests"], response_json["instrumented_tests"]
-        else:
-            try:
-                error = response.json()["error"]
-                logging.error(f"Error generating tests: {response.status_code} - {error}")
-                ph(
-                    "cli-testgen-error-response",
-                    {"response_status_code": response.status_code, "error": error},
-                )
-                return None
-            except Exception:
-                logging.exception(f"Error generating tests: {response.status_code} - {response.text}")
-                ph(
-                    "cli-testgen-error-response",
-                    {"response_status_code": response.status_code, "error": response.text},
-                )
-                return None
+        try:
+            error = response.json()["error"]
+            logging.error(f"Error generating tests: {response.status_code} - {error}")
+            ph(
+                "cli-testgen-error-response",
+                {"response_status_code": response.status_code, "error": error},
+            )
+            return None
+        except Exception:
+            logging.exception(f"Error generating tests: {response.status_code} - {response.text}")
+            ph(
+                "cli-testgen-error-response",
+                {"response_status_code": response.status_code, "error": response.text},
+            )
+            return None
 
 
 class LocalAiServiceClient(AiServiceClient):
