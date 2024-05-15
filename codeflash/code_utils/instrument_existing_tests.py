@@ -1,16 +1,18 @@
+from __future__ import annotations
+
 import ast
-from _ast import ClassDef
-from typing import Any, Optional, Tuple
+import logging
+from typing import Iterable
 
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 
 
 class ReplaceCallNodeWithName(ast.NodeTransformer):
-    def __init__(self, only_function_name, new_variable_name="codeflash_return_value"):
+    def __init__(self, only_function_name: str, new_variable_name: str = "codeflash_return_value") -> None:
         self.only_function_name = only_function_name
         self.new_variable_name = new_variable_name
 
-    def visit_Call(self, node: ast.Call):
+    def visit_Call(self, node: ast.Call) -> ast.Name | ast.Call:
         if isinstance(node, ast.Call):
             if hasattr(node.func, "id"):
                 function_name = node.func.id
@@ -29,17 +31,17 @@ class ReplaceCallNodeWithName(ast.NodeTransformer):
 
 
 class InjectPerfOnly(ast.NodeTransformer):
-    def __init__(self, function_name, module_path):
+    def __init__(self, function_name: str, module_path: str) -> None:
         self.only_function_name = function_name
         self.module_path = module_path
 
     def update_line_node(
         self,
-        test_node,
-        node_name,
+        test_node: ast.AST,
+        node_name: str,
         index: str,
-        test_class_name: Optional[str] = None,
-    ):
+        test_class_name: str | None = None,
+    ) -> Iterable[ast.stmt]:
         call_node = None
         function_name = ""
         for node in ast.walk(test_node):
@@ -55,14 +57,10 @@ class InjectPerfOnly(ast.NodeTransformer):
 
                 if function_name == self.only_function_name:
                     call_node = node
+                    break
 
         if call_node is None:
             return [test_node]
-
-        if hasattr(call_node.func, "id"):
-            function_id = call_node.func.id
-        else:
-            function_id = call_node.func.attr
 
         updated_nodes = [
             ast.Assign(
@@ -78,9 +76,9 @@ class InjectPerfOnly(ast.NodeTransformer):
                         ast.Constant(value=index),
                         ast.Name(id="codeflash_cur", ctx=ast.Load()),
                         ast.Name(id="codeflash_con", ctx=ast.Load()),
-                    ]
-                    + call_node.args
-                    + call_node.keywords,
+                        *call_node.args,
+                        *call_node.keywords,
+                    ],
                     keywords=[],
                 ),
                 lineno=test_node.lineno,
@@ -89,18 +87,19 @@ class InjectPerfOnly(ast.NodeTransformer):
         ]
         subbed_node = ReplaceCallNodeWithName(self.only_function_name).visit(test_node)
 
-        # TODO: Not just run the tests and ensure that the tests pass but also test the return value and compare that
-        #  for equality amongst the original and the optimized version. This will ensure that the optimizations are correct
-        #  in a more robust way.
+        # TODO: Not just run the tests and ensure that the tests pass but also test the return value and
+        #  compare that for equality amongst the original and the optimized version. This will ensure that the
+        #  optimizations are correct in a more robust way.
 
         updated_nodes.append(subbed_node)
         return updated_nodes
 
-    def is_target_function_line(self, line_node):
+    def is_target_function_line(self, line_node: ast.AST) -> bool:
+        node: ast.AST
         for node in ast.walk(line_node):
             if isinstance(node, ast.Call):
                 if hasattr(node.func, "id"):
-                    function_name = node.func.id
+                    function_name: str = node.func.id
 
                 if hasattr(node.func, "attr"):
                     function_name = node.func.attr
@@ -113,15 +112,15 @@ class InjectPerfOnly(ast.NodeTransformer):
 
         return False
 
-    def visit_ClassDef(self, node: ClassDef) -> Any:
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
         # TODO: Ensure that this class inherits from unittest.TestCase. Don't modify non unittest.TestCase classes
         for inner_node in ast.walk(node):
-            if isinstance(inner_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                inner_node = self.visit_FunctionDef(inner_node, node.name)
+            if isinstance(inner_node, ast.FunctionDef):
+                self.visit_FunctionDef(inner_node, node.name)
 
         return node
 
-    def visit_FunctionDef(self, node: ast.FunctionDef, test_class_name: Optional[str] = None):
+    def visit_FunctionDef(self, node: ast.FunctionDef, test_class_name: str | None = None) -> ast.FunctionDef:
         if node.name.startswith("test_"):
             node.body = (
                 [
@@ -226,7 +225,8 @@ class InjectPerfOnly(ast.NodeTransformer):
                 if isinstance(line_node, (ast.With, ast.For, ast.While)):
                     j = len(line_node.body) - 1
                     while j >= 0:
-                        compound_line_node = line_node.body[j]
+                        compound_line_node: ast.stmt = line_node.body[j]
+                        internal_node: ast.AST
                         for internal_node in ast.walk(compound_line_node):
                             if self.is_target_function_line(internal_node):
                                 line_node.body[j : j + 1] = self.update_line_node(
@@ -254,33 +254,36 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
     np_array is what we want
     """
 
-    def __init__(self, qualified_name: str):
+    def __init__(self, qualified_name: str) -> None:
         self.split_qualified_name = qualified_name.split(".")
         assert len(self.split_qualified_name) <= 2, "Only support functions in the format module.function"
         self.imported_as = qualified_name
         self.to_match = self.split_qualified_name[0]
         try:
-            self.optional_method_name = self.split_qualified_name[1]
+            self.optional_method_name: str | None = self.split_qualified_name[1]
         except IndexError:
             self.optional_method_name = None
 
     # TODO: Validate if the function imported is actually from the right module
-    def visit_ImportFrom(self, node: ast.ImportFrom):
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         for alias in node.names:
-            if alias.name == self.to_match:
-                if hasattr(alias, "asname") and alias.asname is not None:
-                    self.imported_as = alias.asname + (
-                        "." + self.optional_method_name if self.optional_method_name else ""
-                    )
+            if alias.name == self.to_match and hasattr(alias, "asname") and alias.asname is not None:
+                self.imported_as = alias.asname + (
+                    "." + self.optional_method_name if self.optional_method_name else ""
+                )
 
 
-def inject_profiling_into_existing_test(test_path, function_name, root_path) -> Tuple[bool, str]:
+def inject_profiling_into_existing_test(
+    test_path: str,
+    function_name: str,
+    root_path: str,
+) -> tuple[bool, str | None]:
     with open(test_path, encoding="utf8") as f:
         test_code = f.read()
     try:
         tree = ast.parse(test_code)
-    except SyntaxError as e:
-        print(f"Syntax error in code: {e}")
+    except SyntaxError:
+        logging.exception("Syntax error in code")
         return False, None
     # TODO: Pass the full name of function here, otherwise we can run into namespace clashes
     module_path = module_name_from_file_path(test_path, root_path)
@@ -296,14 +299,14 @@ def inject_profiling_into_existing_test(test_path, function_name, root_path) -> 
         ast.Import(names=[ast.alias(name="sqlite3")]),
         ast.Import(names=[ast.alias(name="dill", asname="pickle")]),
     ]
-    tree.body = new_imports + [create_wrapper_function(function_name, module_path)] + tree.body
+    tree.body = [*new_imports, create_wrapper_function(), *tree.body]
 
     return True, ast.unparse(tree)
 
 
-def create_wrapper_function(function_name, module_path):
+def create_wrapper_function() -> ast.FunctionDef:
     lineno = 1
-    node = ast.FunctionDef(
+    return ast.FunctionDef(
         name="codeflash_wrap",
         args=ast.arguments(
             args=[
@@ -574,4 +577,3 @@ def create_wrapper_function(function_name, module_path):
         returns=None,
         type_params=[],
     )
-    return node
