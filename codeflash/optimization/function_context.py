@@ -54,6 +54,61 @@ def get_type_annotation_context(
     sources: list[tuple[Source, str, str]] = []
     ast_parents: list[FunctionParent] = []
 
+    def get_annotation_source(
+        jedi_script: jedi.Script,
+        name: str,
+        node_parents,
+        line_no: int,
+        col_no: str,
+    ) -> str:
+        try:
+            definition: list[Name] = jedi_script.goto(
+                line=line_no,
+                column=col_no,
+                follow_imports=True,
+                follow_builtin_imports=False,
+            )
+        except Exception as ex:
+            if hasattr(name, "full_name"):
+                logging.exception(
+                    f"Error while getting definition for {name.full_name}: {ex}",
+                )
+            else:
+                logging.exception(f"Error while getting definition: {ex}")
+            definition = []
+        if definition:  # TODO can be multiple definitions
+            definition_path = str(definition[0].module_path)
+            # The definition is part of this project and not defined within the original function
+            if (
+                definition_path.startswith(project_root_path + os.sep)
+                and definition[0].full_name
+                and not path_belongs_to_site_packages(definition_path)
+                and not belongs_to_function(definition[0], function_name)
+            ):
+                source_code = get_code(
+                    [
+                        FunctionToOptimize(
+                            definition[0].name,
+                            definition_path,
+                            node_parents[:-1],
+                        ),
+                    ],
+                )[0]
+                if source_code:
+                    sources.append(
+                        (
+                            Source(
+                                definition[0].name,
+                                definition[0],
+                                source_code,
+                            ),
+                            definition_path,
+                            definition[0].full_name.removeprefix(
+                                definition[0].module_name + ".",
+                            ),
+                        ),
+                    )
+
     def visit_children(
         node: Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module],
         node_parents: list[FunctionParent],
@@ -61,6 +116,31 @@ def get_type_annotation_context(
         child: Union[ast.AST, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module]
         for child in ast.iter_child_nodes(node):
             visit(child, node_parents)
+
+    def visit_all_annotation_children(
+        node: Union[ast.Subscript, ast.Name, ast.BinOp],
+        node_parents: list[FunctionParent],
+    ) -> None:
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+            visit_all_annotation_children(node.left, node_parents)
+            visit_all_annotation_children(node.right, node_parents)
+        if isinstance(node, ast.Name) and hasattr(node, "id"):
+            name: str = node.id
+            line_no: int = node.lineno
+            col_no: int = node.col_offset
+            get_annotation_source(jedi_script, name, node_parents, line_no, col_no)
+        if isinstance(node, ast.Subscript):
+            if hasattr(node, "slice"):
+                if isinstance(node.slice, ast.Subscript):
+                    visit_all_annotation_children(node.slice, node_parents)
+                elif isinstance(node.slice, ast.Tuple):
+                    for elt in node.slice.elts:
+                        if isinstance(elt, (ast.Name, ast.Subscript)):
+                            visit_all_annotation_children(elt, node_parents)
+                elif isinstance(node.slice, ast.Name):
+                    visit_all_annotation_children(node.slice, node_parents)
+            if hasattr(node, "value"):
+                visit_all_annotation_children(node.value, node_parents)
 
     def visit(
         node: Union[ast.AST, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module],
@@ -71,57 +151,11 @@ def get_type_annotation_context(
                 if node.name == function_name and node_parents == function.parents:
                     arg: ast.arg
                     for arg in node.args.args:
-                        if arg.annotation and hasattr(arg.annotation, "id"):
-                            name: str = arg.annotation.id
-                            line_no: int = arg.annotation.lineno
-                            col_no: int = arg.annotation.col_offset
-                            try:
-                                definition: list[Name] = jedi_script.goto(
-                                    line=line_no,
-                                    column=col_no,
-                                    follow_imports=True,
-                                    follow_builtin_imports=False,
-                                )
-                            except Exception as ex:
-                                if hasattr(name, "full_name"):
-                                    logging.exception(
-                                        f"Error while getting definition for {name.full_name}: {ex}",
-                                    )
-                                else:
-                                    logging.exception(f"Error while getting definition: {ex}")
-                                definition = []
-                            if definition:  # TODO can be multiple definitions
-                                definition_path = str(definition[0].module_path)
-                                # The definition is part of this project and not defined within the original function
-                                if (
-                                    definition_path.startswith(project_root_path + os.sep)
-                                    and definition[0].full_name
-                                    and not path_belongs_to_site_packages(definition_path)
-                                    and not belongs_to_function(definition[0], function_name)
-                                ):
-                                    source_code = get_code(
-                                        [
-                                            FunctionToOptimize(
-                                                definition[0].name,
-                                                definition_path,
-                                                node_parents[:-1],
-                                            ),
-                                        ],
-                                    )[0]
-                                    if source_code:
-                                        sources.append(
-                                            (
-                                                Source(
-                                                    definition[0].name,
-                                                    definition[0],
-                                                    source_code,
-                                                ),
-                                                definition_path,
-                                                definition[0].full_name.removeprefix(
-                                                    definition[0].module_name + ".",
-                                                ),
-                                            ),
-                                        )
+                        if arg.annotation:
+                            visit_all_annotation_children(arg.annotation, node_parents)
+                    if node.returns:
+                        visit_all_annotation_children(node.returns, node_parents)
+
             if not isinstance(node, ast.Module):
                 node_parents.append(FunctionParent(node.name, type(node).__name__))
             visit_children(node, node_parents)
@@ -230,12 +264,9 @@ def get_constrained_function_context_and_dependent_functions(
         dependent_functions_sources = [
             function[0].source_code
             for function in dependent_functions
-            if not function[2].count(".")
-            or function[2].split(".")[0] != function_to_optimize.parents[0].name
+            if not function[2].count(".") or function[2].split(".")[0] != function_to_optimize.parents[0].name
         ]
-    dependent_functions_tokens = [
-        len(tokenizer.encode(function)) for function in dependent_functions_sources
-    ]
+    dependent_functions_tokens = [len(tokenizer.encode(function)) for function in dependent_functions_sources]
 
     context_list = []
     context_len = len(code_to_optimize_tokens)
