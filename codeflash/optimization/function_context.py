@@ -117,6 +117,32 @@ def get_type_annotation_context(
         for child in ast.iter_child_nodes(node):
             visit(child, node_parents)
 
+    def visit_all_annotation_children(
+        node: Union[ast.Subscript, ast.Name, ast.BinOp],
+        node_parents: list[FunctionParent],
+    ) -> None:
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+            visit_all_annotation_children(node.left, node_parents)
+            visit_all_annotation_children(node.right, node_parents)
+        if isinstance(node, ast.Name):
+            if hasattr(node, "id"):
+                name: str = node.id
+                line_no: int = node.lineno
+                col_no: int = node.col_offset
+                get_annotation_source(jedi_script, name, node_parents, line_no, col_no)
+        if isinstance(node, ast.Subscript):
+            if hasattr(node, "slice"):
+                if isinstance(node.slice, ast.Subscript):
+                    visit_all_annotation_children(node.slice, node_parents)
+                elif isinstance(node.slice, ast.Tuple):
+                    for elt in node.slice.elts:
+                        if isinstance(elt, (ast.Name, ast.Subscript)):
+                            visit_all_annotation_children(elt, node_parents)
+                elif isinstance(node.slice, ast.Name):
+                    visit_all_annotation_children(node.slice, node_parents)
+            if hasattr(node, "value"):
+                visit_all_annotation_children(node.value, node_parents)
+
     def visit(
         node: Union[ast.AST, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module],
         node_parents: list[FunctionParent],
@@ -126,16 +152,10 @@ def get_type_annotation_context(
                 if node.name == function_name and node_parents == function.parents:
                     arg: ast.arg
                     for arg in node.args.args:
-                        if arg.annotation and hasattr(arg.annotation, "id"):
-                            name: str = arg.annotation.id
-                            line_no: int = arg.annotation.lineno
-                            col_no: int = arg.annotation.col_offset
-                            get_annotation_source(jedi_script, name, node_parents, line_no, col_no)
-                    if node.returns and hasattr(node.returns, "id"):
-                        name = node.returns.id
-                        line_no = node.returns.lineno
-                        col_no = node.returns.col_offset
-                        get_annotation_source(jedi_script, name, node_parents, line_no, col_no)
+                        if arg.annotation:
+                            visit_all_annotation_children(arg.annotation, node_parents)
+                    if node.returns:
+                        visit_all_annotation_children(node.returns, node_parents)
 
             if not isinstance(node, ast.Module):
                 node_parents.append(FunctionParent(node.name, type(node).__name__))
