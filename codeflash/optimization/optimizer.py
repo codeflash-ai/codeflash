@@ -277,6 +277,7 @@ class Optimizer:
         )
         with pathlib.Path(generated_tests_path).open("w", encoding="utf8") as file:
             file.write(generated_tests.instrumented_test_source)
+        logging.info(f"Generated tests:\n{generated_tests.generated_original_test_source}")
         self.test_files_created.add(generated_tests_path)
         baseline_result = self.establish_original_code_baseline(
             function_to_optimize.qualified_name,
@@ -852,7 +853,7 @@ class Optimizer:
         first_run = True
         do_break = False
         logging.info(
-            f"Running {len(instrumented_unittests_created_for_function)} tests for {function_name} ..."
+            f"Running {len(instrumented_unittests_created_for_function)} tests for {function_name} ...",
         )
         while (
             cumulative_test_runtime < MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS

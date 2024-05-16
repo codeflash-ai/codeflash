@@ -95,6 +95,7 @@ class TestResults(BaseModel):
             if test_result.did_pass:
                 passed += 1
             else:
+                logging.info(f"Failed test: {test_result.id}")
                 failed += 1
         return f"Passed: {passed}, Failed: {failed}"
 
