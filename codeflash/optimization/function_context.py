@@ -124,12 +124,11 @@ def get_type_annotation_context(
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
             visit_all_annotation_children(node.left, node_parents)
             visit_all_annotation_children(node.right, node_parents)
-        if isinstance(node, ast.Name):
-            if hasattr(node, "id"):
-                name: str = node.id
-                line_no: int = node.lineno
-                col_no: int = node.col_offset
-                get_annotation_source(jedi_script, name, node_parents, line_no, col_no)
+        if isinstance(node, ast.Name) and hasattr(node, "id"):
+            name: str = node.id
+            line_no: int = node.lineno
+            col_no: int = node.col_offset
+            get_annotation_source(jedi_script, name, node_parents, line_no, col_no)
         if isinstance(node, ast.Subscript):
             if hasattr(node, "slice"):
                 if isinstance(node.slice, ast.Subscript):
