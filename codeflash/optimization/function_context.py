@@ -54,6 +54,61 @@ def get_type_annotation_context(
     sources: list[tuple[Source, str, str]] = []
     ast_parents: list[FunctionParent] = []
 
+    def get_annotation_source(
+        jedi_script: jedi.Script,
+        name: str,
+        node_parents,
+        line_no: int,
+        col_no: str,
+    ) -> str:
+        try:
+            definition: list[Name] = jedi_script.goto(
+                line=line_no,
+                column=col_no,
+                follow_imports=True,
+                follow_builtin_imports=False,
+            )
+        except Exception as ex:
+            if hasattr(name, "full_name"):
+                logging.exception(
+                    f"Error while getting definition for {name.full_name}: {ex}",
+                )
+            else:
+                logging.exception(f"Error while getting definition: {ex}")
+            definition = []
+        if definition:  # TODO can be multiple definitions
+            definition_path = str(definition[0].module_path)
+            # The definition is part of this project and not defined within the original function
+            if (
+                definition_path.startswith(project_root_path + os.sep)
+                and definition[0].full_name
+                and not path_belongs_to_site_packages(definition_path)
+                and not belongs_to_function(definition[0], function_name)
+            ):
+                source_code = get_code(
+                    [
+                        FunctionToOptimize(
+                            definition[0].name,
+                            definition_path,
+                            node_parents[:-1],
+                        ),
+                    ],
+                )[0]
+                if source_code:
+                    sources.append(
+                        (
+                            Source(
+                                definition[0].name,
+                                definition[0],
+                                source_code,
+                            ),
+                            definition_path,
+                            definition[0].full_name.removeprefix(
+                                definition[0].module_name + ".",
+                            ),
+                        ),
+                    )
+
     def visit_children(
         node: Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module],
         node_parents: list[FunctionParent],
@@ -75,53 +130,13 @@ def get_type_annotation_context(
                             name: str = arg.annotation.id
                             line_no: int = arg.annotation.lineno
                             col_no: int = arg.annotation.col_offset
-                            try:
-                                definition: list[Name] = jedi_script.goto(
-                                    line=line_no,
-                                    column=col_no,
-                                    follow_imports=True,
-                                    follow_builtin_imports=False,
-                                )
-                            except Exception as ex:
-                                if hasattr(name, "full_name"):
-                                    logging.exception(
-                                        f"Error while getting definition for {name.full_name}: {ex}",
-                                    )
-                                else:
-                                    logging.exception(f"Error while getting definition: {ex}")
-                                definition = []
-                            if definition:  # TODO can be multiple definitions
-                                definition_path = str(definition[0].module_path)
-                                # The definition is part of this project and not defined within the original function
-                                if (
-                                    definition_path.startswith(project_root_path + os.sep)
-                                    and definition[0].full_name
-                                    and not path_belongs_to_site_packages(definition_path)
-                                    and not belongs_to_function(definition[0], function_name)
-                                ):
-                                    source_code = get_code(
-                                        [
-                                            FunctionToOptimize(
-                                                definition[0].name,
-                                                definition_path,
-                                                node_parents[:-1],
-                                            ),
-                                        ],
-                                    )[0]
-                                    if source_code:
-                                        sources.append(
-                                            (
-                                                Source(
-                                                    definition[0].name,
-                                                    definition[0],
-                                                    source_code,
-                                                ),
-                                                definition_path,
-                                                definition[0].full_name.removeprefix(
-                                                    definition[0].module_name + ".",
-                                                ),
-                                            ),
-                                        )
+                            get_annotation_source(jedi_script, name, node_parents, line_no, col_no)
+                    if node.returns and hasattr(node.returns, "id"):
+                        name = node.returns.id
+                        line_no = node.returns.lineno
+                        col_no = node.returns.col_offset
+                        get_annotation_source(jedi_script, name, node_parents, line_no, col_no)
+
             if not isinstance(node, ast.Module):
                 node_parents.append(FunctionParent(node.name, type(node).__name__))
             visit_children(node, node_parents)
@@ -230,12 +245,9 @@ def get_constrained_function_context_and_dependent_functions(
         dependent_functions_sources = [
             function[0].source_code
             for function in dependent_functions
-            if not function[2].count(".")
-            or function[2].split(".")[0] != function_to_optimize.parents[0].name
+            if not function[2].count(".") or function[2].split(".")[0] != function_to_optimize.parents[0].name
         ]
-    dependent_functions_tokens = [
-        len(tokenizer.encode(function)) for function in dependent_functions_sources
-    ]
+    dependent_functions_tokens = [len(tokenizer.encode(function)) for function in dependent_functions_sources]
 
     context_list = []
     context_len = len(code_to_optimize_tokens)
