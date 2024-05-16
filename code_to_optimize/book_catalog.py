@@ -1,61 +1,73 @@
+from __future__ import annotations
+
 from time import time
+from typing import Any, cast
 
+from _typeshed import SupportsDunderGT, SupportsDunderLT
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, Text
-from sqlalchemy.engine import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, relationship, sessionmaker
+from sqlalchemy.engine import Engine, create_engine
+from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
+from sqlalchemy.orm.relationships import _RelationshipDeclared
 
-POSTGRES_CONNECTION_STRING = "postgresql://cf_developer:XJcbU37MBYeh4dDK6PTV5n@sqlalchemy-experiments.postgres.database.azure.com:5432/postgres"
-Base = declarative_base()
+POSTGRES_CONNECTION_STRING: str = "postgresql://cf_developer:XJcbU37MBYeh4dDK6PTV5n@sqlalchemy-experiments.postgres.database.azure.com:5432/postgres"
+
+
+class Base(DeclarativeBase):
+    pass
 
 
 class Author(Base):
-    __tablename__ = "authors"
+    __tablename__: str = "authors"
 
-    id = Column(Integer, primary_key=True)
-    name = Column(Text, nullable=False)
+    id: Column[int] = Column(Integer, primary_key=True)
+    name: Column[str] = Column(Text, nullable=False)
 
 
 class Book(Base):
     __tablename__ = "books"
 
-    id = Column(Integer, primary_key=True)
-    title = Column(Text, nullable=False)
-    author_id = Column(Integer, ForeignKey("authors.id"), nullable=False)
-    is_bestseller = Column(Boolean, default=False)
+    id: Column[int] = Column(Integer, primary_key=True)
+    title: Column[str] = Column(Text, nullable=False)
+    author_id: Column[int] = Column(Integer, ForeignKey("authors.id"), nullable=False)
+    is_bestseller: Column[bool] = Column(Boolean, default=False)
 
-    author = relationship("Author", backref="books")
+    author: _RelationshipDeclared[Author] = relationship("Author", backref="books")
 
 
-def init_table():
-    engine = create_engine(POSTGRES_CONNECTION_STRING, echo=True)
-    session = sessionmaker(bind=engine)()
+def init_table() -> Session:
+    engine: Engine = create_engine(POSTGRES_CONNECTION_STRING, echo=True)
+    session: Session = sessionmaker(bind=engine)()
+    i: int
     for i in range(50):
-        author = Author(id=i, name=f"author{i}")
+        author: Author = Author(id=i, name=f"author{i}")
         session.add(author)
     for i in range(100000):
-        book = Book(id=i, title=f"book{i}", author_id=i % 50, is_bestseller=i % 2 == 0)
+        book: Book = Book(id=i, title=f"book{i}", author_id=i % 50, is_bestseller=i % 2 == 0)
         session.add(book)
     session.commit()
 
     return session
 
 
-def get_authors(session: Session):
-    books = session.query(Book).all()
-    _authors = []
+def get_authors(session: Session) -> list[Author]:
+    books: list[Book] = session.query(Book).all()
+    _authors: list[Author] = []
+    book: Book
     for book in books:
         _authors.append(book.author)
-    return sorted(list(set(_authors)), key=lambda x: x.id)
+    return sorted(
+        list(set(_authors)),
+        key=lambda x: cast(SupportsDunderLT[Any] | SupportsDunderGT[Any], x.id),
+    )
 
 
 if __name__ == "__main__":
     # _session = init_table()
-    engine = create_engine(POSTGRES_CONNECTION_STRING, echo=True)
-    session_factory = sessionmaker(bind=engine)
-    _session = session_factory()
-    _t = time()
-    authors = get_authors(_session)
+    engine: Engine = create_engine(POSTGRES_CONNECTION_STRING, echo=True)
+    session_factory: sessionmaker[Session] = sessionmaker(bind=engine)
+    _session: Session = session_factory()
+    _t: float = time()
+    authors: list[Author] = get_authors(_session)
     print("TIME TAKEN", time() - _t)
     authors_name = list(map(lambda x: x.name, authors))
     print("len(authors_name)", len(authors_name))
