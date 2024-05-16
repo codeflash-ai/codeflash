@@ -24,7 +24,7 @@ class Author(Base):
 
 
 class Book(Base):
-    __tablename__ = "books"
+    __tablename__: str = "books"
 
     id: Column[int] = Column(Integer, primary_key=True)
     title: Column[str] = Column(Text, nullable=False)
