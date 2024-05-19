@@ -193,9 +193,7 @@ def get_function_variables_definitions(
 
     for name in names:
         try:
-            definitions: list[Name] = script.goto(
-                line=name.line,
-                column=name.column,
+            definitions: list[Name] = name.goto(
                 follow_imports=True,
                 follow_builtin_imports=False,
             )
