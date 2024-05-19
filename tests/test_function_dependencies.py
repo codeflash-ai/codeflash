@@ -19,12 +19,12 @@ def simple_function_with_one_dep(data):
 
 def test_simple_dependencies():
     file_path = pathlib.Path(__file__).resolve()
-    dependent_functions = get_function_variables_definitions(
+    helper_functions = get_function_variables_definitions(
         FunctionToOptimize("simple_function_with_one_dep", str(file_path), []),
         str(file_path.parent.resolve()),
     )
-    assert len(dependent_functions) == 1
-    assert dependent_functions[0][0].definition.full_name == "test_function_dependencies.calculate_something"
+    assert len(helper_functions) == 1
+    assert helper_functions[0][0].definition.full_name == "test_function_dependencies.calculate_something"
 
 
 def global_dependency_1(num):
@@ -75,13 +75,13 @@ class C:
 def test_multiple_classes_dependencies():
     # TODO: Check if C.run only gets calculate_something_3 as dependency and likewise for other classes
     file_path = pathlib.Path(__file__).resolve()
-    dependent_functions = get_function_variables_definitions(
+    helper_functions = get_function_variables_definitions(
         FunctionToOptimize("run", str(file_path), [FunctionParent("C", "ClassDef")]),
         str(file_path.parent.resolve()),
     )
 
-    # assert len(dependent_functions) == 2
-    assert list(map(lambda x: x[0].full_name, dependent_functions)) == [
+    # assert len(helper_functions) == 2
+    assert list(map(lambda x: x[0].full_name, helper_functions)) == [
         "test_function_dependencies.C.calculate_something_3",
         "test_function_dependencies.global_dependency_3",
     ]
@@ -96,12 +96,12 @@ def recursive_dependency_1(num):
 
 def test_recursive_dependency():
     file_path = pathlib.Path(__file__).resolve()
-    dependent_functions = get_function_variables_definitions(
+    helper_functions = get_function_variables_definitions(
         FunctionToOptimize("recursive_dependency_1", str(file_path), []),
         str(file_path.parent.resolve()),
     )
-    assert len(dependent_functions) == 1
-    assert dependent_functions[0][0].definition.full_name == "test_function_dependencies.calculate_something"
+    assert len(helper_functions) == 1
+    assert helper_functions[0][0].definition.full_name == "test_function_dependencies.calculate_something"
 
 
 @dataclass
@@ -119,15 +119,13 @@ def simple_function_with_one_dep_ann(data: MyData):
 
 def test_simple_dependencies_ann():
     file_path = pathlib.Path(__file__).resolve()
-    dependent_functions = get_function_variables_definitions(
+    helper_functions = get_function_variables_definitions(
         FunctionToOptimize("simple_function_with_one_dep_ann", str(file_path), []),
         str(file_path.parent.resolve()),
     )
-    assert len(dependent_functions) == 2
-    assert dependent_functions[0][0].definition.full_name == "test_function_dependencies.MyData"
-    assert (
-        dependent_functions[1][0].definition.full_name == "test_function_dependencies.calculate_something_ann"
-    )
+    assert len(helper_functions) == 2
+    assert helper_functions[0][0].definition.full_name == "test_function_dependencies.MyData"
+    assert helper_functions[1][0].definition.full_name == "test_function_dependencies.calculate_something_ann"
 
 
 from collections import defaultdict

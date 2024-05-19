@@ -242,7 +242,7 @@ def get_function_variables_definitions(
 MAX_PROMPT_TOKENS = 4096  # 128000  # gpt-4-128k
 
 
-def get_constrained_function_context_and_dependent_functions(
+def get_constrained_function_context_and_helper_functions(
     function_to_optimize: FunctionToOptimize,
     project_root_path: str,
     code_to_optimize: str,
@@ -250,7 +250,7 @@ def get_constrained_function_context_and_dependent_functions(
 ) -> tuple[str, list[tuple[Source, str, str]]]:
     # TODO: Not just do static analysis, but also find the datatypes of function arguments by running the existing
     #  unittests and inspecting the arguments to resolve the real definitions and dependencies.
-    dependent_functions: list[tuple[Source, str, str]] = get_function_variables_definitions(
+    helper_functions: list[tuple[Source, str, str]] = get_function_variables_definitions(
         function_to_optimize,
         project_root_path,
     )
@@ -258,25 +258,25 @@ def get_constrained_function_context_and_dependent_functions(
     code_to_optimize_tokens = tokenizer.encode(code_to_optimize)
 
     if not function_to_optimize.parents:
-        dependent_functions_sources = [function[0].source_code for function in dependent_functions]
+        helper_functions_sources = [function[0].source_code for function in helper_functions]
     else:
-        dependent_functions_sources = [
+        helper_functions_sources = [
             function[0].source_code
-            for function in dependent_functions
+            for function in helper_functions
             if not function[2].count(".") or function[2].split(".")[0] != function_to_optimize.parents[0].name
         ]
-    dependent_functions_tokens = [len(tokenizer.encode(function)) for function in dependent_functions_sources]
+    helper_functions_tokens = [len(tokenizer.encode(function)) for function in helper_functions_sources]
 
     context_list = []
     context_len = len(code_to_optimize_tokens)
     logging.debug(f"ORIGINAL CODE TOKENS LENGTH: {context_len}")
-    logging.debug(f"ALL DEPENDENCIES TOKENS LENGTH: {sum(dependent_functions_tokens)}")
-    for function_source, source_len in zip(dependent_functions_sources, dependent_functions_tokens):
+    logging.debug(f"ALL DEPENDENCIES TOKENS LENGTH: {sum(helper_functions_tokens)}")
+    for function_source, source_len in zip(helper_functions_sources, helper_functions_tokens):
         if context_len + source_len <= max_tokens:
             context_list.append(function_source)
             context_len += source_len
         else:
             break
     logging.debug("FINAL OPTIMIZATION CONTEXT TOKENS LENGTH:", context_len)
-    dependent_code: str = "\n".join(context_list)
-    return dependent_code, dependent_functions
+    helper_code: str = "\n".join(context_list)
+    return helper_code, helper_functions

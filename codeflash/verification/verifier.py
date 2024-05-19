@@ -17,7 +17,7 @@ def generate_tests(
     aiservice_client: AiServiceClient,
     source_code_being_tested: str,
     function_to_optimize: FunctionToOptimize,
-    dependent_function_names: list[str],
+    helper_function_names: list[str],
     module_path: str,
     test_cfg: TestConfig,
     test_timeout: int,
@@ -47,7 +47,7 @@ def generate_tests(
         response = aiservice_client.generate_regression_tests(
             source_code_being_tested=source_code_being_tested,
             function_to_optimize=function_to_optimize,
-            dependent_function_names=dependent_function_names,
+            helper_function_names=helper_function_names,
             module_path=module_path,
             test_module_path=test_module_path,
             test_framework=test_cfg.test_framework,
