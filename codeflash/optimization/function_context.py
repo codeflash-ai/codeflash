@@ -206,21 +206,22 @@ def get_function_variables_definitions(
             definitions = []
         if definitions:
             # TODO: there can be multiple definitions, see how to handle such cases
-            definition_path = str(definitions[0].module_path)
+            definition = definitions[0]
+            definition_path = str(definition.module_path)
             # The definition is part of this project and not defined within the original function
             if (
                 definition_path.startswith(project_root_path + os.sep)
                 and not path_belongs_to_site_packages(definition_path)
-                and definitions[0].full_name
-                and not belongs_to_function(definitions[0], function_name)
+                and definition.full_name
+                and not belongs_to_function(definition, function_name)
             ):
                 source_code = get_code_no_skeleton(definition_path, definitions[0].name)
                 if source_code:
                     sources.append(
                         (
-                            Source(name.full_name, definitions[0], source_code),
+                            Source(definition.full_name, definition, source_code),
                             definition_path,
-                            name.full_name.removeprefix(name.module_name + "."),
+                            definition.full_name.removeprefix(name.module_name + "."),
                         ),
                     )
     annotation_sources = get_type_annotation_context(

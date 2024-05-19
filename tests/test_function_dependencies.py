@@ -82,8 +82,8 @@ def test_multiple_classes_dependencies():
 
     # assert len(dependent_functions) == 2
     assert list(map(lambda x: x[0].full_name, dependent_functions)) == [
-        "test_function_dependencies.C.run.calculate_something_3",
-        "test_function_dependencies.C.run.global_dependency_3",
+        "test_function_dependencies.C.calculate_something_3",
+        "test_function_dependencies.global_dependency_3",
     ]
 
 
