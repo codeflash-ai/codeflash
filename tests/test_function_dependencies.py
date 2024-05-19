@@ -165,7 +165,7 @@ def test_class_method_dependencies():
     opt = Optimizer(
         Namespace(
             project_root=str(file_path.parent.resolve()),
-            disable_telemetry=False,
+            disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
             pytest_cmd="pytest",
@@ -190,4 +190,39 @@ def test_class_method_dependencies():
         pytest.fail()
     code_context = ctx_result.unwrap()
     # The code_context above should have the topologicalSortUtil function in it
-    print("hi")
+    assert len(code_context.helper_functions) == 1
+    assert (
+        code_context.helper_functions[0][0].definition.full_name
+        == "test_function_dependencies.Graph.topologicalSortUtil"
+    )
+    assert code_context.helper_functions[0][0].definition.name == "topologicalSortUtil"
+    assert code_context.helper_functions[0][2] == "Graph.topologicalSortUtil"
+    assert code_context.contextual_dunder_methods == {("Graph", "__init__")}
+    assert (
+        code_context.code_to_optimize_with_helpers
+        == """from collections import defaultdict
+
+class Graph:
+    def __init__(self, vertices):
+        self.graph = defaultdict(list)
+        self.V = vertices  # No. of vertices
+    def topologicalSort(self):
+        visited = [False] * self.V
+        stack = []
+
+        for i in range(self.V):
+            if visited[i] == False:
+                self.topologicalSortUtil(i, visited, stack)
+
+        # Print contents of stack
+        return stack
+    def topologicalSortUtil(self, v, visited, stack):
+        visited[v] = True
+
+        for i in self.graph[v]:
+            if visited[i] == False:
+                self.topologicalSortUtil(i, visited, stack)
+
+        stack.insert(0, v)
+"""
+    )

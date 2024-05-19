@@ -673,7 +673,7 @@ class Optimizer:
             ]
             optimizable_methods = [function_to_optimize] + [
                 FunctionToOptimize(
-                    df[2].split(".")[0],
+                    df[2].split(".")[-1],
                     "",
                     [FunctionParent(df[2].split(".")[0], "ClassDef")],
                     None,
