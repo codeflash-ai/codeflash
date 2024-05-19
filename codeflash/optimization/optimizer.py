@@ -71,7 +71,7 @@ from codeflash.verification.verifier import generate_tests
 
 class OptimizationSet(BaseModel):
     control: list[OptimizedCandidate]
-    experiment: list[OptimizedCandidate] | None
+    experiment: Optional[list[OptimizedCandidate]]
 
 
 class OptimizedCandidateResult(BaseModel):
