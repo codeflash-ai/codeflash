@@ -7,7 +7,7 @@ from typing import List
 from codeflash.code_utils.code_extractor import get_code
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.optimization.function_context import (
-    get_constrained_function_context_and_dependent_functions,
+    get_constrained_function_context_and_helper_functions,
 )
 
 
@@ -43,7 +43,7 @@ def function_to_optimize3(data: dict[CustomDataClass, list[CustomDataClass]]) ->
 
 def test_function_context_includes_type_annotation() -> None:
     file_path = pathlib.Path(__file__).resolve()
-    a, dependent_functions = get_constrained_function_context_and_dependent_functions(
+    a, helper_functions = get_constrained_function_context_and_helper_functions(
         FunctionToOptimize("function_to_optimize", str(file_path), []),
         str(file_path.parent.resolve()),
         """def function_to_optimize(data: CustomType):
@@ -53,13 +53,13 @@ def test_function_context_includes_type_annotation() -> None:
         1000,
     )
 
-    assert len(dependent_functions) == 1
-    assert dependent_functions[0][0].full_name == "CustomType"
+    assert len(helper_functions) == 1
+    assert helper_functions[0][0].full_name == "CustomType"
 
 
 def test_function_context_includes_type_annotation_dataclass() -> None:
     file_path = pathlib.Path(__file__).resolve()
-    a, dependent_functions = get_constrained_function_context_and_dependent_functions(
+    a, helper_functions = get_constrained_function_context_and_helper_functions(
         FunctionToOptimize("function_to_optimize2", str(file_path), []),
         str(file_path.parent.resolve()),
         """def function_to_optimize2(data: CustomDataClass) -> CustomType:
@@ -69,14 +69,14 @@ def test_function_context_includes_type_annotation_dataclass() -> None:
         1000,
     )
 
-    assert len(dependent_functions) == 2
-    assert dependent_functions[0][0].full_name == "CustomDataClass"
-    assert dependent_functions[1][0].full_name == "CustomType"
+    assert len(helper_functions) == 2
+    assert helper_functions[0][0].full_name == "CustomDataClass"
+    assert helper_functions[1][0].full_name == "CustomType"
 
 
 def test_function_context_works_for_composite_types() -> None:
     file_path = pathlib.Path(__file__).resolve()
-    a, dependent_functions = get_constrained_function_context_and_dependent_functions(
+    a, helper_functions = get_constrained_function_context_and_helper_functions(
         FunctionToOptimize("function_to_optimize3", str(file_path), []),
         str(file_path.parent.resolve()),
         """def function_to_optimize3(data: set[CustomDataClass[CustomDataClass, int]]) -> list[CustomType]:
@@ -86,9 +86,9 @@ def test_function_context_works_for_composite_types() -> None:
         1000,
     )
 
-    assert len(dependent_functions) == 2
-    assert dependent_functions[0][0].full_name == "CustomDataClass"
-    assert dependent_functions[1][0].full_name == "CustomType"
+    assert len(helper_functions) == 2
+    assert helper_functions[0][0].full_name == "CustomDataClass"
+    assert helper_functions[1][0].full_name == "CustomType"
 
 
 def test_function_context_custom_datatype() -> None:
@@ -99,12 +99,12 @@ def test_function_context_custom_datatype() -> None:
     )
     assert code is not None
     assert contextual_dunder_methods == set()
-    a, dependent_functions = get_constrained_function_context_and_dependent_functions(
+    a, helper_functions = get_constrained_function_context_and_helper_functions(
         FunctionToOptimize("cosine_similarity", str(file_path), []),
         str(project_path),
         code,
         1000,
     )
 
-    assert len(dependent_functions) == 1
-    assert dependent_functions[0][0].full_name == "Matrix"
+    assert len(helper_functions) == 1
+    assert helper_functions[0][0].full_name == "Matrix"

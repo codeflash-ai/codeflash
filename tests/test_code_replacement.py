@@ -307,7 +307,7 @@ def blob(st):
 """
     original_code_main = """import libcst as cst
 from typing import Mandatory
-from dependent import blob
+from helper import blob
 
 print("Au revoir")
 
@@ -320,7 +320,7 @@ def other_function(st):
 print("Salut monde")
 """
 
-    original_code_dependent = """import numpy as np
+    original_code_helper = """import numpy as np
 
 print("Cool")
 
@@ -336,7 +336,7 @@ print("Not cool")
 from typing import Optional
 import libcst as cst
 from typing import Mandatory
-from dependent import blob
+from helper import blob
 
 print("Au revoir")
 
@@ -349,7 +349,7 @@ def other_function(st):
 print("Salut monde")
 """
 
-    expected_dependent = """import libcst as cst
+    expected_helper = """import libcst as cst
 from typing import Optional
 import numpy as np
 
@@ -372,14 +372,14 @@ print("Not cool")
     )
     assert new_main_code == expected_main
 
-    new_dependent_code: str = replace_functions_in_file(
-        original_code_dependent,
+    new_helper_code: str = replace_functions_in_file(
+        original_code_helper,
         ["blob"],
         optim_code,
         [],
         set(),
     )
-    assert new_dependent_code == expected_dependent
+    assert new_helper_code == expected_helper
 
 
 def test_test_libcst_code_replacement7() -> None:
