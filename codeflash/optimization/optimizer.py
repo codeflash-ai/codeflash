@@ -83,7 +83,7 @@ class OptimizedCandidateResult(BaseModel):
 class OriginalCodeBaseline(BaseModel):
     generated_test_results: TestResults
     existing_test_results: TestResults
-    overall_test_results: TestResults | None
+    overall_test_results: Optional[TestResults]
     runtime: int
 
 
