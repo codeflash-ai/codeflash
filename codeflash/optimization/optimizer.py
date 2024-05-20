@@ -131,9 +131,12 @@ class Optimizer:
         logging.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
             return
-        if not env_utils.ensure_git_repo(module_root=self.args.module_root):
+        continue_execution, disable_pr = env_utils.ensure_git_repo(module_root=self.args.module_root)
+        if not continue_execution:
             logging.error("No git repository detected and user aborted run. Exiting...")
             sys.exit(1)
+        if disable_pr:
+            self.args.no_pr = True
 
         file_to_funcs_to_optimize: dict[str, list[FunctionToOptimize]]
         num_optimizable_functions: int
