@@ -156,7 +156,7 @@ class AiServiceClient:
         self,
         source_code_being_tested: str,
         function_to_optimize: FunctionToOptimize,
-        dependent_function_names: list[str],
+        helper_function_names: list[str],
         module_path: str,
         test_module_path: str,
         test_framework: str,
@@ -169,7 +169,7 @@ class AiServiceClient:
         ----------
         - source_code_being_tested (str): The source code of the function being tested.
         - function_to_optimize (FunctionToOptimize): The function to optimize.
-        - dependent_function_names (list[Source]): List of dependent function names.
+        - helper_function_names (list[Source]): List of helper function names.
         - module_path (str): The module path where the function is located.
         - test_module_path (str): The module path for the test code.
         - test_framework (str): The test framework to use, e.g., "pytest".
@@ -187,7 +187,7 @@ class AiServiceClient:
         payload = {
             "source_code_being_tested": source_code_being_tested,
             "function_to_optimize": function_to_optimize,
-            "dependent_function_names": dependent_function_names,
+            "helper_function_names": helper_function_names,
             "module_path": module_path,
             "test_module_path": test_module_path,
             "test_framework": test_framework,

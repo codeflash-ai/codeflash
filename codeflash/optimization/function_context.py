@@ -193,9 +193,7 @@ def get_function_variables_definitions(
 
     for name in names:
         try:
-            definitions: list[Name] = script.goto(
-                line=name.line,
-                column=name.column,
+            definitions: list[Name] = name.goto(
                 follow_imports=True,
                 follow_builtin_imports=False,
             )
@@ -208,21 +206,22 @@ def get_function_variables_definitions(
             definitions = []
         if definitions:
             # TODO: there can be multiple definitions, see how to handle such cases
-            definition_path = str(definitions[0].module_path)
+            definition = definitions[0]
+            definition_path = str(definition.module_path)
             # The definition is part of this project and not defined within the original function
             if (
                 definition_path.startswith(project_root_path + os.sep)
                 and not path_belongs_to_site_packages(definition_path)
-                and definitions[0].full_name
-                and not belongs_to_function(definitions[0], function_name)
+                and definition.full_name
+                and not belongs_to_function(definition, function_name)
             ):
                 source_code = get_code_no_skeleton(definition_path, definitions[0].name)
                 if source_code:
                     sources.append(
                         (
-                            Source(name.full_name, definitions[0], source_code),
+                            Source(definition.full_name, definition, source_code),
                             definition_path,
-                            name.full_name.removeprefix(name.module_name + "."),
+                            definition.full_name.removeprefix(name.module_name + "."),
                         ),
                     )
     annotation_sources = get_type_annotation_context(
@@ -243,7 +242,7 @@ def get_function_variables_definitions(
 MAX_PROMPT_TOKENS = 4096  # 128000  # gpt-4-128k
 
 
-def get_constrained_function_context_and_dependent_functions(
+def get_constrained_function_context_and_helper_functions(
     function_to_optimize: FunctionToOptimize,
     project_root_path: str,
     code_to_optimize: str,
@@ -251,7 +250,7 @@ def get_constrained_function_context_and_dependent_functions(
 ) -> tuple[str, list[tuple[Source, str, str]]]:
     # TODO: Not just do static analysis, but also find the datatypes of function arguments by running the existing
     #  unittests and inspecting the arguments to resolve the real definitions and dependencies.
-    dependent_functions: list[tuple[Source, str, str]] = get_function_variables_definitions(
+    helper_functions: list[tuple[Source, str, str]] = get_function_variables_definitions(
         function_to_optimize,
         project_root_path,
     )
@@ -259,25 +258,25 @@ def get_constrained_function_context_and_dependent_functions(
     code_to_optimize_tokens = tokenizer.encode(code_to_optimize)
 
     if not function_to_optimize.parents:
-        dependent_functions_sources = [function[0].source_code for function in dependent_functions]
+        helper_functions_sources = [function[0].source_code for function in helper_functions]
     else:
-        dependent_functions_sources = [
+        helper_functions_sources = [
             function[0].source_code
-            for function in dependent_functions
+            for function in helper_functions
             if not function[2].count(".") or function[2].split(".")[0] != function_to_optimize.parents[0].name
         ]
-    dependent_functions_tokens = [len(tokenizer.encode(function)) for function in dependent_functions_sources]
+    helper_functions_tokens = [len(tokenizer.encode(function)) for function in helper_functions_sources]
 
     context_list = []
     context_len = len(code_to_optimize_tokens)
     logging.debug(f"ORIGINAL CODE TOKENS LENGTH: {context_len}")
-    logging.debug(f"ALL DEPENDENCIES TOKENS LENGTH: {sum(dependent_functions_tokens)}")
-    for function_source, source_len in zip(dependent_functions_sources, dependent_functions_tokens):
+    logging.debug(f"ALL DEPENDENCIES TOKENS LENGTH: {sum(helper_functions_tokens)}")
+    for function_source, source_len in zip(helper_functions_sources, helper_functions_tokens):
         if context_len + source_len <= max_tokens:
             context_list.append(function_source)
             context_len += source_len
         else:
             break
     logging.debug("FINAL OPTIMIZATION CONTEXT TOKENS LENGTH:", context_len)
-    dependent_code: str = "\n".join(context_list)
-    return dependent_code, dependent_functions
+    helper_code: str = "\n".join(context_list)
+    return helper_code, helper_functions
