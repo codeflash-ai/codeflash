@@ -68,6 +68,7 @@ class FunctionTestInvocation:
     test_framework: str  # unittest or pytest
     test_type: TestType
     return_value: Optional[object]  # The return value of the function invocation
+    timed_out: Optional[bool]
 
 
 class TestResults(BaseModel):

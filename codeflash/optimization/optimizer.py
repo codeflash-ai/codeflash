@@ -30,7 +30,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.code_utils.config_consts import (
-    INDIVIDUAL_TEST_TIMEOUT,
+    INDIVIDUAL_TESTCASE_TIMEOUT,
     MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS,
     MAX_FUNCTION_TEST_SECONDS,
     MAX_TEST_FUNCTION_RUNS,
@@ -1155,7 +1155,7 @@ class Optimizer:
             test_file,
             test_framework=self.args.test_framework,
             cwd=self.args.project_root,
-            pytest_timeout=INDIVIDUAL_TEST_TIMEOUT,
+            pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
             pytest_cmd=self.test_cfg.pytest_cmd,
             verbose=True,
             test_env=test_env,
@@ -1192,7 +1192,7 @@ class Optimizer:
             helper_function_names=helper_function_names,
             module_path=module_path,
             test_cfg=self.test_cfg,
-            test_timeout=INDIVIDUAL_TEST_TIMEOUT,
+            test_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
             use_cached_tests=self.args.use_cached_tests,
             function_trace_id=function_trace_id,
         )

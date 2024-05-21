@@ -68,6 +68,7 @@ def parse_test_return_values_bin(
                     test_framework=test_framework,
                     test_type=test_type,
                     return_value=test_pickle,
+                    timed_out=False,
                 ),
             )
             # Hardcoding the test result to True because the test did execute and we are only interested in the return values,
@@ -110,6 +111,7 @@ def parse_sqlite_test_results(
                 test_framework=test_config.test_framework,
                 test_type=test_type,
                 return_value=pickle.loads(val[6]),
+                timed_out=False,
             ),
         )
         # return_value is only None temporarily as this is only being used for the existing tests. This should generalize
@@ -179,11 +181,15 @@ def parse_test_xml(
                         f"testcase.name is None in parse_test_xml for testcase {testcase!r} in file {xml_file_contents}",
                     )
                 continue
-            # Parse test timing
-            # system_out_content = ""
-            # for system_out in testcase.system_out:
+            timed_out = False
+            if test_config.test_framework == "pytest":
+                if len(testcase.result) > 1:
+                    print(f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!")
+                if len(testcase.result) == 1:
+                    message = testcase.result[0].message.lower()
+                    if "failed: timeout >" in message:
+                        timed_out = True
 
-            #     system_out_content += system_out.text
             test_results.add(
                 FunctionTestInvocation(
                     id=InvocationId(
@@ -199,6 +205,7 @@ def parse_test_xml(
                     did_pass=result,
                     test_type=test_type,
                     return_value=None,
+                    timed_out=timed_out,
                 ),
             )
     if len(test_results) == 0:
@@ -268,6 +275,7 @@ def merge_test_results(
                         did_pass=xml_result.did_pass,
                         test_type=xml_result.test_type,
                         return_value=result_bin.return_value,
+                        timed_out=xml_result.timed_out,
                     ),
                 )
         else:
@@ -278,9 +286,6 @@ def merge_test_results(
                 except IndexError:
                     xml_result = None
                 if xml_result is None:
-                    # if xml_result.test_type == TestType.EXISTING_UNIT_TEST:
-                    # only support
-                    # logging.warning(f"Could not find xml result for bin result: {bin_result.id}")
                     merged_test_results.add(bin_result)
                     continue
                 merged_test_results.add(
@@ -292,6 +297,7 @@ def merge_test_results(
                         did_pass=bin_result.did_pass,
                         test_type=bin_result.test_type,
                         return_value=bin_result.return_value,
+                        timed_out=xml_result.timed_out,  # only the xml gets the timed_out flag
                     ),
                 )
 
