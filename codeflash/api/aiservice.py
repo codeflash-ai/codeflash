@@ -5,7 +5,7 @@ import logging
 import os
 import pickle
 import platform
-from time import time
+import time
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import requests
