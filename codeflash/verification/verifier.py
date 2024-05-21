@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 import ast
 import logging
-from typing import Optional, Tuple
 
 from codeflash.api.aiservice import AiServiceClient
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
@@ -23,7 +24,7 @@ def generate_tests(
     test_timeout: int,
     use_cached_tests: bool,
     function_trace_id: str,
-) -> Optional[Tuple[str, str]]:
+) -> tuple[str, str] | None:
     # TODO: Sometimes this recreates the original Class definition. This overrides and messes up the original
     #  class import. Remove the recreation of the class definition
     logging.info(f"Generating new tests for function {function_to_optimize.function_name} ...")

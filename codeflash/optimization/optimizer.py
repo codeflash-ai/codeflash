@@ -4,11 +4,12 @@ import concurrent.futures
 import logging
 import os
 import pathlib
+import subprocess
 import sys
 import uuid
 from argparse import Namespace
 from collections import defaultdict
-from typing import List, Optional, Tuple, Union
+from typing import Optional
 
 import isort
 import libcst as cst
@@ -765,8 +766,6 @@ class Optimizer:
         function_trace_id: str,
         run_experiment: bool = False,
     ) -> Result[tuple[GeneratedTests, OptimizationSet], str]:
-        generated_original_test_source = None
-        instrumented_test_source = None
         max_workers = 2 if not run_experiment else 3
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_tests = executor.submit(
@@ -979,7 +978,7 @@ class Optimizer:
         original_generated_test_results: TestResults,
         generated_tests_path: str,
         best_runtime_until_now: int,
-        tests_in_file: Optional[List[TestsInFile]],
+        tests_in_file: list[TestsInFile] | None,
         run_generated_tests: bool,
     ) -> Result[OptimizedCandidateResult, str]:
         success = True
@@ -1149,24 +1148,26 @@ class Optimizer:
         test_file: str,
         test_type: TestType,
         optimization_iteration: int,
-        test_function: Optional[str] = None,
+        test_function: str | None = None,
     ) -> TestResults:
-        result_file_path, run_result = run_tests(
-            test_file,
-            test_framework=self.args.test_framework,
-            cwd=self.args.project_root,
-            pytest_timeout=INDIVIDUAL_TEST_TIMEOUT,
-            pytest_cmd=self.test_cfg.pytest_cmd,
-            verbose=True,
-            test_env=test_env,
-            only_run_this_test_function=test_function,
-        )
-        if run_result.returncode != 0:
-            logging.debug(
-                f"Nonzero return code {run_result.returncode} when running tests in {test_file}.\n"
-                f"stdout: {run_result.stdout}\n"
-                f"stderr: {run_result.stderr}\n",
+        try:
+            result_file_path, run_result = run_tests(
+                test_file,
+                test_framework=self.args.test_framework,
+                cwd=self.args.project_root,
+                pytest_timeout=INDIVIDUAL_TEST_TIMEOUT,
+                pytest_cmd=self.test_cfg.pytest_cmd,
+                verbose=True,
+                test_env=test_env,
+                only_run_this_test_function=test_function,
             )
+        except subprocess.CalledProcessError as cpe:
+            logging.exception(
+                f"Nonzero return code {cpe.returncode} when running tests in {test_file}.\n"
+                f"stdout: {cpe.stdout}\n"
+                f"stderr: {cpe.stderr}\n",
+            )
+            return TestResults(test_results=[])
         unittest_results = parse_test_results(
             test_xml_path=result_file_path,
             test_py_path=test_file,
@@ -1184,7 +1185,7 @@ class Optimizer:
         helper_function_names: list[str],
         module_path: str,
         function_trace_id: str,
-    ) -> Union[Tuple[str, str], None]:
+    ) -> tuple[str, str] | None:
         tests = generate_tests(
             self.aiservice_client,
             source_code_being_tested=source_code_being_tested,

@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 import subprocess
-from typing import Optional, Tuple
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 
@@ -7,13 +8,13 @@ from codeflash.code_utils.code_utils import get_run_tmp_file
 def run_tests(
     test_path: str,
     test_framework: str,
-    cwd: Optional[str] = None,
-    test_env: Optional[dict[str, str]] = None,
-    pytest_timeout: Optional[int] = None,
+    cwd: str | None = None,
+    test_env: dict[str, str] | None = None,
+    pytest_timeout: int | None = None,
     pytest_cmd: str = "pytest",
     verbose: bool = False,
-    only_run_this_test_function: Optional[str] = None,
-) -> Tuple[str, subprocess.CompletedProcess]:
+    only_run_this_test_function: str | None = None,
+) -> tuple[str, subprocess.CompletedProcess]:
     assert test_framework in ["pytest", "unittest"]
     if only_run_this_test_function and "__replay_test" in test_path:
         test_path = test_path + "::" + only_run_this_test_function
@@ -29,11 +30,11 @@ def run_tests(
                 f"--timeout={pytest_timeout}",
                 f"--junitxml={result_file_path}",
             ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             cwd=cwd,
             env=test_env,
-            check=False,
+            check=True,
+            text=True,
             timeout=600,
         )
     elif test_framework == "unittest":
@@ -43,11 +44,11 @@ def run_tests(
             + (["-v"] if verbose else [])
             + [test_path]
             + ["--output-file", result_file_path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             cwd=cwd,
             env=test_env,
-            check=False,
+            check=True,
+            text=True,
         )
     else:
         raise ValueError("Invalid test framework -- I only support Pytest and Unittest currently.")
