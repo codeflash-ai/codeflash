@@ -4,6 +4,8 @@ import ast
 import logging
 from typing import Iterable
 
+import isort
+
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 
 
@@ -300,8 +302,7 @@ def inject_profiling_into_existing_test(
         ast.Import(names=[ast.alias(name="dill", asname="pickle")]),
     ]
     tree.body = [*new_imports, create_wrapper_function(), *tree.body]
-
-    return True, ast.unparse(tree)
+    return True, isort.code(ast.unparse(tree))
 
 
 def create_wrapper_function() -> ast.FunctionDef:
