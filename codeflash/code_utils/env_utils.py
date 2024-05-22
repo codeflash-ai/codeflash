@@ -64,10 +64,11 @@ def ensure_pr_number() -> bool:
     return True
 
 
-def ensure_git_repo(module_root: str) -> bool:
+def ensure_git_repo(module_root: str) -> tuple[bool, bool]:
+    # return type is (should_continue, disable_PR_creation)
     try:
         _ = git.Repo(module_root, search_parent_directories=True).git_dir
-        return True
+        return True, False
     except git.exc.InvalidGitRepositoryError:
         # Only ask for the prompt if running in non-interactive mode
         if sys.__stdin__.isatty():
@@ -78,9 +79,9 @@ def ensure_git_repo(module_root: str) -> bool:
                 show_choices=True,
             )
             if response == "no":
-                return False
+                return False, True
             if response == "yes":
-                return True
+                return True, True
         else:
             # continue running, important for GitHub actions
-            return True
+            return True, False
