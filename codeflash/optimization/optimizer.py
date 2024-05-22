@@ -4,7 +4,6 @@ import concurrent.futures
 import logging
 import os
 import pathlib
-import subprocess
 import sys
 import uuid
 from argparse import Namespace
@@ -1150,24 +1149,22 @@ class Optimizer:
         optimization_iteration: int,
         test_function: str | None = None,
     ) -> TestResults:
-        try:
-            result_file_path, run_result = run_tests(
-                test_file,
-                test_framework=self.args.test_framework,
-                cwd=self.args.project_root,
-                pytest_timeout=INDIVIDUAL_TEST_TIMEOUT,
-                pytest_cmd=self.test_cfg.pytest_cmd,
-                verbose=True,
-                test_env=test_env,
-                only_run_this_test_function=test_function,
+        result_file_path, run_result = run_tests(
+            test_file,
+            test_framework=self.args.test_framework,
+            cwd=self.args.project_root,
+            pytest_timeout=INDIVIDUAL_TEST_TIMEOUT,
+            pytest_cmd=self.test_cfg.pytest_cmd,
+            verbose=True,
+            test_env=test_env,
+            only_run_this_test_function=test_function,
+        )
+        if run_result.returncode != 0:
+            logging.debug(
+                f"Nonzero return code {run_result.returncode} when running tests in {test_file}.\n"
+                f"stdout: {run_result.stdout}\n"
+                f"stderr: {run_result.stderr}\n",
             )
-        except subprocess.CalledProcessError as cpe:
-            logging.exception(
-                f"Nonzero return code {cpe.returncode} when running tests in {test_file}.\n"
-                f"stdout: {cpe.stdout}\n"
-                f"stderr: {cpe.stderr}\n",
-            )
-            return TestResults(test_results=[])
         unittest_results = parse_test_results(
             test_xml_path=result_file_path,
             test_py_path=test_file,

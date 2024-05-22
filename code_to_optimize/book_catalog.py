@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 from time import time
-from typing import Any, cast
 
-from _typeshed import SupportsDunderGT, SupportsDunderLT
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, Text
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
-from sqlalchemy.orm.relationships import _RelationshipDeclared
+from sqlalchemy.orm.relationships import Relationship
 
-POSTGRES_CONNECTION_STRING: str = "postgresql://cf_developer:XJcbU37MBYeh4dDK6PTV5n@sqlalchemy-experiments.postgres.database.azure.com:5432/postgres"
+POSTGRES_CONNECTION_STRING: str = ("postgresql://cf_developer:XJcbU37MBYeh4dDK6PTV5n@sqlalchemy-experiments.postgres"
+                                   ".database.azure.com:5432/postgres")
 
 
 class Base(DeclarativeBase):
@@ -31,12 +30,12 @@ class Book(Base):
     author_id: Column[int] = Column(Integer, ForeignKey("authors.id"), nullable=False)
     is_bestseller: Column[bool] = Column(Boolean, default=False)
 
-    author: _RelationshipDeclared[Author] = relationship("Author", backref="books")
+    author: Relationship[Author] = relationship("Author", backref="books")
 
 
 def init_table() -> Session:
-    engine: Engine = create_engine(POSTGRES_CONNECTION_STRING, echo=True)
-    session: Session = sessionmaker(bind=engine)()
+    catalog_engine: Engine = create_engine(POSTGRES_CONNECTION_STRING, echo=True)
+    session: Session = sessionmaker(bind=catalog_engine)()
     i: int
     for i in range(50):
         author: Author = Author(id=i, name=f"author{i}")
@@ -57,12 +56,11 @@ def get_authors(session: Session) -> list[Author]:
         _authors.append(book.author)
     return sorted(
         list(set(_authors)),
-        key=lambda x: cast(SupportsDunderLT[Any] | SupportsDunderGT[Any], x.id),
+        key=lambda x: x.id,
     )
 
 
 if __name__ == "__main__":
-    # _session = init_table()
     engine: Engine = create_engine(POSTGRES_CONNECTION_STRING, echo=True)
     session_factory: sessionmaker[Session] = sessionmaker(bind=engine)
     _session: Session = session_factory()

@@ -33,7 +33,6 @@ def run_tests(
             capture_output=True,
             cwd=cwd,
             env=test_env,
-            check=True,
             text=True,
             timeout=600,
         )
@@ -47,7 +46,6 @@ def run_tests(
             capture_output=True,
             cwd=cwd,
             env=test_env,
-            check=True,
             text=True,
         )
     else:
