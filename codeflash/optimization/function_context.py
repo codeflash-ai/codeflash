@@ -98,7 +98,7 @@ def get_type_annotation_context(
                     sources.append(
                         (
                             Source(
-                                definition[0].name,
+                                definition[0].full_name,
                                 definition[0],
                                 source_code,
                             ),
