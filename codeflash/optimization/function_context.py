@@ -277,6 +277,6 @@ def get_constrained_function_context_and_helper_functions(
             context_len += source_len
         else:
             break
-    logging.debug("FINAL OPTIMIZATION CONTEXT TOKENS LENGTH:", context_len)
+    logging.debug(f"FINAL OPTIMIZATION CONTEXT TOKENS LENGTH: {context_len}")
     helper_code: str = "\n".join(context_list)
     return helper_code, helper_functions
