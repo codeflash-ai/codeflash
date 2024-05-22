@@ -315,9 +315,7 @@ def process_test_files(
                 scope_parameters = test_functions_list[index].parameters
                 test_type = test_functions_list[index].test_type
                 try:
-                    definition = script.goto(
-                        line=name.line,
-                        column=name.column,
+                    definition = name.goto(
                         follow_imports=True,
                         follow_builtin_imports=False,
                     )
