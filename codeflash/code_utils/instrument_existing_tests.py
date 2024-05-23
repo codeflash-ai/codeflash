@@ -4,6 +4,8 @@ import ast
 import logging
 from typing import Iterable
 
+import isort
+
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 
 
@@ -14,6 +16,7 @@ class ReplaceCallNodeWithName(ast.NodeTransformer):
 
     def visit_Call(self, node: ast.Call) -> ast.Name | ast.Call:
         if isinstance(node, ast.Call):
+            function_name: str = ""
             if hasattr(node.func, "id"):
                 function_name = node.func.id
 
@@ -37,13 +40,13 @@ class InjectPerfOnly(ast.NodeTransformer):
 
     def update_line_node(
         self,
-        test_node: ast.AST,
+            test_node: ast.stmt,
         node_name: str,
         index: str,
         test_class_name: str | None = None,
     ) -> Iterable[ast.stmt]:
         call_node = None
-        function_name = ""
+        function_name: str = ""
         for node in ast.walk(test_node):
             if isinstance(node, ast.Call):
                 if hasattr(node.func, "id"):
@@ -98,8 +101,9 @@ class InjectPerfOnly(ast.NodeTransformer):
         node: ast.AST
         for node in ast.walk(line_node):
             if isinstance(node, ast.Call):
+                function_name: str = ""
                 if hasattr(node.func, "id"):
-                    function_name: str = node.func.id
+                    function_name = node.func.id
 
                 if hasattr(node.func, "attr"):
                     function_name = node.func.attr
@@ -113,7 +117,7 @@ class InjectPerfOnly(ast.NodeTransformer):
         return False
 
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
-        # TODO: Ensure that this class inherits from unittest.TestCase. Don't modify non unittest.TestCase classes
+        # TODO: Ensure that this class inherits from unittest.TestCase. Don't modify non unittest.TestCase classes.
         for inner_node in ast.walk(node):
             if isinstance(inner_node, ast.FunctionDef):
                 self.visit_FunctionDef(inner_node, node.name)
@@ -228,7 +232,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                         compound_line_node: ast.stmt = line_node.body[j]
                         internal_node: ast.AST
                         for internal_node in ast.walk(compound_line_node):
-                            if self.is_target_function_line(internal_node):
+                            if isinstance(internal_node, ast.stmt) and self.is_target_function_line(internal_node):
                                 line_node.body[j : j + 1] = self.update_line_node(
                                     internal_node,
                                     node.name,
@@ -300,8 +304,7 @@ def inject_profiling_into_existing_test(
         ast.Import(names=[ast.alias(name="dill", asname="pickle")]),
     ]
     tree.body = [*new_imports, create_wrapper_function(), *tree.body]
-
-    return True, ast.unparse(tree)
+    return True, isort.code(ast.unparse(tree), float_to_top=True)
 
 
 def create_wrapper_function() -> ast.FunctionDef:
