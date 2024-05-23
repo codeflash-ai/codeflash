@@ -1,4 +1,4 @@
-from code_to_optimize.hamming_distance import _hamming_distance
+from code_to_optimize.final_test_set.hamming_distance import _hamming_distance
 import numpy as np
 
 

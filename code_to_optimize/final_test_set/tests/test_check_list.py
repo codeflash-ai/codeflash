@@ -1,4 +1,4 @@
-from code_to_optimize.check_list import check_user_access
+from code_to_optimize.final_test_set.check_list import check_user_access
 
 
 def test_check_user_access():

@@ -1,4 +1,4 @@
-from code_to_optimize.single_name_to_first_last_names import (
+from code_to_optimize.final_test_set.single_name_to_first_last_names import (
     single_name_to_first_last_names,
 )
 

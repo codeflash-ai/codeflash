@@ -1,4 +1,4 @@
-from code_to_optimize.topological_sort import Graph
+from code_to_optimize.final_test_set.topological_sort import Graph
 
 
 def test_graph_simple():

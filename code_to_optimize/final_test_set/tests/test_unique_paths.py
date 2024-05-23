@@ -1,4 +1,4 @@
-from code_to_optimize.unique_paths import uniquePaths
+from code_to_optimize.final_test_set.unique_paths import uniquePaths
 
 
 def test_minimal_grid():

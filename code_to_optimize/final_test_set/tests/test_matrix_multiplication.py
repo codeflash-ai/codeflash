@@ -1,4 +1,4 @@
-from code_to_optimize.matrix_multiplication import matrix_multiply
+from code_to_optimize.final_test_set.matrix_multiplication import matrix_multiply
 import pytest
 
 

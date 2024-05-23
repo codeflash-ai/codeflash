@@ -1,4 +1,4 @@
-from code_to_optimize.find_factors import find_factors
+from code_to_optimize.final_test_set.find_factors import find_factors
 
 
 def test_small_number():

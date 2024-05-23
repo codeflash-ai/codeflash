@@ -1,4 +1,4 @@
-from code_to_optimize.generate_primes import generate_primes
+from code_to_optimize.final_test_set.generate_primes import generate_primes
 
 
 def test_generate_primes():

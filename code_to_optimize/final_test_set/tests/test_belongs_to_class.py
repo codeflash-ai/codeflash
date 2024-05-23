@@ -1,6 +1,6 @@
 from unittest.mock import Mock
 
-from code_to_optimize.belongs_to_class import belongs_to_class
+from code_to_optimize.final_test_set.belongs_to_class import belongs_to_class
 
 
 def test_positive_match():

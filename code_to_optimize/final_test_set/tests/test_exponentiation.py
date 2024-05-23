@@ -1,4 +1,4 @@
-from code_to_optimize.exponentiation import exponentiation
+from code_to_optimize.final_test_set.exponentiation import exponentiation
 
 
 def test_exponentiation():

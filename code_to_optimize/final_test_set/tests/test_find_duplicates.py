@@ -1,4 +1,4 @@
-from code_to_optimize.find_duplicates import find_duplicates
+from code_to_optimize.final_test_set.find_duplicates import find_duplicates
 
 
 def test_basic_case():

@@ -1,4 +1,4 @@
-from code_to_optimize.string_concat import concatenate_strings
+from code_to_optimize.final_test_set.string_concat import concatenate_strings
 
 
 def test_concatenate_strings_zero():

@@ -1,4 +1,4 @@
-from code_to_optimize.find_common_tags import find_common_tags
+from code_to_optimize.final_test_set.find_common_tags import find_common_tags
 
 
 def test_common_tags_1():

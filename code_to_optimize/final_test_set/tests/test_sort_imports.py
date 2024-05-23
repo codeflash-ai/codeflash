@@ -1,7 +1,7 @@
 import os
 import tempfile
 
-from code_to_optimize.sort_imports import sort_imports
+from code_to_optimize.final_test_set.sort_imports import sort_imports
 
 
 def test_remove_duplicate_imports():

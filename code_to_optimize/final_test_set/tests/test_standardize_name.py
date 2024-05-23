@@ -1,4 +1,4 @@
-from code_to_optimize.standardize_name import standardize_name
+from code_to_optimize.final_test_set.standardize_name import standardize_name
 import pytest
 
 

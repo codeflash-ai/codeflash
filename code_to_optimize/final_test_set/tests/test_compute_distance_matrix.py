@@ -1,4 +1,6 @@
-from code_to_optimize.compute_distance_matrix import compute_distance_matrix
+from code_to_optimize.final_test_set.compute_distance_matrix import (
+    compute_distance_matrix,
+)
 import numpy as np
 
 

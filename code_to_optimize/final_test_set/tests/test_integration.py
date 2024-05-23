@@ -1,4 +1,4 @@
-from code_to_optimize.integration import integrate_f
+from code_to_optimize.final_test_set.integration import integrate_f
 import pytest
 
 
