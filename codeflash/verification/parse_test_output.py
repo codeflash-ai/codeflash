@@ -1,6 +1,7 @@
 import logging
 import os
 import pathlib
+import re
 import sqlite3
 import subprocess
 from collections import defaultdict
@@ -189,25 +190,48 @@ def parse_test_xml(
                     message = testcase.result[0].message.lower()
                     if "failed: timeout >" in message:
                         timed_out = True
+            matches = re.findall(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?)######!", testcase.system_out)
+            if not matches or not len(matches):
+                print("COULD NOT FIND TEST ID IN XML SYSTEM OUT")
 
-            test_results.add(
-                FunctionTestInvocation(
-                    id=InvocationId(
-                        test_module_path=test_module_path,
-                        test_class_name=test_class,
-                        test_function_name=test_function,
-                        function_getting_tested="",  # FIXME,
-                        iteration_id=None,
+                test_results.add(
+                    FunctionTestInvocation(
+                        id=InvocationId(
+                            test_module_path=test_module_path,
+                            test_class_name=test_class,
+                            test_function_name=test_function,
+                            function_getting_tested="",  # FIXME,
+                            iteration_id=None,
+                        ),
+                        file_name=file_name,
+                        runtime=None,
+                        test_framework=test_config.test_framework,
+                        did_pass=result,
+                        test_type=test_type,
+                        return_value=None,
+                        timed_out=timed_out,
                     ),
-                    file_name=file_name,
-                    runtime=None,
-                    test_framework=test_config.test_framework,
-                    did_pass=result,
-                    test_type=test_type,
-                    return_value=None,
-                    timed_out=timed_out,
-                ),
-            )
+                )
+            else:
+                for match in matches:
+                    test_results.add(
+                        FunctionTestInvocation(
+                            id=InvocationId(
+                                test_module_path=match[0],
+                                test_class_name=None if match[1] == "" else match[1],
+                                test_function_name=match[2],
+                                function_getting_tested=match[3],
+                                iteration_id=match[4],
+                            ),
+                            file_name=file_name,
+                            runtime=None,
+                            test_framework=test_config.test_framework,
+                            did_pass=result,
+                            test_type=test_type,
+                            return_value=None,
+                            timed_out=timed_out,
+                        ),
+                    )
     if len(test_results) == 0:
         logging.info(f"Test '{test_py_file_path}' failed to run, skipping it")
         if run_result is not None:
@@ -265,6 +289,7 @@ def merge_test_results(
         if len(xml_results) == 1:
             xml_result = xml_results[0]
             # This means that we only have one FunctionTestInvocation for this test xml. Match them to the bin results
+            # Either a whole test function fails or passes.
             for result_bin in bin_results:
                 merged_test_results.add(
                     FunctionTestInvocation(
@@ -278,7 +303,34 @@ def merge_test_results(
                         timed_out=xml_result.timed_out,
                     ),
                 )
+        elif xml_results.test_results[0].id.iteration_id is not None:
+            # This means that we have multiple iterations of the same test function
+            # We need to match the iteration_id to the bin results
+            for i in range(len(xml_results.test_results)):
+                xml_result = xml_results.test_results[i]
+                try:
+                    bin_result = bin_results.get_by_id(xml_result.id)
+                except AttributeError:
+                    bin_result = None
+                if bin_result is None:
+                    merged_test_results.add(xml_result)
+                    continue
+                merged_test_results.add(
+                    FunctionTestInvocation(
+                        id=xml_result.id,
+                        file_name=xml_result.file_name,
+                        runtime=bin_result.runtime,
+                        test_framework=xml_result.test_framework,
+                        did_pass=xml_result.did_pass,
+                        test_type=xml_result.test_type,
+                        return_value=bin_result.return_value,
+                        timed_out=xml_result.timed_out
+                        if bin_result.runtime is None
+                        else False,  # If runtime was measured in the bin file, then the testcase did not time out
+                    ),
+                )
         else:
+            # Should happen only if the xml did not have any test invocation id info
             for i in range(len(bin_results.test_results)):
                 bin_result = bin_results.test_results[i]
                 try:

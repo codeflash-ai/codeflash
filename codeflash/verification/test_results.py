@@ -37,7 +37,7 @@ class InvocationId:
 
     # test_module_path:TestSuiteClass.test_function_name:function_tested:iteration_id
     def id(self):
-        return f"{self.test_module_path}:{self.test_class_name or ''}.{self.test_function_name}:{self.function_getting_tested}:{self.iteration_id}"
+        return f"{self.test_module_path}:{(self.test_class_name + '.' if self.test_class_name else '')}{self.test_function_name}:{self.function_getting_tested}:{self.iteration_id}"
 
     @staticmethod
     def from_str_id(string_id: str, iteration_id: Optional[str] = None) -> InvocationId:

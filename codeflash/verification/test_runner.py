@@ -21,13 +21,17 @@ def run_tests(
     if test_framework == "pytest":
         result_file_path = get_run_tmp_file("pytest_results.xml")
         pytest_cmd_list = [chunk for chunk in pytest_cmd.split(" ") if chunk != ""]
+
         results = subprocess.run(
             pytest_cmd_list
             + [
                 test_path,
-                "-q",
+                "--capture=tee-sys",
                 f"--timeout={pytest_timeout}",
+                "-q",
                 f"--junitxml={result_file_path}",
+                "-o",
+                "junit_logging=all",
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -48,6 +52,7 @@ def run_tests(
             cwd=cwd,
             env=test_env,
             check=False,
+            timeout=600,
         )
     else:
         raise ValueError("Invalid test framework -- I only support Pytest and Unittest currently.")
