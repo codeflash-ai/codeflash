@@ -1048,12 +1048,12 @@ class Optimizer:
                         candidate_existing_test_results,
                     )
                     for test_invocation in candidate_existing_test_results:
+                        original_test_invocation = original_existing_test_results.get_by_id(
+                            test_invocation.id
+                        )
                         if (
-                            overall_original_test_results.get_by_id(test_invocation.id) is None
-                            or test_invocation.did_pass
-                            != overall_original_test_results.get_by_id(
-                                test_invocation.id,
-                            ).did_pass
+                            original_test_invocation is None
+                            or test_invocation.did_pass != original_test_invocation.did_pass
                             or not return_values_are_equal
                         ):
                             logging.info("Test results did not match the test results of the original code.")
