@@ -3,6 +3,7 @@ from typing import Union
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 
+from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.verification.test_results import TestResults
 
 
@@ -20,8 +21,8 @@ class PrComment:
     def to_json(self) -> dict[str, Union[str, dict[str, dict[str, int]]]]:
         return {
             "optimization_explanation": self.optimization_explanation,
-            "best_runtime": f"{(self.best_runtime / 1000):.2f}",
-            "original_runtime": f"{(self.original_runtime / 1000):.2f}",
+            "best_runtime": humanize_runtime(self.best_runtime),
+            "original_runtime": humanize_runtime(self.original_runtime),
             "function_name": self.function_name,
             "file_path": self.relative_file_path,
             "speedup_x": self.speedup_x,

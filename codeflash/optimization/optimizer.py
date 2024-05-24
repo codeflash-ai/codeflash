@@ -8,7 +8,7 @@ import sys
 import uuid
 from argparse import Namespace
 from collections import defaultdict
-from typing import List, Optional, Tuple, Union
+from typing import Optional
 
 import isort
 import libcst as cst
@@ -54,7 +54,7 @@ from codeflash.discovery.functions_to_optimize import (
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.optimization.function_context import (
     Source,
-    get_constrained_function_context_and_dependent_functions,
+    get_constrained_function_context_and_helper_functions,
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
 from codeflash.result.explanation import Explanation
@@ -71,7 +71,7 @@ from codeflash.verification.verifier import generate_tests
 
 class OptimizationSet(BaseModel):
     control: list[OptimizedCandidate]
-    experiment: list[OptimizedCandidate] | None
+    experiment: Optional[list[OptimizedCandidate]]
 
 
 class OptimizedCandidateResult(BaseModel):
@@ -83,7 +83,7 @@ class OptimizedCandidateResult(BaseModel):
 class OriginalCodeBaseline(BaseModel):
     generated_test_results: TestResults
     existing_test_results: TestResults
-    overall_test_results: TestResults | None
+    overall_test_results: Optional[TestResults]
     runtime: int
 
 
@@ -94,15 +94,15 @@ class GeneratedTests(BaseModel):
 
 class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
-    dependent_functions: list[tuple[Source, str, str]]
+    helper_functions: list[tuple[Source, str, str]]
     runtime: int
     winning_test_results: TestResults
 
 
 class CodeOptimizationContext(BaseModel):
-    code_to_optimize_with_dependents: str
+    code_to_optimize_with_helpers: str
     contextual_dunder_methods: set[tuple[str, str]]
-    dependent_functions: list[tuple[Source, str, str]]
+    helper_functions: list[tuple[Source, str, str]]
     preexisting_functions: list[str]
 
 
@@ -131,9 +131,12 @@ class Optimizer:
         logging.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
             return
-        if not env_utils.ensure_git_repo(module_root=self.args.module_root):
+        continue_execution, disable_pr = env_utils.ensure_git_repo(module_root=self.args.module_root)
+        if not continue_execution:
             logging.error("No git repository detected and user aborted run. Exiting...")
             sys.exit(1)
+        if disable_pr:
+            self.args.no_pr = True
 
         file_to_funcs_to_optimize: dict[str, list[FunctionToOptimize]]
         num_optimizable_functions: int
@@ -232,21 +235,21 @@ class Optimizer:
         if not is_successful(ctx_result):
             return Failure(ctx_result.failure())
         code_context: CodeOptimizationContext = ctx_result.unwrap()
-        dependent_functions_by_module_abspath = defaultdict(set)
-        for _, module_abspath, qualified_name in code_context.dependent_functions:
-            dependent_functions_by_module_abspath[module_abspath].add(qualified_name)
-        original_dependent_code = {}
-        for module_abspath in dependent_functions_by_module_abspath:
+        helper_functions_by_module_abspath = defaultdict(set)
+        for _, module_abspath, qualified_name in code_context.helper_functions:
+            helper_functions_by_module_abspath[module_abspath].add(qualified_name)
+        original_helper_code = {}
+        for module_abspath in helper_functions_by_module_abspath:
             with pathlib.Path(module_abspath).open(encoding="utf8") as f:
-                dependent_code = f.read()
-                original_dependent_code[module_abspath] = dependent_code
-        logging.info(f"Code to be optimized:\n{code_context.code_to_optimize_with_dependents}")
+                helper_code = f.read()
+                original_helper_code[module_abspath] = helper_code
+        logging.info(f"Code to be optimized:\n{code_context.code_to_optimize_with_helpers}")
         module_path = module_name_from_file_path(function_to_optimize.file_path, self.args.project_root)
 
-        for module_abspath in original_dependent_code:
-            code_context.code_to_optimize_with_dependents = add_needed_imports_from_module(
-                original_dependent_code[module_abspath],
-                code_context.code_to_optimize_with_dependents,
+        for module_abspath in original_helper_code:
+            code_context.code_to_optimize_with_helpers = add_needed_imports_from_module(
+                original_helper_code[module_abspath],
+                code_context.code_to_optimize_with_helpers,
                 module_abspath,
                 function_to_optimize.file_path,
                 self.args.project_root,
@@ -259,9 +262,9 @@ class Optimizer:
         self.instrumented_unittests_created.update(instrumented_unittests_created_for_function)
 
         generated_results = self.generate_tests_and_optimizations(
-            code_context.code_to_optimize_with_dependents,
+            code_context.code_to_optimize_with_helpers,
             function_to_optimize,
-            code_context.dependent_functions,
+            code_context.helper_functions,
             module_path,
             function_trace_id,
             run_experiment=should_run_experiment,
@@ -308,13 +311,13 @@ class Optimizer:
             best_optimization = self.determine_best_candidate(
                 candidates,
                 code_context,
-                dependent_functions_by_module_abspath,
+                helper_functions_by_module_abspath,
                 function_to_optimize,
                 generated_tests_path,
                 instrumented_unittests_created_for_function,
                 original_code,
                 original_code_baseline,
-                original_dependent_code,
+                original_helper_code,
                 function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
                 tests_in_file,
             )
@@ -341,16 +344,16 @@ class Optimizer:
                     generated_tests,
                 )
 
-                self.replace_function_and_dependents_with_optimized_code(
+                self.replace_function_and_helpers_with_optimized_code(
                     code_context,
-                    dependent_functions_by_module_abspath,
+                    helper_functions_by_module_abspath,
                     explanation,
                     best_optimization.candidate.source_code,
                     function_to_optimize.qualified_name,
                 )
 
-                new_code, new_dependent_code = self.reformat_code_and_dependents(
-                    dependent_functions_by_module_abspath,
+                new_code, new_helper_code = self.reformat_code_and_helpers(
+                    helper_functions_by_module_abspath,
                     explanation.file_path,
                     original_code,
                 )
@@ -361,9 +364,9 @@ class Optimizer:
                     tests_root=self.test_cfg.tests_root,
                 )
 
-                original_code_combined = original_dependent_code.copy()
+                original_code_combined = original_helper_code.copy()
                 original_code_combined[explanation.file_path] = original_code
-                new_code_combined = new_dependent_code.copy()
+                new_code_combined = new_helper_code.copy()
                 new_code_combined[explanation.file_path] = new_code
                 if not self.args.no_pr:
                     check_create_pr(
@@ -378,11 +381,11 @@ class Optimizer:
                         #  a) Error propagation, where error in one function can cause the next optimization to fail
                         #  b) Performance estimates become unstable, as the runtime of an optimization might be
                         #     dependent on the runtime of the previous optimization
-                        self.write_code_and_dependents(
+                        self.write_code_and_helpers(
                             original_code,
-                            original_dependent_code,
+                            original_helper_code,
                             function_to_optimize.file_path,
-                            dependent_functions_by_module_abspath,
+                            helper_functions_by_module_abspath,
                         )
         # Delete all the generated tests to not cause any clutter.
         pathlib.Path(generated_tests_path).unlink(missing_ok=True)
@@ -396,13 +399,13 @@ class Optimizer:
         self,
         candidates: list[OptimizedCandidate],
         code_context: CodeOptimizationContext,
-        dependent_functions_by_module_abspath: dict[str, set[str]],
+        helper_functions_by_module_abspath: dict[str, set[str]],
         function_to_optimize: FunctionToOptimize,
         generated_tests_path: str,
         instrumented_unittests_created_for_function: set[str],
         original_code: str,
         original_code_baseline: OriginalCodeBaseline,
-        original_dependent_code: dict[str, str],
+        original_helper_code: dict[str, str],
         function_trace_id: str,
         only_run_this_test_function: list[TestsInFile] | None = None,
     ) -> BestOptimization | None:
@@ -442,7 +445,7 @@ class Optimizer:
                 for (
                     module_abspath,
                     qualified_names,
-                ) in dependent_functions_by_module_abspath.items():
+                ) in helper_functions_by_module_abspath.items():
                     replace_function_definitions_in_module(
                         function_names=list(qualified_names),
                         optimized_code=candidate.source_code,
@@ -459,11 +462,11 @@ class Optimizer:
                 AttributeError,
             ) as e:
                 logging.error(e)  # noqa: TRY400
-                self.write_code_and_dependents(
+                self.write_code_and_helpers(
                     original_code,
-                    original_dependent_code,
+                    original_helper_code,
                     function_to_optimize.file_path,
-                    dependent_functions_by_module_abspath,
+                    helper_functions_by_module_abspath,
                 )
                 continue
 
@@ -519,16 +522,16 @@ class Optimizer:
                     )
                     best_optimization = BestOptimization(
                         candidate=candidate,
-                        dependent_functions=code_context.dependent_functions,
+                        helper_functions=code_context.helper_functions,
                         runtime=best_test_runtime,
                         winning_test_results=candidate_result.best_test_results,
                     )
                     best_runtime_until_now = best_test_runtime
-            self.write_code_and_dependents(
+            self.write_code_and_helpers(
                 original_code,
-                original_dependent_code,
+                original_helper_code,
                 function_to_optimize.file_path,
-                dependent_functions_by_module_abspath,
+                helper_functions_by_module_abspath,
             )
             logging.info("----------------")
         self.aiservice_client.log_results(
@@ -571,22 +574,22 @@ class Optimizer:
             },
         )
 
-    def write_code_and_dependents(
+    def write_code_and_helpers(
         self,
         original_code: str,
-        original_dependent_code: dict[str, str],
+        original_helper_code: dict[str, str],
         path: str,
-        dependent_functions_by_module_abspath: dict[str, set[str]],
+        helper_functions_by_module_abspath: dict[str, set[str]],
     ) -> None:
         with pathlib.Path(path).open("w", encoding="utf8") as f:
             f.write(original_code)
-        for module_abspath in dependent_functions_by_module_abspath:
+        for module_abspath in helper_functions_by_module_abspath:
             with pathlib.Path(module_abspath).open("w", encoding="utf8") as f:
-                f.write(original_dependent_code[module_abspath])
+                f.write(original_helper_code[module_abspath])
 
-    def reformat_code_and_dependents(
+    def reformat_code_and_helpers(
         self,
-        dependent_functions_by_module_abspath: dict[str, set[str]],
+        helper_functions_by_module_abspath: dict[str, set[str]],
         path: str,
         original_code: str,
     ) -> tuple[str, dict[str, str]]:
@@ -600,21 +603,21 @@ class Optimizer:
             should_sort_imports,
             path,
         )
-        new_dependent_code: dict[str, str] = {
+        new_helper_code: dict[str, str] = {
             module_abspath: format_code(
                 self.args.formatter_cmd,
                 self.args.imports_sort_cmd,
                 should_sort_imports,
                 module_abspath,
             )
-            for module_abspath in dependent_functions_by_module_abspath
+            for module_abspath in helper_functions_by_module_abspath
         }
-        return new_code, new_dependent_code
+        return new_code, new_helper_code
 
-    def replace_function_and_dependents_with_optimized_code(
+    def replace_function_and_helpers_with_optimized_code(
         self,
         code_context: CodeOptimizationContext,
-        dependent_functions_by_module_abspath: dict[str, set[str]],
+        helper_functions_by_module_abspath: dict[str, set[str]],
         explanation: Explanation,
         optimized_code: str,
         qualified_function_name: str,
@@ -631,7 +634,7 @@ class Optimizer:
         for (
             module_abspath,
             qualified_names,
-        ) in dependent_functions_by_module_abspath.items():
+        ) in helper_functions_by_module_abspath.items():
             replace_function_definitions_in_module(
                 function_names=list(qualified_names),
                 optimized_code=optimized_code,
@@ -657,29 +660,29 @@ class Optimizer:
         if not success:
             return Failure("Error in parsing the code, skipping optimization.")
         (
-            dependent_code,
-            dependent_functions,
-        ) = get_constrained_function_context_and_dependent_functions(
+            helper_code,
+            helper_functions,
+        ) = get_constrained_function_context_and_helper_functions(
             function_to_optimize,
             self.args.project_root,
             code_to_optimize,
         )
         if function_to_optimize.parents:
             function_class = function_to_optimize.parents[0].name
-            dependent_methods = [
+            helper_methods = [
                 df
-                for df in dependent_functions
+                for df in helper_functions
                 if df[2].count(".") > 0 and df[2].split(".")[0] == function_class
             ]
             optimizable_methods = [function_to_optimize] + [
                 FunctionToOptimize(
-                    df[2].split(".")[0],
+                    df[2].split(".")[-1],
                     "",
                     [FunctionParent(df[2].split(".")[0], "ClassDef")],
                     None,
                     None,
                 )
-                for df in dependent_methods
+                for df in helper_methods
             ]
             if len(optimizable_methods) > 1:
                 code_to_optimize, contextual_dunder_methods = extract_code(
@@ -687,23 +690,23 @@ class Optimizer:
                 )
                 if code_to_optimize is None:
                     return Failure("Could not find function to optimize.")
-        code_to_optimize_with_dependents = dependent_code + "\n" + code_to_optimize
+        code_to_optimize_with_helpers = helper_code + "\n" + code_to_optimize
 
-        code_to_optimize_with_dependents_and_imports = add_needed_imports_from_module(
+        code_to_optimize_with_helpers_and_imports = add_needed_imports_from_module(
             original_source_code,
-            code_to_optimize_with_dependents,
+            code_to_optimize_with_helpers,
             function_to_optimize.file_path,
             function_to_optimize.file_path,
             project_root,
         )
         preexisting_functions.extend(
-            [fn[0].full_name.split(".")[-1] for fn in dependent_functions],
+            [fn[0].full_name.split(".")[-1] for fn in helper_functions],
         )
         return Success(
             CodeOptimizationContext(
-                code_to_optimize_with_dependents=code_to_optimize_with_dependents_and_imports,
+                code_to_optimize_with_helpers=code_to_optimize_with_helpers_and_imports,
                 contextual_dunder_methods=contextual_dunder_methods,
-                dependent_functions=dependent_functions,
+                helper_functions=helper_functions,
                 preexisting_functions=preexisting_functions,
             ),
         )
@@ -758,28 +761,26 @@ class Optimizer:
 
     def generate_tests_and_optimizations(
         self,
-        code_to_optimize_with_dependents: str,
+        code_to_optimize_with_helpers: str,
         function_to_optimize: FunctionToOptimize,
-        dependent_functions: list[tuple[Source, str, str]],
+        helper_functions: list[tuple[Source, str, str]],
         module_path: str,
         function_trace_id: str,
         run_experiment: bool = False,
     ) -> Result[tuple[GeneratedTests, OptimizationSet], str]:
-        generated_original_test_source = None
-        instrumented_test_source = None
         max_workers = 2 if not run_experiment else 3
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_tests = executor.submit(
                 self.generate_and_instrument_tests,
-                code_to_optimize_with_dependents,
+                code_to_optimize_with_helpers,
                 function_to_optimize,
-                [definition[0].full_name for definition in dependent_functions],
+                [definition[0].full_name for definition in helper_functions],
                 module_path,
                 function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id,
             )
             future_optimization_candidates = executor.submit(
                 self.aiservice_client.optimize_python_code,
-                code_to_optimize_with_dependents,
+                code_to_optimize_with_helpers,
                 function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id,
                 N_CANDIDATES,
                 ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
@@ -787,7 +788,7 @@ class Optimizer:
             if run_experiment:
                 future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
-                    code_to_optimize_with_dependents,
+                    code_to_optimize_with_helpers,
                     function_trace_id[:-4] + "EXP1",
                     N_CANDIDATES,
                     ExperimentMetadata(id=self.experiment_id, group="experiment"),
@@ -979,7 +980,7 @@ class Optimizer:
         original_generated_test_results: TestResults,
         generated_tests_path: str,
         best_runtime_until_now: int,
-        tests_in_file: Optional[List[TestsInFile]],
+        tests_in_file: list[TestsInFile] | None,
         run_generated_tests: bool,
     ) -> Result[OptimizedCandidateResult, str]:
         success = True
@@ -1149,7 +1150,7 @@ class Optimizer:
         test_file: str,
         test_type: TestType,
         optimization_iteration: int,
-        test_function: Optional[str] = None,
+        test_function: str | None = None,
     ) -> TestResults:
         result_file_path, run_result = run_tests(
             test_file,
@@ -1181,15 +1182,15 @@ class Optimizer:
         self,
         source_code_being_tested: str,
         function_to_optimize: FunctionToOptimize,
-        dependent_function_names: list[str],
+        helper_function_names: list[str],
         module_path: str,
         function_trace_id: str,
-    ) -> Union[Tuple[str, str], None]:
+    ) -> tuple[str, str] | None:
         tests = generate_tests(
             self.aiservice_client,
             source_code_being_tested=source_code_being_tested,
             function_to_optimize=function_to_optimize,
-            dependent_function_names=dependent_function_names,
+            helper_function_names=helper_function_names,
             module_path=module_path,
             test_cfg=self.test_cfg,
             test_timeout=INDIVIDUAL_TEST_TIMEOUT,

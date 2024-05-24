@@ -5,7 +5,6 @@ from codeflash.code_utils.git_utils import get_repo_owner_and_name
 
 
 class TestGitUtils(unittest.TestCase):
-
     @patch("codeflash.code_utils.git_utils.get_remote_url")
     def test_test_get_repo_owner_and_name(self, mock_get_remote_url):
         # Test with a standard GitHub HTTPS URL
@@ -19,6 +18,12 @@ class TestGitUtils(unittest.TestCase):
         owner, repo_name = get_repo_owner_and_name()
         self.assertEqual(owner, "owner")
         self.assertEqual(repo_name, "repo")
+
+        # Test with another GitHub SSH URL
+        mock_get_remote_url.return_value = "git@github.com:codeflash-ai/posthog.git"
+        owner, repo_name = get_repo_owner_and_name()
+        self.assertEqual(owner, "codeflash-ai")
+        self.assertEqual(repo_name, "posthog")
 
         # Test with a URL without the .git suffix
         mock_get_remote_url.return_value = "https://github.com/owner/repo"

@@ -4,18 +4,16 @@ import json
 import logging
 import os
 import platform
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from typing import Any
 
 import requests
 from pydantic.dataclasses import dataclass
 from pydantic.json import pydantic_encoder
 
 from codeflash.code_utils.env_utils import get_codeflash_api_key
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.telemetry.posthog import ph
-
-if TYPE_CHECKING:
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.models.ExperimentMetadata import ExperimentMetadata
 
 
 @dataclass(frozen=True)
@@ -26,7 +24,7 @@ class OptimizedCandidate:
 
 
 class AiServiceClient:
-    def __init__(self):
+    def __init__(self) -> None:
         self.base_url = self.get_aiservice_base_url()
         self.headers = {
             "Authorization": f"Bearer {get_codeflash_api_key()}",
@@ -43,8 +41,8 @@ class AiServiceClient:
         self,
         endpoint: str,
         method: str = "POST",
-        payload: Optional[Dict[str, Any]] = None,
-        timeout: float = None,
+        payload: dict[str, Any] | None = None,
+        timeout: float | None = None,
     ) -> requests.Response:
         """Make an API request to the given endpoint on the AI service.
 
@@ -159,20 +157,20 @@ class AiServiceClient:
         self,
         source_code_being_tested: str,
         function_to_optimize: FunctionToOptimize,
-        dependent_function_names: list[str],
+        helper_function_names: list[str],
         module_path: str,
         test_module_path: str,
         test_framework: str,
         test_timeout: int,
         trace_id: str,
-    ) -> Optional[Tuple[str, str]]:
+    ) -> tuple[str, str] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
 
         Parameters
         ----------
         - source_code_being_tested (str): The source code of the function being tested.
         - function_to_optimize (FunctionToOptimize): The function to optimize.
-        - dependent_function_names (list[Source]): List of dependent function names.
+        - helper_function_names (list[Source]): List of helper function names.
         - module_path (str): The module path where the function is located.
         - test_module_path (str): The module path for the test code.
         - test_framework (str): The test framework to use, e.g., "pytest".
@@ -190,7 +188,7 @@ class AiServiceClient:
         payload = {
             "source_code_being_tested": source_code_being_tested,
             "function_to_optimize": function_to_optimize,
-            "dependent_function_names": dependent_function_names,
+            "helper_function_names": helper_function_names,
             "module_path": module_path,
             "test_module_path": test_module_path,
             "test_framework": test_framework,
