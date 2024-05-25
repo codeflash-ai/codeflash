@@ -190,7 +190,9 @@ def parse_test_xml(
                     message = testcase.result[0].message.lower()
                     if "failed: timeout >" in message:
                         timed_out = True
-            matches = re.findall(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?)######!", testcase.system_out)
+            matches = re.findall(
+                r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?)######!", testcase.system_out or ""
+            )
             if not matches or not len(matches):
                 print("COULD NOT FIND TEST ID IN XML SYSTEM OUT")
 
