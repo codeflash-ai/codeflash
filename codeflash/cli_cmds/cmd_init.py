@@ -325,7 +325,7 @@ def apologize_and_exit() -> NoReturn:
     sys.exit(1)
 
 
-def install_github_action() -> None:
+def install_github_actions() -> None:
     config, config_file_path = parse_config_file()
 
     ph("cli-github-optimization-choice", {"optimize_prs": True})

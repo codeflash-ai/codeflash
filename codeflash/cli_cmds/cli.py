@@ -6,7 +6,7 @@ import git
 
 from codeflash.api.cfapi import check_github_app_installed_on_repo
 from codeflash.cli_cmds import logging_config
-from codeflash.cli_cmds.cmd_init import apologize_and_exit, init_codeflash, install_github_action
+from codeflash.cli_cmds.cmd_init import apologize_and_exit, init_codeflash, install_github_actions
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
@@ -89,7 +89,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
             init_codeflash()
             exit()
         if args.command == ["init", "actions"]:
-            install_github_action()
+            install_github_actions()
             exit()
         else:
             raise ValueError(f"Command {args.command} not recognized")
