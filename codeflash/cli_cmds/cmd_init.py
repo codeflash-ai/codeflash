@@ -58,8 +58,6 @@ def init_codeflash() -> None:
 
         configure_pyproject_toml(setup_info)
 
-        # ask_run_end_to_end_test(setup_info)  # maybe run this after the following help text?
-
         click.echo(
             f"{LF}"
             f"⚡️ Codeflash is now set up! You can now run:{LF}"
