@@ -19,7 +19,7 @@ from codeflash.version import __version__ as version
 
 def parse_args() -> Namespace:
     parser = ArgumentParser()
-    parser.add_argument("command", nargs="+", help="The command to run (e.g., 'init' or 'init actions')")
+    parser.add_argument("command", nargs="*", help="The command to run (e.g., 'init' or 'init actions')")
     parser.add_argument("--file", help="Try to optimize only this file")
     parser.add_argument(
         "--function",
