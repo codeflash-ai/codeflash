@@ -98,7 +98,7 @@ def get_type_annotation_context(
                     sources.append(
                         (
                             Source(
-                                definition[0].name,
+                                definition[0].full_name,
                                 definition[0],
                                 source_code,
                             ),
@@ -277,6 +277,6 @@ def get_constrained_function_context_and_helper_functions(
             context_len += source_len
         else:
             break
-    logging.debug("FINAL OPTIMIZATION CONTEXT TOKENS LENGTH:", context_len)
+    logging.debug(f"FINAL OPTIMIZATION CONTEXT TOKENS LENGTH: {context_len}")
     helper_code: str = "\n".join(context_list)
     return helper_code, helper_functions

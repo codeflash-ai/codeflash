@@ -39,11 +39,16 @@ class TestPigLatin(unittest.TestCase):
         output = sorter(input)
         self.assertEqual(output, list(range(5000)))
 """
-    expected = """import time
-import gc
+    expected = """import gc
 import os
 import sqlite3
+import time
+import unittest
+
 import dill as pickle
+
+from code_to_optimize.bubble_sort import sorter
+
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -63,8 +68,6 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
-import unittest
-from code_to_optimize.bubble_sort import sorter
 
 class TestPigLatin(unittest.TestCase):
 
@@ -85,7 +88,8 @@ class TestPigLatin(unittest.TestCase):
         codeflash_return_value = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '11', codeflash_cur, codeflash_con, input)
         output = codeflash_return_value
         self.assertEqual(output, list(range(5000)))
-        codeflash_con.close()"""
+        codeflash_con.close()
+"""
     with tempfile.NamedTemporaryFile(mode="w") as f:
         f.write(code)
         f.flush()
@@ -114,11 +118,20 @@ def test_prepare_image_for_yolo():
         ret = packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo(**args)
         assert compare_results(return_val_1, ret)
 """
-    expected = """import time
-import gc
+    expected = """import gc
 import os
 import sqlite3
+import time
+
 import dill as pickle
+import pytest
+from packagename.ml.yolo.image_reshaping_utils import \\
+    prepare_image_for_yolo as \\
+    packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo
+
+from codeflash.tracing.replay_test import get_next_arg_and_return
+from codeflash.validation.equivalence import compare_results
+
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -138,11 +151,6 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
-import dill as pickle
-import pytest
-from codeflash.tracing.replay_test import get_next_arg_and_return
-from codeflash.validation.equivalence import compare_results
-from packagename.ml.yolo.image_reshaping_utils import prepare_image_for_yolo as packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo
 
 def test_prepare_image_for_yolo():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
@@ -161,7 +169,8 @@ def test_prepare_image_for_yolo():
         codeflash_return_value = codeflash_wrap(packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo, '{module_path}', None, 'test_prepare_image_for_yolo', 'packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo', '4_2', codeflash_cur, codeflash_con, **args)
         ret = codeflash_return_value
         assert compare_results(return_val_1, ret)
-    codeflash_con.close()"""
+    codeflash_con.close()
+"""
     with tempfile.NamedTemporaryFile(mode="w") as f:
         f.write(code)
         f.flush()
@@ -191,11 +200,15 @@ def test_sort():
     output = sorter(input)
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
 
-    expected = """import time
-import gc
+    expected = """import gc
 import os
 import sqlite3
+import time
+
 import dill as pickle
+
+from code_to_optimize.bubble_sort import sorter
+
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -215,7 +228,6 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
-from code_to_optimize.bubble_sort import sorter
 
 def test_sort():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
@@ -230,7 +242,8 @@ def test_sort():
     codeflash_return_value = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '8', codeflash_cur, codeflash_con, input)
     output = codeflash_return_value
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
-    codeflash_con.close()"""
+    codeflash_con.close()
+"""
 
     test_path = (
         pathlib.Path(__file__).parent.resolve()
@@ -320,11 +333,16 @@ def test_sort_parametrized(input, expected_output):
     output = sorter(input)
     assert output == expected_output
 """
-    expected = """import time
-import gc
+    expected = """import gc
 import os
 import sqlite3
+import time
+
 import dill as pickle
+import pytest
+
+from code_to_optimize.bubble_sort import sorter
+
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -344,8 +362,6 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
-from code_to_optimize.bubble_sort import sorter
-import pytest
 
 @pytest.mark.parametrize('input, expected_output', [([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
 def test_sort_parametrized(input, expected_output):
@@ -356,7 +372,8 @@ def test_sort_parametrized(input, expected_output):
     codeflash_return_value = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized', 'sorter', '4', codeflash_cur, codeflash_con, input)
     output = codeflash_return_value
     assert output == expected_output
-    codeflash_con.close()"""
+    codeflash_con.close()
+"""
     test_path = (
         pathlib.Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_parametrized_results_temp.py"
@@ -462,11 +479,16 @@ def test_sort_parametrized_loop(input, expected_output):
         output = sorter(input)
         assert output == expected_output
 """
-    expected = """import time
-import gc
+    expected = """import gc
 import os
 import sqlite3
+import time
+
 import dill as pickle
+import pytest
+
+from code_to_optimize.bubble_sort import sorter
+
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -486,8 +508,6 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
-from code_to_optimize.bubble_sort import sorter
-import pytest
 
 @pytest.mark.parametrize('input, expected_output', [([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
 def test_sort_parametrized_loop(input, expected_output):
@@ -499,7 +519,8 @@ def test_sort_parametrized_loop(input, expected_output):
         codeflash_return_value = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized_loop', 'sorter', '4_0', codeflash_cur, codeflash_con, input)
         output = codeflash_return_value
         assert output == expected_output
-    codeflash_con.close()"""
+    codeflash_con.close()
+"""
 
     test_path = (
         pathlib.Path(__file__).parent.resolve()
@@ -634,11 +655,15 @@ def test_sort():
         output = sorter(input)
         assert output == expected_output"""
 
-    expected = """import time
-import gc
+    expected = """import gc
 import os
 import sqlite3
+import time
+
 import dill as pickle
+
+from code_to_optimize.bubble_sort import sorter
+
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -658,7 +683,6 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
-from code_to_optimize.bubble_sort import sorter
 
 def test_sort():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
@@ -673,7 +697,8 @@ def test_sort():
         codeflash_return_value = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '6_2', codeflash_cur, codeflash_con, input)
         output = codeflash_return_value
         assert output == expected_output
-    codeflash_con.close()"""
+    codeflash_con.close()
+"""
 
     test_path = (
         pathlib.Path(__file__).parent.resolve()
@@ -781,11 +806,16 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(output, list(range(50)))
 """
 
-    expected = """import time
-import gc
+    expected = """import gc
 import os
 import sqlite3
+import time
+import unittest
+
 import dill as pickle
+
+from code_to_optimize.bubble_sort import sorter
+
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -805,8 +835,6 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
-import unittest
-from code_to_optimize.bubble_sort import sorter
 
 class TestPigLatin(unittest.TestCase):
 
@@ -827,7 +855,8 @@ class TestPigLatin(unittest.TestCase):
         codeflash_return_value = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '11', codeflash_cur, codeflash_con, input)
         output = codeflash_return_value
         self.assertEqual(output, list(range(50)))
-        codeflash_con.close()"""
+        codeflash_con.close()
+"""
 
     test_path = (
         pathlib.Path(__file__).parent.resolve()
@@ -936,11 +965,17 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(output, expected_output)
 """
 
-    expected = """import time
-import gc
+    expected = """import gc
 import os
 import sqlite3
+import time
+import unittest
+
 import dill as pickle
+from parameterized import parameterized
+
+from code_to_optimize.bubble_sort import sorter
+
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -960,9 +995,6 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
-import unittest
-from parameterized import parameterized
-from code_to_optimize.bubble_sort import sorter
 
 class TestPigLatin(unittest.TestCase):
 
@@ -975,7 +1007,8 @@ class TestPigLatin(unittest.TestCase):
         codeflash_return_value = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_cur, codeflash_con, input)
         output = codeflash_return_value
         self.assertEqual(output, expected_output)
-        codeflash_con.close()"""
+        codeflash_con.close()
+"""
 
     test_path = (
         pathlib.Path(__file__).parent.resolve()
@@ -1080,11 +1113,16 @@ class TestPigLatin(unittest.TestCase):
             output = sorter(input)
             self.assertEqual(output, expected_output)"""
 
-    expected = """import time
-import gc
+    expected = """import gc
 import os
 import sqlite3
+import time
+import unittest
+
 import dill as pickle
+
+from code_to_optimize.bubble_sort import sorter
+
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -1104,8 +1142,6 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
-import unittest
-from code_to_optimize.bubble_sort import sorter
 
 class TestPigLatin(unittest.TestCase):
 
@@ -1122,7 +1158,8 @@ class TestPigLatin(unittest.TestCase):
             codeflash_return_value = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '6_2', codeflash_cur, codeflash_con, input)
             output = codeflash_return_value
             self.assertEqual(output, expected_output)
-        codeflash_con.close()"""
+        codeflash_con.close()
+"""
 
     test_path = (
         pathlib.Path(__file__).parent.resolve()
@@ -1231,11 +1268,17 @@ class TestPigLatin(unittest.TestCase):
             self.assertEqual(output, expected_output)
 """
 
-    expected = """import time
-import gc
+    expected = """import gc
 import os
 import sqlite3
+import time
+import unittest
+
 import dill as pickle
+from parameterized import parameterized
+
+from code_to_optimize.bubble_sort import sorter
+
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -1255,9 +1298,6 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
-import unittest
-from parameterized import parameterized
-from code_to_optimize.bubble_sort import sorter
 
 class TestPigLatin(unittest.TestCase):
 
@@ -1271,7 +1311,8 @@ class TestPigLatin(unittest.TestCase):
             codeflash_return_value = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4_0', codeflash_cur, codeflash_con, input)
             output = codeflash_return_value
             self.assertEqual(output, expected_output)
-        codeflash_con.close()"""
+        codeflash_con.close()
+"""
 
     test_path = (
         pathlib.Path(__file__).parent.resolve()
@@ -1447,11 +1488,14 @@ def test_class_name_A_function_name():
     ret = class_name_A.function_name(**args)
 """
 
-    expected = """import time
-import gc
+    expected = """import gc
 import os
 import sqlite3
+import time
+
 import dill as pickle
+from module import class_name as class_name_A
+
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -1471,7 +1515,6 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
-from module import class_name as class_name_A
 
 def test_class_name_A_function_name():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
@@ -1480,7 +1523,8 @@ def test_class_name_A_function_name():
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     codeflash_return_value = codeflash_wrap(class_name_A.function_name, '{module_path}', None, 'test_class_name_A_function_name', 'class_name_A.function_name', '4', codeflash_cur, codeflash_con, **args)
     ret = codeflash_return_value
-    codeflash_con.close()"""
+    codeflash_con.close()
+"""
 
     test_path = (
         pathlib.Path(__file__).parent.resolve()
@@ -1520,11 +1564,15 @@ def test_common_tags_1():
     assert find_common_tags(articles_2) == set(1)
 """
 
-    expected = """import time
-import gc
+    expected = """import gc
 import os
 import sqlite3
+import time
+
 import dill as pickle
+
+from codeflash.result.common_tags import find_common_tags
+
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
@@ -1544,7 +1592,6 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
-from codeflash.result.common_tags import find_common_tags
 
 def test_common_tags_1():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
@@ -1557,7 +1604,8 @@ def test_common_tags_1():
     articles_2 = [1, 2]
     codeflash_return_value = codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '7', codeflash_cur, codeflash_con, articles_2)
     assert codeflash_return_value == set(1)
-    codeflash_con.close()"""
+    codeflash_con.close()
+"""
 
     test_path = (
         pathlib.Path(__file__).parent.resolve()

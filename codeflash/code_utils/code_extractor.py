@@ -204,7 +204,10 @@ def get_code_no_skeleton(file_path: str, target_name: str) -> str | None:
 
     while stack:
         node = stack.pop()
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name_parts[-1]:
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            and node.name == name_parts[-1]
+        ):
             target_node = node
             break
         stack.extend(list(ast.iter_child_nodes(node)))

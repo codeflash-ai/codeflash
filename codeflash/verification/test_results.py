@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import sys
 from enum import Enum
-from typing import Iterator, List, Optional
+from typing import Iterator, Optional
 
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
@@ -72,7 +72,7 @@ class FunctionTestInvocation:
 
 
 class TestResults(BaseModel):
-    test_results: List[FunctionTestInvocation] = []
+    test_results: list[FunctionTestInvocation] = []
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
         self.test_results.append(function_test_invocation)
@@ -83,10 +83,10 @@ class TestResults(BaseModel):
     def get_by_id(
         self,
         invocation_id: InvocationId,
-    ) -> Optional[FunctionTestInvocation]:
+    ) -> FunctionTestInvocation | None:
         return next((r for r in self.test_results if r.id == invocation_id), None)
 
-    def get_all_ids(self) -> List[InvocationId]:
+    def get_all_ids(self) -> list[InvocationId]:
         return [test_result.id for test_result in self.test_results]
 
     def get_test_pass_fail_report(self) -> str:

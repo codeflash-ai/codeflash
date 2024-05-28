@@ -8,7 +8,7 @@ import sys
 import uuid
 from argparse import Namespace
 from collections import defaultdict
-from typing import List, Optional, Tuple, Union
+from typing import Optional
 
 import isort
 import libcst as cst
@@ -131,9 +131,12 @@ class Optimizer:
         logging.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
             return
-        if not env_utils.ensure_git_repo(module_root=self.args.module_root):
+        continue_execution, disable_pr = env_utils.ensure_git_repo(module_root=self.args.module_root)
+        if not continue_execution:
             logging.error("No git repository detected and user aborted run. Exiting...")
             sys.exit(1)
+        if disable_pr:
+            self.args.no_pr = True
 
         file_to_funcs_to_optimize: dict[str, list[FunctionToOptimize]]
         num_optimizable_functions: int
@@ -765,8 +768,6 @@ class Optimizer:
         function_trace_id: str,
         run_experiment: bool = False,
     ) -> Result[tuple[GeneratedTests, OptimizationSet], str]:
-        generated_original_test_source = None
-        instrumented_test_source = None
         max_workers = 2 if not run_experiment else 3
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_tests = executor.submit(
@@ -979,7 +980,7 @@ class Optimizer:
         original_generated_test_results: TestResults,
         generated_tests_path: str,
         best_runtime_until_now: int,
-        tests_in_file: Optional[List[TestsInFile]],
+        tests_in_file: list[TestsInFile] | None,
         run_generated_tests: bool,
     ) -> Result[OptimizedCandidateResult, str]:
         success = True
@@ -1152,7 +1153,7 @@ class Optimizer:
         test_file: str,
         test_type: TestType,
         optimization_iteration: int,
-        test_function: Optional[str] = None,
+        test_function: str | None = None,
     ) -> TestResults:
         result_file_path, run_result = run_tests(
             test_file,
@@ -1187,7 +1188,7 @@ class Optimizer:
         helper_function_names: list[str],
         module_path: str,
         function_trace_id: str,
-    ) -> Union[Tuple[str, str], None]:
+    ) -> tuple[str, str] | None:
         tests = generate_tests(
             self.aiservice_client,
             source_code_being_tested=source_code_being_tested,
