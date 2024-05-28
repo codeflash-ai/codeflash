@@ -15,6 +15,7 @@ from pydantic.dataclasses import dataclass
 from returns.pipeline import is_successful
 
 from codeflash.code_utils.compat import LF
+from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import (
     get_codeflash_api_key,
 )
@@ -57,9 +58,7 @@ def init_codeflash() -> None:
 
         configure_pyproject_toml(setup_info)
 
-        prompt_github_action(setup_info)
-
-        ask_run_end_to_end_test(setup_info)  # mebbe run this after the following help text?
+        # ask_run_end_to_end_test(setup_info)  # maybe run this after the following help text?
 
         click.echo(
             f"{LF}"
@@ -134,9 +133,7 @@ def collect_setup_info() -> SetupInfo:
     module_root_answer = inquirer.list_input(
         message="Which Python module do you want me to optimize going forward? (Usually the top-most directory with all of your Python source code)",
         choices=module_subdir_options,
-        default=(
-            project_name if project_name in module_subdir_options else module_subdir_options[0]
-        ),
+        default=(project_name if project_name in module_subdir_options else module_subdir_options[0]),
     )
     module_root = "." if module_root_answer == curdir_option else module_root_answer
     ph("cli-project-root-provided")
@@ -152,9 +149,7 @@ def collect_setup_info() -> SetupInfo:
         f"(If you don't have any tests yet, I can create an empty tests{os.pathsep} directory for you)",
         choices=test_subdir_options,
         default=(
-            default_tests_subdir
-            if default_tests_subdir in test_subdir_options
-            else test_subdir_options[0]
+            default_tests_subdir if default_tests_subdir in test_subdir_options else test_subdir_options[0]
         ),
     )
 
@@ -174,9 +169,7 @@ def collect_setup_info() -> SetupInfo:
                 ),
             ],
         )
-        tests_root = (
-            custom_tests_root_answer["path"] if custom_tests_root_answer else apologize_and_exit()
-        )
+        tests_root = custom_tests_root_answer["path"] if custom_tests_root_answer else apologize_and_exit()
     else:
         tests_root = tests_root_answer
     tests_root = os.path.relpath(tests_root, curdir)
@@ -185,9 +178,7 @@ def collect_setup_info() -> SetupInfo:
     # Autodiscover test framework
     autodetected_test_framework = detect_test_framework(curdir, tests_root)
     autodetected_suffix = (
-        f" (seems to me you're using {autodetected_test_framework})"
-        if autodetected_test_framework
-        else ""
+        f" (seems to me you're using {autodetected_test_framework})" if autodetected_test_framework else ""
     )
     test_framework = inquirer.list_input(
         message="Which test framework do you use?" + autodetected_suffix,
@@ -278,7 +269,9 @@ def check_for_toml_or_setup_file() -> Optional[str]:
             with open(setup_py_path, encoding="utf8") as f:
                 setup_py_content = f.read()
             project_name_match = re.search(
-                r"setup\s*\([^)]*?name\s*=\s*['\"](.*?)['\"]", setup_py_content, re.DOTALL,
+                r"setup\s*\([^)]*?name\s*=\s*['\"](.*?)['\"]",
+                setup_py_content,
+                re.DOTALL,
             )
             if project_name_match:
                 project_name = project_name_match.group(1)
@@ -335,82 +328,81 @@ def apologize_and_exit() -> NoReturn:
 
 
 # Ask if the user wants Codeflash to optimize new GitHub PRs
-def prompt_github_action(setup_info: SetupInfo) -> None:
-    optimize_yes = inquirer.confirm(
-        message="Do you want Codeflash to automatically optimize new Github PRs when they're opened (recommended)?",
+def install_github_action() -> None:
+    config, config_file_path = parse_config_file()
+
+    ph("cli-github-optimization-choice", {"optimize_prs": True})
+    repo = Repo(config["module_root"], search_parent_directories=True)
+    git_root = repo.git.rev_parse("--show-toplevel")
+    workflows_path = os.path.join(git_root, ".github", "workflows")
+    optimize_yaml_path = os.path.join(workflows_path, "codeflash-optimize.yaml")
+
+    confirm_creation_yes = inquirer.confirm(
+        message=f"I'll create a new GitHub actions workflow file at {optimize_yaml_path} ... is this OK?",
         default=True,
     )
-    ph("cli-github-optimization-choice", {"optimize_prs": optimize_yes})
-    if optimize_yes:
-        repo = Repo(setup_info.module_root, search_parent_directories=True)
-        git_root = repo.git.rev_parse("--show-toplevel")
-        workflows_path = os.path.join(git_root, ".github", "workflows")
-        optimize_yaml_path = os.path.join(workflows_path, "codeflash-optimize.yaml")
+    ph(
+        "cli-github-optimization-confirm-workflow-creation",
+        {"confirm_creation": confirm_creation_yes},
+    )
+    if confirm_creation_yes:
+        os.makedirs(workflows_path, exist_ok=True)
+        from importlib.resources import read_text
 
-        confirm_creation_yes = inquirer.confirm(
-            message=f"Great! I'll create a new workflow file at {optimize_yaml_path} ... is this OK?",
-            default=True,
+        py_version = sys.version_info
+        python_version_string = f" {py_version.major}.{py_version.minor}"
+
+        optimize_yml_content = read_text(
+            "codeflash.cli_cmds.workflows",
+            "codeflash-optimize.yaml",
         )
-        ph(
-            "cli-github-optimization-confirm-workflow-creation",
-            {"confirm_creation": confirm_creation_yes},
+        optimize_yml_content = optimize_yml_content.replace(
+            " {{ python_version }}",
+            python_version_string,
         )
-        if confirm_creation_yes:
-            os.makedirs(workflows_path, exist_ok=True)
-            from importlib.resources import read_text
-
-            py_version = sys.version_info
-            python_version_string = f" {py_version.major}.{py_version.minor}"
-
-            optimize_yml_content = read_text(
-                "codeflash.cli_cmds.workflows", "codeflash-optimize.yaml",
-            )
-            optimize_yml_content = optimize_yml_content.replace(
-                " {{ python_version }}", python_version_string,
-            )
-            with open(optimize_yaml_path, "w", encoding="utf8") as optimize_yml_file:
-                optimize_yml_file.write(optimize_yml_content)
-            click.echo(f"✅ Created {optimize_yaml_path}{LF}")
-            click.prompt(
-                f"Next, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.{LF}"
-                + f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} ...{LF}"
-                + f"Then, click 'New repository secret' to add your api key with the variable name CODEFLASH_API_KEY.{LF}",
-                default="",
-                type=click.STRING,
-                prompt_suffix="",
-                show_default=False,
-            )
-            click.launch(get_github_secrets_page_url(repo))
-            click.echo(
-                "🐙 I opened your Github secrets page! Note: if you see a 404, you probably don't have access to this "
-                + "repo's secrets; ask a repo admin to add it for you, or (not super recommended) you can temporarily "
-                f"hard-code your api key into the workflow file.{LF}",
-            )
-            click.pause()
-            click.echo()
-            click.prompt(
-                f"Finally, for the workflow to work, you'll need to edit the workflow file to install the right "
-                f"Python version and any project dependencies.{LF}"
-                + f"Press Enter to open {optimize_yaml_path} in your editor.{LF}",
-                default="",
-                type=click.STRING,
-                prompt_suffix="",
-                show_default=False,
-            )
-            click.launch(optimize_yaml_path)
-            click.echo(
-                "📝 I opened the workflow file in your editor! You'll need to edit the steps that install the right Python "
-                + f"version and any project dependencies. See the comments in the file for more details.{LF}",
-            )
-            click.pause()
-            click.echo()
-            click.echo(
-                f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}",
-            )
-            ph("cli-github-workflow-created")
-        else:
-            click.echo("⏩️ Skipping GitHub workflow creation.")
-            ph("cli-github-workflow-skipped")
+        with open(optimize_yaml_path, "w", encoding="utf8") as optimize_yml_file:
+            optimize_yml_file.write(optimize_yml_content)
+        click.echo(f"✅ Created {optimize_yaml_path}{LF}")
+        click.prompt(
+            f"Next, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.{LF}"
+            + f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} ...{LF}"
+            + f"Then, click 'New repository secret' to add your api key with the variable name CODEFLASH_API_KEY.{LF}",
+            default="",
+            type=click.STRING,
+            prompt_suffix="",
+            show_default=False,
+        )
+        click.launch(get_github_secrets_page_url(repo))
+        click.echo(
+            "🐙 I opened your Github secrets page! Note: if you see a 404, you probably don't have access to this "
+            + "repo's secrets; ask a repo admin to add it for you, or (not super recommended) you can temporarily "
+            f"hard-code your api key into the workflow file.{LF}",
+        )
+        click.pause()
+        click.echo()
+        click.prompt(
+            f"Finally, for the workflow to work, you'll need to edit the workflow file to install the right "
+            f"Python version and any project dependencies.{LF}"
+            + f"Press Enter to open {optimize_yaml_path} in your editor.{LF}",
+            default="",
+            type=click.STRING,
+            prompt_suffix="",
+            show_default=False,
+        )
+        click.launch(optimize_yaml_path)
+        click.echo(
+            "📝 I opened the workflow file in your editor! You'll need to edit the steps that install the right Python "
+            + f"version and any project dependencies. See the comments in the file for more details.{LF}",
+        )
+        click.pause()
+        click.echo()
+        click.echo(
+            f"🚀 Codeflash is now configured to automatically optimize new Github PRs! Please also install the Codeflash GitHub app for this to work.{LF}",
+        )
+        ph("cli-github-workflow-created")
+    else:
+        click.echo("⏩️ Skipping GitHub workflow creation.")
+        ph("cli-github-workflow-skipped")
 
 
 # Create or update the pyproject.toml file with the Codeflash dependency & configuration

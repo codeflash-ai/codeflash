@@ -6,7 +6,7 @@ import git
 
 from codeflash.api.cfapi import check_github_app_installed_on_repo
 from codeflash.cli_cmds import logging_config
-from codeflash.cli_cmds.cmd_init import apologize_and_exit, init_codeflash
+from codeflash.cli_cmds.cmd_init import apologize_and_exit, init_codeflash, install_github_action
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
@@ -19,7 +19,7 @@ from codeflash.version import __version__ as version
 
 def parse_args() -> Namespace:
     parser = ArgumentParser()
-    parser.add_argument("command", nargs="?", help="The command to run (e.g., 'init')")
+    parser.add_argument("command", nargs="+", help="The command to run (e.g., 'init')")
     parser.add_argument("--file", help="Try to optimize only this file")
     parser.add_argument(
         "--function",
@@ -84,9 +84,16 @@ def process_cmd_args(args: Namespace) -> Namespace:
     if args.version:
         logging.info(f"Codeflash version {version}")
         exit()
-    if "command" in args and args.command == "init":
-        init_codeflash()
-        exit()
+    if "command" in args:
+        if args.command == ["init"]:
+            init_codeflash()
+            exit()
+        if args.command == ["init", "actions"]:
+            install_github_action()
+            exit()
+        else:
+            raise ValueError(f"Command {args.command} not recognized")
+
     if args.function and not args.file:
         raise ValueError("If you specify a --function, you must specify the --file it is in")
     if args.file:
