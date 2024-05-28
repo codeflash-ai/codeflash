@@ -84,7 +84,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
     if args.version:
         logging.info(f"Codeflash version {version}")
         exit()
-    if "command" in args:
+    if "command" in args and args.command:
         if args.command == ["init"]:
             init_codeflash()
             exit()
