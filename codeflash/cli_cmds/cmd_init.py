@@ -325,7 +325,6 @@ def apologize_and_exit() -> NoReturn:
     sys.exit(1)
 
 
-# Ask if the user wants Codeflash to optimize new GitHub PRs
 def install_github_action() -> None:
     config, config_file_path = parse_config_file()
 
