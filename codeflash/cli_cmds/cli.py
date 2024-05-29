@@ -1,25 +1,25 @@
 import logging
 import os
+import sys
 from argparse import SUPPRESS, ArgumentParser, Namespace
 
 import git
 
-from codeflash.api.cfapi import check_github_app_installed_on_repo
 from codeflash.cli_cmds import logging_config
-from codeflash.cli_cmds.cmd_init import apologize_and_exit, init_codeflash
+from codeflash.cli_cmds.cli_common import apologize_and_exit
+from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.git_utils import (
-    get_github_secrets_page_url,
     get_repo_owner_and_name,
 )
+from codeflash.code_utils.github_utils import get_github_secrets_page_url, require_github_app_or_exit
 from codeflash.version import __version__ as version
 
 
 def parse_args() -> Namespace:
     parser = ArgumentParser()
-    parser.add_argument("command", nargs="?", help="The command to run (e.g., 'init')")
+    parser.add_argument("command", nargs="*", help="The command to run (e.g., 'init' or 'init actions')")
     parser.add_argument("--file", help="Try to optimize only this file")
     parser.add_argument(
         "--function",
@@ -77,32 +77,45 @@ def parse_args() -> Namespace:
 
 
 def process_cmd_args(args: Namespace) -> Namespace:
+    is_init: bool = "command" in args and args.command and args.command[0] == "init"
     if args.verbose:
-        logging_config.set(logging.DEBUG)
+        logging_config.set_level(logging.DEBUG, echo_setting=not is_init)
     else:
-        logging_config.set(logging.INFO)
+        logging_config.set_level(logging.INFO, echo_setting=not is_init)
     if args.version:
         logging.info(f"Codeflash version {version}")
-        exit()
-    if "command" in args and args.command == "init":
-        init_codeflash()
-        exit()
+        sys.exit()
+
+    if is_init:
+        if args.command == ["init"]:
+            init_codeflash()
+            sys.exit()
+        if args.command == ["init", "actions"]:
+            install_github_actions()
+            sys.exit()
+        else:
+            logging.error(f"Command `{' '.join(args.command)}` not recognized")
+            sys.exit(1)
+
     if args.function and not args.file:
-        raise ValueError("If you specify a --function, you must specify the --file it is in")
+        logging.error("If you specify a --function, you must specify the --file it is in")
+        sys.exit(1)
     if args.file:
         if not os.path.exists(args.file):
-            raise ValueError(f"File {args.file} does not exist")
+            logging.error(f"File {args.file} does not exist")
+            exit(1)
         args.file = os.path.realpath(args.file)
     if args.replay_test:
         if not os.path.isfile(args.replay_test):
-            raise ValueError(f"Replay test file {args.replay_test} does not exist")
+            logging.error(f"Replay test file {args.replay_test} does not exist")
+            sys.exit(1)
         args.replay_test = os.path.realpath(args.replay_test)
 
     try:
         pyproject_config, pyproject_file_path = parse_config_file(args.config_file)
     except ValueError as e:
         logging.exception(e.args[0])
-        exit(1)
+        sys.exit(1)
     supported_keys = [
         "module_root",
         "tests_root",
@@ -173,19 +186,7 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
             apologize_and_exit()
         owner, repo = get_repo_owner_and_name(git_repo)
         if not args.no_pr:
-            try:
-                response = check_github_app_installed_on_repo(owner, repo)
-                if not response.ok or response.text != "true":
-                    logging.error(f"Error: {response.text}")
-                    raise Exception
-            except Exception:
-                logging.exception(
-                    f"Could not find the Codeflash GitHub App installed on the repository {owner}/{repo} or the GitHub"
-                    f" account linked to your CODEFLASH_API_KEY does not have access to the repository {owner}/{repo}.{LF}"
-                    "Please install the Codeflash GitHub App on your repository to use --all. You can install it by going to "
-                    f"https://github.com/settings/installations/{LF}",
-                )
-                apologize_and_exit()
+            require_github_app_or_exit(owner, repo)
     if not hasattr(args, "all"):
         args.all = None
     elif args.all == "":
