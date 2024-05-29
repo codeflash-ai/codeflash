@@ -94,7 +94,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
             install_github_actions()
             sys.exit()
         else:
-            logging.error(f"Command `{" ".join(args.command)}` not recognized")
+            logging.error(f"Command `{' '.join(args.command)}` not recognized")
             sys.exit(1)
 
     if args.function and not args.file:
