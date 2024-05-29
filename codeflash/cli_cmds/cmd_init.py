@@ -1,10 +1,11 @@
 import ast
+import logging
 import os
 import re
 import subprocess
 import sys
 import time
-from typing import NoReturn, Optional
+from typing import Optional
 
 import click
 import inquirer
@@ -14,12 +15,14 @@ from git import Repo
 from pydantic.dataclasses import dataclass
 from returns.pipeline import is_successful
 
+from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import (
     get_codeflash_api_key,
 )
-from codeflash.code_utils.git_utils import get_github_secrets_page_url
+from codeflash.code_utils.git_utils import get_repo_owner_and_name
+from codeflash.code_utils.github_utils import get_github_secrets_page_url, require_github_app_or_exit
 from codeflash.code_utils.shell_utils import (
     get_shell_rc_path,
     save_api_key_to_rc,
@@ -49,7 +52,6 @@ class SetupInfo:
 
 def init_codeflash() -> None:
     try:
-        click.echo(CODEFLASH_LOGO)
         click.echo(f"⚡️ Welcome to Codeflash! Let's get you set up.{LF}")
 
         did_add_new_key = prompt_api_key()
@@ -317,32 +319,35 @@ def check_for_toml_or_setup_file() -> Optional[str]:
     return project_name
 
 
-def apologize_and_exit() -> NoReturn:
-    click.echo(
-        "💡 If you're having trouble, see https://app.codeflash.ai/app/getting-started for further help getting started with Codeflash!",
-    )
-    click.echo("👋 Exiting...")
-    sys.exit(1)
-
-
 def install_github_actions() -> None:
-    config, config_file_path = parse_config_file()
+    try:
+        click.echo(
+            "⚡️ Codeflash can automatically optimize new Github PRs for you when they're opened. Let's get that set up!",
+        )
+        config, config_file_path = parse_config_file()
 
-    ph("cli-github-optimization-choice", {"optimize_prs": True})
-    repo = Repo(config["module_root"], search_parent_directories=True)
-    git_root = repo.git.rev_parse("--show-toplevel")
-    workflows_path = os.path.join(git_root, ".github", "workflows")
-    optimize_yaml_path = os.path.join(workflows_path, "codeflash-optimize.yaml")
+        ph("cli-github-optimization-choice", {"optimize_prs": True})
+        repo = Repo(config["module_root"], search_parent_directories=True)
 
-    confirm_creation_yes = inquirer.confirm(
-        message=f"I'll create a new GitHub actions workflow file at {optimize_yaml_path} ... is this OK?",
-        default=True,
-    )
-    ph(
-        "cli-github-optimization-confirm-workflow-creation",
-        {"confirm_creation": confirm_creation_yes},
-    )
-    if confirm_creation_yes:
+        owner, repo_name = get_repo_owner_and_name(repo)
+        require_github_app_or_exit(owner, repo_name)
+
+        git_root = repo.git.rev_parse("--show-toplevel")
+        workflows_path = os.path.join(git_root, ".github", "workflows")
+        optimize_yaml_path = os.path.join(workflows_path, "codeflash-optimize.yaml")
+
+        confirm_creation_yes = inquirer.confirm(
+            message=f"I'm going to create a new GitHub actions workflow file at {optimize_yaml_path} ... is this OK?",
+            default=True,
+        )
+        ph(
+            "cli-github-optimization-confirm-workflow-creation",
+            {"confirm_creation": confirm_creation_yes},
+        )
+        if not confirm_creation_yes:
+            click.echo("⏩️ Exiting workflow creation.")
+            ph("cli-github-workflow-skipped")
+            apologize_and_exit()
         os.makedirs(workflows_path, exist_ok=True)
         from importlib.resources import read_text
 
@@ -394,12 +399,11 @@ def install_github_actions() -> None:
         click.pause()
         click.echo()
         click.echo(
-            f"🚀 Codeflash is now configured to automatically optimize new Github PRs! Please also install the Codeflash GitHub app for this to work.{LF}",
+            f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}",
         )
         ph("cli-github-workflow-created")
-    else:
-        click.echo("⏩️ Skipping GitHub workflow creation.")
-        ph("cli-github-workflow-skipped")
+    except KeyboardInterrupt:
+        apologize_and_exit()
 
 
 # Create or update the pyproject.toml file with the Codeflash dependency & configuration
