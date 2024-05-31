@@ -19,8 +19,8 @@ from codeflash.version import __version__ as version
 
 def parse_args() -> Namespace:
     parser = ArgumentParser()
-    parser.add_argument('init', help='Initialize Codeflash for project')
-    parser.add_argument('init actions', nargs='?', help='Initialize github actions workflow')
+    parser.add_argument('init', nargs='*', help='Initialize Codeflash for Python project.')
+    parser.add_argument('init actions', nargs='*', help='Initialize GitHub Actions workflow')
     ##
     parser.add_argument("--file", help="Try to optimize only this file")
     parser.add_argument(
@@ -79,7 +79,8 @@ def parse_args() -> Namespace:
 
 
 def process_cmd_args(args: Namespace) -> Namespace:
-    is_init: bool = "command" in args and args.command and args.command[0] == "init"
+    is_init: bool = (args.init == "init")
+    print("is_init is", args.init)
     if args.verbose:
         logging_config.set_level(logging.DEBUG, echo_setting=not is_init)
     else:
@@ -87,7 +88,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
     if args.version:
         logging.info(f"Codeflash version {version}")
         sys.exit()
-    if args.init:
+    if is_init:
         init_actions_input = vars(args)["init actions"]
         if init_actions_input == "actions":
             install_github_actions()
