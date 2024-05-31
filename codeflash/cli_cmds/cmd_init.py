@@ -140,7 +140,9 @@ def collect_setup_info() -> SetupInfo:
     # Discover test directory
     default_tests_subdir = "tests"
     create_for_me_option = f"okay, create a tests{os.pathsep} directory for me!"
-    test_subdir_options = valid_subdirs if len(valid_subdirs) > 0 else [create_for_me_option]
+    test_subdir_options = valid_subdirs
+    if "tests" not in valid_subdirs:
+        test_subdir_options.append(create_for_me_option)
     custom_dir_option = "enter a custom directory..."
     test_subdir_options.append(custom_dir_option)
     tests_root_answer = inquirer.list_input(
