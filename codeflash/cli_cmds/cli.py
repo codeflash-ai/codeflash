@@ -21,7 +21,7 @@ def parse_args() -> Namespace:
     parser = ArgumentParser()
     subparsers = parser.add_subparsers(dest='command', help='Sub-commands')
 
-    init_parser = subparsers.add_parser('init', help='Initialize Codeflash for Python project.')
+    init_parser = subparsers.add_parser('init', help='Initialize Codeflash for a Python project.')
     init_parser.set_defaults(func=init_codeflash)
 
     init_actions_parser = subparsers.add_parser('init-actions', help='Initialize GitHub Actions workflow')
