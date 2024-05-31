@@ -57,13 +57,15 @@ def add_needed_imports_from_module(
                 asname=alias_pair[1],
             )
 
-    return (
-        RemoveImportsVisitor(dst_context)
-        .transform_module(
-            AddImportsVisitor(dst_context).transform_module(cst.parse_module(dst_module_code)),
-        )
-        .code.lstrip("\n")
-    )
+    try:
+        parsed_module = cst.parse_module(dst_module_code)
+    except cst.ParserSyntaxError as e:
+        logging.exception(f"Syntax error in destination module code: {e}")
+        return dst_module_code  # Return the original code if there's a syntax error
+
+    transformed_module = AddImportsVisitor(dst_context).transform_module(parsed_module)
+    transformed_module = RemoveImportsVisitor(dst_context).transform_module(transformed_module)
+    return transformed_module.code.lstrip("\n")
 
 
 def get_code(
