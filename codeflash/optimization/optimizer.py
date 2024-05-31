@@ -473,8 +473,8 @@ class Optimizer:
                 ) / best_test_runtime
                 logging.info(
                     f"Candidate runtime measured over {candidate_result.times_run} run{'s' if candidate_result.times_run > 1 else ''}: "
-                    f"{humanize_runtime(candidate_result.best_test_runtime)}, speedup ratio = "
-                    f"{((original_code_baseline.runtime - candidate_result.best_test_runtime) / candidate_result.best_test_runtime):.3f}",
+                    f"{humanize_runtime(best_test_runtime)}, speedup ratio = "
+                    f"{((original_code_baseline.runtime - best_test_runtime) / best_test_runtime):.3f}",
                 )
 
                 if speedup_critic(candidate_result, original_code_baseline.runtime, best_runtime_until_now):
