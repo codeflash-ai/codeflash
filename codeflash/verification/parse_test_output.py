@@ -323,7 +323,7 @@ def merge_test_results(
                         file_name=xml_result.file_name,
                         runtime=bin_result.runtime,
                         test_framework=xml_result.test_framework,
-                        did_pass=xml_result.did_pass,
+                        did_pass=bin_result.did_pass,
                         test_type=xml_result.test_type,
                         return_value=bin_result.return_value,
                         timed_out=xml_result.timed_out

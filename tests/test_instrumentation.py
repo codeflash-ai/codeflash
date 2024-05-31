@@ -46,7 +46,6 @@ import time
 import unittest
 
 import dill as pickle
-
 from code_to_optimize.bubble_sort import sorter
 
 
@@ -60,6 +59,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -125,12 +125,11 @@ import time
 
 import dill as pickle
 import pytest
+from codeflash.tracing.replay_test import get_next_arg_and_return
+from codeflash.validation.equivalence import compare_results
 from packagename.ml.yolo.image_reshaping_utils import \\
     prepare_image_for_yolo as \\
     packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo
-
-from codeflash.tracing.replay_test import get_next_arg_and_return
-from codeflash.validation.equivalence import compare_results
 
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
@@ -143,6 +142,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -206,7 +206,6 @@ import sqlite3
 import time
 
 import dill as pickle
-
 from code_to_optimize.bubble_sort import sorter
 
 
@@ -220,6 +219,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -253,10 +253,17 @@ def test_sort():
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/pytest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
-        success, new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+        success, new_test = inject_profiling_into_existing_test(
+            test_path, "sorter", project_root_path
+        )
         assert success
         assert new_test == expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_results_temp",
@@ -298,7 +305,8 @@ def test_sort():
         assert test_results[0].id.test_class_name is None
         assert test_results[0].id.test_function_name == "test_sort"
         assert (
-            test_results[0].id.test_module_path == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
+            test_results[0].id.test_module_path
+            == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
         )
         assert test_results[0].runtime > 0
         assert test_results[0].did_pass
@@ -308,7 +316,8 @@ def test_sort():
         assert test_results[1].id.test_class_name is None
         assert test_results[1].id.test_function_name == "test_sort"
         assert (
-            test_results[1].id.test_module_path == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
+            test_results[1].id.test_module_path
+            == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
@@ -340,7 +349,6 @@ import time
 
 import dill as pickle
 import pytest
-
 from code_to_optimize.bubble_sort import sorter
 
 
@@ -354,6 +362,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -382,10 +391,17 @@ def test_sort_parametrized(input, expected_output):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/pytest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
-        success, new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+        success, new_test = inject_profiling_into_existing_test(
+            test_path, "sorter", project_root_path
+        )
         assert success
         assert new_test == expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp",
@@ -486,7 +502,6 @@ import time
 
 import dill as pickle
 import pytest
-
 from code_to_optimize.bubble_sort import sorter
 
 
@@ -500,6 +515,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -530,10 +546,17 @@ def test_sort_parametrized_loop(input, expected_output):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/pytest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
-        success, new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+        success, new_test = inject_profiling_into_existing_test(
+            test_path, "sorter", project_root_path
+        )
         assert success
         assert new_test == expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp",
@@ -661,7 +684,6 @@ import sqlite3
 import time
 
 import dill as pickle
-
 from code_to_optimize.bubble_sort import sorter
 
 
@@ -675,6 +697,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -708,10 +731,17 @@ def test_sort():
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/pytest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
-        success, new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+        success, new_test = inject_profiling_into_existing_test(
+            test_path, "sorter", project_root_path
+        )
         assert success
         assert new_test == expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_loop_results_temp",
@@ -813,7 +843,6 @@ import time
 import unittest
 
 import dill as pickle
-
 from code_to_optimize.bubble_sort import sorter
 
 
@@ -827,6 +856,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -866,10 +896,17 @@ class TestPigLatin(unittest.TestCase):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/unittest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
-        success, new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+        success, new_test = inject_profiling_into_existing_test(
+            test_path, "sorter", project_root_path
+        )
 
         assert success
         assert new_test == expected.format(
@@ -1018,10 +1055,17 @@ class TestPigLatin(unittest.TestCase):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/unittest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
-        success, new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+        success, new_test = inject_profiling_into_existing_test(
+            test_path, "sorter", project_root_path
+        )
         assert success
         assert new_test == expected.format(
             module_path="tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_results_temp",
@@ -1169,10 +1213,17 @@ class TestPigLatin(unittest.TestCase):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/unittest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
-        success, new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+        success, new_test = inject_profiling_into_existing_test(
+            test_path, "sorter", project_root_path
+        )
         assert success
         assert new_test == expected.format(
             module_path="tests.unittest.test_perfinjector_bubble_sort_unittest_loop_results_temp",
@@ -1322,10 +1373,17 @@ class TestPigLatin(unittest.TestCase):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/unittest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
-        success, new_test = inject_profiling_into_existing_test(test_path, "sorter", project_root_path)
+        success, new_test = inject_profiling_into_existing_test(
+            test_path, "sorter", project_root_path
+        )
         assert success
         assert new_test == expected.format(
             module_path="tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp",
@@ -1435,7 +1493,9 @@ class TestPigLatin(unittest.TestCase):
 
 
 def test_update_line_node() -> None:
-    injectperf = InjectPerfOnly("sorter", "code_to_optimize.tests.pytest.test_bubble_sort")
+    injectperf = InjectPerfOnly(
+        "sorter", "code_to_optimize.tests.pytest.test_bubble_sort"
+    )
     node = ast.Assign(
         targets=[ast.Name(id="output", ctx=ast.Store())],
         value=ast.Call(
@@ -1474,7 +1534,10 @@ from nuitka.nodes.ImportNodes import ExpressionBuiltinImport as nuitka_nodes_Imp
 
     visitor = FunctionImportedAsVisitor("ExpressionBuiltinImport.method_name")
     visitor.visit(tree)
-    assert visitor.imported_as == "nuitka_nodes_ImportNodes_ExpressionBuiltinImport.method_name"
+    assert (
+        visitor.imported_as
+        == "nuitka_nodes_ImportNodes_ExpressionBuiltinImport.method_name"
+    )
 
     visitor = FunctionImportedAsVisitor("class_name_B")
     visitor.visit(tree)
@@ -1507,6 +1570,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -1534,7 +1598,9 @@ def test_class_name_A_function_name():
         with open(test_path, "w") as f:
             f.write(code)
 
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
         success, new_test = inject_profiling_into_existing_test(
             test_path,
@@ -1570,7 +1636,6 @@ import sqlite3
 import time
 
 import dill as pickle
-
 from codeflash.result.common_tags import find_common_tags
 
 
@@ -1584,6 +1649,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -1615,8 +1681,13 @@ def test_common_tags_1():
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/pytest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
         success, new_test = inject_profiling_into_existing_test(
             test_path,

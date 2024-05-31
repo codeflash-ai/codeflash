@@ -1053,14 +1053,16 @@ class Optimizer:
                             test_invocation.id,
                         )
                         if (
-                            original_test_invocation is None
-                            or (
-                                not original_test_invocation.timed_out
-                                and (test_invocation.did_pass != original_test_invocation.did_pass)
+                            original_test_invocation is not None
+                            and not original_test_invocation.timed_out
+                            and (
+                                test_invocation.did_pass
+                                != original_test_invocation.did_pass
                             )
-                            or not return_values_are_equal
-                        ):
-                            logging.info("Test results did not match the test results of the original code.")
+                        ) or not return_values_are_equal:
+                            logging.info(
+                                "Test results did not match the test results of the original code."
+                            )
                             logging.info(
                                 f"Test {test_invocation.id} failed. Skipping this candidate.",
                             )

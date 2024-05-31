@@ -18,6 +18,9 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
     for test_id in test_ids_superset:
         original_test_result = original_results.get_by_id(test_id)
         cdd_test_results = candidate_results.get_by_id(test_id)
+        if cdd_test_results is not None and original_test_result is None:
+            continue
+
         if original_test_result is None or cdd_test_results is None:
             are_equal = False
             break
