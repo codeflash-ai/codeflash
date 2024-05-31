@@ -1,8 +1,9 @@
 ﻿from __future__ import annotations
+
 from sqlalchemy import create_engine, Integer, String, ForeignKey
-from sqlalchemy.orm import sessionmaker, relationship, Relationship, Session as SessionType, DeclarativeBase
 from sqlalchemy.engine.base import Engine
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import sessionmaker, relationship, Relationship, Session, DeclarativeBase
 
 
 # Custom base class
@@ -10,24 +11,21 @@ class Base(DeclarativeBase):
     pass
 
 
-# Setup
 engine: Engine = create_engine('sqlite:///example.db')
 
-# Typing for sessionmaker
-Session = sessionmaker(bind=engine)
-session: SessionType = Session()
+session_factory = sessionmaker(bind=engine)
+session: Session = session_factory()
 
 
-# Models
-class User(Base):  # Base now properly recognized
-    __tablename__ = 'users'
+class User(Base):
+    __tablename__: str = 'users'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String)
     posts: Relationship[list[Post]] = relationship("Post", order_by="Post.id", back_populates="user")
 
 
-class Post(Base):  # Base now properly recognized
-    __tablename__ = 'posts'
+class Post(Base):
+    __tablename__: str = 'posts'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'))
@@ -37,7 +35,6 @@ class Post(Base):  # Base now properly recognized
 Base.metadata.create_all(engine)
 
 
-# Inefficient query
 def get_user_posts() -> dict[User, list[Post]]:
     users: list[User] = session.query(User).all()  # Query all users
     user_posts: dict[User, list[Post]] = {}
