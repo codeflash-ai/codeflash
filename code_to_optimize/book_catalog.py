@@ -1,5 +1,5 @@
-from __future__ import annotations
-
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, Text
+from sqlalchemy.orm import Session, relationship
 from time import time
 
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, Text
@@ -47,7 +47,6 @@ def init_table() -> Session:
 
     return session
 
-
 def get_authors(session: Session) -> list[Author]:
     books: list[Book] = session.query(Book).all()
     _authors: list[Author] = []
@@ -59,6 +58,19 @@ def get_authors(session: Session) -> list[Author]:
         key=lambda x: x.id,
     )
 
+def get_authors2(num_authors) -> list[Author]:
+    engine: Engine = create_engine(POSTGRES_CONNECTION_STRING, echo=True)
+    session_factory: sessionmaker[Session] = sessionmaker(bind=engine)
+    session: Session = session_factory()
+    books: list[Book] = session.query(Book).all()
+    _authors: list[Author] = []
+    book: Book
+    for book in books:
+        _authors.append(book.author)
+    return sorted(
+        list(set(_authors)),
+        key=lambda x: x.id,
+    )[:num_authors]
 
 if __name__ == "__main__":
     engine: Engine = create_engine(POSTGRES_CONNECTION_STRING, echo=True)
