@@ -63,7 +63,9 @@ def generate_tests(
                 path,
             )
         else:
-            logging.error(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")
+            logging.warning(
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}"
+            )
             return None
 
     # TODO: Add support for inspired tests
