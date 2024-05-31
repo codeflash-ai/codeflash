@@ -19,7 +19,11 @@ from codeflash.version import __version__ as version
 
 def parse_args() -> Namespace:
     parser = ArgumentParser()
-    parser.add_argument("command", nargs="*", help="The command to run (e.g., 'init' or 'init actions')")
+    # parser.add_argument("command", nargs="*", help="The command to run (e.g., 'init' or 'init actions')")
+    #subparsers = parser.add_subparsers(dest='command')
+    parser.add_argument('init', help='Initialize Codeflash for project')
+    parser.add_argument('init actions', nargs='?', help='Initialize github actions workflow')
+    ##
     parser.add_argument("--file", help="Try to optimize only this file")
     parser.add_argument(
         "--function",
@@ -85,18 +89,17 @@ def process_cmd_args(args: Namespace) -> Namespace:
     if args.version:
         logging.info(f"Codeflash version {version}")
         sys.exit()
-
-    if is_init:
-        if args.command == ["init"]:
-            init_codeflash()
-            sys.exit()
-        if args.command == ["init", "actions"]:
+    if args.init:
+        init_actions_input = vars(args)["init actions"]
+        if init_actions_input == "actions":
             install_github_actions()
-            sys.exit()
-        else:
-            logging.error(f"Command `{' '.join(args.command)}` not recognized")
             sys.exit(1)
-
+        elif init_actions_input is None:
+            init_codeflash()
+            sys.exit(1)
+        else:
+            logging.error(f"Command `{' '.join(sys.argv[1:])}` not recognized")
+            sys.exit(1)
     if args.function and not args.file:
         logging.error("If you specify a --function, you must specify the --file it is in")
         sys.exit(1)
