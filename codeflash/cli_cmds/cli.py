@@ -121,7 +121,6 @@ def process_cmd_args(args: Namespace) -> Namespace:
         "tests_root",
         "test_framework",
         "ignore_paths",
-        "minimum_performance_gain",
         "pytest_cmd",
         "formatter_cmd",
         "disable_telemetry",

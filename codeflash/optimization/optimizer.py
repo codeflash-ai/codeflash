@@ -8,11 +8,9 @@ import sys
 import uuid
 from argparse import Namespace
 from collections import defaultdict
-from typing import Optional
 
 import isort
 import libcst as cst
-from pydantic import BaseModel
 from returns.pipeline import is_successful
 from returns.result import Failure, Result, Success
 
@@ -52,11 +50,20 @@ from codeflash.discovery.functions_to_optimize import (
     get_functions_to_optimize,
 )
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
+from codeflash.models.models import (
+    BestOptimization,
+    CodeOptimizationContext,
+    GeneratedTests,
+    OptimizationSet,
+    OptimizedCandidateResult,
+    OriginalCodeBaseline,
+)
 from codeflash.optimization.function_context import (
     Source,
     get_constrained_function_context_and_helper_functions,
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
+from codeflash.result.critic import speedup_critic
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry import posthog
 from codeflash.telemetry.posthog import ph
@@ -67,43 +74,6 @@ from codeflash.verification.test_results import TestResults, TestType
 from codeflash.verification.test_runner import run_tests
 from codeflash.verification.verification_utils import TestConfig, get_test_file_path
 from codeflash.verification.verifier import generate_tests
-
-
-class OptimizationSet(BaseModel):
-    control: list[OptimizedCandidate]
-    experiment: Optional[list[OptimizedCandidate]]
-
-
-class OptimizedCandidateResult(BaseModel):
-    times_run: int
-    best_test_runtime: int
-    best_test_results: TestResults
-
-
-class OriginalCodeBaseline(BaseModel):
-    generated_test_results: TestResults
-    existing_test_results: TestResults
-    overall_test_results: Optional[TestResults]
-    runtime: int
-
-
-class GeneratedTests(BaseModel):
-    generated_original_test_source: str
-    instrumented_test_source: str
-
-
-class BestOptimization(BaseModel):
-    candidate: OptimizedCandidate
-    helper_functions: list[tuple[Source, str, str]]
-    runtime: int
-    winning_test_results: TestResults
-
-
-class CodeOptimizationContext(BaseModel):
-    code_to_optimize_with_helpers: str
-    contextual_dunder_methods: set[tuple[str, str]]
-    helper_functions: list[tuple[Source, str, str]]
-    preexisting_functions: list[str]
 
 
 class Optimizer:
@@ -501,25 +471,13 @@ class Optimizer:
                 speedup_ratios[candidate.optimization_id] = (
                     original_code_baseline.runtime - best_test_runtime
                 ) / best_test_runtime
-
                 logging.info(
                     f"Candidate runtime measured over {candidate_result.times_run} run{'s' if candidate_result.times_run > 1 else ''}: "
                     f"{humanize_runtime(best_test_runtime)}, speedup ratio = "
                     f"{((original_code_baseline.runtime - best_test_runtime) / best_test_runtime):.3f}",
                 )
-                if (
-                    ((original_code_baseline.runtime - best_test_runtime) / best_test_runtime)
-                    > self.args.minimum_performance_gain
-                ) and best_test_runtime < best_runtime_until_now:
-                    logging.info(
-                        "This candidate is better than the previous best candidate.",
-                    )
 
-                    logging.info(
-                        f"Original runtime: {humanize_runtime(original_code_baseline.runtime)} Best test runtime: "
-                        f"{humanize_runtime(best_test_runtime)}, ratio = "
-                        f"{((original_code_baseline.runtime - best_test_runtime) / best_test_runtime)}",
-                    )
+                if speedup_critic(candidate_result, original_code_baseline.runtime, best_runtime_until_now):
                     best_optimization = BestOptimization(
                         candidate=candidate,
                         helper_functions=code_context.helper_functions,
@@ -527,6 +485,7 @@ class Optimizer:
                         winning_test_results=candidate_result.best_test_results,
                     )
                     best_runtime_until_now = best_test_runtime
+
             self.write_code_and_helpers(
                 original_code,
                 original_helper_code,
