@@ -19,7 +19,13 @@ from codeflash.version import __version__ as version
 
 def parse_args() -> Namespace:
     parser = ArgumentParser()
-    parser.add_argument("command", nargs="*", help="The command to run (e.g., 'init' or 'init actions')")
+    subparsers = parser.add_subparsers(dest='command', help='Sub-commands')
+
+    init_parser = subparsers.add_parser('init', help='Initialize Codeflash for a Python project.')
+    init_parser.set_defaults(func=init_codeflash)
+
+    init_actions_parser = subparsers.add_parser('init-actions', help='Initialize GitHub Actions workflow')
+    init_actions_parser.set_defaults(func=install_github_actions)
     parser.add_argument("--file", help="Try to optimize only this file")
     parser.add_argument(
         "--function",
@@ -77,7 +83,7 @@ def parse_args() -> Namespace:
 
 
 def process_cmd_args(args: Namespace) -> Namespace:
-    is_init: bool = "command" in args and args.command and args.command[0] == "init"
+    is_init: bool = args.command.startswith("init") if args.command else False
     if args.verbose:
         logging_config.set_level(logging.DEBUG, echo_setting=not is_init)
     else:
@@ -85,18 +91,9 @@ def process_cmd_args(args: Namespace) -> Namespace:
     if args.version:
         logging.info(f"Codeflash version {version}")
         sys.exit()
-
-    if is_init:
-        if args.command == ["init"]:
-            init_codeflash()
-            sys.exit()
-        if args.command == ["init", "actions"]:
-            install_github_actions()
-            sys.exit()
-        else:
-            logging.error(f"Command `{' '.join(args.command)}` not recognized")
-            sys.exit(1)
-
+    if args.command:
+        args.func()
+        sys.exit(1)
     if args.function and not args.file:
         logging.error("If you specify a --function, you must specify the --file it is in")
         sys.exit(1)
