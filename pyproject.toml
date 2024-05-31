@@ -12,6 +12,9 @@ packages = [
 ]
 keywords = ["codeflash", "performance", "optimization", "ai", "code", "machine learning", "LLM"]
 
+# Don't forget to install the poetry plugins we use too:
+# poetry self add poetry-dynamic-versioning
+
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
 unidiff = ">=0.7.4"
