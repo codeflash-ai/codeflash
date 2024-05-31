@@ -84,11 +84,6 @@ def get_repo_owner_and_name(repo: Optional[Repo] = None) -> tuple[str, str]:
     return repo_owner, repo_name
 
 
-def get_github_secrets_page_url(repo: Optional[Repo] = None) -> str:
-    owner, repo_name = get_repo_owner_and_name(repo)
-    return f"https://github.com/{owner}/{repo_name}/settings/secrets/actions"
-
-
 def git_root_dir(repo: Optional[Repo] = None) -> str:
     repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
     return repository.working_dir
