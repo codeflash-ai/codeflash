@@ -1,5 +1,4 @@
 import ast
-import logging
 import os
 import re
 import subprocess
@@ -125,7 +124,7 @@ def collect_setup_info() -> SetupInfo:
         if not d.startswith(".") and not d.startswith("__") and d not in ignore_subdirs
     ]
 
-    valid_module_subdirs = [dir for dir in valid_subdirs if dir != "tests"]
+    valid_module_subdirs = [d for d in valid_subdirs if d != "tests"]
 
     curdir_option = "current directory (" + curdir + ")"
     module_subdir_options = valid_module_subdirs + [curdir_option]
@@ -349,15 +348,11 @@ def install_github_actions() -> None:
             ph("cli-github-workflow-skipped")
             apologize_and_exit()
         os.makedirs(workflows_path, exist_ok=True)
-        from importlib.resources import read_text
-
+        from importlib.resources import files
         py_version = sys.version_info
         python_version_string = f" {py_version.major}.{py_version.minor}"
-
-        optimize_yml_content = read_text(
-            "codeflash.cli_cmds.workflows",
-            "codeflash-optimize.yaml",
-        )
+        optimize_yml_content = files("codeflash").joinpath(
+            "cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding='utf-8')
         optimize_yml_content = optimize_yml_content.replace(
             " {{ python_version }}",
             python_version_string,
