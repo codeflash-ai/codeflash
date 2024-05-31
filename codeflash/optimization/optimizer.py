@@ -478,13 +478,13 @@ class Optimizer:
                 )
 
                 if speedup_critic(candidate_result, original_code_baseline.runtime, best_runtime_until_now):
-                    best_runtime_until_now = best_test_runtime
                     best_optimization = BestOptimization(
                         candidate=candidate,
                         helper_functions=code_context.helper_functions,
                         runtime=best_test_runtime,
                         winning_test_results=candidate_result.best_test_results,
                     )
+                    best_runtime_until_now = best_test_runtime
 
             self.write_code_and_helpers(
                 original_code,
