@@ -19,8 +19,6 @@ from codeflash.version import __version__ as version
 
 def parse_args() -> Namespace:
     parser = ArgumentParser()
-    # parser.add_argument("command", nargs="*", help="The command to run (e.g., 'init' or 'init actions')")
-    #subparsers = parser.add_subparsers(dest='command')
     parser.add_argument('init', help='Initialize Codeflash for project')
     parser.add_argument('init actions', nargs='?', help='Initialize github actions workflow')
     ##
