@@ -82,7 +82,6 @@ def parse_args() -> Namespace:
 
 def process_cmd_args(args: Namespace) -> Namespace:
     is_init: bool = (args.command == "init")
-    print("is_init is", args.command)
     if args.verbose:
         logging_config.set_level(logging.DEBUG, echo_setting=not is_init)
     else:
