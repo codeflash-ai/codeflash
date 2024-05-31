@@ -184,10 +184,10 @@ def test_prepare_image_for_yolo():
             os.path.dirname(f.name),
         )
     assert success
-    assert new_test == expected.format(
+    assert new_test.replace('"', "'") == expected.format(
         module_path=os.path.basename(f.name),
         tmp_dir_path=get_run_tmp_file("test_return_values"),
-    )
+    ).replace('"', "'")
 
 
 def test_perfinjector_bubble_sort_results() -> None:
@@ -269,10 +269,10 @@ def test_sort():
             test_path, "sorter", project_root_path
         )
         assert success
-        assert new_test == expected.format(
+        assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_results_temp",
             tmp_dir_path=get_run_tmp_file("test_return_values"),
-        )
+        ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
         with open(test_path, "w") as f:
@@ -408,10 +408,10 @@ def test_sort_parametrized(input, expected_output):
             test_path, "sorter", project_root_path
         )
         assert success
-        assert new_test == expected.format(
+        assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp",
             tmp_dir_path=get_run_tmp_file("test_return_values"),
-        )
+        ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
         with open(test_path, "w") as f:
@@ -564,10 +564,10 @@ def test_sort_parametrized_loop(input, expected_output):
             test_path, "sorter", project_root_path
         )
         assert success
-        assert new_test == expected.format(
+        assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp",
             tmp_dir_path=get_run_tmp_file("test_return_values"),
-        )
+        ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
         with open(test_path, "w") as f:
@@ -750,10 +750,10 @@ def test_sort():
             test_path, "sorter", project_root_path
         )
         assert success
-        assert new_test == expected.format(
+        assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_loop_results_temp",
             tmp_dir_path=get_run_tmp_file("test_return_values"),
-        )
+        ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
         with open(test_path, "w") as f:
@@ -917,10 +917,10 @@ class TestPigLatin(unittest.TestCase):
         )
 
         assert success
-        assert new_test == expected.format(
+        assert new_test.replace('"', "'") == expected.format(
             module_path="tests.unittest.test_perfinjector_bubble_sort_unittest_results_temp",
             tmp_dir_path=get_run_tmp_file("test_return_values"),
-        )
+        ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
         with open(test_path, "w") as f:
@@ -1076,10 +1076,10 @@ class TestPigLatin(unittest.TestCase):
             test_path, "sorter", project_root_path
         )
         assert success
-        assert new_test == expected.format(
+        assert new_test.replace('"', "'") == expected.format(
             module_path="tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_results_temp",
             tmp_dir_path=get_run_tmp_file("test_return_values"),
-        )
+        ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
         with open(test_path, "w") as f:
@@ -1235,10 +1235,10 @@ class TestPigLatin(unittest.TestCase):
             test_path, "sorter", project_root_path
         )
         assert success
-        assert new_test == expected.format(
+        assert new_test.replace('"', "'") == expected.format(
             module_path="tests.unittest.test_perfinjector_bubble_sort_unittest_loop_results_temp",
             tmp_dir_path=get_run_tmp_file("test_return_values"),
-        )
+        ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
         with open(test_path, "w") as f:
@@ -1396,10 +1396,10 @@ class TestPigLatin(unittest.TestCase):
             test_path, "sorter", project_root_path
         )
         assert success
-        assert new_test == expected.format(
+        assert new_test.replace('"', "'") == expected.format(
             module_path="tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp",
             tmp_dir_path=get_run_tmp_file("test_return_values"),
-        )
+        ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
         with open(test_path, "w") as f:
@@ -1621,10 +1621,10 @@ def test_class_name_A_function_name():
     finally:
         pathlib.Path(test_path).unlink(missing_ok=True)
     assert success
-    assert new_test == expected.format(
+    assert new_test.replace('"', "'") == expected.format(
         tmp_dir_path=get_run_tmp_file("test_return_values"),
         module_path="tests.pytest.test_class_function_instrumentation_temp",
-    )
+    ).replace('"', "'")
 
 
 def test_wrong_function_instrumentation() -> None:
@@ -1707,9 +1707,9 @@ def test_common_tags_1():
             project_root_path,
         )
         assert success
-        assert new_test == expected.format(
+        assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_wrong_function_instrumentation_temp",
             tmp_dir_path=get_run_tmp_file("test_return_values"),
-        )
+        ).replace('"', "'")
     finally:
         pathlib.Path(test_path).unlink(missing_ok=True)
