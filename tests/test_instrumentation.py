@@ -101,10 +101,10 @@ class TestPigLatin(unittest.TestCase):
             os.path.dirname(f.name),
         )
     assert success
-    assert new_test == expected.format(
+    assert new_test.replace('"', "'") == expected.format(
         module_path=os.path.basename(f.name),
         tmp_dir_path=get_run_tmp_file("test_return_values"),
-    )
+    ).replace('"', "'")
 
 
 def test_perfinjector_only_replay_test() -> None:
@@ -1568,7 +1568,6 @@ import sqlite3
 import time
 
 import dill as pickle
-
 from module import class_name as class_name_A
 
 
