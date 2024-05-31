@@ -2,8 +2,6 @@ import os
 
 import tomlkit
 
-from codeflash.code_utils.config_consts import MIN_IMPROVEMENT_THRESHOLD
-
 
 def find_pyproject_toml(config_file=None):
     # Find the pyproject.toml file on the root of the project
@@ -57,10 +55,6 @@ def parse_config_file(config_file_path=None):
     # default values:
     path_keys = ["module-root", "tests-root"]
     path_list_keys = ["ignore-paths"]
-    # TODO: minimum-peformance-gain should become a more dynamic auto-detection in the future
-    float_keys = {
-        "minimum-performance-gain": MIN_IMPROVEMENT_THRESHOLD,
-    }  # the value is the default value
     str_keys = {
         "pytest-cmd": "pytest",
         "formatter-cmd": "black",
@@ -70,11 +64,6 @@ def parse_config_file(config_file_path=None):
         "disable-telemetry": False,
     }
 
-    for key in float_keys:
-        if key in config:
-            config[key] = float(config[key])
-        else:
-            config[key] = float_keys[key]
     for key in str_keys:
         if key in config:
             config[key] = str(config[key])
