@@ -129,7 +129,7 @@ import pytest
 from packagename.ml.yolo.image_reshaping_utils import \\
     prepare_image_for_yolo as \\
     packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo
-    
+
 from codeflash.tracing.replay_test import get_next_arg_and_return
 from codeflash.validation.equivalence import compare_results
 
@@ -144,7 +144,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -222,7 +222,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -366,7 +366,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -520,7 +520,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -703,7 +703,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -863,7 +863,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -1578,7 +1578,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -1658,7 +1658,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
