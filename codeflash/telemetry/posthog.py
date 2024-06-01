@@ -21,6 +21,7 @@ def initialize_posthog(enabled: bool) -> None:
         project_api_key="phc_aUO790jHd7z1SXwsYCz8dRApxueplZlZWeDSpKc5hol",
         host="https://us.posthog.com",
     )
+    _posthog.log.setLevel(logging.CRITICAL)  # Suppress PostHog logging
     ph("cli-telemetry-enabled")
 
 
