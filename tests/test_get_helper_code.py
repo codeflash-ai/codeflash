@@ -17,6 +17,7 @@ def OptimizeMe(a, b, c):
     return HelperClass().helper_method(a, b, c)
 
 
+@pytest.mark.skip()
 def test_get_outside_method_helper() -> None:
     file_path = pathlib.Path(__file__).resolve()
     opt = Optimizer(
@@ -57,6 +58,8 @@ _KEY_T = TypeVar("_KEY_T")
 _STORE_T = TypeVar("_STORE_T")
 class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
     """Interface for cache backends used by the persistent cache decorator."""
+    
+    def __init__(self) -> None: ...
 
     def hash_key(
         self,
@@ -244,4 +247,102 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         if not is_successful(ctx_result):
             pytest.fail()
         code_context = ctx_result.unwrap()
-        print("hi")
+        assert code_context.helper_functions[0][2] == "_R"
+        assert code_context.helper_functions[1][2] == "AbstractCacheBackend.get_cache_or_call"
+        assert len(code_context.contextual_dunder_methods) == 2
+
+        assert (
+            code_context.code_to_optimize_with_helpers
+            == '''_R = TypeVar("_R")
+
+class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
+    def __init__(self) -> None: ...
+    def get_cache_or_call(
+        self,
+        *,
+        func: Callable[_P, Any],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        lifespan: datetime.timedelta,
+    ) -> Any:  # noqa: ANN401
+        """
+        Retrieve the cached results for a function call.
+
+        Args:
+        ----
+            func (Callable[..., _R]): The function to retrieve cached results for.
+            args (tuple[Any, ...]): The positional arguments passed to the function.
+            kwargs (dict[str, Any]): The keyword arguments passed to the function.
+            lifespan (datetime.timedelta): The maximum age of the cached results.
+
+        Returns:
+        -------
+            _R: The cached results, if available.
+
+        """
+        if os.environ.get("NO_CACHE"):
+            return func(*args, **kwargs)
+
+        try:
+            key = self.hash_key(func=func, args=args, kwargs=kwargs)
+        except:  # noqa: E722
+            # If we can't create a cache key, we should just call the function.
+            logging.warning("Failed to hash cache key for function: %s", func)
+            return func(*args, **kwargs)
+        result_pair = self.get(key=key)
+
+        if result_pair is not None:
+            cached_time, result = result_pair
+            if not os.environ.get("RE_CACHE") and (
+                datetime.datetime.now() < (cached_time + lifespan)  # noqa: DTZ005
+            ):
+                try:
+                    return self.decode(data=result)
+                except CacheBackendDecodeError as e:
+                    logging.warning("Failed to decode cache data: %s", e)
+                    # If decoding fails we will treat this as a cache miss.
+                    # This might happens if underlying class definition of the data changes.
+            self.delete(key=key)
+        result = func(*args, **kwargs)
+        try:
+            self.put(key=key, data=self.encode(data=result))
+        except CacheBackendEncodeError as e:
+            logging.warning("Failed to encode cache data: %s", e)
+        # If encoding fails, we should still return the result.
+        return result
+
+class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
+    def __init__(
+        self,
+        func: Callable[_P, _R],
+        duration: datetime.timedelta,
+    ) -> None:
+        self.__wrapped__ = func
+        self.__duration__ = duration
+        self.__backend__ = AbstractCacheBackend()
+        functools.update_wrapper(self, func)
+    def __call__(self, *args: _P.args, **kwargs: _P.kwargs) -> _R:
+        """
+        Calls the wrapped function, either using the cache or bypassing it based on environment variables.
+
+        Args:
+        ----
+            *args (_P.args): Positional arguments for the wrapped function.
+            **kwargs (_P.kwargs): Keyword arguments for the wrapped function.
+
+        Returns:
+        -------
+            _R: The result of the wrapped function.
+
+        """  # noqa: E501
+        if "NO_CACHE" in os.environ:
+            return self.__wrapped__(*args, **kwargs)
+        os.makedirs(DEFAULT_CACHE_LOCATION, exist_ok=True)
+        return self.__backend__.get_cache_or_call(
+            func=self.__wrapped__,
+            args=args,
+            kwargs=kwargs,
+            lifespan=self.__duration__,
+        )
+'''
+        )

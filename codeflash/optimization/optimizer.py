@@ -621,6 +621,7 @@ class Optimizer:
         (
             helper_code,
             helper_functions,
+            helper_dunder_methods,
         ) = get_constrained_function_context_and_helper_functions(
             function_to_optimize,
             self.args.project_root,
@@ -661,6 +662,7 @@ class Optimizer:
         preexisting_functions.extend(
             [fn[0].full_name.split(".")[-1] for fn in helper_functions],
         )
+        contextual_dunder_methods.update(helper_dunder_methods)
         return Success(
             CodeOptimizationContext(
                 code_to_optimize_with_helpers=code_to_optimize_with_helpers_and_imports,
