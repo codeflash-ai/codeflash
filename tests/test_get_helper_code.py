@@ -1,25 +1,23 @@
-﻿import tempfile
 import pathlib
-import pytest
-from codeflash.optimization.optimizer import Optimizer
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.optimization.function_context import (
-    get_constrained_function_context_and_helper_functions,
-)
+import tempfile
 from argparse import Namespace
-from returns.pipeline import is_successful
 
-def OptimizeMe(a, b, c):
-    return HelperClass().helper_method(a, b, c)
+import pytest
+from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+from codeflash.optimization.optimizer import Optimizer
+from returns.pipeline import is_successful
 
 
 class HelperClass:
     def helper_method(self, a, b, c):
         return a + b + c
 
+
+def OptimizeMe(a, b, c):
+    return HelperClass().helper_method(a, b, c)
+
+
 def test_get_outside_method_helper() -> None:
-
-
     file_path = pathlib.Path(__file__).resolve()
     opt = Optimizer(
         Namespace(
@@ -49,8 +47,6 @@ def test_get_outside_method_helper() -> None:
         pytest.fail()
     code_context = ctx_result.unwrap()
     print("hi")
-
-
 
 
 def test_flavio_typed_code_helper() -> None:
@@ -167,11 +163,10 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         self,
         func: Callable[_P, _R],
         duration: datetime.timedelta,
-        backend: _CacheBackendT,
     ) -> None:
         self.__wrapped__ = func
         self.__duration__ = duration
-        self.__backend__ = backend
+        self.__backend__ = AbstractCacheBackend()
         functools.update_wrapper(self, func)
 
     def cache_clear(self) -> None:
@@ -218,3 +213,35 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
             lifespan=self.__duration__,
         )
 '''
+    with tempfile.NamedTemporaryFile(mode="w") as f:
+        f.write(code)
+        f.flush()
+        file_path = pathlib.Path(f.name).resolve()
+        opt = Optimizer(
+            Namespace(
+                project_root=str(file_path.parent.resolve()),
+                disable_telemetry=True,
+                tests_root="tests",
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+            ),
+        )
+        function_to_optimize = FunctionToOptimize(
+            function_name="__call__",
+            file_path=str(file_path),
+            parents=[FunctionParent(name="_PersistentCache", type="ClassDef")],
+            starting_line=None,
+            ending_line=None,
+        )
+        with open(file_path) as f:
+            original_code = f.read()
+        ctx_result = opt.get_code_optimization_context(
+            function_to_optimize,
+            opt.args.project_root,
+            original_code,
+        )
+        if not is_successful(ctx_result):
+            pytest.fail()
+        code_context = ctx_result.unwrap()
+        print("hi")
