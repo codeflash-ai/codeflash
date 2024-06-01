@@ -478,6 +478,7 @@ def test_compare_results_fn():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=5,
+                timed_out=False,
             ),
         ],
     )
@@ -498,6 +499,7 @@ def test_compare_results_fn():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=5,
+                timed_out=False,
             ),
         ],
     )
@@ -520,6 +522,7 @@ def test_compare_results_fn():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=[5],
+                timed_out=False,
             ),
         ],
     )
@@ -542,6 +545,7 @@ def test_compare_results_fn():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=5,
+                timed_out=False,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -557,10 +561,11 @@ def test_compare_results_fn():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=5,
+                timed_out=False,
             ),
         ],
     )
 
-    assert not compare_test_results(original_results, new_results_3)
+    assert compare_test_results(original_results, new_results_3)
 
     assert not compare_test_results(TestResults(), TestResults())
