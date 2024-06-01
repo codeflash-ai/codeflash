@@ -28,7 +28,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.code_utils.config_consts import (
-    INDIVIDUAL_TEST_TIMEOUT,
+    INDIVIDUAL_TESTCASE_TIMEOUT,
     MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS,
     MAX_FUNCTION_TEST_SECONDS,
     MAX_TEST_FUNCTION_RUNS,
@@ -1008,15 +1008,20 @@ class Optimizer:
                         candidate_existing_test_results,
                     )
                     for test_invocation in candidate_existing_test_results:
+                        original_test_invocation = original_existing_test_results.get_by_id(
+                            test_invocation.id,
+                        )
                         if (
-                            overall_original_test_results.get_by_id(test_invocation.id) is None
-                            or test_invocation.did_pass
-                            != overall_original_test_results.get_by_id(
-                                test_invocation.id,
-                            ).did_pass
-                            or not return_values_are_equal
-                        ):
-                            logging.info("Test results did not match the test results of the original code.")
+                            original_test_invocation is not None
+                            and not original_test_invocation.timed_out
+                            and (
+                                test_invocation.did_pass
+                                != original_test_invocation.did_pass
+                            )
+                        ) or not return_values_are_equal:
+                            logging.info(
+                                "Test results did not match the test results of the original code."
+                            )
                             logging.info(
                                 f"Test {test_invocation.id} failed. Skipping this candidate.",
                             )
@@ -1115,7 +1120,7 @@ class Optimizer:
             test_file,
             test_framework=self.args.test_framework,
             cwd=self.args.project_root,
-            pytest_timeout=INDIVIDUAL_TEST_TIMEOUT,
+            pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
             pytest_cmd=self.test_cfg.pytest_cmd,
             verbose=True,
             test_env=test_env,
@@ -1152,7 +1157,7 @@ class Optimizer:
             helper_function_names=helper_function_names,
             module_path=module_path,
             test_cfg=self.test_cfg,
-            test_timeout=INDIVIDUAL_TEST_TIMEOUT,
+            test_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
             use_cached_tests=self.args.use_cached_tests,
             function_trace_id=function_trace_id,
         )
