@@ -79,7 +79,7 @@ from codeflash.verification.verifier import generate_tests
 class Optimizer:
     def __init__(self, args: Namespace) -> None:
         self.args = args
-        init_sentry(not args.disable_telemetry)
+        init_sentry(not args.disable_telemetry, exclude_errors=True)
         posthog.initialize_posthog(not args.disable_telemetry)
 
         self.test_cfg = TestConfig(
@@ -103,7 +103,7 @@ class Optimizer:
             return
         continue_execution, disable_pr = env_utils.ensure_git_repo(module_root=self.args.module_root)
         if not continue_execution:
-            logging.error("No git repository detected and user aborted run. Exiting...")
+            logging.critical("No git repository detected and user aborted run. Exiting...")
             sys.exit(1)
         if disable_pr:
             self.args.no_pr = True
@@ -171,7 +171,7 @@ class Optimizer:
                     if is_successful(best_optimization):
                         optimizations_found += 1
                     else:
-                        logging.error(best_optimization.failure())
+                        logging.warning(best_optimization.failure())
                         continue
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
             if optimizations_found == 0:
@@ -1161,7 +1161,7 @@ class Optimizer:
             function_trace_id=function_trace_id,
         )
         if tests is None:
-            logging.error(
+            logging.warning(
                 f"Failed to generate and instrument tests for {function_to_optimize.function_name}",
             )
             return None
