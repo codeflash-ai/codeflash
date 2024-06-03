@@ -327,7 +327,7 @@ def install_github_actions() -> None:
         )
         config, config_file_path = parse_config_file()
 
-        ph("cli-github-optimization-choice", {"optimize_prs": True})
+        ph("cli-github-actions-install-started")
         repo = Repo(config["module_root"], search_parent_directories=True)
 
         owner, repo_name = get_repo_owner_and_name(repo)
@@ -351,10 +351,14 @@ def install_github_actions() -> None:
             apologize_and_exit()
         os.makedirs(workflows_path, exist_ok=True)
         from importlib.resources import files
+
         py_version = sys.version_info
         python_version_string = f" {py_version.major}.{py_version.minor}"
-        optimize_yml_content = files("codeflash").joinpath(
-            "cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding='utf-8')
+        optimize_yml_content = (
+            files("codeflash")
+            .joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml")
+            .read_text(encoding="utf-8")
+        )
         optimize_yml_content = optimize_yml_content.replace(
             " {{ python_version }}",
             python_version_string,
