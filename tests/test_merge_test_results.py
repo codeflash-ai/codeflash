@@ -24,6 +24,7 @@ def test_merge_test_results_1():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
+                timed_out=False,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -39,6 +40,7 @@ def test_merge_test_results_1():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
+                timed_out=False,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -54,6 +56,7 @@ def test_merge_test_results_1():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
+                timed_out=False,
             ),
         ],
     )
@@ -74,6 +77,7 @@ def test_merge_test_results_1():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
+                timed_out=False,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -89,6 +93,7 @@ def test_merge_test_results_1():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
+                timed_out=False,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -104,6 +109,7 @@ def test_merge_test_results_1():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
+                timed_out=False,
             ),
         ],
     )
@@ -124,6 +130,7 @@ def test_merge_test_results_1():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
+                timed_out=False,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -139,6 +146,7 @@ def test_merge_test_results_1():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
+                timed_out=False,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -154,6 +162,7 @@ def test_merge_test_results_1():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
+                timed_out=False,
             ),
         ],
     )
@@ -180,6 +189,7 @@ def test_merge_test_results_1():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
+                timed_out=False,
             ),
         ],
     )
@@ -224,6 +234,7 @@ def test_merge_test_results_1():
                 test_framework="pytest",
                 test_type=TestType.GENERATED_REGRESSION,
                 return_value=None,
+                timed_out=False,
             ),
         ],
     )
@@ -244,6 +255,7 @@ def test_merge_test_results_1():
                 test_framework="pytest",
                 test_type=TestType.GENERATED_REGRESSION,
                 return_value=[2],
+                timed_out=False,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -259,6 +271,7 @@ def test_merge_test_results_1():
                 test_framework="pytest",
                 test_type=TestType.GENERATED_REGRESSION,
                 return_value=[3],
+                timed_out=False,
             ),
         ],
     )

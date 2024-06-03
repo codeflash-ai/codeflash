@@ -1,15 +1,16 @@
 import ast
 import logging
 import os
-from typing import Union
+import re
+from typing import Tuple, Union
 
 import jedi
 import tiktoken
 from jedi.api.classes import Name
 from pydantic.dataclasses import dataclass
 
-from codeflash.code_utils.code_extractor import get_code, get_code_no_skeleton
-from codeflash.code_utils.code_utils import path_belongs_to_site_packages
+from codeflash.code_utils.code_extractor import get_code
+from codeflash.code_utils.code_utils import module_name_from_file_path, path_belongs_to_site_packages
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 
 
@@ -53,6 +54,7 @@ def get_type_annotation_context(
         return []
     sources: list[tuple[Source, str, str]] = []
     ast_parents: list[FunctionParent] = []
+    contextual_dunder_methods = set()
 
     def get_annotation_source(
         jedi_script: jedi.Script,
@@ -93,14 +95,14 @@ def get_type_annotation_context(
                             node_parents[:-1],
                         ),
                     ],
-                )[0]
-                if source_code:
+                )
+                if source_code[0]:
                     sources.append(
                         (
                             Source(
                                 definition[0].full_name,
                                 definition[0],
-                                source_code,
+                                source_code[0],
                             ),
                             definition_path,
                             definition[0].full_name.removeprefix(
@@ -108,6 +110,7 @@ def get_type_annotation_context(
                             ),
                         ),
                     )
+                    contextual_dunder_methods.update(source_code[1])
 
     def visit_children(
         node: Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module],
@@ -164,17 +167,18 @@ def get_type_annotation_context(
 
     visit(module, ast_parents)
 
-    return sources
+    return sources, contextual_dunder_methods
 
 
 def get_function_variables_definitions(
     function_to_optimize: FunctionToOptimize,
     project_root_path: str,
-) -> list[tuple[Source, str, str]]:
+) -> Tuple[list[tuple[Source, str, str]], set[tuple[str, str]]]:
     function_name = function_to_optimize.function_name
     file_path = function_to_optimize.file_path
     script = jedi.Script(path=file_path, project=jedi.Project(path=project_root_path))
     sources: list[tuple[Source, str, str]] = []
+    contextual_dunder_methods = set()
     # TODO: The function name condition can be stricter so that it does not clash with other class names etc.
     # TODO: The function could have been imported as some other name,
     #  we should be checking for the translation as well. Also check for the original function name.
@@ -215,28 +219,44 @@ def get_function_variables_definitions(
                 and definition.full_name
                 and not belongs_to_function(definition, function_name)
             ):
-                source_code = get_code_no_skeleton(definition_path, definitions[0].name)
-                if source_code:
+                module_name = module_name_from_file_path(definition_path, project_root_path)
+                m = re.match(rf"{module_name}\.(.*)\.{definitions[0].name}", definitions[0].full_name)
+                parents = []
+                if m:
+                    parents = [FunctionParent(m.group(1), "ClassDef")]
+
+                source_code = get_code(
+                    [
+                        FunctionToOptimize(
+                            function_name=definitions[0].name,
+                            file_path=definition_path,
+                            parents=parents,
+                        ),
+                    ],
+                )
+                if source_code[0]:
                     sources.append(
                         (
-                            Source(definition.full_name, definition, source_code),
+                            Source(definition.full_name, definition, source_code[0]),
                             definition_path,
                             definition.full_name.removeprefix(name.module_name + "."),
                         ),
                     )
-    annotation_sources = get_type_annotation_context(
+                    contextual_dunder_methods.update(source_code[1])
+    annotation_sources, annotation_dunder_methods = get_type_annotation_context(
         function_to_optimize,
         script,
         project_root_path,
     )
     sources[:0] = annotation_sources  # prepend the annotation sources
+    contextual_dunder_methods.update(annotation_dunder_methods)
     deduped_sources = []
     existing_full_names = set()
     for source in sources:
         if source[0].full_name not in existing_full_names:
             deduped_sources.append(source)
             existing_full_names.add(source[0].full_name)
-    return deduped_sources
+    return deduped_sources, contextual_dunder_methods
 
 
 MAX_PROMPT_TOKENS = 4096  # 128000  # gpt-4-128k
@@ -247,10 +267,10 @@ def get_constrained_function_context_and_helper_functions(
     project_root_path: str,
     code_to_optimize: str,
     max_tokens: int = MAX_PROMPT_TOKENS,
-) -> tuple[str, list[tuple[Source, str, str]]]:
+) -> tuple[str, list[tuple[Source, str, str]], set[tuple[str, str]]]:
     # TODO: Not just do static analysis, but also find the datatypes of function arguments by running the existing
     #  unittests and inspecting the arguments to resolve the real definitions and dependencies.
-    helper_functions: list[tuple[Source, str, str]] = get_function_variables_definitions(
+    helper_functions, dunder_methods = get_function_variables_definitions(
         function_to_optimize,
         project_root_path,
     )
@@ -279,4 +299,4 @@ def get_constrained_function_context_and_helper_functions(
             break
     logging.debug(f"FINAL OPTIMIZATION CONTEXT TOKENS LENGTH: {context_len}")
     helper_code: str = "\n".join(context_list)
-    return helper_code, helper_functions
+    return helper_code, helper_functions, dunder_methods
