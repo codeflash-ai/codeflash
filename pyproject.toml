@@ -99,7 +99,7 @@ classmethod-decorators = [
 "**/*" = ["D102"]
 
 [tool.ruff]
-line-length = 120
+line-length = 110
 
 [tool.ruff.format]
 docstring-code-format = true
