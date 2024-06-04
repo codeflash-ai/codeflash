@@ -146,9 +146,18 @@ def comparator(orig: Any, new: Any) -> bool:
         if hasattr(orig, "__dict__") and hasattr(new, "__dict__"):
             orig_keys = orig.__dict__
             new_keys = new.__dict__
+            if (
+                str(type(orig_keys)) == "<class 'mappingproxy'>"
+                and str(type(new_keys)) == "<class 'mappingproxy'>"
+            ):
+                # meta class objects
+                if orig != new:
+                    return False
+                orig_keys = dict(orig_keys)
+                new_keys = dict(new_keys)
             return comparator(orig_keys, new_keys)
 
-        # TODO : Add other types here
+        # TODO : d other types here
         logging.warning(f"Unknown comparator input type: {type(orig)}")
         return True
     except RecursionError as e:
