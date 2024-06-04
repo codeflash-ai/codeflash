@@ -62,10 +62,13 @@ def add_needed_imports_from_module(
     except cst.ParserSyntaxError as e:
         logging.exception(f"Syntax error in destination module code: {e}")
         return dst_module_code  # Return the original code if there's a syntax error
-
-    transformed_module = AddImportsVisitor(dst_context).transform_module(parsed_module)
-    transformed_module = RemoveImportsVisitor(dst_context).transform_module(transformed_module)
-    return transformed_module.code.lstrip("\n")
+    try:
+        transformed_module = AddImportsVisitor(dst_context).transform_module(parsed_module)
+        transformed_module = RemoveImportsVisitor(dst_context).transform_module(transformed_module)
+        return transformed_module.code.lstrip("\n")
+    except Exception as e:
+        logging.exception(f"Error adding imports to destination module code: {e}")
+        return dst_module_code
 
 
 def get_code(
