@@ -490,6 +490,9 @@ def test_custom_object():
     assert comparator(C, C)
     assert not comparator(C, D)
 
+    E = C
+    assert comparator(C, E)
+
 
 def test_compare_results_fn():
     original_results = TestResults(
