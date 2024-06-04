@@ -126,6 +126,7 @@ module-root = "codeflash"
 tests-root = "tests"
 test-framework = "pytest"
 ignore-paths = []
+formatter-cmd = ["ruff check --exit-zero --fix $file", "ruff format $file"]
 
 
 [build-system]

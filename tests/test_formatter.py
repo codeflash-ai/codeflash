@@ -1,12 +1,12 @@
 import os
 import tempfile
 
+import pytest
 from codeflash.code_utils.formatter import format_code, sort_imports
 
 
 def test_remove_duplicate_imports():
-    """Test that duplicate imports are removed when should_sort_imports is True.
-    """
+    """Test that duplicate imports are removed when should_sort_imports is True."""
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
         tmp.write(b"import os\nimport os\n")
         tmp_path = tmp.name
@@ -17,8 +17,7 @@ def test_remove_duplicate_imports():
 
 
 def test_remove_multiple_duplicate_imports():
-    """Test that multiple duplicate imports are removed when should_sort_imports is True.
-    """
+    """Test that multiple duplicate imports are removed when should_sort_imports is True."""
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
         tmp.write(b"import sys\nimport os\nimport sys\n")
         tmp_path = tmp.name
@@ -29,8 +28,7 @@ def test_remove_multiple_duplicate_imports():
 
 
 def test_sorting_imports():
-    """Test that imports are sorted when should_sort_imports is True.
-    """
+    """Test that imports are sorted when should_sort_imports is True."""
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
         tmp.write(b"import sys\nimport unittest\nimport os\n")
         tmp_path = tmp.name
@@ -41,8 +39,7 @@ def test_sorting_imports():
 
 
 def test_no_sorting_imports():
-    """Test that imports are not sorted when should_sort_imports is False.
-    """
+    """Test that imports are not sorted when should_sort_imports is False."""
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
         tmp.write(b"import sys\nimport unittest\nimport os\n")
         tmp_path = tmp.name
@@ -53,14 +50,16 @@ def test_no_sorting_imports():
 
 
 def test_sort_imports_without_formatting():
-    """Test that imports are sorted when formatting is disabled and should_sort_imports is True.
-    """
+    """Test that imports are sorted when formatting is disabled and should_sort_imports is True."""
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
         tmp.write(b"import sys\nimport unittest\nimport os\n")
         tmp_path = tmp.name
 
     new_code = format_code(
-        formatter_cmd="disabled", imports_sort_cmd="isort", should_sort_imports=True, path=tmp_path,
+        formatter_cmd=["disabled"],
+        imports_sort_cmd="isort",
+        should_sort_imports=True,
+        path=tmp_path,
     )
     os.remove(tmp_path)
     assert new_code == "import os\nimport sys\nimport unittest\n"
@@ -121,3 +120,61 @@ def foo():
     actual = sort_imports(imports_sort_cmd="isort", should_sort_imports=True, path=tmp_path)
 
     assert actual == expected
+
+
+def test_formatter_black():
+    original_code = b"""
+import os
+import sys    
+def foo():
+    return os.path.join(sys.path[0], 'bar')"""
+    expected = """import os
+import sys
+
+
+def foo():
+    return os.path.join(sys.path[0], "bar")
+"""
+    with tempfile.NamedTemporaryFile() as tmp:
+        tmp.write(original_code)
+        tmp.flush()
+        tmp_path = tmp.name
+
+        actual = format_code(
+            formatter_cmd=["black $file"],
+            imports_sort_cmd="isort",
+            should_sort_imports=False,
+            path=tmp_path,
+        )
+        assert actual == expected
+
+
+def test_formatter_ruff():
+    try:
+        import ruff
+    except ImportError:
+        pytest.skip("ruff is not installed")
+    original_code = b"""
+import os
+import sys    
+def foo():
+    return os.path.join(sys.path[0], 'bar')"""
+    expected = """import os
+import sys
+
+
+def foo():
+    return os.path.join(sys.path[0], "bar")
+"""
+    with tempfile.NamedTemporaryFile(suffix=".py") as tmp:
+        tmp.write(original_code)
+        tmp.flush()
+        tmp_path = tmp.name
+
+        actual = format_code(
+            formatter_cmd=["ruff check --exit-zero --fix $file", "ruff format $file"],
+            imports_sort_cmd="isort",
+            should_sort_imports=False,
+            path=tmp_path,
+        )
+        assert actual == expected
