@@ -460,6 +460,39 @@ def test_custom_object():
     assert comparator(a, b)
     assert not comparator(a, c)
 
+    class A:
+        items = [1, 2, 3]
+        val = 5
+
+    class B:
+        items = [1, 2, 4]
+        val = 5
+
+    assert comparator(A, A)
+    assert not comparator(A, B)
+
+    class C:
+        items = [1, 2, 3]
+        val = 5
+
+        def __init__(self):
+            self.itemm2 = [1, 2, 3]
+            self.val2 = 5
+
+    class D:
+        items = [1, 2, 3]
+        val = 5
+
+        def __init__(self):
+            self.itemm2 = [1, 2, 4]
+            self.val2 = 5
+
+    assert comparator(C, C)
+    assert not comparator(C, D)
+
+    E = C
+    assert comparator(C, E)
+
 
 def test_compare_results_fn():
     original_results = TestResults(
@@ -478,6 +511,7 @@ def test_compare_results_fn():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=5,
+                timed_out=False,
             ),
         ],
     )
@@ -498,6 +532,7 @@ def test_compare_results_fn():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=5,
+                timed_out=False,
             ),
         ],
     )
@@ -520,6 +555,7 @@ def test_compare_results_fn():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=[5],
+                timed_out=False,
             ),
         ],
     )
@@ -542,6 +578,7 @@ def test_compare_results_fn():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=5,
+                timed_out=False,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -557,10 +594,11 @@ def test_compare_results_fn():
                 test_framework="unittest",
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=5,
+                timed_out=False,
             ),
         ],
     )
 
-    assert not compare_test_results(original_results, new_results_3)
+    assert compare_test_results(original_results, new_results_3)
 
     assert not compare_test_results(TestResults(), TestResults())

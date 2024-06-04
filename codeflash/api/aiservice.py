@@ -218,7 +218,7 @@ class AiServiceClient:
             )
             return None
         except Exception:
-            logging.exception(f"Error generating tests: {response.status_code} - {response.text}")
+            logging.error(f"Error generating tests: {response.status_code} - {response.text}")  # noqa: TRY400
             ph(
                 "cli-testgen-error-response",
                 {"response_status_code": response.status_code, "error": response.text},
