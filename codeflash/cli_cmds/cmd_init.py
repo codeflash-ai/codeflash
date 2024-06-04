@@ -1,13 +1,15 @@
+from __future__ import annotations
+
 import ast
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
-from typing import Optional, Any
+from typing import Any, Callable, Optional
 
 import click
-import shutil
 import inquirer
 import inquirer.themes
 import tomlkit
@@ -49,6 +51,7 @@ class SetupInfo:
     test_framework: str
     ignore_paths: list[str]
 
+
 def split_string_to_fit_width(string: str, width: int) -> list[str]:
     words = string.split()
     lines = []
@@ -56,7 +59,7 @@ def split_string_to_fit_width(string: str, width: int) -> list[str]:
     # split string into lines that fit with "[?] " present
     for word in words[1:]:
         if len(current_line) + len(word) + 1 <= width:
-            current_line += ' ' + word
+            current_line += " " + word
         else:
             lines.append(current_line)
             current_line = word
@@ -64,14 +67,15 @@ def split_string_to_fit_width(string: str, width: int) -> list[str]:
     lines.append(current_line)
     return lines
 
-def split_string_to_cli_width(string: str, isConfirm: bool = False) -> list[str]:
+
+def split_string_to_cli_width(string: str, is_confirm: bool = False) -> list[str]:
     cli_width, _ = shutil.get_terminal_size()
-    # split string to lines that accomodate "[?] " prefix
+    # split string to lines that accommodate "[?] " prefix
     cli_width -= len("[?] ")
     lines = split_string_to_fit_width(string, cli_width)
 
-    # split last line to additionaly accomodate ": " or " (y/N): " suffix
-    cli_width -= len(" (y/N):") if isConfirm else len(": ")
+    # split last line to additionally accommodate ": " or " (y/N): " suffix
+    cli_width -= len(" (y/N):") if is_confirm else len(": ")
     last_lines = split_string_to_fit_width(lines[-1], cli_width)
 
     lines = lines[:-1] + last_lines
@@ -82,29 +86,32 @@ def split_string_to_cli_width(string: str, isConfirm: bool = False) -> list[str]
             lines[i] = "[\033[33m?\033[0m] " + lines[i]
     return lines
 
-def inquirer_wrapper_path(*args, **kwargs) -> Any:
+
+def inquirer_wrapper_path(*args, **kwargs) -> dict[str]:
     message = None
     response = None
     new_args = []
     new_kwargs = {}
 
-    message = kwargs['message']
+    message = kwargs["message"]
     new_kwargs = {**kwargs}
     split_messages = split_string_to_cli_width(message)
     for split_message in split_messages[:-1]:
         click.echo(split_message)
 
     last_message = split_messages[-1]
-    new_kwargs['message'] = last_message
+    new_kwargs["message"] = last_message
     new_args.append(args[0])
 
-    response = inquirer.prompt([
-        inquirer.Path(*new_args, **new_kwargs)
-    ])
+    response = inquirer.prompt(
+        [
+            inquirer.Path(*new_args, **new_kwargs),
+        ],
+    )
     return response
 
 
-def inquirer_wrapper(func, *args, **kwargs) -> Any:
+def inquirer_wrapper(func: Callable, *args, **kwargs) -> str | bool:
     # extract the message
     message = None
     response = None
@@ -114,10 +121,10 @@ def inquirer_wrapper(func, *args, **kwargs) -> Any:
     if len(args) == 1:
         message = args[0]
     else:
-        message = kwargs['message']
+        message = kwargs["message"]
         new_kwargs = {**kwargs}
     # split the message
-    split_messages = split_string_to_cli_width(message, func == inquirer.confirm)
+    split_messages = split_string_to_cli_width(message, is_confirm=func == inquirer.confirm)
     for split_message in split_messages[:-1]:
         click.echo(split_message)
 
@@ -126,11 +133,12 @@ def inquirer_wrapper(func, *args, **kwargs) -> Any:
     if len(args) == 1:
         new_args.append(last_message)
     else:
-        new_kwargs['message'] = last_message
+        new_kwargs["message"] = last_message
 
     response = func(*new_args, **new_kwargs)
 
     return response
+
 
 def init_codeflash() -> None:
     try:
@@ -168,8 +176,9 @@ def init_codeflash() -> None:
 
 
 def ask_run_end_to_end_test(setup_info) -> None:
-    run_tests = inquirer_wrapper(inquirer.confirm,
-        message= "⚡️ Do you want to run a sample optimization to make sure everything's set up correctly? (takes about 3 minutes)",
+    run_tests = inquirer_wrapper(
+        inquirer.confirm,
+        message="⚡️ Do you want to run a sample optimization to make sure everything's set up correctly? (takes about 3 minutes)",
         default=True,
     )
     if run_tests:
@@ -212,8 +221,10 @@ def collect_setup_info() -> SetupInfo:
     curdir_option = "current directory (" + curdir + ")"
     module_subdir_options = valid_module_subdirs + [curdir_option]
 
-    module_root_answer = inquirer_wrapper(inquirer.list_input,
-        message="Which Python module do you want me to optimize going forward? (Usually the top-most directory with all of your Python source code)",
+    module_root_answer = inquirer_wrapper(
+        inquirer.list_input,
+        message="Which Python module do you want me to optimize going forward? (Usually the top-most directory with "
+        "all of your Python source code)",
         choices=module_subdir_options,
         default=(project_name if project_name in module_subdir_options else module_subdir_options[0]),
     )
@@ -370,7 +381,8 @@ def check_for_toml_or_setup_file() -> Optional[str]:
         ph("cli-no-pyproject-toml-or-setup-py")
 
         # Create a pyproject.toml file because it doesn't exist
-        create_toml = inquirer_wrapper(inquirer.confirm,
+        create_toml = inquirer_wrapper(
+            inquirer.confirm,
             "Do you want me to create a pyproject.toml file in the current directory?",
             default=True,
             show_default=False,
@@ -418,9 +430,10 @@ def install_github_actions() -> None:
         workflows_path = os.path.join(git_root, ".github", "workflows")
         optimize_yaml_path = os.path.join(workflows_path, "codeflash-optimize.yaml")
 
-        confirm_creation_yes = inquirer_wrapper(inquirer.confirm,
+        confirm_creation_yes = inquirer_wrapper(
+            inquirer.confirm,
             message=f"I'm going to create a new GitHub actions workflow file at {optimize_yaml_path} ... is this OK?",
-            default=True
+            default=True,
         )
         ph(
             "cli-github-optimization-confirm-workflow-creation",
@@ -560,6 +573,7 @@ def prompt_api_key() -> bool:
     enter_api_key_and_save_to_rc()
     ph("cli-new-api-key-entered")
     return True
+
 
 def enter_api_key_and_save_to_rc() -> None:
     browser_launched = False
