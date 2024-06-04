@@ -460,6 +460,39 @@ def test_custom_object():
     assert comparator(a, b)
     assert not comparator(a, c)
 
+    class A:
+        items = [1, 2, 3]
+        val = 5
+
+    class B:
+        items = [1, 2, 4]
+        val = 5
+
+    assert comparator(A, A)
+    assert not comparator(A, B)
+
+    class C:
+        items = [1, 2, 3]
+        val = 5
+
+        def __init__(self):
+            self.itemm2 = [1, 2, 3]
+            self.val2 = 5
+
+    class D:
+        items = [1, 2, 3]
+        val = 5
+
+        def __init__(self):
+            self.itemm2 = [1, 2, 4]
+            self.val2 = 5
+
+    assert comparator(C, C)
+    assert not comparator(C, D)
+
+    E = C
+    assert comparator(C, E)
+
 
 def test_compare_results_fn():
     original_results = TestResults(
