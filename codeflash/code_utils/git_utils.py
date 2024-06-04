@@ -108,3 +108,37 @@ def confirm_proceeding_with_no_git_repo() -> bool:
         )
     # continue running on non-interactive environments, important for GitHub actions
     return True
+    if sys.__stdin__.isatty():
+        return inquirer.confirm(
+            "WARNING: I did not find a git repository for your code. If you proceed in running codeflash, optimized code will"
+            " be written over your current code and you could irreversibly lose your current code. Proceed?",
+            default=False,
+        )
+    # continue running on non-interactive environments, important for GitHub actions
+    return True
+
+
+def check_and_push_branch(repo: git.Repo) -> bool:
+    current_branch = repo.active_branch.name
+    origin = repo.remote(name="origin")
+
+    # Check if the shell is a TTY
+    if not sys.__stdin__.isatty():
+        logging.warning("Non-interactive shell detected. Branch will not be pushed.")
+        return False
+
+    # Check if the branch is pushed
+    if f"origin/{current_branch}" not in repo.refs:
+        logging.warning(f"⚠️ The branch '{current_branch}' is not pushed to the remote repository.")
+        if sys.__stdin__.isatty() and inquirer.confirm(
+            f"⚡️ In order for me to create PRs, your current branch needs to be pushed. Do you want to push the branch "
+            f"'{current_branch}' to the remote repository?",
+            default=False,
+        ):
+            origin.push(current_branch)
+            logging.info(f"⬆️ Branch '{current_branch}' has been pushed to origin.")
+            return True
+        logging.info(f"🔘 Branch '{current_branch}' has not been pushed to origin.")
+        return False
+    logging.debug(f"The branch '{current_branch}' is present in the remote repository.")
+    return True
