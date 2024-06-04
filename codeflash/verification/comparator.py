@@ -155,6 +155,9 @@ def comparator(orig: Any, new: Any) -> bool:
                     return False
                 orig_keys = dict(orig_keys)
                 new_keys = dict(new_keys)
+                orig_keys = {k: v for k, v in orig_keys.items() if not k.startswith("__")}
+                new_keys = {k: v for k, v in new_keys.items() if not k.startswith("__")}
+
             return comparator(orig_keys, new_keys)
 
         # TODO : Add other types here
