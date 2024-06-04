@@ -11,6 +11,8 @@ from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.git_utils import (
+    check_running_in_git_repo,
+    confirm_proceeding_with_no_git_repo,
     get_repo_owner_and_name,
 )
 from codeflash.code_utils.github_utils import get_github_secrets_page_url, require_github_app_or_exit
@@ -19,12 +21,12 @@ from codeflash.version import __version__ as version
 
 def parse_args() -> Namespace:
     parser = ArgumentParser()
-    subparsers = parser.add_subparsers(dest='command', help='Sub-commands')
+    subparsers = parser.add_subparsers(dest="command", help="Sub-commands")
 
-    init_parser = subparsers.add_parser('init', help='Initialize Codeflash for a Python project.')
+    init_parser = subparsers.add_parser("init", help="Initialize Codeflash for a Python project.")
     init_parser.set_defaults(func=init_codeflash)
 
-    init_actions_parser = subparsers.add_parser('init-actions', help='Initialize GitHub Actions workflow')
+    init_actions_parser = subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
     init_actions_parser.set_defaults(func=install_github_actions)
     parser.add_argument("--file", help="Try to optimize only this file")
     parser.add_argument(
@@ -94,6 +96,11 @@ def process_cmd_args(args: Namespace) -> Namespace:
     if args.command:
         args.func()
         sys.exit(1)
+    if not check_running_in_git_repo(module_root=args.module_root):
+        if not confirm_proceeding_with_no_git_repo():
+            logging.critical("No git repository detected and user aborted run. Exiting...")
+            sys.exit(1)
+        args.no_pr = True
     if args.function and not args.file:
         logging.error("If you specify a --function, you must specify the --file it is in")
         sys.exit(1)
