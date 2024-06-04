@@ -157,7 +157,7 @@ def comparator(orig: Any, new: Any) -> bool:
                 new_keys = dict(new_keys)
             return comparator(orig_keys, new_keys)
 
-        # TODO : d other types here
+        # TODO : Add other types here
         logging.warning(f"Unknown comparator input type: {type(orig)}")
         return True
     except RecursionError as e:
