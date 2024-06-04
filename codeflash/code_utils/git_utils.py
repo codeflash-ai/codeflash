@@ -122,14 +122,12 @@ def check_and_push_branch(repo: git.Repo) -> bool:
     current_branch = repo.active_branch.name
     origin = repo.remote(name="origin")
 
-    # Check if the shell is a TTY
-    if not sys.__stdin__.isatty():
-        logging.warning("Non-interactive shell detected. Branch will not be pushed.")
-        return False
-
     # Check if the branch is pushed
     if f"origin/{current_branch}" not in repo.refs:
         logging.warning(f"⚠️ The branch '{current_branch}' is not pushed to the remote repository.")
+        if not sys.__stdin__.isatty():
+            logging.warning("Non-interactive shell detected. Branch will not be pushed.")
+            return False
         if sys.__stdin__.isatty() and inquirer.confirm(
             f"⚡️ In order for me to create PRs, your current branch needs to be pushed. Do you want to push the branch "
             f"'{current_branch}' to the remote repository?",
