@@ -82,7 +82,7 @@ warn_required_dynamic_aliases = true
 [tool.ruff.lint]
 select = ["ALL"]
 unfixable = ["F401"]
-ignore = ["ANN101", "S101", "D103","G004", "FIX002"]
+ignore = ["S101", "D103", "FIX002"]
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true
@@ -99,7 +99,7 @@ classmethod-decorators = [
 "**/*" = ["D102"]
 
 [tool.ruff]
-line-length = 110
+line-length = 120
 
 [tool.ruff.format]
 docstring-code-format = true
