@@ -92,6 +92,12 @@ def test_standard_python_library_objects():
     assert comparator(a, b)
     assert not comparator(a, c)
 
+    a = datetime.time(2, 2, 2)
+    b = datetime.time(2, 2, 2)
+    c = datetime.time(2, 2, 3)
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
     a = decimal.Decimal(3.14)
     b = decimal.Decimal(3.14)
     c = decimal.Decimal(3.15)
