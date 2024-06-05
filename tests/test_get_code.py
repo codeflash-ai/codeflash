@@ -1,6 +1,5 @@
 import tempfile
 
-import pytest
 from codeflash.code_utils.code_extractor import get_code
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 
@@ -283,15 +282,14 @@ def test_get_code_multiline_class_def() -> None:
         assert contextual_dunder_methods == set()
 
 
-@pytest.mark.skip(
-    reason="This should be fixed within 2 days but skipping so that the rest of the fixes can be merged in",
-)
-def test_get_code_dataclass_attribute():
-    code = """@dataclass
-class CustomDataClass:
-    name: str = ""
-    data: List[int] = field(default_factory=list)"""
-
+def test_get_code_class_attribute() -> None:
+    code = """class MyClass:
+   MyAttr: str
+   def MyMethodToOpt(self):
+      return MyClass.MyAttr"""
+    expected = """class MyClass:
+   def MyMethodToOpt(self):
+      return MyClass.MyAttr"""
     with tempfile.NamedTemporaryFile("w") as f:
         f.write(code)
         f.flush()
@@ -299,11 +297,11 @@ class CustomDataClass:
         new_code, contextual_dunder_methods = get_code(
             [
                 FunctionToOptimize(
-                    "name",
+                    "MyMethodToOpt",
                     f.name,
-                    [FunctionParent("CustomDataClass", "ClassDef")],
+                    [FunctionParent("MyClass", "ClassDef")],
                 ),
             ],
         )
-        assert new_code is None
+        assert new_code == expected
         assert contextual_dunder_methods == set()
