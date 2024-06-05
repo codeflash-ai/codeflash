@@ -545,20 +545,18 @@ class Optimizer:
         path: str,
         original_code: str,
     ) -> tuple[str, dict[str, str]]:
-        should_sort_imports = True
-        if isort.code(original_code) != original_code:
+        should_sort_imports = not self.args.disable_imports_sorting
+        if should_sort_imports and isort.code(original_code) != original_code:
             should_sort_imports = False
 
         new_code = format_code(
             self.args.formatter_cmd,
-            self.args.imports_sort_cmd,
             should_sort_imports,
             path,
         )
         new_helper_code: dict[str, str] = {
             module_abspath: format_code(
                 self.args.formatter_cmd,
-                self.args.imports_sort_cmd,
                 should_sort_imports,
                 module_abspath,
             )

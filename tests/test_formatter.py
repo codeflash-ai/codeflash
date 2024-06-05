@@ -11,7 +11,7 @@ def test_remove_duplicate_imports():
         tmp.write(b"import os\nimport os\n")
         tmp_path = tmp.name
 
-    new_code = sort_imports(imports_sort_cmd="isort", should_sort_imports=True, path=tmp_path)
+    new_code = sort_imports(should_sort_imports=True, path=tmp_path)
     os.remove(tmp_path)
     assert new_code == "import os\n"
 
@@ -22,7 +22,7 @@ def test_remove_multiple_duplicate_imports():
         tmp.write(b"import sys\nimport os\nimport sys\n")
         tmp_path = tmp.name
 
-    new_code = sort_imports(imports_sort_cmd="isort", should_sort_imports=True, path=tmp_path)
+    new_code = sort_imports(should_sort_imports=True, path=tmp_path)
     os.remove(tmp_path)
     assert new_code == "import os\nimport sys\n"
 
@@ -33,7 +33,7 @@ def test_sorting_imports():
         tmp.write(b"import sys\nimport unittest\nimport os\n")
         tmp_path = tmp.name
 
-    new_code = sort_imports(imports_sort_cmd="isort", should_sort_imports=True, path=tmp_path)
+    new_code = sort_imports(should_sort_imports=True, path=tmp_path)
     os.remove(tmp_path)
     assert new_code == "import os\nimport sys\nimport unittest\n"
 
@@ -44,7 +44,7 @@ def test_no_sorting_imports():
         tmp.write(b"import sys\nimport unittest\nimport os\n")
         tmp_path = tmp.name
 
-    new_code = sort_imports(imports_sort_cmd="isort", should_sort_imports=False, path=tmp_path)
+    new_code = sort_imports(should_sort_imports=False, path=tmp_path)
     os.remove(tmp_path)
     assert new_code == "import sys\nimport unittest\nimport os\n"
 
@@ -57,7 +57,6 @@ def test_sort_imports_without_formatting():
 
     new_code = format_code(
         formatter_cmd=["disabled"],
-        imports_sort_cmd="isort",
         should_sort_imports=True,
         path=tmp_path,
     )
@@ -87,7 +86,7 @@ def foo():
         tmp.write(original_code)
         tmp_path = tmp.name
 
-    actual = sort_imports(imports_sort_cmd="isort", should_sort_imports=True, path=tmp_path)
+    actual = sort_imports(should_sort_imports=True, path=tmp_path)
 
     assert actual == expected
 
@@ -117,7 +116,7 @@ def foo():
         tmp.write(original_code)
         tmp_path = tmp.name
 
-    actual = sort_imports(imports_sort_cmd="isort", should_sort_imports=True, path=tmp_path)
+    actual = sort_imports(should_sort_imports=True, path=tmp_path)
 
     assert actual == expected
 
@@ -142,7 +141,6 @@ def foo():
 
         actual = format_code(
             formatter_cmd=["black $file"],
-            imports_sort_cmd="isort",
             should_sort_imports=False,
             path=tmp_path,
         )
@@ -173,7 +171,6 @@ def foo():
 
         actual = format_code(
             formatter_cmd=["ruff check --exit-zero --fix $file", "ruff format $file"],
-            imports_sort_cmd="isort",
             should_sort_imports=False,
             path=tmp_path,
         )

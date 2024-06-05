@@ -7,7 +7,6 @@ import isort
 
 def format_code(
     formatter_cmd: list[str],
-    imports_sort_cmd: str,
     should_sort_imports: bool,
     path: str,
 ) -> str:
@@ -17,7 +16,7 @@ def format_code(
     ), f"File {path} does not exist. Cannot format the file. Exiting..."
     if formatter_cmd[0].lower() == "disabled":
         if should_sort_imports:
-            return sort_imports(imports_sort_cmd, should_sort_imports, path)
+            return sort_imports(should_sort_imports, path)
 
         with open(path, encoding="utf8") as f:
             new_code = f.read()
@@ -45,7 +44,7 @@ def format_code(
             logging.error(f"Failed to format code with {' '.join(formatter_cmd_list)}")
 
     if should_sort_imports:
-        return sort_imports(imports_sort_cmd, should_sort_imports, path)
+        return sort_imports(should_sort_imports, path)
 
     with open(path, encoding="utf8") as f:
         new_code = f.read()
@@ -53,12 +52,12 @@ def format_code(
     return new_code
 
 
-def sort_imports(imports_sort_cmd: str, should_sort_imports: bool, path: str) -> str:
+def sort_imports(should_sort_imports: bool, path: str) -> str:
     try:
         with open(path, encoding="utf8") as f:
             code = f.read()
 
-        if imports_sort_cmd.lower() == "disabled" or not should_sort_imports:
+        if not should_sort_imports:
             return code
 
         # Deduplicate and sort imports, modify the code in memory, not on disk
