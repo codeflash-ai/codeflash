@@ -131,7 +131,9 @@ def comparator(orig: Any, new: Any) -> bool:
         except Exception:
             pass
 
-        if isinstance(orig, (datetime.datetime, datetime.date, datetime.timedelta, datetime.time)):
+        if isinstance(
+            orig, (datetime.datetime, datetime.date, datetime.timedelta, datetime.time, datetime.timezone)
+        ):
             return orig == new
 
         # If the object passed has a user defined __eq__ method, use that
