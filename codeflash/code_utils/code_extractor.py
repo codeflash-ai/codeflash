@@ -173,10 +173,13 @@ def get_code(
         return None, set()
     for qualified_name_parts in qualified_name_parts_list:
         target_node: ast.AST | None = find_target(module_node.body, qualified_name_parts)
-        if target_node is None or not isinstance(target_node, (
-                ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Assign, ast.AnnAssign)):
+        if target_node is None:
             continue
-        if hasattr(target_node, "decorator_list") and target_node.decorator_list:
+
+        if (
+            isinstance(target_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            and target_node.decorator_list
+        ):
             target_code += "".join(
                 lines[target_node.decorator_list[0].lineno - 1 : target_node.end_lineno],
             )
