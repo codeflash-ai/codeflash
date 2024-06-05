@@ -400,6 +400,7 @@ def install_github_actions() -> None:
         click.pause()
         click.echo()
         click.echo(
+            f"Please commit and push this GitHub actions file to your repo, and you're all set!{LF}"
             f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}",
         )
         ph("cli-github-workflow-created")
