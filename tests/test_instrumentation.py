@@ -133,6 +133,7 @@ import time
 
 import dill as pickle
 import pytest
+import timeout_decorator
 from packagename.ml.yolo.image_reshaping_utils import \\
     prepare_image_for_yolo as \\
     packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo
@@ -867,6 +868,7 @@ import unittest
 
 import dill as pickle
 import timeout_decorator
+
 from code_to_optimize.bubble_sort import sorter
 
 
@@ -1528,8 +1530,7 @@ class TestPigLatin(unittest.TestCase):
 
 def test_update_line_node() -> None:
     injectperf = InjectPerfOnly(
-        "sorter",
-        "code_to_optimize.tests.pytest.test_bubble_sort",
+        "sorter", "code_to_optimize.tests.pytest.test_bubble_sort", "pytest"
     )
     node = ast.Assign(
         targets=[ast.Name(id="output", ctx=ast.Store())],
