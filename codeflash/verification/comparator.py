@@ -131,7 +131,9 @@ def comparator(orig: Any, new: Any) -> bool:
         except Exception:
             pass
 
-        if isinstance(orig, (datetime.datetime, datetime.date, datetime.timedelta)):
+        if isinstance(
+            orig, (datetime.datetime, datetime.date, datetime.timedelta, datetime.time, datetime.timezone)
+        ):
             return orig == new
 
         # If the object passed has a user defined __eq__ method, use that
@@ -146,6 +148,18 @@ def comparator(orig: Any, new: Any) -> bool:
         if hasattr(orig, "__dict__") and hasattr(new, "__dict__"):
             orig_keys = orig.__dict__
             new_keys = new.__dict__
+            if (
+                str(type(orig_keys)) == "<class 'mappingproxy'>"
+                and str(type(new_keys)) == "<class 'mappingproxy'>"
+            ):
+                # meta class objects
+                if orig != new:
+                    return False
+                orig_keys = dict(orig_keys)
+                new_keys = dict(new_keys)
+                orig_keys = {k: v for k, v in orig_keys.items() if not k.startswith("__")}
+                new_keys = {k: v for k, v in new_keys.items() if not k.startswith("__")}
+
             return comparator(orig_keys, new_keys)
 
         # TODO : Add other types here
