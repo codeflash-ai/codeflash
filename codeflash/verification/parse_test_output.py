@@ -190,6 +190,15 @@ def parse_test_xml(
                     message = testcase.result[0].message.lower()
                     if "failed: timeout >" in message:
                         timed_out = True
+            else:
+                if len(testcase.result) > 1:
+                    print(
+                        f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!"
+                    )
+                if len(testcase.result) == 1:
+                    message = testcase.result[0].message.lower()
+                    if "timed out" in message:
+                        timed_out = True
             matches = re.findall(
                 r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?)######!", testcase.system_out or ""
             )
@@ -219,7 +228,9 @@ def parse_test_xml(
                         FunctionTestInvocation(
                             id=InvocationId(
                                 test_module_path=match[0],
-                                test_class_name=None if match[1] == "" else match[1],
+                                test_class_name=None
+                                if match[1] == ""
+                                else match[1][:-1],
                                 test_function_name=match[2],
                                 function_getting_tested=match[3],
                                 iteration_id=match[4],

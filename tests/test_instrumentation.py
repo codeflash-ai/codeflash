@@ -48,6 +48,7 @@ import time
 import unittest
 
 import dill as pickle
+import timeout_decorator
 
 from code_to_optimize.bubble_sort import sorter
 
@@ -79,6 +80,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
 
 class TestPigLatin(unittest.TestCase):
 
+    @timeout_decorator.timeout(15)
     def test_sort(self):
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
@@ -102,9 +104,7 @@ class TestPigLatin(unittest.TestCase):
         f.write(code)
         f.flush()
         success, new_test = inject_profiling_into_existing_test(
-            f.name,
-            "sorter",
-            os.path.dirname(f.name),
+            f.name, "sorter", os.path.dirname(f.name), "unittest"
         )
     assert success
     assert new_test == expected.format(
@@ -133,6 +133,7 @@ import time
 
 import dill as pickle
 import pytest
+import timeout_decorator
 from packagename.ml.yolo.image_reshaping_utils import \\
     prepare_image_for_yolo as \\
     packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo
@@ -193,6 +194,7 @@ def test_prepare_image_for_yolo():
             f.name,
             "prepare_image_for_yolo",
             os.path.dirname(f.name),
+            pytest,
         )
     assert success
     assert new_test == expected.format(
@@ -220,6 +222,7 @@ import sqlite3
 import time
 
 import dill as pickle
+import timeout_decorator
 
 from code_to_optimize.bubble_sort import sorter
 
@@ -268,13 +271,16 @@ def test_sort():
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/pytest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            "sorter",
-            project_root_path,
+            test_path, "sorter", project_root_path, "pytest"
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -317,7 +323,8 @@ def test_sort():
         assert test_results[0].id.test_class_name is None
         assert test_results[0].id.test_function_name == "test_sort"
         assert (
-            test_results[0].id.test_module_path == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
+            test_results[0].id.test_module_path
+            == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
         )
         assert test_results[0].runtime > 0
         assert test_results[0].did_pass
@@ -327,7 +334,8 @@ def test_sort():
         assert test_results[1].id.test_class_name is None
         assert test_results[1].id.test_function_name == "test_sort"
         assert (
-            test_results[1].id.test_module_path == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
+            test_results[1].id.test_module_path
+            == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
@@ -359,6 +367,7 @@ import time
 
 import dill as pickle
 import pytest
+import timeout_decorator
 
 from code_to_optimize.bubble_sort import sorter
 
@@ -402,13 +411,16 @@ def test_sort_parametrized(input, expected_output):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/pytest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            "sorter",
-            project_root_path,
+            test_path, "sorter", project_root_path, "pytest"
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -510,6 +522,7 @@ import time
 
 import dill as pickle
 import pytest
+import timeout_decorator
 
 from code_to_optimize.bubble_sort import sorter
 
@@ -555,13 +568,16 @@ def test_sort_parametrized_loop(input, expected_output):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/pytest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            "sorter",
-            project_root_path,
+            test_path, "sorter", project_root_path, "pytest"
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -690,6 +706,7 @@ import sqlite3
 import time
 
 import dill as pickle
+import timeout_decorator
 
 from code_to_optimize.bubble_sort import sorter
 
@@ -738,13 +755,16 @@ def test_sort():
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/pytest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            "sorter",
-            project_root_path,
+            test_path, "sorter", project_root_path, "pytest"
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -819,7 +839,6 @@ def test_sort():
         pathlib.Path(test_path).unlink(missing_ok=True)
 
 
-@pytest.mark.skip(reason="Timeout handling not implemented for unittest yet")
 def test_perfinjector_bubble_sort_unittest_results() -> None:
     code = """import unittest
 
@@ -848,6 +867,8 @@ import time
 import unittest
 
 import dill as pickle
+import timeout_decorator
+
 from code_to_optimize.bubble_sort import sorter
 
 
@@ -873,6 +894,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
 
 class TestPigLatin(unittest.TestCase):
 
+    @timeout_decorator.timeout(15)
     def test_sort(self):
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
@@ -901,13 +923,16 @@ class TestPigLatin(unittest.TestCase):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/unittest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            "sorter",
-            project_root_path,
+            test_path, "sorter", project_root_path, "unittest"
         )
 
         assert success
@@ -984,7 +1009,6 @@ class TestPigLatin(unittest.TestCase):
         pathlib.Path(test_path).unlink(missing_ok=True)
 
 
-@pytest.mark.skip(reason="Timeout handling not implemented for unittest yet")
 def test_perfinjector_bubble_sort_unittest_parametrized_results() -> None:
     code = """import unittest
 from parameterized import parameterized
@@ -1012,6 +1036,7 @@ import time
 import unittest
 
 import dill as pickle
+import timeout_decorator
 from parameterized import parameterized
 
 from code_to_optimize.bubble_sort import sorter
@@ -1027,6 +1052,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -1039,6 +1065,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
 class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
+    @timeout_decorator.timeout(15)
     def test_sort(self, input, expected_output):
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
@@ -1058,13 +1085,16 @@ class TestPigLatin(unittest.TestCase):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/unittest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            "sorter",
-            project_root_path,
+            test_path, "sorter", project_root_path, "unittest"
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -1140,7 +1170,6 @@ class TestPigLatin(unittest.TestCase):
         pathlib.Path(test_path).unlink(missing_ok=True)
 
 
-@pytest.mark.skip(reason="Timeout handling not implemented for unittest yet")
 def test_perfinjector_bubble_sort_unittest_loop_results() -> None:
     code = """import unittest
 
@@ -1165,6 +1194,7 @@ import time
 import unittest
 
 import dill as pickle
+import timeout_decorator
 
 from code_to_optimize.bubble_sort import sorter
 
@@ -1179,6 +1209,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -1190,6 +1221,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
 
 class TestPigLatin(unittest.TestCase):
 
+    @timeout_decorator.timeout(15)
     def test_sort(self):
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
@@ -1214,13 +1246,16 @@ class TestPigLatin(unittest.TestCase):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/unittest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            "sorter",
-            project_root_path,
+            test_path, "sorter", project_root_path, "unittest"
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -1296,7 +1331,6 @@ class TestPigLatin(unittest.TestCase):
         os.remove(test_path)
 
 
-@pytest.mark.skip(reason="Timeout handling not implemented for unittest yet")
 def test_perfinjector_bubble_sort_unittest_parametrized_loop_results() -> None:
     code = """import unittest
 from parameterized import parameterized
@@ -1325,6 +1359,7 @@ import time
 import unittest
 
 import dill as pickle
+import timeout_decorator
 from parameterized import parameterized
 
 from code_to_optimize.bubble_sort import sorter
@@ -1340,6 +1375,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -1352,6 +1388,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
 class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
+    @timeout_decorator.timeout(15)
     def test_sort(self, input, expected_output):
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
@@ -1372,13 +1409,16 @@ class TestPigLatin(unittest.TestCase):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/unittest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            "sorter",
-            project_root_path,
+            test_path, "sorter", project_root_path, "unittest"
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -1490,8 +1530,7 @@ class TestPigLatin(unittest.TestCase):
 
 def test_update_line_node() -> None:
     injectperf = InjectPerfOnly(
-        "sorter",
-        "code_to_optimize.tests.pytest.test_bubble_sort",
+        "sorter", "code_to_optimize.tests.pytest.test_bubble_sort", "pytest"
     )
     node = ast.Assign(
         targets=[ast.Name(id="output", ctx=ast.Store())],
@@ -1531,7 +1570,10 @@ from nuitka.nodes.ImportNodes import ExpressionBuiltinImport as nuitka_nodes_Imp
 
     visitor = FunctionImportedAsVisitor("ExpressionBuiltinImport.method_name")
     visitor.visit(tree)
-    assert visitor.imported_as == "nuitka_nodes_ImportNodes_ExpressionBuiltinImport.method_name"
+    assert (
+        visitor.imported_as
+        == "nuitka_nodes_ImportNodes_ExpressionBuiltinImport.method_name"
+    )
 
     visitor = FunctionImportedAsVisitor("class_name_B")
     visitor.visit(tree)
@@ -1551,6 +1593,7 @@ import sqlite3
 import time
 
 import dill as pickle
+import timeout_decorator
 from module import class_name as class_name_A
 
 
@@ -1592,12 +1635,12 @@ def test_class_name_A_function_name():
         with open(test_path, "w") as f:
             f.write(code)
 
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            "class_name.function_name",
-            project_root_path,
+            test_path, "class_name.function_name", project_root_path, "pytest"
         )
     finally:
         pathlib.Path(test_path).unlink(missing_ok=True)
@@ -1628,6 +1671,7 @@ import sqlite3
 import time
 
 import dill as pickle
+import timeout_decorator
 
 from codeflash.result.common_tags import find_common_tags
 
@@ -1674,13 +1718,16 @@ def test_common_tags_1():
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
-        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/pytest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
 
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            "find_common_tags",
-            project_root_path,
+            test_path, "find_common_tags", project_root_path, "pytest"
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
