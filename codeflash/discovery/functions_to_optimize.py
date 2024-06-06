@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import ast
 import logging
 import os
@@ -5,7 +7,7 @@ import random
 from _ast import AsyncFunctionDef, ClassDef, FunctionDef
 from collections import defaultdict
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import git
 import libcst as cst
@@ -52,7 +54,7 @@ class FunctionVisitor(cst.CSTVisitor):
         node.visit(return_visitor)
         if return_visitor.has_return_statement:
             pos: CodeRange = self.get_metadata(cst.metadata.PositionProvider, node)
-            parents: Optional[CSTNode] = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+            parents: CSTNode | None = self.get_metadata(cst.metadata.ParentNodeProvider, node)
             ast_parents: list[FunctionParent] = []
             while parents is not None:
                 if isinstance(parents, (cst.FunctionDef, cst.ClassDef)):
@@ -73,8 +75,8 @@ class FunctionVisitor(cst.CSTVisitor):
 
 class FunctionWithReturnStatement(ast.NodeVisitor):
     def __init__(self, file_path: str) -> None:
-        self.functions: List[FunctionToOptimize] = []
-        self.ast_path: List[FunctionParent] = []
+        self.functions: list[FunctionToOptimize] = []
+        self.ast_path: list[FunctionParent] = []
         self.file_path: str = file_path
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
@@ -124,7 +126,7 @@ class FunctionToOptimize:
 
     function_name: str
     file_path: str
-    parents: List[FunctionParent]  # List[ClassDef | FunctionDef | AsyncFunctionDef]
+    parents: list[FunctionParent]  # list[ClassDef | FunctionDef | AsyncFunctionDef]
     starting_line: Optional[int] = None
     ending_line: Optional[int] = None
 
@@ -142,7 +144,7 @@ class FunctionToOptimize:
         )
 
     @property
-    def qualified_name(self):
+    def qualified_name(self) -> str:
         return self.function_name if self.parents == [] else f"{self.parents[0].name}.{self.function_name}"
 
     def qualified_name_with_modules_from_root(self, project_root_path: str) -> str:
@@ -150,15 +152,15 @@ class FunctionToOptimize:
 
 
 def get_functions_to_optimize(
-    optimize_all: Optional[str],
-    replay_test: Optional[str],
-    file: Optional[str],
-    only_get_this_function: Optional[str],
+    optimize_all: str | None,
+    replay_test: str | None,
+    file: str | None,
+    only_get_this_function: str | None,
     test_cfg: TestConfig,
-    ignore_paths: List[str],
+    ignore_paths: list[str],
     project_root: str,
     module_root: str,
-) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
+) -> tuple[dict[str, list[FunctionToOptimize]], int]:
     assert (
         sum(
             [  # Ensure only one of the options is provided
@@ -169,7 +171,7 @@ def get_functions_to_optimize(
         )
         <= 1
     ), "Only one of optimize_all, replay_test, or file should be provided"
-    functions: Dict[str, List[FunctionToOptimize]]
+    functions: dict[str, list[FunctionToOptimize]]
     if optimize_all:
         logging.info("Finding all functions in the module '%s' ...", optimize_all)
         functions = get_all_files_and_functions(optimize_all)
@@ -221,9 +223,9 @@ def get_functions_to_optimize(
     return filtered_modified_functions, functions_count
 
 
-def get_functions_within_git_diff() -> Dict[str, List[FunctionToOptimize]]:
+def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
     modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=False)
-    modified_functions: Dict[str, List[FunctionToOptimize]] = {}
+    modified_functions: dict[str, list[FunctionToOptimize]] = {}
     for path in modified_lines:
         if not os.path.exists(path):
             continue
@@ -246,8 +248,8 @@ def get_functions_within_git_diff() -> Dict[str, List[FunctionToOptimize]]:
     return modified_functions
 
 
-def get_all_files_and_functions(module_root_path: str) -> Dict[str, List[FunctionToOptimize]]:
-    functions: Dict[str, List[FunctionToOptimize]] = {}
+def get_all_files_and_functions(module_root_path: str) -> dict[str, list[FunctionToOptimize]]:
+    functions: dict[str, list[FunctionToOptimize]] = {}
     for root, dirs, files in os.walk(module_root_path):
         for file in files:
             if not file.endswith(".py"):
@@ -264,8 +266,8 @@ def get_all_files_and_functions(module_root_path: str) -> Dict[str, List[Functio
     return functions_shuffled
 
 
-def find_all_functions_in_file(file_path: str) -> Dict[str, List[FunctionToOptimize]]:
-    functions: Dict[str, List[FunctionToOptimize]] = {}
+def find_all_functions_in_file(file_path: str) -> dict[str, list[FunctionToOptimize]]:
+    functions: dict[str, list[FunctionToOptimize]] = {}
     with open(file_path, encoding="utf8") as f:
         try:
             ast_module = ast.parse(f.read())
@@ -282,7 +284,7 @@ def get_all_replay_test_functions(
     replay_test: str,
     test_cfg: TestConfig,
     project_root_path: str,
-) -> Dict[str, List[FunctionToOptimize]]:
+) -> dict[str, list[FunctionToOptimize]]:
     function_tests = discover_unit_tests(test_cfg, discover_only_these_tests=[replay_test])
     # Get the absolute file paths for each function, excluding class name if present
     filtered_valid_functions = defaultdict(list)
@@ -304,15 +306,15 @@ def get_all_replay_test_functions(
         )
         if class_name:
             # If there is a class name, append it to the module path
-            function: str = class_name + "." + function_name
+            function = class_name + "." + function_name
             file_path_parts = module_path_parts[:-1]  # Exclude the class name
         else:
-            function: str = function_name
+            function = function_name
             file_path_parts = module_path_parts
         file_path = os.path.join(project_root_path, *file_path_parts) + ".py"
         file_to_functions_map[file_path].append((function, function_name, class_name))
     for file_path, functions in file_to_functions_map.items():
-        all_valid_functions: Dict[str, List[FunctionToOptimize]] = find_all_functions_in_file(
+        all_valid_functions: dict[str, list[FunctionToOptimize]] = find_all_functions_in_file(
             file_path=file_path,
         )
         filtered_list = []
@@ -356,7 +358,7 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
         self,
         file_name: str,
         function_or_method_name: str,
-        class_name: Optional[str] = None,
+        class_name: str | None = None,
     ) -> None:
         self.file_name = file_name
         self.class_name = class_name
@@ -390,7 +392,7 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
 def inspect_top_level_functions_or_methods(
     file_name: str,
     function_or_method_name: str,
-    class_name: Optional[str] = None,
+    class_name: str | None = None,
 ) -> FunctionProperties:
     with open(file_name, encoding="utf8") as file:
         try:
@@ -408,19 +410,19 @@ def inspect_top_level_functions_or_methods(
 
 
 def filter_functions(
-    modified_functions: Dict[str, List[FunctionToOptimize]],
+    modified_functions: dict[str, list[FunctionToOptimize]],
     tests_root: str,
-    ignore_paths: List[str],
+    ignore_paths: list[str],
     project_root: str,
     module_root: str,
     disable_logs: bool = False,
-) -> Tuple[Dict[str, List[FunctionToOptimize]], int]:
+) -> tuple[dict[str, list[FunctionToOptimize]], int]:
     # Remove any function that we don't want to optimize
 
     # Ignore files with submodule path, cache the submodule paths
     submodule_paths = ignored_submodule_paths(module_root)
 
-    filtered_modified_functions: Dict[str, List[FunctionToOptimize]] = {}
+    filtered_modified_functions: dict[str, list[FunctionToOptimize]] = {}
     functions_count: int = 0
     test_functions_removed_count: int = 0
     non_modules_removed_count: int = 0
@@ -475,7 +477,7 @@ def filter_functions(
 def filter_files_optimized(
     file_path: str,
     tests_root: str,
-    ignore_paths: List[str],
+    ignore_paths: list[str],
     module_root: str,
 ) -> bool:
     """Optimized version of the filter_functions function above.

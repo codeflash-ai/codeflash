@@ -51,6 +51,7 @@ def run_tests(
             cwd=cwd,
             env=test_env,
             text=True,
+            timeout=600,
         )
     else:
         raise ValueError("Invalid test framework -- I only support Pytest and Unittest currently.")
