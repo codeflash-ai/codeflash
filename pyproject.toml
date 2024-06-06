@@ -125,7 +125,7 @@ initial-content = """
 module-root = "codeflash"
 tests-root = "tests"
 test-framework = "pytest"
-formatter-cmd = ["poetry run ruff check --exit-zero --fix $file", "poetry run ruff format $file"]
+formatter-cmds = ["poetry run ruff check --exit-zero --fix $file", "poetry run ruff format $file"]
 
 
 [build-system]

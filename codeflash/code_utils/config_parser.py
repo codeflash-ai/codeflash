@@ -63,7 +63,7 @@ def parse_config_file(config_file_path=None):
         "disable-imports-sorting": False,
     }
     list_str_keys = {
-        "formatter-cmd": ["black $file"],
+        "formatter-cmds": ["black $file"],
     }
 
     for key in str_keys:

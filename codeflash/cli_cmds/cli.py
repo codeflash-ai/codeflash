@@ -127,7 +127,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
         "test_framework",
         "ignore_paths",
         "pytest_cmd",
-        "formatter_cmd",
+        "formatter_cmds",
         "disable_telemetry",
         "disable_imports_sorting",
     ]
