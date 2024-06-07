@@ -1,4 +1,5 @@
 from __future__ import annotations
+from __future__ import annotations
 
 import ast
 import os
@@ -24,7 +25,10 @@ from codeflash.code_utils.env_utils import (
     get_codeflash_api_key,
 )
 from codeflash.code_utils.git_utils import get_repo_owner_and_name
-from codeflash.code_utils.github_utils import get_github_secrets_page_url, require_github_app_or_exit
+from codeflash.code_utils.github_utils import (
+    get_github_secrets_page_url,
+    require_github_app_or_exit,
+)
 from codeflash.code_utils.shell_utils import (
     get_shell_rc_path,
     save_api_key_to_rc,
@@ -55,16 +59,20 @@ class SetupInfo:
 def split_string_to_fit_width(string: str, width: int) -> list[str]:
     words = string.split()
     lines = []
-    current_line = words[0]
-    # split string into lines that fit with "[?] " present
-    for word in words[1:]:
-        if len(current_line) + len(word) + 1 <= width:
-            current_line += " " + word
-        else:
-            lines.append(current_line)
-            current_line = word
+    current_line = [words[0]]
+    current_length = len(words[0])
 
-    lines.append(current_line)
+    for word in words[1:]:
+        word_length = len(word)
+        if current_length + word_length + 1 <= width:
+            current_line.append(word)
+            current_length += word_length + 1
+        else:
+            lines.append(" ".join(current_line))
+            current_line = [word]
+            current_length = word_length
+
+    lines.append(" ".join(current_line))
     return lines
 
 
@@ -124,7 +132,9 @@ def inquirer_wrapper(func: Callable, *args, **kwargs) -> str | bool:
         message = kwargs["message"]
         new_kwargs = {**kwargs}
     # split the message
-    split_messages = split_string_to_cli_width(message, is_confirm=func == inquirer.confirm)
+    split_messages = split_string_to_cli_width(
+        message, is_confirm=func == inquirer.confirm
+    )
     for split_message in split_messages[:-1]:
         click.echo(split_message)
 
@@ -226,7 +236,11 @@ def collect_setup_info() -> SetupInfo:
         message="Which Python module do you want me to optimize going forward? (Usually the top-most directory with "
         "all of your Python source code)",
         choices=module_subdir_options,
-        default=(project_name if project_name in module_subdir_options else module_subdir_options[0]),
+        default=(
+            project_name
+            if project_name in module_subdir_options
+            else module_subdir_options[0]
+        ),
     )
     module_root = "." if module_root_answer == curdir_option else module_root_answer
     ph("cli-project-root-provided")
@@ -245,7 +259,9 @@ def collect_setup_info() -> SetupInfo:
         f"(If you don't have any tests yet, I can create an empty tests{os.pathsep} directory for you)",
         choices=test_subdir_options,
         default=(
-            default_tests_subdir if default_tests_subdir in test_subdir_options else test_subdir_options[0]
+            default_tests_subdir
+            if default_tests_subdir in test_subdir_options
+            else test_subdir_options[0]
         ),
     )
 
@@ -261,7 +277,11 @@ def collect_setup_info() -> SetupInfo:
             exists=True,
             normalize_to_absolute_path=True,
         )
-        tests_root = custom_tests_root_answer["path"] if custom_tests_root_answer else apologize_and_exit()
+        tests_root = (
+            custom_tests_root_answer["path"]
+            if custom_tests_root_answer
+            else apologize_and_exit()
+        )
     else:
         tests_root = tests_root_answer
     tests_root = os.path.relpath(tests_root, curdir)
@@ -270,7 +290,9 @@ def collect_setup_info() -> SetupInfo:
     # Autodiscover test framework
     autodetected_test_framework = detect_test_framework(curdir, tests_root)
     autodetected_suffix = (
-        f" (seems to me you're using {autodetected_test_framework})" if autodetected_test_framework else ""
+        f" (seems to me you're using {autodetected_test_framework})"
+        if autodetected_test_framework
+        else ""
     )
     test_framework = inquirer_wrapper(
         inquirer.list_input,
@@ -351,7 +373,9 @@ def check_for_toml_or_setup_file() -> Optional[str]:
         try:
             with open(pyproject_toml_path, encoding="utf8") as f:
                 pyproject_toml_content = f.read()
-            project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]
+            project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"][
+                "name"
+            ]
             click.echo(f"✅ I found a pyproject.toml for your project {project_name}.")
             ph("cli-pyproject-toml-found-name")
         except Exception:
@@ -398,7 +422,9 @@ def check_for_toml_or_setup_file() -> Optional[str]:
 
                 # Check if the pyproject.toml file was created
                 if os.path.exists(pyproject_toml_path):
-                    click.echo(f"✅ Created a pyproject.toml file at {pyproject_toml_path}")
+                    click.echo(
+                        f"✅ Created a pyproject.toml file at {pyproject_toml_path}"
+                    )
                     click.pause()
                 ph("cli-created-pyproject-toml")
             except OSError:
@@ -559,7 +585,9 @@ def prompt_api_key() -> bool:
         existing_api_key = None
     if existing_api_key:
         display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
-        click.echo(f"🔑 I found a CODEFLASH_API_KEY in your environment [{display_key}]!")
+        click.echo(
+            f"🔑 I found a CODEFLASH_API_KEY in your environment [{display_key}]!"
+        )
 
         use_existing_key = inquirer_wrapper(
             inquirer.confirm,
@@ -667,7 +695,9 @@ def run_end_to_end_test(setup_info: SetupInfo) -> None:
     click.echo(f"{LF}🗑️ Deleted {bubble_sort_path}")
 
     if process.returncode == 0:
-        click.echo(f"{LF}✅ End-to-end test passed. Codeflash has been correctly set up!")
+        click.echo(
+            f"{LF}✅ End-to-end test passed. Codeflash has been correctly set up!"
+        )
     else:
         click.echo(
             f"{LF}❌ End-to-end test failed. Please check the logs above, and take a look at https://app.codeflash.ai/app/getting-started for help and troubleshooting.",
