@@ -1,6 +1,5 @@
 import tempfile
 
-import pytest
 from codeflash.code_utils.code_extractor import get_code
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 
@@ -283,9 +282,6 @@ def test_get_code_multiline_class_def() -> None:
         assert contextual_dunder_methods == set()
 
 
-@pytest.mark.skip(
-    reason="This should be fixed within 2 days but skipping so that the rest of the fixes can be merged in",
-)
 def test_get_code_dataclass_attribute():
     code = """@dataclass
 class CustomDataClass:
@@ -296,6 +292,9 @@ class CustomDataClass:
         f.write(code)
         f.flush()
 
+        # This is not something that should ever happen with the current implementation, as get_code only runs with a
+        # single FunctionToOptimize instance, in the case where that instance has been filtered to represent a function
+        # (with a definition).
         new_code, contextual_dunder_methods = get_code(
             [
                 FunctionToOptimize(
