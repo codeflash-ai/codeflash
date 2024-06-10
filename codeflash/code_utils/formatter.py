@@ -10,9 +10,9 @@ def format_code(
     path: str,
 ) -> str:
     # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
-    assert os.path.exists(
-        path,
-    ), f"File {path} does not exist. Cannot format the file. Exiting..."
+    if not os.path.exists(path):
+        logging.error(f"File {path} does not exist. Cannot format the file.")
+        return None
     if formatter_cmds[0].lower() == "disabled":
         with open(path, encoding="utf8") as f:
             new_code = f.read()
