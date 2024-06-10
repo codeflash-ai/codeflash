@@ -5,9 +5,12 @@ import os.path
 import pathlib
 from typing import Dict, Optional
 
+import git
+
 from codeflash.api import cfapi
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.git_utils import (
+    check_and_push_branch,
     get_current_branch,
     get_repo_owner_and_name,
     git_root_dir,
@@ -23,11 +26,11 @@ def existing_tests_source_for(
     tests_root: str,
 ) -> str:
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
-    existing_tests = ""
+    existing_tests_unique = set()
     if test_files:
         for test_file in test_files:
-            existing_tests += "- " + os.path.relpath(test_file.test_file, tests_root) + "\n"
-    return existing_tests
+            existing_tests_unique.add("- " + os.path.relpath(test_file.test_file, tests_root))
+    return "\n".join(sorted(existing_tests_unique))
 
 
 def check_create_pr(
@@ -38,10 +41,11 @@ def check_create_pr(
     generated_original_test_source: str,
 ) -> None:
     pr_number: Optional[int] = env_utils.get_pr_number()
+    git_repo = git.Repo(search_parent_directories=True)
 
     if pr_number is not None:
         logging.info(f"Suggesting changes to PR #{pr_number} ...")
-        owner, repo = get_repo_owner_and_name()
+        owner, repo = get_repo_owner_and_name(git_repo)
         relative_path = str(pathlib.Path(os.path.relpath(explanation.file_path, git_root_dir())).as_posix())
         response = cfapi.suggest_changes(
             owner=owner,
@@ -76,8 +80,11 @@ def check_create_pr(
             )
     else:
         logging.info("Creating a new PR with the optimized code...")
-        owner, repo = get_repo_owner_and_name()
+        owner, repo = get_repo_owner_and_name(git_repo)
 
+        if not check_and_push_branch(git_repo):
+            logging.warning("⏭️ Branch is not pushed, skipping PR creation...")
+            return
         relative_path = str(pathlib.Path(os.path.relpath(explanation.file_path, git_root_dir())).as_posix())
         base_branch = get_current_branch()
         response = cfapi.create_pr(

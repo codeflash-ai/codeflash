@@ -1,6 +1,7 @@
 import logging
 import os
 import pathlib
+import re
 import sqlite3
 import subprocess
 from collections import defaultdict
@@ -68,6 +69,7 @@ def parse_test_return_values_bin(
                     test_framework=test_framework,
                     test_type=test_type,
                     return_value=test_pickle,
+                    timed_out=False,
                 ),
             )
             # Hardcoding the test result to True because the test did execute and we are only interested in the return values,
@@ -110,6 +112,7 @@ def parse_sqlite_test_results(
                 test_framework=test_config.test_framework,
                 test_type=test_type,
                 return_value=pickle.loads(val[6]),
+                timed_out=False,
             ),
         )
         # return_value is only None temporarily as this is only being used for the existing tests. This should generalize
@@ -179,28 +182,68 @@ def parse_test_xml(
                         f"testcase.name is None in parse_test_xml for testcase {testcase!r} in file {xml_file_contents}",
                     )
                 continue
-            # Parse test timing
-            # system_out_content = ""
-            # for system_out in testcase.system_out:
-
-            #     system_out_content += system_out.text
-            test_results.add(
-                FunctionTestInvocation(
-                    id=InvocationId(
-                        test_module_path=test_module_path,
-                        test_class_name=test_class,
-                        test_function_name=test_function,
-                        function_getting_tested="",  # FIXME,
-                        iteration_id=None,
-                    ),
-                    file_name=file_name,
-                    runtime=None,
-                    test_framework=test_config.test_framework,
-                    did_pass=result,
-                    test_type=test_type,
-                    return_value=None,
-                ),
+            timed_out = False
+            if test_config.test_framework == "pytest":
+                if len(testcase.result) > 1:
+                    print(f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!")
+                if len(testcase.result) == 1:
+                    message = testcase.result[0].message.lower()
+                    if "failed: timeout >" in message:
+                        timed_out = True
+            else:
+                if len(testcase.result) > 1:
+                    print(
+                        f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!"
+                    )
+                if len(testcase.result) == 1:
+                    message = testcase.result[0].message.lower()
+                    if "timed out" in message:
+                        timed_out = True
+            matches = re.findall(
+                r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?)######!", testcase.system_out or ""
             )
+            if not matches or not len(matches):
+
+                test_results.add(
+                    FunctionTestInvocation(
+                        id=InvocationId(
+                            test_module_path=test_module_path,
+                            test_class_name=test_class,
+                            test_function_name=test_function,
+                            function_getting_tested="",  # FIXME,
+                            iteration_id=None,
+                        ),
+                        file_name=file_name,
+                        runtime=None,
+                        test_framework=test_config.test_framework,
+                        did_pass=result,
+                        test_type=test_type,
+                        return_value=None,
+                        timed_out=timed_out,
+                    ),
+                )
+            else:
+                for match in matches:
+                    test_results.add(
+                        FunctionTestInvocation(
+                            id=InvocationId(
+                                test_module_path=match[0],
+                                test_class_name=None
+                                if match[1] == ""
+                                else match[1][:-1],
+                                test_function_name=match[2],
+                                function_getting_tested=match[3],
+                                iteration_id=match[4],
+                            ),
+                            file_name=file_name,
+                            runtime=None,
+                            test_framework=test_config.test_framework,
+                            did_pass=result,
+                            test_type=test_type,
+                            return_value=None,
+                            timed_out=timed_out,
+                        ),
+                    )
     if len(test_results) == 0:
         logging.info(f"Test '{test_py_file_path}' failed to run, skipping it")
         if run_result is not None:
@@ -258,6 +301,7 @@ def merge_test_results(
         if len(xml_results) == 1:
             xml_result = xml_results[0]
             # This means that we only have one FunctionTestInvocation for this test xml. Match them to the bin results
+            # Either a whole test function fails or passes.
             for result_bin in bin_results:
                 merged_test_results.add(
                     FunctionTestInvocation(
@@ -268,9 +312,37 @@ def merge_test_results(
                         did_pass=xml_result.did_pass,
                         test_type=xml_result.test_type,
                         return_value=result_bin.return_value,
+                        timed_out=xml_result.timed_out,
+                    ),
+                )
+        elif xml_results.test_results[0].id.iteration_id is not None:
+            # This means that we have multiple iterations of the same test function
+            # We need to match the iteration_id to the bin results
+            for i in range(len(xml_results.test_results)):
+                xml_result = xml_results.test_results[i]
+                try:
+                    bin_result = bin_results.get_by_id(xml_result.id)
+                except AttributeError:
+                    bin_result = None
+                if bin_result is None:
+                    merged_test_results.add(xml_result)
+                    continue
+                merged_test_results.add(
+                    FunctionTestInvocation(
+                        id=xml_result.id,
+                        file_name=xml_result.file_name,
+                        runtime=bin_result.runtime,
+                        test_framework=xml_result.test_framework,
+                        did_pass=bin_result.did_pass,
+                        test_type=xml_result.test_type,
+                        return_value=bin_result.return_value,
+                        timed_out=xml_result.timed_out
+                        if bin_result.runtime is None
+                        else False,  # If runtime was measured in the bin file, then the testcase did not time out
                     ),
                 )
         else:
+            # Should happen only if the xml did not have any test invocation id info
             for i in range(len(bin_results.test_results)):
                 bin_result = bin_results.test_results[i]
                 try:
@@ -278,9 +350,6 @@ def merge_test_results(
                 except IndexError:
                     xml_result = None
                 if xml_result is None:
-                    # if xml_result.test_type == TestType.EXISTING_UNIT_TEST:
-                    # only support
-                    # logging.warning(f"Could not find xml result for bin result: {bin_result.id}")
                     merged_test_results.add(bin_result)
                     continue
                 merged_test_results.add(
@@ -292,6 +361,7 @@ def merge_test_results(
                         did_pass=bin_result.did_pass,
                         test_type=bin_result.test_type,
                         return_value=bin_result.return_value,
+                        timed_out=xml_result.timed_out,  # only the xml gets the timed_out flag
                     ),
                 )
 

@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import os
+from argparse import Namespace
+from pathlib import Path
+
+from returns.pipeline import is_successful
 
 from codeflash.code_utils.code_replacer import replace_functions_in_file
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize, FunctionParent
+from codeflash.optimization.optimizer import Optimizer
 
 os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
 
@@ -707,3 +713,62 @@ print("Hello world")
         contextual_functions,
     )
     assert new_code == expected
+
+
+class HelperClass:
+    def __init__(self, name):
+        self.name = name
+
+    def innocent_bystander(self):
+        pass
+
+    def helper_method(self):
+        return self.name
+
+
+class MainClass:
+    def __init__(self, name):
+        self.name = name
+
+    def main_method(self):
+        return HelperClass(self.name).helper_method()
+
+
+def test_code_replacement10() -> None:
+    get_code_output = """from __future__ import annotations
+
+class HelperClass:
+    def __init__(self, name):
+        self.name = name
+
+    def innocent_bystander(self):
+        pass
+
+    def helper_method(self):
+        return self.name
+
+class MainClass:
+    def __init__(self, name):
+        self.name = name
+    def main_method(self):
+        return HelperClass(self.name).helper_method()
+"""
+    file_path = Path(__file__).resolve()
+    opt = Optimizer(
+        Namespace(
+            project_root=str(file_path.parent.resolve()),
+            disable_telemetry=True,
+            tests_root="tests",
+            test_framework="pytest",
+            pytest_cmd="pytest",
+            experiment_id=None,
+        ),
+    )
+    func_top_optimize = FunctionToOptimize(function_name="main_method", file_path=str(file_path),
+                                           parents=[FunctionParent("MainClass", "ClassDef")])
+    with open(file_path) as f:
+        original_code = f.read()
+        code_context = opt.get_code_optimization_context(function_to_optimize=func_top_optimize,
+                                                         project_root=str(file_path.parent),
+                                                         original_source_code=original_code).unwrap()
+        assert code_context.code_to_optimize_with_helpers == get_code_output

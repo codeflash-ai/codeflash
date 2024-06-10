@@ -119,13 +119,17 @@ def create_pr(
     return response
 
 
-def check_github_app_installed_on_repo(owner: str, repo: str) -> Response:
+def is_github_app_installed_on_repo(owner: str, repo: str) -> bool:
     """Check if the Codeflash GitHub App is installed on the specified repository.
     :param owner: The owner of the repository.
     :param repo: The name of the repository.
     :return: The response object.
     """
-    return make_cfapi_request(
+    response = make_cfapi_request(
         endpoint=f"/is-github-app-installed?repo={repo}&owner={owner}",
         method="GET",
     )
+    if not response.ok or response.text != "true":
+        logging.error(f"Error: {response.text}")
+        return False
+    return True

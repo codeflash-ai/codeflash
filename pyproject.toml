@@ -12,6 +12,9 @@ packages = [
 ]
 keywords = ["codeflash", "performance", "optimization", "ai", "code", "machine learning", "LLM"]
 
+# Don't forget to install the poetry plugins we use too:
+# poetry self add poetry-dynamic-versioning
+
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
 unidiff = ">=0.7.4"
@@ -79,7 +82,7 @@ warn_required_dynamic_aliases = true
 [tool.ruff.lint]
 select = ["ALL"]
 unfixable = ["F401"]
-ignore = ["ANN101", "S101", "D103","G004", "FIX002"]
+ignore = ["S101", "D103", "FIX002"]
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true
@@ -122,7 +125,7 @@ initial-content = """
 module-root = "codeflash"
 tests-root = "tests"
 test-framework = "pytest"
-ignore-paths = []
+formatter-cmds = ["poetry run ruff check --exit-zero --fix $file", "poetry run ruff format $file"]
 
 
 [build-system]

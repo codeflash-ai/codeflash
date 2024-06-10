@@ -6,40 +6,38 @@ import isort
 
 
 def format_code(
-    formatter_cmd: str,
-    imports_sort_cmd: str,
-    should_sort_imports: bool,
+    formatter_cmds: list[str],
     path: str,
 ) -> str:
     # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
-    if formatter_cmd.lower() == "disabled":
-        if should_sort_imports:
-            return sort_imports(imports_sort_cmd, should_sort_imports, path)
-
+    if not os.path.exists(path):
+        logging.error(f"File {path} does not exist. Cannot format the file.")
+        return None
+    if formatter_cmds[0].lower() == "disabled":
         with open(path, encoding="utf8") as f:
             new_code = f.read()
         return new_code
+    file_token = "$file"
 
-    formatter_cmd_list = [chunk for chunk in formatter_cmd.split(" ") if chunk != ""]
-    logging.info(f"Formatting code with {formatter_cmd} ...")
-    # black currently does not have a stable public API, so we are using the CLI
-    # the main problem is custom config parsing https://github.com/psf/black/issues/779
-    assert os.path.exists(
-        path
-    ), f"File {path} does not exist. Cannot format the file. Exiting..."
-    result = subprocess.run(
-        formatter_cmd_list + [path],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
-    if result.returncode == 0:
-        logging.info("OK")
-    else:
-        logging.error(f"Failed to format code with {formatter_cmd}")
+    for command in formatter_cmds:
+        formatter_cmd_list = [chunk for chunk in command.split(" ") if chunk != ""]
+        formatter_cmd_list = [path if chunk == file_token else chunk for chunk in formatter_cmd_list]
+        logging.info(f"Formatting code with {' '.join(formatter_cmd_list)} ...")
 
-    if should_sort_imports:
-        return sort_imports(imports_sort_cmd, should_sort_imports, path)
+        try:
+            result = subprocess.run(
+                formatter_cmd_list,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+        except Exception as e:
+            logging.exception(f"Failed to format code with {' '.join(formatter_cmd_list)}: {e}")
+            return None
+        if result.returncode == 0:
+            logging.info("FORMATTING OK")
+        else:
+            logging.error(f"Failed to format code with {' '.join(formatter_cmd_list)}")
 
     with open(path, encoding="utf8") as f:
         new_code = f.read()
@@ -47,14 +45,8 @@ def format_code(
     return new_code
 
 
-def sort_imports(imports_sort_cmd: str, should_sort_imports: bool, path: str) -> str:
+def sort_imports(code: str) -> str:
     try:
-        with open(path, encoding="utf8") as f:
-            code = f.read()
-
-        if imports_sort_cmd.lower() == "disabled" or not should_sort_imports:
-            return code
-
         # Deduplicate and sort imports, modify the code in memory, not on disk
         sorted_code = isort.code(code)
     except Exception as e:

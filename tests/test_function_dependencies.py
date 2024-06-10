@@ -22,7 +22,7 @@ def test_simple_dependencies():
     helper_functions = get_function_variables_definitions(
         FunctionToOptimize("simple_function_with_one_dep", str(file_path), []),
         str(file_path.parent.resolve()),
-    )
+    )[0]
     assert len(helper_functions) == 1
     assert helper_functions[0][0].definition.full_name == "test_function_dependencies.calculate_something"
 
@@ -81,9 +81,9 @@ def test_multiple_classes_dependencies():
     )
 
     # assert len(helper_functions) == 2
-    assert list(map(lambda x: x[0].full_name, helper_functions)) == [
-        "test_function_dependencies.C.calculate_something_3",
+    assert list(map(lambda x: x[0].full_name, helper_functions[0])) == [
         "test_function_dependencies.global_dependency_3",
+        "test_function_dependencies.C.calculate_something_3",
     ]
 
 
@@ -99,7 +99,7 @@ def test_recursive_dependency():
     helper_functions = get_function_variables_definitions(
         FunctionToOptimize("recursive_dependency_1", str(file_path), []),
         str(file_path.parent.resolve()),
-    )
+    )[0]
     assert len(helper_functions) == 1
     assert helper_functions[0][0].definition.full_name == "test_function_dependencies.calculate_something"
 
@@ -122,7 +122,7 @@ def test_simple_dependencies_ann():
     helper_functions = get_function_variables_definitions(
         FunctionToOptimize("simple_function_with_one_dep_ann", str(file_path), []),
         str(file_path.parent.resolve()),
-    )
+    )[0]
     assert len(helper_functions) == 2
     assert helper_functions[0][0].definition.full_name == "test_function_dependencies.MyData"
     assert helper_functions[1][0].definition.full_name == "test_function_dependencies.calculate_something_ann"

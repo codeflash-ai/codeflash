@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import logging
-from collections import deque
 
 import libcst as cst
 from libcst.codemod import CodemodContext
@@ -57,19 +56,33 @@ def add_needed_imports_from_module(
                 asname=alias_pair[1],
             )
 
-    return (
-        RemoveImportsVisitor(dst_context)
-        .transform_module(
-            AddImportsVisitor(dst_context).transform_module(cst.parse_module(dst_module_code)),
-        )
-        .code.lstrip("\n")
-    )
+    try:
+        parsed_module = cst.parse_module(dst_module_code)
+    except cst.ParserSyntaxError as e:
+        logging.exception(f"Syntax error in destination module code: {e}")
+        return dst_module_code  # Return the original code if there's a syntax error
+    try:
+        transformed_module = AddImportsVisitor(dst_context).transform_module(parsed_module)
+        transformed_module = RemoveImportsVisitor(dst_context).transform_module(transformed_module)
+        return transformed_module.code.lstrip("\n")
+    except Exception as e:
+        logging.exception(f"Error adding imports to destination module code: {e}")
+        return dst_module_code
 
 
 def get_code(
     functions_to_optimize: list[FunctionToOptimize],
 ) -> tuple[str | None, set[tuple[str, str]]]:
-    """Return the code for a class or functions in a file."""
+    """Return the code for a function or methods in a Python module. functions_to_optimize is either a singleton
+    FunctionToOptimize instance, which represents either a function at the module level or a method of a class at the
+    module level, or it represents a list of methods of the same class."""
+
+    if not functions_to_optimize or (
+            functions_to_optimize[0].parents and functions_to_optimize[0].parents[0].type != "ClassDef") or (
+            len(functions_to_optimize[0].parents) > 1 or (
+            len(functions_to_optimize) > 1) and len({fn.parents[0] for fn in functions_to_optimize}) != 1):
+        return None, set()
+
     file_path: str = functions_to_optimize[0].file_path
     class_skeleton: set[tuple[int, int | None]] = set()
     contextual_dunder_methods: set[tuple[str, str]] = set()
@@ -88,63 +101,63 @@ def get_code(
                 # The many mypy issues will be fixed once this code moves to the backend,
                 # using Type Guards as we move to 3.10+.
                 # We will cover the Type Alias case on the backend since it's a 3.12 feature.
-                (
                     isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
                     and node.name == name_parts[0]
-                )
+                ):
+                target = node
+                break
                 # The next two cases cover type aliases in pre-3.12 syntax, where only single assignment is allowed.
-                or (
-                    isinstance(node, ast.Assign)
+            if (
+                    (isinstance(node, ast.Assign)
                     and len(node.targets) == 1
                     and isinstance(node.targets[0], ast.Name)
-                    and node.targets[0].id == name_parts[0]
-                )
+                    and node.targets[0].id == name_parts[0])
                 or (
                     isinstance(node, ast.AnnAssign)
                     and hasattr(node.target, "id")
-                    and node.target.id == name_parts[0]
-                )
-            ):
+                    and node.target.id == name_parts[0])
+                ):
+                if class_skeleton:
+                    break
                 target = node
                 break
 
         if target is None or len(name_parts) == 1:
             return target
 
-        if isinstance(target, ast.ClassDef):
-            class_skeleton.add((target.lineno, target.body[0].lineno - 1))
-            cbody = target.body
-            if isinstance(cbody[0], ast.expr):  # Is a docstring
-                class_skeleton.add((cbody[0].lineno, cbody[0].end_lineno))
-                cbody = cbody[1:]
-                cnode: ast.stmt
-            for cnode in cbody:
-                # Collect all dunder methods.
-                cnode_name: str
-                if (
-                    isinstance(cnode, (ast.FunctionDef, ast.AsyncFunctionDef))
-                    and len(cnode_name := cnode.name) > 4
-                    and cnode_name != name_parts[1]
-                    and cnode_name.isascii()
-                    and cnode_name.startswith("__")
-                    and cnode_name.endswith("__")
-                ):
-                    contextual_dunder_methods.add((target.name, cnode_name))
-                    class_skeleton.add((cnode.lineno, cnode.end_lineno))
+        if not isinstance(target, ast.ClassDef):
+            return None
+        class_skeleton.add((target.lineno, target.body[0].lineno - 1))
+        cbody = target.body
+        if isinstance(cbody[0], ast.expr):  # Is a docstring
+            class_skeleton.add((cbody[0].lineno, cbody[0].end_lineno))
+            cbody = cbody[1:]
+            cnode: ast.stmt
+        for cnode in cbody:
+            # Collect all dunder methods.
+            cnode_name: str
+            if (
+                isinstance(cnode, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and len(cnode_name := cnode.name) > 4
+                and cnode_name != name_parts[1]
+                and cnode_name.isascii()
+                and cnode_name.startswith("__")
+                and cnode_name.endswith("__")
+            ):
+                contextual_dunder_methods.add((target.name, cnode_name))
+                class_skeleton.add((cnode.lineno, cnode.end_lineno))
 
-            return find_target(target.body, name_parts[1:])
-
-        return None
+        return find_target(target.body, name_parts[1:])
 
     with open(file_path, encoding="utf8") as file:
-        source_code = file.read()
+        source_code: str = file.read()
     try:
-        module_node = ast.parse(source_code)
-    except SyntaxError as e:
-        logging.exception(f"get_code - Syntax error in code: {e}")
+        module_node: ast.Module = ast.parse(source_code)
+    except SyntaxError:
+        logging.exception("get_code - Syntax error while parsing code")
         return None, set()
     # Get the source code lines for the target node
-    lines = source_code.splitlines(keepends=True)
+    lines: list[str] = source_code.splitlines(keepends=True)
     if len(functions_to_optimize[0].parents) == 1:
         if (
             functions_to_optimize[0].parents[0].type == "ClassDef"
@@ -155,7 +168,7 @@ def get_code(
 
         else:
             logging.error(
-                f"Error: get_code does not support nesting function in functions: {functions_to_optimize[0].parents}",
+                f"Error: get_code does not support inner functions: {functions_to_optimize[0].parents}",
             )
             return None, set()
     elif len(functions_to_optimize[0].parents) == 0:
@@ -180,51 +193,13 @@ def get_code(
             )
         else:
             target_code += "".join(lines[target_node.lineno - 1 : target_node.end_lineno])
+    if not target_code:
+        return None, set()
     class_list: list[tuple[int, int | None]] = sorted(class_skeleton)
     class_code = "".join(
         ["".join(lines[s_lineno - 1 : e_lineno]) for (s_lineno, e_lineno) in class_list],
     )
     return class_code + target_code, contextual_dunder_methods
-
-
-def get_code_no_skeleton(file_path: str, target_name: str) -> str | None:
-    """Return the code for a function in a file, irrespective of class skeleton."""
-    with open(file_path, encoding="utf8") as file:
-        source_code = file.read()
-
-    try:
-        module_node = ast.parse(source_code)
-    except SyntaxError as e:
-        logging.exception(f"get_code_no_skeleton - Syntax error in code: {e}")
-        return None
-
-    name_parts = target_name.split(".")
-    target_node = None
-    stack: deque[ast.AST] = deque([module_node])
-
-    while stack:
-        node = stack.pop()
-        if (
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-            and node.name == name_parts[-1]
-        ):
-            target_node = node
-            break
-        stack.extend(list(ast.iter_child_nodes(node)))
-
-    if target_node is None:
-        return None
-
-    # Get the source code lines for the target node
-    lines = source_code.splitlines(keepends=True)
-    if hasattr(target_node, "decorator_list") and target_node.decorator_list:
-        target_code = "".join(
-            lines[target_node.decorator_list[0].lineno - 1 : target_node.end_lineno],
-        )
-    else:
-        target_code = "".join(lines[target_node.lineno - 1 : target_node.end_lineno])
-
-    return target_code
 
 
 def extract_code(

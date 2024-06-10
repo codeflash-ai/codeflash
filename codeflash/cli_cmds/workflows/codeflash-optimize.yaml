@@ -29,18 +29,19 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-      # TODO: Replace this with your project's python installation method
+      # TODO: Replace the following with your project's python installation method
       - name: Set up Python
         if: steps.bot_check.outputs.skip_remaining_steps == 'no'
         uses: actions/setup-python@v4
         with:
           python-version: {{ python_version }}
-      # TODO: Replace this with your project's dependency installation method
+      # TODO: Replace the following with your project's dependency installation method
       - name: Install Project Dependencies
         if: steps.bot_check.outputs.skip_remaining_steps == 'no'
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt # TODO: Replace this with your project setup method
+        # TODO: Replace the following with your project setup method
+          pip install -r requirements.txt
           pip install codeflash
       - name: Run Codeflash to optimize code
         if: steps.bot_check.outputs.skip_remaining_steps == 'no'

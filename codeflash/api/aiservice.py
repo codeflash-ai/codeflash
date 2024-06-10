@@ -26,7 +26,10 @@ class OptimizedCandidate:
 class AiServiceClient:
     def __init__(self) -> None:
         self.base_url = self.get_aiservice_base_url()
-        self.headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
+        self.headers = {
+            "Authorization": f"Bearer {get_codeflash_api_key()}",
+            "Connection": "close",
+        }
 
     def get_aiservice_base_url(self) -> str:
         if os.environ.get("CODEFLASH_AIS_SERVER", default="prod").lower() == "local":
@@ -215,7 +218,7 @@ class AiServiceClient:
             )
             return None
         except Exception:
-            logging.exception(f"Error generating tests: {response.status_code} - {response.text}")
+            logging.error(f"Error generating tests: {response.status_code} - {response.text}")  # noqa: TRY400
             ph(
                 "cli-testgen-error-response",
                 {"response_status_code": response.status_code, "error": response.text},

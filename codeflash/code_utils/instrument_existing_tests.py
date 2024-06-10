@@ -34,9 +34,12 @@ class ReplaceCallNodeWithName(ast.NodeTransformer):
 
 
 class InjectPerfOnly(ast.NodeTransformer):
-    def __init__(self, function_name: str, module_path: str) -> None:
+    def __init__(
+        self, function_name: str, module_path: str, test_framework: str
+    ) -> None:
         self.only_function_name = function_name
         self.module_path = module_path
+        self.test_framework = test_framework
 
     def update_line_node(
         self,
@@ -221,6 +224,14 @@ class InjectPerfOnly(ast.NodeTransformer):
                     ),
                 ]
             )
+            if self.test_framework == "unittest":
+                node.decorator_list.append(
+                    ast.Call(
+                        func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
+                        args=[ast.Constant(value=15)],
+                        keywords=[],
+                    )
+                )
             i = len(node.body) - 1
             while i >= 0:
                 line_node = node.body[i]
@@ -281,6 +292,7 @@ def inject_profiling_into_existing_test(
     test_path: str,
     function_name: str,
     root_path: str,
+    test_framework: str,
 ) -> tuple[bool, str | None]:
     with open(test_path, encoding="utf8") as f:
         test_code = f.read()
@@ -295,13 +307,14 @@ def inject_profiling_into_existing_test(
     import_visitor.visit(tree)
     function_name = import_visitor.imported_as
 
-    tree = InjectPerfOnly(function_name, module_path).visit(tree)
+    tree = InjectPerfOnly(function_name, module_path, test_framework).visit(tree)
     new_imports = [
         ast.Import(names=[ast.alias(name="time")]),
         ast.Import(names=[ast.alias(name="gc")]),
         ast.Import(names=[ast.alias(name="os")]),
         ast.Import(names=[ast.alias(name="sqlite3")]),
         ast.Import(names=[ast.alias(name="dill", asname="pickle")]),
+        ast.Import(names=[ast.alias(name="timeout_decorator")]),
     ]
     tree.body = [*new_imports, create_wrapper_function(), *tree.body]
     return True, isort.code(ast.unparse(tree), float_to_top=True)
@@ -463,6 +476,51 @@ def create_wrapper_function() -> ast.FunctionDef:
                     ],
                 ),
                 lineno=lineno + 8,
+            ),
+            ast.Expr(
+                value=ast.Call(
+                    func=ast.Name(id="print", ctx=ast.Load()),
+                    args=[
+                        ast.JoinedStr(
+                            values=[
+                                ast.Constant(value="!######"),
+                                ast.FormattedValue(
+                                    value=ast.Name(id="test_module_name", ctx=ast.Load()),
+                                    conversion=-1,
+                                ),
+                                ast.Constant(value=":"),
+                                ast.FormattedValue(
+                                    value=ast.IfExp(
+                                        test=ast.Name(id="test_class_name", ctx=ast.Load()),
+                                        body=ast.BinOp(
+                                            left=ast.Name(id="test_class_name", ctx=ast.Load()),
+                                            op=ast.Add(),
+                                            right=ast.Constant(value="."),
+                                        ),
+                                        orelse=ast.Constant(value=""),
+                                    ),
+                                    conversion=-1,
+                                ),
+                                ast.FormattedValue(
+                                    value=ast.Name(id="test_name", ctx=ast.Load()),
+                                    conversion=-1,
+                                ),
+                                ast.Constant(value=":"),
+                                ast.FormattedValue(
+                                    value=ast.Name(id="function_name", ctx=ast.Load()),
+                                    conversion=-1,
+                                ),
+                                ast.Constant(value=":"),
+                                ast.FormattedValue(
+                                    value=ast.Name(id="invocation_id", ctx=ast.Load()),
+                                    conversion=-1,
+                                ),
+                                ast.Constant(value="######!"),
+                            ],
+                        ),
+                    ],
+                    keywords=[],
+                ),
             ),
             ast.Expr(
                 value=ast.Call(

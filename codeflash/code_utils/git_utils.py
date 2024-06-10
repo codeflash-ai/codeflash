@@ -1,9 +1,11 @@
 import logging
 import os
+import sys
 from io import StringIO
 from typing import Optional
 
 import git
+import inquirer
 from git import Repo
 from unidiff import PatchSet
 
@@ -84,11 +86,49 @@ def get_repo_owner_and_name(repo: Optional[Repo] = None) -> tuple[str, str]:
     return repo_owner, repo_name
 
 
-def get_github_secrets_page_url(repo: Optional[Repo] = None) -> str:
-    owner, repo_name = get_repo_owner_and_name(repo)
-    return f"https://github.com/{owner}/{repo_name}/settings/secrets/actions"
-
-
 def git_root_dir(repo: Optional[Repo] = None) -> str:
     repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
     return repository.working_dir
+
+
+def check_running_in_git_repo(module_root: str) -> bool:
+    try:
+        _ = git.Repo(module_root, search_parent_directories=True).git_dir
+        return True
+    except git.exc.InvalidGitRepositoryError:
+        return confirm_proceeding_with_no_git_repo()
+
+
+def confirm_proceeding_with_no_git_repo() -> bool:
+    if sys.__stdin__.isatty():
+        return inquirer.confirm(
+            "WARNING: I did not find a git repository for your code. If you proceed in running codeflash, optimized code will"
+            " be written over your current code and you could irreversibly lose your current code. Proceed?",
+            default=False,
+        )
+    # continue running on non-interactive environments, important for GitHub actions
+    return True
+
+
+def check_and_push_branch(repo: git.Repo) -> bool:
+    current_branch = repo.active_branch.name
+    origin = repo.remote(name="origin")
+
+    # Check if the branch is pushed
+    if f"origin/{current_branch}" not in repo.refs:
+        logging.warning(f"⚠️ The branch '{current_branch}' is not pushed to the remote repository.")
+        if not sys.__stdin__.isatty():
+            logging.warning("Non-interactive shell detected. Branch will not be pushed.")
+            return False
+        if sys.__stdin__.isatty() and inquirer.confirm(
+            f"⚡️ In order for me to create PRs, your current branch needs to be pushed. Do you want to push the branch "
+            f"'{current_branch}' to the remote repository?",
+            default=False,
+        ):
+            origin.push(current_branch)
+            logging.info(f"⬆️ Branch '{current_branch}' has been pushed to origin.")
+            return True
+        logging.info(f"🔘 Branch '{current_branch}' has not been pushed to origin.")
+        return False
+    logging.debug(f"The branch '{current_branch}' is present in the remote repository.")
+    return True

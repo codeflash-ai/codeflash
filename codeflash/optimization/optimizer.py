@@ -4,15 +4,12 @@ import concurrent.futures
 import logging
 import os
 import pathlib
-import sys
 import uuid
 from argparse import Namespace
 from collections import defaultdict
-from typing import Optional
 
 import isort
 import libcst as cst
-from pydantic import BaseModel
 from returns.pipeline import is_successful
 from returns.result import Failure, Result, Success
 
@@ -30,14 +27,14 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.code_utils.config_consts import (
-    INDIVIDUAL_TEST_TIMEOUT,
+    INDIVIDUAL_TESTCASE_TIMEOUT,
     MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS,
     MAX_FUNCTION_TEST_SECONDS,
     MAX_TEST_FUNCTION_RUNS,
     MAX_TEST_RUN_ITERATIONS,
     N_CANDIDATES,
 )
-from codeflash.code_utils.formatter import format_code
+from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import (
     inject_profiling_into_existing_test,
 )
@@ -52,11 +49,20 @@ from codeflash.discovery.functions_to_optimize import (
     get_functions_to_optimize,
 )
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
+from codeflash.models.models import (
+    BestOptimization,
+    CodeOptimizationContext,
+    GeneratedTests,
+    OptimizationSet,
+    OptimizedCandidateResult,
+    OriginalCodeBaseline,
+)
 from codeflash.optimization.function_context import (
     Source,
     get_constrained_function_context_and_helper_functions,
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
+from codeflash.result.critic import speedup_critic
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry import posthog
 from codeflash.telemetry.posthog import ph
@@ -69,47 +75,10 @@ from codeflash.verification.verification_utils import TestConfig, get_test_file_
 from codeflash.verification.verifier import generate_tests
 
 
-class OptimizationSet(BaseModel):
-    control: list[OptimizedCandidate]
-    experiment: Optional[list[OptimizedCandidate]]
-
-
-class OptimizedCandidateResult(BaseModel):
-    times_run: int
-    best_test_runtime: int
-    best_test_results: TestResults
-
-
-class OriginalCodeBaseline(BaseModel):
-    generated_test_results: TestResults
-    existing_test_results: TestResults
-    overall_test_results: Optional[TestResults]
-    runtime: int
-
-
-class GeneratedTests(BaseModel):
-    generated_original_test_source: str
-    instrumented_test_source: str
-
-
-class BestOptimization(BaseModel):
-    candidate: OptimizedCandidate
-    helper_functions: list[tuple[Source, str, str]]
-    runtime: int
-    winning_test_results: TestResults
-
-
-class CodeOptimizationContext(BaseModel):
-    code_to_optimize_with_helpers: str
-    contextual_dunder_methods: set[tuple[str, str]]
-    helper_functions: list[tuple[Source, str, str]]
-    preexisting_functions: list[str]
-
-
 class Optimizer:
     def __init__(self, args: Namespace) -> None:
         self.args = args
-        init_sentry(not args.disable_telemetry)
+        init_sentry(not args.disable_telemetry, exclude_errors=True)
         posthog.initialize_posthog(not args.disable_telemetry)
 
         self.test_cfg = TestConfig(
@@ -131,12 +100,6 @@ class Optimizer:
         logging.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
             return
-        continue_execution, disable_pr = env_utils.ensure_git_repo(module_root=self.args.module_root)
-        if not continue_execution:
-            logging.error("No git repository detected and user aborted run. Exiting...")
-            sys.exit(1)
-        if disable_pr:
-            self.args.no_pr = True
 
         file_to_funcs_to_optimize: dict[str, list[FunctionToOptimize]]
         num_optimizable_functions: int
@@ -201,7 +164,7 @@ class Optimizer:
                     if is_successful(best_optimization):
                         optimizations_found += 1
                     else:
-                        logging.error(best_optimization.failure())
+                        logging.warning(best_optimization.failure())
                         continue
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
             if optimizations_found == 0:
@@ -501,25 +464,13 @@ class Optimizer:
                 speedup_ratios[candidate.optimization_id] = (
                     original_code_baseline.runtime - best_test_runtime
                 ) / best_test_runtime
-
                 logging.info(
                     f"Candidate runtime measured over {candidate_result.times_run} run{'s' if candidate_result.times_run > 1 else ''}: "
                     f"{humanize_runtime(best_test_runtime)}, speedup ratio = "
                     f"{((original_code_baseline.runtime - best_test_runtime) / best_test_runtime):.3f}",
                 )
-                if (
-                    ((original_code_baseline.runtime - best_test_runtime) / best_test_runtime)
-                    > self.args.minimum_performance_gain
-                ) and best_test_runtime < best_runtime_until_now:
-                    logging.info(
-                        "This candidate is better than the previous best candidate.",
-                    )
 
-                    logging.info(
-                        f"Original runtime: {humanize_runtime(original_code_baseline.runtime)} Best test runtime: "
-                        f"{humanize_runtime(best_test_runtime)}, ratio = "
-                        f"{((original_code_baseline.runtime - best_test_runtime) / best_test_runtime)}",
-                    )
+                if speedup_critic(candidate_result, original_code_baseline.runtime, best_runtime_until_now):
                     best_optimization = BestOptimization(
                         candidate=candidate,
                         helper_functions=code_context.helper_functions,
@@ -527,6 +478,7 @@ class Optimizer:
                         winning_test_results=candidate_result.best_test_results,
                     )
                     best_runtime_until_now = best_test_runtime
+
             self.write_code_and_helpers(
                 original_code,
                 original_helper_code,
@@ -593,25 +545,27 @@ class Optimizer:
         path: str,
         original_code: str,
     ) -> tuple[str, dict[str, str]]:
-        should_sort_imports = True
-        if isort.code(original_code) != original_code:
+        should_sort_imports = not self.args.disable_imports_sorting
+        if should_sort_imports and isort.code(original_code) != original_code:
             should_sort_imports = False
 
         new_code = format_code(
-            self.args.formatter_cmd,
-            self.args.imports_sort_cmd,
-            should_sort_imports,
+            self.args.formatter_cmds,
             path,
         )
-        new_helper_code: dict[str, str] = {
-            module_abspath: format_code(
-                self.args.formatter_cmd,
-                self.args.imports_sort_cmd,
-                should_sort_imports,
+        if should_sort_imports:
+            new_code = sort_imports(new_code)
+
+        new_helper_code: dict[str, str] = {}
+        for module_abspath in helper_functions_by_module_abspath:
+            new_code = format_code(
+                self.args.formatter_cmds,
                 module_abspath,
             )
-            for module_abspath in helper_functions_by_module_abspath
-        }
+            if should_sort_imports:
+                new_code = sort_imports(new_code)
+            new_helper_code[module_abspath] = new_code
+
         return new_code, new_helper_code
 
     def replace_function_and_helpers_with_optimized_code(
@@ -662,6 +616,7 @@ class Optimizer:
         (
             helper_code,
             helper_functions,
+            helper_dunder_methods,
         ) = get_constrained_function_context_and_helper_functions(
             function_to_optimize,
             self.args.project_root,
@@ -702,6 +657,7 @@ class Optimizer:
         preexisting_functions.extend(
             [fn[0].full_name.split(".")[-1] for fn in helper_functions],
         )
+        contextual_dunder_methods.update(helper_dunder_methods)
         return Success(
             CodeOptimizationContext(
                 code_to_optimize_with_helpers=code_to_optimize_with_helpers_and_imports,
@@ -745,6 +701,7 @@ class Optimizer:
                     tests_in_file.test_file,
                     function_to_optimize.function_name,
                     self.args.project_root,
+                    self.args.test_framework,
                 )
                 if not success:
                     continue
@@ -1049,15 +1006,17 @@ class Optimizer:
                         candidate_existing_test_results,
                     )
                     for test_invocation in candidate_existing_test_results:
+                        original_test_invocation = original_existing_test_results.get_by_id(
+                            test_invocation.id,
+                        )
                         if (
-                            overall_original_test_results.get_by_id(test_invocation.id) is None
-                            or test_invocation.did_pass
-                            != overall_original_test_results.get_by_id(
-                                test_invocation.id,
-                            ).did_pass
-                            or not return_values_are_equal
-                        ):
-                            logging.info("Test results did not match the test results of the original code.")
+                            original_test_invocation is not None
+                            and not original_test_invocation.timed_out
+                            and (test_invocation.did_pass != original_test_invocation.did_pass)
+                        ) or not return_values_are_equal:
+                            logging.info(
+                                "Test results did not match the test results of the original code.",
+                            )
                             logging.info(
                                 f"Test {test_invocation.id} failed. Skipping this candidate.",
                             )
@@ -1156,7 +1115,7 @@ class Optimizer:
             test_file,
             test_framework=self.args.test_framework,
             cwd=self.args.project_root,
-            pytest_timeout=INDIVIDUAL_TEST_TIMEOUT,
+            pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
             pytest_cmd=self.test_cfg.pytest_cmd,
             verbose=True,
             test_env=test_env,
@@ -1193,12 +1152,12 @@ class Optimizer:
             helper_function_names=helper_function_names,
             module_path=module_path,
             test_cfg=self.test_cfg,
-            test_timeout=INDIVIDUAL_TEST_TIMEOUT,
+            test_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
             use_cached_tests=self.args.use_cached_tests,
             function_trace_id=function_trace_id,
         )
         if tests is None:
-            logging.error(
+            logging.warning(
                 f"Failed to generate and instrument tests for {function_to_optimize.function_name}",
             )
             return None

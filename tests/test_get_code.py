@@ -280,3 +280,29 @@ def test_get_code_multiline_class_def() -> None:
         )
         assert new_code == expected
         assert contextual_dunder_methods == set()
+
+
+def test_get_code_dataclass_attribute():
+    code = """@dataclass
+class CustomDataClass:
+    name: str = ""
+    data: List[int] = field(default_factory=list)"""
+
+    with tempfile.NamedTemporaryFile("w") as f:
+        f.write(code)
+        f.flush()
+
+        # This is not something that should ever happen with the current implementation, as get_code only runs with a
+        # single FunctionToOptimize instance, in the case where that instance has been filtered to represent a function
+        # (with a definition).
+        new_code, contextual_dunder_methods = get_code(
+            [
+                FunctionToOptimize(
+                    "name",
+                    f.name,
+                    [FunctionParent("CustomDataClass", "ClassDef")],
+                ),
+            ],
+        )
+        assert new_code is None
+        assert contextual_dunder_methods == set()
