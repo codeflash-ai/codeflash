@@ -132,7 +132,8 @@ def comparator(orig: Any, new: Any) -> bool:
             pass
 
         if isinstance(
-            orig, (datetime.datetime, datetime.date, datetime.timedelta, datetime.time, datetime.timezone)
+            orig,
+            (datetime.datetime, datetime.date, datetime.timedelta, datetime.time, datetime.timezone),
         ):
             return orig == new
 
@@ -164,7 +165,7 @@ def comparator(orig: Any, new: Any) -> bool:
 
         # TODO : Add other types here
         logging.warning(f"Unknown comparator input type: {type(orig)}")
-        return True
+        return False
     except RecursionError as e:
         logging.exception(f"RecursionError while comparing objects: {e}")
         sentry_sdk.capture_exception(e)
