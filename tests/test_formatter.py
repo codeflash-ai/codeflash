@@ -2,6 +2,7 @@ import os
 import tempfile
 
 import pytest
+from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.formatter import format_code, sort_imports
 
 
@@ -92,6 +93,51 @@ def foo():
     actual = sort_imports(original_code)
 
     assert actual == expected
+
+
+def test_formatter_cmds_non_existent():
+    """Test that default formatter-cmds is used when it doesn't exist in the toml."""
+    config_data = """
+[tool.codeflash]
+module-root = "src"
+tests-root = "tests"
+test-framework = "pytest"
+ignore-paths = []
+"""
+
+    with tempfile.NamedTemporaryFile(suffix=".toml", delete=False) as tmp:
+        tmp.write(config_data.encode())
+        tmp.flush()
+        tmp_path = tmp.name
+
+    try:
+        config, _ = parse_config_file(tmp_path)
+        assert config["formatter_cmds"] == ["black $file"]
+    finally:
+        os.remove(tmp_path)
+
+    original_code = b"""
+import os
+import sys
+def foo():
+    return os.path.join(sys.path[0], 'bar')"""
+    expected = """import os
+import sys
+
+
+def foo():
+    return os.path.join(sys.path[0], "bar")
+"""
+    with tempfile.NamedTemporaryFile() as tmp:
+        tmp.write(original_code)
+        tmp.flush()
+        tmp_path = tmp.name
+
+        actual = format_code(
+            formatter_cmds=["black $file"],
+            path=tmp_path,
+        )
+        assert actual == expected
 
 
 def test_formatter_black():
