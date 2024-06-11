@@ -84,6 +84,8 @@ def parse_config_file(config_file_path=None):
     for key in list_str_keys:
         if key in config:
             config[key] = [str(cmd) for cmd in config[key]]
+        else:
+            config[key] = list_str_keys[key]
 
     for key in path_list_keys:
         if key in config:
