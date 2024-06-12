@@ -21,7 +21,9 @@ def test_speedup_critic():
     )
 
     assert not speedup_critic(
-        candidate_result, original_code_runtime, best_runtime_until_now
+        candidate_result,
+        original_code_runtime,
+        best_runtime_until_now,
     )  # 6% improvement
 
     original_code_runtime = 100000

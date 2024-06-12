@@ -26,11 +26,11 @@ def existing_tests_source_for(
     tests_root: str,
 ) -> str:
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
-    existing_tests = ""
+    existing_tests_unique = set()
     if test_files:
         for test_file in test_files:
-            existing_tests += "- " + os.path.relpath(test_file.test_file, tests_root) + "\n"
-    return existing_tests
+            existing_tests_unique.add("- " + os.path.relpath(test_file.test_file, tests_root))
+    return "\n".join(sorted(existing_tests_unique))
 
 
 def check_create_pr(

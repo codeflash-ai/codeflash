@@ -57,11 +57,13 @@ def parse_config_file(config_file_path=None):
     path_list_keys = ["ignore-paths"]
     str_keys = {
         "pytest-cmd": "pytest",
-        "formatter-cmd": "black",
-        "imports-sort-cmd": "isort",
     }
     bool_keys = {
         "disable-telemetry": False,
+        "disable-imports-sorting": False,
+    }
+    list_str_keys = {
+        "formatter-cmds": ["black $file"],
     }
 
     for key in str_keys:
@@ -79,6 +81,11 @@ def parse_config_file(config_file_path=None):
             config[key] = os.path.realpath(
                 os.path.join(os.path.dirname(config_file_path), config[key]),
             )
+    for key in list_str_keys:
+        if key in config:
+            config[key] = [str(cmd) for cmd in config[key]]
+        else:
+            config[key] = list_str_keys[key]
 
     for key in path_list_keys:
         if key in config:

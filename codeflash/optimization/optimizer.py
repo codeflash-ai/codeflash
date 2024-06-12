@@ -34,7 +34,7 @@ from codeflash.code_utils.config_consts import (
     MAX_TEST_RUN_ITERATIONS,
     N_CANDIDATES,
 )
-from codeflash.code_utils.formatter import format_code
+from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import (
     inject_profiling_into_existing_test,
 )
@@ -545,25 +545,27 @@ class Optimizer:
         path: str,
         original_code: str,
     ) -> tuple[str, dict[str, str]]:
-        should_sort_imports = True
-        if isort.code(original_code) != original_code:
+        should_sort_imports = not self.args.disable_imports_sorting
+        if should_sort_imports and isort.code(original_code) != original_code:
             should_sort_imports = False
 
         new_code = format_code(
-            self.args.formatter_cmd,
-            self.args.imports_sort_cmd,
-            should_sort_imports,
+            self.args.formatter_cmds,
             path,
         )
-        new_helper_code: dict[str, str] = {
-            module_abspath: format_code(
-                self.args.formatter_cmd,
-                self.args.imports_sort_cmd,
-                should_sort_imports,
+        if should_sort_imports:
+            new_code = sort_imports(new_code)
+
+        new_helper_code: dict[str, str] = {}
+        for module_abspath in helper_functions_by_module_abspath:
+            new_code = format_code(
+                self.args.formatter_cmds,
                 module_abspath,
             )
-            for module_abspath in helper_functions_by_module_abspath
-        }
+            if should_sort_imports:
+                new_code = sort_imports(new_code)
+            new_helper_code[module_abspath] = new_code
+
         return new_code, new_helper_code
 
     def replace_function_and_helpers_with_optimized_code(

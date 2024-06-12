@@ -127,9 +127,9 @@ def process_cmd_args(args: Namespace) -> Namespace:
         "test_framework",
         "ignore_paths",
         "pytest_cmd",
-        "formatter_cmd",
+        "formatter_cmds",
         "disable_telemetry",
-        "imports_sort_cmd",
+        "disable_imports_sorting",
     ]
     for key in supported_keys:
         if key in pyproject_config:
