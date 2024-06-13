@@ -35,14 +35,17 @@ def add_needed_imports_from_module(
         ),
     )
     cst.parse_module(src_module_code).visit(gatherer)
-
-    for mod in gatherer.module_imports:
-        AddImportsVisitor.add_needed_import(dst_context, mod)
-        RemoveImportsVisitor.remove_unused_import(dst_context, mod)
-    for mod, obj_seq in gatherer.object_mapping.items():
-        for obj in obj_seq:
-            AddImportsVisitor.add_needed_import(dst_context, mod, obj)
-            RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
+    try:
+        for mod in gatherer.module_imports:
+            AddImportsVisitor.add_needed_import(dst_context, mod)
+            RemoveImportsVisitor.remove_unused_import(dst_context, mod)
+        for mod, obj_seq in gatherer.object_mapping.items():
+            for obj in obj_seq:
+                AddImportsVisitor.add_needed_import(dst_context, mod, obj)
+                RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
+    except Exception as e:
+        logging.exception(f"Error adding imports to destination module code: {e}")
+        return dst_module_code
     for mod, asname in gatherer.module_aliases.items():
         AddImportsVisitor.add_needed_import(dst_context, mod, asname=asname)
         RemoveImportsVisitor.remove_unused_import(dst_context, mod, asname=asname)
@@ -75,12 +78,17 @@ def get_code(
 ) -> tuple[str | None, set[tuple[str, str]]]:
     """Return the code for a function or methods in a Python module. functions_to_optimize is either a singleton
     FunctionToOptimize instance, which represents either a function at the module level or a method of a class at the
-    module level, or it represents a list of methods of the same class."""
-
-    if not functions_to_optimize or (
-            functions_to_optimize[0].parents and functions_to_optimize[0].parents[0].type != "ClassDef") or (
-            len(functions_to_optimize[0].parents) > 1 or (
-            len(functions_to_optimize) > 1) and len({fn.parents[0] for fn in functions_to_optimize}) != 1):
+    module level, or it represents a list of methods of the same class.
+    """
+    if (
+        not functions_to_optimize
+        or (functions_to_optimize[0].parents and functions_to_optimize[0].parents[0].type != "ClassDef")
+        or (
+            len(functions_to_optimize[0].parents) > 1
+            or (len(functions_to_optimize) > 1)
+            and len({fn.parents[0] for fn in functions_to_optimize}) != 1
+        )
+    ):
         return None, set()
 
     file_path: str = functions_to_optimize[0].file_path
@@ -101,22 +109,22 @@ def get_code(
                 # The many mypy issues will be fixed once this code moves to the backend,
                 # using Type Guards as we move to 3.10+.
                 # We will cover the Type Alias case on the backend since it's a 3.12 feature.
-                    isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-                    and node.name == name_parts[0]
-                ):
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                and node.name == name_parts[0]
+            ):
                 target = node
                 break
                 # The next two cases cover type aliases in pre-3.12 syntax, where only single assignment is allowed.
             if (
-                    (isinstance(node, ast.Assign)
-                    and len(node.targets) == 1
-                    and isinstance(node.targets[0], ast.Name)
-                    and node.targets[0].id == name_parts[0])
-                or (
-                    isinstance(node, ast.AnnAssign)
-                    and hasattr(node.target, "id")
-                    and node.target.id == name_parts[0])
-                ):
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == name_parts[0]
+            ) or (
+                isinstance(node, ast.AnnAssign)
+                and hasattr(node.target, "id")
+                and node.target.id == name_parts[0]
+            ):
                 if class_skeleton:
                     break
                 target = node
