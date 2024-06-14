@@ -188,6 +188,7 @@ class Optimizer:
     ) -> Result[BestOptimization, str]:
         should_run_experiment = self.experiment_id is not None
         function_trace_id: str = str(uuid.uuid4())
+        logging.debug(f"Function Trace ID: {function_trace_id}")
         ph("cli-optimize-function-start", {"function_trace_id": function_trace_id})
         self.cleanup_leftover_test_return_values()
         ctx_result = self.get_code_optimization_context(
