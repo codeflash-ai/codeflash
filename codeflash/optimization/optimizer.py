@@ -4,6 +4,7 @@ import concurrent.futures
 import logging
 import os
 import pathlib
+import subprocess
 import uuid
 from argparse import Namespace
 from collections import defaultdict
@@ -1112,16 +1113,22 @@ class Optimizer:
         optimization_iteration: int,
         test_function: str | None = None,
     ) -> TestResults:
-        result_file_path, run_result = run_tests(
-            test_file,
-            test_framework=self.args.test_framework,
-            cwd=self.args.project_root,
-            pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-            pytest_cmd=self.test_cfg.pytest_cmd,
-            verbose=True,
-            test_env=test_env,
-            only_run_this_test_function=test_function,
-        )
+        try:
+            result_file_path, run_result = run_tests(
+                test_file,
+                test_framework=self.args.test_framework,
+                cwd=self.args.project_root,
+                pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
+                pytest_cmd=self.test_cfg.pytest_cmd,
+                verbose=True,
+                test_env=test_env,
+                only_run_this_test_function=test_function,
+            )
+        except subprocess.TimeoutExpired:
+            logging.exception(
+                f"Error running tests in {test_file}.\nTimeout Error",
+            )
+            return TestResults()
         if run_result.returncode != 0:
             logging.debug(
                 f"Nonzero return code {run_result.returncode} when running tests in {test_file}.\n"
