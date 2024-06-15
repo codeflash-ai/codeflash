@@ -47,8 +47,9 @@ def init_table() -> Session:
 
     return session
 
-def get_authors(session: Session) -> list[Author]:
-    books: list[Book] = session.query(Book).all()
+
+def get_authors(books: list[Book]) -> list[Author]:
+    # books: list[Book] = session.query(Book).all()
     _authors: list[Author] = []
     book: Book
     for book in books:
