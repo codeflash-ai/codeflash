@@ -1124,9 +1124,9 @@ class Optimizer:
                 test_env=test_env,
                 only_run_this_test_function=test_function,
             )
-        except subprocess.TimeoutExpired as e:
+        except subprocess.TimeoutExpired:
             logging.exception(
-                f"Error running tests in {test_file}.\nTimeout Error: {e}\n",
+                f"Error running tests in {test_file}.\nTimeout Error",
             )
             return TestResults()
         if run_result.returncode != 0:
