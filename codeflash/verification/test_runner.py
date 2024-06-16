@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shlex
 import subprocess
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
@@ -21,7 +23,7 @@ def run_tests(
 
     if test_framework == "pytest":
         result_file_path = get_run_tmp_file("pytest_results.xml")
-        pytest_cmd_list = [chunk for chunk in pytest_cmd.split(" ") if chunk != ""]
+        pytest_cmd_list = shlex.split(pytest_cmd, posix=os.name != "nt")
 
         results = subprocess.run(
             pytest_cmd_list
@@ -39,6 +41,7 @@ def run_tests(
             env=test_env,
             text=True,
             timeout=600,
+            check=False,
         )
     elif test_framework == "unittest":
         result_file_path = get_run_tmp_file("unittest_results.xml")
@@ -52,6 +55,7 @@ def run_tests(
             env=test_env,
             text=True,
             timeout=600,
+            check=False,
         )
     else:
         raise ValueError("Invalid test framework -- I only support Pytest and Unittest currently.")

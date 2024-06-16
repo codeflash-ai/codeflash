@@ -1,5 +1,6 @@
 import logging
 import os.path
+import shlex
 import subprocess
 
 import isort
@@ -20,7 +21,7 @@ def format_code(
     file_token = "$file"
 
     for command in formatter_cmds:
-        formatter_cmd_list = [chunk for chunk in command.split(" ") if chunk != ""]
+        formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
         formatter_cmd_list = [path if chunk == file_token else chunk for chunk in formatter_cmd_list]
         logging.info(f"Formatting code with {' '.join(formatter_cmd_list)} ...")
 
@@ -49,8 +50,8 @@ def sort_imports(code: str) -> str:
     try:
         # Deduplicate and sort imports, modify the code in memory, not on disk
         sorted_code = isort.code(code)
-    except Exception as e:
-        logging.exception(f"Failed to sort imports with isort for {path}: {e}")
+    except Exception:
+        logging.exception("Failed to sort imports with isort.")
         return code  # Fall back to original code if isort fails
 
     return sorted_code
