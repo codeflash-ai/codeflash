@@ -384,8 +384,7 @@ class Optimizer:
             f"Determining best optimized candidate (out of {len(candidates)}) for {function_to_optimize.qualified_name} ...",
         )
         try:
-            for i, candidate in enumerate(candidates):
-                j = i + 1
+            for j, candidate in enumerate(candidates, start=1):
                 if candidate.source_code is None:
                     continue
                 # remove left overs from previous run
@@ -472,7 +471,9 @@ class Optimizer:
                         f"{((original_code_baseline.runtime - best_test_runtime) / best_test_runtime):.3f}",
                     )
 
-                    if speedup_critic(candidate_result, original_code_baseline.runtime, best_runtime_until_now):
+                    if speedup_critic(
+                        candidate_result, original_code_baseline.runtime, best_runtime_until_now
+                    ):
                         best_optimization = BestOptimization(
                             candidate=candidate,
                             helper_functions=code_context.helper_functions,
@@ -495,7 +496,7 @@ class Optimizer:
                 function_to_optimize.file_path,
                 helper_functions_by_module_abspath,
             )
-            logging.error(f"Optimization interrupted: {e}")
+            logging.exception(f"Optimization interrupted: {e}")
             raise e
 
         self.aiservice_client.log_results(
