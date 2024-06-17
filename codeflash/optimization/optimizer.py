@@ -173,7 +173,6 @@ class Optimizer:
             elif self.args.all:
                 logging.info("✨ All functions have been optimized! ✨")
         finally:
-            # TODO @afik.cohen: Also revert the file/function being optimized if the process did not succeed
             for test_file in self.instrumented_unittests_created:
                 pathlib.Path(test_file).unlink(missing_ok=True)
             for test_file in self.test_files_created:
@@ -384,110 +383,121 @@ class Optimizer:
         logging.info(
             f"Determining best optimized candidate (out of {len(candidates)}) for {function_to_optimize.qualified_name} ...",
         )
-        for i, candidate in enumerate(candidates):
-            j = i + 1
-            if candidate.source_code is None:
-                continue
-            # remove left overs from previous run
-            pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.bin")).unlink(
-                missing_ok=True,
-            )
-            pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.sqlite")).unlink(
-                missing_ok=True,
-            )
-            logging.info(f"Optimized candidate {j}/{len(candidates)}:")
-            logging.info(candidate.source_code)
-            try:
-                replace_function_definitions_in_module(
-                    function_names=[function_to_optimize.qualified_name],
-                    optimized_code=candidate.source_code,
-                    file_path_of_module_with_function_to_optimize=function_to_optimize.file_path,
-                    module_abspath=function_to_optimize.file_path,
-                    preexisting_functions=code_context.preexisting_functions,
-                    contextual_functions=code_context.contextual_dunder_methods,
-                    project_root_path=self.args.project_root,
+        try:
+            for i, candidate in enumerate(candidates):
+                j = i + 1
+                if candidate.source_code is None:
+                    continue
+                # remove left overs from previous run
+                pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.bin")).unlink(
+                    missing_ok=True,
                 )
-                for (
-                    module_abspath,
-                    qualified_names,
-                ) in helper_functions_by_module_abspath.items():
+                pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.sqlite")).unlink(
+                    missing_ok=True,
+                )
+                logging.info(f"Optimized candidate {j}/{len(candidates)}:")
+                logging.info(candidate.source_code)
+                try:
                     replace_function_definitions_in_module(
-                        function_names=list(qualified_names),
+                        function_names=[function_to_optimize.qualified_name],
                         optimized_code=candidate.source_code,
                         file_path_of_module_with_function_to_optimize=function_to_optimize.file_path,
-                        module_abspath=module_abspath,
-                        preexisting_functions=[],
+                        module_abspath=function_to_optimize.file_path,
+                        preexisting_functions=code_context.preexisting_functions,
                         contextual_functions=code_context.contextual_dunder_methods,
                         project_root_path=self.args.project_root,
                     )
-            except (
-                ValueError,
-                SyntaxError,
-                cst.ParserSyntaxError,
-                AttributeError,
-            ) as e:
-                logging.error(e)  # noqa: TRY400
+                    for (
+                        module_abspath,
+                        qualified_names,
+                    ) in helper_functions_by_module_abspath.items():
+                        replace_function_definitions_in_module(
+                            function_names=list(qualified_names),
+                            optimized_code=candidate.source_code,
+                            file_path_of_module_with_function_to_optimize=function_to_optimize.file_path,
+                            module_abspath=module_abspath,
+                            preexisting_functions=[],
+                            contextual_functions=code_context.contextual_dunder_methods,
+                            project_root_path=self.args.project_root,
+                        )
+                except (
+                    ValueError,
+                    SyntaxError,
+                    cst.ParserSyntaxError,
+                    AttributeError,
+                ) as e:
+                    logging.error(e)  # noqa: TRY400
+                    self.write_code_and_helpers(
+                        original_code,
+                        original_helper_code,
+                        function_to_optimize.file_path,
+                        helper_functions_by_module_abspath,
+                    )
+                    continue
+
+                # Run generated tests if at least one of them passed
+                run_generated_tests = False
+                if original_code_baseline.generated_test_results:
+                    for test_result in original_code_baseline.generated_test_results.test_results:
+                        if test_result.did_pass:
+                            run_generated_tests = True
+                            break
+
+                run_results = self.run_optimized_candidate(
+                    optimization_index=j,
+                    instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
+                    overall_original_test_results=original_code_baseline.overall_test_results,
+                    original_existing_test_results=original_code_baseline.existing_test_results,
+                    original_generated_test_results=original_code_baseline.generated_test_results,
+                    generated_tests_path=generated_tests_path,
+                    best_runtime_until_now=best_runtime_until_now,
+                    tests_in_file=only_run_this_test_function,
+                    run_generated_tests=run_generated_tests,
+                )
+                if not is_successful(run_results):
+                    optimized_runtimes[candidate.optimization_id] = None
+                    is_correct[candidate.optimization_id] = False
+                    speedup_ratios[candidate.optimization_id] = None
+                else:
+                    candidate_result: OptimizedCandidateResult = run_results.unwrap()
+                    best_test_runtime = candidate_result.best_test_runtime
+                    optimized_runtimes[candidate.optimization_id] = best_test_runtime
+                    is_correct[candidate.optimization_id] = True
+                    speedup_ratios[candidate.optimization_id] = (
+                        original_code_baseline.runtime - best_test_runtime
+                    ) / best_test_runtime
+                    logging.info(
+                        f"Candidate runtime measured over {candidate_result.times_run} run{'s' if candidate_result.times_run > 1 else ''}: "
+                        f"{humanize_runtime(best_test_runtime)}, speedup ratio = "
+                        f"{((original_code_baseline.runtime - best_test_runtime) / best_test_runtime):.3f}",
+                    )
+
+                    if speedup_critic(candidate_result, original_code_baseline.runtime, best_runtime_until_now):
+                        best_optimization = BestOptimization(
+                            candidate=candidate,
+                            helper_functions=code_context.helper_functions,
+                            runtime=best_test_runtime,
+                            winning_test_results=candidate_result.best_test_results,
+                        )
+                        best_runtime_until_now = best_test_runtime
+
                 self.write_code_and_helpers(
                     original_code,
                     original_helper_code,
                     function_to_optimize.file_path,
                     helper_functions_by_module_abspath,
                 )
-                continue
-
-            # Run generated tests if at least one of them passed
-            run_generated_tests = False
-            if original_code_baseline.generated_test_results:
-                for test_result in original_code_baseline.generated_test_results.test_results:
-                    if test_result.did_pass:
-                        run_generated_tests = True
-                        break
-
-            run_results = self.run_optimized_candidate(
-                optimization_index=j,
-                instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
-                overall_original_test_results=original_code_baseline.overall_test_results,
-                original_existing_test_results=original_code_baseline.existing_test_results,
-                original_generated_test_results=original_code_baseline.generated_test_results,
-                generated_tests_path=generated_tests_path,
-                best_runtime_until_now=best_runtime_until_now,
-                tests_in_file=only_run_this_test_function,
-                run_generated_tests=run_generated_tests,
-            )
-            if not is_successful(run_results):
-                optimized_runtimes[candidate.optimization_id] = None
-                is_correct[candidate.optimization_id] = False
-                speedup_ratios[candidate.optimization_id] = None
-            else:
-                candidate_result: OptimizedCandidateResult = run_results.unwrap()
-                best_test_runtime = candidate_result.best_test_runtime
-                optimized_runtimes[candidate.optimization_id] = best_test_runtime
-                is_correct[candidate.optimization_id] = True
-                speedup_ratios[candidate.optimization_id] = (
-                    original_code_baseline.runtime - best_test_runtime
-                ) / best_test_runtime
-                logging.info(
-                    f"Candidate runtime measured over {candidate_result.times_run} run{'s' if candidate_result.times_run > 1 else ''}: "
-                    f"{humanize_runtime(best_test_runtime)}, speedup ratio = "
-                    f"{((original_code_baseline.runtime - best_test_runtime) / best_test_runtime):.3f}",
-                )
-
-                if speedup_critic(candidate_result, original_code_baseline.runtime, best_runtime_until_now):
-                    best_optimization = BestOptimization(
-                        candidate=candidate,
-                        helper_functions=code_context.helper_functions,
-                        runtime=best_test_runtime,
-                        winning_test_results=candidate_result.best_test_results,
-                    )
-                    best_runtime_until_now = best_test_runtime
-
+                logging.info("----------------")
+        except KeyboardInterrupt as e:
             self.write_code_and_helpers(
                 original_code,
                 original_helper_code,
                 function_to_optimize.file_path,
                 helper_functions_by_module_abspath,
             )
-            logging.info("----------------")
+            logging.error(f"Optimization interrupted: {e}")
+            raise e
+
         self.aiservice_client.log_results(
             function_trace_id=function_trace_id,
             speedup_ratio=speedup_ratios,
