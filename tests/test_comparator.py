@@ -72,6 +72,21 @@ def test_basic_python_objects():
     assert not comparator(a, c)
     assert not comparator(a, d)
 
+    a = (65).to_bytes()
+    b = (65).to_bytes()
+    c = (66).to_bytes()
+    assert comparator(a, b)
+    assert not comparator(a, c)
+    a = (65).to_bytes(2, byteorder="little")
+    b = (65).to_bytes(2, byteorder="big")
+    assert not comparator(a, b)
+
+    a = bytearray([65, 64, 63])
+    b = bytearray([65, 64, 63])
+    c = bytearray([65, 64, 62])
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
 
 def test_standard_python_library_objects():
     a = datetime.datetime(2020, 2, 2, 2, 2, 2)
