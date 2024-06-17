@@ -72,9 +72,9 @@ def test_basic_python_objects():
     assert not comparator(a, c)
     assert not comparator(a, d)
 
-    a = (65).to_bytes()
-    b = (65).to_bytes()
-    c = (66).to_bytes()
+    a = (65).to_bytes(1)
+    b = (65).to_bytes(1)
+    c = (66).to_bytes(1)
     assert comparator(a, b)
     assert not comparator(a, c)
     a = (65).to_bytes(2, byteorder="little")
