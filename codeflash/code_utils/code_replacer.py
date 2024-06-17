@@ -26,7 +26,6 @@ class OptimFunctionCollector(cst.CSTVisitor):
         self.optim_body: FunctionDef | None = None
         self.optim_new_class_functions: list[cst.FunctionDef] = []
         self.optim_new_functions: list[cst.FunctionDef] = []
-        self.optim_imports: list[cst.SimpleStatementLine] = []
         self.preexisting_functions = preexisting_functions
         self.contextual_functions = contextual_functions.union(
             {(self.class_name, self.function_name)},
@@ -64,10 +63,6 @@ class OptimFunctionCollector(cst.CSTVisitor):
             ):
                 self.optim_new_class_functions.append(child_node)
 
-    def leave_SimpleStatementLine(self, original_node: cst.SimpleStatementLine) -> None:
-        if isinstance(original_node.body[0], (cst.Import, cst.ImportFrom)):
-            self.optim_imports.append(original_node)
-
 
 class OptimFunctionReplacer(cst.CSTTransformer):
     def __init__(
@@ -75,7 +70,6 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         function_name: str,
         optim_body: cst.FunctionDef,
         optim_new_class_functions: list[cst.FunctionDef],
-        optim_imports: list[cst.SimpleStatementLine],
         optim_new_functions: list[cst.FunctionDef],
         class_name: str | None = None,
     ) -> None:
@@ -83,7 +77,6 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         self.function_name = function_name
         self.optim_body = optim_body
         self.optim_new_class_functions = optim_new_class_functions
-        self.optim_new_imports = optim_imports
         self.optim_new_functions = optim_new_functions
         self.class_name = class_name
         self.depth: int = 0
@@ -126,10 +119,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         return updated_node
 
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
-        if len(self.optim_new_imports) == 0:
-            node = updated_node
-        else:
-            node = updated_node.with_changes(body=(*self.optim_new_imports, *updated_node.body))
+        node = updated_node
         max_function_index = None
         class_index = None
         for index, _node in enumerate(node.body):
@@ -190,13 +180,11 @@ def replace_functions_in_file(
             continue
         if visitor.optim_body is None:
             raise ValueError(f"Did not find the function {function_name} in the optimized code")
-        optim_imports: list[cst.SimpleStatementLine] = [] if i > 0 else visitor.optim_imports
 
         transformer = OptimFunctionReplacer(
             visitor.function_name,
             visitor.optim_body,
             visitor.optim_new_class_functions,
-            optim_imports,
             visitor.optim_new_functions,
             class_name=class_name,
         )
@@ -205,6 +193,31 @@ def replace_functions_in_file(
         source_code = modified_tree.code
 
     return source_code
+
+
+def replace_functions_and_add_imports(
+    source_code: str,
+    function_names: list[str],
+    optimized_code: str,
+    file_path_of_module_with_function_to_optimize: str,
+    module_abspath: str,
+    preexisting_functions: list[str],
+    contextual_functions: set[tuple[str, str]],
+    project_root_path: str,
+) -> str:
+    return add_needed_imports_from_module(
+        optimized_code,
+        replace_functions_in_file(
+            source_code,
+            function_names,
+            optimized_code,
+            preexisting_functions,
+            contextual_functions,
+        ),
+        file_path_of_module_with_function_to_optimize,
+        module_abspath,
+        project_root_path,
+    )
 
 
 def replace_function_definitions_in_module(
@@ -219,17 +232,14 @@ def replace_function_definitions_in_module(
     file: IO[str]
     with open(module_abspath, encoding="utf8") as file:
         source_code: str = file.read()
-    new_code: str = add_needed_imports_from_module(
+    new_code: str = replace_functions_and_add_imports(
+        source_code,
+        function_names,
         optimized_code,
-        replace_functions_in_file(
-            source_code,
-            function_names,
-            optimized_code,
-            preexisting_functions,
-            contextual_functions,
-        ),
         file_path_of_module_with_function_to_optimize,
         module_abspath,
+        preexisting_functions,
+        contextual_functions,
         project_root_path,
     )
     with open(module_abspath, "w", encoding="utf8") as file:
