@@ -31,7 +31,8 @@ def session(session_factory: sessionmaker[Session]) -> Generator[Session, None, 
 
 
 def test_get_authors_basic(session: Session) -> None:
-    authors = get_authors(session)
+    books: list[Book] = session.query(Book).all()
+    authors = get_authors(books)
     assert len(authors) == 50, "Should return 50 authors"
     author_names = [author.name for author in authors]
     for i in range(50):
