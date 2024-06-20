@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from typing import IO
 
 import libcst as cst
@@ -242,7 +243,7 @@ def replace_function_definitions_in_module(
         contextual_functions,
         project_root_path,
     )
-    if new_code == source_code:
+    if ast.dump(ast.parse(new_code)) == ast.dump(ast.parse(source_code)):
         return False
     with open(module_abspath, "w", encoding="utf8") as file:
         file.write(new_code)
