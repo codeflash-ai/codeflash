@@ -397,7 +397,7 @@ class Optimizer:
                 logging.info(f"Optimized candidate {j}/{len(candidates)}:")
                 logging.info(candidate.source_code)
                 try:
-                    replace_function_definitions_in_module(
+                    did_update = replace_function_definitions_in_module(
                         function_names=[function_to_optimize.qualified_name],
                         optimized_code=candidate.source_code,
                         file_path_of_module_with_function_to_optimize=function_to_optimize.file_path,
@@ -410,7 +410,7 @@ class Optimizer:
                         module_abspath,
                         qualified_names,
                     ) in helper_functions_by_module_abspath.items():
-                        replace_function_definitions_in_module(
+                        did_update |= replace_function_definitions_in_module(
                             function_names=list(qualified_names),
                             optimized_code=candidate.source_code,
                             file_path_of_module_with_function_to_optimize=function_to_optimize.file_path,
@@ -419,6 +419,11 @@ class Optimizer:
                             contextual_functions=code_context.contextual_dunder_methods,
                             project_root_path=self.args.project_root,
                         )
+                    if not did_update:
+                        logging.warning(
+                            "No functions were replaced in the optimized code. Skipping optimization candidate."
+                        )
+                        continue
                 except (
                     ValueError,
                     SyntaxError,
@@ -472,7 +477,9 @@ class Optimizer:
                     )
 
                     if speedup_critic(
-                        candidate_result, original_code_baseline.runtime, best_runtime_until_now
+                        candidate_result,
+                        original_code_baseline.runtime,
+                        best_runtime_until_now,
                     ):
                         best_optimization = BestOptimization(
                             candidate=candidate,

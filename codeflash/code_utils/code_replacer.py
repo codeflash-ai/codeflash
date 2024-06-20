@@ -228,7 +228,7 @@ def replace_function_definitions_in_module(
     preexisting_functions: list[str],
     contextual_functions: set[tuple[str, str]],
     project_root_path: str,
-) -> None:
+) -> bool:
     file: IO[str]
     with open(module_abspath, encoding="utf8") as file:
         source_code: str = file.read()
@@ -242,5 +242,8 @@ def replace_function_definitions_in_module(
         contextual_functions,
         project_root_path,
     )
+    if new_code == source_code:
+        return False
     with open(module_abspath, "w", encoding="utf8") as file:
         file.write(new_code)
+    return True
