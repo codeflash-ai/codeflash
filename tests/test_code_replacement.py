@@ -4,7 +4,7 @@ import os
 from argparse import Namespace
 from pathlib import Path
 
-from codeflash.code_utils.code_replacer import replace_functions_and_add_imports
+from codeflash.code_utils.code_replacer import replace_functions_and_add_imports, replace_functions_in_file
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 from codeflash.optimization.optimizer import Optimizer
 
@@ -50,7 +50,8 @@ print("Hello world")
 """
 
     function_name: str = "NewClass.new_function"
-    preexisting_functions: list[str] = ["new_function"]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
+        ("new_function", [FunctionParent(name="NewClass", type="ClassDef")])]
     contextual_functions: set[tuple[str, str]] = {("NewClass", "__init__")}
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -111,7 +112,7 @@ print("Hello world")
 """
 
     function_name: str = "NewClass.new_function"
-    preexisting_functions: list[str] = ["new_function", "other_function"]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [("new_function", []), ("other_function", [])]
     contextual_functions: set[tuple[str, str]] = {("NewClass", "__init__")}
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -172,7 +173,7 @@ print("Salut monde")
 """
 
     function_names: list[str] = ["module.other_function"]
-    preexisting_functions: list[str] = []
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = []
     contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -236,7 +237,7 @@ print("Salut monde")
 """
 
     function_names: list[str] = ["module.yet_another_function", "module.other_function"]
-    preexisting_functions: list[str] = []
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = []
     contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -289,7 +290,7 @@ def supersort(doink):
 """
 
     function_names: list[str] = ["sorter_deps"]
-    preexisting_functions: list[str] = ["sorter_deps"]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [("sorter_deps", [])]
     contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -373,7 +374,7 @@ print("Not cool")
         optimized_code=optim_code,
         file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
         module_abspath=str(Path(__file__).resolve()),
-        preexisting_functions=["other_function", "yet_another_function", "blob"],
+        preexisting_functions=[("other_function", []), ("yet_another_function", []), ("blob", [])],
         contextual_functions=set(),
         project_root_path=str(Path(__file__).resolve().parent.resolve()),
     )
@@ -573,10 +574,9 @@ class CacheConfig(BaseConfig):
             )
 """
     function_names: list[str] = ["CacheSimilarityEvalConfig.from_config"]
-    preexisting_functions: list[str] = [
-        "__init__",
-        "from_config",
-    ]
+    parents = [FunctionParent(name="CacheConfig", type="ClassDef")]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [("__init__", parents), ("from_config", parents)]
+
     contextual_functions: set[tuple[str, str]] = {
         ("CacheSimilarityEvalConfig", "__init__"),
         ("CacheConfig", "__init__"),
@@ -652,9 +652,8 @@ def test_test_libcst_code_replacement8() -> None:
         return np.sum(a != b) / a.size
 '''
     function_names: list[str] = ["_EmbeddingDistanceChainMixin._hamming_distance"]
-    preexisting_functions: list[str] = [
-        "_hamming_distance",
-    ]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
+        ("_hamming_distance", [FunctionParent("_EmbeddingDistanceChainMixin", "ClassDef")])]
     contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -709,9 +708,9 @@ def totally_new_function(value: Optional[str]):
 
 print("Hello world")
 """
-
+    parents = [FunctionParent(name="NewClass", type="ClassDef")]
     function_name: str = "NewClass.__init__"
-    preexisting_functions: list[str] = ["__init__", "__call__"]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [("__init__", parents), ("__call__", parents)]
     contextual_functions: set[tuple[str, str]] = {
         ("NewClass", "__init__"),
         ("NewClass", "__call__"),
@@ -794,168 +793,43 @@ class MainClass:
 
 
 def test_code_replacement11() -> None:
-    optim_code = '''from abc import abstractmethod
-from typing import Any, List, Mapping, MutableMapping, Optional, Tuple
-
-import requests
-from requests.auth import AuthBase
-
-
-class AbstractOauth2Authenticator(AuthBase):
-    def __init__(
-        self,
-        refresh_token_error_status_codes: Tuple[int, ...] = (),
-        refresh_token_error_key: str = "",
-        refresh_token_error_values: Tuple[str, ...] = (),
-    ) -> None:
-        """
-        If all of refresh_token_error_status_codes, refresh_token_error_key, and refresh_token_error_values are set,
-        then http errors with such params will be wrapped in AirbyteTracedException.
-        """
-        self._refresh_token_error_status_codes = refresh_token_error_status_codes
-        self._refresh_token_error_key = refresh_token_error_key
-        self._refresh_token_error_values = refresh_token_error_values
-
-    def __call__(self, request: requests.PreparedRequest) -> requests.PreparedRequest:
-        """Attach the HTTP headers required to authenticate on the HTTP request"""
-        request.headers.update(self.get_auth_header())
-        return request
-
-    def build_refresh_request_body(self) -> Mapping[str, Any]:
-        """
-        Returns the request body to set on the refresh request
-
-        Override to define additional parameters
-        """
-        payload: MutableMapping[str, Any] = {
-            "grant_type": self.get_grant_type(),
-            "client_id": self.get_client_id(),
-            "client_secret": self.get_client_secret(),
-            "refresh_token": self.get_refresh_token(),
-        }
-
-        scopes = self.get_scopes()
-        if scopes:
-            payload["scopes"] = scopes
-
-        refresh_request_body = self.get_refresh_request_body()
-        if refresh_request_body:
-            for key, val in refresh_request_body.items():
-                if key not in payload:
-                    payload[key] = val
-
+    optim_code = '''class Fu():
+    def foo(self) -> dict[str, str]:
+        payload: dict[str, str] = {"bar": self.bar(), "real_bar": str(self.real_bar() + 1)}
         return payload
 
-    @abstractmethod
-    def get_grant_type(self) -> str:
-        """Returns grant_type specified for requesting access_token"""
-        pass
-
-    @abstractmethod
-    def get_client_id(self) -> str:
-        """The client id to authenticate"""
-        pass
-
-    @abstractmethod
-    def get_client_secret(self) -> str:
-        """The client secret to authenticate"""
-        pass
-
-    @abstractmethod
-    def get_refresh_token(self) -> Optional[str]:
-        """The token used to refresh the access token when it expires"""
-        pass
-
-    @abstractmethod
-    def get_scopes(self) -> List[str]:
-        """List of requested scopes"""
-        pass
-
-    @abstractmethod
-    def get_refresh_request_body(self) -> Mapping[str, Any]:
-        """Returns the request body to set on the refresh request"""
+    def real_bar(self) -> int:
+        """No abstract nonsense"""
         pass
 '''
-    original_code = '''import requests
-from abc import abstractmethod
-from requests.auth import AuthBase
-from typing import Any, List, Mapping, MutableMapping, Optional, Tuple
-
-class AbstractOauth2Authenticator(AuthBase):
-    def __init__(
-        self,
-        refresh_token_error_status_codes: Tuple[int, ...] = (),
-        refresh_token_error_key: str = "",
-        refresh_token_error_values: Tuple[str, ...] = (),
-    ) -> None:
-        """
-        If all of refresh_token_error_status_codes, refresh_token_error_key, and refresh_token_error_values are set,
-        then http errors with such params will be wrapped in AirbyteTracedException.
-        """
-        self._refresh_token_error_status_codes = refresh_token_error_status_codes
-        self._refresh_token_error_key = refresh_token_error_key
-        self._refresh_token_error_values = refresh_token_error_values
-    def __call__(self, request: requests.PreparedRequest) -> requests.PreparedRequest:
-        """Attach the HTTP headers required to authenticate on the HTTP request"""
-        request.headers.update(self.get_auth_header())
-        return request
-    def build_refresh_request_body(self) -> Mapping[str, Any]:
-        """
-        Returns the request body to set on the refresh request
-
-        Override to define additional parameters
-        """
-        payload: MutableMapping[str, Any] = {
-            "grant_type": self.get_grant_type(),
-            "client_id": self.get_client_id(),
-            "client_secret": self.get_client_secret(),
-            "refresh_token": self.get_refresh_token(),
-        }
-
-        if self.get_scopes():
-            payload["scopes"] = self.get_scopes()
-
-        if self.get_refresh_request_body():
-            for key, val in self.get_refresh_request_body().items():
-                # We defer to existing oauth constructs over custom configured fields
-                if key not in payload:
-                    payload[key] = val
-
+    original_code = '''class Fu():
+    def foo(self) -> dict[str, str]:
+        payload: dict[str, str] = {"bar": self.bar(), "real_bar": str(self.real_bar())}
         return payload
-    @abstractmethod
-    def get_grant_type(self) -> str:
-        """Returns grant_type specified for requesting access_token"""
-    @abstractmethod
-    def get_client_id(self) -> str:
-        """The client id to authenticate"""
-    @abstractmethod
-    def get_client_secret(self) -> str:
-        """The client secret to authenticate"""
-    @abstractmethod
-    def get_refresh_token(self) -> Optional[str]:
-        """The token used to refresh the access token when it expires"""
-    @abstractmethod
-    def get_scopes(self) -> List[str]:
-        """List of requested scopes"""
-    @abstractmethod
-    def get_refresh_request_body(self) -> Mapping[str, Any]:
-        """Returns the request body to set on the refresh request"""
+
+    def real_bar(self) -> int:
+        """No abstract nonsense"""
+        return 0
+'''
+    expected_code = '''class Fu():
+    def foo(self) -> dict[str, str]:
+        payload: dict[str, str] = {"bar": self.bar(), "real_bar": str(self.real_bar() + 1)}
+        return payload
+
+    def real_bar(self) -> int:
+        """No abstract nonsense"""
+        return 0
 '''
 
-    function_name: str = "AbstractOauth2Authenticator.build_refresh_request_body"
-    # TODO : Fill the right values here
-    preexisting_functions: list[str] = ["__init__", "__call__"]
-    contextual_functions: set[tuple[str, str]] = {
-        ("AbstractOauth2Authenticator", "__init__"),
-        ("AbstractOauth2Authenticator", "__call__"),
-    }
-    new_code: str = replace_functions_and_add_imports(
+    function_name: str = "Fu.foo"
+    parents = [FunctionParent("Fu", "ClassDef")]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [("foo", parents), ("real_bar", parents)]
+    contextual_functions: set[tuple[str, str]] = set()
+    new_code: str = replace_functions_in_file(
         source_code=original_code,
-        function_names=[function_name],
+        original_function_names=[function_name],
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
-        module_abspath=str(Path(__file__).resolve()),
         preexisting_functions=preexisting_functions,
         contextual_functions=contextual_functions,
-        project_root_path=str(Path(__file__).resolve().parent.resolve()),
     )
+    assert new_code == expected_code
