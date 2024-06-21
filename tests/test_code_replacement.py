@@ -791,3 +791,44 @@ class MainClass:
             original_source_code=original_code,
         ).unwrap()
         assert code_context.code_to_optimize_with_helpers == get_code_output
+
+
+def test_test_libcst_code_replacement11() -> None:
+    # Test if the dunder method is not modified
+    optim_code = """class NewClass:
+    def __init__(self, name):
+        self.name = name
+        self.new_attribute = "Sorry i modified a dunder method"
+    def new_function(self, value):
+        return other_function(self.name)
+    def new_function2(value):
+        return value
+    def __call__(self, value):
+        return self.new_attribute
+    """
+
+    original_code = """class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def new_function(self, value):
+        return other_function(self.name)
+    def new_function2(value):
+        return value
+    def __call__(self, value):
+        return self.name
+"""
+
+    function_names: list[str] = ["module.yet_another_function", "module.other_function"]
+    preexisting_functions: list[str] = []
+    contextual_functions: set[tuple[str, str]] = set()
+    new_code: str = replace_functions_and_add_imports(
+        source_code=original_code,
+        function_names=function_names,
+        optimized_code=optim_code,
+        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
+        module_abspath=str(Path(__file__).resolve()),
+        preexisting_functions=preexisting_functions,
+        contextual_functions=contextual_functions,
+        project_root_path=str(Path(__file__).resolve().parent.resolve()),
+    )
+    assert new_code == original_code
