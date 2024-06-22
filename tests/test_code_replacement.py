@@ -51,7 +51,8 @@ print("Hello world")
 
     function_name: str = "NewClass.new_function"
     preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
-        ("new_function", [FunctionParent(name="NewClass", type="ClassDef")])]
+        ("new_function", [FunctionParent(name="NewClass", type="ClassDef")]),
+    ]
     contextual_functions: set[tuple[str, str]] = {("NewClass", "__init__")}
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -112,7 +113,10 @@ print("Hello world")
 """
 
     function_name: str = "NewClass.new_function"
-    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [("new_function", []), ("other_function", [])]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
+        ("new_function", []),
+        ("other_function", []),
+    ]
     contextual_functions: set[tuple[str, str]] = {("NewClass", "__init__")}
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -575,7 +579,10 @@ class CacheConfig(BaseConfig):
 """
     function_names: list[str] = ["CacheSimilarityEvalConfig.from_config"]
     parents = [FunctionParent(name="CacheConfig", type="ClassDef")]
-    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [("__init__", parents), ("from_config", parents)]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
+        ("__init__", parents),
+        ("from_config", parents),
+    ]
 
     contextual_functions: set[tuple[str, str]] = {
         ("CacheSimilarityEvalConfig", "__init__"),
@@ -653,7 +660,8 @@ def test_test_libcst_code_replacement8() -> None:
 '''
     function_names: list[str] = ["_EmbeddingDistanceChainMixin._hamming_distance"]
     preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
-        ("_hamming_distance", [FunctionParent("_EmbeddingDistanceChainMixin", "ClassDef")])]
+        ("_hamming_distance", [FunctionParent("_EmbeddingDistanceChainMixin", "ClassDef")]),
+    ]
     contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -710,7 +718,10 @@ print("Hello world")
 """
     parents = [FunctionParent(name="NewClass", type="ClassDef")]
     function_name: str = "NewClass.__init__"
-    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [("__init__", parents), ("__call__", parents)]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
+        ("__init__", parents),
+        ("__call__", parents),
+    ]
     contextual_functions: set[tuple[str, str]] = {
         ("NewClass", "__init__"),
         ("NewClass", "__call__"),
