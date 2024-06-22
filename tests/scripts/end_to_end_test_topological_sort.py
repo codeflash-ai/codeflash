@@ -14,7 +14,7 @@ def main():
         "--file",
         "topological_sort.py",
         "--function",
-        "sorter",
+        "Graph.topologicalSort",
         "--test-framework",
         "pytest",
         "--tests-root",
