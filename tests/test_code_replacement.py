@@ -4,7 +4,7 @@ import os
 from argparse import Namespace
 from pathlib import Path
 
-from codeflash.code_utils.code_replacer import replace_functions_and_add_imports
+from codeflash.code_utils.code_replacer import replace_functions_and_add_imports, replace_functions_in_file
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 from codeflash.optimization.optimizer import Optimizer
 
@@ -50,7 +50,9 @@ print("Hello world")
 """
 
     function_name: str = "NewClass.new_function"
-    preexisting_functions: list[str] = ["new_function"]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
+        ("new_function", [FunctionParent(name="NewClass", type="ClassDef")]),
+    ]
     contextual_functions: set[tuple[str, str]] = {("NewClass", "__init__")}
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -111,7 +113,10 @@ print("Hello world")
 """
 
     function_name: str = "NewClass.new_function"
-    preexisting_functions: list[str] = ["new_function", "other_function"]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
+        ("new_function", []),
+        ("other_function", []),
+    ]
     contextual_functions: set[tuple[str, str]] = {("NewClass", "__init__")}
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -172,7 +177,7 @@ print("Salut monde")
 """
 
     function_names: list[str] = ["module.other_function"]
-    preexisting_functions: list[str] = []
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = []
     contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -236,7 +241,7 @@ print("Salut monde")
 """
 
     function_names: list[str] = ["module.yet_another_function", "module.other_function"]
-    preexisting_functions: list[str] = []
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = []
     contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -289,7 +294,7 @@ def supersort(doink):
 """
 
     function_names: list[str] = ["sorter_deps"]
-    preexisting_functions: list[str] = ["sorter_deps"]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [("sorter_deps", [])]
     contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -373,7 +378,7 @@ print("Not cool")
         optimized_code=optim_code,
         file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
         module_abspath=str(Path(__file__).resolve()),
-        preexisting_functions=["other_function", "yet_another_function", "blob"],
+        preexisting_functions=[("other_function", []), ("yet_another_function", []), ("blob", [])],
         contextual_functions=set(),
         project_root_path=str(Path(__file__).resolve().parent.resolve()),
     )
@@ -573,10 +578,12 @@ class CacheConfig(BaseConfig):
             )
 """
     function_names: list[str] = ["CacheSimilarityEvalConfig.from_config"]
-    preexisting_functions: list[str] = [
-        "__init__",
-        "from_config",
+    parents = [FunctionParent(name="CacheConfig", type="ClassDef")]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
+        ("__init__", parents),
+        ("from_config", parents),
     ]
+
     contextual_functions: set[tuple[str, str]] = {
         ("CacheSimilarityEvalConfig", "__init__"),
         ("CacheConfig", "__init__"),
@@ -652,8 +659,8 @@ def test_test_libcst_code_replacement8() -> None:
         return np.sum(a != b) / a.size
 '''
     function_names: list[str] = ["_EmbeddingDistanceChainMixin._hamming_distance"]
-    preexisting_functions: list[str] = [
-        "_hamming_distance",
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
+        ("_hamming_distance", [FunctionParent("_EmbeddingDistanceChainMixin", "ClassDef")]),
     ]
     contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_and_add_imports(
@@ -709,9 +716,12 @@ def totally_new_function(value: Optional[str]):
 
 print("Hello world")
 """
-
+    parents = [FunctionParent(name="NewClass", type="ClassDef")]
     function_name: str = "NewClass.__init__"
-    preexisting_functions: list[str] = ["__init__", "__call__"]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
+        ("__init__", parents),
+        ("__call__", parents),
+    ]
     contextual_functions: set[tuple[str, str]] = {
         ("NewClass", "__init__"),
         ("NewClass", "__call__"),
@@ -793,7 +803,91 @@ class MainClass:
         assert code_context.code_to_optimize_with_helpers == get_code_output
 
 
-def test_test_libcst_code_replacement11() -> None:
+def test_code_replacement11() -> None:
+    optim_code = '''class Fu():
+    def foo(self) -> dict[str, str]:
+        payload: dict[str, str] = {"bar": self.bar(), "real_bar": str(self.real_bar() + 1)}
+        return payload
+
+    def real_bar(self) -> int:
+        """No abstract nonsense"""
+        pass
+'''
+    original_code = '''class Fu():
+    def foo(self) -> dict[str, str]:
+        payload: dict[str, str] = {"bar": self.bar(), "real_bar": str(self.real_bar())}
+        return payload
+
+    def real_bar(self) -> int:
+        """No abstract nonsense"""
+        return 0
+'''
+    expected_code = '''class Fu():
+    def foo(self) -> dict[str, str]:
+        payload: dict[str, str] = {"bar": self.bar(), "real_bar": str(self.real_bar() + 1)}
+        return payload
+
+    def real_bar(self) -> int:
+        """No abstract nonsense"""
+        return 0
+'''
+
+    function_name: str = "Fu.foo"
+    parents = [FunctionParent("Fu", "ClassDef")]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [("foo", parents), ("real_bar", parents)]
+    contextual_functions: set[tuple[str, str]] = set()
+    new_code: str = replace_functions_in_file(
+        source_code=original_code,
+        original_function_names=[function_name],
+        optimized_code=optim_code,
+        preexisting_functions=preexisting_functions,
+        contextual_functions=contextual_functions,
+    )
+    assert new_code == expected_code
+
+
+def test_code_replacement12() -> None:
+    optim_code = '''class Fu():
+    def foo(self) -> dict[str, str]:
+        payload: dict[str, str] = {"bar": self.bar(), "real_bar": str(self.real_bar() + 1)}
+        return payload
+
+    def real_bar(self) -> int:
+        """No abstract nonsense"""
+        pass
+'''
+    original_code = '''class Fu():
+    def foo(self) -> dict[str, str]:
+        payload: dict[str, str] = {"bar": self.bar(), "real_bar": str(self.real_bar())}
+        return payload
+
+    def real_bar(self) -> int:
+        """No abstract nonsense"""
+        return 0
+'''
+    expected_code = '''class Fu():
+    def foo(self) -> dict[str, str]:
+        payload: dict[str, str] = {"bar": self.bar(), "real_bar": str(self.real_bar())}
+        return payload
+
+    def real_bar(self) -> int:
+        """No abstract nonsense"""
+        pass
+'''
+
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = []
+    contextual_functions: set[tuple[str, str]] = set()
+    new_code: str = replace_functions_in_file(
+        source_code=original_code,
+        original_function_names=["Fu.real_bar"],
+        optimized_code=optim_code,
+        preexisting_functions=preexisting_functions,
+        contextual_functions=contextual_functions,
+    )
+    assert new_code == expected_code
+
+
+def test_test_libcst_code_replacement13() -> None:
     # Test if the dunder method is not modified
     optim_code = """class NewClass:
     def __init__(self, name):
@@ -819,7 +913,7 @@ def test_test_libcst_code_replacement11() -> None:
 """
 
     function_names: list[str] = ["module.yet_another_function", "module.other_function"]
-    preexisting_functions: list[str] = []
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = []
     contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,

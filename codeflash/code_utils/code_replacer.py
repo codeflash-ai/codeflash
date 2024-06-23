@@ -7,6 +7,7 @@ import libcst as cst
 from libcst import FunctionDef
 
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module
+from codeflash.discovery.functions_to_optimize import FunctionParent
 
 
 class OptimFunctionCollector(cst.CSTVisitor):
@@ -17,7 +18,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
         function_name: str,
         class_name: str | None,
         contextual_functions: set[tuple[str, str]],
-        preexisting_functions: list[str] | None = None,
+        preexisting_functions: list[tuple[str, list[FunctionParent]]] | None = None,
     ) -> None:
         super().__init__()
         if preexisting_functions is None:
@@ -44,7 +45,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
             self.optim_body = node
         elif (
             self.preexisting_functions
-            and node.name.value not in self.preexisting_functions
+            and (node.name.value, []) not in self.preexisting_functions
             and (
                 isinstance(parent, cst.Module)
                 or (parent2 is not None and not isinstance(parent2, cst.ClassDef))
@@ -53,14 +54,13 @@ class OptimFunctionCollector(cst.CSTVisitor):
             self.optim_new_functions.append(node)
 
     def visit_ClassDef_body(self, node: cst.ClassDef) -> None:
+        parents = [FunctionParent(name=node.name.value, type="ClassDef")]
         for child_node in node.body.body:
             if (
-                isinstance(child_node, cst.FunctionDef)
-                and (
-                    node.name.value,
-                    child_node.name.value,
-                )
-                not in self.contextual_functions
+                self.preexisting_functions
+                and isinstance(child_node, cst.FunctionDef)
+                and (node.name.value, child_node.name.value) not in self.contextual_functions
+                and (child_node.name.value, parents) not in self.preexisting_functions
             ):
                 self.optim_new_class_functions.append(child_node)
 
@@ -153,7 +153,7 @@ def replace_functions_in_file(
     source_code: str,
     original_function_names: list[str],
     optimized_code: str,
-    preexisting_functions: list[str],
+    preexisting_functions: list[tuple[str, list[FunctionParent]]],
     contextual_functions: set[tuple[str, str]],
 ) -> str:
     parsed_function_names = []
@@ -202,7 +202,7 @@ def replace_functions_and_add_imports(
     optimized_code: str,
     file_path_of_module_with_function_to_optimize: str,
     module_abspath: str,
-    preexisting_functions: list[str],
+    preexisting_functions: list[tuple[str, list[FunctionParent]]],
     contextual_functions: set[tuple[str, str]],
     project_root_path: str,
 ) -> str:
@@ -226,7 +226,7 @@ def replace_function_definitions_in_module(
     optimized_code: str,
     file_path_of_module_with_function_to_optimize: str,
     module_abspath: str,
-    preexisting_functions: list[str],
+    preexisting_functions: list[tuple[str, list[FunctionParent]]],
     contextual_functions: set[tuple[str, str]],
     project_root_path: str,
 ) -> bool:
