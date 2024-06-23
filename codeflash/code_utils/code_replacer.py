@@ -57,7 +57,8 @@ class OptimFunctionCollector(cst.CSTVisitor):
         parents = [FunctionParent(name=node.name.value, type="ClassDef")]
         for child_node in node.body.body:
             if (
-                isinstance(child_node, cst.FunctionDef)
+                self.preexisting_functions
+                and isinstance(child_node, cst.FunctionDef)
                 and (node.name.value, child_node.name.value) not in self.contextual_functions
                 and (child_node.name.value, parents) not in self.preexisting_functions
             ):
