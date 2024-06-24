@@ -60,7 +60,22 @@ def comparator(orig: Any, new: Any) -> bool:
                     return False
             return True
 
-        if isinstance(orig, (str, int, bool, complex, type(None), decimal.Decimal, set)):
+        if isinstance(
+            orig,
+            (
+                str,
+                int,
+                bool,
+                complex,
+                type(None),
+                decimal.Decimal,
+                set,
+                bytes,
+                bytearray,
+                memoryview,
+                frozenset,
+            ),
+        ):
             return orig == new
         if isinstance(orig, float):
             if math.isnan(orig) and math.isnan(new):

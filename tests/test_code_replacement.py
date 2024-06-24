@@ -4,10 +4,8 @@ import os
 from argparse import Namespace
 from pathlib import Path
 
-from returns.pipeline import is_successful
-
-from codeflash.code_utils.code_replacer import replace_functions_in_file
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize, FunctionParent
+from codeflash.code_utils.code_replacer import replace_functions_and_add_imports, replace_functions_in_file
+from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 from codeflash.optimization.optimizer import Optimizer
 
 os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
@@ -37,9 +35,7 @@ class NewClass:
 
 print("Hello world")
 """
-    expected = """import libcst as cst
-from typing import Optional
-class NewClass:
+    expected = """class NewClass:
     def __init__(self, name):
         self.name = name
     def new_function(self, value):
@@ -54,14 +50,19 @@ print("Hello world")
 """
 
     function_name: str = "NewClass.new_function"
-    preexisting_functions: list[str] = ["new_function"]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
+        ("new_function", [FunctionParent(name="NewClass", type="ClassDef")]),
+    ]
     contextual_functions: set[tuple[str, str]] = {("NewClass", "__init__")}
-    new_code: str = replace_functions_in_file(
-        original_code,
-        [function_name],
-        optim_code,
-        preexisting_functions,
-        contextual_functions,
+    new_code: str = replace_functions_and_add_imports(
+        source_code=original_code,
+        function_names=[function_name],
+        optimized_code=optim_code,
+        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
+        module_abspath=str(Path(__file__).resolve()),
+        preexisting_functions=preexisting_functions,
+        contextual_functions=contextual_functions,
+        project_root_path=str(Path(__file__).resolve().parent.resolve()),
     )
     assert new_code == expected
 
@@ -95,9 +96,7 @@ class NewClass:
 
 print("Hello world")
 """
-    expected = """import libcst as cst
-from typing import Optional
-from OtherModule import other_function
+    expected = """from OtherModule import other_function
 
 class NewClass:
     def __init__(self, name):
@@ -114,14 +113,20 @@ print("Hello world")
 """
 
     function_name: str = "NewClass.new_function"
-    preexisting_functions: list[str] = ["new_function", "other_function"]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
+        ("new_function", []),
+        ("other_function", []),
+    ]
     contextual_functions: set[tuple[str, str]] = {("NewClass", "__init__")}
-    new_code: str = replace_functions_in_file(
-        original_code,
-        [function_name],
-        optim_code,
-        preexisting_functions,
-        contextual_functions,
+    new_code: str = replace_functions_and_add_imports(
+        source_code=original_code,
+        function_names=[function_name],
+        optimized_code=optim_code,
+        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
+        module_abspath=str(Path(__file__).resolve()),
+        preexisting_functions=preexisting_functions,
+        contextual_functions=contextual_functions,
+        project_root_path=str(Path(__file__).resolve().parent.resolve()),
     )
     assert new_code == expected
 
@@ -139,7 +144,7 @@ def other_function(st):
 class NewClass:
     def __init__(self, name):
         self.name = name
-    def new_function(self, value):
+    def new_function(self, value: cst.Name):
         return other_function(self.name)
     def new_function2(value):
         return value
@@ -158,10 +163,7 @@ def other_function(st):
 
 print("Salut monde")
 """
-    expected = """import libcst as cst
-from typing import Optional
-import libcst as cst
-from typing import Mandatory
+    expected = """from typing import Mandatory
 
 print("Au revoir")
 
@@ -175,14 +177,17 @@ print("Salut monde")
 """
 
     function_names: list[str] = ["module.other_function"]
-    preexisting_functions: list[str] = []
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = []
     contextual_functions: set[tuple[str, str]] = set()
-    new_code: str = replace_functions_in_file(
-        original_code,
-        function_names,
-        optim_code,
-        preexisting_functions,
-        contextual_functions,
+    new_code: str = replace_functions_and_add_imports(
+        source_code=original_code,
+        function_names=function_names,
+        optimized_code=optim_code,
+        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
+        module_abspath=str(Path(__file__).resolve()),
+        preexisting_functions=preexisting_functions,
+        contextual_functions=contextual_functions,
+        project_root_path=str(Path(__file__).resolve().parent.resolve()),
     )
     assert new_code == expected
 
@@ -194,7 +199,7 @@ from typing import Optional
 def totally_new_function(value):
     return value
 
-def yet_another_function(values):
+def yet_another_function(values: Optional[str]):
     return len(values) + 2
 
 def other_function(st):
@@ -222,14 +227,11 @@ def other_function(st):
 
 print("Salut monde")
 """
-    expected = """import libcst as cst
-from typing import Optional
-import libcst as cst
-from typing import Mandatory
+    expected = """from typing import Optional, Mandatory
 
 print("Au revoir")
 
-def yet_another_function(values):
+def yet_another_function(values: Optional[str]):
     return len(values) + 2
 
 def other_function(st):
@@ -239,14 +241,17 @@ print("Salut monde")
 """
 
     function_names: list[str] = ["module.yet_another_function", "module.other_function"]
-    preexisting_functions: list[str] = []
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = []
     contextual_functions: set[tuple[str, str]] = set()
-    new_code: str = replace_functions_in_file(
-        original_code,
-        function_names,
-        optim_code,
-        preexisting_functions,
-        contextual_functions,
+    new_code: str = replace_functions_and_add_imports(
+        source_code=original_code,
+        function_names=function_names,
+        optimized_code=optim_code,
+        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
+        module_abspath=str(Path(__file__).resolve()),
+        preexisting_functions=preexisting_functions,
+        contextual_functions=contextual_functions,
+        project_root_path=str(Path(__file__).resolve().parent.resolve()),
     )
     assert new_code == expected
 
@@ -289,14 +294,17 @@ def supersort(doink):
 """
 
     function_names: list[str] = ["sorter_deps"]
-    preexisting_functions: list[str] = ["sorter_deps"]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [("sorter_deps", [])]
     contextual_functions: set[tuple[str, str]] = set()
-    new_code: str = replace_functions_in_file(
-        original_code,
-        function_names,
-        optim_code,
-        preexisting_functions,
-        contextual_functions,
+    new_code: str = replace_functions_and_add_imports(
+        source_code=original_code,
+        function_names=function_names,
+        optimized_code=optim_code,
+        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
+        module_abspath=str(Path(__file__).resolve()),
+        preexisting_functions=preexisting_functions,
+        contextual_functions=contextual_functions,
+        project_root_path=str(Path(__file__).resolve().parent.resolve()),
     )
     assert new_code == expected
 
@@ -338,10 +346,7 @@ def blab(st):
 
 print("Not cool")
 """
-    expected_main = """import libcst as cst
-from typing import Optional
-import libcst as cst
-from typing import Mandatory
+    expected_main = """from typing import Mandatory
 from helper import blob
 
 print("Au revoir")
@@ -355,9 +360,7 @@ def other_function(st):
 print("Salut monde")
 """
 
-    expected_helper = """import libcst as cst
-from typing import Optional
-import numpy as np
+    expected_helper = """import numpy as np
 
 print("Cool")
 
@@ -369,21 +372,27 @@ def blab(st):
 
 print("Not cool")
 """
-    new_main_code: str = replace_functions_in_file(
-        original_code_main,
-        ["other_function"],
-        optim_code,
-        ["other_function", "yet_another_function", "blob"],
-        set(),
+    new_main_code: str = replace_functions_and_add_imports(
+        source_code=original_code_main,
+        function_names=["other_function"],
+        optimized_code=optim_code,
+        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
+        module_abspath=str(Path(__file__).resolve()),
+        preexisting_functions=[("other_function", []), ("yet_another_function", []), ("blob", [])],
+        contextual_functions=set(),
+        project_root_path=str(Path(__file__).resolve().parent.resolve()),
     )
     assert new_main_code == expected_main
 
-    new_helper_code: str = replace_functions_in_file(
-        original_code_helper,
-        ["blob"],
-        optim_code,
-        [],
-        set(),
+    new_helper_code: str = replace_functions_and_add_imports(
+        source_code=original_code_helper,
+        function_names=["blob"],
+        optimized_code=optim_code,
+        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
+        module_abspath=str(Path(__file__).resolve()),
+        preexisting_functions=[],
+        contextual_functions=set(),
+        project_root_path=str(Path(__file__).resolve().parent.resolve()),
     )
     assert new_helper_code == expected_helper
 
@@ -569,21 +578,26 @@ class CacheConfig(BaseConfig):
             )
 """
     function_names: list[str] = ["CacheSimilarityEvalConfig.from_config"]
-    preexisting_functions: list[str] = [
-        "__init__",
-        "from_config",
+    parents = [FunctionParent(name="CacheConfig", type="ClassDef")]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
+        ("__init__", parents),
+        ("from_config", parents),
     ]
+
     contextual_functions: set[tuple[str, str]] = {
         ("CacheSimilarityEvalConfig", "__init__"),
         ("CacheConfig", "__init__"),
         ("CacheInitConfig", "__init__"),
     }
-    new_code: str = replace_functions_in_file(
-        original_code,
-        function_names,
-        optim_code,
-        preexisting_functions,
-        contextual_functions,
+    new_code: str = replace_functions_and_add_imports(
+        source_code=original_code,
+        function_names=function_names,
+        optimized_code=optim_code,
+        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
+        module_abspath=str(Path(__file__).resolve()),
+        preexisting_functions=preexisting_functions,
+        contextual_functions=contextual_functions,
+        project_root_path=str(Path(__file__).resolve().parent.resolve()),
     )
     assert new_code == expected
 
@@ -645,16 +659,19 @@ def test_test_libcst_code_replacement8() -> None:
         return np.sum(a != b) / a.size
 '''
     function_names: list[str] = ["_EmbeddingDistanceChainMixin._hamming_distance"]
-    preexisting_functions: list[str] = [
-        "_hamming_distance",
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
+        ("_hamming_distance", [FunctionParent("_EmbeddingDistanceChainMixin", "ClassDef")]),
     ]
     contextual_functions: set[tuple[str, str]] = set()
-    new_code: str = replace_functions_in_file(
-        original_code,
-        function_names,
-        optim_code,
-        preexisting_functions,
-        contextual_functions,
+    new_code: str = replace_functions_and_add_imports(
+        source_code=original_code,
+        function_names=function_names,
+        optimized_code=optim_code,
+        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
+        module_abspath=str(Path(__file__).resolve()),
+        preexisting_functions=preexisting_functions,
+        contextual_functions=contextual_functions,
+        project_root_path=str(Path(__file__).resolve().parent.resolve()),
     )
     assert new_code == expected
 
@@ -663,7 +680,7 @@ def test_test_libcst_code_replacement9() -> None:
     optim_code = """import libcst as cst
 from typing import Optional
 
-def totally_new_function(value):
+def totally_new_function(value: Optional[str]):
     return value
 
 class NewClass:
@@ -672,7 +689,7 @@ class NewClass:
     def __call__(self, value):
         return self.name
     def new_function2(value):
-        return value
+        return cst.ensure_type(value, str)
     """
 
     original_code = """class NewClass:
@@ -685,32 +702,39 @@ print("Hello world")
 """
     expected = """import libcst as cst
 from typing import Optional
+
 class NewClass:
     def __init__(self, name):
         self.name = str(name)
     def __call__(self, value):
         return "I am still old"
     def new_function2(value):
-        return value
+        return cst.ensure_type(value, str)
 
-def totally_new_function(value):
+def totally_new_function(value: Optional[str]):
     return value
 
 print("Hello world")
 """
-
+    parents = [FunctionParent(name="NewClass", type="ClassDef")]
     function_name: str = "NewClass.__init__"
-    preexisting_functions: list[str] = ["__init__", "__call__"]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
+        ("__init__", parents),
+        ("__call__", parents),
+    ]
     contextual_functions: set[tuple[str, str]] = {
         ("NewClass", "__init__"),
         ("NewClass", "__call__"),
     }
-    new_code: str = replace_functions_in_file(
-        original_code,
-        [function_name],
-        optim_code,
-        preexisting_functions,
-        contextual_functions,
+    new_code: str = replace_functions_and_add_imports(
+        source_code=original_code,
+        function_names=[function_name],
+        optimized_code=optim_code,
+        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
+        module_abspath=str(Path(__file__).resolve()),
+        preexisting_functions=preexisting_functions,
+        contextual_functions=contextual_functions,
+        project_root_path=str(Path(__file__).resolve().parent.resolve()),
     )
     assert new_code == expected
 
@@ -764,11 +788,141 @@ class MainClass:
             experiment_id=None,
         ),
     )
-    func_top_optimize = FunctionToOptimize(function_name="main_method", file_path=str(file_path),
-                                           parents=[FunctionParent("MainClass", "ClassDef")])
+    func_top_optimize = FunctionToOptimize(
+        function_name="main_method",
+        file_path=str(file_path),
+        parents=[FunctionParent("MainClass", "ClassDef")],
+    )
     with open(file_path) as f:
         original_code = f.read()
-        code_context = opt.get_code_optimization_context(function_to_optimize=func_top_optimize,
-                                                         project_root=str(file_path.parent),
-                                                         original_source_code=original_code).unwrap()
+        code_context = opt.get_code_optimization_context(
+            function_to_optimize=func_top_optimize,
+            project_root=str(file_path.parent),
+            original_source_code=original_code,
+        ).unwrap()
         assert code_context.code_to_optimize_with_helpers == get_code_output
+
+
+def test_code_replacement11() -> None:
+    optim_code = '''class Fu():
+    def foo(self) -> dict[str, str]:
+        payload: dict[str, str] = {"bar": self.bar(), "real_bar": str(self.real_bar() + 1)}
+        return payload
+
+    def real_bar(self) -> int:
+        """No abstract nonsense"""
+        pass
+'''
+    original_code = '''class Fu():
+    def foo(self) -> dict[str, str]:
+        payload: dict[str, str] = {"bar": self.bar(), "real_bar": str(self.real_bar())}
+        return payload
+
+    def real_bar(self) -> int:
+        """No abstract nonsense"""
+        return 0
+'''
+    expected_code = '''class Fu():
+    def foo(self) -> dict[str, str]:
+        payload: dict[str, str] = {"bar": self.bar(), "real_bar": str(self.real_bar() + 1)}
+        return payload
+
+    def real_bar(self) -> int:
+        """No abstract nonsense"""
+        return 0
+'''
+
+    function_name: str = "Fu.foo"
+    parents = [FunctionParent("Fu", "ClassDef")]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = [("foo", parents), ("real_bar", parents)]
+    contextual_functions: set[tuple[str, str]] = set()
+    new_code: str = replace_functions_in_file(
+        source_code=original_code,
+        original_function_names=[function_name],
+        optimized_code=optim_code,
+        preexisting_functions=preexisting_functions,
+        contextual_functions=contextual_functions,
+    )
+    assert new_code == expected_code
+
+
+def test_code_replacement12() -> None:
+    optim_code = '''class Fu():
+    def foo(self) -> dict[str, str]:
+        payload: dict[str, str] = {"bar": self.bar(), "real_bar": str(self.real_bar() + 1)}
+        return payload
+
+    def real_bar(self) -> int:
+        """No abstract nonsense"""
+        pass
+'''
+    original_code = '''class Fu():
+    def foo(self) -> dict[str, str]:
+        payload: dict[str, str] = {"bar": self.bar(), "real_bar": str(self.real_bar())}
+        return payload
+
+    def real_bar(self) -> int:
+        """No abstract nonsense"""
+        return 0
+'''
+    expected_code = '''class Fu():
+    def foo(self) -> dict[str, str]:
+        payload: dict[str, str] = {"bar": self.bar(), "real_bar": str(self.real_bar())}
+        return payload
+
+    def real_bar(self) -> int:
+        """No abstract nonsense"""
+        pass
+'''
+
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = []
+    contextual_functions: set[tuple[str, str]] = set()
+    new_code: str = replace_functions_in_file(
+        source_code=original_code,
+        original_function_names=["Fu.real_bar"],
+        optimized_code=optim_code,
+        preexisting_functions=preexisting_functions,
+        contextual_functions=contextual_functions,
+    )
+    assert new_code == expected_code
+
+
+def test_test_libcst_code_replacement13() -> None:
+    # Test if the dunder method is not modified
+    optim_code = """class NewClass:
+    def __init__(self, name):
+        self.name = name
+        self.new_attribute = "Sorry i modified a dunder method"
+    def new_function(self, value):
+        return other_function(self.name)
+    def new_function2(value):
+        return value
+    def __call__(self, value):
+        return self.new_attribute
+    """
+
+    original_code = """class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def new_function(self, value):
+        return other_function(self.name)
+    def new_function2(value):
+        return value
+    def __call__(self, value):
+        return self.name
+"""
+
+    function_names: list[str] = ["module.yet_another_function", "module.other_function"]
+    preexisting_functions: list[tuple[str, list[FunctionParent]]] = []
+    contextual_functions: set[tuple[str, str]] = set()
+    new_code: str = replace_functions_and_add_imports(
+        source_code=original_code,
+        function_names=function_names,
+        optimized_code=optim_code,
+        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
+        module_abspath=str(Path(__file__).resolve()),
+        preexisting_functions=preexisting_functions,
+        contextual_functions=contextual_functions,
+        project_root_path=str(Path(__file__).resolve().parent.resolve()),
+    )
+    assert new_code == original_code
