@@ -17,7 +17,7 @@ def simple_function_with_one_dep(data):
     return calculate_something(data)
 
 
-def test_simple_dependencies():
+def test_simple_dependencies() -> None:
     file_path = pathlib.Path(__file__).resolve()
     helper_functions = get_function_variables_definitions(
         FunctionToOptimize("simple_function_with_one_dep", str(file_path), []),
@@ -72,7 +72,7 @@ class C:
         return c
 
 
-def test_multiple_classes_dependencies():
+def test_multiple_classes_dependencies() -> None:
     # TODO: Check if C.run only gets calculate_something_3 as dependency and likewise for other classes
     file_path = pathlib.Path(__file__).resolve()
     helper_functions = get_function_variables_definitions(
@@ -94,7 +94,7 @@ def recursive_dependency_1(num):
     return recursive_dependency_1(num) + num_1
 
 
-def test_recursive_dependency():
+def test_recursive_dependency() -> None:
     file_path = pathlib.Path(__file__).resolve()
     helper_functions = get_function_variables_definitions(
         FunctionToOptimize("recursive_dependency_1", str(file_path), []),
@@ -117,7 +117,7 @@ def simple_function_with_one_dep_ann(data: MyData):
     return calculate_something_ann(data)
 
 
-def test_simple_dependencies_ann():
+def test_simple_dependencies_ann() -> None:
     file_path = pathlib.Path(__file__).resolve()
     helper_functions = get_function_variables_definitions(
         FunctionToOptimize("simple_function_with_one_dep_ann", str(file_path), []),
@@ -160,7 +160,7 @@ class Graph:
         return stack
 
 
-def test_class_method_dependencies():
+def test_class_method_dependencies() -> None:
     file_path = pathlib.Path(__file__).resolve()
     opt = Optimizer(
         Namespace(
@@ -226,3 +226,33 @@ class Graph:
         stack.insert(0, v)
 """
     )
+
+
+def calculate_something_else(data):
+    return data + 1
+
+
+def imalittledecorator(func):
+    def wrapper(data):
+        return func(data)
+
+    return wrapper
+
+
+@imalittledecorator
+def simple_function_with_decorator_dep(data):
+    return calculate_something_else(data)
+
+
+@pytest.mark.skip(reason="no decorator dependency support")
+def test_decorator_dependencies() -> None:
+    file_path = pathlib.Path(__file__).resolve()
+    helper_functions = get_function_variables_definitions(
+        FunctionToOptimize("simple_function_with_decorator_dep", str(file_path), []),
+        str(file_path.parent.resolve()),
+    )[0]
+    assert len(helper_functions) == 2
+    assert {helper_functions[0][0].definition.full_name, helper_functions[1][0].definition.full_name} == {
+        "test_function_dependencies.calculate_something",
+        "test_function_dependencies.imalittledecorator",
+    }
