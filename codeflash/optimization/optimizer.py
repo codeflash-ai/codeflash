@@ -23,7 +23,6 @@ from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
-    get_all_function_names,
     get_run_tmp_file,
     module_name_from_file_path,
 )
@@ -397,7 +396,7 @@ class Optimizer:
                 logging.info(f"Optimized candidate {j}/{len(candidates)}:")
                 logging.info(candidate.source_code)
                 try:
-                    replace_function_definitions_in_module(
+                    did_update = replace_function_definitions_in_module(
                         function_names=[function_to_optimize.qualified_name],
                         optimized_code=candidate.source_code,
                         file_path_of_module_with_function_to_optimize=function_to_optimize.file_path,
@@ -410,7 +409,7 @@ class Optimizer:
                         module_abspath,
                         qualified_names,
                     ) in helper_functions_by_module_abspath.items():
-                        replace_function_definitions_in_module(
+                        did_update |= replace_function_definitions_in_module(
                             function_names=list(qualified_names),
                             optimized_code=candidate.source_code,
                             file_path_of_module_with_function_to_optimize=function_to_optimize.file_path,
@@ -419,6 +418,11 @@ class Optimizer:
                             contextual_functions=code_context.contextual_dunder_methods,
                             project_root_path=self.args.project_root,
                         )
+                    if not did_update:
+                        logging.warning(
+                            "No functions were replaced in the optimized code. Skipping optimization candidate.",
+                        )
+                        continue
                 except (
                     ValueError,
                     SyntaxError,
@@ -472,7 +476,9 @@ class Optimizer:
                     )
 
                     if speedup_critic(
-                        candidate_result, original_code_baseline.runtime, best_runtime_until_now
+                        candidate_result,
+                        original_code_baseline.runtime,
+                        best_runtime_until_now,
                     ):
                         best_optimization = BestOptimization(
                             candidate=candidate,
@@ -623,9 +629,11 @@ class Optimizer:
         )
         if code_to_optimize is None:
             return Failure("Could not find function to optimize.")
-        success, preexisting_functions = get_all_function_names(code_to_optimize)
-        if not success:
-            return Failure("Error in parsing the code, skipping optimization.")
+        preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
+            (name, [FunctionParent(name=class_name, type="ClassDef")])
+            for class_name, name in contextual_dunder_methods
+        ]
+        preexisting_functions.append((function_to_optimize.function_name, function_to_optimize.parents))
         (
             helper_code,
             helper_functions,
@@ -668,7 +676,12 @@ class Optimizer:
             project_root,
         )
         preexisting_functions.extend(
-            [fn[0].full_name.split(".")[-1] for fn in helper_functions],
+            [
+                (qualified_name_list[-1], ([FunctionParent(name=qualified_name_list[-2], type="ClassDef")]))
+                if len(qualified_name_list := fn[0].full_name.split(".")) > 1
+                else (qualified_name_list[-1], [])
+                for fn in helper_functions
+            ],
         )
         contextual_dunder_methods.update(helper_dunder_methods)
         return Success(

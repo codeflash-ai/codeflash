@@ -97,24 +97,27 @@ def parse_sqlite_test_results(
     finally:
         db.close()
     for val in data:
-        test_results.add(
-            FunctionTestInvocation(
-                id=InvocationId(
-                    test_module_path=val[0],
-                    test_class_name=val[1],
-                    test_function_name=val[2],
-                    function_getting_tested=val[3],
-                    iteration_id=val[4],
+        try:
+            test_results.add(
+                FunctionTestInvocation(
+                    id=InvocationId(
+                        test_module_path=val[0],
+                        test_class_name=val[1],
+                        test_function_name=val[2],
+                        function_getting_tested=val[3],
+                        iteration_id=val[4],
+                    ),
+                    file_name=test_py_file_path,
+                    did_pass=True,
+                    runtime=val[5],
+                    test_framework=test_config.test_framework,
+                    test_type=test_type,
+                    return_value=pickle.loads(val[6]),
+                    timed_out=False,
                 ),
-                file_name=test_py_file_path,
-                did_pass=True,
-                runtime=val[5],
-                test_framework=test_config.test_framework,
-                test_type=test_type,
-                return_value=pickle.loads(val[6]),
-                timed_out=False,
-            ),
-        )
+            )
+        except Exception:
+            logging.exception("Failed to load pickle file.")
         # return_value is only None temporarily as this is only being used for the existing tests. This should generalize
         # to read the return_value from the sqlite file as well.
         # Hardcoding the test result to True because the test did execute and we are only interested in the return values,
@@ -193,17 +196,17 @@ def parse_test_xml(
             else:
                 if len(testcase.result) > 1:
                     print(
-                        f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!"
+                        f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!",
                     )
                 if len(testcase.result) == 1:
                     message = testcase.result[0].message.lower()
                     if "timed out" in message:
                         timed_out = True
             matches = re.findall(
-                r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?)######!", testcase.system_out or ""
+                r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?)######!",
+                testcase.system_out or "",
             )
             if not matches or not len(matches):
-
                 test_results.add(
                     FunctionTestInvocation(
                         id=InvocationId(
@@ -228,9 +231,7 @@ def parse_test_xml(
                         FunctionTestInvocation(
                             id=InvocationId(
                                 test_module_path=match[0],
-                                test_class_name=None
-                                if match[1] == ""
-                                else match[1][:-1],
+                                test_class_name=None if match[1] == "" else match[1][:-1],
                                 test_function_name=match[2],
                                 function_getting_tested=match[3],
                                 iteration_id=match[4],
