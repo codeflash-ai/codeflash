@@ -830,6 +830,7 @@ class Optimizer:
             test_env["PYTHONPATH"] += os.pathsep + self.args.project_root
         cumulative_test_runtime = 0
         cumulative_test_runs = 0
+        test_times_list = []
         first_run = True
         do_break = False
         logging.info(
@@ -920,6 +921,7 @@ class Optimizer:
                     logging.info(
                         f"Overall test results for original code: {TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}",
                     )
+                test_times_list.append(original_total_runtime_iter)
                 if original_runtime is None or original_total_runtime_iter < original_runtime:
                     original_runtime = best_runtime = original_total_runtime_iter
                     overall_original_test_results = original_test_results_iter
@@ -941,6 +943,7 @@ class Optimizer:
         logging.info(
             f"Original code runtime measured over {times_run} run{'s' if times_run > 1 else ''}: {humanize_runtime(original_runtime)}",
         )
+        logging.debug(f"Original code test runtimes: {test_times_list}")
         return Success(
             OriginalCodeBaseline(
                 generated_test_results=original_gen_results,
@@ -978,6 +981,7 @@ class Optimizer:
             test_env["PYTHONPATH"] += os.pathsep + self.args.project_root
         cumulative_test_runtime = 0
         cumulative_test_runs = 0
+        test_times_list = []
         first_run = True
         do_break = False
         while (
@@ -1088,6 +1092,7 @@ class Optimizer:
                     )
                     do_break = True
                     break
+                test_times_list.append(test_runtime)
                 if best_test_runtime is None or test_runtime < best_test_runtime:
                     if candidate_generated_test_results:
                         candidate_existing_test_results.merge(candidate_generated_test_results)
@@ -1117,6 +1122,7 @@ class Optimizer:
 
         if not success:
             return Failure("Failed to run the optimized candidate.")
+        logging.debug(f"Optimized code {optimization_index} runtime: {test_times_list}")
         return Success(
             OptimizedCandidateResult(
                 times_run=times_run,
