@@ -82,7 +82,7 @@ warn_required_dynamic_aliases = true
 [tool.ruff.lint]
 select = ["ALL"]
 unfixable = ["F401"]
-ignore = ["S101", "D103", "FIX002", "G004"]
+ignore = ["S101", "D103", "FIX002"]
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true
