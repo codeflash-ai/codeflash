@@ -53,7 +53,9 @@ def main(trace_id: str) -> None:
     ):
         filename = f"optimization_candidate_{idx}.py"
         explanation = explanations_post.get(opt_id, "")
-        content_with_comment = f'"""{explanation}"""\n\n{optimization}'
+        speedup = speedup_ratio.get(opt_id)
+        speedup_comment = f"Speedup: {speedup}" if speedup is not None else "No speedup"
+        content_with_comment = f'"""{explanation}\n\n{speedup_comment}"""\n\n{optimization}'
         write_to_file(filename, content_with_comment)
 
     # Find and write the best optimization candidate to its own file
@@ -73,8 +75,9 @@ def main(trace_id: str) -> None:
             )
             best_optimization = optimizations_post.get(best_optimization_id)
             best_explanation = explanations_post.get(best_optimization_id, "")
+            best_speedup_comment = f"Speedup: {best_speedup}"
             best_content_with_comment = (
-                f'"""{best_explanation}"""\n\n{best_optimization}'
+                f'"""{best_explanation}\n\n{best_speedup_comment}"""\n\n{best_optimization}'
             )
             if best_optimization and best_explanation is not None:
                 write_to_file(
