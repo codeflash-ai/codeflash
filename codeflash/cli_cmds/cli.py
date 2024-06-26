@@ -107,6 +107,9 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
             logging.error(f"File {args.file} does not exist")
             sys.exit(1)
         args.file = os.path.realpath(args.file)
+        if not args.no_pr:
+            owner, repo = get_repo_owner_and_name()
+            require_github_app_or_exit(owner, repo)
     if args.replay_test:
         if not os.path.isfile(args.replay_test):
             logging.error(f"Replay test file {args.replay_test} does not exist")

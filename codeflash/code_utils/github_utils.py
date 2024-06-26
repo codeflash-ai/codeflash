@@ -22,4 +22,7 @@ def require_github_app_or_exit(owner: str, repo: str) -> None:
             "Before continuing, please install the Codeflash GitHub App on your repository by visiting "
             f"https://github.com/apps/codeflash-ai{LF}",
         )
+        logging.error(
+            f"Note: if you want to find optimizations without opening PRs, you can run Codeflash with the --no-pr flag.{LF}",
+        )
         apologize_and_exit()
