@@ -82,10 +82,10 @@ def parse_args() -> Namespace:
     parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose debug logs")
     parser.add_argument("--version", action="store_true", help="Print the version of codeflash")
     args: Namespace = parser.parse_args()
-    return process_cmd_args(args)
+    return process_and_validate_cmd_args(args)
 
 
-def process_cmd_args(args: Namespace) -> Namespace:
+def process_and_validate_cmd_args(args: Namespace) -> Namespace:
     is_init: bool = args.command.startswith("init") if args.command else False
     if args.verbose:
         logging_config.set_level(logging.DEBUG, echo_setting=not is_init)
@@ -94,9 +94,6 @@ def process_cmd_args(args: Namespace) -> Namespace:
     if args.version:
         logging.info(f"Codeflash version {version}")
         sys.exit()
-    if args.command:
-        args.func()
-        sys.exit(1)
     if not check_running_in_git_repo(module_root=args.module_root):
         if not confirm_proceeding_with_no_git_repo():
             logging.critical("No git repository detected and user aborted run. Exiting...")
@@ -108,7 +105,7 @@ def process_cmd_args(args: Namespace) -> Namespace:
     if args.file:
         if not os.path.exists(args.file):
             logging.error(f"File {args.file} does not exist")
-            exit(1)
+            sys.exit(1)
         args.file = os.path.realpath(args.file)
     if args.replay_test:
         if not os.path.isfile(args.replay_test):
@@ -116,6 +113,10 @@ def process_cmd_args(args: Namespace) -> Namespace:
             sys.exit(1)
         args.replay_test = os.path.realpath(args.replay_test)
 
+    return args
+
+
+def process_pyproject_config(args: Namespace) -> Namespace:
     try:
         pyproject_config, pyproject_file_path = parse_config_file(args.config_file)
     except ValueError as e:
@@ -132,11 +133,11 @@ def process_cmd_args(args: Namespace) -> Namespace:
         "disable_imports_sorting",
     ]
     for key in supported_keys:
-        if key in pyproject_config:
-            if (
-                hasattr(args, key.replace("-", "_")) and getattr(args, key.replace("-", "_")) is None
-            ) or not hasattr(args, key.replace("-", "_")):
-                setattr(args, key.replace("-", "_"), pyproject_config[key])
+        if key in pyproject_config and (
+            (hasattr(args, key.replace("-", "_")) and getattr(args, key.replace("-", "_")) is None)
+            or not hasattr(args, key.replace("-", "_"))
+        ):
+            setattr(args, key.replace("-", "_"), pyproject_config[key])
     assert args.module_root is not None and os.path.isdir(
         args.module_root,
     ), f"--module-root {args.module_root} must be a valid directory"
@@ -166,15 +167,13 @@ def process_cmd_args(args: Namespace) -> Namespace:
     # in this case, the ".." becomes outside project scope, causing issues with un-importable paths
     args.project_root = project_root_from_module_root(args.module_root, pyproject_file_path)
     args.tests_root = os.path.realpath(args.tests_root)
-    args = handle_optimize_all_arg_parsing(args)
-    return args
+    return handle_optimize_all_arg_parsing(args)
 
 
 def project_root_from_module_root(module_root: str, pyproject_file_path: str) -> str:
     if os.path.dirname(pyproject_file_path) == module_root:
         return module_root
-    else:
-        return os.path.realpath(os.path.join(module_root, ".."))
+    return os.path.realpath(os.path.join(module_root, ".."))
 
 
 def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
