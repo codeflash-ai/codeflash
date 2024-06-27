@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 import tomlkit
 
@@ -31,7 +32,7 @@ def find_pyproject_toml(config_file=None):
         )
 
 
-def parse_config_file(config_file_path=None):
+def parse_config_file(config_file_path: str = None) -> tuple[dict[str, Any], str]:
     config_file_path = find_pyproject_toml(config_file_path)
     try:
         with open(config_file_path, "rb") as f:
