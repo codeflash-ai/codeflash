@@ -64,9 +64,7 @@ from codeflash.optimization.function_context import (
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
 from codeflash.result.critic import speedup_critic
 from codeflash.result.explanation import Explanation
-from codeflash.telemetry import posthog
 from codeflash.telemetry.posthog import ph
-from codeflash.telemetry.sentry import init_sentry
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestResults, TestType
@@ -78,8 +76,6 @@ from codeflash.verification.verifier import generate_tests
 class Optimizer:
     def __init__(self, args: Namespace) -> None:
         self.args = args
-        init_sentry(not args.disable_telemetry, exclude_errors=True)
-        posthog.initialize_posthog(not args.disable_telemetry)
 
         self.test_cfg = TestConfig(
             tests_root=args.tests_root,
