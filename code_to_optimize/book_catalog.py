@@ -1,4 +1,6 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, Text
+from typing import List
+
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, Text, func
 from sqlalchemy.orm import Session, relationship
 from time import time
 
@@ -49,7 +51,6 @@ def init_table() -> Session:
 
 
 def get_authors(books: list[Book]) -> list[Author]:
-    # books: list[Book] = session.query(Book).all()
     _authors: list[Author] = []
     book: Book
     for book in books:
@@ -72,6 +73,32 @@ def get_authors2(num_authors) -> list[Author]:
         list(set(_authors)),
         key=lambda x: x.id,
     )[:num_authors]
+
+
+def get_top_author(authors: List[Author]) -> Author:
+    engine: Engine = create_engine(POSTGRES_CONNECTION_STRING, echo=True)
+    session_factory: sessionmaker[Session] = sessionmaker(bind=engine)
+    session: Session = session_factory()
+
+    # Step 1: Initialize variables to keep track of the author with the maximum bestsellers
+    max_bestsellers = 0
+    top_author = None
+
+    # Step 2: Iterate over each author to count their bestsellers
+    for author in authors:
+        bestseller_count = (
+            session.query(func.count(Book.id))
+            .filter(Book.author_id == author.id, Book.is_bestseller == True)
+            .scalar()
+        )
+
+        # Step 3: Update the author with the maximum bestsellers
+        if bestseller_count > max_bestsellers:
+            max_bestsellers = bestseller_count
+            top_author = author
+
+    return top_author
+
 
 if __name__ == "__main__":
     engine: Engine = create_engine(POSTGRES_CONNECTION_STRING, echo=True)
