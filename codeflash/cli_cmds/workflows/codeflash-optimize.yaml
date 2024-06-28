@@ -24,7 +24,7 @@ jobs:
             echo "skip_remaining_steps=no" >> $GITHUB_OUTPUT
             echo "It's not. Proceeding with the optimization."
           fi
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         if: steps.bot_check.outputs.skip_remaining_steps == 'no'
         with:
           fetch-depth: 0
@@ -32,7 +32,7 @@ jobs:
       # TODO: Replace the following with your project's python installation method
       - name: Set up Python
         if: steps.bot_check.outputs.skip_remaining_steps == 'no'
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: {{ python_version }}
       # TODO: Replace the following with your project's dependency installation method
