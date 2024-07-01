@@ -20,13 +20,6 @@ def file_path_from_module_name(module_name: str, project_root_path: str) -> str:
     return os.path.join(project_root_path, module_name.replace(".", os.sep) + ".py")
 
 
-def ellipsis_in_ast(module: ast.AST) -> bool:
-    for node in ast.walk(module):
-        if isinstance(node, ast.Constant) and node.value is ...:
-            return True
-    return False
-
-
 def get_imports_from_file(
     file_path: str | None = None,
     file_string: str | None = None,
@@ -51,7 +44,7 @@ def get_imports_from_file(
     return imports
 
 
-def get_all_function_names(code: str) -> Tuple[bool, List[str]]:
+def get_all_function_names(code: str) -> tuple[bool, list[str]]:
     try:
         module = ast.parse(code)
     except SyntaxError as e:
