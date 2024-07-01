@@ -254,7 +254,7 @@ def parse_test_xml(
             except AttributeError:
                 stdout = run_result.stdout
                 stderr = run_result.stderr
-            logging.info(
+            logging.debug(
                 f"Test log - STDOUT : {stdout} \n STDERR : {stderr}",
             )
     return test_results
