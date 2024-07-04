@@ -573,13 +573,13 @@ class Optimizer:
 
         new_helper_code: dict[str, str] = {}
         for module_abspath in helper_functions_by_module_abspath:
-            new_code = format_code(
+            formatted_helper_code = format_code(
                 self.args.formatter_cmds,
                 module_abspath,
             )
             if should_sort_imports:
-                new_code = sort_imports(new_code)
-            new_helper_code[module_abspath] = new_code
+                formatted_helper_code = sort_imports(formatted_helper_code)
+            new_helper_code[module_abspath] = formatted_helper_code
 
         return new_code, new_helper_code
 
