@@ -5,7 +5,6 @@ import logging
 import os
 import re
 from collections import defaultdict
-from typing import Union
 
 import jedi
 import tiktoken
@@ -14,7 +13,7 @@ from jedi.api.classes import Name
 from codeflash.code_utils.code_extractor import get_code
 from codeflash.code_utils.code_utils import module_name_from_file_path, path_belongs_to_site_packages
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
-from codeflash.models.models import FunctionSource, Source
+from codeflash.models.models import FunctionSource
 
 
 def belongs_to_class(name: Name, class_name: str) -> bool:
@@ -95,16 +94,14 @@ def get_type_annotation_context(
                 if source_code[0]:
                     sources.append(
                         FunctionSource(
-                            source=Source(
-                                definition[0].full_name,
-                                definition[0],
-                                source_code[0],
-                            ),
+                            fully_qualified_name=definition[0].full_name,
+                            jedi_definition=definition[0],
+                            source_code=source_code[0],
                             file_path=definition_path,
                             qualified_name=definition[0].full_name.removeprefix(
                                 definition[0].module_name + ".",
                             ),
-                            name=definition[0].name,
+                            only_function_name=definition[0].name,
                         ),
                     )
                     contextual_dunder_methods.update(source_code[1])
@@ -234,12 +231,14 @@ def get_function_variables_definitions(
                 if source_code[0]:
                     sources.append(
                         FunctionSource(
-                            source=Source(definition.full_name, definition, source_code[0]),
+                            fully_qualified_name=definition.full_name,
+                            jedi_definition=definition,
+                            source_code=source_code[0],
                             file_path=definition_path,
                             qualified_name=definition.full_name.removeprefix(
                                 name.module_name + ".",
                             ),
-                            name=definition.name,
+                            only_function_name=definition.name,
                         ),
                     )
                     contextual_dunder_methods.update(source_code[1])
@@ -256,7 +255,7 @@ def get_function_variables_definitions(
     )
     parent_sources = set()
     for source in sources:
-        if (fully_qualified_name := source.source.fully_qualified_name) not in existing_fully_qualified_names:
+        if (fully_qualified_name := source.fully_qualified_name) not in existing_fully_qualified_names:
             if not source.qualified_name.count("."):
                 no_parent_sources[source.file_path][source.qualified_name].add(source)
             else:
@@ -296,10 +295,10 @@ def get_constrained_function_context_and_helper_functions(
     code_to_optimize_tokens = tokenizer.encode(code_to_optimize)
 
     if not function_to_optimize.parents:
-        helper_functions_sources = [function.source.source_code for function in helper_functions]
+        helper_functions_sources = [function.source_code for function in helper_functions]
     else:
         helper_functions_sources = [
-            function.source.source_code
+            function.source_code
             for function in helper_functions
             if not function.qualified_name.count(".")
             or function.qualified_name.split(".")[0] != function_to_optimize.parents[0].name

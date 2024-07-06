@@ -54,15 +54,10 @@ class OptimizationSet(BaseModel):
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
-class Source:
-    fully_qualified_name: str
-    definition: Name
-    source_code: str
-
-
-@dataclass(frozen=True, config={"arbitrary_types_allowed": True})
 class FunctionSource:
-    source: Source
     file_path: str
     qualified_name: str
-    name: str
+    fully_qualified_name: str
+    only_function_name: str
+    source_code: str
+    jedi_definition: Name
