@@ -236,7 +236,7 @@ def get_function_variables_definitions(
                             source_code=source_code[0],
                             file_path=definition_path,
                             qualified_name=definition.full_name.removeprefix(
-                                name.module_name + ".",
+                                definition.module_name + ".",
                             ),
                             only_function_name=definition.name,
                         ),
