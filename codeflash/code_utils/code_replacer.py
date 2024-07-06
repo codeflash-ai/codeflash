@@ -230,7 +230,8 @@ def replace_function_definitions_in_module(
     contextual_functions: set[tuple[str, str]],
     project_root_path: str,
 ) -> bool:
-    """:param function_names: This is the name of the function or class.method. Not a fully qualified name.
+    """:param function_names: List of qualified (not fully qualified) function names (function_name or
+    class_name.method_name).
     :param optimized_code:
     :param file_path_of_module_with_function_to_optimize:
     :param module_abspath:

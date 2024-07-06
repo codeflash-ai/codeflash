@@ -101,24 +101,24 @@ def get_type_annotation_context(
                                 source_code[0],
                             ),
                             file_path=definition_path,
-                            fully_qualified_name=definition[0].full_name.removeprefix(
+                            qualified_name=definition[0].full_name.removeprefix(
                                 definition[0].module_name + ".",
                             ),
-                            function_name=definition[0].name,
+                            name=definition[0].name,
                         ),
                     )
                     contextual_dunder_methods.update(source_code[1])
 
     def visit_children(
-        node: Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module],
+        node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Module,
         node_parents: list[FunctionParent],
     ) -> None:
-        child: Union[ast.AST, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module]
+        child: ast.AST | ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Module
         for child in ast.iter_child_nodes(node):
             visit(child, node_parents)
 
     def visit_all_annotation_children(
-        node: Union[ast.Subscript, ast.Name, ast.BinOp],
+        node: ast.Subscript | ast.Name | ast.BinOp,
         node_parents: list[FunctionParent],
     ) -> None:
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
@@ -143,7 +143,7 @@ def get_type_annotation_context(
                 visit_all_annotation_children(node.value, node_parents)
 
     def visit(
-        node: Union[ast.AST, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module],
+        node: ast.AST | ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Module,
         node_parents: list[FunctionParent],
     ) -> None:
         if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -236,10 +236,10 @@ def get_function_variables_definitions(
                         FunctionSource(
                             source=Source(definition.full_name, definition, source_code[0]),
                             file_path=definition_path,
-                            fully_qualified_name=definition.full_name.removeprefix(
+                            qualified_name=definition.full_name.removeprefix(
                                 name.module_name + ".",
                             ),
-                            function_name=definition.name,
+                            name=definition.name,
                         ),
                     )
                     contextual_dunder_methods.update(source_code[1])
@@ -250,23 +250,23 @@ def get_function_variables_definitions(
     )
     sources[:0] = annotation_sources  # prepend the annotation sources
     contextual_dunder_methods.update(annotation_dunder_methods)
-    existing_full_names = set()
+    existing_fully_qualified_names = set()
     no_parent_sources: dict[str, dict[str, set[FunctionSource]]] = defaultdict(
         lambda: defaultdict(set),
     )
     parent_sources = set()
     for source in sources:
-        if (full_name := source.source.full_name) not in existing_full_names:
-            if not source.fully_qualified_name.count("."):
-                no_parent_sources[source.file_path][source.fully_qualified_name].add(source)
+        if (fully_qualified_name := source.source.fully_qualified_name) not in existing_fully_qualified_names:
+            if not source.qualified_name.count("."):
+                no_parent_sources[source.file_path][source.qualified_name].add(source)
             else:
                 parent_sources.add(source)
-            existing_full_names.add(full_name)
+            existing_fully_qualified_names.add(fully_qualified_name)
     deduped_parent_sources = [
         source
         for source in parent_sources
         if source.file_path not in no_parent_sources
-        or source.fully_qualified_name.rpartition(".")[0] not in no_parent_sources[source.file_path]
+        or source.qualified_name.rpartition(".")[0] not in no_parent_sources[source.file_path]
     ]
     deduped_no_parent_sources = [
         source
@@ -301,8 +301,8 @@ def get_constrained_function_context_and_helper_functions(
         helper_functions_sources = [
             function.source.source_code
             for function in helper_functions
-            if not function.fully_qualified_name.count(".")
-            or function.fully_qualified_name.split(".")[0] != function_to_optimize.parents[0].name
+            if not function.qualified_name.count(".")
+            or function.qualified_name.split(".")[0] != function_to_optimize.parents[0].name
         ]
     helper_functions_tokens = [len(tokenizer.encode(function)) for function in helper_functions_sources]
 

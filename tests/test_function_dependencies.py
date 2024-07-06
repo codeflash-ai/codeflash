@@ -81,7 +81,7 @@ def test_multiple_classes_dependencies() -> None:
     )
 
     # assert len(helper_functions) == 2
-    assert list(map(lambda x: x.source.full_name, helper_functions[0])) == [
+    assert list(map(lambda x: x.source.fully_qualified_name, helper_functions[0])) == [
         "test_function_dependencies.global_dependency_3",
         "test_function_dependencies.C.calculate_something_3",
     ]
@@ -199,7 +199,7 @@ def test_class_method_dependencies() -> None:
         == "test_function_dependencies.Graph.topologicalSortUtil"
     )
     assert code_context.helper_functions[0].source.definition.name == "topologicalSortUtil"
-    assert code_context.helper_functions[0].fully_qualified_name == "Graph.topologicalSortUtil"
+    assert code_context.helper_functions[0].qualified_name == "Graph.topologicalSortUtil"
     assert code_context.contextual_dunder_methods == {("Graph", "__init__")}
     assert (
         code_context.code_to_optimize_with_helpers

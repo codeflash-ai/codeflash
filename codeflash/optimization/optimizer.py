@@ -197,7 +197,7 @@ class Optimizer:
         helper_functions_by_module_abspath = defaultdict(set)
         for helper_function in code_context.helper_functions:
             helper_functions_by_module_abspath[helper_function.file_path].add(
-                helper_function.fully_qualified_name
+                helper_function.qualified_name,
             )
         original_helper_code = {}
         for module_abspath in helper_functions_by_module_abspath:
@@ -646,14 +646,13 @@ class Optimizer:
             helper_methods = [
                 df
                 for df in helper_functions
-                if df.fully_qualified_name.count(".") > 0
-                and df.fully_qualified_name.split(".")[0] == function_class
+                if df.qualified_name.count(".") > 0 and df.qualified_name.split(".")[0] == function_class
             ]
             optimizable_methods = [function_to_optimize] + [
                 FunctionToOptimize(
-                    df.fully_qualified_name.split(".")[-1],
+                    df.qualified_name.split(".")[-1],
                     "",
-                    [FunctionParent(df.fully_qualified_name.split(".")[0], "ClassDef")],
+                    [FunctionParent(df.qualified_name.split(".")[0], "ClassDef")],
                     None,
                     None,
                 )
@@ -677,7 +676,7 @@ class Optimizer:
         preexisting_functions.extend(
             [
                 (qualified_name_list[-1], ([FunctionParent(name=qualified_name_list[-2], type="ClassDef")]))
-                if len(qualified_name_list := fn.source.full_name.split(".")) > 1
+                if len(qualified_name_list := fn.source.fully_qualified_name.split(".")) > 1
                 else (qualified_name_list[-1], [])
                 for fn in helper_functions
             ],
@@ -756,7 +755,7 @@ class Optimizer:
                 self.generate_and_instrument_tests,
                 code_to_optimize_with_helpers,
                 function_to_optimize,
-                [definition.source.full_name for definition in helper_functions],
+                [definition.source.fully_qualified_name for definition in helper_functions],
                 module_path,
                 function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id,
             )

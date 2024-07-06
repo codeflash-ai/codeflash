@@ -48,9 +48,14 @@ class OptimizationSet(BaseModel):
     experiment: Optional[list[OptimizedCandidate]]
 
 
+# If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
+# qualified name of the method is foo.eggs.Ham.spam, its qualified name is Ham.spam, and its name is spam. The full name
+# of the module is foo.eggs.
+
+
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
 class Source:
-    full_name: str
+    fully_qualified_name: str
     definition: Name
     source_code: str
 
@@ -59,5 +64,5 @@ class Source:
 class FunctionSource:
     source: Source
     file_path: str
-    fully_qualified_name: str
-    function_name: str
+    qualified_name: str
+    name: str
