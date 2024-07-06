@@ -247,8 +247,10 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         if not is_successful(ctx_result):
             pytest.fail()
         code_context = ctx_result.unwrap()
-        assert code_context.helper_functions[0][2] == "_R"
-        assert code_context.helper_functions[1][2] == "AbstractCacheBackend.get_cache_or_call"
+        assert code_context.helper_functions[0].fully_qualified_name == "_R"
+        assert (
+            code_context.helper_functions[1].fully_qualified_name == "AbstractCacheBackend.get_cache_or_call"
+        )
         assert len(code_context.contextual_dunder_methods) == 2
 
         assert (
