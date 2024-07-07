@@ -672,6 +672,7 @@ class Optimizer:
             function_to_optimize.file_path,
             function_to_optimize.file_path,
             project_root,
+            helper_functions,
         )
         preexisting_functions.extend(
             [
