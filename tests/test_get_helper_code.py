@@ -346,3 +346,61 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         )
 '''
         )
+
+
+def test_bubble_sort_deps() -> None:
+    file_path = (pathlib.Path(__file__) / ".." / ".." / "code_to_optimize" / "bubble_sort_deps.py").resolve()
+    opt = Optimizer(
+        Namespace(
+            project_root=str(file_path.parent.parent.resolve()),
+            disable_telemetry=True,
+            tests_root=str(file_path.parent / "tests"),
+            test_framework="pytest",
+            pytest_cmd="pytest",
+            experiment_id=None,
+        ),
+    )
+    function_to_optimize = FunctionToOptimize(
+        function_name="sorter_deps",
+        file_path=str(file_path),
+        parents=[],
+        starting_line=None,
+        ending_line=None,
+    )
+    with open(file_path) as f:
+        original_code = f.read()
+    ctx_result = opt.get_code_optimization_context(
+        function_to_optimize,
+        opt.args.project_root,
+        original_code,
+    )
+    if not is_successful(ctx_result):
+        pytest.fail()
+    code_context = ctx_result.unwrap()
+    assert (
+        code_context.code_to_optimize_with_helpers
+        == """def dep1_comparer(arr, j: int) -> bool:
+    return arr[j] > arr[j + 1]
+
+def dep2_swap(arr, j):
+    temp = arr[j]
+    arr[j] = arr[j + 1]
+    arr[j + 1] = temp
+
+def sorter_deps(arr):
+    for i in range(len(arr)):
+        for j in range(len(arr) - 1):
+            if dep1_comparer(arr, j):
+                dep2_swap(arr, j)
+    return arr
+"""
+    )
+    assert len(code_context.helper_functions) == 2
+    assert (
+        code_context.helper_functions[0].fully_qualified_name
+        == "code_to_optimize.bubble_sort_dep1_helper.dep1_comparer"
+    )
+    assert (
+        code_context.helper_functions[1].fully_qualified_name
+        == "code_to_optimize.bubble_sort_dep2_swap.dep2_swap"
+    )
