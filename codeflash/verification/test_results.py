@@ -93,11 +93,12 @@ class TestResults(BaseModel):
         passed = 0
         failed = 0
         for test_result in self.test_results:
-            if test_result.did_pass:
-                passed += 1
-            else:
-                logging.info(f"Failed test: {test_result.id}")
-                failed += 1
+            if test_result.test_type != TestType.EXISTING_UNIT_TEST or test_result.id.function_getting_tested:
+                if test_result.did_pass:
+                    passed += 1
+                else:
+                    logging.info(f"Failed test: {test_result.id}")
+                    failed += 1
         return f"Passed: {passed}, Failed: {failed}"
 
     def get_test_pass_fail_report_by_type(self) -> dict[TestType, dict[str, int]]:
@@ -105,10 +106,11 @@ class TestResults(BaseModel):
         for test_type in TestType:
             report[test_type] = {"passed": 0, "failed": 0}
         for test_result in self.test_results:
-            if test_result.did_pass:
-                report[test_result.test_type]["passed"] += 1
-            else:
-                report[test_result.test_type]["failed"] += 1
+            if test_result.test_type != TestType.EXISTING_UNIT_TEST or test_result.id.function_getting_tested:
+                if test_result.did_pass:
+                    report[test_result.test_type]["passed"] += 1
+                else:
+                    report[test_result.test_type]["failed"] += 1
         return report
 
     @staticmethod
