@@ -230,6 +230,16 @@ def replace_function_definitions_in_module(
     contextual_functions: set[tuple[str, str]],
     project_root_path: str,
 ) -> bool:
+    """:param function_names: List of qualified (not fully qualified) function names (function_name or
+    class_name.method_name).
+    :param optimized_code:
+    :param file_path_of_module_with_function_to_optimize:
+    :param module_abspath:
+    :param preexisting_functions:
+    :param contextual_functions:
+    :param project_root_path:
+    :return:
+    """
     file: IO[str]
     with open(module_abspath, encoding="utf8") as file:
         source_code: str = file.read()

@@ -52,13 +52,13 @@ from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
     CodeOptimizationContext,
+    FunctionSource,
     GeneratedTests,
     OptimizationSet,
     OptimizedCandidateResult,
     OriginalCodeBaseline,
 )
 from codeflash.optimization.function_context import (
-    Source,
     get_constrained_function_context_and_helper_functions,
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
@@ -195,8 +195,10 @@ class Optimizer:
             return Failure(ctx_result.failure())
         code_context: CodeOptimizationContext = ctx_result.unwrap()
         helper_functions_by_module_abspath = defaultdict(set)
-        for _, module_abspath, qualified_name in code_context.helper_functions:
-            helper_functions_by_module_abspath[module_abspath].add(qualified_name)
+        for helper_function in code_context.helper_functions:
+            helper_functions_by_module_abspath[helper_function.file_path].add(
+                helper_function.qualified_name,
+            )
         original_helper_code = {}
         for module_abspath in helper_functions_by_module_abspath:
             with pathlib.Path(module_abspath).open(encoding="utf8") as f:
@@ -644,13 +646,13 @@ class Optimizer:
             helper_methods = [
                 df
                 for df in helper_functions
-                if df[2].count(".") > 0 and df[2].split(".")[0] == function_class
+                if df.qualified_name.count(".") > 0 and df.qualified_name.split(".")[0] == function_class
             ]
             optimizable_methods = [function_to_optimize] + [
                 FunctionToOptimize(
-                    df[2].split(".")[-1],
+                    df.qualified_name.split(".")[-1],
                     "",
-                    [FunctionParent(df[2].split(".")[0], "ClassDef")],
+                    [FunctionParent(df.qualified_name.split(".")[0], "ClassDef")],
                     None,
                     None,
                 )
@@ -670,11 +672,12 @@ class Optimizer:
             function_to_optimize.file_path,
             function_to_optimize.file_path,
             project_root,
+            helper_functions,
         )
         preexisting_functions.extend(
             [
                 (qualified_name_list[-1], ([FunctionParent(name=qualified_name_list[-2], type="ClassDef")]))
-                if len(qualified_name_list := fn[0].full_name.split(".")) > 1
+                if len(qualified_name_list := fn.fully_qualified_name.split(".")) > 1
                 else (qualified_name_list[-1], [])
                 for fn in helper_functions
             ],
@@ -742,7 +745,7 @@ class Optimizer:
         self,
         code_to_optimize_with_helpers: str,
         function_to_optimize: FunctionToOptimize,
-        helper_functions: list[tuple[Source, str, str]],
+        helper_functions: list[FunctionSource],
         module_path: str,
         function_trace_id: str,
         run_experiment: bool = False,
@@ -753,7 +756,7 @@ class Optimizer:
                 self.generate_and_instrument_tests,
                 code_to_optimize_with_helpers,
                 function_to_optimize,
-                [definition[0].full_name for definition in helper_functions],
+                [definition.fully_qualified_name for definition in helper_functions],
                 module_path,
                 function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id,
             )

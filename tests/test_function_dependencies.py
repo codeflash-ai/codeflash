@@ -24,7 +24,7 @@ def test_simple_dependencies() -> None:
         str(file_path.parent.resolve()),
     )[0]
     assert len(helper_functions) == 1
-    assert helper_functions[0][0].definition.full_name == "test_function_dependencies.calculate_something"
+    assert helper_functions[0].jedi_definition.full_name == "test_function_dependencies.calculate_something"
 
 
 def global_dependency_1(num):
@@ -81,7 +81,7 @@ def test_multiple_classes_dependencies() -> None:
     )
 
     # assert len(helper_functions) == 2
-    assert list(map(lambda x: x[0].full_name, helper_functions[0])) == [
+    assert list(map(lambda x: x.fully_qualified_name, helper_functions[0])) == [
         "test_function_dependencies.global_dependency_3",
         "test_function_dependencies.C.calculate_something_3",
     ]
@@ -101,7 +101,8 @@ def test_recursive_dependency() -> None:
         str(file_path.parent.resolve()),
     )[0]
     assert len(helper_functions) == 1
-    assert helper_functions[0][0].definition.full_name == "test_function_dependencies.calculate_something"
+    assert helper_functions[0].jedi_definition.full_name == "test_function_dependencies.calculate_something"
+    assert helper_functions[0].fully_qualified_name == "test_function_dependencies.calculate_something"
 
 
 @dataclass
@@ -124,8 +125,10 @@ def test_simple_dependencies_ann() -> None:
         str(file_path.parent.resolve()),
     )[0]
     assert len(helper_functions) == 2
-    assert helper_functions[0][0].definition.full_name == "test_function_dependencies.MyData"
-    assert helper_functions[1][0].definition.full_name == "test_function_dependencies.calculate_something_ann"
+    assert helper_functions[0].jedi_definition.full_name == "test_function_dependencies.MyData"
+    assert (
+        helper_functions[1].jedi_definition.full_name == "test_function_dependencies.calculate_something_ann"
+    )
 
 
 from collections import defaultdict
@@ -192,11 +195,15 @@ def test_class_method_dependencies() -> None:
     # The code_context above should have the topologicalSortUtil function in it
     assert len(code_context.helper_functions) == 1
     assert (
-        code_context.helper_functions[0][0].definition.full_name
+        code_context.helper_functions[0].jedi_definition.full_name
         == "test_function_dependencies.Graph.topologicalSortUtil"
     )
-    assert code_context.helper_functions[0][0].definition.name == "topologicalSortUtil"
-    assert code_context.helper_functions[0][2] == "Graph.topologicalSortUtil"
+    assert code_context.helper_functions[0].jedi_definition.name == "topologicalSortUtil"
+    assert (
+        code_context.helper_functions[0].fully_qualified_name
+        == "test_function_dependencies.Graph.topologicalSortUtil"
+    )
+    assert code_context.helper_functions[0].qualified_name == "Graph.topologicalSortUtil"
     assert code_context.contextual_dunder_methods == {("Graph", "__init__")}
     assert (
         code_context.code_to_optimize_with_helpers
