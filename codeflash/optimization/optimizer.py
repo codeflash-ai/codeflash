@@ -677,7 +677,7 @@ class Optimizer:
         preexisting_functions.extend(
             [
                 (qualified_name_list[-1], ([FunctionParent(name=qualified_name_list[-2], type="ClassDef")]))
-                if len(qualified_name_list := fn.fully_qualified_name.split(".")) > 1
+                if len(qualified_name_list := fn.qualified_name.split(".")) > 1
                 else (qualified_name_list[-1], [])
                 for fn in helper_functions
             ],
