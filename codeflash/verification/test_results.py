@@ -70,6 +70,9 @@ class FunctionTestInvocation:
     return_value: Optional[object]  # The return value of the function invocation
     timed_out: Optional[bool]
 
+    def test_executed(self) -> bool:
+        return self.test_type != TestType.EXISTING_UNIT_TEST or self.id.function_getting_tested
+
 
 class TestResults(BaseModel):
     test_results: list[FunctionTestInvocation] = []
@@ -93,7 +96,7 @@ class TestResults(BaseModel):
         passed = 0
         failed = 0
         for test_result in self.test_results:
-            if test_result.test_type != TestType.EXISTING_UNIT_TEST or test_result.id.function_getting_tested:
+            if test_result.test_executed():
                 if test_result.did_pass:
                     passed += 1
                 else:
@@ -106,7 +109,7 @@ class TestResults(BaseModel):
         for test_type in TestType:
             report[test_type] = {"passed": 0, "failed": 0}
         for test_result in self.test_results:
-            if test_result.test_type != TestType.EXISTING_UNIT_TEST or test_result.id.function_getting_tested:
+            if test_result.test_executed():
                 if test_result.did_pass:
                     report[test_result.test_type]["passed"] += 1
                 else:
