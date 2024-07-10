@@ -9,6 +9,8 @@ from libcst.codemod import CodemodContext
 from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, RemoveImportsVisitor
 from libcst.helpers import calculate_module_and_package
 
+from codeflash.discovery.functions_to_optimize import FunctionParent
+
 if TYPE_CHECKING:
     from libcst.helpers import ModuleNameAndPackage
 
@@ -237,3 +239,22 @@ def extract_code(
         )
         return None, set()
     return edited_code, contextual_dunder_methods
+
+
+def find_preexisting_objects(source_code: str):
+    """Find all preexisting functions, classes or class methods in the source code"""
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = []
+    try:
+        module_node: ast.Module = ast.parse(source_code)
+    except SyntaxError:
+        logging.exception("find_preexisting_objects - Syntax error while parsing code")
+        return preexisting_objects
+    for node in module_node.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            preexisting_objects.append((node.name, []))
+        elif isinstance(node, ast.ClassDef):
+            preexisting_objects.append((node.name, []))
+            for cnode in node.body:
+                if isinstance(cnode, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    preexisting_objects.append((cnode.name, [FunctionParent(node.name, "ClassDef")]))
+    return preexisting_objects
