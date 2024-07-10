@@ -199,10 +199,11 @@ class Optimizer:
             return Failure(ctx_result.failure())
         code_context: CodeOptimizationContext = ctx_result.unwrap()
         original_helper_code = {}
-        for helper_function in code_context.helper_functions:
-            with pathlib.Path(helper_function.file_path).open(encoding="utf8") as f:
+        helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+        for helper_function_path in helper_function_paths:
+            with pathlib.Path(helper_function_path).open(encoding="utf8") as f:
                 helper_code = f.read()
-                original_helper_code[helper_function.file_path] = helper_code
+                original_helper_code[helper_function_path] = helper_code
         logging.info(f"Code to be optimized:\n{code_context.code_to_optimize_with_helpers}")
         module_path = module_name_from_file_path(function_to_optimize.file_path, self.args.project_root)
 
