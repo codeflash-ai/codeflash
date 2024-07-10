@@ -269,7 +269,6 @@ def collect_setup_info() -> SetupInfo:
             message=f"Enter the path to your tests directory inside {os.path.abspath(module_root) + os.path.sep} ",
             path_type=inquirer.Path.DIRECTORY,
             exists=True,
-            normalize_to_absolute_path=True,
         )
         tests_root = custom_tests_root_answer["path"] if custom_tests_root_answer else apologize_and_exit()
     else:
