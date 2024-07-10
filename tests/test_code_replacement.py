@@ -6,7 +6,11 @@ from argparse import Namespace
 from collections import defaultdict
 from pathlib import Path
 
-from codeflash.code_utils.code_replacer import replace_functions_and_add_imports, replace_functions_in_file
+from codeflash.code_utils.code_replacer import (
+    is_zero_diff,
+    replace_functions_and_add_imports,
+    replace_functions_in_file,
+)
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 from codeflash.optimization.optimizer import Optimizer
 
@@ -1499,3 +1503,39 @@ def cosine_similarity_top_k(
     return ret_idxs, scores
 '''
     )
+
+
+def test_0_diff_code_replacement():
+    original_code = """from __future__ import annotations
+    
+import numpy as np
+def functionA():
+    return np.array([1, 2, 3])
+"""
+    optim_code_a = """from __future__ import annotations
+import numpy as np
+def functionA():
+    return np.array([1, 2, 3])"""
+
+    assert is_zero_diff(original_code, optim_code_a)
+
+    optim_code_b = """
+import numpy as np
+def functionA():
+    return np.array([1, 2, 3])"""
+
+    assert is_zero_diff(original_code, optim_code_b)
+
+    optim_code_c = """
+def functionA():
+    return np.array([1, 2, 3])"""
+
+    assert is_zero_diff(original_code, optim_code_c)
+
+    optim_code_d = """from __future__ import annotations
+    
+import numpy as np
+def functionA():
+    return np.array([1, 2, 3, 4])
+"""
+    assert not is_zero_diff(original_code, optim_code_d)
