@@ -20,7 +20,11 @@ from codeflash.api.aiservice import (
     OptimizedCandidate,
 )
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code
+from codeflash.code_utils.code_extractor import (
+    add_needed_imports_from_module,
+    extract_code,
+    find_preexisting_objects,
+)
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     get_run_tmp_file,
@@ -194,16 +198,12 @@ class Optimizer:
         if not is_successful(ctx_result):
             return Failure(ctx_result.failure())
         code_context: CodeOptimizationContext = ctx_result.unwrap()
-        helper_functions_by_module_abspath = defaultdict(set)
-        for helper_function in code_context.helper_functions:
-            helper_functions_by_module_abspath[helper_function.file_path].add(
-                helper_function.qualified_name,
-            )
         original_helper_code = {}
-        for module_abspath in helper_functions_by_module_abspath:
-            with pathlib.Path(module_abspath).open(encoding="utf8") as f:
+        helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+        for helper_function_path in helper_function_paths:
+            with pathlib.Path(helper_function_path).open(encoding="utf8") as f:
                 helper_code = f.read()
-                original_helper_code[module_abspath] = helper_code
+                original_helper_code[helper_function_path] = helper_code
         logging.info(f"Code to be optimized:\n{code_context.code_to_optimize_with_helpers}")
         module_path = module_name_from_file_path(function_to_optimize.file_path, self.args.project_root)
 
@@ -272,7 +272,6 @@ class Optimizer:
             best_optimization = self.determine_best_candidate(
                 candidates,
                 code_context,
-                helper_functions_by_module_abspath,
                 function_to_optimize,
                 generated_tests_path,
                 instrumented_unittests_created_for_function,
@@ -306,15 +305,14 @@ class Optimizer:
                 )
 
                 self.replace_function_and_helpers_with_optimized_code(
-                    code_context,
-                    helper_functions_by_module_abspath,
-                    explanation,
-                    best_optimization.candidate.source_code,
-                    function_to_optimize.qualified_name,
+                    code_context=code_context,
+                    function_to_optimize_file_path=explanation.file_path,
+                    optimized_code=best_optimization.candidate.source_code,
+                    qualified_function_name=function_to_optimize.qualified_name,
                 )
 
                 new_code, new_helper_code = self.reformat_code_and_helpers(
-                    helper_functions_by_module_abspath,
+                    code_context.helper_functions,
                     explanation.file_path,
                     original_code,
                 )
@@ -346,7 +344,6 @@ class Optimizer:
                             original_code,
                             original_helper_code,
                             function_to_optimize.file_path,
-                            helper_functions_by_module_abspath,
                         )
         # Delete all the generated tests to not cause any clutter.
         pathlib.Path(generated_tests_path).unlink(missing_ok=True)
@@ -360,7 +357,6 @@ class Optimizer:
         self,
         candidates: list[OptimizedCandidate],
         code_context: CodeOptimizationContext,
-        helper_functions_by_module_abspath: dict[str, set[str]],
         function_to_optimize: FunctionToOptimize,
         generated_tests_path: str,
         instrumented_unittests_created_for_function: set[str],
@@ -394,28 +390,12 @@ class Optimizer:
                 logging.info(f"Optimized candidate {j}/{len(candidates)}:")
                 logging.info(candidate.source_code)
                 try:
-                    did_update = replace_function_definitions_in_module(
-                        function_names=[function_to_optimize.qualified_name],
+                    did_update = self.replace_function_and_helpers_with_optimized_code(
+                        code_context=code_context,
+                        function_to_optimize_file_path=function_to_optimize.file_path,
                         optimized_code=candidate.source_code,
-                        file_path_of_module_with_function_to_optimize=function_to_optimize.file_path,
-                        module_abspath=function_to_optimize.file_path,
-                        preexisting_functions=code_context.preexisting_functions,
-                        contextual_functions=code_context.contextual_dunder_methods,
-                        project_root_path=self.args.project_root,
+                        qualified_function_name=function_to_optimize.qualified_name,
                     )
-                    for (
-                        module_abspath,
-                        qualified_names,
-                    ) in helper_functions_by_module_abspath.items():
-                        did_update |= replace_function_definitions_in_module(
-                            function_names=list(qualified_names),
-                            optimized_code=candidate.source_code,
-                            file_path_of_module_with_function_to_optimize=function_to_optimize.file_path,
-                            module_abspath=module_abspath,
-                            preexisting_functions=[],
-                            contextual_functions=code_context.contextual_dunder_methods,
-                            project_root_path=self.args.project_root,
-                        )
                     if not did_update:
                         logging.warning(
                             "No functions were replaced in the optimized code. Skipping optimization candidate.",
@@ -432,7 +412,6 @@ class Optimizer:
                         original_code,
                         original_helper_code,
                         function_to_optimize.file_path,
-                        helper_functions_by_module_abspath,
                     )
                     continue
 
@@ -490,7 +469,6 @@ class Optimizer:
                     original_code,
                     original_helper_code,
                     function_to_optimize.file_path,
-                    helper_functions_by_module_abspath,
                 )
                 logging.info("----------------")
         except KeyboardInterrupt as e:
@@ -498,7 +476,6 @@ class Optimizer:
                 original_code,
                 original_helper_code,
                 function_to_optimize.file_path,
-                helper_functions_by_module_abspath,
             )
             logging.exception(f"Optimization interrupted: {e}")
             raise e
@@ -548,17 +525,16 @@ class Optimizer:
         original_code: str,
         original_helper_code: dict[str, str],
         path: str,
-        helper_functions_by_module_abspath: dict[str, set[str]],
     ) -> None:
         with pathlib.Path(path).open("w", encoding="utf8") as f:
             f.write(original_code)
-        for module_abspath in helper_functions_by_module_abspath:
+        for module_abspath in original_helper_code:
             with pathlib.Path(module_abspath).open("w", encoding="utf8") as f:
                 f.write(original_helper_code[module_abspath])
 
     def reformat_code_and_helpers(
         self,
-        helper_functions_by_module_abspath: dict[str, set[str]],
+        helper_functions: list[FunctionSource],
         path: str,
         original_code: str,
     ) -> tuple[str, dict[str, str]]:
@@ -574,7 +550,8 @@ class Optimizer:
             new_code = sort_imports(new_code)
 
         new_helper_code: dict[str, str] = {}
-        for module_abspath in helper_functions_by_module_abspath:
+        helper_functions_paths = {hf.file_path for hf in helper_functions}
+        for module_abspath in helper_functions_paths:
             formatted_helper_code = format_code(
                 self.args.formatter_cmds,
                 module_abspath,
@@ -588,33 +565,40 @@ class Optimizer:
     def replace_function_and_helpers_with_optimized_code(
         self,
         code_context: CodeOptimizationContext,
-        helper_functions_by_module_abspath: dict[str, set[str]],
-        explanation: Explanation,
+        function_to_optimize_file_path: str,
         optimized_code: str,
         qualified_function_name: str,
-    ) -> None:
-        replace_function_definitions_in_module(
+    ) -> bool:
+        """Raises many exceptions if the code is not valid. Catch them where using"""
+        did_update = replace_function_definitions_in_module(
             function_names=[qualified_function_name],
             optimized_code=optimized_code,
-            file_path_of_module_with_function_to_optimize=explanation.file_path,
-            module_abspath=explanation.file_path,
-            preexisting_functions=code_context.preexisting_functions,
+            file_path_of_module_with_function_to_optimize=function_to_optimize_file_path,
+            module_abspath=function_to_optimize_file_path,
+            preexisting_objects=code_context.preexisting_objects,
             contextual_functions=code_context.contextual_dunder_methods,
             project_root_path=self.args.project_root,
         )
+        helper_functions_by_module_abspath = defaultdict(set)
+        for helper_function in code_context.helper_functions:
+            if helper_function.jedi_definition.type != "class":
+                helper_functions_by_module_abspath[helper_function.file_path].add(
+                    helper_function.qualified_name,
+                )
         for (
             module_abspath,
             qualified_names,
         ) in helper_functions_by_module_abspath.items():
-            replace_function_definitions_in_module(
+            did_update |= replace_function_definitions_in_module(
                 function_names=list(qualified_names),
                 optimized_code=optimized_code,
-                file_path_of_module_with_function_to_optimize=explanation.file_path,
+                file_path_of_module_with_function_to_optimize=function_to_optimize_file_path,
                 module_abspath=module_abspath,
-                preexisting_functions=[],
+                preexisting_objects=[],
                 contextual_functions=code_context.contextual_dunder_methods,
                 project_root_path=self.args.project_root,
             )
+        return did_update
 
     def get_code_optimization_context(
         self,
@@ -627,11 +611,6 @@ class Optimizer:
         )
         if code_to_optimize is None:
             return Failure("Could not find function to optimize.")
-        preexisting_functions: list[tuple[str, list[FunctionParent]]] = [
-            (name, [FunctionParent(name=class_name, type="ClassDef")])
-            for class_name, name in contextual_dunder_methods
-        ]
-        preexisting_functions.append((function_to_optimize.function_name, function_to_optimize.parents))
         (
             helper_code,
             helper_functions,
@@ -674,21 +653,14 @@ class Optimizer:
             project_root,
             helper_functions,
         )
-        preexisting_functions.extend(
-            [
-                (qualified_name_list[-1], ([FunctionParent(name=qualified_name_list[-2], type="ClassDef")]))
-                if len(qualified_name_list := fn.qualified_name.split(".")) > 1
-                else (qualified_name_list[-1], [])
-                for fn in helper_functions
-            ],
-        )
+        preexisting_objects = find_preexisting_objects(code_to_optimize_with_helpers)
         contextual_dunder_methods.update(helper_dunder_methods)
         return Success(
             CodeOptimizationContext(
                 code_to_optimize_with_helpers=code_to_optimize_with_helpers_and_imports,
                 contextual_dunder_methods=contextual_dunder_methods,
                 helper_functions=helper_functions,
-                preexisting_functions=preexisting_functions,
+                preexisting_objects=preexisting_objects,
             ),
         )
 

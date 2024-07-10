@@ -22,7 +22,7 @@ class CodeOptimizationContext(BaseModel):
     code_to_optimize_with_helpers: str
     contextual_dunder_methods: set[tuple[str, str]]
     helper_functions: list[FunctionSource]
-    preexisting_functions: list[tuple[str, list[FunctionParent]]]
+    preexisting_objects: list[tuple[str, list[FunctionParent]]]
 
 
 class OptimizedCandidateResult(BaseModel):
