@@ -20,7 +20,11 @@ from codeflash.api.aiservice import (
     OptimizedCandidate,
 )
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code
+from codeflash.code_utils.code_extractor import (
+    add_needed_imports_from_module,
+    extract_code,
+    find_preexisting_objects,
+)
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     get_run_tmp_file,
@@ -606,11 +610,6 @@ class Optimizer:
         )
         if code_to_optimize is None:
             return Failure("Could not find function to optimize.")
-        preexisting_objects: list[tuple[str, list[FunctionParent]]] = [
-            (name, [FunctionParent(name=class_name, type="ClassDef")])
-            for class_name, name in contextual_dunder_methods
-        ]
-        preexisting_objects.append((function_to_optimize.function_name, function_to_optimize.parents))
         (
             helper_code,
             helper_functions,
@@ -653,14 +652,7 @@ class Optimizer:
             project_root,
             helper_functions,
         )
-        preexisting_objects.extend(
-            [
-                (qualified_name_list[-1], ([FunctionParent(name=qualified_name_list[-2], type="ClassDef")]))
-                if len(qualified_name_list := fn.qualified_name.split(".")) > 1
-                else (qualified_name_list[-1], [])
-                for fn in helper_functions
-            ],
-        )
+        preexisting_objects = find_preexisting_objects(code_to_optimize_with_helpers)
         contextual_dunder_methods.update(helper_dunder_methods)
         return Success(
             CodeOptimizationContext(
