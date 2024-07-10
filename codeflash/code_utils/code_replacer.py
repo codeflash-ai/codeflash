@@ -253,8 +253,18 @@ def replace_function_definitions_in_module(
         contextual_functions,
         project_root_path,
     )
-    if ast.dump(ast.parse(new_code)) == ast.dump(ast.parse(source_code)):
+    if is_zero_diff(source_code, new_code):
         return False
     with open(module_abspath, "w", encoding="utf8") as file:
         file.write(new_code)
     return True
+
+
+def is_zero_diff(original_code: str, new_code: str) -> bool:
+    def normalize_for_diff(tree: ast.Module) -> ast.Module:
+        tree.body = [node for node in tree.body if not isinstance(node, (ast.Import, ast.ImportFrom))]
+        return tree
+
+    original_code_unparsed = ast.unparse(normalize_for_diff(ast.parse(original_code)))
+    new_code_unparsed = ast.unparse(normalize_for_diff(ast.parse(new_code)))
+    return original_code_unparsed == new_code_unparsed
