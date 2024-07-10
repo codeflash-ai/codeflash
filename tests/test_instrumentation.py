@@ -1736,3 +1736,82 @@ def test_common_tags_1():
         ).replace('"', "'")
     finally:
         pathlib.Path(test_path).unlink(missing_ok=True)
+
+
+def test_conditional_instrumentation() -> None:
+    code = """from code_to_optimize.bubble_sort import sorter
+
+
+def test_sort():
+    input = [5, 4, 3, 2, 1, 0]
+    if len(input) > 0:
+        assert sorter(input) == [0, 1, 2, 3, 4, 5]"""
+
+    expected = """import gc
+import os
+import sqlite3
+import time
+
+import dill as pickle
+import timeout_decorator
+
+from code_to_optimize.bubble_sort import sorter
+
+
+def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
+    if not hasattr(codeflash_wrap, 'index'):
+        codeflash_wrap.index = {{}}
+    if test_id in codeflash_wrap.index:
+        codeflash_wrap.index[test_id] += 1
+    else:
+        codeflash_wrap.index[test_id] = 0
+    codeflash_test_index = codeflash_wrap.index[test_id]
+    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
+    gc.disable()
+    counter = time.perf_counter_ns()
+    return_value = wrapped(*args, **kwargs)
+    codeflash_duration = time.perf_counter_ns() - counter
+    gc.enable()
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    codeflash_con.commit()
+    return return_value
+
+def test_sort():
+    codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
+    codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
+    codeflash_cur = codeflash_con.cursor()
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    input = [5, 4, 3, 2, 1, 0]
+    if len(input) > 0:
+        codeflash_return_value = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '5_0', codeflash_cur, codeflash_con, input)
+        assert codeflash_return_value == [0, 1, 2, 3, 4, 5]
+    codeflash_con.close()
+"""
+    test_path = (
+        pathlib.Path(__file__).parent.resolve()
+        / "../code_to_optimize/tests/pytest/test_conditional_instrumentation_temp.py"
+    )
+    try:
+        with open(test_path, "w") as f:
+            f.write(code)
+
+        tests_root = (
+            pathlib.Path(__file__).parent.resolve()
+            / "../code_to_optimize/tests/pytest/"
+        )
+        project_root_path = (
+            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        )
+
+        success, new_test = inject_profiling_into_existing_test(
+            test_path, "sorter", project_root_path, "pytest"
+        )
+        assert success
+        assert new_test.replace('"', "'") == expected.format(
+            module_path="tests.pytest.test_conditional_instrumentation_temp",
+            tmp_dir_path=get_run_tmp_file("test_return_values"),
+        ).replace('"', "'")
+    finally:
+        pathlib.Path(test_path).unlink(missing_ok=True)
