@@ -1357,7 +1357,7 @@ def cosine_similarity_top_k(
     contextual_functions = set()
     helper_functions = [
         FakeFunctionSource(
-            file_path="/Users/saurabh/Library/CloudStorage/Dropbox/codeflash/cli/code_to_optimize/math_utils.py",
+            file_path=str((Path(__file__).parent / "code_to_optimize" / "math_utils.py").resolve()),
             qualified_name="Matrix",
             fully_qualified_name="code_to_optimize.math_utils.Matrix",
             only_function_name="Matrix",
@@ -1365,7 +1365,7 @@ def cosine_similarity_top_k(
             jedi_definition=JediDefinition(type="class"),
         ),
         FakeFunctionSource(
-            file_path="/Users/saurabh/Library/CloudStorage/Dropbox/codeflash/cli/code_to_optimize/math_utils.py",
+            file_path=str((Path(__file__).parent / "code_to_optimize" / "math_utils.py").resolve()),
             qualified_name="cosine_similarity",
             fully_qualified_name="code_to_optimize.math_utils.cosine_similarity",
             only_function_name="cosine_similarity",
