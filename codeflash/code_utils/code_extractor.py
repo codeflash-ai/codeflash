@@ -2,13 +2,20 @@ from __future__ import annotations
 
 import ast
 import logging
+from typing import TYPE_CHECKING
 
 import libcst as cst
 from libcst.codemod import CodemodContext
 from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, RemoveImportsVisitor
-from libcst.helpers import ModuleNameAndPackage, calculate_module_and_package
+from libcst.helpers import calculate_module_and_package
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.discovery.functions_to_optimize import FunctionParent
+
+if TYPE_CHECKING:
+    from libcst.helpers import ModuleNameAndPackage
+
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.models.models import FunctionSource
 
 
 def add_needed_imports_from_module(
@@ -17,8 +24,12 @@ def add_needed_imports_from_module(
     src_path: str,
     dst_path: str,
     project_root: str,
+    helper_functions: list[FunctionSource] | None = None,
 ) -> str:
     """Add all needed and used source module code imports to the destination module code, and return it."""
+    if helper_functions is None:
+        helper_functions = []
+    helper_functions_fqn = {f.fully_qualified_name for f in helper_functions}
     src_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, src_path)
     dst_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, dst_path)
 
@@ -41,6 +52,8 @@ def add_needed_imports_from_module(
             RemoveImportsVisitor.remove_unused_import(dst_context, mod)
         for mod, obj_seq in gatherer.object_mapping.items():
             for obj in obj_seq:
+                if f"{mod}.{obj}" in helper_functions_fqn:
+                    continue  # Skip adding imports for helper functions already in the context
                 AddImportsVisitor.add_needed_import(dst_context, mod, obj)
                 RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
     except Exception as e:
@@ -51,6 +64,8 @@ def add_needed_imports_from_module(
         RemoveImportsVisitor.remove_unused_import(dst_context, mod, asname=asname)
     for mod, alias_pairs in gatherer.alias_mapping.items():
         for alias_pair in alias_pairs:
+            if f"{mod}.{alias_pair[0]}" in helper_functions_fqn:
+                continue
             AddImportsVisitor.add_needed_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
             RemoveImportsVisitor.remove_unused_import(
                 dst_context,
@@ -224,3 +239,22 @@ def extract_code(
         )
         return None, set()
     return edited_code, contextual_dunder_methods
+
+
+def find_preexisting_objects(source_code: str):
+    """Find all preexisting functions, classes or class methods in the source code"""
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = []
+    try:
+        module_node: ast.Module = ast.parse(source_code)
+    except SyntaxError:
+        logging.exception("find_preexisting_objects - Syntax error while parsing code")
+        return preexisting_objects
+    for node in module_node.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            preexisting_objects.append((node.name, []))
+        elif isinstance(node, ast.ClassDef):
+            preexisting_objects.append((node.name, []))
+            for cnode in node.body:
+                if isinstance(cnode, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    preexisting_objects.append((cnode.name, [FunctionParent(node.name, "ClassDef")]))
+    return preexisting_objects

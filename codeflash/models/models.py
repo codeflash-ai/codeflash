@@ -2,17 +2,18 @@ from __future__ import annotations
 
 from typing import Optional
 
+from jedi.api.classes import Name
 from pydantic import BaseModel
+from pydantic.dataclasses import dataclass
 
-from codeflash.discovery.functions_to_optimize import FunctionParent
 from codeflash.api.aiservice import OptimizedCandidate
-from codeflash.optimization.function_context import Source
+from codeflash.discovery.functions_to_optimize import FunctionParent
 from codeflash.verification.test_results import TestResults
 
 
 class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
-    helper_functions: list[tuple[Source, str, str]]
+    helper_functions: list[FunctionSource]
     runtime: int
     winning_test_results: TestResults
 
@@ -20,8 +21,8 @@ class BestOptimization(BaseModel):
 class CodeOptimizationContext(BaseModel):
     code_to_optimize_with_helpers: str
     contextual_dunder_methods: set[tuple[str, str]]
-    helper_functions: list[tuple[Source, str, str]]
-    preexisting_functions: list[tuple[str, list[FunctionParent]]]
+    helper_functions: list[FunctionSource]
+    preexisting_objects: list[tuple[str, list[FunctionParent]]]
 
 
 class OptimizedCandidateResult(BaseModel):
@@ -45,3 +46,18 @@ class OriginalCodeBaseline(BaseModel):
 class OptimizationSet(BaseModel):
     control: list[OptimizedCandidate]
     experiment: Optional[list[OptimizedCandidate]]
+
+
+# If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
+# qualified name of the method is foo.eggs.Ham.spam, its qualified name is Ham.spam, and its name is spam. The full name
+# of the module is foo.eggs.
+
+
+@dataclass(frozen=True, config={"arbitrary_types_allowed": True})
+class FunctionSource:
+    file_path: str
+    qualified_name: str
+    fully_qualified_name: str
+    only_function_name: str
+    source_code: str
+    jedi_definition: Name

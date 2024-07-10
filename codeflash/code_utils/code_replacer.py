@@ -18,17 +18,17 @@ class OptimFunctionCollector(cst.CSTVisitor):
         function_name: str,
         class_name: str | None,
         contextual_functions: set[tuple[str, str]],
-        preexisting_functions: list[tuple[str, list[FunctionParent]]] | None = None,
+        preexisting_objects: list[tuple[str, list[FunctionParent]]] | None = None,
     ) -> None:
         super().__init__()
-        if preexisting_functions is None:
-            preexisting_functions = []
+        if preexisting_objects is None:
+            preexisting_objects = []
         self.function_name = function_name
         self.class_name = class_name
         self.optim_body: FunctionDef | None = None
         self.optim_new_class_functions: list[cst.FunctionDef] = []
         self.optim_new_functions: list[cst.FunctionDef] = []
-        self.preexisting_functions = preexisting_functions
+        self.preexisting_objects = preexisting_objects
         self.contextual_functions = contextual_functions.union(
             {(self.class_name, self.function_name)},
         )
@@ -44,8 +44,8 @@ class OptimFunctionCollector(cst.CSTVisitor):
         if node.name.value == self.function_name:
             self.optim_body = node
         elif (
-            self.preexisting_functions
-            and (node.name.value, []) not in self.preexisting_functions
+            self.preexisting_objects
+            and (node.name.value, []) not in self.preexisting_objects
             and (
                 isinstance(parent, cst.Module)
                 or (parent2 is not None and not isinstance(parent2, cst.ClassDef))
@@ -57,10 +57,10 @@ class OptimFunctionCollector(cst.CSTVisitor):
         parents = [FunctionParent(name=node.name.value, type="ClassDef")]
         for child_node in node.body.body:
             if (
-                self.preexisting_functions
+                self.preexisting_objects
                 and isinstance(child_node, cst.FunctionDef)
                 and (node.name.value, child_node.name.value) not in self.contextual_functions
-                and (child_node.name.value, parents) not in self.preexisting_functions
+                and (child_node.name.value, parents) not in self.preexisting_objects
             ):
                 self.optim_new_class_functions.append(child_node)
 
@@ -153,7 +153,7 @@ def replace_functions_in_file(
     source_code: str,
     original_function_names: list[str],
     optimized_code: str,
-    preexisting_functions: list[tuple[str, list[FunctionParent]]],
+    preexisting_objects: list[tuple[str, list[FunctionParent]]],
     contextual_functions: set[tuple[str, str]],
 ) -> str:
     parsed_function_names = []
@@ -173,11 +173,11 @@ def replace_functions_in_file(
             function_name,
             class_name,
             contextual_functions,
-            preexisting_functions,
+            preexisting_objects,
         )
         module.visit(visitor)
 
-        if visitor.optim_body is None and not preexisting_functions:
+        if visitor.optim_body is None and not preexisting_objects:
             continue
         if visitor.optim_body is None:
             raise ValueError(f"Did not find the function {function_name} in the optimized code")
@@ -202,7 +202,7 @@ def replace_functions_and_add_imports(
     optimized_code: str,
     file_path_of_module_with_function_to_optimize: str,
     module_abspath: str,
-    preexisting_functions: list[tuple[str, list[FunctionParent]]],
+    preexisting_objects: list[tuple[str, list[FunctionParent]]],
     contextual_functions: set[tuple[str, str]],
     project_root_path: str,
 ) -> str:
@@ -212,7 +212,7 @@ def replace_functions_and_add_imports(
             source_code,
             function_names,
             optimized_code,
-            preexisting_functions,
+            preexisting_objects,
             contextual_functions,
         ),
         file_path_of_module_with_function_to_optimize,
@@ -226,10 +226,20 @@ def replace_function_definitions_in_module(
     optimized_code: str,
     file_path_of_module_with_function_to_optimize: str,
     module_abspath: str,
-    preexisting_functions: list[tuple[str, list[FunctionParent]]],
+    preexisting_objects: list[tuple[str, list[FunctionParent]]],
     contextual_functions: set[tuple[str, str]],
     project_root_path: str,
 ) -> bool:
+    """:param function_names: List of qualified (not fully qualified) function names (function_name or
+    class_name.method_name).
+    :param optimized_code:
+    :param file_path_of_module_with_function_to_optimize:
+    :param module_abspath:
+    :param preexisting_objects:
+    :param contextual_functions:
+    :param project_root_path:
+    :return:
+    """
     file: IO[str]
     with open(module_abspath, encoding="utf8") as file:
         source_code: str = file.read()
@@ -239,12 +249,22 @@ def replace_function_definitions_in_module(
         optimized_code,
         file_path_of_module_with_function_to_optimize,
         module_abspath,
-        preexisting_functions,
+        preexisting_objects,
         contextual_functions,
         project_root_path,
     )
-    if ast.dump(ast.parse(new_code)) == ast.dump(ast.parse(source_code)):
+    if is_zero_diff(source_code, new_code):
         return False
     with open(module_abspath, "w", encoding="utf8") as file:
         file.write(new_code)
     return True
+
+
+def is_zero_diff(original_code: str, new_code: str) -> bool:
+    def normalize_for_diff(tree: ast.Module) -> ast.Module:
+        tree.body = [node for node in tree.body if not isinstance(node, (ast.Import, ast.ImportFrom))]
+        return tree
+
+    original_code_unparsed = ast.unparse(normalize_for_diff(ast.parse(original_code)))
+    new_code_unparsed = ast.unparse(normalize_for_diff(ast.parse(new_code)))
+    return original_code_unparsed == new_code_unparsed

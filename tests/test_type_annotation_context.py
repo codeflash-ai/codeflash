@@ -54,7 +54,7 @@ def test_function_context_includes_type_annotation() -> None:
     )
 
     assert len(helper_functions) == 1
-    assert helper_functions[0][0].full_name == "test_type_annotation_context.CustomType"
+    assert helper_functions[0].fully_qualified_name == "test_type_annotation_context.CustomType"
 
 
 def test_function_context_includes_type_annotation_dataclass() -> None:
@@ -70,8 +70,8 @@ def test_function_context_includes_type_annotation_dataclass() -> None:
     )
 
     assert len(helper_functions) == 2
-    assert helper_functions[0][0].full_name == "test_type_annotation_context.CustomDataClass"
-    assert helper_functions[1][0].full_name == "test_type_annotation_context.CustomType"
+    assert helper_functions[0].fully_qualified_name == "test_type_annotation_context.CustomDataClass"
+    assert helper_functions[1].fully_qualified_name == "test_type_annotation_context.CustomType"
 
 
 def test_function_context_works_for_composite_types() -> None:
@@ -87,8 +87,8 @@ def test_function_context_works_for_composite_types() -> None:
     )
 
     assert len(helper_functions) == 2
-    assert helper_functions[0][0].full_name == "test_type_annotation_context.CustomDataClass"
-    assert helper_functions[1][0].full_name == "test_type_annotation_context.CustomType"
+    assert helper_functions[0].fully_qualified_name == "test_type_annotation_context.CustomDataClass"
+    assert helper_functions[1].fully_qualified_name == "test_type_annotation_context.CustomType"
 
 
 def test_function_context_custom_datatype() -> None:
@@ -107,4 +107,4 @@ def test_function_context_custom_datatype() -> None:
     )
 
     assert len(helper_functions) == 1
-    assert helper_functions[0][0].full_name == "math_utils.Matrix"
+    assert helper_functions[0].fully_qualified_name == "math_utils.Matrix"

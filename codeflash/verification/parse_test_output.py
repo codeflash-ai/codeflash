@@ -248,8 +248,14 @@ def parse_test_xml(
     if len(test_results) == 0:
         logging.info(f"Test '{test_py_file_path}' failed to run, skipping it")
         if run_result is not None:
-            logging.info(
-                f"Test log - STDOUT : {run_result.stdout.decode()} \n STDERR : {run_result.stderr.decode()}",
+            try:
+                stdout = run_result.stdout.decode()
+                stderr = run_result.stderr.decode()
+            except AttributeError:
+                stdout = run_result.stdout
+                stderr = run_result.stderr
+            logging.debug(
+                f"Test log - STDOUT : {stdout} \n STDERR : {stderr}",
             )
     return test_results
 
