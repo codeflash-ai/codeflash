@@ -19,6 +19,7 @@ import sqlite3
 import sys
 import time
 from collections import defaultdict
+from copy import copy
 from typing import Any, List, Optional
 
 import dill
@@ -448,7 +449,7 @@ class Tracer:
 
         if not isinstance(sort, tuple):
             sort = (sort,)
-        pstats.Stats(self).strip_dirs().sort_stats(*sort).print_stats(15)
+        pstats.Stats(copy(self)).strip_dirs().sort_stats(*sort).print_stats(15)
 
     def dump_stats(self, file):
         with open(file, "wb") as f:

@@ -7,7 +7,7 @@ from copy import copy
 
 class ProfileStats(pstats.Stats):
     def __init__(self, trace_file_path: str, time_unit: str = "ns"):
-        assert os.path.exists(trace_file_path), f"Trace file {trace_file_path} does not exist"
+        assert os.path.isfile(trace_file_path), f"Trace file {trace_file_path} does not exist"
         assert time_unit in ["ns", "us", "ms", "s"], f"Invalid time unit {time_unit}"
         self.trace_file_path = trace_file_path
         self.time_unit = time_unit
