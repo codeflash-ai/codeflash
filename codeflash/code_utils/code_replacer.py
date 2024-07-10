@@ -261,7 +261,7 @@ def replace_function_definitions_in_module(
 
 
 def is_zero_diff(original_code: str, new_code: str) -> bool:
-    def normalize_for_diff(tree: ast.AST):
+    def normalize_for_diff(tree: ast.Module) -> ast.Module:
         tree.body = [node for node in tree.body if not isinstance(node, (ast.Import, ast.ImportFrom))]
         return tree
 
