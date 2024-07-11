@@ -237,7 +237,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                 line_node = node.body[i]
                 # TODO: Validate if the functional call actually did not raise any exceptions
 
-                if isinstance(line_node, (ast.With, ast.For, ast.While)):
+                if isinstance(line_node, (ast.With, ast.For, ast.While, ast.If)):
                     j = len(line_node.body) - 1
                     while j >= 0:
                         compound_line_node: ast.stmt = line_node.body[j]
