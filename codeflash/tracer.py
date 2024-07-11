@@ -15,11 +15,13 @@ import marshal
 import os
 import pathlib
 import pickle
+import re
 import sqlite3
 import sys
 import time
 from collections import defaultdict
 from copy import copy
+from io import StringIO
 from typing import Any, List, Optional
 
 import dill
@@ -449,7 +451,52 @@ class Tracer:
 
         if not isinstance(sort, tuple):
             sort = (sort,)
-        pstats.Stats(copy(self)).strip_dirs().sort_stats(*sort).print_stats(15)
+        # The following code customizes the default printing behavior to
+        # print in milliseconds.
+        s = StringIO()
+        pstats.Stats(copy(self), stream=s).strip_dirs().sort_stats(*sort).print_stats(15)
+        raw_stats = s.getvalue()
+        m = re.search(r"function calls? in (\d+)\.\d+ (seconds?)", raw_stats)
+        total_time = None
+        if m:
+            total_time = int(m.group(1))
+        if total_time is None:
+            print("Failed to get total time from stats")
+        total_time_ms = total_time / 1e6
+        raw_stats = re.sub(
+            r"(function calls?) in (\d+)\.\d+ (seconds?)",
+            rf"\1 in {total_time_ms:.3f} milliseconds",
+            raw_stats,
+        )
+        match_pattern = r"^ +\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +"
+        m = re.findall(match_pattern, raw_stats, re.MULTILINE)
+        ms_times = []
+        for tottime, percall, cumtime, percall_cum in m:
+            tottime_ms = int(tottime) / 1e6
+            percall_ms = int(percall) / 1e6
+            cumtime_ms = int(cumtime) / 1e6
+            percall_cum_ms = int(percall_cum) / 1e6
+            ms_times.append([tottime_ms, percall_ms, cumtime_ms, percall_cum_ms])
+        split_stats = raw_stats.split("\n")
+        new_stats = []
+
+        replace_pattern = r"^( +\d+) +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(.*)"
+        times_index = 0
+        for line in split_stats:
+            if times_index >= len(ms_times):
+                replaced = line
+            else:
+                replaced, n = re.subn(
+                    replace_pattern,
+                    rf"\g<1>{ms_times[times_index][0]:8.3f} {ms_times[times_index][1]:8.3f} {ms_times[times_index][2]:8.3f} {ms_times[times_index][3]:8.3f} \g<6>",
+                    line,
+                    count=1,
+                )
+                if n > 0:
+                    times_index += 1
+            new_stats.append(replaced)
+
+        print("\n".join(new_stats))
 
     def dump_stats(self, file):
         with open(file, "wb") as f:
