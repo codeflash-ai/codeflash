@@ -5,9 +5,10 @@ import logging
 from typing import TYPE_CHECKING
 
 import libcst as cst
+import libcst.matchers as m
 from libcst.codemod import CodemodContext
 from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, RemoveImportsVisitor
-from libcst.helpers import calculate_module_and_package
+from libcst.helpers import calculate_module_and_package, get_full_name_for_node
 
 from codeflash.discovery.functions_to_optimize import FunctionParent
 
@@ -16,6 +17,35 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.models import FunctionSource
+
+
+def get_first_import_from_node(module: cst.Module) -> cst.ImportFrom | None:
+    #
+    if (
+        (module_body := module.body)
+        and (first_statement_body := module_body[0].body)
+        and not isinstance(first_statement_body, cst.BaseSuite)
+        and isinstance(first_base_small_statement := first_statement_body[0], cst.ImportFrom)
+    ):
+        return first_base_small_statement
+    return None
+
+
+def remove_first_imported_aliased_objects(
+    module_code: str,
+    imported_module_name: str,
+) -> tuple[str, cst.ImportFrom | None]:
+    tree: cst.Module = cst.parse_module(module_code)
+    first_import_from_node: cst.ImportFrom | None = get_first_import_from_node(tree)
+    return (
+        ((tree.with_changes(body=tree.body[1:]) if tree.body else tree).code, first_import_from_node)
+        if first_import_from_node
+        and (first_import_from_node_module := first_import_from_node.module)
+        and get_full_name_for_node(first_import_from_node_module) == imported_module_name
+        and not isinstance(first_import_from_node_names := first_import_from_node.names, cst.ImportStar)
+        and any(m.matches(alias, m.ImportAlias(asname=m.AsName())) for alias in first_import_from_node_names)
+        else (module_code, None)
+    )
 
 
 def add_needed_imports_from_module(
@@ -27,6 +57,7 @@ def add_needed_imports_from_module(
     helper_functions: list[FunctionSource] | None = None,
 ) -> str:
     """Add all needed and used source module code imports to the destination module code, and return it."""
+    src_module_code, _ = remove_first_imported_aliased_objects(src_module_code, "__future__")
     if helper_functions is None:
         helper_functions = []
     helper_functions_fqn = {f.fully_qualified_name for f in helper_functions}
@@ -241,7 +272,7 @@ def extract_code(
     return edited_code, contextual_dunder_methods
 
 
-def find_preexisting_objects(source_code: str):
+def find_preexisting_objects(source_code: str) -> list[tuple[str, list[FunctionParent]]]:
     """Find all preexisting functions, classes or class methods in the source code"""
     preexisting_objects: list[tuple[str, list[FunctionParent]]] = []
     try:
