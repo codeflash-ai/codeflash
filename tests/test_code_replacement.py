@@ -6,6 +6,8 @@ from argparse import Namespace
 from collections import defaultdict
 from pathlib import Path
 
+import libcst as cst
+from codeflash.code_utils.code_extractor import remove_first_imported_aliased_objects
 from codeflash.code_utils.code_replacer import (
     is_zero_diff,
     replace_functions_and_add_imports,
@@ -1257,7 +1259,7 @@ class TestResults(BaseModel):
     )
 
 
-def test_code_replacement_type_annotation():
+def test_code_replacement_type_annotation() -> None:
     original_code = '''import numpy as np
 from pydantic.dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -1504,6 +1506,51 @@ def cosine_similarity_top_k(
 '''
     )
 
+
+def test_future_aliased_imports_removal() -> None:
+    module_code1 = """from __future__ import annotations as _annotations
+print("Hello monde")
+"""
+
+    expected_code1 = """print("Hello monde")
+"""
+
+    assert remove_first_imported_aliased_objects(module_code1, "__future__")[0] == expected_code1
+
+    module_code2 = """from __future__ import annotations
+print("Hello monde")
+"""
+
+    assert remove_first_imported_aliased_objects(module_code2, "__future__")[0] == module_code2
+
+    module_code3 = """from __future__ import annotations as _annotations
+from __future__ import annotations
+from past import autopasta as dood
+print("Hello monde")
+"""
+
+    expected_code3 = """from __future__ import annotations
+from past import autopasta as dood
+print("Hello monde")
+"""
+
+    assert remove_first_imported_aliased_objects(module_code3, "__future__")[0] == expected_code3
+
+    module_code4 = """from __future__ import annotations
+from __future__ import annotations  as _annotations
+from past import autopasta as dood
+print("Hello monde")
+"""
+
+    assert remove_first_imported_aliased_objects(module_code4, "__future__")[0] == module_code4
+
+    module_code5 = """from future import annotations as _annotations
+from __future__ import annotations  as _annotations
+from past import autopasta as dood
+print("Hello monde")
+"""
+
+    assert remove_first_imported_aliased_objects(module_code5, "__future__")[0] == module_code5
 
 def test_0_diff_code_replacement():
     original_code = """from __future__ import annotations
