@@ -11,6 +11,8 @@ def funcB(number):
 
 
 def funcC(number):
+    if number == 1:
+        return "0"
     string_formatting = ""
     for i in range(number):
         string_formatting += f"{i}"
@@ -18,10 +20,10 @@ def funcC(number):
 
 
 def compare_functions(number):
+    resultA = funcA(number)
     for _ in range(2000):
-        resultA = funcA(number)
         resultB = funcB(number)
-        resultC = funcC(number)
+        resultC = funcC(1)
         equal = resultA == resultB == resultC
 
 

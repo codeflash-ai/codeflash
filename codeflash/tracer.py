@@ -200,19 +200,7 @@ class Tracer:
             f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}",
         )
 
-    def trace_callback(self, frame: Any, event: str, arg: Any) -> None:
-        # profiler section
-        timer = self.timer
-        t = timer() - self.t - self.bias
-        if event == "c_call":
-            self.c_func_name = arg.__name__
-
-        if self.dispatch[event](self, frame, t):
-            self.t = timer()
-        else:
-            self.t = timer() - t  # put back unrecorded delta
-
-        # tracer section
+    def tracer_logic(self, frame: Any, event: str):
         if event not in ["call", "return"]:
             return
         if self.timeout is not None:
@@ -322,6 +310,25 @@ class Tracer:
         if self.next_insert == 0:
             self.next_insert = 1000
             self.con.commit()
+
+    def trace_callback(self, frame: Any, event: str, arg: Any) -> None:
+        # profiler section
+        timer = self.timer
+        t = timer() - self.t - self.bias
+        if event == "c_call":
+            self.c_func_name = arg.__name__
+
+        if self.dispatch[event](self, frame, t):
+            prof_success = True
+        else:
+            prof_success = False
+        # tracer section
+        self.tracer_logic(frame, event)
+        # measure the time as the last thing before return
+        if prof_success:
+            self.t = timer()
+        else:
+            self.t = timer() - t
 
     def trace_dispatch_call(self, frame, t):
         if self.cur and frame.f_back is not self.cur[-2]:
