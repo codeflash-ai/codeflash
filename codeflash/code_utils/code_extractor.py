@@ -2,13 +2,50 @@ from __future__ import annotations
 
 import ast
 import logging
+from typing import TYPE_CHECKING
 
 import libcst as cst
+import libcst.matchers as m
 from libcst.codemod import CodemodContext
 from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, RemoveImportsVisitor
-from libcst.helpers import ModuleNameAndPackage, calculate_module_and_package
+from libcst.helpers import calculate_module_and_package, get_full_name_for_node
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.discovery.functions_to_optimize import FunctionParent
+
+if TYPE_CHECKING:
+    from libcst.helpers import ModuleNameAndPackage
+
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.models.models import FunctionSource
+
+
+def get_first_import_from_node(module: cst.Module) -> cst.ImportFrom | None:
+    #
+    if (
+        (module_body := module.body)
+        and (first_statement_body := module_body[0].body)
+        and not isinstance(first_statement_body, cst.BaseSuite)
+        and isinstance(first_base_small_statement := first_statement_body[0], cst.ImportFrom)
+    ):
+        return first_base_small_statement
+    return None
+
+
+def remove_first_imported_aliased_objects(
+    module_code: str,
+    imported_module_name: str,
+) -> tuple[str, cst.ImportFrom | None]:
+    tree: cst.Module = cst.parse_module(module_code)
+    first_import_from_node: cst.ImportFrom | None = get_first_import_from_node(tree)
+    return (
+        ((tree.with_changes(body=tree.body[1:]) if tree.body else tree).code, first_import_from_node)
+        if first_import_from_node
+        and (first_import_from_node_module := first_import_from_node.module)
+        and get_full_name_for_node(first_import_from_node_module) == imported_module_name
+        and not isinstance(first_import_from_node_names := first_import_from_node.names, cst.ImportStar)
+        and any(m.matches(alias, m.ImportAlias(asname=m.AsName())) for alias in first_import_from_node_names)
+        else (module_code, None)
+    )
 
 
 def add_needed_imports_from_module(
@@ -17,8 +54,13 @@ def add_needed_imports_from_module(
     src_path: str,
     dst_path: str,
     project_root: str,
+    helper_functions: list[FunctionSource] | None = None,
 ) -> str:
     """Add all needed and used source module code imports to the destination module code, and return it."""
+    src_module_code, _ = remove_first_imported_aliased_objects(src_module_code, "__future__")
+    if helper_functions is None:
+        helper_functions = []
+    helper_functions_fqn = {f.fully_qualified_name for f in helper_functions}
     src_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, src_path)
     dst_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, dst_path)
 
@@ -35,19 +77,26 @@ def add_needed_imports_from_module(
         ),
     )
     cst.parse_module(src_module_code).visit(gatherer)
-
-    for mod in gatherer.module_imports:
-        AddImportsVisitor.add_needed_import(dst_context, mod)
-        RemoveImportsVisitor.remove_unused_import(dst_context, mod)
-    for mod, obj_seq in gatherer.object_mapping.items():
-        for obj in obj_seq:
-            AddImportsVisitor.add_needed_import(dst_context, mod, obj)
-            RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
+    try:
+        for mod in gatherer.module_imports:
+            AddImportsVisitor.add_needed_import(dst_context, mod)
+            RemoveImportsVisitor.remove_unused_import(dst_context, mod)
+        for mod, obj_seq in gatherer.object_mapping.items():
+            for obj in obj_seq:
+                if f"{mod}.{obj}" in helper_functions_fqn:
+                    continue  # Skip adding imports for helper functions already in the context
+                AddImportsVisitor.add_needed_import(dst_context, mod, obj)
+                RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
+    except Exception as e:
+        logging.exception(f"Error adding imports to destination module code: {e}")
+        return dst_module_code
     for mod, asname in gatherer.module_aliases.items():
         AddImportsVisitor.add_needed_import(dst_context, mod, asname=asname)
         RemoveImportsVisitor.remove_unused_import(dst_context, mod, asname=asname)
     for mod, alias_pairs in gatherer.alias_mapping.items():
         for alias_pair in alias_pairs:
+            if f"{mod}.{alias_pair[0]}" in helper_functions_fqn:
+                continue
             AddImportsVisitor.add_needed_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
             RemoveImportsVisitor.remove_unused_import(
                 dst_context,
@@ -75,12 +124,17 @@ def get_code(
 ) -> tuple[str | None, set[tuple[str, str]]]:
     """Return the code for a function or methods in a Python module. functions_to_optimize is either a singleton
     FunctionToOptimize instance, which represents either a function at the module level or a method of a class at the
-    module level, or it represents a list of methods of the same class."""
-
-    if not functions_to_optimize or (
-            functions_to_optimize[0].parents and functions_to_optimize[0].parents[0].type != "ClassDef") or (
-            len(functions_to_optimize[0].parents) > 1 or (
-            len(functions_to_optimize) > 1) and len({fn.parents[0] for fn in functions_to_optimize}) != 1):
+    module level, or it represents a list of methods of the same class.
+    """
+    if (
+        not functions_to_optimize
+        or (functions_to_optimize[0].parents and functions_to_optimize[0].parents[0].type != "ClassDef")
+        or (
+            len(functions_to_optimize[0].parents) > 1
+            or (len(functions_to_optimize) > 1)
+            and len({fn.parents[0] for fn in functions_to_optimize}) != 1
+        )
+    ):
         return None, set()
 
     file_path: str = functions_to_optimize[0].file_path
@@ -101,22 +155,22 @@ def get_code(
                 # The many mypy issues will be fixed once this code moves to the backend,
                 # using Type Guards as we move to 3.10+.
                 # We will cover the Type Alias case on the backend since it's a 3.12 feature.
-                    isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-                    and node.name == name_parts[0]
-                ):
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                and node.name == name_parts[0]
+            ):
                 target = node
                 break
                 # The next two cases cover type aliases in pre-3.12 syntax, where only single assignment is allowed.
             if (
-                    (isinstance(node, ast.Assign)
-                    and len(node.targets) == 1
-                    and isinstance(node.targets[0], ast.Name)
-                    and node.targets[0].id == name_parts[0])
-                or (
-                    isinstance(node, ast.AnnAssign)
-                    and hasattr(node.target, "id")
-                    and node.target.id == name_parts[0])
-                ):
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == name_parts[0]
+            ) or (
+                isinstance(node, ast.AnnAssign)
+                and hasattr(node.target, "id")
+                and node.target.id == name_parts[0]
+            ):
                 if class_skeleton:
                     break
                 target = node
@@ -216,3 +270,22 @@ def extract_code(
         )
         return None, set()
     return edited_code, contextual_dunder_methods
+
+
+def find_preexisting_objects(source_code: str) -> list[tuple[str, list[FunctionParent]]]:
+    """Find all preexisting functions, classes or class methods in the source code"""
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = []
+    try:
+        module_node: ast.Module = ast.parse(source_code)
+    except SyntaxError:
+        logging.exception("find_preexisting_objects - Syntax error while parsing code")
+        return preexisting_objects
+    for node in module_node.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            preexisting_objects.append((node.name, []))
+        elif isinstance(node, ast.ClassDef):
+            preexisting_objects.append((node.name, []))
+            for cnode in node.body:
+                if isinstance(cnode, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    preexisting_objects.append((cnode.name, [FunctionParent(node.name, "ClassDef")]))
+    return preexisting_objects

@@ -72,6 +72,35 @@ def test_basic_python_objects():
     assert not comparator(a, c)
     assert not comparator(a, d)
 
+    a = (65).to_bytes(1, byteorder="big")
+    b = (65).to_bytes(1, byteorder="big")
+    c = (66).to_bytes(1, byteorder="big")
+    assert comparator(a, b)
+    assert not comparator(a, c)
+    a = (65).to_bytes(2, byteorder="little")
+    b = (65).to_bytes(2, byteorder="big")
+    assert not comparator(a, b)
+
+    a = bytearray([65, 64, 63])
+    b = bytearray([65, 64, 63])
+    c = bytearray([65, 64, 62])
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    memoryview_a = memoryview(bytearray([65, 64, 63]))
+    memoryview_b = memoryview(bytearray([65, 64, 63]))
+    memoryview_c = memoryview(bytearray([65, 64, 62]))
+    assert comparator(memoryview_a, memoryview_b)
+    assert not comparator(memoryview_a, memoryview_c)
+
+    a = frozenset([1, 2, 3])
+    b = frozenset([2, 3, 1])
+    c = frozenset([1, 2, 4])
+    d = frozenset([1, 2, 3, 4])
+    assert comparator(a, b)
+    assert not comparator(a, c)
+    assert not comparator(a, d)
+
 
 def test_standard_python_library_objects():
     a = datetime.datetime(2020, 2, 2, 2, 2, 2)

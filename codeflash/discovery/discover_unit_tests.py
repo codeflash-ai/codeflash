@@ -2,6 +2,7 @@ import logging
 import os
 import pathlib
 import re
+import shlex
 import subprocess
 import unittest
 from collections import defaultdict
@@ -131,7 +132,7 @@ def discover_tests_pytest(
 ) -> Dict[str, List[TestsInFile]]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
-    pytest_cmd_list = [chunk for chunk in cfg.pytest_cmd.split(" ") if chunk != ""]
+    pytest_cmd_list = shlex.split(cfg.pytest_cmd, posix=os.name != "nt")
     pytest_result = subprocess.run(
         pytest_cmd_list + [f"{tests_root}", "--co", "-q", "-m", "not skip"],
         stdout=subprocess.PIPE,

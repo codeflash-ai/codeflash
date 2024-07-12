@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 import ast
 import logging
 import os
 import site
 from tempfile import TemporaryDirectory
-from typing import List, Optional, Tuple, Union
 
 
 def module_name_from_file_path(file_path: str, project_root_path: str) -> str:
@@ -19,18 +20,11 @@ def file_path_from_module_name(module_name: str, project_root_path: str) -> str:
     return os.path.join(project_root_path, module_name.replace(".", os.sep) + ".py")
 
 
-def ellipsis_in_ast(module: ast.AST) -> bool:
-    for node in ast.walk(module):
-        if isinstance(node, ast.Constant) and node.value == ...:
-            return True
-    return False
-
-
 def get_imports_from_file(
-    file_path: Optional[str] = None,
-    file_string: Optional[str] = None,
-    file_ast: Optional[ast.AST] = None,
-) -> List[Union[ast.Import, ast.ImportFrom]]:
+    file_path: str | None = None,
+    file_string: str | None = None,
+    file_ast: ast.AST | None = None,
+) -> list[ast.Import | ast.ImportFrom]:
     assert (
         sum([file_path is not None, file_string is not None, file_ast is not None]) == 1
     ), "Must provide exactly one of file_path, file_string, or file_ast"
@@ -50,7 +44,7 @@ def get_imports_from_file(
     return imports
 
 
-def get_all_function_names(code: str) -> Tuple[bool, List[str]]:
+def get_all_function_names(code: str) -> tuple[bool, list[str]]:
     try:
         module = ast.parse(code)
     except SyntaxError as e:
