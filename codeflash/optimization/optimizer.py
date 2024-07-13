@@ -334,6 +334,7 @@ class Optimizer:
                         explanation=explanation,
                         existing_tests_source=existing_tests,
                         generated_original_test_source=generated_tests.generated_original_test_source,
+                        function_trace_id=function_trace_id,
                     )
                     if self.args.all or env_utils.get_pr_number():
                         # Reverting to original code, because optimizing functions in a sequence can lead to
