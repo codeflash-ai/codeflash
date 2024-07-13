@@ -63,6 +63,7 @@ def suggest_changes(
     pr_comment: PrComment,
     existing_tests: str,
     generated_tests: str,
+    trace_id: str,
 ) -> Response:
     """Suggest changes to a pull request.
     Will make a review suggestion when possible;
@@ -83,6 +84,7 @@ def suggest_changes(
         "prCommentFields": pr_comment.to_json(),
         "existingTests": existing_tests,
         "generatedTests": generated_tests,
+        "traceId": trace_id,
     }
     response = make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
     return response
@@ -96,6 +98,7 @@ def create_pr(
     pr_comment: PrComment,
     existing_tests: str,
     generated_tests: str,
+    trace_id: str,
 ) -> Response:
     """Create a pull request, targeting the specified branch. (usually 'main')
     :param owner: The owner of the repository.
@@ -114,6 +117,7 @@ def create_pr(
         "prCommentFields": pr_comment.to_json(),
         "existingTests": existing_tests,
         "generatedTests": generated_tests,
+        "traceId": trace_id,
     }
     response = make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
     return response
