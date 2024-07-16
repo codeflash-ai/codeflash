@@ -22,6 +22,7 @@ import time
 from collections import defaultdict
 from copy import copy
 from io import StringIO
+from types import FrameType
 from typing import Any, List, Optional
 
 import dill
@@ -200,7 +201,7 @@ class Tracer:
             f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}",
         )
 
-    def tracer_logic(self, frame: Any, event: str):
+    def tracer_logic(self, frame: FrameType, event: str):
         if event not in ["call", "return"]:
             return
         if self.timeout is not None:
@@ -311,7 +312,7 @@ class Tracer:
             self.next_insert = 1000
             self.con.commit()
 
-    def trace_callback(self, frame: Any, event: str, arg: Any) -> None:
+    def trace_callback(self, frame: FrameType, event: str, arg: Any) -> None:
         # profiler section
         timer = self.timer
         t = timer() - self.t - self.bias
@@ -328,7 +329,7 @@ class Tracer:
         if prof_success:
             self.t = timer()
         else:
-            self.t = timer() - t
+            self.t = timer() - t  # put back unrecorded delta
 
     def trace_dispatch_call(self, frame, t):
         if self.cur and frame.f_back is not self.cur[-2]:
