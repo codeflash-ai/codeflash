@@ -22,6 +22,7 @@ import time
 from collections import defaultdict
 from copy import copy
 from io import StringIO
+from types import FrameType
 from typing import Any, List, Optional
 
 import dill
@@ -38,7 +39,7 @@ from codeflash.verification.verification_utils import get_test_file_path
 
 class Tracer:
     """Use this class as a 'with' context manager to trace a function call,
-    input arguments, and return value.
+    input arguments, and profiling info.
     """
 
     def __init__(
@@ -65,6 +66,13 @@ class Tracer:
             disable = True
         self.disable = disable
         if self.disable:
+            return
+        if sys.getprofile() is not None or sys.gettrace() is not None:
+            print(
+                "WARNING - Codeflash: Another profiler, debugger or coverage tool is already running. "
+                "Please disable it before starting the Codeflash Tracer, both can't run. Codeflash Tracer is DISABLED.",
+            )
+            self.disable = True
             return
         self.con = None
         self.output_file = os.path.abspath(output)
@@ -200,7 +208,7 @@ class Tracer:
             f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}",
         )
 
-    def tracer_logic(self, frame: Any, event: str):
+    def tracer_logic(self, frame: FrameType, event: str):
         if event not in ["call", "return"]:
             return
         if self.timeout is not None:
@@ -289,8 +297,6 @@ class Tracer:
 
             except (TypeError, dill.PicklingError, AttributeError, RecursionError, OSError):
                 # give up
-                # TODO: If this branch hits then its possible there are no paired arg, return values in the replay test.
-                #  Filter them out
                 return
         cur.execute(
             "INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
@@ -311,7 +317,7 @@ class Tracer:
             self.next_insert = 1000
             self.con.commit()
 
-    def trace_callback(self, frame: Any, event: str, arg: Any) -> None:
+    def trace_callback(self, frame: FrameType, event: str, arg: Any) -> None:
         # profiler section
         timer = self.timer
         t = timer() - self.t - self.bias
@@ -328,7 +334,7 @@ class Tracer:
         if prof_success:
             self.t = timer()
         else:
-            self.t = timer() - t
+            self.t = timer() - t  # put back unrecorded delta
 
     def trace_dispatch_call(self, frame, t):
         if self.cur and frame.f_back is not self.cur[-2]:
