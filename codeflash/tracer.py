@@ -174,21 +174,6 @@ class Tracer:
             )
         self.con.commit()
         self.con.close()
-        print("function_count", self.function_count)
-
-        # filter any functions where we did not capture the return
-        self.function_modules = [
-            function
-            for function in self.function_modules
-            if self.function_count[
-                function.file_name
-                + ":"
-                + (function.class_name + ":" if function.class_name else "")
-                + function.function_name
-            ]
-            > 0
-        ]
-        print("function_modules", self.function_modules)
 
         replay_test = create_trace_replay_test(
             trace_file=self.output_file,
@@ -211,7 +196,7 @@ class Tracer:
         )
 
     def tracer_logic(self, frame: FrameType, event: str):
-        if event not in ["call", "return"]:
+        if event != "call":
             return
         if self.timeout is not None:
             if (time.time() - self.start_time) > self.timeout:
@@ -242,10 +227,9 @@ class Tracer:
         function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
         if function_qualified_name in self.ignored_qualified_functions:
             return
-        if event == "return":
-            self.function_count[function_qualified_name] += 1
-            if self.function_count[function_qualified_name] >= self.max_function_count:
-                self.ignored_qualified_functions.add(function_qualified_name)
+        self.function_count[function_qualified_name] += 1
+        if self.function_count[function_qualified_name] >= self.max_function_count:
+            self.ignored_qualified_functions.add(function_qualified_name)
             return
 
         if function_qualified_name not in self.function_count:
