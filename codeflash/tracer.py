@@ -174,6 +174,7 @@ class Tracer:
             )
         self.con.commit()
         self.con.close()
+        print("function_count", self.function_count)
 
         # filter any functions where we did not capture the return
         self.function_modules = [
@@ -187,6 +188,7 @@ class Tracer:
             ]
             > 0
         ]
+        print("function_modules", self.function_modules)
 
         replay_test = create_trace_replay_test(
             trace_file=self.output_file,
@@ -244,7 +246,6 @@ class Tracer:
             self.function_count[function_qualified_name] += 1
             if self.function_count[function_qualified_name] >= self.max_function_count:
                 self.ignored_qualified_functions.add(function_qualified_name)
-                del self.function_count[function_qualified_name]  # save memory
             return
 
         if function_qualified_name not in self.function_count:
