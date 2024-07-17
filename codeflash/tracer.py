@@ -463,7 +463,8 @@ class Tracer:
         s = StringIO()
         pstats.Stats(copy(self), stream=s).strip_dirs().sort_stats(*sort).print_stats(15)
         raw_stats = s.getvalue()
-        m = re.search(r"function calls? in (\d+)\.\d+ (seconds?)", raw_stats)
+        print(raw_stats)
+        m = re.search(r"function calls?.*in (\d+)\.\d+ (seconds?)", raw_stats)
         total_time = None
         if m:
             total_time = int(m.group(1))
