@@ -467,7 +467,7 @@ class Tracer:
             rf"\1 in {total_time_ms:.3f} milliseconds",
             raw_stats,
         )
-        match_pattern = r"^ +\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +"
+        match_pattern = r"^ +[\d\/]+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +"
         m = re.findall(match_pattern, raw_stats, re.MULTILINE)
         ms_times = []
         for tottime, percall, cumtime, percall_cum in m:
@@ -479,7 +479,7 @@ class Tracer:
         split_stats = raw_stats.split("\n")
         new_stats = []
 
-        replace_pattern = r"^( +\d+) +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(.*)"
+        replace_pattern = r"^( +[\d\/]+) +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(.*)"
         times_index = 0
         for line in split_stats:
             if times_index >= len(ms_times):
