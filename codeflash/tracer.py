@@ -48,7 +48,7 @@ class Tracer:
         functions: Optional[List[str]] = None,
         disable: bool = False,
         config_file_path: Optional[str] = None,
-        max_function_count: int = 100,
+        max_function_count: int = 256,
         timeout: Optional[int] = None,  # seconds
     ) -> None:
         """:param output: The path to the output trace file
@@ -241,7 +241,10 @@ class Tracer:
         if function_qualified_name in self.ignored_qualified_functions:
             return
         if event == "return":
-            self.function_count[function_qualified_name] += 1
+            self.function_count[function_qualified_name] = max(
+                self.function_count[function_qualified_name] + 1,
+                0,
+            )
             if self.function_count[function_qualified_name] >= self.max_function_count:
                 self.ignored_qualified_functions.add(function_qualified_name)
             return
@@ -295,6 +298,10 @@ class Tracer:
 
             except (TypeError, dill.PicklingError, AttributeError, RecursionError, OSError):
                 # give up
+                self.function_count[function_qualified_name] = max(
+                    self.function_count[function_qualified_name] - 1,
+                    -1,
+                )
                 return
         cur.execute(
             "INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
@@ -547,11 +554,12 @@ def main():
         "--max-function-count",
         help="Maximum number of inputs for one function to include in the trace.",
         type=int,
-        default=100,
+        default=256,
     )
     parser.add_argument(
         "--tracer-timeout",
-        help="Timeout in seconds for the tracer, if the traced code takes more than this time, then tracing stops and normal execution continues.",
+        help="Timeout in seconds for the tracer, if the traced code takes more than this time, then tracing stops and "
+        "normal execution continues.",
         type=float,
         default=None,
     )
