@@ -15,10 +15,14 @@ import marshal
 import os
 import pathlib
 import pickle
+import re
 import sqlite3
 import sys
 import time
 from collections import defaultdict
+from copy import copy
+from io import StringIO
+from types import FrameType
 from typing import Any, List, Optional
 
 import dill
@@ -35,7 +39,7 @@ from codeflash.verification.verification_utils import get_test_file_path
 
 class Tracer:
     """Use this class as a 'with' context manager to trace a function call,
-    input arguments, and return value.
+    input arguments, and profiling info.
     """
 
     def __init__(
@@ -62,6 +66,13 @@ class Tracer:
             disable = True
         self.disable = disable
         if self.disable:
+            return
+        if sys.getprofile() is not None or sys.gettrace() is not None:
+            print(
+                "WARNING - Codeflash: Another profiler, debugger or coverage tool is already running. "
+                "Please disable it before starting the Codeflash Tracer, both can't run. Codeflash Tracer is DISABLED.",
+            )
+            self.disable = True
             return
         self.con = None
         self.output_file = os.path.abspath(output)
@@ -197,19 +208,7 @@ class Tracer:
             f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}",
         )
 
-    def trace_callback(self, frame: Any, event: str, arg: Any) -> None:
-        # profiler section
-        timer = self.timer
-        t = timer() - self.t - self.bias
-        if event == "c_call":
-            self.c_func_name = arg.__name__
-
-        if self.dispatch[event](self, frame, t):
-            self.t = timer()
-        else:
-            self.t = timer() - t  # put back unrecorded delta
-
-        # tracer section
+    def tracer_logic(self, frame: FrameType, event: str):
         if event not in ["call", "return"]:
             return
         if self.timeout is not None:
@@ -245,9 +244,7 @@ class Tracer:
             self.function_count[function_qualified_name] += 1
             if self.function_count[function_qualified_name] >= self.max_function_count:
                 self.ignored_qualified_functions.add(function_qualified_name)
-                del self.function_count[function_qualified_name]  # save memory
             return
-
         if function_qualified_name not in self.function_count:
             # seeing this function for the first time
             self.function_count[function_qualified_name] = 0
@@ -298,8 +295,6 @@ class Tracer:
 
             except (TypeError, dill.PicklingError, AttributeError, RecursionError, OSError):
                 # give up
-                # TODO: If this branch hits then its possible there are no paired arg, return values in the replay test.
-                #  Filter them out
                 return
         cur.execute(
             "INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
@@ -319,6 +314,25 @@ class Tracer:
         if self.next_insert == 0:
             self.next_insert = 1000
             self.con.commit()
+
+    def trace_callback(self, frame: FrameType, event: str, arg: Any) -> None:
+        # profiler section
+        timer = self.timer
+        t = timer() - self.t - self.bias
+        if event == "c_call":
+            self.c_func_name = arg.__name__
+
+        if self.dispatch[event](self, frame, t):
+            prof_success = True
+        else:
+            prof_success = False
+        # tracer section
+        self.tracer_logic(frame, event)
+        # measure the time as the last thing before return
+        if prof_success:
+            self.t = timer()
+        else:
+            self.t = timer() - t  # put back unrecorded delta
 
     def trace_dispatch_call(self, frame, t):
         if self.cur and frame.f_back is not self.cur[-2]:
@@ -448,7 +462,52 @@ class Tracer:
 
         if not isinstance(sort, tuple):
             sort = (sort,)
-        pstats.Stats(self).strip_dirs().sort_stats(*sort).print_stats(15)
+        # The following code customizes the default printing behavior to
+        # print in milliseconds.
+        s = StringIO()
+        pstats.Stats(copy(self), stream=s).strip_dirs().sort_stats(*sort).print_stats(15)
+        raw_stats = s.getvalue()
+        m = re.search(r"function calls?.*in (\d+)\.\d+ (seconds?)", raw_stats)
+        total_time = None
+        if m:
+            total_time = int(m.group(1))
+        if total_time is None:
+            print("Failed to get total time from stats")
+        total_time_ms = total_time / 1e6
+        raw_stats = re.sub(
+            r"(function calls?.*)in (\d+)\.\d+ (seconds?)",
+            rf"\1 in {total_time_ms:.3f} milliseconds",
+            raw_stats,
+        )
+        match_pattern = r"^ *[\d\/]+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +"
+        m = re.findall(match_pattern, raw_stats, re.MULTILINE)
+        ms_times = []
+        for tottime, percall, cumtime, percall_cum in m:
+            tottime_ms = int(tottime) / 1e6
+            percall_ms = int(percall) / 1e6
+            cumtime_ms = int(cumtime) / 1e6
+            percall_cum_ms = int(percall_cum) / 1e6
+            ms_times.append([tottime_ms, percall_ms, cumtime_ms, percall_cum_ms])
+        split_stats = raw_stats.split("\n")
+        new_stats = []
+
+        replace_pattern = r"^( *[\d\/]+) +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(.*)"
+        times_index = 0
+        for line in split_stats:
+            if times_index >= len(ms_times):
+                replaced = line
+            else:
+                replaced, n = re.subn(
+                    replace_pattern,
+                    rf"\g<1>{ms_times[times_index][0]:8.3f} {ms_times[times_index][1]:8.3f} {ms_times[times_index][2]:8.3f} {ms_times[times_index][3]:8.3f} \g<6>",
+                    line,
+                    count=1,
+                )
+                if n > 0:
+                    times_index += 1
+            new_stats.append(replaced)
+
+        print("\n".join(new_stats))
 
     def dump_stats(self, file):
         with open(file, "wb") as f:
