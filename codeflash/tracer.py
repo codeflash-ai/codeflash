@@ -241,10 +241,7 @@ class Tracer:
         if function_qualified_name in self.ignored_qualified_functions:
             return
         if event == "return":
-            self.function_count[function_qualified_name] = max(
-                self.function_count[function_qualified_name] + 1,
-                0,
-            )
+            self.function_count[function_qualified_name] += self.function_count[function_qualified_name]
             if self.function_count[function_qualified_name] >= self.max_function_count:
                 self.ignored_qualified_functions.add(function_qualified_name)
             return
@@ -298,10 +295,7 @@ class Tracer:
 
             except (TypeError, dill.PicklingError, AttributeError, RecursionError, OSError):
                 # give up
-                self.function_count[function_qualified_name] = max(
-                    self.function_count[function_qualified_name] - 1,
-                    -1,
-                )
+                self.function_count[function_qualified_name] -= 1
                 return
         cur.execute(
             "INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
