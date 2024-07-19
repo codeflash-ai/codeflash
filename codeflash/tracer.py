@@ -475,7 +475,7 @@ class Tracer:
             print("Failed to get total time from stats")
         total_time_ms = total_time / 1e6
         raw_stats = re.sub(
-            r"(function calls?) in (\d+)\.\d+ (seconds?)",
+            r"(function calls?.*)in (\d+)\.\d+ (seconds?)",
             rf"\1 in {total_time_ms:.3f} milliseconds",
             raw_stats,
         )
