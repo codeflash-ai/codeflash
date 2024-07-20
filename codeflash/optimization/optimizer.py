@@ -623,7 +623,7 @@ class Optimizer:
         )
         if function_to_optimize.parents:
             function_class = function_to_optimize.parents[0].name
-            helper_methods = [
+            same_class_helper_methods = [
                 df
                 for df in helper_functions
                 if df.qualified_name.count(".") > 0 and df.qualified_name.split(".")[0] == function_class
@@ -636,7 +636,7 @@ class Optimizer:
                     None,
                     None,
                 )
-                for df in helper_methods
+                for df in same_class_helper_methods
             ]
             dedup_optimizable_methods = []
             added_methods = set()

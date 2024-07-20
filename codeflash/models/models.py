@@ -10,6 +10,20 @@ from codeflash.api.aiservice import OptimizedCandidate
 from codeflash.discovery.functions_to_optimize import FunctionParent
 from codeflash.verification.test_results import TestResults
 
+# If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
+# qualified name of the method is foo.eggs.Ham.spam, its qualified name is Ham.spam, and its name is spam. The full name
+# of the module is foo.eggs.
+
+
+@dataclass(frozen=True, config={"arbitrary_types_allowed": True})
+class FunctionSource:
+    file_path: str
+    qualified_name: str
+    fully_qualified_name: str
+    only_function_name: str
+    source_code: str
+    jedi_definition: Name
+
 
 class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
@@ -46,18 +60,3 @@ class OriginalCodeBaseline(BaseModel):
 class OptimizationSet(BaseModel):
     control: list[OptimizedCandidate]
     experiment: Optional[list[OptimizedCandidate]]
-
-
-# If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
-# qualified name of the method is foo.eggs.Ham.spam, its qualified name is Ham.spam, and its name is spam. The full name
-# of the module is foo.eggs.
-
-
-@dataclass(frozen=True, config={"arbitrary_types_allowed": True})
-class FunctionSource:
-    file_path: str
-    qualified_name: str
-    fully_qualified_name: str
-    only_function_name: str
-    source_code: str
-    jedi_definition: Name
