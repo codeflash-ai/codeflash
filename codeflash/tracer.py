@@ -241,7 +241,7 @@ class Tracer:
         if function_qualified_name in self.ignored_qualified_functions:
             return
         if event == "return":
-            self.function_count[function_qualified_name] += self.function_count[function_qualified_name]
+            self.function_count[function_qualified_name] += 1
             if self.function_count[function_qualified_name] >= self.max_function_count:
                 self.ignored_qualified_functions.add(function_qualified_name)
             return
