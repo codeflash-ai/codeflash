@@ -219,6 +219,14 @@ class Graph:
     def __init__(self, vertices):
         self.graph = defaultdict(list)
         self.V = vertices  # No. of vertices
+    def topologicalSortUtil(self, v, visited, stack):
+        visited[v] = True
+
+        for i in self.graph[v]:
+            if visited[i] == False:
+                self.topologicalSortUtil(i, visited, stack)
+
+        stack.insert(0, v)
     def topologicalSort(self):
         visited = [False] * self.V
         stack = []
@@ -229,14 +237,6 @@ class Graph:
 
         # Print contents of stack
         return stack
-    def topologicalSortUtil(self, v, visited, stack):
-        visited[v] = True
-
-        for i in self.graph[v]:
-            if visited[i] == False:
-                self.topologicalSortUtil(i, visited, stack)
-
-        stack.insert(0, v)
 """
     )
 
@@ -311,12 +311,12 @@ def test_recursive_function_context() -> None:
     assert (
         code_context.code_to_optimize_with_helpers
         == """class C:
+    def calculate_something_3(self, num):
+        return num + 1
     def recursive(self, num):
         if num == 0:
             return 0
         num_1 = self.calculate_something_3(num)
         return self.recursive(num) + num_1
-    def calculate_something_3(self, num):
-        return num + 1
 """
     )

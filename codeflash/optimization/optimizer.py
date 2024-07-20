@@ -628,7 +628,7 @@ class Optimizer:
                 for df in helper_functions
                 if df.qualified_name.count(".") > 0 and df.qualified_name.split(".")[0] == function_class
             ]
-            optimizable_methods = [function_to_optimize] + [
+            optimizable_methods = [
                 FunctionToOptimize(
                     df.qualified_name.split(".")[-1],
                     df.file_path,
@@ -637,16 +637,16 @@ class Optimizer:
                     None,
                 )
                 for df in same_class_helper_methods
-            ]
+            ] + [function_to_optimize]
             dedup_optimizable_methods = []
             added_methods = set()
-            for method in optimizable_methods:
+            for method in reversed(optimizable_methods):
                 if f"{method.file_path}.{method.qualified_name}" not in added_methods:
                     dedup_optimizable_methods.append(method)
                     added_methods.add(f"{method.file_path}.{method.qualified_name}")
             if len(dedup_optimizable_methods) > 1:
                 code_to_optimize, contextual_dunder_methods = extract_code(
-                    dedup_optimizable_methods,
+                    list(reversed(dedup_optimizable_methods)),
                 )
                 if code_to_optimize is None:
                     return Failure("Could not find function to optimize.")
