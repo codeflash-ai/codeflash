@@ -71,6 +71,12 @@ class C:
         c = global_dependency_3(b)
         return c
 
+    def recursive(self, num):
+        if num == 0:
+            return 0
+        num_1 = self.calculate_something_3(num)
+        return self.recursive(num) + num_1
+
 
 def test_multiple_classes_dependencies() -> None:
     # TODO: Check if C.run only gets calculate_something_3 as dependency and likewise for other classes
@@ -213,6 +219,14 @@ class Graph:
     def __init__(self, vertices):
         self.graph = defaultdict(list)
         self.V = vertices  # No. of vertices
+    def topologicalSortUtil(self, v, visited, stack):
+        visited[v] = True
+
+        for i in self.graph[v]:
+            if visited[i] == False:
+                self.topologicalSortUtil(i, visited, stack)
+
+        stack.insert(0, v)
     def topologicalSort(self):
         visited = [False] * self.V
         stack = []
@@ -223,14 +237,6 @@ class Graph:
 
         # Print contents of stack
         return stack
-    def topologicalSortUtil(self, v, visited, stack):
-        visited[v] = True
-
-        for i in self.graph[v]:
-            if visited[i] == False:
-                self.topologicalSortUtil(i, visited, stack)
-
-        stack.insert(0, v)
 """
     )
 
@@ -263,3 +269,54 @@ def test_decorator_dependencies() -> None:
         "test_function_dependencies.calculate_something",
         "test_function_dependencies.imalittledecorator",
     }
+
+
+def test_recursive_function_context() -> None:
+    file_path = pathlib.Path(__file__).resolve()
+    opt = Optimizer(
+        Namespace(
+            project_root=str(file_path.parent.resolve()),
+            disable_telemetry=True,
+            tests_root="tests",
+            test_framework="pytest",
+            pytest_cmd="pytest",
+            experiment_id=None,
+        ),
+    )
+    function_to_optimize = FunctionToOptimize(
+        function_name="recursive",
+        file_path=str(file_path),
+        parents=[FunctionParent(name="C", type="ClassDef")],
+        starting_line=None,
+        ending_line=None,
+    )
+    with open(file_path) as f:
+        original_code = f.read()
+    ctx_result = opt.get_code_optimization_context(
+        function_to_optimize,
+        opt.args.project_root,
+        original_code,
+    )
+    if not is_successful(ctx_result):
+        pytest.fail()
+    code_context = ctx_result.unwrap()
+    # The code_context above should have the topologicalSortUtil function in it
+    assert len(code_context.helper_functions) == 2
+    assert set(
+        [
+            code_context.helper_functions[1].fully_qualified_name,
+            code_context.helper_functions[0].fully_qualified_name,
+        ],
+    ) == set(["test_function_dependencies.C.calculate_something_3", "test_function_dependencies.C.recursive"])
+    assert (
+        code_context.code_to_optimize_with_helpers
+        == """class C:
+    def calculate_something_3(self, num):
+        return num + 1
+    def recursive(self, num):
+        if num == 0:
+            return 0
+        num_1 = self.calculate_something_3(num)
+        return self.recursive(num) + num_1
+"""
+    )
