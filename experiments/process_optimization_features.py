@@ -1,9 +1,9 @@
-import json
 import os
 import sys
 from typing import Any, Dict
-from sqlalchemy import create_engine
+
 import pandas as pd
+from sqlalchemy import create_engine
 
 
 def execute_query(query: str, trace_id: str):
@@ -26,11 +26,7 @@ def write_to_file(filename: str, content: str) -> None:
 
 
 def main(trace_id: str) -> None:
-    query = "SELECT original_code, optimizations_post, speedup_ratio, generated_test FROM optimization_features WHERE trace_id = %s"
-
-
-def main(trace_id: str) -> None:
-    query = "SELECT original_code, optimizations_post, speedup_ratio, generated_test, explanations_post FROM optimization_features WHERE trace_id = %s"
+    query = "SELECT original_code, optimizations_post, speedup_ratio, generated_test, instrumented_generated_test, explanations_post FROM optimization_features WHERE trace_id = %s"
     result = execute_query(query, trace_id)
 
     if not result:
@@ -43,13 +39,15 @@ def main(trace_id: str) -> None:
     speedup_ratio = result["speedup_ratio"]
     generated_test = result["generated_test"]
     explanations_post = result["explanations_post"]
+    instrumented_tests = result["instrumented_generated_test"]
 
     # Write original code to file
     write_to_file("original_code.py", original_code)
 
     # Write each optimization candidate to its own file
     for idx, (opt_id, optimization) in enumerate(
-        extract_json_values(optimizations_post).items(), start=1
+        extract_json_values(optimizations_post).items(),
+        start=1,
     ):
         filename = f"optimization_candidate_{idx}.py"
         explanation = explanations_post.get(opt_id, "")
@@ -61,16 +59,10 @@ def main(trace_id: str) -> None:
     # Find and write the best optimization candidate to its own file
     if speedup_ratio is not None:
         valid_speedup_values = [v for v in speedup_ratio.values() if v is not None]
-        best_speedup = (
-            max(valid_speedup_values, default=None) if valid_speedup_values else None
-        )
+        best_speedup = max(valid_speedup_values, default=None) if valid_speedup_values else None
         if best_speedup is not None:
             best_optimization_id = next(
-                (
-                    id
-                    for id, speedup in speedup_ratio.items()
-                    if speedup == best_speedup
-                ),
+                (id for id, speedup in speedup_ratio.items() if speedup == best_speedup),
                 None,
             )
             best_optimization = optimizations_post.get(best_optimization_id)
@@ -81,13 +73,15 @@ def main(trace_id: str) -> None:
             )
             if best_optimization and best_explanation is not None:
                 write_to_file(
-                    "best_optimization_candidate.py", best_content_with_comment
+                    "best_optimization_candidate.py",
+                    best_content_with_comment,
                 )
     else:
         print("No speedup ratio found")
 
     # Write generated tests to file
     write_to_file("generated_tests.py", generated_test)
+    write_to_file("instrumented_generated_tests.py", instrumented_tests)
 
 
 """
