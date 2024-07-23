@@ -10,6 +10,7 @@ import time
 from typing import Any, Callable, Optional
 
 import click
+import git
 import inquirer
 import inquirer.themes
 import tomlkit
@@ -17,6 +18,7 @@ from git import Repo
 from pydantic.dataclasses import dataclass
 from returns.pipeline import is_successful
 
+from codeflash.api.cfapi import is_github_app_installed_on_repo
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
@@ -159,6 +161,8 @@ def init_codeflash() -> None:
         setup_info: SetupInfo = collect_setup_info()
 
         configure_pyproject_toml(setup_info)
+
+        install_github_app()
 
         click.echo(
             f"{LF}"
@@ -545,6 +549,38 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
     click.echo(f"✅ Added Codeflash configuration to {toml_path}")
     click.echo()
+
+
+def install_github_app() -> None:
+    click.prompt(
+        f"Finally, you'll need install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
+        + f"Press Enter to open the page to let you install the app ...{LF}",
+        default="",
+        type=click.STRING,
+        prompt_suffix="",
+        show_default=False,
+    )
+    click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
+    click.prompt(
+        f"Press Enter once you've finished installing the github app...{LF}",
+        default="",
+        type=click.STRING,
+        prompt_suffix="",
+        show_default=False,
+    )
+
+    git_repo = git.Repo(search_parent_directories=True)
+    owner, repo = get_repo_owner_and_name(git_repo)
+
+    while not is_github_app_installed_on_repo(owner, repo):
+        click.prompt(
+            f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
+            f"Press Enter once you've finished installing the github app...{LF}",
+            default="",
+            type=click.STRING,
+            prompt_suffix="",
+            show_default=False,
+        )
 
 
 class CFAPIKeyType(click.ParamType):
