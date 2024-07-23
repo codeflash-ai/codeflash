@@ -104,7 +104,7 @@ trace_file_path = r"{trace_file}"
         """\
         for arg_val_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_name=r"{file_name}", class_name="{class_name}", num_to_get={max_run_count}):
             args = pickle.loads(arg_val_pkl){filter_variables}
-            ret = {class_name_alias}.{method_name}(**args)
+            ret = {class_name_alias}{method_name}(**args)
             """,
     )
     if test_framework == "unittest":
@@ -133,12 +133,13 @@ trace_file_path = r"{trace_file}"
                 func.class_name + "_" + func.function_name,
             )
             filter_variables = '\n    args.pop("__class__", None)' if func.function_name == "__init__" else ""
+            method_name = "." + func.function_name if func.function_name != "__init__" else ""
             test_body = test_class_method_body.format(
                 orig_function_name=func.function_name,
                 file_name=func.file_name,
                 class_name_alias=class_name_alias,
                 class_name=func.class_name,
-                method_name=func.function_name,
+                method_name=method_name,
                 max_run_count=max_run_count,
                 filter_variables=filter_variables,
             )
