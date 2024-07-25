@@ -552,35 +552,41 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
 
 
 def install_github_app() -> None:
-    click.prompt(
-        f"Finally, you'll need install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
-        + f"Press Enter to open the page to let you install the app ...{LF}",
-        default="",
-        type=click.STRING,
-        prompt_suffix="",
-        show_default=False,
-    )
-    click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
-    click.prompt(
-        f"Press Enter once you've finished installing the github app...{LF}",
-        default="",
-        type=click.STRING,
-        prompt_suffix="",
-        show_default=False,
-    )
-
     git_repo = git.Repo(search_parent_directories=True)
     owner, repo = get_repo_owner_and_name(git_repo)
 
-    while not is_github_app_installed_on_repo(owner, repo):
+    if is_github_app_installed_on_repo(owner, repo):
+        click.echo(
+            "🐙 Looks like you've already installed the Codeflash GitHub app on this repository!",
+        )
+
+    else:
         click.prompt(
-            f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
+            f"Finally, you'll need install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
+            + f"Press Enter to open the page to let you install the app ...{LF}",
+            default="",
+            type=click.STRING,
+            prompt_suffix="",
+            show_default=False,
+        )
+        click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
+        click.prompt(
             f"Press Enter once you've finished installing the github app...{LF}",
             default="",
             type=click.STRING,
             prompt_suffix="",
             show_default=False,
         )
+
+        while not is_github_app_installed_on_repo(owner, repo):
+            click.prompt(
+                f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
+                f"Press Enter once you've finished installing the github app...{LF}",
+                default="",
+                type=click.STRING,
+                prompt_suffix="",
+                show_default=False,
+            )
 
 
 class CFAPIKeyType(click.ParamType):
