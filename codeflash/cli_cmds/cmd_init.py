@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import sys
 import time
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 import click
 import inquirer
@@ -53,6 +53,7 @@ class SetupInfo:
     tests_root: str
     test_framework: str
     ignore_paths: list[str]
+    formatter: str
 
 
 def split_string_to_fit_width(string: str, width: int) -> list[str]:
@@ -291,6 +292,14 @@ def collect_setup_info() -> SetupInfo:
 
     ph("cli-test-framework-provided", {"test_framework": test_framework})
 
+    formatter = inquirer_wrapper(
+        inquirer.list_input,
+        message="Which code formatter do you use?",
+        choices=["black", "ruff", "other", "don't use a formatter"],
+        default="black",
+        carousel=True,
+    )
+
     # Ask for paths to ignore and update the setup_info dictionary
     # ignore_paths_input = click.prompt("Are there any paths Codeflash should ignore? (comma-separated, no spaces)",
     #                                   default='', show_default=False)
@@ -302,6 +311,7 @@ def collect_setup_info() -> SetupInfo:
         tests_root=tests_root,
         test_framework=test_framework,
         ignore_paths=ignore_paths,
+        formatter=formatter,
     )
 
 
@@ -534,7 +544,17 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     codeflash_section["tests-root"] = setup_info.tests_root
     codeflash_section["test-framework"] = setup_info.test_framework
     codeflash_section["ignore-paths"] = setup_info.ignore_paths
-
+    formatter = setup_info.formatter
+    formatter_cmds = []
+    if formatter == "black":
+        formatter_cmds.append("black $file")
+    elif formatter == "ruff":
+        formatter_cmds.extend(["ruff check --exit-zero --fix $file", "ruff format $file"])
+    elif formatter == "other":
+        formatter_cmds.append("your-formatter $file")
+    elif formatter == "don't use a formatter":
+        formatter_cmds.append("disabled")
+    codeflash_section["formatter-cmds"] = formatter_cmds
     # Add the 'codeflash' section, ensuring 'tool' section exists
     tool_section = pyproject_data.get("tool", tomlkit.table())
     tool_section["codeflash"] = codeflash_section
