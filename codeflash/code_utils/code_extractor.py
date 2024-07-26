@@ -5,7 +5,6 @@ import logging
 from typing import TYPE_CHECKING
 
 import libcst as cst
-import libcst.matchers as m
 from libcst.codemod import CodemodContext
 from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, RemoveImportsVisitor
 from libcst.helpers import calculate_module_and_package, get_full_name_for_node
@@ -19,33 +18,25 @@ if TYPE_CHECKING:
     from codeflash.models.models import FunctionSource
 
 
-def get_first_import_from_node(module: cst.Module) -> cst.ImportFrom | None:
-    #
-    if (
-        (module_body := module.body)
-        and (first_statement_body := module_body[0].body)
-        and not isinstance(first_statement_body, cst.BaseSuite)
-        and isinstance(first_base_small_statement := first_statement_body[0], cst.ImportFrom)
-    ):
-        return first_base_small_statement
-    return None
-
-
-def remove_first_imported_aliased_objects(
-    module_code: str,
-    imported_module_name: str,
-) -> tuple[str, cst.ImportFrom | None]:
-    tree: cst.Module = cst.parse_module(module_code)
-    first_import_from_node: cst.ImportFrom | None = get_first_import_from_node(tree)
-    return (
-        ((tree.with_changes(body=tree.body[1:]) if tree.body else tree).code, first_import_from_node)
-        if first_import_from_node
-        and (first_import_from_node_module := first_import_from_node.module)
-        and get_full_name_for_node(first_import_from_node_module) == imported_module_name
-        and not isinstance(first_import_from_node_names := first_import_from_node.names, cst.ImportStar)
-        and any(m.matches(alias, m.ImportAlias(asname=m.AsName())) for alias in first_import_from_node_names)
-        else (module_code, None)
+def delete_aliased___future___import(module_code: str) -> str:
+    module: cst.Module = cst.parse_module(module_code)
+    statement_number = next(
+        (
+            i
+            for i, top_statement in enumerate(module.body)
+            if isinstance(top_statement, cst.SimpleStatementLine)
+            for base_small_statement in top_statement.body
+            if isinstance(base_small_statement, cst.ImportFrom)
+            and get_full_name_for_node(base_small_statement.module) == "__future__"
+            and not isinstance(base_small_statement_names := base_small_statement.names, cst.ImportStar)
+            for name in base_small_statement_names
+            if name.evaluated_alias
+        ),
+        None,
     )
+    if statement_number is None:
+        return module_code
+    return module.with_changes(body=[s for i, s in enumerate(module.body) if i != statement_number]).code
 
 
 def add_needed_imports_from_module(
@@ -57,7 +48,7 @@ def add_needed_imports_from_module(
     helper_functions: list[FunctionSource] | None = None,
 ) -> str:
     """Add all needed and used source module code imports to the destination module code, and return it."""
-    src_module_code, _ = remove_first_imported_aliased_objects(src_module_code, "__future__")
+    src_module_code = delete_aliased___future___import(src_module_code)
     if helper_functions is None:
         helper_functions = []
     helper_functions_fqn = {f.fully_qualified_name for f in helper_functions}
