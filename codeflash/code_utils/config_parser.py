@@ -101,6 +101,11 @@ def parse_config_file(config_file_path: str = None) -> tuple[dict[str, Any], str
         "pytest",
         "unittest",
     ], "In pyproject.toml, Codeflash only supports the 'test-framework' as pytest and unittest."
+    if len(config["formatter-cmds"]) > 0:
+        assert config["formatter-cmds"][0] != "your-formatter $file", (
+            "The formatter command is not set correctly in pyproject.toml. Please set the "
+            "formatter command in the 'formatter-cmds' key. More info - https://docs.codeflash.ai/configuration"
+        )
     for key in list(config.keys()):
         if "-" in key:
             config[key.replace("-", "_")] = config[key]
