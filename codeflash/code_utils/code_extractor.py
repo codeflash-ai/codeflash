@@ -36,7 +36,8 @@ def delete_aliased___future___import(module_code: str) -> str:
     )
     if statement_number is None:
         return module_code
-    return module.with_changes(body=[s for i, s in enumerate(module.body) if i != statement_number]).code
+    new_body = [statement for i, statement in enumerate(module.body) if i != statement_number]
+    return (module.with_changes(body=new_body) if module.body else module).code
 
 
 def add_needed_imports_from_module(
