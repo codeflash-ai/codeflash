@@ -6,8 +6,7 @@ from argparse import Namespace
 from collections import defaultdict
 from pathlib import Path
 
-import libcst as cst
-from codeflash.code_utils.code_extractor import delete_aliased___future___import
+from codeflash.code_utils.code_extractor import delete___future___aliased_imports
 from codeflash.code_utils.code_replacer import (
     is_zero_diff,
     replace_functions_and_add_imports,
@@ -1515,13 +1514,13 @@ print("Hello monde")
     expected_code1 = """print("Hello monde")
 """
 
-    assert delete_aliased___future___import(module_code1) == expected_code1
+    assert delete___future___aliased_imports(module_code1) == expected_code1
 
     module_code2 = """from __future__ import annotations
 print("Hello monde")
 """
 
-    assert delete_aliased___future___import(module_code2) == module_code2
+    assert delete___future___aliased_imports(module_code2) == module_code2
 
     module_code3 = """from __future__ import annotations as _annotations
 from __future__ import annotations
@@ -1534,7 +1533,7 @@ from past import autopasta as dood
 print("Hello monde")
 """
 
-    assert delete_aliased___future___import(module_code3) == expected_code3
+    assert delete___future___aliased_imports(module_code3) == expected_code3
 
     module_code4 = """from __future__ import annotations
 from __future__ import annotations  as _annotations
@@ -1547,14 +1546,14 @@ from past import autopasta as dood
 print("Hello monde")
 """
 
-    assert delete_aliased___future___import(module_code4) == expected_module_code4
+    assert delete___future___aliased_imports(module_code4) == expected_module_code4
 
     module_code5 = """from future import annotations as _annotations
 from past import autopasta as dood
 print("Hello monde")
 """
 
-    assert delete_aliased___future___import(module_code5) == module_code5
+    assert delete___future___aliased_imports(module_code5) == module_code5
 
     module_code6 = '''"""Private logic for creating models."""
 
@@ -1563,7 +1562,7 @@ from __future__ import annotations as _annotations
     expected_code6 = '''"""Private logic for creating models."""
 '''
 
-    assert delete_aliased___future___import(module_code6) == expected_code6
+    assert delete___future___aliased_imports(module_code6) == expected_code6
 
 
 def test_0_diff_code_replacement():

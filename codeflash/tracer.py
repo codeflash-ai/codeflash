@@ -283,11 +283,9 @@ class Tracer:
             # We do not pickle self for __init__ to avoid recursion errors, and instead instantiate its class
             # directly with the rest of the arguments in the replay tests. We copy the arguments to avoid memory
             # leaks, bad references or side-effects when unpickling.
-            arguments = (
-                {k: v for k, v in arguments.items() if k != "self"}
-                if (class_name and code.co_name == "__init__")
-                else arguments.copy()
-            )
+            arguments = {k: v for k, v in arguments.items()}
+            if class_name and code.co_name == "__init__":
+                del arguments["self"]
             local_vars = pickle.dumps(
                 arguments,
                 protocol=pickle.HIGHEST_PROTOCOL,
