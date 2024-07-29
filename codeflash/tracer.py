@@ -230,12 +230,13 @@ class Tracer:
             if code.co_name not in self.functions:
                 return
         class_name = None
+        arguments = frame.f_locals
         if (
-            "self" in frame.f_locals
-            and hasattr(frame.f_locals["self"], "__class__")
-            and hasattr(frame.f_locals["self"].__class__, "__name__")
+            "self" in arguments
+            and hasattr(arguments["self"], "__class__")
+            and hasattr(arguments["self"].__class__, "__name__")
         ):
-            class_name = frame.f_locals["self"].__class__.__name__
+            class_name = arguments["self"].__class__.__name__
         file_name = os.path.realpath(file_name)
         function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
         if function_qualified_name in self.ignored_qualified_functions:
@@ -279,8 +280,14 @@ class Tracer:
         try:
             # pickling can be a recursive operator, so we need to increase the recursion limit
             sys.setrecursionlimit(10000)
+            # We do not pickle self for __init__ to avoid recursion errors, and instead instantiate its class
+            # directly with the rest of the arguments in the replay tests. We copy the arguments to avoid memory
+            # leaks, bad references or side-effects when unpickling.
+            arguments = {k: v for k, v in arguments.items()}
+            if class_name and code.co_name == "__init__":
+                del arguments["self"]
             local_vars = pickle.dumps(
-                frame.f_locals,
+                arguments,
                 protocol=pickle.HIGHEST_PROTOCOL,
             )
             sys.setrecursionlimit(original_recursion_limit)
@@ -288,7 +295,7 @@ class Tracer:
             # we retry with dill if pickle fails. It's slower but more comprehensive
             try:
                 local_vars = dill.dumps(
-                    frame.f_locals,
+                    arguments,
                     protocol=dill.HIGHEST_PROTOCOL,
                 )
                 sys.setrecursionlimit(original_recursion_limit)

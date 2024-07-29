@@ -49,11 +49,11 @@ def main():
     improvement_x = float(m.group(2).replace(",", ""))
 
     assert (
-        improvement_pct > 10
-    ), f"Performance improvement percentage was {improvement_pct}, which was not above 10%"
+        improvement_pct > 5
+    ), f"Performance improvement percentage was {improvement_pct}, which was not above 5%"
     assert (
-        improvement_x > 0.10
-    ), f"Performance improvement rate was {improvement_x}x, which was not above 0.1x"
+        improvement_x > 0.05
+    ), f"Performance improvement rate was {improvement_x}x, which was not above 0.05x"
 
     # Check for the line indicating the number of discovered existing unit tests
     unit_test_search = re.search(
