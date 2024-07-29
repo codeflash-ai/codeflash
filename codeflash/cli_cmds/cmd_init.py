@@ -747,5 +747,5 @@ def run_end_to_end_test(setup_info: SetupInfo) -> None:
         )
     else:
         click.echo(
-            f"{LF}❌ End-to-end test failed. Please check the logs above, and take a look at https://app.codeflash.ai/app/getting-started for help and troubleshooting.",
+            f"{LF}❌ End-to-end test failed. Please check the logs above, and take a look at https://docs.codeflash.ai/getting-started/local-installation for help and troubleshooting.",
         )
