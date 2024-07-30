@@ -8,7 +8,7 @@ import requests
 from pydantic.json import pydantic_encoder
 from requests import Response
 
-from codeflash.code_utils.env_utils import get_codeflash_api_key
+from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key
 from codeflash.github.PrComment import FileDiffContent, PrComment
 
 if os.environ.get("CODEFLASH_CFAPI_SERVER", default="prod").lower() == "local":
@@ -45,6 +45,9 @@ def get_user_id() -> Optional[str]:
     """Retrieve the user's userid by making a request to the /cfapi/cli-get-user endpoint.
     :return: The userid or None if the request fails.
     """
+    if not ensure_codeflash_api_key():
+        return None
+
     response = make_cfapi_request(endpoint="/cli-get-user", method="GET")
     if response.status_code == 200:
         return response.text
