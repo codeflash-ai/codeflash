@@ -8,6 +8,7 @@ import subprocess
 import uuid
 from argparse import Namespace
 from collections import defaultdict
+import re
 
 import isort
 import libcst as cst
@@ -234,6 +235,10 @@ class Optimizer:
             return Failure(generated_results.failure())
         tests_and_opts: tuple[GeneratedTests, OptimizationSet] = generated_results.unwrap()
         generated_tests, optimizations_set = tests_and_opts
+        test_function_pattern = re.compile(r"def (test_[a-zA-Z0-9_]+)\(")
+        test_function_names = test_function_pattern.findall(
+            generated_tests.generated_original_test_source
+        )
         generated_tests_path = get_test_file_path(
             self.args.tests_root,
             function_to_optimize.function_name,
@@ -243,7 +248,10 @@ class Optimizer:
             file.write(generated_tests.instrumented_test_source)
         logging.info(f"Generated tests:\n{generated_tests.generated_original_test_source}")
         self.test_files_created.add(generated_tests_path)
-        baseline_result = self.establish_original_code_baseline(
+        (
+            baseline_result,
+            test_functions_to_remove,
+        ) = self.establish_original_code_baseline(
             function_to_optimize.qualified_name,
             instrumented_unittests_created_for_function,
             generated_tests_path,
@@ -281,7 +289,19 @@ class Optimizer:
                 function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
                 tests_in_file,
             )
-            ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
+            ph(
+                "cli-optimize-function-finished",
+                {"function_trace_id": function_trace_id},
+            )
+
+            for test_function in test_functions_to_remove:
+                function_pattern = re.compile(
+                    r"^def " + re.escape(test_function) + r"\(.*?^\s*$",
+                    re.DOTALL | re.MULTILINE,
+                )
+                generated_tests.generated_original_test_source = function_pattern.sub(
+                    "", generated_tests.generated_original_test_source
+                )
 
             if best_optimization:
                 logging.info(
@@ -864,6 +884,10 @@ class Optimizer:
                     TestType.GENERATED_REGRESSION,
                     0,
                 )
+                functions_to_remove = []
+                for result in original_gen_results.test_results:
+                    if not result.did_pass:
+                        functions_to_remove.append(result.id.test_function_name)
 
                 # TODO: Implement the logic to disregard the timing info of the tests that errored out. That is remove test cases that failed to run.
 
@@ -926,13 +950,16 @@ class Optimizer:
             f"Original code runtime measured over {times_run} run{'s' if times_run > 1 else ''}: {humanize_runtime(original_runtime)}",
         )
         logging.debug(f"Original code test runtimes: {test_times_list}")
-        return Success(
-            OriginalCodeBaseline(
-                generated_test_results=original_gen_results,
-                existing_test_results=existing_test_results,
-                overall_test_results=overall_original_test_results,
-                runtime=best_runtime,
+        return (
+            Success(
+                OriginalCodeBaseline(
+                    generated_test_results=original_gen_results,
+                    existing_test_results=existing_test_results,
+                    overall_test_results=overall_original_test_results,
+                    runtime=best_runtime,
+                ),
             ),
+            functions_to_remove,
         )
 
     def run_optimized_candidate(
