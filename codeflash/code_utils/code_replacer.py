@@ -94,7 +94,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         if original_node.name.value == self.function_name and (
             self.depth == 0 or (self.depth == 1 and self.in_class)
         ):
-            return updated_node.with_changes(body=self.optim_body.body)
+            return updated_node.with_changes(body=self.optim_body.body, decorators=self.optim_body.decorators)
         return updated_node
 
     def visit_ClassDef(self, node: cst.ClassDef) -> bool:
