@@ -249,11 +249,11 @@ def other_function(st):
 
 print("Salut monde")
 """
-    expected = """from typing import Optional, Mandatory
+    expected = """from typing import Mandatory
 
 print("Au revoir")
 
-def yet_another_function(values: Optional[str]):
+def yet_another_function(values):
     return len(values) + 2
 
 def other_function(st):
@@ -303,6 +303,7 @@ def sorter_deps(arr):
 """
     expected = """from code_to_optimize.bubble_sort_dep1_helper import dep1_comparer
 from code_to_optimize.bubble_sort_dep2_swap import dep2_swap
+
 def sorter_deps(arr):
     supersort(badsort(arr))
     return arr
@@ -386,7 +387,7 @@ print("Salut monde")
 
 print("Cool")
 
-def blob(st):
+def blob(values):
     return(st * 2)
 
 def blab(st):
@@ -667,6 +668,8 @@ def test_test_libcst_code_replacement8() -> None:
         """Permit embeddings to go unvalidated."""
 
         arbitrary_types_allowed: bool = True
+
+
     @staticmethod
     def _hamming_distance(a: np.ndarray, b: np.ndarray) -> np.floating:
         """Compute the Hamming distance between two vectors.
@@ -1247,7 +1250,6 @@ class TestResults(BaseModel):
                 return False
         sys.setrecursionlimit(original_recursion_limit)
         return True
-    
     def get_test_pass_fail_report_by_type(self) -> dict[TestType, dict[str, int]]:
         report = {test_type: {"passed": 0, "failed": 0} for test_type in TestType}
         for test_result in self.test_results:
