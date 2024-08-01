@@ -577,7 +577,7 @@ def install_github_app() -> None:
 
     if is_github_app_installed_on_repo(owner, repo):
         click.echo(
-            "🐙 Looks like you've already installed the Codeflash GitHub app on this repository! Continuing...",
+            "🐙 Looks like you've already installed the Codeflash GitHub app on this repository! Continuing…",
         )
 
     else:
@@ -591,7 +591,7 @@ def install_github_app() -> None:
         )
         click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
         click.prompt(
-            f"Press Enter once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target ...{LF}",
+            f"Press Enter once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target …{LF}",
             default="",
             type=click.STRING,
             prompt_suffix="",
