@@ -84,7 +84,7 @@ def check_create_pr(
         logging.info("Creating a new PR with the optimized code...")
         owner, repo = get_repo_owner_and_name(git_repo)
 
-        if not check_and_push_branch(git_repo):
+        if not check_and_push_branch(git_repo, wait_for_push=True):
             logging.warning("⏭️ Branch is not pushed, skipping PR creation...")
             return
         relative_path = str(pathlib.Path(os.path.relpath(explanation.file_path, git_root_dir())).as_posix())
