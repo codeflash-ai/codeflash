@@ -295,12 +295,8 @@ class Optimizer:
             )
 
             for test_function in test_functions_to_remove:
-                # function_pattern = re.compile(
-                #     rf"^\s*def {re.escape(test_function)}\(.*?^\s*(?=def |\Z)",
-                #     re.DOTALL | re.MULTILINE,
-                # )
                 function_pattern = re.compile(
-                    rf"\n^\s*def {re.escape(test_function)}\(.*?^\s*(?=\n\n|\Z)",
+                    rf"^\s*def {re.escape(test_function)}\(.*?^\s*(?=\n(?=def |\Z))",
                     re.DOTALL | re.MULTILINE,
                 )
                 generated_tests.generated_original_test_source = function_pattern.sub(
