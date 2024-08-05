@@ -477,7 +477,7 @@ class Tracer:
         # The following code customizes the default printing behavior to
         # print in milliseconds.
         s = StringIO()
-        pstats.Stats(copy(self), stream=s).strip_dirs().sort_stats(*sort).print_stats(15)
+        pstats.Stats(copy(self), stream=s).strip_dirs().sort_stats(*sort).print_stats(25)
         raw_stats = s.getvalue()
         m = re.search(r"function calls?.*in (\d+)\.\d+ (seconds?)", raw_stats)
         total_time = None
