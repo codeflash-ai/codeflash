@@ -577,7 +577,7 @@ def install_github_app() -> None:
 
     if is_github_app_installed_on_repo(owner, repo):
         click.echo(
-            "🐙 Looks like you've already installed the Codeflash GitHub app on this repository!",
+            "🐙 Looks like you've already installed the Codeflash GitHub app on this repository! Continuing…",
         )
 
     else:
@@ -591,22 +591,32 @@ def install_github_app() -> None:
         )
         click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
         click.prompt(
-            f"Press Enter once you've finished installing the github app...{LF}",
+            f"Press Enter once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target …{LF}",
             default="",
             type=click.STRING,
             prompt_suffix="",
             show_default=False,
         )
 
+        count = 2
         while not is_github_app_installed_on_repo(owner, repo):
+            if count == 0:
+                click.echo(
+                    f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
+                    f"You won't be able to create PRs with Codeflash until you install the app.{LF}"
+                    f"In the meantime you can make local only optimizations by using the '--no-pr' flag with codeflash.{LF}",
+                )
+                break
             click.prompt(
                 f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
-                f"Press Enter once you've finished installing the github app...{LF}",
+                f"Please install it from https://github.com/apps/codeflash-ai/installations/select_target {LF}"
+                f"Press Enter to continue once you've finished installing the github app...{LF}",
                 default="",
                 type=click.STRING,
                 prompt_suffix="",
                 show_default=False,
             )
+            count -= 1
 
 
 class CFAPIKeyType(click.ParamType):
