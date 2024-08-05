@@ -231,12 +231,16 @@ class Tracer:
                 return
         class_name = None
         arguments = frame.f_locals
-        if (
-            "self" in arguments
-            and hasattr(arguments["self"], "__class__")
-            and hasattr(arguments["self"].__class__, "__name__")
-        ):
-            class_name = arguments["self"].__class__.__name__
+        try:
+            if (
+                "self" in arguments
+                and hasattr(arguments["self"], "__class__")
+                and hasattr(arguments["self"].__class__, "__name__")
+            ):
+                class_name = arguments["self"].__class__.__name__
+        except:
+            # someone can override the getattr method and raise an exception. I'm looking at you wrapt
+            return
         file_name = os.path.realpath(file_name)
         function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
         if function_qualified_name in self.ignored_qualified_functions:
