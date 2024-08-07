@@ -282,14 +282,9 @@ class Optimizer:
                 function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
                 tests_in_file,
             )
-            ph(
-                "cli-optimize-function-finished",
-                {"function_trace_id": function_trace_id},
-            )
+            ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
-            generated_tests = self.remove_functions_from_generated_tests(
-                generated_tests, test_functions_to_remove
-            )
+            generated_tests = self.remove_functions_from_generated_tests(generated_tests, test_functions_to_remove)
 
             if best_optimization:
                 logging.info(
