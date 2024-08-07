@@ -4,11 +4,11 @@ import concurrent.futures
 import logging
 import os
 import pathlib
+import re
 import subprocess
 import uuid
 from argparse import Namespace
 from collections import defaultdict
-import re
 
 import isort
 import libcst as cst
@@ -235,10 +235,6 @@ class Optimizer:
             return Failure(generated_results.failure())
         tests_and_opts: tuple[GeneratedTests, OptimizationSet] = generated_results.unwrap()
         generated_tests, optimizations_set = tests_and_opts
-        test_function_pattern = re.compile(r"def (test_[a-zA-Z0-9_]+)\(")
-        test_function_names = test_function_pattern.findall(
-            generated_tests.generated_original_test_source
-        )
         generated_tests_path = get_test_file_path(
             self.args.tests_root,
             function_to_optimize.function_name,
@@ -295,7 +291,8 @@ class Optimizer:
             )
 
             generated_tests = self.remove_functions_from_generated_tests(
-                generated_tests, test_functions_to_remove
+                generated_tests,
+                test_functions_to_remove,
             )
 
             if best_optimization:
@@ -370,7 +367,9 @@ class Optimizer:
         return Success(best_optimization)
 
     def remove_functions_from_generated_tests(
-        self, generated_tests, test_functions_to_remove
+        self,
+        generated_tests,
+        test_functions_to_remove,
     ):
         for test_function in test_functions_to_remove:
             function_pattern = re.compile(
@@ -379,14 +378,15 @@ class Optimizer:
             )
 
             match = function_pattern.search(
-                generated_tests.generated_original_test_source
+                generated_tests.generated_original_test_source,
             )
 
             if match is None or "@pytest.mark.parametrize" in match.group(0):
                 continue
 
             generated_tests.generated_original_test_source = function_pattern.sub(
-                "", generated_tests.generated_original_test_source
+                "",
+                generated_tests.generated_original_test_source,
             )
 
         return generated_tests
