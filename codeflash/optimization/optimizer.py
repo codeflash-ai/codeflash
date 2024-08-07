@@ -294,14 +294,9 @@ class Optimizer:
                 {"function_trace_id": function_trace_id},
             )
 
-            for test_function in test_functions_to_remove:
-                function_pattern = re.compile(
-                    rf"^\s*def {re.escape(test_function)}\(.*?^\s*(?=\n(?=def |\Z))",
-                    re.DOTALL | re.MULTILINE,
-                )
-                generated_tests.generated_original_test_source = function_pattern.sub(
-                    "", generated_tests.generated_original_test_source
-                )
+            generated_tests = self.remove_functions_from_generated_tests(
+                generated_tests, test_functions_to_remove
+            )
 
             if best_optimization:
                 logging.info(
@@ -373,6 +368,28 @@ class Optimizer:
         if not best_optimization:
             return Failure(f"No best optimizations found for function {function_to_optimize.qualified_name}")
         return Success(best_optimization)
+
+    def remove_functions_from_generated_tests(
+        self, generated_tests, test_functions_to_remove
+    ):
+        for test_function in test_functions_to_remove:
+            function_pattern = re.compile(
+                rf"(@pytest\.mark\.parametrize\(.*?\)\s*)?def\s+{re.escape(test_function)}\(.*?\):.*?(?=\ndef\s|\n$)",
+                re.DOTALL,
+            )
+
+            match = function_pattern.search(
+                generated_tests.generated_original_test_source
+            )
+
+            if match is None or "@pytest.mark.parametrize" in match.group(0):
+                continue
+
+            generated_tests.generated_original_test_source = function_pattern.sub(
+                "", generated_tests.generated_original_test_source
+            )
+
+        return generated_tests
 
     def determine_best_candidate(
         self,
