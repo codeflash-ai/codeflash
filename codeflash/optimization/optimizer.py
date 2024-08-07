@@ -4,11 +4,11 @@ import concurrent.futures
 import logging
 import os
 import pathlib
-import re
 import subprocess
 import uuid
 from argparse import Namespace
 from collections import defaultdict
+import re
 
 import isort
 import libcst as cst
@@ -244,10 +244,7 @@ class Optimizer:
             file.write(generated_tests.instrumented_test_source)
         logging.info(f"Generated tests:\n{generated_tests.generated_original_test_source}")
         self.test_files_created.add(generated_tests_path)
-        (
-            baseline_result,
-            test_functions_to_remove,
-        ) = self.establish_original_code_baseline(
+        baseline_result, test_functions_to_remove = self.establish_original_code_baseline(
             function_to_optimize.qualified_name,
             instrumented_unittests_created_for_function,
             generated_tests_path,
@@ -285,15 +282,9 @@ class Optimizer:
                 function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
                 tests_in_file,
             )
-            ph(
-                "cli-optimize-function-finished",
-                {"function_trace_id": function_trace_id},
-            )
+            ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
-            generated_tests = self.remove_functions_from_generated_tests(
-                generated_tests,
-                test_functions_to_remove,
-            )
+            generated_tests = self.remove_functions_from_generated_tests(generated_tests, test_functions_to_remove)
 
             if best_optimization:
                 logging.info(
@@ -367,9 +358,7 @@ class Optimizer:
         return Success(best_optimization)
 
     def remove_functions_from_generated_tests(
-        self,
-        generated_tests,
-        test_functions_to_remove,
+        self, generated_tests, test_functions_to_remove
     ):
         for test_function in test_functions_to_remove:
             function_pattern = re.compile(
@@ -378,15 +367,14 @@ class Optimizer:
             )
 
             match = function_pattern.search(
-                generated_tests.generated_original_test_source,
+                generated_tests.generated_original_test_source
             )
 
             if match is None or "@pytest.mark.parametrize" in match.group(0):
                 continue
 
             generated_tests.generated_original_test_source = function_pattern.sub(
-                "",
-                generated_tests.generated_original_test_source,
+                "", generated_tests.generated_original_test_source
             )
 
         return generated_tests
