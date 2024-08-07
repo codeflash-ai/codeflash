@@ -30,6 +30,9 @@ from codeflash.verification.verification_utils import TestConfig
 class FunctionProperties:
     is_top_level: bool
     has_args: Optional[bool]
+    is_staticmethod: Optional[bool]
+    is_classmethod: Optional[bool]
+    staticmethod_class_name: Optional[str]
 
 
 class ReturnStatementVisitor(cst.CSTVisitor):
@@ -359,12 +362,16 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
         file_name: str,
         function_or_method_name: str,
         class_name: str | None = None,
+        line_no: int | None = None,
     ) -> None:
         self.file_name = file_name
         self.class_name = class_name
         self.function_name = function_or_method_name
         self.is_top_level = False
         self.function_has_args = None
+        self.line_no = line_no
+        self.is_staticmethod = False
+        self.is_classmethod = False
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         if node.name == self.function_name:
@@ -385,7 +392,29 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
             for body_node in node.body:
                 if isinstance(body_node, ast.FunctionDef) and body_node.name == self.function_name:
                     self.is_top_level = True
+                    if any(
+                        isinstance(decorator, ast.Name) and decorator.id == "classmethod"
+                        for decorator in body_node.decorator_list
+                    ):
+                        self.is_classmethod = True
                     return
+        else:
+            # search if the class has a staticmethod with the same name and on the same line number
+            for body_node in node.body:
+                if (
+                    isinstance(body_node, ast.FunctionDef)
+                    and body_node.name == self.function_name
+                    and body_node.lineno in {self.line_no, self.line_no + 1}
+                    and any(
+                        isinstance(decorator, ast.Name) and decorator.id == "staticmethod"
+                        for decorator in body_node.decorator_list
+                    )
+                ):
+                    self.is_staticmethod = True
+                    self.is_top_level = True
+                    self.class_name = node.name
+                    return
+
         return
 
 
@@ -393,6 +422,7 @@ def inspect_top_level_functions_or_methods(
     file_name: str,
     function_or_method_name: str,
     class_name: str | None = None,
+    line_no: int | None = None,
 ) -> FunctionProperties:
     with open(file_name, encoding="utf8") as file:
         try:
@@ -404,9 +434,17 @@ def inspect_top_level_functions_or_methods(
         file_name=file_name,
         function_or_method_name=function_or_method_name,
         class_name=class_name,
+        line_no=line_no,
     )
     visitor.visit(ast_module)
-    return FunctionProperties(is_top_level=visitor.is_top_level, has_args=visitor.function_has_args)
+    staticmethod_class_name = visitor.class_name if visitor.is_staticmethod else None
+    return FunctionProperties(
+        is_top_level=visitor.is_top_level,
+        has_args=visitor.function_has_args,
+        is_staticmethod=visitor.is_staticmethod,
+        is_classmethod=visitor.is_classmethod,
+        staticmethod_class_name=staticmethod_class_name,
+    )
 
 
 def filter_functions(

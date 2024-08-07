@@ -49,7 +49,25 @@ class A:
         def functionD():
             pass
         return 6
+class AirbyteEntrypoint(object):
+    @staticmethod
+    def handle_record_counts(message: AirbyteMessage, stream_message_count: DefaultDict[HashableStreamDescriptor, float]) -> AirbyteMessage:
+        match message.type:
+            case Type.RECORD:
+                stream_message_count[HashableStreamDescriptor(name=message.record.stream, namespace=message.record.namespace)] += 1.0
+            case Type.STATE:
+                stream_descriptor = message_utils.get_stream_descriptor(message)
 
+                # Set record count from the counter onto the state message
+                message.state.sourceStats = message.state.sourceStats or AirbyteStateStats()
+                message.state.sourceStats.recordCount = stream_message_count.get(stream_descriptor, 0.0)
+
+                # Reset the counter
+                stream_message_count[stream_descriptor] = 0.0
+        return message
+    @classmethod
+    def functionE(cls, num):
+        return AirbyteEntrypoint.handle_record_counts(num)
     """,
         )
         f.flush()
@@ -59,6 +77,19 @@ class A:
         assert not inspect_top_level_functions_or_methods(f.name, "functionD", class_name="A").is_top_level
         assert not inspect_top_level_functions_or_methods(f.name, "functionF", class_name="E").is_top_level
         assert not inspect_top_level_functions_or_methods(f.name, "functionA").has_args
+        staticmethod_func = inspect_top_level_functions_or_methods(
+            f.name,
+            "handle_record_counts",
+            class_name=None,
+            line_no=15,
+        )
+        assert staticmethod_func.is_staticmethod
+        assert staticmethod_func.staticmethod_class_name == "AirbyteEntrypoint"
+        assert inspect_top_level_functions_or_methods(
+            f.name,
+            "functionE",
+            class_name="AirbyteEntrypoint",
+        ).is_classmethod
 
 
 def test_class_method_discovery():

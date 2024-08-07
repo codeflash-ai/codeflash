@@ -238,6 +238,8 @@ class Tracer:
                 and hasattr(arguments["self"].__class__, "__name__")
             ):
                 class_name = arguments["self"].__class__.__name__
+            elif "cls" in arguments and hasattr(arguments["cls"], "__name__"):
+                class_name = arguments["cls"].__name__
         except:
             # someone can override the getattr method and raise an exception. I'm looking at you wrapt
             return
@@ -272,6 +274,7 @@ class Tracer:
                         project_root_path=self.project_root,
                     ),
                     class_name=class_name,
+                    line_no=code.co_firstlineno,
                 ),
             )
 

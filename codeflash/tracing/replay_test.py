@@ -57,6 +57,10 @@ def create_trace_replay_test(
     max_run_count=100,
 ) -> str:
     assert test_framework in ["pytest", "unittest"]
+    for f in functions:
+        print(
+            f"Function: {f.function_name}, Module_name: {f.module_name}, Class: {f.class_name}, line_no: {f.line_no}",
+        )
 
     imports = f"""import dill as pickle
 {"import unittest" if test_framework == "unittest" else ""}
@@ -69,6 +73,7 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
             file_name=function.file_name,
             function_or_method_name=function.function_name,
             class_name=function.class_name,
+            line_no=function.line_no,
         )
         for function in functions
     ]
@@ -76,8 +81,15 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
     for function, function_property in zip(functions, function_properties):
         if not function_property.is_top_level:
             # can't be imported and run in the replay test
+            print(
+                f"Skipping {function.function_name}, {function.file_name}, {function.class_name} as it is not a top-level function",
+            )
             continue
-        if function.class_name:
+        if function_property.is_staticmethod:
+            function_imports.append(
+                f"from {function.module_name} import {function_property.staticmethod_class_name} as {get_function_alias(function.module_name, function_property.staticmethod_class_name)}",
+            )
+        elif function.class_name:
             function_imports.append(
                 f"from {function.module_name} import {function.class_name} as {get_function_alias(function.module_name, function.class_name)}",
             )
@@ -107,6 +119,13 @@ trace_file_path = r"{trace_file}"
             ret = {class_name_alias}{method_name}(**args)
             """,
     )
+    test_class_staticmethod_body = textwrap.dedent(
+        """\
+        for arg_val_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_name=r"{file_name}", num_to_get={max_run_count}):
+            args = pickle.loads(arg_val_pkl){filter_variables}
+            ret = {class_name_alias}{method_name}(**args)
+            """,
+    )
     if test_framework == "unittest":
         self = "self"
         test_template = "\nclass TestTracedFunctions(unittest.TestCase):\n"
@@ -117,7 +136,8 @@ trace_file_path = r"{trace_file}"
         if not func_property.is_top_level:
             # can't be imported and run in the replay test
             continue
-        if func.class_name is None:
+
+        if func.class_name is None and not func_property.is_staticmethod:
             alias = get_function_alias(func.module_name, func.function_name)
             test_body = test_function_body.format(
                 function_name=alias,
@@ -126,13 +146,34 @@ trace_file_path = r"{trace_file}"
                 max_run_count=max_run_count,
                 args="**args" if func_property.has_args else "",
             )
+        elif func_property.is_staticmethod:
+            class_name_alias = get_function_alias(func.module_name, func_property.staticmethod_class_name)
+            alias = get_function_alias(
+                func.module_name,
+                func_property.staticmethod_class_name + "_" + func.function_name,
+            )
+            method_name = "." + func.function_name if func.function_name != "__init__" else ""
+            test_body = test_class_staticmethod_body.format(
+                orig_function_name=func.function_name,
+                file_name=func.file_name,
+                class_name_alias=class_name_alias,
+                method_name=method_name,
+                max_run_count=max_run_count,
+                filter_variables="",
+            )
         else:
             class_name_alias = get_function_alias(func.module_name, func.class_name)
             alias = get_function_alias(
                 func.module_name,
                 func.class_name + "_" + func.function_name,
             )
-            filter_variables = '\n    args.pop("__class__", None)' if func.function_name == "__init__" else ""
+
+            if func_property.is_classmethod:
+                filter_variables = '\n    args.pop("cls", None)'
+            elif func.function_name == "__init__":
+                filter_variables = '\n    args.pop("__class__", None)'
+            else:
+                filter_variables = ""
             method_name = "." + func.function_name if func.function_name != "__init__" else ""
             test_body = test_class_method_body.format(
                 orig_function_name=func.function_name,
