@@ -235,10 +235,6 @@ class Optimizer:
             return Failure(generated_results.failure())
         tests_and_opts: tuple[GeneratedTests, OptimizationSet] = generated_results.unwrap()
         generated_tests, optimizations_set = tests_and_opts
-        test_function_pattern = re.compile(r"def (test_[a-zA-Z0-9_]+)\(")
-        test_function_names = test_function_pattern.findall(
-            generated_tests.generated_original_test_source
-        )
         generated_tests_path = get_test_file_path(
             self.args.tests_root,
             function_to_optimize.function_name,
@@ -248,10 +244,7 @@ class Optimizer:
             file.write(generated_tests.instrumented_test_source)
         logging.info(f"Generated tests:\n{generated_tests.generated_original_test_source}")
         self.test_files_created.add(generated_tests_path)
-        (
-            baseline_result,
-            test_functions_to_remove,
-        ) = self.establish_original_code_baseline(
+        baseline_result, test_functions_to_remove = self.establish_original_code_baseline(
             function_to_optimize.qualified_name,
             instrumented_unittests_created_for_function,
             generated_tests_path,
