@@ -374,7 +374,7 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
         self.is_classmethod = False
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        if node.name == self.function_name:
+        if self.class_name is None and node.name == self.function_name:
             self.is_top_level = True
             self.function_has_args = any(
                 (

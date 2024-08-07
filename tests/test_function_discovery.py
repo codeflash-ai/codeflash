@@ -56,6 +56,8 @@ class AirbyteEntrypoint(object):
     @classmethod
     def functionE(cls, num):
         return AirbyteEntrypoint.handle_record_counts(num)
+def non_classmethod_function(cls, name):
+    return cls.name
     """,
         )
         f.flush()
@@ -78,6 +80,10 @@ class AirbyteEntrypoint(object):
             "functionE",
             class_name="AirbyteEntrypoint",
         ).is_classmethod
+        assert not inspect_top_level_functions_or_methods(
+            f.name, "non_classmethod_function", class_name="AirbyteEntrypoint"
+        ).is_top_level
+        # needed because this will be traced with a class_name being passed
 
 
 def test_class_method_discovery():
