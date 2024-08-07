@@ -6,8 +6,7 @@ from argparse import Namespace
 from collections import defaultdict
 from pathlib import Path
 
-import libcst as cst
-from codeflash.code_utils.code_extractor import remove_first_imported_aliased_objects
+from codeflash.code_utils.code_extractor import delete___future___aliased_imports
 from codeflash.code_utils.code_replacer import (
     is_zero_diff,
     replace_functions_and_add_imports,
@@ -53,6 +52,7 @@ class NewClass:
     original_code = """class NewClass:
     def __init__(self, name):
         self.name = name
+    @staticmethod
     def new_function(self, value):
         return "I am still old"
 
@@ -250,11 +250,11 @@ def other_function(st):
 
 print("Salut monde")
 """
-    expected = """from typing import Optional, Mandatory
+    expected = """from typing import Mandatory
 
 print("Au revoir")
 
-def yet_another_function(values: Optional[str]):
+def yet_another_function(values):
     return len(values) + 2
 
 def other_function(st):
@@ -280,7 +280,8 @@ print("Salut monde")
 
 
 def test_test_libcst_code_replacement5() -> None:
-    optim_code = """def sorter_deps(arr):
+    optim_code = """@lru_cache(17)
+def sorter_deps(arr: list[int]) -> list[int]:
     supersort(badsort(arr))
     return arr
 
@@ -304,6 +305,8 @@ def sorter_deps(arr):
 """
     expected = """from code_to_optimize.bubble_sort_dep1_helper import dep1_comparer
 from code_to_optimize.bubble_sort_dep2_swap import dep2_swap
+
+@lru_cache(17)
 def sorter_deps(arr):
     supersort(badsort(arr))
     return arr
@@ -387,7 +390,7 @@ print("Salut monde")
 
 print("Cool")
 
-def blob(st):
+def blob(values):
     return(st * 2)
 
 def blab(st):
@@ -649,7 +652,6 @@ def test_test_libcst_code_replacement8() -> None:
         arbitrary_types_allowed: bool = True
 
 
-    @staticmethod
     def _hamming_distance(a: np.ndarray, b: np.ndarray) -> np.floating:
         """Compute the Hamming distance between two vectors.
 
@@ -668,6 +670,8 @@ def test_test_libcst_code_replacement8() -> None:
         """Permit embeddings to go unvalidated."""
 
         arbitrary_types_allowed: bool = True
+
+
     @staticmethod
     def _hamming_distance(a: np.ndarray, b: np.ndarray) -> np.floating:
         """Compute the Hamming distance between two vectors.
@@ -1248,7 +1252,6 @@ class TestResults(BaseModel):
                 return False
         sys.setrecursionlimit(original_recursion_limit)
         return True
-    
     def get_test_pass_fail_report_by_type(self) -> dict[TestType, dict[str, int]]:
         report = {test_type: {"passed": 0, "failed": 0} for test_type in TestType}
         for test_result in self.test_results:
@@ -1515,13 +1518,13 @@ print("Hello monde")
     expected_code1 = """print("Hello monde")
 """
 
-    assert remove_first_imported_aliased_objects(module_code1, "__future__")[0] == expected_code1
+    assert delete___future___aliased_imports(module_code1) == expected_code1
 
     module_code2 = """from __future__ import annotations
 print("Hello monde")
 """
 
-    assert remove_first_imported_aliased_objects(module_code2, "__future__")[0] == module_code2
+    assert delete___future___aliased_imports(module_code2) == module_code2
 
     module_code3 = """from __future__ import annotations as _annotations
 from __future__ import annotations
@@ -1534,7 +1537,7 @@ from past import autopasta as dood
 print("Hello monde")
 """
 
-    assert remove_first_imported_aliased_objects(module_code3, "__future__")[0] == expected_code3
+    assert delete___future___aliased_imports(module_code3) == expected_code3
 
     module_code4 = """from __future__ import annotations
 from __future__ import annotations  as _annotations
@@ -1542,15 +1545,29 @@ from past import autopasta as dood
 print("Hello monde")
 """
 
-    assert remove_first_imported_aliased_objects(module_code4, "__future__")[0] == module_code4
-
-    module_code5 = """from future import annotations as _annotations
-from __future__ import annotations  as _annotations
+    expected_module_code4 = """from __future__ import annotations
 from past import autopasta as dood
 print("Hello monde")
 """
 
-    assert remove_first_imported_aliased_objects(module_code5, "__future__")[0] == module_code5
+    assert delete___future___aliased_imports(module_code4) == expected_module_code4
+
+    module_code5 = """from future import annotations as _annotations
+from past import autopasta as dood
+print("Hello monde")
+"""
+
+    assert delete___future___aliased_imports(module_code5) == module_code5
+
+    module_code6 = '''"""Private logic for creating models."""
+
+from __future__ import annotations as _annotations
+'''
+    expected_code6 = '''"""Private logic for creating models."""
+'''
+
+    assert delete___future___aliased_imports(module_code6) == expected_code6
+
 
 def test_0_diff_code_replacement():
     original_code = """from __future__ import annotations

@@ -10,6 +10,7 @@ import time
 from typing import Callable, Optional
 
 import click
+import git
 import inquirer
 import inquirer.themes
 import tomlkit
@@ -17,6 +18,7 @@ from git import Repo
 from pydantic.dataclasses import dataclass
 from returns.pipeline import is_successful
 
+from codeflash.api.cfapi import is_github_app_installed_on_repo
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
@@ -160,6 +162,8 @@ def init_codeflash() -> None:
         setup_info: SetupInfo = collect_setup_info()
 
         configure_pyproject_toml(setup_info)
+
+        install_github_app()
 
         click.echo(
             f"{LF}"
@@ -567,6 +571,54 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     click.echo()
 
 
+def install_github_app() -> None:
+    git_repo = git.Repo(search_parent_directories=True)
+    owner, repo = get_repo_owner_and_name(git_repo)
+
+    if is_github_app_installed_on_repo(owner, repo):
+        click.echo(
+            "🐙 Looks like you've already installed the Codeflash GitHub app on this repository! Continuing…",
+        )
+
+    else:
+        click.prompt(
+            f"Finally, you'll need install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
+            + f"Press Enter to open the page to let you install the app ...{LF}",
+            default="",
+            type=click.STRING,
+            prompt_suffix="",
+            show_default=False,
+        )
+        click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
+        click.prompt(
+            f"Press Enter once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target …{LF}",
+            default="",
+            type=click.STRING,
+            prompt_suffix="",
+            show_default=False,
+        )
+
+        count = 2
+        while not is_github_app_installed_on_repo(owner, repo):
+            if count == 0:
+                click.echo(
+                    f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
+                    f"You won't be able to create PRs with Codeflash until you install the app.{LF}"
+                    f"In the meantime you can make local only optimizations by using the '--no-pr' flag with codeflash.{LF}",
+                )
+                break
+            click.prompt(
+                f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
+                f"Please install it from https://github.com/apps/codeflash-ai/installations/select_target {LF}"
+                f"Press Enter to continue once you've finished installing the github app...{LF}",
+                default="",
+                type=click.STRING,
+                prompt_suffix="",
+                show_default=False,
+            )
+            count -= 1
+
+
 class CFAPIKeyType(click.ParamType):
     name = "cfapi-key"
 
@@ -705,5 +757,5 @@ def run_end_to_end_test(setup_info: SetupInfo) -> None:
         )
     else:
         click.echo(
-            f"{LF}❌ End-to-end test failed. Please check the logs above, and take a look at https://app.codeflash.ai/app/getting-started for help and troubleshooting.",
+            f"{LF}❌ End-to-end test failed. Please check the logs above, and take a look at https://docs.codeflash.ai/getting-started/local-installation for help and troubleshooting.",
         )

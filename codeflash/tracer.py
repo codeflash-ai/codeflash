@@ -231,12 +231,18 @@ class Tracer:
                 return
         class_name = None
         arguments = frame.f_locals
-        if (
-            "self" in arguments
-            and hasattr(arguments["self"], "__class__")
-            and hasattr(arguments["self"].__class__, "__name__")
-        ):
-            class_name = arguments["self"].__class__.__name__
+        try:
+            if (
+                "self" in arguments
+                and hasattr(arguments["self"], "__class__")
+                and hasattr(arguments["self"].__class__, "__name__")
+            ):
+                class_name = arguments["self"].__class__.__name__
+            elif "cls" in arguments and hasattr(arguments["cls"], "__name__"):
+                class_name = arguments["cls"].__name__
+        except:
+            # someone can override the getattr method and raise an exception. I'm looking at you wrapt
+            return
         file_name = os.path.realpath(file_name)
         function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
         if function_qualified_name in self.ignored_qualified_functions:
@@ -268,6 +274,7 @@ class Tracer:
                         project_root_path=self.project_root,
                     ),
                     class_name=class_name,
+                    line_no=code.co_firstlineno,
                 ),
             )
 
@@ -280,9 +287,12 @@ class Tracer:
         try:
             # pickling can be a recursive operator, so we need to increase the recursion limit
             sys.setrecursionlimit(10000)
-            # We do not pickle self to avoid recursion errors, and will instead
+            # We do not pickle self for __init__ to avoid recursion errors, and instead instantiate its class
+            # directly with the rest of the arguments in the replay tests. We copy the arguments to avoid memory
+            # leaks, bad references or side-effects when unpickling.
+            arguments = {k: v for k, v in arguments.items()}
             if class_name and code.co_name == "__init__":
-                arguments = {k: v for k, v in arguments.items() if k != "self"}
+                del arguments["self"]
             local_vars = pickle.dumps(
                 arguments,
                 protocol=pickle.HIGHEST_PROTOCOL,
@@ -470,7 +480,7 @@ class Tracer:
         # The following code customizes the default printing behavior to
         # print in milliseconds.
         s = StringIO()
-        pstats.Stats(copy(self), stream=s).strip_dirs().sort_stats(*sort).print_stats(15)
+        pstats.Stats(copy(self), stream=s).strip_dirs().sort_stats(*sort).print_stats(25)
         raw_stats = s.getvalue()
         m = re.search(r"function calls?.*in (\d+)\.\d+ (seconds?)", raw_stats)
         total_time = None

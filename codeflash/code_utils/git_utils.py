@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 from io import StringIO
 from typing import Optional
 
@@ -112,7 +113,7 @@ def confirm_proceeding_with_no_git_repo() -> bool:
     return True
 
 
-def check_and_push_branch(repo: git.Repo) -> bool:
+def check_and_push_branch(repo: git.Repo, wait_for_push: bool = False) -> bool:
     current_branch = repo.active_branch.name
     origin = repo.remote(name="origin")
 
@@ -129,6 +130,9 @@ def check_and_push_branch(repo: git.Repo) -> bool:
         ):
             origin.push(current_branch)
             logging.info(f"⬆️ Branch '{current_branch}' has been pushed to origin.")
+            if wait_for_push:
+                time.sleep(3)  # adding this to give time for the push to register with GitHub,
+                # so that our modifications to it are not rejected
             return True
         logging.info(f"🔘 Branch '{current_branch}' has not been pushed to origin.")
         return False
