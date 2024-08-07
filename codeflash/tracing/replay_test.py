@@ -57,10 +57,6 @@ def create_trace_replay_test(
     max_run_count=100,
 ) -> str:
     assert test_framework in ["pytest", "unittest"]
-    for f in functions:
-        print(
-            f"Function: {f.function_name}, Module_name: {f.module_name}, Class: {f.class_name}, line_no: {f.line_no}",
-        )
 
     imports = f"""import dill as pickle
 {"import unittest" if test_framework == "unittest" else ""}
@@ -81,9 +77,6 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
     for function, function_property in zip(functions, function_properties):
         if not function_property.is_top_level:
             # can't be imported and run in the replay test
-            print(
-                f"Skipping {function.function_name}, {function.file_name}, {function.class_name} as it is not a top-level function",
-            )
             continue
         if function_property.is_staticmethod:
             function_imports.append(
