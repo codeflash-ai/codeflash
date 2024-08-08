@@ -8,7 +8,6 @@ import subprocess
 import uuid
 from argparse import Namespace
 from collections import defaultdict
-import re
 
 import isort
 import libcst as cst
@@ -30,6 +29,9 @@ from codeflash.code_utils.code_replacer import replace_function_definitions_in_m
 from codeflash.code_utils.code_utils import (
     get_run_tmp_file,
     module_name_from_file_path,
+)
+from codeflash.code_utils.remove_generated_tests import (
+    remove_functions_from_generated_tests,
 )
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
@@ -356,28 +358,6 @@ class Optimizer:
         if not best_optimization:
             return Failure(f"No best optimizations found for function {function_to_optimize.qualified_name}")
         return Success(best_optimization)
-
-    def remove_functions_from_generated_tests(
-        self, generated_tests, test_functions_to_remove
-    ):
-        for test_function in test_functions_to_remove:
-            function_pattern = re.compile(
-                rf"(@pytest\.mark\.parametrize\(.*?\)\s*)?def\s+{re.escape(test_function)}\(.*?\):.*?(?=\ndef\s|\n$)",
-                re.DOTALL,
-            )
-
-            match = function_pattern.search(
-                generated_tests.generated_original_test_source
-            )
-
-            if match is None or "@pytest.mark.parametrize" in match.group(0):
-                continue
-
-            generated_tests.generated_original_test_source = function_pattern.sub(
-                "", generated_tests.generated_original_test_source
-            )
-
-        return generated_tests
 
     def determine_best_candidate(
         self,
