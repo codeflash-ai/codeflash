@@ -286,7 +286,7 @@ class Optimizer:
             )
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
-            generated_tests = self.remove_functions_from_generated_tests(generated_tests, test_functions_to_remove)
+            generated_tests = remove_functions_from_generated_tests(generated_tests, test_functions_to_remove)
 
             if best_optimization:
                 logging.info(
