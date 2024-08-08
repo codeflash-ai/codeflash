@@ -1,5 +1,6 @@
 import datetime
 import decimal
+import enum
 import logging
 import math
 from typing import Any
@@ -74,6 +75,7 @@ def comparator(orig: Any, new: Any) -> bool:
                 bytearray,
                 memoryview,
                 frozenset,
+                enum.Enum,
             ),
         ):
             return orig == new

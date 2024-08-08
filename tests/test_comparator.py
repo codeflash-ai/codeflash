@@ -1,6 +1,7 @@
 import dataclasses
 import datetime
 import decimal
+from enum import UNIQUE, Enum, Flag, IntFlag, auto, verify
 
 import pydantic
 import pytest
@@ -144,6 +145,51 @@ def test_standard_python_library_objects():
     a = decimal.Decimal(3.14)
     b = decimal.Decimal(3.14)
     c = decimal.Decimal(3.15)
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    class Color(Flag):
+        RED = auto()
+        GREEN = auto()
+        BLUE = auto()
+
+    class Color2(Enum):
+        RED = auto()
+        GREEN = auto()
+        BLUE = auto()
+
+    a = Color.RED
+    b = Color.RED
+    c = Color.GREEN
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    a = Color2.RED
+    b = Color2.RED
+    c = Color2.GREEN
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    @verify(UNIQUE)
+    class Color3(Enum):
+        RED = 1
+        GREEN = 2
+        BLUE = 3
+
+    a = Color3.RED
+    b = Color3.RED
+    c = Color3.GREEN
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    class Color4(IntFlag):
+        RED = auto()
+        GREEN = auto()
+        BLUE = auto()
+
+    a = Color4.RED
+    b = Color4.RED
+    c = Color4.GREEN
     assert comparator(a, b)
     assert not comparator(a, c)
 
