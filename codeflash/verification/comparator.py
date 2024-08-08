@@ -178,6 +178,9 @@ def comparator(orig: Any, new: Any) -> bool:
 
             return comparator(orig_keys, new_keys)
 
+        if str(type(orig)) == "<class 'builtin_function_or_method'>":
+            return new == orig
+
         # TODO : Add other types here
         logging.warning(f"Unknown comparator input type: {type(orig)}")
         return False
