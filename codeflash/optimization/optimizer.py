@@ -869,10 +869,11 @@ class Optimizer:
                     TestType.GENERATED_REGRESSION,
                     0,
                 )
-                functions_to_remove = []
-                for result in original_gen_results.test_results:
-                    if not result.did_pass:
-                        functions_to_remove.append(result.id.test_function_name)
+                functions_to_remove = [
+                    result.id.test_function_name
+                    for result in original_gen_results.test_results
+                    if not result.did_pass
+                ]
 
                 # TODO: Implement the logic to disregard the timing info of the tests that errored out. That is remove test cases that failed to run.
 
