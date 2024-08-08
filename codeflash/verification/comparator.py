@@ -3,6 +3,7 @@ import decimal
 import enum
 import logging
 import math
+import types
 from typing import Any
 
 import sentry_sdk
@@ -166,10 +167,7 @@ def comparator(orig: Any, new: Any) -> bool:
         if hasattr(orig, "__dict__") and hasattr(new, "__dict__"):
             orig_keys = orig.__dict__
             new_keys = new.__dict__
-            if (
-                str(type(orig_keys)) == "<class 'mappingproxy'>"
-                and str(type(new_keys)) == "<class 'mappingproxy'>"
-            ):
+            if type(orig_keys) == types.MappingProxyType and type(new_keys) == types.MappingProxyType:
                 # meta class objects
                 if orig != new:
                     return False
@@ -180,8 +178,10 @@ def comparator(orig: Any, new: Any) -> bool:
 
             return comparator(orig_keys, new_keys)
 
-        if str(type(orig)) == "<class 'builtin_function_or_method'>":
+        if type(orig) in [types.BuiltinFunctionType, types.BuiltinMethodType]:
             return new == orig
+        if str(type(orig)) == "<class 'object'>":
+            return True
 
         # TODO : Add other types here
         logging.warning(f"Unknown comparator input type: {type(orig)}")

@@ -110,6 +110,12 @@ def test_basic_python_objects():
     assert not comparator(a, b)
     assert not comparator(c, d)
 
+    a = object()
+    b = object()
+    c = abs
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
 
 def test_standard_python_library_objects():
     a = datetime.datetime(2020, 2, 2, 2, 2, 2)
