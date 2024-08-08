@@ -117,6 +117,7 @@ class Tracer:
         self.cur = None
         self.start_time = None
         self.timer = time.process_time_ns
+        self.total_tt = 0
         self.simulate_call("profiler")
         assert (
             "test_framework" in self.config
@@ -160,18 +161,25 @@ class Tracer:
         self.con.commit()
 
         self.create_stats()
-        self.print_stats("tottime")
+
         cur = self.con.cursor()
         cur.execute(
-            "CREATE TABLE pstats (filename TEXT, line_number INTEGER, function TEXT, "
+            "CREATE TABLE pstats (filename TEXT, line_number INTEGER, function TEXT, class_name TEXT, "
             "call_count_nonrecursive INTEGER, num_callers INTEGER, total_time_ns INTEGER, "
             "cumulative_time_ns INTEGER, callers BLOB)",
         )
         for func, (cc, nc, tt, ct, callers) in self.stats.items():
             cur.execute(
-                "INSERT INTO pstats VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (func[0], func[1], func[2], cc, nc, tt, ct, pickle.dumps(callers)),
+                "INSERT INTO pstats VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (os.path.realpath(func[0]), func[1], func[2], func[3], cc, nc, tt, ct, pickle.dumps(callers)),
             )
+        self.con.commit()
+
+        self.make_pstats_compatible()
+        self.print_stats("tottime")
+        cur = self.con.cursor()
+        cur.execute("CREATE TABLE total_time (time_ns INTEGER)")
+        cur.execute("INSERT INTO total_time VALUES (?)", (self.total_tt,))
         self.con.commit()
         self.con.close()
 
@@ -364,7 +372,20 @@ class Tracer:
                 self.trace_dispatch_return(rframe, 0)
                 assert self.cur is None or frame.f_back is self.cur[-2], ("Bad call", self.cur[-3])
         fcode = frame.f_code
-        fn = (fcode.co_filename, fcode.co_firstlineno, fcode.co_name)
+        arguments = frame.f_locals
+        class_name = None
+        try:
+            if (
+                "self" in arguments
+                and hasattr(arguments["self"], "__class__")
+                and hasattr(arguments["self"].__class__, "__name__")
+            ):
+                class_name = arguments["self"].__class__.__name__
+            elif "cls" in arguments and hasattr(arguments["cls"], "__name__"):
+                class_name = arguments["cls"].__name__
+        except:
+            pass
+        fn = (fcode.co_filename, fcode.co_firstlineno, fcode.co_name, class_name)
         self.cur = (t, 0, 0, fn, frame, self.cur)
         timings = self.timings
         if fn in timings:
@@ -382,7 +403,7 @@ class Tracer:
         return 1
 
     def trace_dispatch_c_call(self, frame, t):
-        fn = ("", 0, self.c_func_name)
+        fn = ("", 0, self.c_func_name, None)
         self.cur = (t, 0, 0, fn, frame, self.cur)
         timings = self.timings
         if fn in timings:
@@ -446,12 +467,13 @@ class Tracer:
             self.co_firstlineno = 0
 
         def __repr__(self):
-            return repr((self.co_filename, self.co_line, self.co_name))
+            return repr((self.co_filename, self.co_line, self.co_name, None))
 
     class fake_frame:
         def __init__(self, code, prior):
             self.f_code = code
             self.f_back = prior
+            self.f_locals = {}
 
     def simulate_call(self, name):
         code = self.fake_code("profiler", 0, name)
@@ -480,7 +502,10 @@ class Tracer:
         # The following code customizes the default printing behavior to
         # print in milliseconds.
         s = StringIO()
-        pstats.Stats(copy(self), stream=s).strip_dirs().sort_stats(*sort).print_stats(25)
+        stats_obj = pstats.Stats(copy(self), stream=s)
+        stats_obj.strip_dirs().sort_stats(*sort).print_stats(15)
+        self.total_tt = stats_obj.total_tt
+        print("total_tt", self.total_tt)
         raw_stats = s.getvalue()
         m = re.search(r"function calls?.*in (\d+)\.\d+ (seconds?)", raw_stats)
         total_time = None
@@ -523,6 +548,21 @@ class Tracer:
             new_stats.append(replaced)
 
         print("\n".join(new_stats))
+
+    def make_pstats_compatible(self):
+        # delete the extra class_name item from the function tuple
+        self.files = []
+        self.top_level = []
+        new_stats = {}
+        for func, (cc, ns, tt, ct, callers) in self.stats.items():
+            new_callers = {(k[0], k[1], k[2]): v for k, v in callers.items()}
+            new_stats[(func[0], func[1], func[2])] = (cc, ns, tt, ct, new_callers)
+        new_timings = {}
+        for func, (cc, ns, tt, ct, callers) in self.timings.items():
+            new_callers = {(k[0], k[1], k[2]): v for k, v in callers.items()}
+            new_timings[(func[0], func[1], func[2])] = (cc, ns, tt, ct, new_callers)
+        self.stats = new_stats
+        self.timings = new_timings
 
     def dump_stats(self, file):
         with open(file, "wb") as f:
