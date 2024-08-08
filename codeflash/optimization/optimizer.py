@@ -950,7 +950,7 @@ class Optimizer:
             )
             success = False
         if not success:
-            return Failure("Failed to establish a baseline for the original code.")
+            return Failure("Failed to establish a baseline for the original code."), []
         logging.info(
             f"Original code runtime measured over {times_run} run{'s' if times_run > 1 else ''}: {humanize_runtime(original_runtime)}",
         )
