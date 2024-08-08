@@ -503,7 +503,7 @@ class Tracer:
         # print in milliseconds.
         s = StringIO()
         stats_obj = pstats.Stats(copy(self), stream=s)
-        stats_obj.strip_dirs().sort_stats(*sort).print_stats(15)
+        stats_obj.strip_dirs().sort_stats(*sort).print_stats(25)
         self.total_tt = stats_obj.total_tt
         print("total_tt", self.total_tt)
         raw_stats = s.getvalue()
