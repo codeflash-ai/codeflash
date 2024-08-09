@@ -30,6 +30,9 @@ from codeflash.code_utils.code_utils import (
     get_run_tmp_file,
     module_name_from_file_path,
 )
+from codeflash.code_utils.remove_generated_tests import (
+    remove_functions_from_generated_tests,
+)
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
     MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS,
@@ -243,7 +246,7 @@ class Optimizer:
             file.write(generated_tests.instrumented_test_source)
         logging.info(f"Generated tests:\n{generated_tests.generated_original_test_source}")
         self.test_files_created.add(generated_tests_path)
-        baseline_result = self.establish_original_code_baseline(
+        baseline_result, test_functions_to_remove = self.establish_original_code_baseline(
             function_to_optimize.qualified_name,
             instrumented_unittests_created_for_function,
             generated_tests_path,
@@ -282,6 +285,8 @@ class Optimizer:
                 tests_in_file,
             )
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
+
+            generated_tests = remove_functions_from_generated_tests(generated_tests, test_functions_to_remove)
 
             if best_optimization:
                 logging.info(
@@ -864,6 +869,11 @@ class Optimizer:
                     TestType.GENERATED_REGRESSION,
                     0,
                 )
+                functions_to_remove = [
+                    result.id.test_function_name
+                    for result in original_gen_results.test_results
+                    if not result.did_pass
+                ]
 
                 # TODO: Implement the logic to disregard the timing info of the tests that errored out. That is remove test cases that failed to run.
 
@@ -921,18 +931,21 @@ class Optimizer:
             )
             success = False
         if not success:
-            return Failure("Failed to establish a baseline for the original code.")
+            return Failure("Failed to establish a baseline for the original code."), []
         logging.info(
             f"Original code runtime measured over {times_run} run{'s' if times_run > 1 else ''}: {humanize_runtime(original_runtime)}",
         )
         logging.debug(f"Original code test runtimes: {test_times_list}")
-        return Success(
-            OriginalCodeBaseline(
-                generated_test_results=original_gen_results,
-                existing_test_results=existing_test_results,
-                overall_test_results=overall_original_test_results,
-                runtime=best_runtime,
+        return (
+            Success(
+                OriginalCodeBaseline(
+                    generated_test_results=original_gen_results,
+                    existing_test_results=existing_test_results,
+                    overall_test_results=overall_original_test_results,
+                    runtime=best_runtime,
+                ),
             ),
+            functions_to_remove,
         )
 
     def run_optimized_candidate(
