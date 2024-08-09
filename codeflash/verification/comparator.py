@@ -34,6 +34,13 @@ try:
 except ImportError:
     HAS_PANDAS = False
 
+try:
+    import pyrsistent
+
+    HAS_PYRSISTENT = True
+except ImportError:
+    HAS_PYRSISTENT = False
+
 
 def comparator(orig: Any, new: Any) -> bool:
     try:
@@ -149,6 +156,21 @@ def comparator(orig: Any, new: Any) -> bool:
                 return np.isinf(new)
         except Exception:
             pass
+
+        if HAS_PYRSISTENT and isinstance(
+            orig,
+            (
+                pyrsistent.PMap,
+                pyrsistent.PVector,
+                pyrsistent.PSet,
+                pyrsistent.PRecord,
+                pyrsistent.PClass,
+                pyrsistent.PBag,
+                pyrsistent.PList,
+                pyrsistent.PDeque,
+            ),
+        ):
+            return orig == new
 
         if isinstance(
             orig,

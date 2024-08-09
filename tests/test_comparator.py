@@ -481,6 +481,69 @@ def test_pandas():
     assert not comparator(an, ap)
 
 
+def test_pyrsistent():
+    try:
+        from pyrsistent import PBag, PClass, PRecord, field, pdeque, pmap, pset, pvector
+    except ImportError:
+        pytest.skip()
+
+    a = pmap({"a": 1, "b": 2})
+    b = pmap({"a": 1, "b": 2})
+    c = pmap({"a": 1, "b": 3})
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    d = pvector([1, 2, 3])
+    e = pvector([1, 2, 3])
+    f = pvector([1, 2, 4])
+    assert comparator(d, e)
+    assert not comparator(d, f)
+
+    g = pset([1, 2, 3])
+    h = pset([2, 3, 1])
+    i = pset([1, 2, 4])
+    assert comparator(g, h)
+    assert not comparator(g, i)
+
+    class TestRecord(PRecord):
+        a = field()
+        b = field()
+
+    j = TestRecord()
+    k = TestRecord()
+    l = TestRecord(a=2, b=3)
+    assert comparator(j, k)
+    assert not comparator(j, l)
+
+    class TestClass(PClass):
+        a = field()
+        b = field()
+
+    m = TestClass()
+    n = TestClass()
+    o = TestClass(a=1, b=3)
+    assert comparator(m, n)
+    assert not comparator(m, o)
+
+    p = pdeque([1, 2, 3], 3)
+    q = pdeque([1, 2, 3], 3)
+    r = pdeque([1, 2, 4], 3)
+    assert comparator(p, q)
+    assert not comparator(p, r)
+
+    s = PBag([1, 2, 3])
+    t = PBag([1, 2, 3])
+    u = PBag([1, 2, 4])
+    assert comparator(s, t)
+    assert not comparator(s, u)
+
+    v = pvector([1, 2, 3])
+    w = pvector([1, 2, 3])
+    x = pvector([1, 2, 4])
+    assert comparator(v, w)
+    assert not comparator(v, x)
+
+
 def test_custom_object():
     class TestClass:
         def __init__(self, value):
