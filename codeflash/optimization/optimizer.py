@@ -703,7 +703,7 @@ class Optimizer:
                 relevant_test_files_count += 1
                 success, injected_test = inject_profiling_into_existing_test(
                     tests_in_file.test_file,
-                    function_to_optimize.function_name,
+                    function_to_optimize,
                     self.args.project_root,
                     self.args.test_framework,
                 )
