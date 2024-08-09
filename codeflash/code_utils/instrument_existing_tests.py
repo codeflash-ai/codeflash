@@ -38,7 +38,6 @@ class InjectPerfOnly(ast.NodeTransformer):
     def __init__(
         self,
         function: FunctionToOptimize,
-        # function_name: str,
         module_path: str,
         test_framework: str,
     ) -> None:
