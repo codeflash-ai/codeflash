@@ -1,7 +1,7 @@
 import dataclasses
 import datetime
 import decimal
-from enum import UNIQUE, Enum, Flag, IntFlag, auto, verify
+from enum import Enum, Flag, IntFlag, auto
 
 import pydantic
 import pytest
@@ -179,18 +179,6 @@ def test_standard_python_library_objects():
     a = Color2.RED
     b = Color2.RED
     c = Color2.GREEN
-    assert comparator(a, b)
-    assert not comparator(a, c)
-
-    @verify(UNIQUE)
-    class Color3(Enum):
-        RED = 1
-        GREEN = 2
-        BLUE = 3
-
-    a = Color3.RED
-    b = Color3.RED
-    c = Color3.GREEN
     assert comparator(a, b)
     assert not comparator(a, c)
 
