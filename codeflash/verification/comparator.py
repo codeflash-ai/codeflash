@@ -77,6 +77,7 @@ def comparator(orig: Any, new: Any) -> bool:
                 memoryview,
                 frozenset,
                 enum.Enum,
+                type,
             ),
         ):
             return orig == new
