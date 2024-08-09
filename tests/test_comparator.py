@@ -1,6 +1,7 @@
 import dataclasses
 import datetime
 import decimal
+from enum import Enum, Flag, IntFlag, auto
 
 import pydantic
 import pytest
@@ -101,6 +102,26 @@ def test_basic_python_objects():
     assert not comparator(a, c)
     assert not comparator(a, d)
 
+    a = map
+    b = pow
+    c = pow
+    d = abs
+    assert comparator(b, c)
+    assert not comparator(a, b)
+    assert not comparator(c, d)
+
+    a = object()
+    b = object()
+    c = abs
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    a = type([])
+    b = type([])
+    c = type({})
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
 
 def test_standard_python_library_objects():
     a = datetime.datetime(2020, 2, 2, 2, 2, 2)
@@ -136,6 +157,39 @@ def test_standard_python_library_objects():
     a = decimal.Decimal(3.14)
     b = decimal.Decimal(3.14)
     c = decimal.Decimal(3.15)
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    class Color(Flag):
+        RED = auto()
+        GREEN = auto()
+        BLUE = auto()
+
+    class Color2(Enum):
+        RED = auto()
+        GREEN = auto()
+        BLUE = auto()
+
+    a = Color.RED
+    b = Color.RED
+    c = Color.GREEN
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    a = Color2.RED
+    b = Color2.RED
+    c = Color2.GREEN
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    class Color4(IntFlag):
+        RED = auto()
+        GREEN = auto()
+        BLUE = auto()
+
+    a = Color4.RED
+    b = Color4.RED
+    c = Color4.GREEN
     assert comparator(a, b)
     assert not comparator(a, c)
 
@@ -413,6 +467,69 @@ def test_pandas():
     ap = pd.arrays.SparseArray([1, 2, 4])
     assert comparator(an, ao)
     assert not comparator(an, ap)
+
+
+def test_pyrsistent():
+    try:
+        from pyrsistent import PBag, PClass, PRecord, field, pdeque, pmap, pset, pvector
+    except ImportError:
+        pytest.skip()
+
+    a = pmap({"a": 1, "b": 2})
+    b = pmap({"a": 1, "b": 2})
+    c = pmap({"a": 1, "b": 3})
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    d = pvector([1, 2, 3])
+    e = pvector([1, 2, 3])
+    f = pvector([1, 2, 4])
+    assert comparator(d, e)
+    assert not comparator(d, f)
+
+    g = pset([1, 2, 3])
+    h = pset([2, 3, 1])
+    i = pset([1, 2, 4])
+    assert comparator(g, h)
+    assert not comparator(g, i)
+
+    class TestRecord(PRecord):
+        a = field()
+        b = field()
+
+    j = TestRecord()
+    k = TestRecord()
+    l = TestRecord(a=2, b=3)
+    assert comparator(j, k)
+    assert not comparator(j, l)
+
+    class TestClass(PClass):
+        a = field()
+        b = field()
+
+    m = TestClass()
+    n = TestClass()
+    o = TestClass(a=1, b=3)
+    assert comparator(m, n)
+    assert not comparator(m, o)
+
+    p = pdeque([1, 2, 3], 3)
+    q = pdeque([1, 2, 3], 3)
+    r = pdeque([1, 2, 4], 3)
+    assert comparator(p, q)
+    assert not comparator(p, r)
+
+    s = PBag([1, 2, 3])
+    t = PBag([1, 2, 3])
+    u = PBag([1, 2, 4])
+    assert comparator(s, t)
+    assert not comparator(s, u)
+
+    v = pvector([1, 2, 3])
+    w = pvector([1, 2, 3])
+    x = pvector([1, 2, 4])
+    assert comparator(v, w)
+    assert not comparator(v, x)
 
 
 def test_custom_object():
