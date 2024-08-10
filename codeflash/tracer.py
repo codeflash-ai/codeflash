@@ -171,7 +171,6 @@ class Tracer:
         )
         for func, (cc, nc, tt, ct, callers) in self.stats.items():
             remapped_callers = [{"key": k, "value": v} for k, v in callers.items()]
-            print(remapped_callers)
             cur.execute(
                 "INSERT INTO pstats VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
