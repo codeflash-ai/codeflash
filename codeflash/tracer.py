@@ -11,6 +11,7 @@
 #
 import importlib.machinery
 import io
+import json
 import marshal
 import os
 import pathlib
@@ -169,9 +170,20 @@ class Tracer:
             "cumulative_time_ns INTEGER, callers BLOB)",
         )
         for func, (cc, nc, tt, ct, callers) in self.stats.items():
+            remapped_callers = [{"key": k, "value": v} for k, v in callers.items()]
             cur.execute(
                 "INSERT INTO pstats VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (os.path.realpath(func[0]), func[1], func[2], func[3], cc, nc, tt, ct, pickle.dumps(callers)),
+                (
+                    os.path.realpath(func[0]),
+                    func[1],
+                    func[2],
+                    func[3],
+                    cc,
+                    nc,
+                    tt,
+                    ct,
+                    json.dumps(remapped_callers),
+                ),
             )
         self.con.commit()
 
