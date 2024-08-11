@@ -630,6 +630,12 @@ def main():
         help="Trace a library module",
         default=False,
     )
+    parser.add_argument(
+        "--codeflash-config",
+        help="Optional path to the project's pyproject.toml file "
+        "with the codeflash config. Will be auto-discovered if not specified.",
+        default=None,
+    )
 
     if not sys.argv[1:]:
         parser.print_usage()
@@ -671,6 +677,7 @@ def main():
                 functions=args.only_functions,
                 max_function_count=args.max_function_count,
                 timeout=args.tracer_timeout,
+                config_file_path=args.codeflash_config,
             ).runctx(code, globs, None)
 
         except BrokenPipeError as exc:
