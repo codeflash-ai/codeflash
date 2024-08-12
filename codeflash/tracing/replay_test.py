@@ -20,9 +20,7 @@ def get_next_arg_and_return(
 ) -> Generator[Any]:
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
-    limit = (
-        num_to_get * 2 + 10
-    )  # we may have to get more than num_to_get*2 to get num_to_get valid pairs (revisit this assumption)
+    limit = num_to_get
     if class_name is not None:
         cursor = cur.execute(
             "SELECT * FROM function_calls WHERE function = ? AND filename = ? AND classname = ? ORDER BY time_ns ASC LIMIT ?",
@@ -34,11 +32,7 @@ def get_next_arg_and_return(
             (function_name, file_name, limit),
         )
 
-    counts = 0
     while (val := cursor.fetchone()) is not None:
-        if counts >= num_to_get:
-            break
-
         event_type = val[0]
         if event_type == "call":
             yield val[7]
@@ -97,7 +91,7 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
     ]
     metadata = f"""functions = {functions_to_optimize}
 trace_file_path = r"{trace_file}"
-"""
+"""  # trace_file_path path is parsed with regex later, format is important
     test_function_body = textwrap.dedent(
         """\
         for arg_val_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_name=r"{file_name}", num_to_get={max_run_count}):
@@ -129,7 +123,6 @@ trace_file_path = r"{trace_file}"
         if not func_property.is_top_level:
             # can't be imported and run in the replay test
             continue
-
         if func.class_name is None and not func_property.is_staticmethod:
             alias = get_function_alias(func.module_name, func.function_name)
             test_body = test_function_body.format(

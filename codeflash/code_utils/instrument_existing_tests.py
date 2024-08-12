@@ -7,6 +7,7 @@ from typing import Iterable
 import isort
 
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
+from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 
 
 class ReplaceCallNodeWithName(ast.NodeTransformer):
@@ -35,15 +36,22 @@ class ReplaceCallNodeWithName(ast.NodeTransformer):
 
 class InjectPerfOnly(ast.NodeTransformer):
     def __init__(
-        self, function_name: str, module_path: str, test_framework: str
+        self,
+        function: FunctionToOptimize,
+        module_path: str,
+        test_framework: str,
     ) -> None:
-        self.only_function_name = function_name
+        self.function_object = function
+        self.class_name = None
+        self.only_function_name = function.function_name
         self.module_path = module_path
         self.test_framework = test_framework
+        if len(function.parents) == 1 and function.parents[0].type == "ClassDef":
+            self.class_name = function.top_level_parent_name
 
     def update_line_node(
         self,
-            test_node: ast.stmt,
+        test_node: ast.stmt,
         node_name: str,
         index: str,
         test_class_name: str | None = None,
@@ -61,7 +69,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                 if hasattr(node.func, "value") and hasattr(node.func.value, "id"):
                     function_name = node.func.value.id + "." + function_name
 
-                if function_name == self.only_function_name:
+                if function_name == self.function_object.qualified_name:
                     call_node = node
                     break
 
@@ -78,7 +86,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                         ast.Constant(value=self.module_path),
                         ast.Constant(value=test_class_name or None),
                         ast.Constant(value=node_name),
-                        ast.Constant(value=self.only_function_name),
+                        ast.Constant(value=self.function_object.qualified_name),
                         ast.Constant(value=index),
                         ast.Name(id="codeflash_cur", ctx=ast.Load()),
                         ast.Name(id="codeflash_con", ctx=ast.Load()),
@@ -91,7 +99,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                 col_offset=test_node.col_offset,
             ),
         ]
-        subbed_node = ReplaceCallNodeWithName(self.only_function_name).visit(test_node)
+        subbed_node = ReplaceCallNodeWithName(self.function_object.qualified_name).visit(test_node)
 
         # TODO: Not just run the tests and ensure that the tests pass but also test the return value and
         #  compare that for equality amongst the original and the optimized version. This will ensure that the
@@ -114,7 +122,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                 if hasattr(node.func, "value") and hasattr(node.func.value, "id"):
                     function_name = node.func.value.id + "." + function_name
 
-                if function_name == self.only_function_name:
+                if function_name == self.function_object.qualified_name:
                     return True
 
         return False
@@ -230,7 +238,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                         func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
                         args=[ast.Constant(value=15)],
                         keywords=[],
-                    )
+                    ),
                 )
             i = len(node.body) - 1
             while i >= 0:
@@ -243,7 +251,12 @@ class InjectPerfOnly(ast.NodeTransformer):
                         compound_line_node: ast.stmt = line_node.body[j]
                         internal_node: ast.AST
                         for internal_node in ast.walk(compound_line_node):
-                            if isinstance(internal_node, ast.stmt) and self.is_target_function_line(internal_node):
+                            if isinstance(
+                                internal_node,
+                                (ast.stmt, ast.Assign),
+                            ) and self.is_target_function_line(
+                                internal_node,
+                            ):
                                 line_node.body[j : j + 1] = self.update_line_node(
                                     internal_node,
                                     node.name,
@@ -269,28 +282,40 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
     np_array is what we want
     """
 
-    def __init__(self, qualified_name: str) -> None:
-        self.split_qualified_name = qualified_name.split(".")
-        assert len(self.split_qualified_name) <= 2, "Only support functions in the format module.function"
-        self.imported_as = qualified_name
-        self.to_match = self.split_qualified_name[0]
-        try:
-            self.optional_method_name: str | None = self.split_qualified_name[1]
-        except IndexError:
-            self.optional_method_name = None
+    def __init__(self, function: FunctionToOptimize) -> None:
+        assert len(function.parents) <= 1, "Only support functions with one or less parent"
+        self.imported_as = function
+        self.function = function
+        if function.parents:
+            self.to_match = function.parents[0].name
+        else:
+            self.to_match = function.function_name
 
     # TODO: Validate if the function imported is actually from the right module
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         for alias in node.names:
             if alias.name == self.to_match and hasattr(alias, "asname") and alias.asname is not None:
-                self.imported_as = alias.asname + (
-                    "." + self.optional_method_name if self.optional_method_name else ""
-                )
+                if self.function.parents:
+                    self.imported_as = FunctionToOptimize(
+                        function_name=self.function.function_name,
+                        parents=[FunctionParent(alias.asname, "ClassDef")],
+                        file_path=self.function.file_path,
+                        starting_line=self.function.starting_line,
+                        ending_line=self.function.ending_line,
+                    )
+                else:
+                    self.imported_as = FunctionToOptimize(
+                        function_name=alias.asname,
+                        parents=[],
+                        file_path=self.function.file_path,
+                        starting_line=self.function.starting_line,
+                        ending_line=self.function.ending_line,
+                    )
 
 
 def inject_profiling_into_existing_test(
     test_path: str,
-    function_name: str,
+    function_to_optimize: FunctionToOptimize,
     root_path: str,
     test_framework: str,
 ) -> tuple[bool, str | None]:
@@ -299,15 +324,15 @@ def inject_profiling_into_existing_test(
     try:
         tree = ast.parse(test_code)
     except SyntaxError:
-        logging.exception("Syntax error in code")
+        logging.exception(f"Syntax error in code in file - {test_path}")
         return False, None
     # TODO: Pass the full name of function here, otherwise we can run into namespace clashes
     module_path = module_name_from_file_path(test_path, root_path)
-    import_visitor = FunctionImportedAsVisitor(function_name)
+    import_visitor = FunctionImportedAsVisitor(function_to_optimize)
     import_visitor.visit(tree)
-    function_name = import_visitor.imported_as
+    func = import_visitor.imported_as
 
-    tree = InjectPerfOnly(function_name, module_path, test_framework).visit(tree)
+    tree = InjectPerfOnly(func, module_path, test_framework).visit(tree)
     new_imports = [
         ast.Import(names=[ast.alias(name="time")]),
         ast.Import(names=[ast.alias(name="gc")]),

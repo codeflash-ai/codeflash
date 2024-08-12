@@ -7,7 +7,6 @@ import sys
 import tempfile
 
 import pytest
-
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import INDIVIDUAL_TESTCASE_TIMEOUT
 from codeflash.code_utils.instrument_existing_tests import (
@@ -15,6 +14,7 @@ from codeflash.code_utils.instrument_existing_tests import (
     InjectPerfOnly,
     inject_profiling_into_existing_test,
 )
+from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestType
 from codeflash.verification.test_runner import run_tests
@@ -103,8 +103,16 @@ class TestPigLatin(unittest.TestCase):
     with tempfile.NamedTemporaryFile(mode="w") as f:
         f.write(code)
         f.flush()
+        func = FunctionToOptimize(
+            function_name="sorter",
+            parents=[],
+            file_path="module.py",
+        )
         success, new_test = inject_profiling_into_existing_test(
-            f.name, "sorter", os.path.dirname(f.name), "unittest"
+            f.name,
+            func,
+            os.path.dirname(f.name),
+            "unittest",
         )
     assert success
     assert new_test == expected.format(
@@ -189,10 +197,14 @@ def test_prepare_image_for_yolo():
     with tempfile.NamedTemporaryFile(mode="w") as f:
         f.write(code)
         f.flush()
-
+        func = FunctionToOptimize(
+            function_name="prepare_image_for_yolo",
+            parents=[],
+            file_path="module.py",
+        )
         success, new_test = inject_profiling_into_existing_test(
             f.name,
-            "prepare_image_for_yolo",
+            func,
             os.path.dirname(f.name),
             pytest,
         )
@@ -271,16 +283,18 @@ def test_sort():
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = (
-            pathlib.Path(__file__).parent.resolve()
-            / "../code_to_optimize/tests/pytest/"
+        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        func = FunctionToOptimize(
+            function_name="sorter",
+            parents=[],
+            file_path="module.py",
         )
-        project_root_path = (
-            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
-        )
-
         success, new_test = inject_profiling_into_existing_test(
-            test_path, "sorter", project_root_path, "pytest"
+            test_path,
+            func,
+            project_root_path,
+            "pytest",
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -323,8 +337,7 @@ def test_sort():
         assert test_results[0].id.test_class_name is None
         assert test_results[0].id.test_function_name == "test_sort"
         assert (
-            test_results[0].id.test_module_path
-            == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
+            test_results[0].id.test_module_path == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
         )
         assert test_results[0].runtime > 0
         assert test_results[0].did_pass
@@ -334,8 +347,7 @@ def test_sort():
         assert test_results[1].id.test_class_name is None
         assert test_results[1].id.test_function_name == "test_sort"
         assert (
-            test_results[1].id.test_module_path
-            == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
+            test_results[1].id.test_module_path == "tests.pytest.test_perfinjector_bubble_sort_results_temp"
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
@@ -411,16 +423,19 @@ def test_sort_parametrized(input, expected_output):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = (
-            pathlib.Path(__file__).parent.resolve()
-            / "../code_to_optimize/tests/pytest/"
-        )
-        project_root_path = (
-            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
-        )
+        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
 
+        func = FunctionToOptimize(
+            function_name="sorter",
+            parents=[],
+            file_path="module.py",
+        )
         success, new_test = inject_profiling_into_existing_test(
-            test_path, "sorter", project_root_path, "pytest"
+            test_path,
+            func,
+            project_root_path,
+            "pytest",
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -568,16 +583,18 @@ def test_sort_parametrized_loop(input, expected_output):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = (
-            pathlib.Path(__file__).parent.resolve()
-            / "../code_to_optimize/tests/pytest/"
+        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        func = FunctionToOptimize(
+            function_name="sorter",
+            parents=[],
+            file_path="module.py",
         )
-        project_root_path = (
-            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
-        )
-
         success, new_test = inject_profiling_into_existing_test(
-            test_path, "sorter", project_root_path, "pytest"
+            test_path,
+            func,
+            project_root_path,
+            "pytest",
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -755,16 +772,19 @@ def test_sort():
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = (
-            pathlib.Path(__file__).parent.resolve()
-            / "../code_to_optimize/tests/pytest/"
-        )
-        project_root_path = (
-            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
-        )
+        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
 
+        func = FunctionToOptimize(
+            function_name="sorter",
+            parents=[],
+            file_path="module.py",
+        )
         success, new_test = inject_profiling_into_existing_test(
-            test_path, "sorter", project_root_path, "pytest"
+            test_path,
+            func,
+            project_root_path,
+            "pytest",
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -923,16 +943,19 @@ class TestPigLatin(unittest.TestCase):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = (
-            pathlib.Path(__file__).parent.resolve()
-            / "../code_to_optimize/tests/unittest/"
-        )
-        project_root_path = (
-            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
-        )
+        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
+        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
 
+        func = FunctionToOptimize(
+            function_name="sorter",
+            parents=[],
+            file_path="module.py",
+        )
         success, new_test = inject_profiling_into_existing_test(
-            test_path, "sorter", project_root_path, "unittest"
+            test_path,
+            func,
+            project_root_path,
+            "unittest",
         )
 
         assert success
@@ -1085,16 +1108,19 @@ class TestPigLatin(unittest.TestCase):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = (
-            pathlib.Path(__file__).parent.resolve()
-            / "../code_to_optimize/tests/unittest/"
-        )
-        project_root_path = (
-            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
-        )
+        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
+        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
 
+        func = FunctionToOptimize(
+            function_name="sorter",
+            parents=[],
+            file_path="module.py",
+        )
         success, new_test = inject_profiling_into_existing_test(
-            test_path, "sorter", project_root_path, "unittest"
+            test_path,
+            func,
+            project_root_path,
+            "unittest",
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -1246,16 +1272,15 @@ class TestPigLatin(unittest.TestCase):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = (
-            pathlib.Path(__file__).parent.resolve()
-            / "../code_to_optimize/tests/unittest/"
-        )
-        project_root_path = (
-            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
-        )
+        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
+        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
 
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path="module.py")
         success, new_test = inject_profiling_into_existing_test(
-            test_path, "sorter", project_root_path, "unittest"
+            test_path,
+            func,
+            project_root_path,
+            "unittest",
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -1409,16 +1434,19 @@ class TestPigLatin(unittest.TestCase):
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = (
-            pathlib.Path(__file__).parent.resolve()
-            / "../code_to_optimize/tests/unittest/"
-        )
-        project_root_path = (
-            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
-        )
+        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
+        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
 
+        f = FunctionToOptimize(
+            function_name="sorter",
+            file_path="module.py",
+            parents=[],
+        )
         success, new_test = inject_profiling_into_existing_test(
-            test_path, "sorter", project_root_path, "unittest"
+            test_path,
+            f,
+            project_root_path,
+            "unittest",
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -1529,8 +1557,15 @@ class TestPigLatin(unittest.TestCase):
 
 
 def test_update_line_node() -> None:
+    function = FunctionToOptimize(
+        function_name="sorter",
+        file_path="module.py",
+        parents=[],
+    )
     injectperf = InjectPerfOnly(
-        "sorter", "code_to_optimize.tests.pytest.test_bubble_sort", "pytest"
+        function,
+        "code_to_optimize.tests.pytest.test_bubble_sort",
+        "pytest",
     )
     node = ast.Assign(
         targets=[ast.Name(id="output", ctx=ast.Store())],
@@ -1559,25 +1594,44 @@ from module import functionB as function_B
 import class_name_B
 from nuitka.nodes.ImportNodes import ExpressionBuiltinImport as nuitka_nodes_ImportNodes_ExpressionBuiltinImport
 """
+    f = FunctionToOptimize(
+        function_name="functionA",
+        file_path="module.py",
+        parents=[],
+    )
     tree = ast.parse(code)
-    visitor = FunctionImportedAsVisitor("functionA")
+    visitor = FunctionImportedAsVisitor(f)
     visitor.visit(tree)
-    assert visitor.imported_as == "functionA"
+    assert visitor.imported_as.function_name == "functionA"
 
-    visitor = FunctionImportedAsVisitor("functionB")
+    f = FunctionToOptimize(
+        function_name="functionB",
+        file_path="module.py",
+        parents=[],
+    )
+    visitor = FunctionImportedAsVisitor(f)
     visitor.visit(tree)
-    assert visitor.imported_as == "function_B"
+    assert visitor.imported_as.function_name == "function_B"
 
-    visitor = FunctionImportedAsVisitor("ExpressionBuiltinImport.method_name")
+    f = FunctionToOptimize(
+        function_name="method_name",
+        file_path="module.py",
+        parents=[FunctionParent("ExpressionBuiltinImport", "ClassDef")],
+    )
+    visitor = FunctionImportedAsVisitor(f)
     visitor.visit(tree)
     assert (
-        visitor.imported_as
-        == "nuitka_nodes_ImportNodes_ExpressionBuiltinImport.method_name"
+        visitor.imported_as.qualified_name == "nuitka_nodes_ImportNodes_ExpressionBuiltinImport.method_name"
     )
 
-    visitor = FunctionImportedAsVisitor("class_name_B")
+    f = FunctionToOptimize(
+        function_name="class_name_B",
+        file_path="module.py",
+        parents=[],
+    )
+    visitor = FunctionImportedAsVisitor(f)
     visitor.visit(tree)
-    assert visitor.imported_as == "class_name_B"
+    assert visitor.imported_as.qualified_name == "class_name_B"
 
 
 def test_class_function_instrumentation() -> None:
@@ -1635,12 +1689,18 @@ def test_class_name_A_function_name():
         with open(test_path, "w") as f:
             f.write(code)
 
-        project_root_path = (
-            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        func = FunctionToOptimize(
+            function_name="function_name",
+            file_path=str(project_root_path / "module.py"),
+            parents=[FunctionParent("class_name", "ClassDef")],
         )
 
         success, new_test = inject_profiling_into_existing_test(
-            test_path, "class_name.function_name", project_root_path, "pytest"
+            test_path,
+            func,
+            project_root_path,
+            "pytest",
         )
     finally:
         pathlib.Path(test_path).unlink(missing_ok=True)
@@ -1718,16 +1778,19 @@ def test_common_tags_1():
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = (
-            pathlib.Path(__file__).parent.resolve()
-            / "../code_to_optimize/tests/pytest/"
-        )
-        project_root_path = (
-            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        func = FunctionToOptimize(
+            function_name="find_common_tags",
+            file_path=str(project_root_path / "module.py"),
+            parents=[],
         )
 
         success, new_test = inject_profiling_into_existing_test(
-            test_path, "find_common_tags", project_root_path, "pytest"
+            test_path,
+            func,
+            project_root_path,
+            "pytest",
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -1797,16 +1860,19 @@ def test_sort():
         with open(test_path, "w") as f:
             f.write(code)
 
-        tests_root = (
-            pathlib.Path(__file__).parent.resolve()
-            / "../code_to_optimize/tests/pytest/"
-        )
-        project_root_path = (
-            pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        func = FunctionToOptimize(
+            function_name="sorter",
+            file_path=str(project_root_path / "module.py"),
+            parents=[],
         )
 
         success, new_test = inject_profiling_into_existing_test(
-            test_path, "sorter", project_root_path, "pytest"
+            test_path,
+            func,
+            project_root_path,
+            "pytest",
         )
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -1815,3 +1881,97 @@ def test_sort():
         ).replace('"', "'")
     finally:
         pathlib.Path(test_path).unlink(missing_ok=True)
+
+
+def test_class_method_instrumentation():
+    code = """from code_to_optimize.bubble_sort import BubbleSorter
+
+
+def test_sort():
+    input = [5, 4, 3, 2, 1, 0]
+    output = BubbleSorter.sorter(input)
+    assert output == [0, 1, 2, 3, 4, 5]
+
+    input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
+    output = BubbleSorter.sorter(input)
+    assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
+
+    expected = """import gc
+import os
+import sqlite3
+import time
+
+import dill as pickle
+import timeout_decorator
+
+from code_to_optimize.bubble_sort import BubbleSorter
+
+
+def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
+    if not hasattr(codeflash_wrap, 'index'):
+        codeflash_wrap.index = {{}}
+    if test_id in codeflash_wrap.index:
+        codeflash_wrap.index[test_id] += 1
+    else:
+        codeflash_wrap.index[test_id] = 0
+    codeflash_test_index = codeflash_wrap.index[test_id]
+    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
+    gc.disable()
+    counter = time.perf_counter_ns()
+    return_value = wrapped(*args, **kwargs)
+    codeflash_duration = time.perf_counter_ns() - counter
+    gc.enable()
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    codeflash_con.commit()
+    return return_value
+
+def test_sort():
+    codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
+    codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
+    codeflash_cur = codeflash_con.cursor()
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    input = [5, 4, 3, 2, 1, 0]
+    codeflash_return_value = codeflash_wrap(BubbleSorter.sorter, 'tests.pytest.test_perfinjector_bubble_sort_results_temp', None, 'test_sort', 'BubbleSorter.sorter', '5', codeflash_cur, codeflash_con, input)
+    output = codeflash_return_value
+    assert output == [0, 1, 2, 3, 4, 5]
+    input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
+    codeflash_return_value = codeflash_wrap(BubbleSorter.sorter, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter', '8', codeflash_cur, codeflash_con, input)
+    output = codeflash_return_value
+    assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+    codeflash_con.close()
+"""
+
+    function_to_optimize = FunctionToOptimize(
+        function_name="sorter",
+        file_path="/Users/renaud/repos/codeflash/cli/code_to_optimize/bubble_sort.py",
+        parents=[FunctionParent("BubbleSorter", "ClassDef")],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    test_path = (
+        pathlib.Path(__file__).parent.resolve()
+        / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_results_temp.py"
+    )
+    try:
+        with open(test_path, "w") as f:
+            f.write(code)
+
+        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+        project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+
+        success, new_test = inject_profiling_into_existing_test(
+            test_path,
+            function_to_optimize,
+            project_root_path,
+            "pytest",
+        )
+        assert success
+        assert new_test.replace('"', "'") == expected.format(
+            module_path="tests.pytest.test_perfinjector_bubble_sort_results_temp",
+            tmp_dir_path=get_run_tmp_file("test_return_values"),
+        ).replace('"', "'")
+    finally:
+        pathlib.Path(test_path).unlink

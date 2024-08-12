@@ -1,7 +1,9 @@
 import datetime
 import decimal
+import enum
 import logging
 import math
+import types
 from typing import Any
 
 import sentry_sdk
@@ -31,6 +33,13 @@ try:
     HAS_PANDAS = True
 except ImportError:
     HAS_PANDAS = False
+
+try:
+    import pyrsistent
+
+    HAS_PYRSISTENT = True
+except ImportError:
+    HAS_PYRSISTENT = False
 
 
 def comparator(orig: Any, new: Any) -> bool:
@@ -74,6 +83,8 @@ def comparator(orig: Any, new: Any) -> bool:
                 bytearray,
                 memoryview,
                 frozenset,
+                enum.Enum,
+                type,
             ),
         ):
             return orig == new
@@ -146,6 +157,21 @@ def comparator(orig: Any, new: Any) -> bool:
         except Exception:
             pass
 
+        if HAS_PYRSISTENT and isinstance(
+            orig,
+            (
+                pyrsistent.PMap,
+                pyrsistent.PVector,
+                pyrsistent.PSet,
+                pyrsistent.PRecord,
+                pyrsistent.PClass,
+                pyrsistent.PBag,
+                pyrsistent.PList,
+                pyrsistent.PDeque,
+            ),
+        ):
+            return orig == new
+
         if isinstance(
             orig,
             (datetime.datetime, datetime.date, datetime.timedelta, datetime.time, datetime.timezone),
@@ -164,10 +190,7 @@ def comparator(orig: Any, new: Any) -> bool:
         if hasattr(orig, "__dict__") and hasattr(new, "__dict__"):
             orig_keys = orig.__dict__
             new_keys = new.__dict__
-            if (
-                str(type(orig_keys)) == "<class 'mappingproxy'>"
-                and str(type(new_keys)) == "<class 'mappingproxy'>"
-            ):
+            if type(orig_keys) == types.MappingProxyType and type(new_keys) == types.MappingProxyType:
                 # meta class objects
                 if orig != new:
                     return False
@@ -177,6 +200,11 @@ def comparator(orig: Any, new: Any) -> bool:
                 new_keys = {k: v for k, v in new_keys.items() if not k.startswith("__")}
 
             return comparator(orig_keys, new_keys)
+
+        if type(orig) in [types.BuiltinFunctionType, types.BuiltinMethodType]:
+            return new == orig
+        if str(type(orig)) == "<class 'object'>":
+            return True
 
         # TODO : Add other types here
         logging.warning(f"Unknown comparator input type: {type(orig)}")

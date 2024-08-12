@@ -1,5 +1,5 @@
+import json
 import os.path
-import pickle
 import pstats
 import sqlite3
 from copy import copy
@@ -31,6 +31,8 @@ class ProfileStats(pstats.Stats):
             cumulative_time_ns,
             callers,
         ) in pdata:
+            loaded_callers = json.loads(callers)
+            unmapped_callers = {caller["key"]: caller["value"] for caller in loaded_callers}
             self.stats[(filename, line_number, function)] = (
                 call_count_nonrecursive,
                 num_callers,
@@ -38,7 +40,7 @@ class ProfileStats(pstats.Stats):
                 cumulative_time_ns / time_conversion_factor
                 if time_conversion_factor != 1
                 else cumulative_time_ns,
-                pickle.loads(callers),
+                unmapped_callers,
             )
 
     def print_stats(self, *amount):
@@ -67,3 +69,14 @@ class ProfileStats(pstats.Stats):
             print(file=self.stream)
             print(file=self.stream)
         return self
+
+
+def get_trace_total_run_time_ns(trace_file_path: str) -> int:
+    if not os.path.isfile(trace_file_path):
+        return 0
+    con = sqlite3.connect(trace_file_path)
+    cur = con.cursor()
+    time_data = cur.execute("SELECT time_ns FROM total_time").fetchone()
+    con.close()
+    time_data = time_data[0] if time_data else 0
+    return int(time_data)
