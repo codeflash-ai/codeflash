@@ -1,5 +1,5 @@
 from codeflash.models.models import OptimizedCandidateResult
-from codeflash.result.critic import speedup_critic, test_critic
+from codeflash.result.critic import speedup_critic, generated_test_critic
 from codeflash.verification.test_results import (
     TestResults,
     FunctionTestInvocation,
@@ -45,7 +45,7 @@ def test_speedup_critic():
     )  # 6% improvement
 
 
-def test_test_critic():
+def test_generated_test_critic():
     test_1 = FunctionTestInvocation(
         id=InvocationId(
             test_module_path="",
@@ -121,7 +121,7 @@ def test_test_critic():
         best_test_results=TestResults(test_results=test_results),
     )
 
-    assert test_critic(candidate_result)
+    assert generated_test_critic(candidate_result)
 
     test_results = [test_1, test_3]
 
@@ -131,7 +131,7 @@ def test_test_critic():
         best_test_results=TestResults(test_results=test_results),
     )
 
-    assert not test_critic(candidate_result)
+    assert not generated_test_critic(candidate_result)
 
     test_results = [test_1, test_3, test_4]
 
@@ -141,7 +141,7 @@ def test_test_critic():
         best_test_results=TestResults(test_results=test_results),
     )
 
-    assert not test_critic(candidate_result)
+    assert not generated_test_critic(candidate_result)
 
     test_results = [test_1]
 
@@ -151,7 +151,7 @@ def test_test_critic():
         best_test_results=TestResults(test_results=test_results),
     )
 
-    assert not test_critic(candidate_result)
+    assert not generated_test_critic(candidate_result)
 
     test_results = [test_1, test_2]
 
@@ -161,7 +161,7 @@ def test_test_critic():
         best_test_results=TestResults(test_results=test_results),
     )
 
-    assert test_critic(candidate_result)
+    assert generated_test_critic(candidate_result)
 
     test_results = [test_1, test_4]
 
@@ -171,4 +171,4 @@ def test_test_critic():
         best_test_results=TestResults(test_results=test_results),
     )
 
-    assert not test_critic(candidate_result)
+    assert not generated_test_critic(candidate_result)
