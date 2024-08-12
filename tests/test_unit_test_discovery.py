@@ -38,8 +38,12 @@ def test_discover_tests_pytest_with_temp_dir_root():
         # Create a dummy test file
         test_file_path = pathlib.Path(tmpdirname) / "test_dummy.py"
         test_file_content = (
+            "import pytest\n"
             "from dummy_code import dummy_function\n\n"
             "def test_dummy_function():\n"
+            "    assert dummy_function() is True\n"
+            "@pytest.mark.parametrize('param', [True])\n"
+            "def test_dummy_parametrized_function(param):\n"
             "    assert dummy_function() is True\n"
         )
         test_file_path.write_text(test_file_content)
@@ -61,7 +65,16 @@ def test_discover_tests_pytest_with_temp_dir_root():
 
         # Check if the dummy test file is discovered
         assert len(discovered_tests) == 1
+        assert len(discovered_tests["dummy_code.dummy_function"]) == 2
         assert discovered_tests["dummy_code.dummy_function"][0].test_file == str(test_file_path)
+        assert discovered_tests["dummy_code.dummy_function"][1].test_file == str(test_file_path)
+        assert {
+            discovered_tests["dummy_code.dummy_function"][0].test_function,
+            discovered_tests["dummy_code.dummy_function"][1].test_function,
+        } == {
+            "test_dummy_parametrized_function[True]",
+            "test_dummy_function",
+        }
 
 
 def test_discover_tests_pytest_with_multi_level_dirs():
