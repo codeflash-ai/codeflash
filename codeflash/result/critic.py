@@ -34,3 +34,16 @@ def speedup_critic(
         return True
     else:
         return False
+
+
+def test_critic(candidate_result: OptimizedCandidateResult) -> bool:
+    test_results = candidate_result.best_test_results.test_results
+    count = len(
+        [
+            test_result
+            for test_result in test_results
+            if test_result.test_type.name == "GENERATED_REGRESSION"
+            and test_result.did_pass
+        ]
+    )
+    return count > 1
