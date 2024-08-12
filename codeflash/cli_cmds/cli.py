@@ -190,7 +190,7 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
                 "I need a git repository to run --all and open PRs for optimizations. Exiting...",
             )
             apologize_and_exit()
-        if not check_and_push_branch(git_repo):
+        if not args.no_pr and not check_and_push_branch(git_repo):
             logging.critical("❌ Branch is not pushed. Exiting...")
             sys.exit(1)
         owner, repo = get_repo_owner_and_name(git_repo)
