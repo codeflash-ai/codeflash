@@ -4,7 +4,8 @@ import re
 import shlex
 import unittest
 from collections import defaultdict
-from typing import Dict, List, Optional
+from multiprocessing import Process, Queue
+from typing import Dict, List, Optional, Tuple
 
 import jedi
 from pydantic.dataclasses import dataclass
@@ -45,6 +46,54 @@ def discover_unit_tests(
     return discover_tests(cfg, discover_only_these_tests)
 
 
+def run_pytest_discovery_new_process(queue: Queue, cwd: str, tests_root: str) -> Tuple[int, List]:
+    import pytest
+
+    collected_tests = []
+
+    os.chdir(cwd)
+    collected_tests = []
+    tests = []
+
+    class PytestCollectionPlugin:
+        def pytest_collection_finish(self, session):
+            collected_tests.extend(session.items)
+
+    try:
+        exitcode = pytest.main(
+            [tests_root, "--collect-only", "-pno:terminal", "-m", "not skip"],
+            plugins=[PytestCollectionPlugin()],
+        )
+    except Exception as e:
+        logging.exception(f"Failed to collect tests: {e!s}")
+        exitcode = -1
+        queue.put((exitcode, tests))
+    tests = parse_pytest_collection_results(collected_tests)
+    queue.put((exitcode, tests))
+
+
+def parse_pytest_collection_results(
+    pytest_tests: str,
+) -> List[TestsInFile]:
+    test_results = []
+    for test in pytest_tests:
+        test_class = None
+        test_file_path = str(test.path)
+        if test.cls:
+            test_class = test.parent.name
+        test_type = TestType.REPLAY_TEST if "__replay_test" in test_file_path else TestType.EXISTING_UNIT_TEST
+        test_results.append(
+            TestsInFile(
+                test_file=str(test.path),
+                test_class=test_class,
+                test_function=test.name,
+                test_suite=None,  # not used in pytest until now
+                test_type=test_type,
+            ),
+        )
+    return test_results
+
+
 def discover_tests_pytest(
     cfg: TestConfig,
     discover_only_these_tests: Optional[List[str]] = None,
@@ -55,23 +104,13 @@ def discover_tests_pytest(
         cfg.pytest_cmd,
         posix=os.name != "nt",
     )  # TODO: Do we need this for test collection?
-    old_cwd = os.getcwd()
-    import pytest
 
-    collected_tests = []
-
-    class PytestCollectionPlugin:
-        def pytest_collection_finish(self, session):
-            collected_tests.extend(session.items)
-
-    os.chdir(project_root)
-    pytest.main(
-        [tests_root, "--collect-only", "-pno:terminal", "-m", "not skip"],
-        plugins=[PytestCollectionPlugin()],
-    )
-    os.chdir(old_cwd)
-
-    tests = parse_pytest_collection_results(collected_tests)
+    q = Queue()
+    p = Process(target=run_pytest_discovery_new_process, args=(q, project_root, tests_root))
+    p.start()
+    exitcode, tests = q.get()
+    p.join()
+    logging.debug(f"Pytest collection exit code: {exitcode}")
 
     file_to_test_map = defaultdict(list)
     for test in tests:
@@ -266,25 +305,3 @@ def process_test_files(
     for function, tests in function_to_test_map.items():
         deduped_function_to_test_map[function] = list(set(tests))
     return deduped_function_to_test_map
-
-
-def parse_pytest_collection_results(
-    pytest_tests: str,
-) -> List[TestsInFile]:
-    test_results = []
-    for test in pytest_tests:
-        test_class = None
-        test_file_path = str(test.path)
-        if test.cls:
-            test_class = test.parent.name
-        test_type = TestType.REPLAY_TEST if "__replay_test" in test_file_path else TestType.EXISTING_UNIT_TEST
-        test_results.append(
-            TestsInFile(
-                test_file=str(test.path),
-                test_class=test_class,
-                test_function=test.name,
-                test_suite=None,  # not used in pytest until now
-                test_type=test_type,
-            ),
-        )
-    return test_results
