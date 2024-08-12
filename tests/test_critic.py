@@ -40,9 +40,7 @@ def test_speedup_critic():
         best_test_results=TestResults(),
     )
 
-    assert speedup_critic(
-        candidate_result, original_code_runtime, best_runtime_until_now
-    )  # 6% improvement
+    assert speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now)  # 6% improvement
 
 
 def test_generated_test_critic():
