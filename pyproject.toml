@@ -16,7 +16,7 @@ keywords = ["codeflash", "performance", "optimization", "ai", "code", "machine l
 # poetry self add poetry-dynamic-versioning
 
 [tool.poetry.dependencies]
-python = ">=3.9"
+python = ">=3.9,<3.14"
 unidiff = ">=0.7.4"
 pytest = ">=7.0.0"
 gitpython = ">=3.1.31"
