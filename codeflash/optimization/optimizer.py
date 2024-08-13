@@ -69,7 +69,7 @@ from codeflash.optimization.function_context import (
     get_constrained_function_context_and_helper_functions,
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
-from codeflash.result.critic import speedup_critic
+from codeflash.result.critic import speedup_critic, generated_test_critic
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog import ph
 from codeflash.verification.equivalence import compare_test_results
@@ -462,7 +462,7 @@ class Optimizer:
                         candidate_result,
                         original_code_baseline.runtime,
                         best_runtime_until_now,
-                    ):
+                    ) and generated_test_critic(candidate_result):
                         best_optimization = BestOptimization(
                             candidate=candidate,
                             helper_functions=code_context.helper_functions,
