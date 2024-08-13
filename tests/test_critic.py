@@ -111,6 +111,24 @@ def test_generated_test_critic():
         return_value=None,
         timed_out=False,
     )
+
+    test_5 = FunctionTestInvocation(
+        id=InvocationId(
+            test_module_path="",
+            test_class_name="",
+            test_function_name="test_5",
+            function_getting_tested="sorter",
+            iteration_id="",
+        ),
+        file_name="test_5",
+        did_pass=True,
+        runtime=0,
+        test_framework="pytest",
+        test_type=TestType.REPLAY_TEST,
+        return_value=None,
+        timed_out=False,
+    )
+
     test_results = [test_1, test_2, test_3]
 
     candidate_result = OptimizedCandidateResult(
@@ -170,3 +188,23 @@ def test_generated_test_critic():
     )
 
     assert not generated_test_critic(candidate_result)
+
+    test_results = [test_4, test_5]
+
+    candidate_result = OptimizedCandidateResult(
+        times_run=5,
+        best_test_runtime=100,
+        best_test_results=TestResults(test_results=test_results),
+    )
+
+    assert generated_test_critic(candidate_result)
+
+    test_results = [test_1, test_2, test_3, test_4, test_5]
+
+    candidate_result = OptimizedCandidateResult(
+        times_run=5,
+        best_test_runtime=100,
+        best_test_results=TestResults(test_results=test_results),
+    )
+
+    assert generated_test_critic(candidate_result)
