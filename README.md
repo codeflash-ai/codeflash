@@ -1,6 +1,8 @@
-# Codeflash CLI
+# Codeflash
 
 Codeflash is an AI optimization tool that automatically improves the performance of your Python code while maintaining its correctness.
+
+![img.png](img.png)
 
 ## Features
 
