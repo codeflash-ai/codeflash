@@ -34,3 +34,21 @@ def speedup_critic(
         return True
     else:
         return False
+
+
+def generated_test_critic(candidate_result: OptimizedCandidateResult) -> bool:
+    test_results = candidate_result.best_test_results.test_results
+    passed_tests = [
+        test_result
+        for test_result in test_results
+        if (
+            test_result.test_type.name == "GENERATED_REGRESSION"
+            or test_result.test_type.name == "REPLAY_TEST"
+        )
+        and test_result.did_pass
+    ]
+
+    if len(passed_tests) == 1 and passed_tests[0].test_type.name == "REPLAY_TEST":
+        return True
+
+    return len(passed_tests) > 1
