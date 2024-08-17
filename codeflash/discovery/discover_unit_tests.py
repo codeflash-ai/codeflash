@@ -49,8 +49,6 @@ def discover_unit_tests(
 def run_pytest_discovery_new_process(queue: Queue, cwd: str, tests_root: str) -> Tuple[int, List]:
     import pytest
 
-    collected_tests = []
-
     os.chdir(cwd)
     collected_tests = []
     tests = []
