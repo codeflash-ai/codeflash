@@ -30,9 +30,6 @@ from codeflash.code_utils.code_utils import (
     get_run_tmp_file,
     module_name_from_file_path,
 )
-from codeflash.code_utils.remove_generated_tests import (
-    remove_functions_from_generated_tests,
-)
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
     MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS,
@@ -44,6 +41,9 @@ from codeflash.code_utils.config_consts import (
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import (
     inject_profiling_into_existing_test,
+)
+from codeflash.code_utils.remove_generated_tests import (
+    remove_functions_from_generated_tests,
 )
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import (
@@ -69,7 +69,7 @@ from codeflash.optimization.function_context import (
     get_constrained_function_context_and_helper_functions,
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
-from codeflash.result.critic import speedup_critic, generated_test_critic
+from codeflash.result.critic import generated_test_critic, speedup_critic
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog import ph
 from codeflash.verification.equivalence import compare_test_results
@@ -820,9 +820,6 @@ class Optimizer:
         test_times_list = []
         first_run = True
         do_break = False
-        logging.info(
-            f"Running {len(instrumented_unittests_created_for_function)} tests for {function_name} ...",
-        )
         while (
             cumulative_test_runtime < MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS
             and cumulative_test_runs < MAX_TEST_FUNCTION_RUNS
