@@ -472,14 +472,14 @@ def install_github_actions() -> None:
         from importlib.resources import files
 
         py_version = sys.version_info
-        python_version_string = f" {py_version.major}.{py_version.minor}"
+        python_version_string = f"'{py_version.major}.{py_version.minor}'"
         optimize_yml_content = (
             files("codeflash")
             .joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml")
             .read_text(encoding="utf-8")
         )
         optimize_yml_content = optimize_yml_content.replace(
-            " {{ python_version }}",
+            "{{ python_version }}",
             python_version_string,
         )
         with open(optimize_yaml_path, "w", encoding="utf8") as optimize_yml_file:
