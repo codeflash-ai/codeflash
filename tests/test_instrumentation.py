@@ -2102,4 +2102,4 @@ def test_code_replacement10() -> None:
     assert new_test == expected.format(
         module_path=os.path.basename(f.name),
         tmp_dir_path=get_run_tmp_file("test_return_values"),
-    )
+    ).replace('"', "'")
