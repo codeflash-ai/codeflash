@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import os
 import os.path
 import pathlib
 import sys
@@ -11,9 +12,9 @@ from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import INDIVIDUAL_TESTCASE_TIMEOUT
 from codeflash.code_utils.instrument_existing_tests import (
     FunctionImportedAsVisitor,
-    InjectPerfOnly,
     inject_profiling_into_existing_test,
 )
+from codeflash.discovery.discover_unit_tests import CodePosition
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestType
@@ -38,8 +39,7 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(output, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
 
         input = list(reversed(range(5000)))
-        output = sorter(input)
-        self.assertEqual(output, list(range(5000)))
+        self.assertEqual(sorter(input), list(range(5000)))
 """
     expected = """import gc
 import os
@@ -87,17 +87,13 @@ class TestPigLatin(unittest.TestCase):
         codeflash_cur = codeflash_con.cursor()
         codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
         input = [5, 4, 3, 2, 1, 0]
-        codeflash_return_value = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '5', codeflash_cur, codeflash_con, input)
-        output = codeflash_return_value
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_cur, codeflash_con, input)
         self.assertEqual(output, [0, 1, 2, 3, 4, 5])
         input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-        codeflash_return_value = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '8', codeflash_cur, codeflash_con, input)
-        output = codeflash_return_value
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_cur, codeflash_con, input)
         self.assertEqual(output, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
         input = list(reversed(range(5000)))
-        codeflash_return_value = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '11', codeflash_cur, codeflash_con, input)
-        output = codeflash_return_value
-        self.assertEqual(output, list(range(5000)))
+        self.assertEqual(codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_cur, codeflash_con, input), list(range(5000)))
         codeflash_con.close()
 """
     with tempfile.NamedTemporaryFile(mode="w") as f:
@@ -108,12 +104,17 @@ class TestPigLatin(unittest.TestCase):
             parents=[],
             file_path="module.py",
         )
+        original_cwd = os.getcwd()
+        run_cwd = pathlib.Path(__file__).parent.parent.resolve()
+        os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
             f.name,
+            [CodePosition(9, 17), CodePosition(13, 17), CodePosition(17, 17)],
             func,
             os.path.dirname(f.name),
             "unittest",
         )
+        os.chdir(original_cwd)
     assert success
     assert new_test == expected.format(
         module_path=os.path.basename(f.name),
@@ -189,8 +190,7 @@ def test_prepare_image_for_yolo():
 """
     expected += """        args = pickle.loads(arg_val_pkl)
         return_val_1 = pickle.loads(return_val_pkl)
-        codeflash_return_value = codeflash_wrap(packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo, '{module_path}', None, 'test_prepare_image_for_yolo', 'packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo', '4_2', codeflash_cur, codeflash_con, **args)
-        ret = codeflash_return_value
+        ret = codeflash_wrap(packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo, '{module_path}', None, 'test_prepare_image_for_yolo', 'packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo', '0_2', codeflash_cur, codeflash_con, **args)
         assert compare_results(return_val_1, ret)
     codeflash_con.close()
 """
@@ -202,12 +202,17 @@ def test_prepare_image_for_yolo():
             parents=[],
             file_path="module.py",
         )
+        original_cwd = os.getcwd()
+        run_cwd = pathlib.Path(__file__).parent.parent.resolve()
+        os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
             f.name,
+            [CodePosition(10, 14)],
             func,
             os.path.dirname(f.name),
             pytest,
         )
+        os.chdir(original_cwd)
     assert success
     assert new_test == expected.format(
         module_path=os.path.basename(f.name),
@@ -265,12 +270,10 @@ def test_sort():
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     input = [5, 4, 3, 2, 1, 0]
-    codeflash_return_value = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '5', codeflash_cur, codeflash_con, input)
-    output = codeflash_return_value
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '1', codeflash_cur, codeflash_con, input)
     assert output == [0, 1, 2, 3, 4, 5]
     input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-    codeflash_return_value = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '8', codeflash_cur, codeflash_con, input)
-    output = codeflash_return_value
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '4', codeflash_cur, codeflash_con, input)
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()
 """
@@ -285,17 +288,22 @@ def test_sort():
 
         tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
         project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        original_cwd = os.getcwd()
+        run_cwd = pathlib.Path(__file__).parent.parent.resolve()
         func = FunctionToOptimize(
             function_name="sorter",
             parents=[],
             file_path="module.py",
         )
+        os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
             test_path,
+            [CodePosition(6, 13), CodePosition(10, 13)],
             func,
             project_root_path,
             "pytest",
         )
+        os.chdir(original_cwd)
         assert success
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_results_temp",
@@ -333,7 +341,7 @@ def test_sort():
             optimization_iteration=0,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
-        assert test_results[0].id.iteration_id == "5_0"
+        assert test_results[0].id.iteration_id == "1_0"
         assert test_results[0].id.test_class_name is None
         assert test_results[0].id.test_function_name == "test_sort"
         assert (
@@ -343,7 +351,7 @@ def test_sort():
         assert test_results[0].did_pass
 
         assert test_results[1].id.function_getting_tested == "sorter"
-        assert test_results[1].id.iteration_id == "8_0"
+        assert test_results[1].id.iteration_id == "4_0"
         assert test_results[1].id.test_class_name is None
         assert test_results[1].id.test_function_name == "test_sort"
         assert (
@@ -410,33 +418,37 @@ def test_sort_parametrized(input, expected_output):
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
-    codeflash_return_value = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized', 'sorter', '4', codeflash_cur, codeflash_con, input)
-    output = codeflash_return_value
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized', 'sorter', '0', codeflash_cur, codeflash_con, input)
     assert output == expected_output
     codeflash_con.close()
 """
     test_path = (
         pathlib.Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_parametrized_results_temp.py"
-    )
+    ).resolve()
     try:
         with open(test_path, "w") as f:
             f.write(code)
 
         tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
         project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        original_cwd = os.getcwd()
+        run_cwd = pathlib.Path(__file__).parent.parent.resolve()
 
         func = FunctionToOptimize(
             function_name="sorter",
             parents=[],
             file_path="module.py",
         )
+        os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
             test_path,
+            [CodePosition(14, 13)],
             func,
             project_root_path,
             "pytest",
         )
+        os.chdir(original_cwd)
         assert success
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp",
@@ -476,7 +488,7 @@ def test_sort_parametrized(input, expected_output):
         )
 
         assert test_results[0].id.function_getting_tested == "sorter"
-        assert test_results[0].id.iteration_id == "4_0"
+        assert test_results[0].id.iteration_id == "0_0"
         assert test_results[0].id.test_class_name is None
         assert test_results[0].id.test_function_name == "test_sort_parametrized"
         assert (
@@ -487,7 +499,7 @@ def test_sort_parametrized(input, expected_output):
         assert test_results[0].did_pass
 
         assert test_results[1].id.function_getting_tested == "sorter"
-        assert test_results[1].id.iteration_id == "4_1"
+        assert test_results[1].id.iteration_id == "0_1"
         assert test_results[1].id.test_class_name is None
         assert test_results[1].id.test_function_name == "test_sort_parametrized"
         assert (
@@ -498,7 +510,7 @@ def test_sort_parametrized(input, expected_output):
         assert test_results[1].did_pass
 
         assert test_results[2].id.function_getting_tested == "sorter"
-        assert test_results[2].id.iteration_id == "4_2"
+        assert test_results[2].id.iteration_id == "0_2"
         assert test_results[2].id.test_class_name is None
         assert test_results[2].id.test_function_name == "test_sort_parametrized"
         assert (
@@ -569,8 +581,7 @@ def test_sort_parametrized_loop(input, expected_output):
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     for i in range(2):
-        codeflash_return_value = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized_loop', 'sorter', '4_0', codeflash_cur, codeflash_con, input)
-        output = codeflash_return_value
+        output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized_loop', 'sorter', '0_0', codeflash_cur, codeflash_con, input)
         assert output == expected_output
     codeflash_con.close()
 """
@@ -585,17 +596,23 @@ def test_sort_parametrized_loop(input, expected_output):
 
         tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
         project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        original_cwd = os.getcwd()
+        run_cwd = pathlib.Path(__file__).parent.parent.resolve()
+
         func = FunctionToOptimize(
             function_name="sorter",
             parents=[],
             file_path="module.py",
         )
+        os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
             test_path,
+            [CodePosition(15, 17)],
             func,
             project_root_path,
             "pytest",
         )
+        os.chdir(original_cwd)
         assert success
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp",
@@ -635,7 +652,7 @@ def test_sort_parametrized_loop(input, expected_output):
         )
 
         assert test_results[0].id.function_getting_tested == "sorter"
-        assert test_results[0].id.iteration_id == "4_0_0"
+        assert test_results[0].id.iteration_id == "0_0_0"
         assert test_results[0].id.test_class_name is None
         assert test_results[0].id.test_function_name == "test_sort_parametrized_loop"
         assert (
@@ -646,7 +663,7 @@ def test_sort_parametrized_loop(input, expected_output):
         assert test_results[0].did_pass
 
         assert test_results[1].id.function_getting_tested == "sorter"
-        assert test_results[1].id.iteration_id == "4_0_1"
+        assert test_results[1].id.iteration_id == "0_0_1"
         assert test_results[1].id.test_class_name is None
         assert test_results[1].id.test_function_name == "test_sort_parametrized_loop"
         assert (
@@ -657,7 +674,7 @@ def test_sort_parametrized_loop(input, expected_output):
         assert test_results[1].did_pass
 
         assert test_results[2].id.function_getting_tested == "sorter"
-        assert test_results[2].id.iteration_id == "4_0_2"
+        assert test_results[2].id.iteration_id == "0_0_2"
         assert test_results[2].id.test_class_name is None
         assert test_results[2].id.test_function_name == "test_sort_parametrized_loop"
         assert (
@@ -668,7 +685,7 @@ def test_sort_parametrized_loop(input, expected_output):
         assert test_results[2].did_pass
 
         assert test_results[3].id.function_getting_tested == "sorter"
-        assert test_results[3].id.iteration_id == "4_0_3"
+        assert test_results[3].id.iteration_id == "0_0_3"
         assert test_results[3].id.test_class_name is None
         assert test_results[3].id.test_function_name == "test_sort_parametrized_loop"
         assert (
@@ -679,7 +696,7 @@ def test_sort_parametrized_loop(input, expected_output):
         assert test_results[3].did_pass
 
         assert test_results[4].id.function_getting_tested == "sorter"
-        assert test_results[4].id.iteration_id == "4_0_4"
+        assert test_results[4].id.iteration_id == "0_0_4"
         assert test_results[4].id.test_class_name is None
         assert test_results[4].id.test_function_name == "test_sort_parametrized_loop"
         assert (
@@ -690,7 +707,7 @@ def test_sort_parametrized_loop(input, expected_output):
         assert test_results[4].did_pass
 
         assert test_results[5].id.function_getting_tested == "sorter"
-        assert test_results[5].id.iteration_id == "4_0_5"
+        assert test_results[5].id.iteration_id == "0_0_5"
         assert test_results[5].id.test_class_name is None
         assert test_results[5].id.test_function_name == "test_sort_parametrized_loop"
         assert (
@@ -758,8 +775,7 @@ def test_sort():
     for i in range(3):
         input = inputs[i]
         expected_output = expected_outputs[i]
-        codeflash_return_value = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '6_2', codeflash_cur, codeflash_con, input)
-        output = codeflash_return_value
+        output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '2_2', codeflash_cur, codeflash_con, input)
         assert output == expected_output
     codeflash_con.close()
 """
@@ -774,18 +790,23 @@ def test_sort():
 
         tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
         project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        run_cwd = pathlib.Path(__file__).parent.parent.resolve()
+        original_cwd = os.getcwd()
 
         func = FunctionToOptimize(
             function_name="sorter",
             parents=[],
             file_path="module.py",
         )
+        os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
             test_path,
+            [CodePosition(11, 17)],
             func,
             project_root_path,
             "pytest",
         )
+        os.chdir(original_cwd)
         assert success
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_loop_results_temp",
@@ -824,7 +845,7 @@ def test_sort():
         )
 
         assert test_results[0].id.function_getting_tested == "sorter"
-        assert test_results[0].id.iteration_id == "6_2_0"
+        assert test_results[0].id.iteration_id == "2_2_0"
         assert test_results[0].id.test_class_name is None
         assert test_results[0].id.test_function_name == "test_sort"
         assert (
@@ -835,7 +856,7 @@ def test_sort():
         assert test_results[0].did_pass
 
         assert test_results[1].id.function_getting_tested == "sorter"
-        assert test_results[1].id.iteration_id == "6_2_1"
+        assert test_results[1].id.iteration_id == "2_2_1"
         assert test_results[1].id.test_class_name is None
         assert test_results[1].id.test_function_name == "test_sort"
         assert (
@@ -846,7 +867,7 @@ def test_sort():
         assert test_results[1].did_pass
 
         assert test_results[2].id.function_getting_tested == "sorter"
-        assert test_results[2].id.iteration_id == "6_2_2"
+        assert test_results[2].id.iteration_id == "2_2_2"
         assert test_results[2].id.test_class_name is None
         assert test_results[2].id.test_function_name == "test_sort"
         assert (
@@ -921,16 +942,13 @@ class TestPigLatin(unittest.TestCase):
         codeflash_cur = codeflash_con.cursor()
         codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
         input = [5, 4, 3, 2, 1, 0]
-        codeflash_return_value = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '5', codeflash_cur, codeflash_con, input)
-        output = codeflash_return_value
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_cur, codeflash_con, input)
         self.assertEqual(output, [0, 1, 2, 3, 4, 5])
         input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-        codeflash_return_value = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '8', codeflash_cur, codeflash_con, input)
-        output = codeflash_return_value
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_cur, codeflash_con, input)
         self.assertEqual(output, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
         input = list(reversed(range(50)))
-        codeflash_return_value = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '11', codeflash_cur, codeflash_con, input)
-        output = codeflash_return_value
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_cur, codeflash_con, input)
         self.assertEqual(output, list(range(50)))
         codeflash_con.close()
 """
@@ -945,18 +963,23 @@ class TestPigLatin(unittest.TestCase):
 
         tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
         project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        run_cwd = pathlib.Path(__file__).parent.parent.resolve()
+        original_cwd = os.getcwd()
 
         func = FunctionToOptimize(
             function_name="sorter",
             parents=[],
             file_path="module.py",
         )
+        os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
             test_path,
+            [CodePosition(9, 17), CodePosition(13, 17), CodePosition(17, 17)],
             func,
             project_root_path,
             "unittest",
         )
+        os.chdir(original_cwd)
 
         assert success
         assert new_test.replace('"', "'") == expected.format(
@@ -997,7 +1020,7 @@ class TestPigLatin(unittest.TestCase):
         )
 
         assert test_results[0].id.function_getting_tested == "sorter"
-        assert test_results[0].id.iteration_id == "5_0"
+        assert test_results[0].id.iteration_id == "1_0"
         assert test_results[0].id.test_class_name == "TestPigLatin"
         assert test_results[0].id.test_function_name == "test_sort"
         assert (
@@ -1008,7 +1031,7 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[0].did_pass
 
         assert test_results[1].id.function_getting_tested == "sorter"
-        assert test_results[1].id.iteration_id == "8_0"
+        assert test_results[1].id.iteration_id == "4_0"
         assert test_results[1].id.test_class_name == "TestPigLatin"
         assert test_results[1].id.test_function_name == "test_sort"
         assert (
@@ -1019,7 +1042,7 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[1].did_pass
 
         assert test_results[2].id.function_getting_tested == "sorter"
-        assert test_results[2].id.iteration_id == "11_0"
+        assert test_results[2].id.iteration_id == "7_0"
         assert test_results[2].id.test_class_name == "TestPigLatin"
         assert test_results[2].id.test_function_name == "test_sort"
         assert (
@@ -1094,8 +1117,7 @@ class TestPigLatin(unittest.TestCase):
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
         codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
-        codeflash_return_value = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_cur, codeflash_con, input)
-        output = codeflash_return_value
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0', codeflash_cur, codeflash_con, input)
         self.assertEqual(output, expected_output)
         codeflash_con.close()
 """
@@ -1110,18 +1132,23 @@ class TestPigLatin(unittest.TestCase):
 
         tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
         project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        run_cwd = pathlib.Path(__file__).parent.parent.resolve()
+        original_cwd = os.getcwd()
 
         func = FunctionToOptimize(
             function_name="sorter",
             parents=[],
             file_path="module.py",
         )
+        os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
             test_path,
+            [CodePosition(16, 17)],
             func,
             project_root_path,
             "unittest",
         )
+        os.chdir(original_cwd)
         assert success
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_results_temp",
@@ -1160,7 +1187,7 @@ class TestPigLatin(unittest.TestCase):
         )
 
         assert test_results[0].id.function_getting_tested == "sorter"
-        assert test_results[0].id.iteration_id == "4_0"
+        assert test_results[0].id.iteration_id == "0_0"
         assert test_results[0].id.test_class_name == "TestPigLatin"
         assert test_results[0].id.test_function_name == "test_sort"
         assert (
@@ -1171,7 +1198,7 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[0].did_pass
 
         assert test_results[1].id.function_getting_tested == "sorter"
-        assert test_results[1].id.iteration_id == "4_1"
+        assert test_results[1].id.iteration_id == "0_1"
         assert test_results[1].id.test_class_name == "TestPigLatin"
         assert test_results[1].id.test_function_name == "test_sort"
         assert (
@@ -1182,7 +1209,7 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[1].did_pass
 
         assert test_results[2].id.function_getting_tested == "sorter"
-        assert test_results[2].id.iteration_id == "4_2"
+        assert test_results[2].id.iteration_id == "0_2"
         assert test_results[2].id.test_class_name == "TestPigLatin"
         assert test_results[2].id.test_function_name == "test_sort"
         assert (
@@ -1258,8 +1285,7 @@ class TestPigLatin(unittest.TestCase):
         for i in range(3):
             input = inputs[i]
             expected_output = expected_outputs[i]
-            codeflash_return_value = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '6_2', codeflash_cur, codeflash_con, input)
-            output = codeflash_return_value
+            output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '2_2', codeflash_cur, codeflash_con, input)
             self.assertEqual(output, expected_output)
         codeflash_con.close()
 """
@@ -1274,14 +1300,19 @@ class TestPigLatin(unittest.TestCase):
 
         tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
         project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        run_cwd = pathlib.Path(__file__).parent.parent.resolve()
+        original_cwd = os.getcwd()
 
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path="module.py")
+        os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
             test_path,
+            [CodePosition(14, 21)],
             func,
             project_root_path,
             "unittest",
         )
+        os.chdir(original_cwd)
         assert success
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.unittest.test_perfinjector_bubble_sort_unittest_loop_results_temp",
@@ -1321,7 +1352,7 @@ class TestPigLatin(unittest.TestCase):
         )
 
         assert test_results[0].id.function_getting_tested == "sorter"
-        assert test_results[0].id.iteration_id == "6_2_0"
+        assert test_results[0].id.iteration_id == "2_2_0"
         assert test_results[0].id.test_class_name == "TestPigLatin"
         assert test_results[0].id.test_function_name == "test_sort"
         assert (
@@ -1332,7 +1363,7 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[0].did_pass
 
         assert test_results[1].id.function_getting_tested == "sorter"
-        assert test_results[1].id.iteration_id == "6_2_1"
+        assert test_results[1].id.iteration_id == "2_2_1"
         assert test_results[1].id.test_class_name == "TestPigLatin"
         assert test_results[1].id.test_function_name == "test_sort"
         assert (
@@ -1343,7 +1374,7 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[1].did_pass
 
         assert test_results[2].id.function_getting_tested == "sorter"
-        assert test_results[2].id.iteration_id == "6_2_2"
+        assert test_results[2].id.iteration_id == "2_2_2"
         assert test_results[2].id.test_class_name == "TestPigLatin"
         assert test_results[2].id.test_function_name == "test_sort"
         assert (
@@ -1420,8 +1451,7 @@ class TestPigLatin(unittest.TestCase):
         codeflash_cur = codeflash_con.cursor()
         codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
         for i in range(2):
-            codeflash_return_value = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4_0', codeflash_cur, codeflash_con, input)
-            output = codeflash_return_value
+            output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0_0', codeflash_cur, codeflash_con, input)
             self.assertEqual(output, expected_output)
         codeflash_con.close()
 """
@@ -1436,18 +1466,23 @@ class TestPigLatin(unittest.TestCase):
 
         tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/"
         project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        run_cwd = pathlib.Path(__file__).parent.parent.resolve()
+        original_cwd = os.getcwd()
 
         f = FunctionToOptimize(
             function_name="sorter",
             file_path="module.py",
             parents=[],
         )
+        os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
             test_path,
+            [CodePosition(17, 21)],
             f,
             project_root_path,
             "unittest",
         )
+        os.chdir(original_cwd)
         assert success
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp",
@@ -1488,7 +1523,7 @@ class TestPigLatin(unittest.TestCase):
         )
 
         assert test_results[0].id.function_getting_tested == "sorter"
-        assert test_results[0].id.iteration_id == "4_0_0"
+        assert test_results[0].id.iteration_id == "0_0_0"
         assert test_results[0].id.test_class_name == "TestPigLatin"
         assert test_results[0].id.test_function_name == "test_sort"
         assert (
@@ -1499,7 +1534,7 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[0].did_pass
 
         assert test_results[1].id.function_getting_tested == "sorter"
-        assert test_results[1].id.iteration_id == "4_0_1"
+        assert test_results[1].id.iteration_id == "0_0_1"
         assert test_results[1].id.test_class_name == "TestPigLatin"
         assert test_results[1].id.test_function_name == "test_sort"
         assert (
@@ -1510,7 +1545,7 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[1].did_pass
 
         assert test_results[2].id.function_getting_tested == "sorter"
-        assert test_results[2].id.iteration_id == "4_0_2"
+        assert test_results[2].id.iteration_id == "0_0_2"
         assert test_results[2].id.test_class_name == "TestPigLatin"
         assert test_results[2].id.test_function_name == "test_sort"
         assert (
@@ -1521,7 +1556,7 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[2].did_pass
 
         assert test_results[3].id.function_getting_tested == "sorter"
-        assert test_results[3].id.iteration_id == "4_0_3"
+        assert test_results[3].id.iteration_id == "0_0_3"
         assert test_results[3].id.test_class_name == "TestPigLatin"
         assert test_results[3].id.test_function_name == "test_sort"
         assert (
@@ -1532,7 +1567,7 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[3].did_pass
 
         assert test_results[4].id.function_getting_tested == "sorter"
-        assert test_results[4].id.iteration_id == "4_0_4"
+        assert test_results[4].id.iteration_id == "0_0_4"
         assert test_results[4].id.test_class_name == "TestPigLatin"
         assert test_results[4].id.test_function_name == "test_sort"
         assert (
@@ -1543,7 +1578,7 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[4].did_pass
 
         assert test_results[5].id.function_getting_tested == "sorter"
-        assert test_results[5].id.iteration_id == "4_0_5"
+        assert test_results[5].id.iteration_id == "0_0_5"
         assert test_results[5].id.test_class_name == "TestPigLatin"
         assert test_results[5].id.test_function_name == "test_sort"
         assert (
@@ -1554,37 +1589,6 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[5].did_pass
     finally:
         pathlib.Path(test_path).unlink(missing_ok=True)
-
-
-def test_update_line_node() -> None:
-    function = FunctionToOptimize(
-        function_name="sorter",
-        file_path="module.py",
-        parents=[],
-    )
-    injectperf = InjectPerfOnly(
-        function,
-        "code_to_optimize.tests.pytest.test_bubble_sort",
-        "pytest",
-    )
-    node = ast.Assign(
-        targets=[ast.Name(id="output", ctx=ast.Store())],
-        value=ast.Call(
-            func=ast.Attribute(
-                value=ast.Name(id="sort", ctx=ast.Load()),
-                attr="sorter",
-                ctx=ast.Load(),
-                lineno=2,
-                col_offset=1,
-            ),
-            args=[ast.Name(id="input", ctx=ast.Load())],
-            keywords=[],
-        ),
-        lineno=1,
-        col_offset=1,
-    )
-
-    assert len(injectperf.update_line_node(node, "test_sort", "0", None)) > 0
 
 
 def test_class_method_imported_as() -> None:
@@ -1676,8 +1680,7 @@ def test_class_name_A_function_name():
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
-    codeflash_return_value = codeflash_wrap(class_name_A.function_name, '{module_path}', None, 'test_class_name_A_function_name', 'class_name_A.function_name', '4', codeflash_cur, codeflash_con, **args)
-    ret = codeflash_return_value
+    ret = codeflash_wrap(class_name_A.function_name, '{module_path}', None, 'test_class_name_A_function_name', 'class_name_A.function_name', '0', codeflash_cur, codeflash_con, **args)
     codeflash_con.close()
 """
 
@@ -1690,18 +1693,22 @@ def test_class_name_A_function_name():
             f.write(code)
 
         project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        run_cwd = pathlib.Path(__file__).parent.parent.resolve()
+        original_cwd = os.getcwd()
         func = FunctionToOptimize(
             function_name="function_name",
             file_path=str(project_root_path / "module.py"),
             parents=[FunctionParent("class_name", "ClassDef")],
         )
-
+        os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
             test_path,
+            [CodePosition(4, 23)],
             func,
             project_root_path,
             "pytest",
         )
+        os.chdir(original_cwd)
     finally:
         pathlib.Path(test_path).unlink(missing_ok=True)
     assert success
@@ -1762,11 +1769,9 @@ def test_common_tags_1():
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     articles_1 = [1, 2, 3]
-    codeflash_return_value = codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '5', codeflash_cur, codeflash_con, articles_1)
-    assert codeflash_return_value == set(1, 2)
+    assert codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '1', codeflash_cur, codeflash_con, articles_1) == set(1, 2)
     articles_2 = [1, 2]
-    codeflash_return_value = codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '7', codeflash_cur, codeflash_con, articles_2)
-    assert codeflash_return_value == set(1)
+    assert codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '3', codeflash_cur, codeflash_con, articles_2) == set(1)
     codeflash_con.close()
 """
 
@@ -1780,18 +1785,23 @@ def test_common_tags_1():
 
         tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
         project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        run_cwd = pathlib.Path(__file__).parent.parent.resolve()
+        original_cwd = os.getcwd()
         func = FunctionToOptimize(
             function_name="find_common_tags",
             file_path=str(project_root_path / "module.py"),
             parents=[],
         )
 
+        os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
             test_path,
+            [CodePosition(7, 11), CodePosition(11, 11)],
             func,
             project_root_path,
             "pytest",
         )
+        os.chdir(original_cwd)
         assert success
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_wrong_function_instrumentation_temp",
@@ -1848,8 +1858,7 @@ def test_sort():
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     input = [5, 4, 3, 2, 1, 0]
     if len(input) > 0:
-        codeflash_return_value = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '5_0', codeflash_cur, codeflash_con, input)
-        assert codeflash_return_value == [0, 1, 2, 3, 4, 5]
+        assert codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '1_0', codeflash_cur, codeflash_con, input) == [0, 1, 2, 3, 4, 5]
     codeflash_con.close()
 """
     test_path = (
@@ -1862,18 +1871,23 @@ def test_sort():
 
         tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
         project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        run_cwd = pathlib.Path(__file__).parent.parent.resolve()
+        original_cwd = os.getcwd()
         func = FunctionToOptimize(
             function_name="sorter",
             file_path=str(project_root_path / "module.py"),
             parents=[],
         )
 
+        os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
             test_path,
+            [CodePosition(7, 15)],
             func,
             project_root_path,
             "pytest",
         )
+        os.chdir(original_cwd)
         assert success
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_conditional_instrumentation_temp",
@@ -1883,7 +1897,7 @@ def test_sort():
         pathlib.Path(test_path).unlink(missing_ok=True)
 
 
-def test_class_method_instrumentation():
+def test_static_method_instrumentation():
     code = """from code_to_optimize.bubble_sort import BubbleSorter
 
 
@@ -1933,12 +1947,10 @@ def test_sort():
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     input = [5, 4, 3, 2, 1, 0]
-    codeflash_return_value = codeflash_wrap(BubbleSorter.sorter, 'tests.pytest.test_perfinjector_bubble_sort_results_temp', None, 'test_sort', 'BubbleSorter.sorter', '5', codeflash_cur, codeflash_con, input)
-    output = codeflash_return_value
+    output = codeflash_wrap(BubbleSorter.sorter, 'tests.pytest.test_perfinjector_bubble_sort_results_temp', None, 'test_sort', 'BubbleSorter.sorter', '1', codeflash_cur, codeflash_con, input)
     assert output == [0, 1, 2, 3, 4, 5]
     input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-    codeflash_return_value = codeflash_wrap(BubbleSorter.sorter, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter', '8', codeflash_cur, codeflash_con, input)
-    output = codeflash_return_value
+    output = codeflash_wrap(BubbleSorter.sorter, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter', '4', codeflash_cur, codeflash_con, input)
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()
 """
@@ -1961,17 +1973,133 @@ def test_sort():
 
         tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
         project_root_path = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/"
+        run_cwd = pathlib.Path(__file__).parent.parent.resolve()
+        original_cwd = os.getcwd()
 
+        os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
             test_path,
+            [CodePosition(6, 26), CodePosition(10, 26)],
             function_to_optimize,
             project_root_path,
             "pytest",
         )
+        os.chdir(original_cwd)
         assert success
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_results_temp",
             tmp_dir_path=get_run_tmp_file("test_return_values"),
         ).replace('"', "'")
     finally:
-        pathlib.Path(test_path).unlink
+        pathlib.Path(test_path).unlink(missing_ok=True)
+
+
+def test_class_method_instrumentation() -> None:
+    code = """from codeflash.optimization.optimizer import Optimizer
+def test_code_replacement10() -> None:
+    get_code_output = '''random code'''
+    file_path = Path(__file__).resolve()
+    opt = Optimizer(
+        Namespace(
+            project_root=str(file_path.parent.resolve()),
+            disable_telemetry=True,
+            tests_root="tests",
+            test_framework="pytest",
+            pytest_cmd="pytest",
+            experiment_id=None,
+        ),
+    )
+    func_top_optimize = FunctionToOptimize(
+        function_name="main_method",
+        file_path=str(file_path),
+        parents=[FunctionParent("MainClass", "ClassDef")],
+    )
+    with open(file_path) as f:
+        original_code = f.read()
+        code_context = opt.get_code_optimization_context(
+            function_to_optimize=func_top_optimize,
+            project_root=str(file_path.parent),
+            original_source_code=original_code,
+        ).unwrap()
+        assert code_context.code_to_optimize_with_helpers == get_code_output
+        code_context = opt.get_code_optimization_context(
+            function_to_optimize=func_top_optimize,
+            project_root=str(file_path.parent),
+            original_source_code=original_code,
+        )
+        assert code_context.code_to_optimize_with_helpers == get_code_output
+    """
+
+    expected = """import gc
+import os
+import sqlite3
+import time
+
+import dill as pickle
+import timeout_decorator
+
+from codeflash.optimization.optimizer import Optimizer
+
+
+def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
+    if not hasattr(codeflash_wrap, 'index'):
+        codeflash_wrap.index = {{}}
+    if test_id in codeflash_wrap.index:
+        codeflash_wrap.index[test_id] += 1
+    else:
+        codeflash_wrap.index[test_id] = 0
+    codeflash_test_index = codeflash_wrap.index[test_id]
+    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')
+    gc.disable()
+    counter = time.perf_counter_ns()
+    return_value = wrapped(*args, **kwargs)
+    codeflash_duration = time.perf_counter_ns() - counter
+    gc.enable()
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    codeflash_con.commit()
+    return return_value
+
+def test_code_replacement10() -> None:
+    codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
+    codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
+    codeflash_cur = codeflash_con.cursor()
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    get_code_output = 'random code'
+    file_path = Path(__file__).resolve()
+    opt = Optimizer(Namespace(project_root=str(file_path.parent.resolve()), disable_telemetry=True, tests_root='tests', test_framework='pytest', pytest_cmd='pytest', experiment_id=None))
+    func_top_optimize = FunctionToOptimize(function_name='main_method', file_path=str(file_path), parents=[FunctionParent('MainClass', 'ClassDef')])
+    with open(file_path) as f:
+        original_code = f.read()
+        code_context = codeflash_wrap(opt.get_code_optimization_context, '{module_path}', None, 'test_code_replacement10', 'Optimizer.get_code_optimization_context', '4_1', codeflash_cur, codeflash_con, function_to_optimize=func_top_optimize, project_root=str(file_path.parent), original_source_code=original_code).unwrap()
+        assert code_context.code_to_optimize_with_helpers == get_code_output
+        code_context = codeflash_wrap(opt.get_code_optimization_context, '{module_path}', None, 'test_code_replacement10', 'Optimizer.get_code_optimization_context', '4_3', codeflash_cur, codeflash_con, function_to_optimize=func_top_optimize, project_root=str(file_path.parent), original_source_code=original_code)
+        assert code_context.code_to_optimize_with_helpers == get_code_output
+    codeflash_con.close()
+"""
+
+    with tempfile.NamedTemporaryFile(mode="w") as f:
+        f.write(code)
+        f.flush()
+        func = FunctionToOptimize(
+            function_name="get_code_optimization_context",
+            parents=[FunctionParent("Optimizer", "ClassDef")],
+            file_path="module.py",
+        )
+        original_cwd = os.getcwd()
+        run_cwd = pathlib.Path(__file__).parent.parent.resolve()
+        os.chdir(str(run_cwd))
+        success, new_test = inject_profiling_into_existing_test(
+            f.name,
+            [CodePosition(22, 28), CodePosition(28, 28)],
+            func,
+            os.path.dirname(f.name),
+            "pytest",
+        )
+        os.chdir(original_cwd)
+    assert success
+    assert new_test == expected.format(
+        module_path=os.path.basename(f.name),
+        tmp_dir_path=get_run_tmp_file("test_return_values"),
+    )

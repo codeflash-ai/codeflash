@@ -25,6 +25,22 @@ class TestsInFile:
 
 
 @dataclass(frozen=True)
+class CodePosition:
+    line_no: int
+    col_no: int
+
+
+@dataclass(frozen=True)
+class FunctionCalledInTest:
+    test_file: str
+    test_class: Optional[str]  # This might be unused...
+    test_function: str
+    test_suite: Optional[str]
+    test_type: TestType
+    position: CodePosition
+
+
+@dataclass(frozen=True)
 class TestFunction:
     function_name: str
     test_suite_name: Optional[str]
@@ -35,7 +51,7 @@ class TestFunction:
 def discover_unit_tests(
     cfg: TestConfig,
     discover_only_these_tests: Optional[List[str]] = None,
-) -> Dict[str, List[TestsInFile]]:
+) -> Dict[str, List[FunctionCalledInTest]]:
     test_frameworks = {
         "pytest": discover_tests_pytest,
         "unittest": discover_tests_unittest,
@@ -95,7 +111,7 @@ def parse_pytest_collection_results(
 def discover_tests_pytest(
     cfg: TestConfig,
     discover_only_these_tests: Optional[List[str]] = None,
-) -> Dict[str, List[TestsInFile]]:
+) -> Dict[str, List[FunctionCalledInTest]]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
     pytest_cmd_list = shlex.split(
@@ -122,7 +138,7 @@ def discover_tests_pytest(
 def discover_tests_unittest(
     cfg: TestConfig,
     discover_only_these_tests: Optional[List[str]] = None,
-) -> Dict[str, List[TestsInFile]]:
+) -> Dict[str, List[FunctionCalledInTest]]:
     tests_root = cfg.tests_root
     loader = unittest.TestLoader()
     tests = loader.discover(str(tests_root))
@@ -189,7 +205,7 @@ def discover_parameters_unittest(function_name: str):
 def process_test_files(
     file_to_test_map: Dict[str, List[TestsInFile]],
     cfg: TestConfig,
-) -> Dict[str, List[TestsInFile]]:
+) -> Dict[str, List[FunctionCalledInTest]]:
     project_root_path = cfg.project_root_path
     test_framework = cfg.test_framework
     function_to_test_map = defaultdict(list)
@@ -291,12 +307,16 @@ def process_test_files(
                         )
                         qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
                         function_to_test_map[qualified_name_with_modules_from_root].append(
-                            TestsInFile(
+                            FunctionCalledInTest(
                                 test_file=test_file,
                                 test_class=None,
                                 test_function=scope_test_function,
                                 test_suite=scope_test_suite,
                                 test_type=test_type,
+                                position=CodePosition(
+                                    line_no=name.line,
+                                    col_no=name.column,
+                                ),
                             ),
                         )
     deduped_function_to_test_map = {}

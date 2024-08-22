@@ -7,31 +7,21 @@ from typing import Iterable
 import isort
 
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
+from codeflash.discovery.discover_unit_tests import CodePosition
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 
 
-class ReplaceCallNodeWithName(ast.NodeTransformer):
-    def __init__(self, only_function_name: str, new_variable_name: str = "codeflash_return_value") -> None:
-        self.only_function_name = only_function_name
-        self.new_variable_name = new_variable_name
-
-    def visit_Call(self, node: ast.Call) -> ast.Name | ast.Call:
-        if isinstance(node, ast.Call):
-            function_name: str = ""
-            if hasattr(node.func, "id"):
-                function_name = node.func.id
-
-            if hasattr(node.func, "attr"):
-                function_name = node.func.attr
-
-            if hasattr(node.func, "value") and hasattr(node.func.value, "id"):
-                function_name = node.func.value.id + "." + function_name
-
-            if function_name == self.only_function_name:
-                return ast.Name(id=self.new_variable_name, ctx=ast.Load())
-
-        self.generic_visit(node)
-        return node
+def node_in_call_position(node: ast.stmt, call_positions: list[CodePosition]) -> bool:
+    if isinstance(node, ast.Call) and hasattr(node, "lineno") and hasattr(node, "col_offset"):
+        for pos in call_positions:
+            if node.lineno <= pos.line_no <= node.end_lineno:
+                if pos.line_no == node.lineno and node.col_offset <= pos.col_no:
+                    return True
+                if pos.line_no == node.end_lineno and node.end_col_offset >= pos.col_no:
+                    return True
+                if node.lineno < pos.line_no < node.end_lineno:
+                    return True
+    return False
 
 
 class InjectPerfOnly(ast.NodeTransformer):
@@ -40,16 +30,18 @@ class InjectPerfOnly(ast.NodeTransformer):
         function: FunctionToOptimize,
         module_path: str,
         test_framework: str,
+        call_positions: list[CodePosition],
     ) -> None:
         self.function_object = function
         self.class_name = None
         self.only_function_name = function.function_name
         self.module_path = module_path
         self.test_framework = test_framework
+        self.call_positions = call_positions
         if len(function.parents) == 1 and function.parents[0].type == "ClassDef":
             self.class_name = function.top_level_parent_name
 
-    def update_line_node(
+    def find_and_update_line_node(
         self,
         test_node: ast.stmt,
         node_name: str,
@@ -57,31 +49,13 @@ class InjectPerfOnly(ast.NodeTransformer):
         test_class_name: str | None = None,
     ) -> Iterable[ast.stmt]:
         call_node = None
-        function_name: str = ""
         for node in ast.walk(test_node):
-            if isinstance(node, ast.Call):
+            if node_in_call_position(node, self.call_positions):
+                call_node = node
                 if hasattr(node.func, "id"):
                     function_name = node.func.id
-
-                if hasattr(node.func, "attr"):
-                    function_name = node.func.attr
-
-                if hasattr(node.func, "value") and hasattr(node.func.value, "id"):
-                    function_name = node.func.value.id + "." + function_name
-
-                if function_name == self.function_object.qualified_name:
-                    call_node = node
-                    break
-
-        if call_node is None:
-            return [test_node]
-
-        updated_nodes = [
-            ast.Assign(
-                targets=[ast.Name(id="codeflash_return_value", ctx=ast.Store())],
-                value=ast.Call(
-                    func=ast.Name(id="codeflash_wrap", ctx=ast.Load()),
-                    args=[
+                    node.func = ast.Name(id="codeflash_wrap", ctx=ast.Load())
+                    node.args = [
                         ast.Name(id=function_name, ctx=ast.Load()),
                         ast.Constant(value=self.module_path),
                         ast.Constant(value=test_class_name or None),
@@ -92,40 +66,31 @@ class InjectPerfOnly(ast.NodeTransformer):
                         ast.Name(id="codeflash_con", ctx=ast.Load()),
                         *call_node.args,
                         *call_node.keywords,
-                    ],
-                    keywords=[],
-                ),
-                lineno=test_node.lineno,
-                col_offset=test_node.col_offset,
-            ),
-        ]
-        subbed_node = ReplaceCallNodeWithName(self.function_object.qualified_name).visit(test_node)
-
-        # TODO: Not just run the tests and ensure that the tests pass but also test the return value and
-        #  compare that for equality amongst the original and the optimized version. This will ensure that the
-        #  optimizations are correct in a more robust way.
-
-        updated_nodes.append(subbed_node)
-        return updated_nodes
-
-    def is_target_function_line(self, line_node: ast.AST) -> bool:
-        node: ast.AST
-        for node in ast.walk(line_node):
-            if isinstance(node, ast.Call):
-                function_name: str = ""
-                if hasattr(node.func, "id"):
-                    function_name = node.func.id
-
+                    ]
+                    break
                 if hasattr(node.func, "attr"):
-                    function_name = node.func.attr
+                    function_to_test = node.func.attr
+                    if function_to_test == self.function_object.function_name:
+                        function_name = ast.unparse(node.func)
+                        node.func = ast.Name(id="codeflash_wrap", ctx=ast.Load())
+                        node.args = [
+                            ast.Name(id=function_name, ctx=ast.Load()),
+                            ast.Constant(value=self.module_path),
+                            ast.Constant(value=test_class_name or None),
+                            ast.Constant(value=node_name),
+                            ast.Constant(value=self.function_object.qualified_name),
+                            ast.Constant(value=index),
+                            ast.Name(id="codeflash_cur", ctx=ast.Load()),
+                            ast.Name(id="codeflash_con", ctx=ast.Load()),
+                            *call_node.args,
+                            *call_node.keywords,
+                        ]
+                        node.keywords = []
+                        break
 
-                if hasattr(node.func, "value") and hasattr(node.func.value, "id"):
-                    function_name = node.func.value.id + "." + function_name
-
-                if function_name == self.function_object.qualified_name:
-                    return True
-
-        return False
+        if call_node is None:
+            return None
+        return [test_node]
 
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
         # TODO: Ensure that this class inherits from unittest.TestCase. Don't modify non unittest.TestCase classes.
@@ -137,101 +102,7 @@ class InjectPerfOnly(ast.NodeTransformer):
 
     def visit_FunctionDef(self, node: ast.FunctionDef, test_class_name: str | None = None) -> ast.FunctionDef:
         if node.name.startswith("test_"):
-            node.body = (
-                [
-                    ast.Assign(
-                        targets=[ast.Name(id="codeflash_iteration", ctx=ast.Store())],
-                        value=ast.Subscript(
-                            value=ast.Attribute(
-                                value=ast.Name(id="os", ctx=ast.Load()),
-                                attr="environ",
-                                ctx=ast.Load(),
-                            ),
-                            slice=ast.Constant(value="CODEFLASH_TEST_ITERATION"),
-                            ctx=ast.Load(),
-                        ),
-                        lineno=node.lineno + 1,
-                        col_offset=node.col_offset,
-                    ),
-                    ast.Assign(
-                        targets=[ast.Name(id="codeflash_con", ctx=ast.Store())],
-                        value=ast.Call(
-                            func=ast.Attribute(
-                                value=ast.Name(id="sqlite3", ctx=ast.Load()),
-                                attr="connect",
-                                ctx=ast.Load(),
-                            ),
-                            args=[
-                                ast.JoinedStr(
-                                    values=[
-                                        ast.Constant(
-                                            value=f"{get_run_tmp_file('test_return_values_')}",
-                                        ),
-                                        ast.FormattedValue(
-                                            value=ast.Name(
-                                                id="codeflash_iteration",
-                                                ctx=ast.Load(),
-                                            ),
-                                            conversion=-1,
-                                        ),
-                                        ast.Constant(value=".sqlite"),
-                                    ],
-                                ),
-                            ],
-                            keywords=[],
-                        ),
-                        lineno=node.lineno + 2,
-                        col_offset=node.col_offset,
-                    ),
-                    ast.Assign(
-                        targets=[ast.Name(id="codeflash_cur", ctx=ast.Store())],
-                        value=ast.Call(
-                            func=ast.Attribute(
-                                value=ast.Name(id="codeflash_con", ctx=ast.Load()),
-                                attr="cursor",
-                                ctx=ast.Load(),
-                            ),
-                            args=[],
-                            keywords=[],
-                        ),
-                        lineno=node.lineno + 3,
-                        col_offset=node.col_offset,
-                    ),
-                    ast.Expr(
-                        value=ast.Call(
-                            func=ast.Attribute(
-                                value=ast.Name(id="codeflash_cur", ctx=ast.Load()),
-                                attr="execute",
-                                ctx=ast.Load(),
-                            ),
-                            args=[
-                                ast.Constant(
-                                    value="CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT,"
-                                    " test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT,"
-                                    " iteration_id TEXT, runtime INTEGER, return_value BLOB)",
-                                ),
-                            ],
-                            keywords=[],
-                        ),
-                        lineno=node.lineno + 4,
-                        col_offset=node.col_offset,
-                    ),
-                ]
-                + node.body
-                + [
-                    ast.Expr(
-                        value=ast.Call(
-                            func=ast.Attribute(
-                                value=ast.Name(id="codeflash_con", ctx=ast.Load()),
-                                attr="close",
-                                ctx=ast.Load(),
-                            ),
-                            args=[],
-                            keywords=[],
-                        ),
-                    ),
-                ]
-            )
+            did_update = False
             if self.test_framework == "unittest":
                 node.decorator_list.append(
                     ast.Call(
@@ -254,25 +125,125 @@ class InjectPerfOnly(ast.NodeTransformer):
                             if isinstance(
                                 internal_node,
                                 (ast.stmt, ast.Assign),
-                            ) and self.is_target_function_line(
-                                internal_node,
                             ):
-                                line_node.body[j : j + 1] = self.update_line_node(
+                                updated_node = self.find_and_update_line_node(
                                     internal_node,
                                     node.name,
                                     str(i) + "_" + str(j),
                                     test_class_name,
                                 )
-                                break
+                                if updated_node is not None:
+                                    line_node.body[j : j + 1] = updated_node
+                                    did_update = True
+                                    break
                         j -= 1
-                elif self.is_target_function_line(line_node):
-                    node.body[i : i + 1] = self.update_line_node(
+                else:
+                    updated_node = self.find_and_update_line_node(
                         line_node,
                         node.name,
                         str(i),
                         test_class_name,
                     )
+                    if updated_node is not None:
+                        node.body[i : i + 1] = updated_node
+                        did_update = True
                 i -= 1
+            if did_update:
+                node.body = (
+                    [
+                        ast.Assign(
+                            targets=[ast.Name(id="codeflash_iteration", ctx=ast.Store())],
+                            value=ast.Subscript(
+                                value=ast.Attribute(
+                                    value=ast.Name(id="os", ctx=ast.Load()),
+                                    attr="environ",
+                                    ctx=ast.Load(),
+                                ),
+                                slice=ast.Constant(value="CODEFLASH_TEST_ITERATION"),
+                                ctx=ast.Load(),
+                            ),
+                            lineno=node.lineno + 1,
+                            col_offset=node.col_offset,
+                        ),
+                        ast.Assign(
+                            targets=[ast.Name(id="codeflash_con", ctx=ast.Store())],
+                            value=ast.Call(
+                                func=ast.Attribute(
+                                    value=ast.Name(id="sqlite3", ctx=ast.Load()),
+                                    attr="connect",
+                                    ctx=ast.Load(),
+                                ),
+                                args=[
+                                    ast.JoinedStr(
+                                        values=[
+                                            ast.Constant(
+                                                value=f"{get_run_tmp_file('test_return_values_')}",
+                                            ),
+                                            ast.FormattedValue(
+                                                value=ast.Name(
+                                                    id="codeflash_iteration",
+                                                    ctx=ast.Load(),
+                                                ),
+                                                conversion=-1,
+                                            ),
+                                            ast.Constant(value=".sqlite"),
+                                        ],
+                                    ),
+                                ],
+                                keywords=[],
+                            ),
+                            lineno=node.lineno + 2,
+                            col_offset=node.col_offset,
+                        ),
+                        ast.Assign(
+                            targets=[ast.Name(id="codeflash_cur", ctx=ast.Store())],
+                            value=ast.Call(
+                                func=ast.Attribute(
+                                    value=ast.Name(id="codeflash_con", ctx=ast.Load()),
+                                    attr="cursor",
+                                    ctx=ast.Load(),
+                                ),
+                                args=[],
+                                keywords=[],
+                            ),
+                            lineno=node.lineno + 3,
+                            col_offset=node.col_offset,
+                        ),
+                        ast.Expr(
+                            value=ast.Call(
+                                func=ast.Attribute(
+                                    value=ast.Name(id="codeflash_cur", ctx=ast.Load()),
+                                    attr="execute",
+                                    ctx=ast.Load(),
+                                ),
+                                args=[
+                                    ast.Constant(
+                                        value="CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT,"
+                                        " test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT,"
+                                        " iteration_id TEXT, runtime INTEGER, return_value BLOB)",
+                                    ),
+                                ],
+                                keywords=[],
+                            ),
+                            lineno=node.lineno + 4,
+                            col_offset=node.col_offset,
+                        ),
+                    ]
+                    + node.body
+                    + [
+                        ast.Expr(
+                            value=ast.Call(
+                                func=ast.Attribute(
+                                    value=ast.Name(id="codeflash_con", ctx=ast.Load()),
+                                    attr="close",
+                                    ctx=ast.Load(),
+                                ),
+                                args=[],
+                                keywords=[],
+                            ),
+                        ),
+                    ]
+                )
         return node
 
 
@@ -315,6 +286,7 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
 
 def inject_profiling_into_existing_test(
     test_path: str,
+    call_positions: list[CodePosition],
     function_to_optimize: FunctionToOptimize,
     root_path: str,
     test_framework: str,
@@ -332,7 +304,7 @@ def inject_profiling_into_existing_test(
     import_visitor.visit(tree)
     func = import_visitor.imported_as
 
-    tree = InjectPerfOnly(func, module_path, test_framework).visit(tree)
+    tree = InjectPerfOnly(func, module_path, test_framework, call_positions).visit(tree)
     new_imports = [
         ast.Import(names=[ast.alias(name="time")]),
         ast.Import(names=[ast.alias(name="gc")]),

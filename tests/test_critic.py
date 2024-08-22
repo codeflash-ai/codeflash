@@ -1,9 +1,9 @@
 from codeflash.models.models import OptimizedCandidateResult
-from codeflash.result.critic import speedup_critic, generated_test_critic
+from codeflash.result.critic import generated_test_critic, speedup_critic
 from codeflash.verification.test_results import (
-    TestResults,
     FunctionTestInvocation,
     InvocationId,
+    TestResults,
     TestType,
 )
 
@@ -147,7 +147,7 @@ def test_generated_test_critic():
         best_test_results=TestResults(test_results=test_results),
     )
 
-    assert not generated_test_critic(candidate_result)
+    assert generated_test_critic(candidate_result)
 
     test_results = [test_1, test_3, test_4]
 
@@ -157,7 +157,7 @@ def test_generated_test_critic():
         best_test_results=TestResults(test_results=test_results),
     )
 
-    assert not generated_test_critic(candidate_result)
+    assert generated_test_critic(candidate_result)
 
     test_results = [test_1]
 

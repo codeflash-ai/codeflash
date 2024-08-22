@@ -69,7 +69,7 @@ from codeflash.optimization.function_context import (
     get_constrained_function_context_and_helper_functions,
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
-from codeflash.result.critic import generated_test_critic, speedup_critic
+from codeflash.result.critic import generated_test_critic, performance_gain, speedup_critic
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog import ph
 from codeflash.verification.equivalence import compare_test_results
@@ -449,13 +449,15 @@ class Optimizer:
                     best_test_runtime = candidate_result.best_test_runtime
                     optimized_runtimes[candidate.optimization_id] = best_test_runtime
                     is_correct[candidate.optimization_id] = True
-                    speedup_ratios[candidate.optimization_id] = (
-                        original_code_baseline.runtime - best_test_runtime
-                    ) / best_test_runtime
+                    perf_gain = performance_gain(
+                        original_runtime_ns=original_code_baseline.runtime,
+                        optimized_runtime_ns=best_test_runtime,
+                    )
+                    speedup_ratios[candidate.optimization_id] = perf_gain
                     logging.info(
                         f"Candidate runtime measured over {candidate_result.times_run} run{'s' if candidate_result.times_run > 1 else ''}: "
                         f"{humanize_runtime(best_test_runtime)}, speedup ratio = "
-                        f"{((original_code_baseline.runtime - best_test_runtime) / best_test_runtime):.3f}",
+                        f"{perf_gain:.3f}",
                     )
 
                     if speedup_critic(
@@ -463,6 +465,12 @@ class Optimizer:
                         original_code_baseline.runtime,
                         best_runtime_until_now,
                     ) and generated_test_critic(candidate_result):
+                        logging.info("This candidate is better than the previous best candidate.")
+                        logging.info(
+                            f"Original runtime: {humanize_runtime(original_code_baseline.runtime)} Best test runtime: "
+                            f"{humanize_runtime(candidate_result.best_test_runtime)}, ratio = "
+                            f"{perf_gain:.3f}",
+                        )
                         best_optimization = BestOptimization(
                             candidate=candidate,
                             helper_functions=code_context.helper_functions,
@@ -691,7 +699,6 @@ class Optimizer:
         function_to_tests: dict[str, list[TestsInFile]],
     ) -> set[str]:
         relevant_test_files_count = 0
-        unique_original_test_files = set()
         unique_instrumented_test_files = set()
 
         func_qualname = function_to_optimize.qualified_name_with_modules_from_root(
@@ -702,23 +709,26 @@ class Optimizer:
                 f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.",
             )
         else:
+            test_file_invocation_positions = defaultdict(list)
             for tests_in_file in function_to_tests.get(func_qualname):
-                if tests_in_file.test_file in unique_original_test_files:
-                    continue
+                test_file_invocation_positions[tests_in_file.test_file].append(tests_in_file.position)
+            for test_file, positions in test_file_invocation_positions.items():
                 relevant_test_files_count += 1
                 success, injected_test = inject_profiling_into_existing_test(
-                    tests_in_file.test_file,
+                    test_file,
+                    positions,
                     function_to_optimize,
                     self.args.project_root,
                     self.args.test_framework,
                 )
                 if not success:
                     continue
-                new_test_path = f"{os.path.splitext(tests_in_file.test_file)[0]}__perfinstrumented{os.path.splitext(tests_in_file.test_file)[1]}"
+                new_test_path = (
+                    f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}"
+                )
                 with pathlib.Path(new_test_path).open("w", encoding="utf8") as f:
                     f.write(injected_test)
                 unique_instrumented_test_files.add(new_test_path)
-                unique_original_test_files.add(tests_in_file.test_file)
             logging.info(
                 f"Discovered {relevant_test_files_count} existing unit test file"
                 f"{'s' if relevant_test_files_count != 1 else ''} for {func_qualname}",
