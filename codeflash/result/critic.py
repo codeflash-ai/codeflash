@@ -40,10 +40,20 @@ def speedup_critic(
 
 def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool:
     test_results = candidate_result.best_test_results.test_results
-    passed_tests = [test_result for test_result in test_results if test_result.did_pass]
 
-    if len(passed_tests) == 1 and passed_tests[0].test_type.name == "REPLAY_TEST":
-        # We accept a candidate with a single replay test that passed
+    passed_test = None
+    count = 0
+
+    for test_result in test_results:
+        if test_result.did_pass:
+            count += 1
+            if count == 1:
+                passed_test = test_result
+            elif count > 1:
+                return True
+
+    # If only one test passed, check if it's a REPLAY_TEST
+    if count == 1 and passed_test.test_type.name == "REPLAY_TEST":
         return True
 
-    return len(passed_tests) > 1
+    return False
