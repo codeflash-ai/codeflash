@@ -2,7 +2,7 @@
 
 Codeflash is an AI optimization tool that automatically improves the performance of your Python code while maintaining its correctness.
 
-![img.png](img.png)
+![img.png](https://tacitassets.blob.core.windows.net/website-assets/readme-img.png)
 
 ## Features
 
