@@ -7,7 +7,6 @@ import pathlib
 import sys
 import tempfile
 
-import pytest
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import INDIVIDUAL_TESTCASE_TIMEOUT
 from codeflash.code_utils.instrument_existing_tests import (
@@ -142,7 +141,6 @@ import time
 
 import dill as pickle
 import pytest
-import timeout_decorator
 from packagename.ml.yolo.image_reshaping_utils import \\
     prepare_image_for_yolo as \\
     packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo
@@ -210,7 +208,7 @@ def test_prepare_image_for_yolo():
             [CodePosition(10, 14)],
             func,
             os.path.dirname(f.name),
-            pytest,
+            "pytest",
         )
         os.chdir(original_cwd)
     assert success
@@ -239,7 +237,6 @@ import sqlite3
 import time
 
 import dill as pickle
-import timeout_decorator
 
 from code_to_optimize.bubble_sort import sorter
 
@@ -387,7 +384,6 @@ import time
 
 import dill as pickle
 import pytest
-import timeout_decorator
 
 from code_to_optimize.bubble_sort import sorter
 
@@ -549,7 +545,6 @@ import time
 
 import dill as pickle
 import pytest
-import timeout_decorator
 
 from code_to_optimize.bubble_sort import sorter
 
@@ -740,7 +735,6 @@ import sqlite3
 import time
 
 import dill as pickle
-import timeout_decorator
 
 from code_to_optimize.bubble_sort import sorter
 
@@ -1651,7 +1645,6 @@ import sqlite3
 import time
 
 import dill as pickle
-import timeout_decorator
 from module import class_name as class_name_A
 
 
@@ -1738,7 +1731,6 @@ import sqlite3
 import time
 
 import dill as pickle
-import timeout_decorator
 
 from codeflash.result.common_tags import find_common_tags
 
@@ -1826,7 +1818,6 @@ import sqlite3
 import time
 
 import dill as pickle
-import timeout_decorator
 
 from code_to_optimize.bubble_sort import sorter
 
@@ -1916,7 +1907,6 @@ import sqlite3
 import time
 
 import dill as pickle
-import timeout_decorator
 
 from code_to_optimize.bubble_sort import BubbleSorter
 
@@ -2036,7 +2026,6 @@ import sqlite3
 import time
 
 import dill as pickle
-import timeout_decorator
 
 from codeflash.optimization.optimizer import Optimizer
 

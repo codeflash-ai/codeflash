@@ -311,8 +311,9 @@ def inject_profiling_into_existing_test(
         ast.Import(names=[ast.alias(name="os")]),
         ast.Import(names=[ast.alias(name="sqlite3")]),
         ast.Import(names=[ast.alias(name="dill", asname="pickle")]),
-        ast.Import(names=[ast.alias(name="timeout_decorator")]),
     ]
+    if test_framework == "unittest":
+        new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
     tree.body = [*new_imports, create_wrapper_function(), *tree.body]
     return True, isort.code(ast.unparse(tree), float_to_top=True)
 
