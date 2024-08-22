@@ -67,6 +67,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                         *call_node.args,
                         *call_node.keywords,
                     ]
+                    node.keywords = []
                     break
                 if hasattr(node.func, "attr"):
                     function_to_test = node.func.attr
