@@ -2042,9 +2042,9 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
 """
     if sys.version_info < (3, 12):
-        expected += """    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')"""
-    else:
         expected += """    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")"""
+    else:
+        expected += """    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')"""
     expected += """
     gc.disable()
     counter = time.perf_counter_ns()
@@ -2096,4 +2096,4 @@ def test_code_replacement10() -> None:
     assert new_test == expected.format(
         module_path=os.path.basename(f.name),
         tmp_dir_path=get_run_tmp_file("test_return_values"),
-    ).replace('"', "'")
+    )
