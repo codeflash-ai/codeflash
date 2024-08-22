@@ -38,7 +38,7 @@ def speedup_critic(
     return False
 
 
-def generated_test_critic(candidate_result: OptimizedCandidateResult) -> bool:
+def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool:
     test_results = candidate_result.best_test_results.test_results
     passed_tests = [test_result for test_result in test_results if test_result.did_pass]
 

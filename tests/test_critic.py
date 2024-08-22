@@ -1,5 +1,5 @@
 from codeflash.models.models import OptimizedCandidateResult
-from codeflash.result.critic import generated_test_critic, speedup_critic
+from codeflash.result.critic import quantity_of_tests_critic, speedup_critic
 from codeflash.verification.test_results import (
     FunctionTestInvocation,
     InvocationId,
@@ -137,7 +137,7 @@ def test_generated_test_critic():
         best_test_results=TestResults(test_results=test_results),
     )
 
-    assert generated_test_critic(candidate_result)
+    assert quantity_of_tests_critic(candidate_result)
 
     test_results = [test_1, test_3]
 
@@ -147,7 +147,7 @@ def test_generated_test_critic():
         best_test_results=TestResults(test_results=test_results),
     )
 
-    assert generated_test_critic(candidate_result)
+    assert quantity_of_tests_critic(candidate_result)
 
     test_results = [test_1, test_3, test_4]
 
@@ -157,7 +157,7 @@ def test_generated_test_critic():
         best_test_results=TestResults(test_results=test_results),
     )
 
-    assert generated_test_critic(candidate_result)
+    assert quantity_of_tests_critic(candidate_result)
 
     test_results = [test_1]
 
@@ -167,7 +167,7 @@ def test_generated_test_critic():
         best_test_results=TestResults(test_results=test_results),
     )
 
-    assert not generated_test_critic(candidate_result)
+    assert not quantity_of_tests_critic(candidate_result)
 
     test_results = [test_1, test_2]
 
@@ -177,7 +177,7 @@ def test_generated_test_critic():
         best_test_results=TestResults(test_results=test_results),
     )
 
-    assert generated_test_critic(candidate_result)
+    assert quantity_of_tests_critic(candidate_result)
 
     test_results = [test_1, test_4]
 
@@ -187,7 +187,7 @@ def test_generated_test_critic():
         best_test_results=TestResults(test_results=test_results),
     )
 
-    assert not generated_test_critic(candidate_result)
+    assert not quantity_of_tests_critic(candidate_result)
 
     test_results = [test_4, test_5]
 
@@ -197,7 +197,7 @@ def test_generated_test_critic():
         best_test_results=TestResults(test_results=test_results),
     )
 
-    assert generated_test_critic(candidate_result)
+    assert quantity_of_tests_critic(candidate_result)
 
     test_results = [test_1, test_2, test_3, test_4, test_5]
 
@@ -207,4 +207,4 @@ def test_generated_test_critic():
         best_test_results=TestResults(test_results=test_results),
     )
 
-    assert generated_test_critic(candidate_result)
+    assert quantity_of_tests_critic(candidate_result)

@@ -69,7 +69,7 @@ from codeflash.optimization.function_context import (
     get_constrained_function_context_and_helper_functions,
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
-from codeflash.result.critic import generated_test_critic, performance_gain, speedup_critic
+from codeflash.result.critic import performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog import ph
 from codeflash.verification.equivalence import compare_test_results
@@ -464,7 +464,7 @@ class Optimizer:
                         candidate_result,
                         original_code_baseline.runtime,
                         best_runtime_until_now,
-                    ) and generated_test_critic(candidate_result):
+                    ) and quantity_of_tests_critic(candidate_result):
                         logging.info("This candidate is better than the previous best candidate.")
                         logging.info(
                             f"Original runtime: {humanize_runtime(original_code_baseline.runtime)} Best test runtime: "
