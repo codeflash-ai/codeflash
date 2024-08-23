@@ -16,6 +16,7 @@ def run_tests(
     pytest_cmd: str = "pytest",
     verbose: bool = False,
     only_run_this_test_function: str | None = None,
+    count: int = 100,
 ) -> tuple[str, subprocess.CompletedProcess]:
     assert test_framework in ["pytest", "unittest"]
     if only_run_this_test_function and "__replay_test" in test_path:
@@ -35,6 +36,7 @@ def run_tests(
                 f"--junitxml={result_file_path}",
                 "-o",
                 "junit_logging=all",
+                f"--count={count}",
             ],
             capture_output=True,
             cwd=cwd,
@@ -58,5 +60,7 @@ def run_tests(
             check=False,
         )
     else:
-        raise ValueError("Invalid test framework -- I only support Pytest and Unittest currently.")
+        raise ValueError(
+            "Invalid test framework -- I only support Pytest and Unittest currently.",
+        )
     return result_file_path, results
