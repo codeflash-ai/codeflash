@@ -805,6 +805,8 @@ class Optimizer:
         generated_tests_path: str,
         tests_in_file: list[TestsInFile],
     ) -> Result[OriginalCodeBaseline, str]:
+        assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
+
         original_runtime = None
         best_runtime = None
         original_gen_results = None
@@ -825,112 +827,194 @@ class Optimizer:
             test_env["PYTHONPATH"] = self.args.project_root
         else:
             test_env["PYTHONPATH"] += os.pathsep + self.args.project_root
-        cumulative_test_runtime = 0
-        cumulative_test_runs = 0
-        test_times_list = []
-        first_run = True
-        do_break = False
-        while (
-            cumulative_test_runtime < MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS
-            and cumulative_test_runs < MAX_TEST_FUNCTION_RUNS
-        ):
-            for i in range(MAX_TEST_RUN_ITERATIONS):
-                if generated_tests_elapsed_time > MAX_FUNCTION_TEST_SECONDS:
-                    do_break = True
-                    break
-                instrumented_existing_test_timing = []
-                original_test_results_iter = TestResults()
-                existing_test_results = TestResults()
-                for test_file in instrumented_unittests_created_for_function:
-                    relevant_tests_in_file = [
-                        test_in_file
-                        for test_in_file in tests_in_file
-                        if test_in_file.test_file == test_file.replace("__perfinstrumented", "")
-                    ]
-                    is_replay_test = relevant_tests_in_file[0].test_type == TestType.REPLAY_TEST
-                    if is_replay_test and len(relevant_tests_in_file) > 1:
-                        logging.warning(
-                            f"Multiple tests found for the replay test {test_file}. Should not happen",
+
+        if test_framework == "pytest":
+            instrumented_existing_test_timing = []
+            original_test_results_iter = TestResults()
+            existing_test_results = TestResults()
+            for test_file in instrumented_unittests_created_for_function:
+                relevant_tests_in_file = [
+                    test_in_file
+                    for test_in_file in tests_in_file
+                    if test_in_file.test_file == test_file.replace("__perfinstrumented", "")
+                ]
+                is_replay_test = relevant_tests_in_file[0].test_type == TestType.REPLAY_TEST
+                if is_replay_test and len(relevant_tests_in_file) > 1:
+                    logging.warning(
+                        f"Multiple tests found for the replay test {test_file}. Should not happen",
+                    )
+
+                unittest_results = self.run_and_parse_tests(
+                    test_env,
+                    test_file,
+                    relevant_tests_in_file[0].test_type,
+                    0,
+                    relevant_tests_in_file[0].test_function if is_replay_test else None,
+                )
+
+                timing = unittest_results.total_passed_runtime()
+                original_test_results_iter.merge(unittest_results)
+                existing_test_results.merge(unittest_results)
+                instrumented_existing_test_timing.append(timing)
+            logging.info(
+                f"Existing unit test results for original code: {original_test_results_iter.get_test_pass_fail_report()}",
+            )
+            original_gen_results = self.run_and_parse_tests(
+                test_env,
+                generated_tests_path,
+                TestType.GENERATED_REGRESSION,
+                0,
+            )
+            functions_to_remove = [
+                result.id.test_function_name
+                for result in original_gen_results.test_results
+                if not result.did_pass
+            ]
+
+            # TODO: Implement the logic to disregard the timing info of the tests that errored out. That is remove test cases that failed to run.
+
+            if not original_gen_results and len(instrumented_existing_test_timing) == 0:
+                logging.warning(
+                    f"Couldn't run any tests for original function {function_name}. SKIPPING OPTIMIZING THIS FUNCTION.",
+                )
+            # TODO: Doing a simple sum of test runtime, Improve it by looking at test by test runtime, or a better scheme
+            # TODO: If the runtime is None, that happens in the case where an exception is expected and is successfully
+            #  caught by the test framework. This makes the test pass, but we can't find runtime because the exception caused
+            #  the execution to not reach the runtime measurement part. We are currently ignoring such tests, because the performance
+            #  for such a execution that raises an exception should not matter.
+            logging.info(
+                f"Generated tests results for original code: {original_gen_results.get_test_pass_fail_report()}",
+            )
+
+            if not original_gen_results:
+                original_total_runtime_iter = sum(instrumented_existing_test_timing)
+            else:
+                original_total_runtime_iter = original_gen_results.total_passed_runtime() + sum(
+                    instrumented_existing_test_timing,
+                )
+
+            if original_total_runtime_iter == 0:
+                logging.warning(
+                    "The overall test runtime of the original function is 0, couldn't run tests.",
+                )
+                logging.warning(original_gen_results.test_results)
+            original_test_results_iter.merge(original_gen_results)
+            logging.info(
+                f"Overall test results for original code: {TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}",
+            )
+            test_times_list = [original_total_runtime_iter]
+            if original_runtime is None or original_total_runtime_iter < original_runtime:
+                original_runtime = best_runtime = original_total_runtime_iter
+                overall_original_test_results = original_test_results_iter
+            times_run += 1
+
+        else:
+            cumulative_test_runtime = 0
+            cumulative_test_runs = 0
+            test_times_list = []
+            first_run = True
+            do_break = False
+            while (
+                cumulative_test_runtime < MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS
+                and cumulative_test_runs < MAX_TEST_FUNCTION_RUNS
+            ):
+                for i in range(MAX_TEST_RUN_ITERATIONS):
+                    if generated_tests_elapsed_time > MAX_FUNCTION_TEST_SECONDS:
+                        do_break = True
+                        break
+                    instrumented_existing_test_timing = []
+                    original_test_results_iter = TestResults()
+                    existing_test_results = TestResults()
+                    for test_file in instrumented_unittests_created_for_function:
+                        relevant_tests_in_file = [
+                            test_in_file
+                            for test_in_file in tests_in_file
+                            if test_in_file.test_file == test_file.replace("__perfinstrumented", "")
+                        ]
+                        is_replay_test = relevant_tests_in_file[0].test_type == TestType.REPLAY_TEST
+                        if is_replay_test and len(relevant_tests_in_file) > 1:
+                            logging.warning(
+                                f"Multiple tests found for the replay test {test_file}. Should not happen",
+                            )
+
+                        unittest_results = self.run_and_parse_tests(
+                            test_env,
+                            test_file,
+                            relevant_tests_in_file[0].test_type,
+                            0,
+                            relevant_tests_in_file[0].test_function if is_replay_test else None,
                         )
 
-                    unittest_results = self.run_and_parse_tests(
+                        timing = unittest_results.total_passed_runtime()
+                        original_test_results_iter.merge(unittest_results)
+                        existing_test_results.merge(unittest_results)
+                        instrumented_existing_test_timing.append(timing)
+                    if i == 0 and first_run:
+                        logging.info(
+                            f"Existing unit test results for original code: {original_test_results_iter.get_test_pass_fail_report()}",
+                        )
+
+                    original_gen_results = self.run_and_parse_tests(
                         test_env,
-                        test_file,
-                        relevant_tests_in_file[0].test_type,
+                        generated_tests_path,
+                        TestType.GENERATED_REGRESSION,
                         0,
-                        relevant_tests_in_file[0].test_function if is_replay_test else None,
                     )
+                    functions_to_remove = [
+                        result.id.test_function_name
+                        for result in original_gen_results.test_results
+                        if not result.did_pass
+                    ]
 
-                    timing = unittest_results.total_passed_runtime()
-                    original_test_results_iter.merge(unittest_results)
-                    existing_test_results.merge(unittest_results)
-                    instrumented_existing_test_timing.append(timing)
-                if i == 0 and first_run:
-                    logging.info(
-                        f"Existing unit test results for original code: {original_test_results_iter.get_test_pass_fail_report()}",
-                    )
+                    # TODO: Implement the logic to disregard the timing info of the tests that errored out. That is remove test cases that failed to run.
 
-                original_gen_results = self.run_and_parse_tests(
-                    test_env,
-                    generated_tests_path,
-                    TestType.GENERATED_REGRESSION,
-                    0,
-                )
-                functions_to_remove = [
-                    result.id.test_function_name
-                    for result in original_gen_results.test_results
-                    if not result.did_pass
-                ]
+                    if not original_gen_results and len(instrumented_existing_test_timing) == 0:
+                        logging.warning(
+                            f"Couldn't run any tests for original function {function_name}. SKIPPING OPTIMIZING THIS FUNCTION.",
+                        )
+                        success = False
+                        do_break = True
+                        break
+                    # TODO: Doing a simple sum of test runtime, Improve it by looking at test by test runtime, or a better scheme
+                    # TODO: If the runtime is None, that happens in the case where an exception is expected and is successfully
+                    #  caught by the test framework. This makes the test pass, but we can't find runtime because the exception caused
+                    #  the execution to not reach the runtime measurement part. We are currently ignoring such tests, because the performance
+                    #  for such a execution that raises an exception should not matter.
+                    if i == 0 and first_run:
+                        logging.info(
+                            f"Generated tests results for original code: {original_gen_results.get_test_pass_fail_report()}",
+                        )
 
-                # TODO: Implement the logic to disregard the timing info of the tests that errored out. That is remove test cases that failed to run.
+                    if not original_gen_results:
+                        original_total_runtime_iter = sum(instrumented_existing_test_timing)
+                    else:
+                        original_total_runtime_iter = original_gen_results.total_passed_runtime() + sum(
+                            instrumented_existing_test_timing,
+                        )
 
-                if not original_gen_results and len(instrumented_existing_test_timing) == 0:
-                    logging.warning(
-                        f"Couldn't run any tests for original function {function_name}. SKIPPING OPTIMIZING THIS FUNCTION.",
-                    )
-                    success = False
-                    do_break = True
+                    if original_total_runtime_iter == 0:
+                        logging.warning(
+                            "The overall test runtime of the original function is 0, couldn't run tests.",
+                        )
+                        logging.warning(original_gen_results.test_results)
+                        do_break = True
+                        break
+                    original_test_results_iter.merge(original_gen_results)
+                    if i == 0 and first_run:
+                        logging.info(
+                            f"Overall test results for original code: {TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}",
+                        )
+                    test_times_list.append(original_total_runtime_iter)
+                    if original_runtime is None or original_total_runtime_iter < original_runtime:
+                        original_runtime = best_runtime = original_total_runtime_iter
+                        overall_original_test_results = original_test_results_iter
+                    cumulative_test_runs += 1
+                    cumulative_test_runtime += original_total_runtime_iter
+                    times_run += 1
+                if first_run:
+                    first_run = False
+                if do_break:
                     break
-                # TODO: Doing a simple sum of test runtime, Improve it by looking at test by test runtime, or a better scheme
-                # TODO: If the runtime is None, that happens in the case where an exception is expected and is successfully
-                #  caught by the test framework. This makes the test pass, but we can't find runtime because the exception caused
-                #  the execution to not reach the runtime measurement part. We are currently ignoring such tests, because the performance
-                #  for such a execution that raises an exception should not matter.
-                if i == 0 and first_run:
-                    logging.info(
-                        f"Generated tests results for original code: {original_gen_results.get_test_pass_fail_report()}",
-                    )
-
-                if not original_gen_results:
-                    original_total_runtime_iter = sum(instrumented_existing_test_timing)
-                else:
-                    original_total_runtime_iter = original_gen_results.total_passed_runtime() + sum(
-                        instrumented_existing_test_timing,
-                    )
-
-                if original_total_runtime_iter == 0:
-                    logging.warning(
-                        "The overall test runtime of the original function is 0, couldn't run tests.",
-                    )
-                    logging.warning(original_gen_results.test_results)
-                    do_break = True
-                    break
-                original_test_results_iter.merge(original_gen_results)
-                if i == 0 and first_run:
-                    logging.info(
-                        f"Overall test results for original code: {TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}",
-                    )
-                test_times_list.append(original_total_runtime_iter)
-                if original_runtime is None or original_total_runtime_iter < original_runtime:
-                    original_runtime = best_runtime = original_total_runtime_iter
-                    overall_original_test_results = original_test_results_iter
-                cumulative_test_runs += 1
-                cumulative_test_runtime += original_total_runtime_iter
-                times_run += 1
-            if first_run:
-                first_run = False
-            if do_break:
-                break
 
         if times_run == 0 and original_runtime is None:
             logging.warning(
@@ -967,6 +1051,8 @@ class Optimizer:
         tests_in_file: list[TestsInFile] | None,
         run_generated_tests: bool,
     ) -> Result[OptimizedCandidateResult, str]:
+        assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
+
         success = True
         best_test_runtime = None
         best_test_results = None
@@ -981,137 +1067,232 @@ class Optimizer:
             test_env["PYTHONPATH"] = self.args.project_root
         else:
             test_env["PYTHONPATH"] += os.pathsep + self.args.project_root
-        cumulative_test_runtime = 0
-        cumulative_test_runs = 0
-        test_times_list = []
-        first_run = True
-        do_break = False
-        while (
-            cumulative_test_runtime < MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS
-            and cumulative_test_runs < MAX_TEST_FUNCTION_RUNS
-        ):
-            for test_index in range(MAX_TEST_RUN_ITERATIONS):
-                pathlib.Path(
-                    get_run_tmp_file(f"test_return_values_{optimization_index}.bin"),
-                ).unlink(missing_ok=True)
-                pathlib.Path(
-                    get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite"),
-                ).unlink(missing_ok=True)
-                if generated_tests_elapsed_time > MAX_FUNCTION_TEST_SECONDS:
-                    do_break = True
-                    break
+        if test_framework == "pytest":
+            pathlib.Path(
+                get_run_tmp_file(f"test_return_values_{optimization_index}.bin"),
+            ).unlink(missing_ok=True)
+            pathlib.Path(
+                get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite"),
+            ).unlink(missing_ok=True)
+            candidate_existing_test_results = TestResults()
+            instrumented_test_timing = []
+            for instrumented_test_file in instrumented_unittests_created_for_function:
+                relevant_tests_in_file = [
+                    test_in_file
+                    for test_in_file in tests_in_file
+                    if test_in_file.test_file == instrumented_test_file.replace("__perfinstrumented", "")
+                ]
+                is_replay_test = relevant_tests_in_file[0].test_type == TestType.REPLAY_TEST
+                if is_replay_test and len(relevant_tests_in_file) > 1:
+                    logging.warning(
+                        f"Multiple tests found for the replay test {instrumented_test_file}. Should not happen",
+                    )
+                candidate_existing_test_result = self.run_and_parse_tests(
+                    test_env,
+                    instrumented_test_file,
+                    relevant_tests_in_file[0].test_type,
+                    optimization_index,
+                    relevant_tests_in_file[0].test_function if is_replay_test else None,
+                )
+                timing = candidate_existing_test_result.total_passed_runtime()
+                candidate_existing_test_results.merge(candidate_existing_test_result)
+                instrumented_test_timing.append(timing)
+                logging.info(
+                    f"Existing unit tests results for candidate: {candidate_existing_test_results.get_test_pass_fail_report()}",
+                )
+                return_values_are_equal = compare_test_results(
+                    original_existing_test_results,
+                    candidate_existing_test_results,
+                )
+                for test_invocation in candidate_existing_test_results:
+                    original_test_invocation = original_existing_test_results.get_by_id(
+                        test_invocation.id,
+                    )
+                    if (
+                        original_test_invocation is not None
+                        and not original_test_invocation.timed_out
+                        and (test_invocation.did_pass != original_test_invocation.did_pass)
+                    ) or not return_values_are_equal:
+                        logging.info(
+                            "Test results did not match the test results of the original code.",
+                        )
+                        logging.info(
+                            f"Test {test_invocation.id} failed. Skipping this candidate.",
+                        )
 
-                candidate_existing_test_results = TestResults()
-                instrumented_test_timing = []
-                for instrumented_test_file in instrumented_unittests_created_for_function:
-                    relevant_tests_in_file = [
-                        test_in_file
-                        for test_in_file in tests_in_file
-                        if test_in_file.test_file == instrumented_test_file.replace("__perfinstrumented", "")
-                    ]
-                    is_replay_test = relevant_tests_in_file[0].test_type == TestType.REPLAY_TEST
-                    if is_replay_test and len(relevant_tests_in_file) > 1:
-                        logging.warning(
-                            f"Multiple tests found for the replay test {instrumented_test_file}. Should not happen",
-                        )
-                    candidate_existing_test_result = self.run_and_parse_tests(
-                        test_env,
-                        instrumented_test_file,
-                        relevant_tests_in_file[0].test_type,
-                        optimization_index,
-                        relevant_tests_in_file[0].test_function if is_replay_test else None,
-                    )
-                    timing = candidate_existing_test_result.total_passed_runtime()
-                    candidate_existing_test_results.merge(candidate_existing_test_result)
-                    instrumented_test_timing.append(timing)
-                if first_run and test_index == 0:
-                    equal_results = True
-                    logging.info(
-                        f"Existing unit tests results for candidate: {candidate_existing_test_results.get_test_pass_fail_report()}",
-                    )
-                    return_values_are_equal = compare_test_results(
-                        original_existing_test_results,
-                        candidate_existing_test_results,
-                    )
-                    for test_invocation in candidate_existing_test_results:
-                        original_test_invocation = original_existing_test_results.get_by_id(
-                            test_invocation.id,
-                        )
-                        if (
-                            original_test_invocation is not None
-                            and not original_test_invocation.timed_out
-                            and (test_invocation.did_pass != original_test_invocation.did_pass)
-                        ) or not return_values_are_equal:
-                            logging.info(
-                                "Test results did not match the test results of the original code.",
+            candidate_generated_test_results = None
+            if run_generated_tests:
+                candidate_generated_test_results = self.run_and_parse_tests(
+                    test_env,
+                    generated_tests_path,
+                    TestType.GENERATED_REGRESSION,
+                    optimization_index,
+                )
+
+            if candidate_generated_test_results:
+                logging.info(
+                    f"Generated tests results for candidate: {candidate_generated_test_results.get_test_pass_fail_report()}",
+                )
+                if compare_test_results(
+                    original_generated_test_results,
+                    candidate_generated_test_results,
+                ):
+                    logging.info("Test results matched!")
+                else:
+                    logging.info("Test results did not match the test results of the original code.")
+
+            if not candidate_generated_test_results:
+                test_runtime = sum(instrumented_test_timing)
+            else:
+                test_runtime = candidate_generated_test_results.total_passed_runtime() + sum(
+                    instrumented_test_timing,
+                )
+
+            if test_runtime == 0:
+                logging.warning(
+                    "The overall test runtime of the optimized function is 0, couldn't run tests.",
+                )
+            test_times_list = [test_runtime]
+            if best_test_runtime is None or test_runtime < best_test_runtime:
+                if candidate_generated_test_results:
+                    candidate_existing_test_results.merge(candidate_generated_test_results)
+                best_test_runtime = test_runtime
+                best_test_results = candidate_existing_test_results
+            times_run += 1
+
+        else:
+            cumulative_test_runtime = 0
+            cumulative_test_runs = 0
+            test_times_list = []
+            first_run = True
+            do_break = False
+            while (
+                cumulative_test_runtime < MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS
+                and cumulative_test_runs < MAX_TEST_FUNCTION_RUNS
+            ):
+                for test_index in range(MAX_TEST_RUN_ITERATIONS):
+                    pathlib.Path(
+                        get_run_tmp_file(f"test_return_values_{optimization_index}.bin"),
+                    ).unlink(missing_ok=True)
+                    pathlib.Path(
+                        get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite"),
+                    ).unlink(missing_ok=True)
+                    if generated_tests_elapsed_time > MAX_FUNCTION_TEST_SECONDS:
+                        do_break = True
+                        break
+
+                    candidate_existing_test_results = TestResults()
+                    instrumented_test_timing = []
+                    for instrumented_test_file in instrumented_unittests_created_for_function:
+                        relevant_tests_in_file = [
+                            test_in_file
+                            for test_in_file in tests_in_file
+                            if test_in_file.test_file
+                            == instrumented_test_file.replace("__perfinstrumented", "")
+                        ]
+                        is_replay_test = relevant_tests_in_file[0].test_type == TestType.REPLAY_TEST
+                        if is_replay_test and len(relevant_tests_in_file) > 1:
+                            logging.warning(
+                                f"Multiple tests found for the replay test {instrumented_test_file}. Should not happen",
                             )
-                            logging.info(
-                                f"Test {test_invocation.id} failed. Skipping this candidate.",
+                        candidate_existing_test_result = self.run_and_parse_tests(
+                            test_env,
+                            instrumented_test_file,
+                            relevant_tests_in_file[0].test_type,
+                            optimization_index,
+                            relevant_tests_in_file[0].test_function if is_replay_test else None,
+                        )
+                        timing = candidate_existing_test_result.total_passed_runtime()
+                        candidate_existing_test_results.merge(candidate_existing_test_result)
+                        instrumented_test_timing.append(timing)
+                    if first_run and test_index == 0:
+                        equal_results = True
+                        logging.info(
+                            f"Existing unit tests results for candidate: {candidate_existing_test_results.get_test_pass_fail_report()}",
+                        )
+                        return_values_are_equal = compare_test_results(
+                            original_existing_test_results,
+                            candidate_existing_test_results,
+                        )
+                        for test_invocation in candidate_existing_test_results:
+                            original_test_invocation = original_existing_test_results.get_by_id(
+                                test_invocation.id,
                             )
-                            equal_results = False
+                            if (
+                                original_test_invocation is not None
+                                and not original_test_invocation.timed_out
+                                and (test_invocation.did_pass != original_test_invocation.did_pass)
+                            ) or not return_values_are_equal:
+                                logging.info(
+                                    "Test results did not match the test results of the original code.",
+                                )
+                                logging.info(
+                                    f"Test {test_invocation.id} failed. Skipping this candidate.",
+                                )
+                                equal_results = False
+                                do_break = True
+                                break
+                        if not equal_results:
                             do_break = True
                             break
+
+                    candidate_generated_test_results = None
+                    if run_generated_tests:
+                        candidate_generated_test_results = self.run_and_parse_tests(
+                            test_env,
+                            generated_tests_path,
+                            TestType.GENERATED_REGRESSION,
+                            optimization_index,
+                        )
+
+                    if candidate_generated_test_results and first_run and test_index == 0:
+                        logging.info(
+                            f"Generated tests results for candidate: {candidate_generated_test_results.get_test_pass_fail_report()}",
+                        )
+                        if compare_test_results(
+                            original_generated_test_results,
+                            candidate_generated_test_results,
+                        ):
+                            equal_results = True
+                            logging.info("Test results matched!")
+                        else:
+                            logging.info("Test results did not match the test results of the original code.")
+                            equal_results = False
                     if not equal_results:
                         do_break = True
                         break
 
-                candidate_generated_test_results = None
-                if run_generated_tests:
-                    candidate_generated_test_results = self.run_and_parse_tests(
-                        test_env,
-                        generated_tests_path,
-                        TestType.GENERATED_REGRESSION,
-                        optimization_index,
-                    )
-
-                if candidate_generated_test_results and first_run and test_index == 0:
-                    logging.info(
-                        f"Generated tests results for candidate: {candidate_generated_test_results.get_test_pass_fail_report()}",
-                    )
-                    if compare_test_results(
-                        original_generated_test_results,
-                        candidate_generated_test_results,
-                    ):
-                        equal_results = True
-                        logging.info("Test results matched!")
+                    if not candidate_generated_test_results:
+                        test_runtime = sum(instrumented_test_timing)
                     else:
-                        logging.info("Test results did not match the test results of the original code.")
-                        equal_results = False
-                if not equal_results:
-                    do_break = True
-                    break
+                        test_runtime = candidate_generated_test_results.total_passed_runtime() + sum(
+                            instrumented_test_timing,
+                        )
 
-                if not candidate_generated_test_results:
-                    test_runtime = sum(instrumented_test_timing)
-                else:
-                    test_runtime = candidate_generated_test_results.total_passed_runtime() + sum(
-                        instrumented_test_timing,
-                    )
-
-                if test_runtime == 0:
-                    logging.warning(
-                        "The overall test runtime of the optimized function is 0, couldn't run tests.",
-                    )
+                    if test_runtime == 0:
+                        logging.warning(
+                            "The overall test runtime of the optimized function is 0, couldn't run tests.",
+                        )
+                        do_break = True
+                        break
+                    test_times_list.append(test_runtime)
+                    if best_test_runtime is None or test_runtime < best_test_runtime:
+                        if candidate_generated_test_results:
+                            candidate_existing_test_results.merge(candidate_generated_test_results)
+                        best_test_runtime = test_runtime
+                        best_test_results = candidate_existing_test_results
+                    cumulative_test_runs += 1
+                    cumulative_test_runtime += test_runtime
+                    times_run += 1
+                if first_run:
+                    first_run = False
+                if best_test_runtime is not None and (best_test_runtime > 3 * best_runtime_until_now):
+                    # If after 5 runs, the optimized candidate is taking 3 times longer than the best code until now,
+                    # then it is not a good optimization. Early exit to save time.
+                    success = True
                     do_break = True
+                if do_break:
                     break
-                test_times_list.append(test_runtime)
-                if best_test_runtime is None or test_runtime < best_test_runtime:
-                    if candidate_generated_test_results:
-                        candidate_existing_test_results.merge(candidate_generated_test_results)
-                    best_test_runtime = test_runtime
-                    best_test_results = candidate_existing_test_results
-                cumulative_test_runs += 1
-                cumulative_test_runtime += test_runtime
-                times_run += 1
-            if first_run:
-                first_run = False
-            if best_test_runtime is not None and (best_test_runtime > 3 * best_runtime_until_now):
-                # If after 5 runs, the optimized candidate is taking 3 times longer than the best code until now,
-                # then it is not a good optimization. Early exit to save time.
-                success = True
-                do_break = True
-            if do_break:
-                break
 
         pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.bin")).unlink(
             missing_ok=True,
@@ -1140,6 +1321,7 @@ class Optimizer:
         test_type: TestType,
         optimization_iteration: int,
         test_function: str | None = None,
+        count: int = 100,
     ) -> TestResults:
         try:
             result_file_path, run_result = run_tests(
@@ -1151,6 +1333,7 @@ class Optimizer:
                 verbose=True,
                 test_env=test_env,
                 only_run_this_test_function=test_function,
+                count=count,
             )
         except subprocess.TimeoutExpired:
             logging.exception(
