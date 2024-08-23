@@ -13,6 +13,7 @@ from codeflash.verification.test_results import (
     TestResults,
     TestType,
 )
+from returns.result import Failure, Success
 
 
 def test_basic_python_objects():
@@ -530,6 +531,26 @@ def test_pyrsistent():
     x = pvector([1, 2, 4])
     assert comparator(v, w)
     assert not comparator(v, x)
+
+
+def test_returns():
+    a = Success(5)
+    b = Success(5)
+    c = Success(6)
+    d = Failure(5)
+    e = Success((5, 5))
+    f = Success((5, 6))
+    assert comparator(a, b)
+    assert not comparator(a, c)
+    assert not comparator(a, d)
+    assert not comparator(a, e)
+    assert not comparator(e, f)
+
+    g = Success((5, 5))
+    h = Success((5, 5))
+    i = Success((5, 6))
+    assert comparator(g, h)
+    assert not comparator(g, i)
 
 
 def test_custom_object():
