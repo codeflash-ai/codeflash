@@ -3,11 +3,10 @@ from __future__ import annotations
 import ast
 import os
 import re
-import shutil
 import subprocess
 import sys
 import time
-from typing import Callable, Optional
+from typing import Optional
 
 import click
 import git
@@ -19,7 +18,7 @@ from pydantic.dataclasses import dataclass
 from returns.pipeline import is_successful
 
 from codeflash.api.cfapi import is_github_app_installed_on_repo
-from codeflash.cli_cmds.cli_common import apologize_and_exit
+from codeflash.cli_cmds.cli_common import apologize_and_exit, inquirer_wrapper, inquirer_wrapper_path
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import (
@@ -56,101 +55,6 @@ class SetupInfo:
     test_framework: str
     ignore_paths: list[str]
     formatter: str
-
-
-def split_string_to_fit_width(string: str, width: int) -> list[str]:
-    words = string.split()
-    lines = []
-    current_line = [words[0]]
-    current_length = len(words[0])
-
-    for word in words[1:]:
-        word_length = len(word)
-        if current_length + word_length + 1 <= width:
-            current_line.append(word)
-            current_length += word_length + 1
-        else:
-            lines.append(" ".join(current_line))
-            current_line = [word]
-            current_length = word_length
-
-    lines.append(" ".join(current_line))
-    return lines
-
-
-def split_string_to_cli_width(string: str, is_confirm: bool = False) -> list[str]:
-    cli_width, _ = shutil.get_terminal_size()
-    # split string to lines that accommodate "[?] " prefix
-    cli_width -= len("[?] ")
-    lines = split_string_to_fit_width(string, cli_width)
-
-    # split last line to additionally accommodate ": " or " (y/N): " suffix
-    cli_width -= len(" (y/N):") if is_confirm else len(": ")
-    last_lines = split_string_to_fit_width(lines[-1], cli_width)
-
-    lines = lines[:-1] + last_lines
-
-    if len(lines) > 1:
-        for i in range(len(lines[:-1])):
-            # Add yellow color to question mark in "[?] " prefix
-            lines[i] = "[\033[33m?\033[0m] " + lines[i]
-    return lines
-
-
-def inquirer_wrapper_path(*args, **kwargs) -> dict[str]:
-    message = None
-    response = None
-    new_args = []
-    new_kwargs = {}
-
-    message = kwargs["message"]
-    new_kwargs = {**kwargs}
-    split_messages = split_string_to_cli_width(message)
-    for split_message in split_messages[:-1]:
-        click.echo(split_message)
-
-    last_message = split_messages[-1]
-    new_kwargs["message"] = last_message
-    new_args.append(args[0])
-
-    response = inquirer.prompt(
-        [
-            inquirer.Path(*new_args, **new_kwargs),
-        ],
-    )
-    return response
-
-
-def inquirer_wrapper(func: Callable, *args, **kwargs) -> str | bool:
-    # extract the message
-    message = None
-    response = None
-    new_args = []
-    new_kwargs = {}
-
-    if len(args) == 1:
-        message = args[0]
-    else:
-        message = kwargs["message"]
-        new_kwargs = {**kwargs}
-    # split the message
-    split_messages = split_string_to_cli_width(
-        message,
-        is_confirm=func == inquirer.confirm,
-    )
-    for split_message in split_messages[:-1]:
-        click.echo(split_message)
-
-    last_message = split_messages[-1]
-
-    if len(args) == 1:
-        new_args.append(last_message)
-    else:
-        new_kwargs["message"] = last_message
-
-    response = func(*new_args, **new_kwargs)
-
-    return response
 
 
 def init_codeflash() -> None:

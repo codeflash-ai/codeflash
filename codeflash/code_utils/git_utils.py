@@ -12,7 +12,7 @@ import inquirer
 from git import Repo
 from unidiff import PatchSet
 
-from codeflash.cli_cmds.cmd_init import inquirer_wrapper
+from codeflash.cli_cmds.cli_common import inquirer_wrapper
 
 
 def get_git_diff(
