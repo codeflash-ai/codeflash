@@ -583,6 +583,7 @@ def install_github_app() -> None:
     else:
         click.prompt(
             f"Finally, you'll need install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
+            + f"I will attempt to open the github app page - https://github.com/apps/codeflash-ai/installations/select_target {LF}"
             + f"Press Enter to open the page to let you install the app ...{LF}",
             default="",
             type=click.STRING,
@@ -626,12 +627,11 @@ class CFAPIKeyType(click.ParamType):
         value = value.strip()
         if value.startswith("cf-") or value == "":
             return value
-        else:
-            self.fail(
-                f"That key [{value}] seems to be invalid. It should start with a 'cf-' prefix. Please try again.",
-                param,
-                ctx,
-            )
+        self.fail(
+            f"That key [{value}] seems to be invalid. It should start with a 'cf-' prefix. Please try again.",
+            param,
+            ctx,
+        )
 
 
 # Returns True if the user entered a new API key, False if they used an existing one
@@ -674,7 +674,7 @@ def enter_api_key_and_save_to_rc() -> None:
         ).strip()
         if api_key:
             break
-        elif not browser_launched:
+        if not browser_launched:
             click.echo(
                 f"Opening your Codeflash API key page. Grab a key from there!{LF}"
                 "You can also open this link manually: https://app.codeflash.ai/app/apikeys",

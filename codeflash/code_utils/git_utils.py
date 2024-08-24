@@ -12,6 +12,8 @@ import inquirer
 from git import Repo
 from unidiff import PatchSet
 
+from codeflash.cli_cmds.cmd_init import inquirer_wrapper
+
 
 def get_git_diff(
     repo_directory: str = os.getcwd(),
@@ -104,8 +106,9 @@ def check_running_in_git_repo(module_root: str) -> bool:
 
 def confirm_proceeding_with_no_git_repo() -> bool:
     if sys.__stdin__.isatty():
-        return inquirer.confirm(
-            "WARNING: I did not find a git repository for your code. If you proceed in running codeflash, optimized code will"
+        return inquirer_wrapper(
+            inquirer.confirm,
+            message="WARNING: I did not find a git repository for your code. If you proceed in running codeflash, optimized code will"
             " be written over your current code and you could irreversibly lose your current code. Proceed?",
             default=False,
         )
@@ -123,8 +126,9 @@ def check_and_push_branch(repo: git.Repo, wait_for_push: bool = False) -> bool:
         if not sys.__stdin__.isatty():
             logging.warning("Non-interactive shell detected. Branch will not be pushed.")
             return False
-        if sys.__stdin__.isatty() and inquirer.confirm(
-            f"⚡️ In order for me to create PRs, your current branch needs to be pushed. Do you want to push the branch "
+        if sys.__stdin__.isatty() and inquirer_wrapper(
+            inquirer.confirm,
+            message=f"⚡️ In order for me to create PRs, your current branch needs to be pushed. Do you want to push the branch "
             f"'{current_branch}' to the remote repository?",
             default=False,
         ):
