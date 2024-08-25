@@ -611,14 +611,21 @@ def create_bubble_sort_file_and_test(args: Namespace) -> None:
                 arr[j + 1] = temp
     return arr
 """
-    bubble_sort_test_content = """def sorter(arr):
-    for i in range(len(arr)):
-        for j in range(len(arr) - 1):
-            if arr[j] > arr[j + 1]:
-                temp = arr[j]
-                arr[j] = arr[j + 1]
-                arr[j + 1] = temp
-    return arr
+    bubble_sort_test_content = f"""from {os.path.basename(args.module_root)}.bubble_sort import sorter
+
+def test_sort():
+    input = [5, 4, 3, 2, 1, 0]
+    output = sorter(input)
+    assert output == [0, 1, 2, 3, 4, 5]
+
+    input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
+    output = sorter(input)
+    assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+
+    input = list(reversed(range(500)))
+    output = sorter(input)
+    assert output == list(range(500))
+
 """
     bubble_sort_path = os.path.join(args.module_root, "bubble_sort.py")
     with open(bubble_sort_path, "w", encoding="utf8") as bubble_sort_file:
