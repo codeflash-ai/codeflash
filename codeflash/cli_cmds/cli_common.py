@@ -17,7 +17,6 @@ def apologize_and_exit() -> NoReturn:
 
 
 def inquirer_wrapper(func: Callable, *args, **kwargs) -> str | bool:
-    # extract the message
     message = None
     response = None
     new_args = []
@@ -27,8 +26,7 @@ def inquirer_wrapper(func: Callable, *args, **kwargs) -> str | bool:
         message = args[0]
     else:
         message = kwargs["message"]
-        new_kwargs = {**kwargs}
-    # split the message
+        new_kwargs = kwargs.copy()
     split_messages = split_string_to_cli_width(
         message,
         is_confirm=func == inquirer.confirm,
@@ -74,7 +72,7 @@ def inquirer_wrapper_path(*args, **kwargs) -> dict[str]:
     new_kwargs = {}
 
     message = kwargs["message"]
-    new_kwargs = {**kwargs}
+    new_kwargs = kwargs.copy()
     split_messages = split_string_to_cli_width(message)
     for split_message in split_messages[:-1]:
         click.echo(split_message)
