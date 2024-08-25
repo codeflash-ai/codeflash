@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import ast
 import os
+import pathlib
 import re
 import subprocess
 import sys
-import time
+from argparse import Namespace
 from typing import Optional
 
 import click
@@ -94,15 +95,15 @@ def init_codeflash() -> None:
         apologize_and_exit()
 
 
-def ask_run_end_to_end_test(setup_info) -> None:
+def ask_run_end_to_end_test(args: Namespace) -> None:
     run_tests = inquirer_wrapper(
         inquirer.confirm,
         message="⚡️ Do you want to run a sample optimization to make sure everything's set up correctly? (takes about 3 minutes)",
         default=True,
     )
     if run_tests:
-        create_bubble_sort_file(setup_info)
-        run_end_to_end_test(setup_info)
+        bubble_sort_path, bubble_sort_test_path = create_bubble_sort_file_and_test(args)
+        run_end_to_end_test(args, bubble_sort_path, bubble_sort_test_path)
 
 
 def collect_setup_info() -> SetupInfo:
@@ -600,7 +601,7 @@ def enter_api_key_and_save_to_rc() -> None:
     os.environ["CODEFLASH_API_KEY"] = api_key
 
 
-def create_bubble_sort_file(setup_info: SetupInfo) -> None:
+def create_bubble_sort_file_and_test(args: Namespace) -> None:
     bubble_sort_content = """def sorter(arr):
     for i in range(len(arr)):
         for j in range(len(arr) - 1):
@@ -610,13 +611,27 @@ def create_bubble_sort_file(setup_info: SetupInfo) -> None:
                 arr[j + 1] = temp
     return arr
 """
-    bubble_sort_path = os.path.join(setup_info.module_root, "bubble_sort.py")
+    bubble_sort_test_content = """def sorter(arr):
+    for i in range(len(arr)):
+        for j in range(len(arr) - 1):
+            if arr[j] > arr[j + 1]:
+                temp = arr[j]
+                arr[j] = arr[j + 1]
+                arr[j + 1] = temp
+    return arr
+"""
+    bubble_sort_path = os.path.join(args.module_root, "bubble_sort.py")
     with open(bubble_sort_path, "w", encoding="utf8") as bubble_sort_file:
         bubble_sort_file.write(bubble_sort_content)
+    bubble_sort_test_path = os.path.join(args.tests_root, "test_bubble_sort.py")
+    with open(bubble_sort_test_path, "w", encoding="utf8") as bubble_sort_test_file:
+        bubble_sort_test_file.write(bubble_sort_test_content)
     click.echo(f"✅ Created {bubble_sort_path}")
+    click.echo(f"✅ Created {bubble_sort_test_path}")
+    return bubble_sort_path, bubble_sort_test_path
 
 
-def run_end_to_end_test(setup_info: SetupInfo) -> None:
+def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test_path: str) -> None:
     command = [
         "codeflash",
         "--file",
@@ -628,32 +643,19 @@ def run_end_to_end_test(setup_info: SetupInfo) -> None:
     idx = 0
     sys.stdout.write("Running sample optimization... ")
     sys.stdout.flush()
-    process = subprocess.Popen(
+    process = subprocess.run(
         command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
         text=True,
-        cwd=setup_info.module_root,
+        cwd=args.module_root,
+        check=False,
     )
-    while process.poll() is None:
-        sys.stdout.write(animation[idx % len(animation)])
-        sys.stdout.flush()
-        time.sleep(0.5)
-        sys.stdout.write("\b")
-        idx += 1
-
-    sys.stdout.write(" ")  # Clear the last animation character
-    sys.stdout.flush()
-    if process.stderr:
-        stderr = process.stderr.read()
-        if stderr:
-            click.echo(stderr.strip())
-
-    bubble_sort_path = os.path.join(setup_info.module_root, "bubble_sort.py")
 
     # Delete the bubble_sort.py file after the test
-    os.remove(bubble_sort_path)
+    pathlib.Path(bubble_sort_path).unlink(missing_ok=True)
+    pathlib.Path(bubble_sort_test_path).unlink(missing_ok=True)
+
     click.echo(f"{LF}🗑️ Deleted {bubble_sort_path}")
+    click.echo(f"{LF}🗑️ Deleted {bubble_sort_test_path}")
 
     if process.returncode == 0:
         click.echo(

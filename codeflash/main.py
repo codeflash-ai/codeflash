@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
-from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
+from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO, ask_run_end_to_end_test
 from codeflash.cli_cmds.logging_config import LOGGING_FORMAT
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.optimization import optimizer
@@ -29,6 +29,11 @@ def main() -> None:
         init_sentry(not disable_telemetry, exclude_errors=True)
         posthog.initialize_posthog(not disable_telemetry)
         args.func()
+    if args.verify_setup:
+        args = process_pyproject_config(args)
+        init_sentry(not args.disable_telemetry, exclude_errors=True)
+        posthog.initialize_posthog(not args.disable_telemetry)
+        ask_run_end_to_end_test(args)
     else:
         args = process_pyproject_config(args)
         init_sentry(not args.disable_telemetry, exclude_errors=True)
