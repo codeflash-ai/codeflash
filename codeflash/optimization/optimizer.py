@@ -37,6 +37,7 @@ from codeflash.code_utils.config_consts import (
     MAX_TEST_FUNCTION_RUNS,
     MAX_TEST_RUN_ITERATIONS,
     N_CANDIDATES,
+    REPEAT_COUNT,
 )
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import (
@@ -805,6 +806,7 @@ class Optimizer:
         generated_tests_path: str,
         tests_in_file: list[TestsInFile],
     ) -> Result[OriginalCodeBaseline, str]:
+        # Recreate first run logic!!!! Needs to be separate.!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
         original_runtime = None
@@ -832,38 +834,63 @@ class Optimizer:
             instrumented_existing_test_timing = []
             original_test_results_iter = TestResults()
             existing_test_results = TestResults()
+            first_test_types = []
+            first_test_functions = []
             for test_file in instrumented_unittests_created_for_function:
                 relevant_tests_in_file = [
                     test_in_file
                     for test_in_file in tests_in_file
                     if test_in_file.test_file == test_file.replace("__perfinstrumented", "")
                 ]
-                is_replay_test = relevant_tests_in_file[0].test_type == TestType.REPLAY_TEST
+                is_replay_test = (
+                    first_test_type := relevant_tests_in_file[0].test_type
+                ) == TestType.REPLAY_TEST
+                first_test_types.append(first_test_type)
+                first_test_functions.append(
+                    relevant_tests_in_file[0].test_function if is_replay_test else None,
+                )
+
                 if is_replay_test and len(relevant_tests_in_file) > 1:
                     logging.warning(
                         f"Multiple tests found for the replay test {test_file}. Should not happen",
                     )
 
-                unittest_results = self.run_and_parse_tests(
-                    test_env,
-                    test_file,
-                    relevant_tests_in_file[0].test_type,
-                    0,
-                    relevant_tests_in_file[0].test_function if is_replay_test else None,
-                )
+                # unittest_results = self.run_and_parse_tests(
+                #     test_env,
+                #     test_file,
+                #     first_test_type,
+                #     0,
+                #     relevant_tests_in_file[0].test_function if is_replay_test else None,
+                # )
+            instrumented_unittests_created_for_function.add(generated_tests_path)
+            first_test_types.append(TestType.GENERATED_REGRESSION)
+            first_test_functions.append(None)
+            # original_gen_results = self.run_and_parse_tests(
+            #     test_env,
+            #     generated_tests_path,
+            #     TestType.GENERATED_REGRESSION,
+            #     0,
+            #     None,
+            #     REPEAT_COUNT,
+            # )
 
-                timing = unittest_results.total_passed_runtime()
-                original_test_results_iter.merge(unittest_results)
-                existing_test_results.merge(unittest_results)
-                instrumented_existing_test_timing.append(timing)
+            # Fix after changing run_and_parse_tests
+            unittest_results = self.run_and_parse_tests(
+                test_env,
+                instrumented_unittests_created_for_function,
+                first_test_types,
+                0,
+                first_test_functions,
+                REPEAT_COUNT,
+            )
+            # Handle these one by one? (unittest results should be all results for everything). Or can merge, append all
+            # at once? This is only for existing tests suites, one by one
+            timing = unittest_results.total_passed_runtime()
+            original_test_results_iter.merge(unittest_results)
+            existing_test_results.merge(unittest_results)
+            instrumented_existing_test_timing.append(timing)
             logging.info(
                 f"Existing unit test results for original code: {original_test_results_iter.get_test_pass_fail_report()}",
-            )
-            original_gen_results = self.run_and_parse_tests(
-                test_env,
-                generated_tests_path,
-                TestType.GENERATED_REGRESSION,
-                0,
             )
             functions_to_remove = [
                 result.id.test_function_name
@@ -872,7 +899,8 @@ class Optimizer:
             ]
 
             # TODO: Implement the logic to disregard the timing info of the tests that errored out. That is remove test cases that failed to run.
-
+            # based on generated test results, need to extract them? Same thing for all following statements in the
+            # pytest branch
             if not original_gen_results and len(instrumented_existing_test_timing) == 0:
                 logging.warning(
                     f"Couldn't run any tests for original function {function_name}. SKIPPING OPTIMIZING THIS FUNCTION.",
@@ -936,7 +964,7 @@ class Optimizer:
                             logging.warning(
                                 f"Multiple tests found for the replay test {test_file}. Should not happen",
                             )
-
+                        # Fix arguments to singleton lists!!!!!!!!!!!!!!
                         unittest_results = self.run_and_parse_tests(
                             test_env,
                             test_file,
@@ -953,7 +981,7 @@ class Optimizer:
                         logging.info(
                             f"Existing unit test results for original code: {original_test_results_iter.get_test_pass_fail_report()}",
                         )
-
+                    # Fix arguments to singleton lists !!!!!!!!!!
                     original_gen_results = self.run_and_parse_tests(
                         test_env,
                         generated_tests_path,
@@ -1317,40 +1345,40 @@ class Optimizer:
     def run_and_parse_tests(
         self,
         test_env: dict[str, str],
-        test_file: str,
-        test_type: TestType,
+        test_files: list[str],
+        test_types: list[TestType],
         optimization_iteration: int,
-        test_function: str | None = None,
-        count: int = 100,
+        test_functions: list[str | None] | None = None,
+        count: int = REPEAT_COUNT,
     ) -> TestResults:
         try:
             result_file_path, run_result = run_tests(
-                test_file,
+                test_files,
                 test_framework=self.args.test_framework,
                 cwd=self.args.project_root,
                 pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                 pytest_cmd=self.test_cfg.pytest_cmd,
                 verbose=True,
                 test_env=test_env,
-                only_run_this_test_function=test_function,
+                only_run_these_test_functions=test_functions,
                 count=count,
             )
         except subprocess.TimeoutExpired:
             logging.exception(
-                f"Error running tests in {test_file}.\nTimeout Error",
+                f'Error running tests in {", ".join(test_files)}.\nTimeout Error',
             )
             return TestResults()
         if run_result.returncode != 0:
             logging.debug(
-                f"Nonzero return code {run_result.returncode} when running tests in {test_file}.\n"
+                f'Nonzero return code {run_result.returncode} when running tests in {", ".join(test_files)}.\n'
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n",
             )
         unittest_results = parse_test_results(
             test_xml_path=result_file_path,
-            test_py_path=test_file,
+            test_py_path=test_files,
             test_config=self.test_cfg,
-            test_type=test_type,
+            test_type=test_types,
             run_result=run_result,
             optimization_iteration=optimization_iteration,
         )
