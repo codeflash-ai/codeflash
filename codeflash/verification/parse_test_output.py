@@ -145,6 +145,7 @@ def parse_test_xml(
         return test_results
     test_module_paths = []
     for file_name in test_py_file_paths:
+        assert os.path.exists(file_name), f"File {file_name} doesn't exist."
         test_module_paths.append(module_name_from_file_path(file_name, test_config.project_root_path))
     test_module_paths_no_perfinstrumented = [
         test_module_path[: -len("__perfinstrumented")]
@@ -173,8 +174,6 @@ def parse_test_xml(
                     )
                 return test_results
             # file_name = test_py_file_path
-            for file_name in test_py_file_paths:
-                assert os.path.exists(file_name), f"File {file_name} doesn't exist."
             result = testcase.is_passed  # TODO: See for the cases of ERROR and SKIPPED
             # test_module_path = module_name_from_file_path(file_name, test_config.project_root_path)
             test_class = None
