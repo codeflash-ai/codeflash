@@ -27,6 +27,9 @@ def run_tests(
     if test_framework == "pytest":
         result_file_path = get_run_tmp_file("pytest_results.xml")
         pytest_cmd_list = shlex.split(pytest_cmd, posix=os.name != "nt")
+        pytest_test_env = test_env.copy()
+        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
+
 
         results = subprocess.run(
             pytest_cmd_list
@@ -43,7 +46,7 @@ def run_tests(
             ],
             capture_output=True,
             cwd=cwd,
-            env=test_env,
+            env=pytest_test_env,
             text=True,
             timeout=600,  # TODO: Make this dynamic
             check=False,
