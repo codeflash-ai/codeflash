@@ -806,7 +806,6 @@ class Optimizer:
         generated_tests_path: str,
         tests_in_file: list[TestsInFile],
     ) -> Result[OriginalCodeBaseline, str]:
-        # Recreate first run logic!!!! Needs to be separate.!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
         original_runtime = None
@@ -849,32 +848,15 @@ class Optimizer:
                 first_test_functions.append(
                     relevant_tests_in_file[0].test_function if is_replay_test else None,
                 )
-
                 if is_replay_test and len(relevant_tests_in_file) > 1:
                     logging.warning(
                         f"Multiple tests found for the replay test {test_file}. Should not happen",
                     )
 
-                # unittest_results = self.run_and_parse_tests(
-                #     test_env,
-                #     test_file,
-                #     first_test_type,
-                #     0,
-                #     relevant_tests_in_file[0].test_function if is_replay_test else None,
-                # )
             instrumented_unittests_created_for_function.add(generated_tests_path)
             first_test_types.append(TestType.GENERATED_REGRESSION)
             first_test_functions.append(None)
-            # original_gen_results = self.run_and_parse_tests(
-            #     test_env,
-            #     generated_tests_path,
-            #     TestType.GENERATED_REGRESSION,
-            #     0,
-            #     None,
-            #     REPEAT_COUNT,
-            # )
 
-            # Fix after changing run_and_parse_tests
             unittest_results = self.run_and_parse_tests(
                 test_env,
                 list(instrumented_unittests_created_for_function),
@@ -964,13 +946,12 @@ class Optimizer:
                             logging.warning(
                                 f"Multiple tests found for the replay test {test_file}. Should not happen",
                             )
-                        # Fix arguments to singleton lists!!!!!!!!!!!!!!
                         unittest_results = self.run_and_parse_tests(
                             test_env,
-                            test_file,
-                            relevant_tests_in_file[0].test_type,
+                            [test_file],
+                            [relevant_tests_in_file[0].test_type],
                             0,
-                            relevant_tests_in_file[0].test_function if is_replay_test else None,
+                            [relevant_tests_in_file[0].test_function if is_replay_test else None],
                         )
 
                         timing = unittest_results.total_passed_runtime()
@@ -981,11 +962,10 @@ class Optimizer:
                         logging.info(
                             f"Existing unit test results for original code: {original_test_results_iter.get_test_pass_fail_report()}",
                         )
-                    # Fix arguments to singleton lists !!!!!!!!!!
                     original_gen_results = self.run_and_parse_tests(
                         test_env,
-                        generated_tests_path,
-                        TestType.GENERATED_REGRESSION,
+                        [generated_tests_path],
+                        [TestType.GENERATED_REGRESSION],
                         0,
                     )
                     functions_to_remove = [
