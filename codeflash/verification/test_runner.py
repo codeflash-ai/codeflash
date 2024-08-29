@@ -5,6 +5,7 @@ import shlex
 import subprocess
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
+from codeflash.code_utils.config_consts import REPEAT_COUNT
 
 
 def run_tests(
@@ -15,8 +16,8 @@ def run_tests(
     pytest_timeout: int | None = None,
     pytest_cmd: str = "pytest",
     verbose: bool = False,
-    only_run_these_test_functions: str | None = None,
-    count: int = 100,
+    only_run_these_test_functions: list[str | None] = None,
+    count: int = REPEAT_COUNT,
 ) -> tuple[str, subprocess.CompletedProcess]:
     assert test_framework in ["pytest", "unittest"]
     # TODO: Make this work for replay tests
@@ -30,10 +31,9 @@ def run_tests(
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
 
-
         results = subprocess.run(
             pytest_cmd_list
-            + list(test_paths)
+            + test_paths
             + [
                 "--capture=tee-sys",
                 f"--timeout={pytest_timeout}",
@@ -56,7 +56,7 @@ def run_tests(
         results = subprocess.run(
             ["python", "-m", "xmlrunner"]
             + (["-v"] if verbose else [])
-            + [test_path]
+            + [test_paths]
             + ["--output-file", result_file_path],
             capture_output=True,
             cwd=cwd,
