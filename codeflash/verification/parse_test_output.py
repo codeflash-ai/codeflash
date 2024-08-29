@@ -127,8 +127,8 @@ def parse_sqlite_test_results(
 
 def parse_test_xml(
     test_xml_file_path: str,
-    test_py_file_path: str,
-    test_type: TestType,
+    test_py_file_paths: list[str],
+    tests_type: list[TestType],
     test_config: TestConfig,
     run_result: Optional[subprocess.CompletedProcess] = None,
 ) -> TestResults:
@@ -143,6 +143,15 @@ def parse_test_xml(
     except Exception as e:
         logging.warning(f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}")
         return test_results
+    test_module_paths = []
+    for file_name in test_py_file_paths:
+        test_module_paths.append(module_name_from_file_path(file_name, test_config.project_root_path))
+    test_module_paths_no_perfinstrumented = [
+        test_module_path[: -len("__perfinstrumented")]
+        if test_module_path.endswith("__perfinstrumented")
+        else test_module_path
+        for test_module_path in test_module_paths
+    ]
 
     for suite in xml:
         for testcase in suite:
@@ -163,19 +172,22 @@ def parse_test_xml(
                         f"Test log - STDOUT : {run_result.stdout.decode()} \n STDERR : {run_result.stderr.decode()}",
                     )
                 return test_results
-            file_name = test_py_file_path
-
-            assert os.path.exists(file_name), f"File {file_name} doesn't exist."
+            # file_name = test_py_file_path
+            for file_name in test_py_file_paths:
+                assert os.path.exists(file_name), f"File {file_name} doesn't exist."
             result = testcase.is_passed  # TODO: See for the cases of ERROR and SKIPPED
-            test_module_path = module_name_from_file_path(file_name, test_config.project_root_path)
+            # test_module_path = module_name_from_file_path(file_name, test_config.project_root_path)
             test_class = None
-            if class_name is not None and class_name.startswith(test_module_path):
-                test_class = class_name[
-                    len(test_module_path) + 1 :
-                ]  # +1 for the dot, gets Unittest class name
+            if class_name is not None:
+                for test_module_path in test_module_paths:
+                    if class_name.startswith(test_module_path):
+                        test_class = class_name[
+                            len(test_module_path) + 1 :
+                        ]  # +1 for the dot, gets Unittest class name
             # test_name = (test_class + "." if test_class else "") + testcase.name
-            if test_module_path.endswith("__perfinstrumented"):
-                test_module_path = test_module_path[: -len("__perfinstrumented")]
+
+            # if test_module_path.endswith("__perfinstrumented"):
+            #     test_module_path = test_module_path[: -len("__perfinstrumented")]
             test_function = testcase.name
             if test_function is None:
                 with sentry_sdk.push_scope() as scope:
@@ -220,7 +232,7 @@ def parse_test_xml(
                         runtime=None,
                         test_framework=test_config.test_framework,
                         did_pass=result,
-                        test_type=test_type,
+                        test_type=tests_type,
                         return_value=None,
                         timed_out=timed_out,
                     ),
@@ -386,7 +398,7 @@ def parse_test_results(
     test_results_xml = parse_test_xml(
         test_xml_path,
         test_py_path,
-        test_type=test_type,
+        tests_type=test_type,
         test_config=test_config,
         run_result=run_result,
     )
