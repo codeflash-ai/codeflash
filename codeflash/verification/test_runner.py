@@ -8,7 +8,7 @@ from codeflash.code_utils.code_utils import get_run_tmp_file
 
 
 def run_tests(
-    test_path: str,
+    test_paths: list[str],
     test_framework: str,
     cwd: str | None = None,
     test_env: dict[str, str] | None = None,
@@ -19,8 +19,10 @@ def run_tests(
     count: int = 100,
 ) -> tuple[str, subprocess.CompletedProcess]:
     assert test_framework in ["pytest", "unittest"]
-    if only_run_these_test_functions and "__replay_test" in test_path:
-        test_path = test_path + "::" + only_run_these_test_functions
+    # TODO: Make this work for replay tests
+    for i, test_path in enumerate(test_paths):
+        if only_run_these_test_functions and "__replay_test" in test_path:
+            test_paths[i] = test_path + "::" + only_run_these_test_functions
 
     if test_framework == "pytest":
         result_file_path = get_run_tmp_file("pytest_results.xml")
@@ -28,8 +30,8 @@ def run_tests(
 
         results = subprocess.run(
             pytest_cmd_list
+            + list(test_paths)
             + [
-                test_path,
                 "--capture=tee-sys",
                 f"--timeout={pytest_timeout}",
                 "-q",
@@ -43,7 +45,7 @@ def run_tests(
             cwd=cwd,
             env=test_env,
             text=True,
-            timeout=600,
+            timeout=600,  # TODO: Make this dynamic
             check=False,
         )
     elif test_framework == "unittest":

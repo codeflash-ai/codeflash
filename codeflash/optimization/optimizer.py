@@ -877,7 +877,7 @@ class Optimizer:
             # Fix after changing run_and_parse_tests
             unittest_results = self.run_and_parse_tests(
                 test_env,
-                instrumented_unittests_created_for_function,
+                list(instrumented_unittests_created_for_function),
                 first_test_types,
                 0,
                 first_test_functions,
