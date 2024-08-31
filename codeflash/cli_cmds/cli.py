@@ -60,11 +60,6 @@ def parse_args() -> Namespace:
         help="Path to the pyproject.toml with codeflash configs.",
     )
     parser.add_argument(
-        "--pytest-cmd",
-        type=str,
-        help="Command that codeflash will use to run pytest. If not specified, codeflash will use 'pytest'",
-    )
-    parser.add_argument(
         "--use-cached-tests",
         action="store_true",
         help="Use cached tests from a specified file for debugging.",
@@ -78,6 +73,11 @@ def parse_args() -> Namespace:
         "--no-pr",
         action="store_true",
         help="Do not create a PR for the optimization, only update the code locally.",
+    )
+    parser.add_argument(
+        "--verify-setup",
+        action="store_true",
+        help="Verify that codeflash is set up correctly by optimizing bubble sort as a test.",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose debug logs")
     parser.add_argument("--version", action="store_true", help="Print the version of codeflash")

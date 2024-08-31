@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import ast
 import os
+import pathlib
 import re
-import shutil
 import subprocess
 import sys
-import time
-from typing import Callable, Optional
+from argparse import Namespace
+from typing import Optional
 
 import click
 import git
@@ -19,7 +19,7 @@ from pydantic.dataclasses import dataclass
 from returns.pipeline import is_successful
 
 from codeflash.api.cfapi import is_github_app_installed_on_repo
-from codeflash.cli_cmds.cli_common import apologize_and_exit
+from codeflash.cli_cmds.cli_common import apologize_and_exit, inquirer_wrapper, inquirer_wrapper_path
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import (
@@ -58,101 +58,6 @@ class SetupInfo:
     formatter: str
 
 
-def split_string_to_fit_width(string: str, width: int) -> list[str]:
-    words = string.split()
-    lines = []
-    current_line = [words[0]]
-    current_length = len(words[0])
-
-    for word in words[1:]:
-        word_length = len(word)
-        if current_length + word_length + 1 <= width:
-            current_line.append(word)
-            current_length += word_length + 1
-        else:
-            lines.append(" ".join(current_line))
-            current_line = [word]
-            current_length = word_length
-
-    lines.append(" ".join(current_line))
-    return lines
-
-
-def split_string_to_cli_width(string: str, is_confirm: bool = False) -> list[str]:
-    cli_width, _ = shutil.get_terminal_size()
-    # split string to lines that accommodate "[?] " prefix
-    cli_width -= len("[?] ")
-    lines = split_string_to_fit_width(string, cli_width)
-
-    # split last line to additionally accommodate ": " or " (y/N): " suffix
-    cli_width -= len(" (y/N):") if is_confirm else len(": ")
-    last_lines = split_string_to_fit_width(lines[-1], cli_width)
-
-    lines = lines[:-1] + last_lines
-
-    if len(lines) > 1:
-        for i in range(len(lines[:-1])):
-            # Add yellow color to question mark in "[?] " prefix
-            lines[i] = "[\033[33m?\033[0m] " + lines[i]
-    return lines
-
-
-def inquirer_wrapper_path(*args, **kwargs) -> dict[str]:
-    message = None
-    response = None
-    new_args = []
-    new_kwargs = {}
-
-    message = kwargs["message"]
-    new_kwargs = {**kwargs}
-    split_messages = split_string_to_cli_width(message)
-    for split_message in split_messages[:-1]:
-        click.echo(split_message)
-
-    last_message = split_messages[-1]
-    new_kwargs["message"] = last_message
-    new_args.append(args[0])
-
-    response = inquirer.prompt(
-        [
-            inquirer.Path(*new_args, **new_kwargs),
-        ],
-    )
-    return response
-
-
-def inquirer_wrapper(func: Callable, *args, **kwargs) -> str | bool:
-    # extract the message
-    message = None
-    response = None
-    new_args = []
-    new_kwargs = {}
-
-    if len(args) == 1:
-        message = args[0]
-    else:
-        message = kwargs["message"]
-        new_kwargs = {**kwargs}
-    # split the message
-    split_messages = split_string_to_cli_width(
-        message,
-        is_confirm=func == inquirer.confirm,
-    )
-    for split_message in split_messages[:-1]:
-        click.echo(split_message)
-
-    last_message = split_messages[-1]
-
-    if len(args) == 1:
-        new_args.append(last_message)
-    else:
-        new_kwargs["message"] = last_message
-
-    response = func(*new_args, **new_kwargs)
-
-    return response
-
-
 def init_codeflash() -> None:
     try:
         click.echo(f"⚡️ Welcome to Codeflash! Let's get you set up.{LF}")
@@ -186,19 +91,20 @@ def init_codeflash() -> None:
                 click.echo(f"  source {get_shell_rc_path()}")
 
         ph("cli-installation-successful", {"did_add_new_key": did_add_new_key})
+        sys.exit(0)
     except KeyboardInterrupt:
         apologize_and_exit()
 
 
-def ask_run_end_to_end_test(setup_info) -> None:
+def ask_run_end_to_end_test(args: Namespace) -> None:
     run_tests = inquirer_wrapper(
         inquirer.confirm,
         message="⚡️ Do you want to run a sample optimization to make sure everything's set up correctly? (takes about 3 minutes)",
         default=True,
     )
     if run_tests:
-        create_bubble_sort_file(setup_info)
-        run_end_to_end_test(setup_info)
+        bubble_sort_path, bubble_sort_test_path = create_bubble_sort_file_and_test(args)
+        run_end_to_end_test(args, bubble_sort_path, bubble_sort_test_path)
 
 
 def collect_setup_info() -> SetupInfo:
@@ -239,7 +145,7 @@ def collect_setup_info() -> SetupInfo:
     module_root_answer = inquirer_wrapper(
         inquirer.list_input,
         message="Which Python module do you want me to optimize going forward? (Usually the top-most directory with "
-        "all of your Python source code)",
+        "all of your Python source code). Use arrow keys to select",
         choices=module_subdir_options,
         default=(project_name if project_name in module_subdir_options else module_subdir_options[0]),
     )
@@ -271,7 +177,7 @@ def collect_setup_info() -> SetupInfo:
     elif tests_root_answer == custom_dir_option:
         custom_tests_root_answer = inquirer_wrapper_path(
             "path",
-            message=f"Enter the path to your tests directory inside {os.path.abspath(module_root) + os.path.sep} ",
+            message=f"Enter the path to your tests directory inside {os.path.abspath('.') + os.path.sep} ",
             path_type=inquirer.Path.DIRECTORY,
             exists=True,
         )
@@ -583,6 +489,7 @@ def install_github_app() -> None:
     else:
         click.prompt(
             f"Finally, you'll need install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
+            + f"I will attempt to open the github app page - https://github.com/apps/codeflash-ai/installations/select_target {LF}"
             + f"Press Enter to open the page to let you install the app ...{LF}",
             default="",
             type=click.STRING,
@@ -626,12 +533,11 @@ class CFAPIKeyType(click.ParamType):
         value = value.strip()
         if value.startswith("cf-") or value == "":
             return value
-        else:
-            self.fail(
-                f"That key [{value}] seems to be invalid. It should start with a 'cf-' prefix. Please try again.",
-                param,
-                ctx,
-            )
+        self.fail(
+            f"That key [{value}] seems to be invalid. It should start with a 'cf-' prefix. Please try again.",
+            param,
+            ctx,
+        )
 
 
 # Returns True if the user entered a new API key, False if they used an existing one
@@ -674,7 +580,7 @@ def enter_api_key_and_save_to_rc() -> None:
         ).strip()
         if api_key:
             break
-        elif not browser_launched:
+        if not browser_launched:
             click.echo(
                 f"Opening your Codeflash API key page. Grab a key from there!{LF}"
                 "You can also open this link manually: https://app.codeflash.ai/app/apikeys",
@@ -696,7 +602,7 @@ def enter_api_key_and_save_to_rc() -> None:
     os.environ["CODEFLASH_API_KEY"] = api_key
 
 
-def create_bubble_sort_file(setup_info: SetupInfo) -> None:
+def create_bubble_sort_file_and_test(args: Namespace) -> None:
     bubble_sort_content = """def sorter(arr):
     for i in range(len(arr)):
         for j in range(len(arr) - 1):
@@ -706,13 +612,55 @@ def create_bubble_sort_file(setup_info: SetupInfo) -> None:
                 arr[j + 1] = temp
     return arr
 """
-    bubble_sort_path = os.path.join(setup_info.module_root, "bubble_sort.py")
+    if args.test_framework == "unittest":
+        bubble_sort_test_content = f"""import unittest
+from {os.path.basename(args.module_root)}.bubble_sort import sorter
+
+class TestBubbleSort(unittest.TestCase):
+    def test_sort(self):
+        input = [5, 4, 3, 2, 1, 0]
+        output = sorter(input)
+        self.assertEqual(output, [0, 1, 2, 3, 4, 5])
+
+        input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
+        output = sorter(input)
+        self.assertEqual(output, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+
+        input = list(reversed(range(100)))
+        output = sorter(input)
+        self.assertEqual(output, list(range(100)))
+"""
+    elif args.test_framework == "pytest":
+        bubble_sort_test_content = f"""from {os.path.basename(args.module_root)}.bubble_sort import sorter
+
+def test_sort():
+    input = [5, 4, 3, 2, 1, 0]
+    output = sorter(input)
+    assert output == [0, 1, 2, 3, 4, 5]
+
+    input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
+    output = sorter(input)
+    assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+
+    input = list(reversed(range(500)))
+    output = sorter(input)
+    assert output == list(range(500))
+"""
+    else:
+        click.echo(f"❌ Unsupported test framework: {args.test_framework}")
+        apologize_and_exit()
+    bubble_sort_path = os.path.join(args.module_root, "bubble_sort.py")
     with open(bubble_sort_path, "w", encoding="utf8") as bubble_sort_file:
         bubble_sort_file.write(bubble_sort_content)
+    bubble_sort_test_path = os.path.join(args.tests_root, "test_bubble_sort.py")
+    with open(bubble_sort_test_path, "w", encoding="utf8") as bubble_sort_test_file:
+        bubble_sort_test_file.write(bubble_sort_test_content)
     click.echo(f"✅ Created {bubble_sort_path}")
+    click.echo(f"✅ Created {bubble_sort_test_path}")
+    return bubble_sort_path, bubble_sort_test_path
 
 
-def run_end_to_end_test(setup_info: SetupInfo) -> None:
+def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test_path: str) -> None:
     command = [
         "codeflash",
         "--file",
@@ -724,32 +672,19 @@ def run_end_to_end_test(setup_info: SetupInfo) -> None:
     idx = 0
     sys.stdout.write("Running sample optimization... ")
     sys.stdout.flush()
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=setup_info.module_root,
-    )
-    while process.poll() is None:
-        sys.stdout.write(animation[idx % len(animation)])
-        sys.stdout.flush()
-        time.sleep(0.5)
-        sys.stdout.write("\b")
-        idx += 1
-
-    sys.stdout.write(" ")  # Clear the last animation character
-    sys.stdout.flush()
-    if process.stderr:
-        stderr = process.stderr.read()
-        if stderr:
-            click.echo(stderr.strip())
-
-    bubble_sort_path = os.path.join(setup_info.module_root, "bubble_sort.py")
-
-    # Delete the bubble_sort.py file after the test
-    os.remove(bubble_sort_path)
-    click.echo(f"{LF}🗑️ Deleted {bubble_sort_path}")
+    try:
+        process = subprocess.run(
+            command,
+            text=True,
+            cwd=args.module_root,
+            check=False,
+        )
+    finally:
+        # Delete the bubble_sort.py file after the test
+        pathlib.Path(bubble_sort_path).unlink(missing_ok=True)
+        pathlib.Path(bubble_sort_test_path).unlink(missing_ok=True)
+        click.echo(f"{LF}🗑️ Deleted {bubble_sort_path}")
+        click.echo(f"{LF}🗑️ Deleted {bubble_sort_test_path}")
 
     if process.returncode == 0:
         click.echo(
