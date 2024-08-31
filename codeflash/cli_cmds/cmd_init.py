@@ -145,7 +145,7 @@ def collect_setup_info() -> SetupInfo:
     module_root_answer = inquirer_wrapper(
         inquirer.list_input,
         message="Which Python module do you want me to optimize going forward? (Usually the top-most directory with "
-        "all of your Python source code)",
+        "all of your Python source code). Use arrow keys to select",
         choices=module_subdir_options,
         default=(project_name if project_name in module_subdir_options else module_subdir_options[0]),
     )
@@ -672,19 +672,19 @@ def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test
     idx = 0
     sys.stdout.write("Running sample optimization... ")
     sys.stdout.flush()
-    process = subprocess.run(
-        command,
-        text=True,
-        cwd=args.module_root,
-        check=False,
-    )
-
-    # Delete the bubble_sort.py file after the test
-    pathlib.Path(bubble_sort_path).unlink(missing_ok=True)
-    pathlib.Path(bubble_sort_test_path).unlink(missing_ok=True)
-
-    click.echo(f"{LF}🗑️ Deleted {bubble_sort_path}")
-    click.echo(f"{LF}🗑️ Deleted {bubble_sort_test_path}")
+    try:
+        process = subprocess.run(
+            command,
+            text=True,
+            cwd=args.module_root,
+            check=False,
+        )
+    finally:
+        # Delete the bubble_sort.py file after the test
+        pathlib.Path(bubble_sort_path).unlink(missing_ok=True)
+        pathlib.Path(bubble_sort_test_path).unlink(missing_ok=True)
+        click.echo(f"{LF}🗑️ Deleted {bubble_sort_path}")
+        click.echo(f"{LF}🗑️ Deleted {bubble_sort_test_path}")
 
     if process.returncode == 0:
         click.echo(
