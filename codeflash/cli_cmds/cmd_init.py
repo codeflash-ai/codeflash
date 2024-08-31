@@ -612,7 +612,26 @@ def create_bubble_sort_file_and_test(args: Namespace) -> None:
     return arr
 """
     # TODO: Add tests for unittests
-    bubble_sort_test_content = f"""from {os.path.basename(args.module_root)}.bubble_sort import sorter
+    if args.test_framework == "unittest":
+        bubble_sort_test_content = f"""import unittest
+from {os.path.basename(args.module_root)}.bubble_sort import sorter
+
+class TestBubbleSort(unittest.TestCase):
+    def test_sort(self):
+        input = [5, 4, 3, 2, 1, 0]
+        output = sorter(input)
+        self.assertEqual(output, [0, 1, 2, 3, 4, 5])
+
+        input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
+        output = sorter(input)
+        self.assertEqual(output, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+
+        input = list(reversed(range(100)))
+        output = sorter(input)
+        self.assertEqual(output, list(range(100)))
+"""
+    elif args.test_framework == "pytest":
+        bubble_sort_test_content = f"""from {os.path.basename(args.module_root)}.bubble_sort import sorter
 
 def test_sort():
     input = [5, 4, 3, 2, 1, 0]
@@ -626,8 +645,10 @@ def test_sort():
     input = list(reversed(range(500)))
     output = sorter(input)
     assert output == list(range(500))
-
 """
+    else:
+        click.echo(f"❌ Unsupported test framework: {args.test_framework}")
+        apologize_and_exit()
     bubble_sort_path = os.path.join(args.module_root, "bubble_sort.py")
     with open(bubble_sort_path, "w", encoding="utf8") as bubble_sort_file:
         bubble_sort_file.write(bubble_sort_content)
