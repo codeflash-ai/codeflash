@@ -91,6 +91,7 @@ def init_codeflash() -> None:
                 click.echo(f"  source {get_shell_rc_path()}")
 
         ph("cli-installation-successful", {"did_add_new_key": did_add_new_key})
+        sys.exit(0)
     except KeyboardInterrupt:
         apologize_and_exit()
 
