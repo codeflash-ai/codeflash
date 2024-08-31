@@ -176,7 +176,7 @@ def collect_setup_info() -> SetupInfo:
     elif tests_root_answer == custom_dir_option:
         custom_tests_root_answer = inquirer_wrapper_path(
             "path",
-            message=f"Enter the path to your tests directory inside {os.path.abspath(module_root) + os.path.sep} ",
+            message=f"Enter the path to your tests directory inside {os.path.abspath(".") + os.path.sep} ",
             path_type=inquirer.Path.DIRECTORY,
             exists=True,
         )
@@ -611,7 +611,6 @@ def create_bubble_sort_file_and_test(args: Namespace) -> None:
                 arr[j + 1] = temp
     return arr
 """
-    # TODO: Add tests for unittests
     if args.test_framework == "unittest":
         bubble_sort_test_content = f"""import unittest
 from {os.path.basename(args.module_root)}.bubble_sort import sorter
