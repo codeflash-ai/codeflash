@@ -177,7 +177,7 @@ def collect_setup_info() -> SetupInfo:
     elif tests_root_answer == custom_dir_option:
         custom_tests_root_answer = inquirer_wrapper_path(
             "path",
-            message=f"Enter the path to your tests directory inside {os.path.abspath(".") + os.path.sep} ",
+            message=f"Enter the path to your tests directory inside {os.path.abspath('.') + os.path.sep} ",
             path_type=inquirer.Path.DIRECTORY,
             exists=True,
         )
