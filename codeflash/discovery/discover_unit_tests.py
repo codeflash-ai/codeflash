@@ -294,6 +294,7 @@ def process_test_files(
                     if (
                         definition_path.startswith(str(project_root_path) + os.sep)
                         and definition[0].module_name != name.module_name
+                        and definition[0].full_name is not None
                     ):
                         if scope_parameters is not None:
                             if test_framework == "pytest":
