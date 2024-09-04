@@ -1,0 +1,940 @@
+﻿    test_id = f'{test_module_name}:{test_class_name}:{test_name}:{line_id}'
+    if not hasattr(codeflash_wrap, 'index'):
+        codeflash_wrap.index = {}
+    if test_id in codeflash_wrap.index:
+        codeflash_wrap.index[test_id] += 1
+    else:
+        codeflash_wrap.index[test_id] = 0
+    codeflash_test_index = codeflash_wrap.index[test_id]
+    invocation_id = f'{line_id}_{codeflash_test_index}'
+    print(f'!######{test_module_name}:{(test_class_name + '.' if test_class_name else '')}{test_name}:{function_name}:{invocation_id}######!')
+
+'pytest',
+ '/Users/renaud/repos/codeflash/cli/code_to_optimize/tests/pytest/test_bubble_sort_parametrized_loop__perfinstrumented.py',
+ '/Users/renaud/repos/codeflash/cli/code_to_optimize/tests/pytest/test_suite1_bubble_sort__perfinstrumented.py',
+ '/Users/renaud/repos/codeflash/cli/code_to_optimize/tests/pytest/test_bubble_sort_parametrized__perfinstrumented.py',
+ '/Users/renaud/repos/codeflash/cli/code_to_optimize/tests/pytest/test_sorter__unit_test_0.py',
+ '/Users/renaud/repos/codeflash/cli/code_to_optimize/tests/pytest/test_bubble_sort_conditional__perfinstrumented.py',
+ '/Users/renaud/repos/codeflash/cli/code_to_optimize/tests/pytest/test_suite2_bubble_sort__perfinstrumented.py',
+ '/Users/renaud/repos/codeflash/cli/code_to_optimize/tests/pytest/test_bubble_sort_import__perfinstrumented.py',
+ '/Users/renaud/repos/codeflash/cli/code_to_optimize/tests/pytest/test_bubble_sort__perfinstrumented.py',
+ '--capture=tee-sys',
+ '--timeout=15',
+ '-q',
+ '--junitxml=/var/folders/wg/xqtxrnxj7273nzvy7ncc2bj00000gn/T/codeflash_bocfr7v1/pytest_results.xml',
+ '-o',
+ 'junit_logging=all',
+ '--count=2',
+ '--repeat-scope=session'
+
+#######################################################################################################################
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="pytest" errors="0" failures="2" skipped="0" tests="58" time="36.612" timestamp="2024-08-30T17:34:12.411998" hostname="Renauds-Laptop.local">
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop__perfinstrumented" name="test_sort_loop_parametrized[input0-expected_output0-1-2]" time="0.002">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_0######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop__perfinstrumented" name="test_sort_loop_parametrized[input1-expected_output1-1-2]" time="0.001">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_2######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_3######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop__perfinstrumented" name="test_sort_loop_parametrized[input2-expected_output2-1-2]" time="0.001">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_4######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_5######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_suite1_bubble_sort__perfinstrumented" name="test_sort1[1-2]" time="0.001">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_suite1_bubble_sort:test_sort1:sorter:1_0######!
+!######code_to_optimize.tests.pytest.test_suite1_bubble_sort:test_sort1:sorter:4_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_suite1_bubble_sort__perfinstrumented" name="test_sort2[1-2]" time="0.001">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_suite1_bubble_sort:test_sort2:sorter:1_0######!
+!######code_to_optimize.tests.pytest.test_suite1_bubble_sort:test_sort2:sorter:4_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort_parametrized__perfinstrumented" name="test_sort_parametrized[input0-expected_output0-1-2]" time="0.001">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized:test_sort_parametrized:sorter:0_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort_parametrized__perfinstrumented" name="test_sort_parametrized[input1-expected_output1-1-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized:test_sort_parametrized:sorter:0_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort_parametrized__perfinstrumented" name="test_sort_parametrized[input2-expected_output2-1-2]" time="1.113">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized:test_sort_parametrized:sorter:0_2######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_sorted_list[1-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_sorted_list:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_sorted_list:sorter:1_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_reverse_sorted_list[1-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_reverse_sorted_list:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_reverse_sorted_list:sorter:1_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_unsorted_list[1-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_unsorted_list:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_unsorted_list:sorter:1_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_empty_list[1-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_empty_list:sorter:0_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_single_element_list[1-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_single_element_list:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_single_element_list:sorter:1_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_two_element_list[1-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_two_element_list:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_two_element_list:sorter:1_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_list_with_duplicates[1-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_duplicates:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_duplicates:sorter:1_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_list_with_negative_numbers[1-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_negative_numbers:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_negative_numbers:sorter:1_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_list_with_mixed_positive_and_negative_numbers[1-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_mixed_positive_and_negative_numbers:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_mixed_positive_and_negative_numbers:sorter:1_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_large_list_of_random_numbers[1-2]" time="0.037">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_large_list_of_random_numbers:sorter:1_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_large_sorted_list[1-2]" time="0.026">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_large_sorted_list:sorter:1_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_large_reverse_sorted_list[1-2]" time="0.041">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_large_reverse_sorted_list:sorter:1_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_list_with_floating_point_numbers[1-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_floating_point_numbers:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_floating_point_numbers:sorter:1_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_list_with_integers_and_floating_points[1-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_integers_and_floating_points:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_integers_and_floating_points:sorter:1_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_consistent_results[1-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_consistent_results:sorter:1_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_consistent_results:sorter:2_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_stress_test_large_inputs[1-2]" time="15.005">
+      <failure message="Failed: Timeout &gt;15.0s">def test_stress_test_large_inputs():
+        random.seed(42)
+        large_list = [random.randint(-1000, 1000) for _ in range(100000)]
+        sorted_large_list = sorted(large_list)
+        _call__bound__arguments = inspect.signature(sorter).bind(large_list)
+        _call__bound__arguments.apply_defaults()
+&gt;       codeflash_return_value, codeflash_duration, codeflash_invocation_id = codeflash_wrap(sorter, 'code_to_optimize.tests.pytest.test_sorter__unit_test_0', None, 'test_stress_test_large_inputs', 'sorter', '2', **_call__bound__arguments.arguments)
+
+code_to_optimize/tests/pytest/test_sorter__unit_test_0.py:202:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+code_to_optimize/tests/pytest/test_sorter__unit_test_0.py:38: in codeflash_wrap
+    return_value = wrapped(*args, **kwargs)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+arr = [-1000, -999, -998, -997, -996, -995, ...]
+
+    def sorter(arr):
+        for i in range(len(arr)):
+            for j in range(len(arr) - 1):
+                if arr[j] &gt; arr[j + 1]:
+                    temp = arr[j]
+                    arr[j] = arr[j + 1]
+&gt;                   arr[j + 1] = temp
+E                   Failed: Timeout &gt;15.0s
+
+code_to_optimize/bubble_sort.py:7: Failed</failure>
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_stress_test_large_inputs:sorter:2_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort_conditional__perfinstrumented" name="test_sort[1-2]" time="0.002">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort_conditional:test_sort:sorter:1_0_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_suite2_bubble_sort__perfinstrumented" name="test_sort3[1-2]" time="0.001">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_suite2_bubble_sort:test_sort3:sorter:1_0######!
+!######code_to_optimize.tests.pytest.test_suite2_bubble_sort:test_sort3:sorter:4_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_suite2_bubble_sort__perfinstrumented" name="test_sort4[1-2]" time="0.001">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_suite2_bubble_sort:test_sort4:sorter:1_0######!
+!######code_to_optimize.tests.pytest.test_suite2_bubble_sort:test_sort4:sorter:4_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort_import__perfinstrumented" name="test_sort[1-2]" time="1.110">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort_import:test_sort:bubble_sorter:1_0######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_import:test_sort:bubble_sorter:4_0######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_import:test_sort:bubble_sorter:7_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort__perfinstrumented" name="test_sort[1-2]" time="1.112">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort:test_sort:sorter:1_0######!
+!######code_to_optimize.tests.pytest.test_bubble_sort:test_sort:sorter:4_0######!
+!######code_to_optimize.tests.pytest.test_bubble_sort:test_sort:sorter:7_0######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop__perfinstrumented" name="test_sort_loop_parametrized[input0-expected_output0-2-2]" time="0.001">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_6######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_7######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop__perfinstrumented" name="test_sort_loop_parametrized[input1-expected_output1-2-2]" time="0.001">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_8######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_9######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop__perfinstrumented" name="test_sort_loop_parametrized[input2-expected_output2-2-2]" time="0.001">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_10######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_11######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_suite1_bubble_sort__perfinstrumented" name="test_sort1[2-2]" time="0.001">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_suite1_bubble_sort:test_sort1:sorter:1_1######!
+!######code_to_optimize.tests.pytest.test_suite1_bubble_sort:test_sort1:sorter:4_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_suite1_bubble_sort__perfinstrumented" name="test_sort2[2-2]" time="0.001">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_suite1_bubble_sort:test_sort2:sorter:1_1######!
+!######code_to_optimize.tests.pytest.test_suite1_bubble_sort:test_sort2:sorter:4_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort_parametrized__perfinstrumented" name="test_sort_parametrized[input0-expected_output0-2-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized:test_sort_parametrized:sorter:0_3######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort_parametrized__perfinstrumented" name="test_sort_parametrized[input1-expected_output1-2-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized:test_sort_parametrized:sorter:0_4######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort_parametrized__perfinstrumented" name="test_sort_parametrized[input2-expected_output2-2-2]" time="0.696">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized:test_sort_parametrized:sorter:0_5######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_sorted_list[2-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_sorted_list:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_sorted_list:sorter:1_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_reverse_sorted_list[2-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_reverse_sorted_list:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_reverse_sorted_list:sorter:1_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_unsorted_list[2-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_unsorted_list:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_unsorted_list:sorter:1_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_empty_list[2-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_empty_list:sorter:0_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_single_element_list[2-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_single_element_list:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_single_element_list:sorter:1_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_two_element_list[2-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_two_element_list:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_two_element_list:sorter:1_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_list_with_duplicates[2-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_duplicates:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_duplicates:sorter:1_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_list_with_negative_numbers[2-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_negative_numbers:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_negative_numbers:sorter:1_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_list_with_mixed_positive_and_negative_numbers[2-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_mixed_positive_and_negative_numbers:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_mixed_positive_and_negative_numbers:sorter:1_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_large_list_of_random_numbers[2-2]" time="0.038">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_large_list_of_random_numbers:sorter:1_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_large_sorted_list[2-2]" time="0.026">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_large_sorted_list:sorter:1_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_large_reverse_sorted_list[2-2]" time="0.041">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_large_reverse_sorted_list:sorter:1_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_list_with_floating_point_numbers[2-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_floating_point_numbers:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_floating_point_numbers:sorter:1_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_list_with_integers_and_floating_points[2-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_integers_and_floating_points:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_integers_and_floating_points:sorter:1_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_consistent_results[2-2]" time="0.000">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_consistent_results:sorter:1_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_consistent_results:sorter:2_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_sorter__unit_test_0" name="test_stress_test_large_inputs[2-2]" time="15.002">
+      <failure message="Failed: Timeout &gt;15.0s">def test_stress_test_large_inputs():
+        random.seed(42)
+        large_list = [random.randint(-1000, 1000) for _ in range(100000)]
+        sorted_large_list = sorted(large_list)
+        _call__bound__arguments = inspect.signature(sorter).bind(large_list)
+        _call__bound__arguments.apply_defaults()
+&gt;       codeflash_return_value, codeflash_duration, codeflash_invocation_id = codeflash_wrap(sorter, 'code_to_optimize.tests.pytest.test_sorter__unit_test_0', None, 'test_stress_test_large_inputs', 'sorter', '2', **_call__bound__arguments.arguments)
+
+code_to_optimize/tests/pytest/test_sorter__unit_test_0.py:202:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+code_to_optimize/tests/pytest/test_sorter__unit_test_0.py:38: in codeflash_wrap
+    return_value = wrapped(*args, **kwargs)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+arr = [-1000, -999, -998, -997, -996, -995, ...]
+
+    def sorter(arr):
+        for i in range(len(arr)):
+            for j in range(len(arr) - 1):
+                if arr[j] &gt; arr[j + 1]:
+                    temp = arr[j]
+                    arr[j] = arr[j + 1]
+&gt;                   arr[j + 1] = temp
+E                   Failed: Timeout &gt;15.0s
+
+code_to_optimize/bubble_sort.py:7: Failed</failure>
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_stress_test_large_inputs:sorter:2_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort_conditional__perfinstrumented" name="test_sort[2-2]" time="0.001">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort_conditional:test_sort:sorter:1_0_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_suite2_bubble_sort__perfinstrumented" name="test_sort3[2-2]" time="0.001">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_suite2_bubble_sort:test_sort3:sorter:1_1######!
+!######code_to_optimize.tests.pytest.test_suite2_bubble_sort:test_sort3:sorter:4_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_suite2_bubble_sort__perfinstrumented" name="test_sort4[2-2]" time="0.001">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_suite2_bubble_sort:test_sort4:sorter:1_1######!
+!######code_to_optimize.tests.pytest.test_suite2_bubble_sort:test_sort4:sorter:4_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort_import__perfinstrumented" name="test_sort[2-2]" time="1.114">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort_import:test_sort:bubble_sorter:1_1######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_import:test_sort:bubble_sorter:4_1######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_import:test_sort:bubble_sorter:7_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+    <testcase classname="code_to_optimize.tests.pytest.test_bubble_sort__perfinstrumented" name="test_sort[2-2]" time="1.120">
+      <system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+!######code_to_optimize.tests.pytest.test_bubble_sort:test_sort:sorter:1_1######!
+!######code_to_optimize.tests.pytest.test_bubble_sort:test_sort:sorter:4_1######!
+!######code_to_optimize.tests.pytest.test_bubble_sort:test_sort:sorter:7_1######!
+
+</system-out>
+      <system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err>
+    </testcase>
+  </testsuite>
+</testsuites>
+#######################################################################################################################
+
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_0######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_1######!
+.!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_2######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_3######!
+.!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_4######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_5######!
+.!######code_to_optimize.tests.pytest.test_suite1_bubble_sort:test_sort1:sorter:1_0######!
+!######code_to_optimize.tests.pytest.test_suite1_bubble_sort:test_sort1:sorter:4_0######!
+.!######code_to_optimize.tests.pytest.test_suite1_bubble_sort:test_sort2:sorter:1_0######!
+!######code_to_optimize.tests.pytest.test_suite1_bubble_sort:test_sort2:sorter:4_0######!
+.!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized:test_sort_parametrized:sorter:0_0######!
+.!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized:test_sort_parametrized:sorter:0_1######!
+.!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized:test_sort_parametrized:sorter:0_2######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_sorted_list:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_sorted_list:sorter:1_0######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_reverse_sorted_list:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_reverse_sorted_list:sorter:1_0######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_unsorted_list:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_unsorted_list:sorter:1_0######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_empty_list:sorter:0_0######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_single_element_list:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_single_element_list:sorter:1_0######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_two_element_list:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_two_element_list:sorter:1_0######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_duplicates:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_duplicates:sorter:1_0######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_negative_numbers:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_negative_numbers:sorter:1_0######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_mixed_positive_and_negative_numbers:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_mixed_positive_and_negative_numbers:sorter:1_0######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_large_list_of_random_numbers:sorter:1_0######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_large_sorted_list:sorter:1_0######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_large_reverse_sorted_list:sorter:1_0######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_floating_point_numbers:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_floating_point_numbers:sorter:1_0######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_integers_and_floating_points:sorter:0_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_integers_and_floating_points:sorter:1_0######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_consistent_results:sorter:1_0######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_consistent_results:sorter:2_0######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_stress_test_large_inputs:sorter:2_0######!
+F!######code_to_optimize.tests.pytest.test_bubble_sort_conditional:test_sort:sorter:1_0_0######!
+.!######code_to_optimize.tests.pytest.test_suite2_bubble_sort:test_sort3:sorter:1_0######!
+!######code_to_optimize.tests.pytest.test_suite2_bubble_sort:test_sort3:sorter:4_0######!
+.!######code_to_optimize.tests.pytest.test_suite2_bubble_sort:test_sort4:sorter:1_0######!
+!######code_to_optimize.tests.pytest.test_suite2_bubble_sort:test_sort4:sorter:4_0######!
+.!######code_to_optimize.tests.pytest.test_bubble_sort_import:test_sort:bubble_sorter:1_0######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_import:test_sort:bubble_sorter:4_0######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_import:test_sort:bubble_sorter:7_0######!
+.!######code_to_optimize.tests.pytest.test_bubble_sort:test_sort:sorter:1_0######!
+!######code_to_optimize.tests.pytest.test_bubble_sort:test_sort:sorter:4_0######!
+!######code_to_optimize.tests.pytest.test_bubble_sort:test_sort:sorter:7_0######!
+.!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_6######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_7######!
+.!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_8######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_9######!
+.!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_10######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized_loop:test_sort_loop_parametrized:sorter:0_0_11######!
+.!######code_to_optimize.tests.pytest.test_suite1_bubble_sort:test_sort1:sorter:1_1######!
+!######code_to_optimize.tests.pytest.test_suite1_bubble_sort:test_sort1:sorter:4_1######!
+.!######code_to_optimize.tests.pytest.test_suite1_bubble_sort:test_sort2:sorter:1_1######!
+!######code_to_optimize.tests.pytest.test_suite1_bubble_sort:test_sort2:sorter:4_1######!
+.!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized:test_sort_parametrized:sorter:0_3######!
+.!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized:test_sort_parametrized:sorter:0_4######!
+.!######code_to_optimize.tests.pytest.test_bubble_sort_parametrized:test_sort_parametrized:sorter:0_5######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_sorted_list:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_sorted_list:sorter:1_1######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_reverse_sorted_list:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_reverse_sorted_list:sorter:1_1######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_unsorted_list:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_unsorted_list:sorter:1_1######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_empty_list:sorter:0_1######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_single_element_list:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_single_element_list:sorter:1_1######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_two_element_list:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_two_element_list:sorter:1_1######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_duplicates:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_duplicates:sorter:1_1######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_negative_numbers:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_negative_numbers:sorter:1_1######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_mixed_positive_and_negative_numbers:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_mixed_positive_and_negative_numbers:sorter:1_1######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_large_list_of_random_numbers:sorter:1_1######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_large_sorted_list:sorter:1_1######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_large_reverse_sorted_list:sorter:1_1######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_floating_point_numbers:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_floating_point_numbers:sorter:1_1######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_integers_and_floating_points:sorter:0_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_list_with_integers_and_floating_points:sorter:1_1######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_consistent_results:sorter:1_1######!
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_consistent_results:sorter:2_1######!
+.!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_stress_test_large_inputs:sorter:2_1######!
+F!######code_to_optimize.tests.pytest.test_bubble_sort_conditional:test_sort:sorter:1_0_1######!
+.!######code_to_optimize.tests.pytest.test_suite2_bubble_sort:test_sort3:sorter:1_1######!
+!######code_to_optimize.tests.pytest.test_suite2_bubble_sort:test_sort3:sorter:4_1######!
+.!######code_to_optimize.tests.pytest.test_suite2_bubble_sort:test_sort4:sorter:1_1######!
+!######code_to_optimize.tests.pytest.test_suite2_bubble_sort:test_sort4:sorter:4_1######!
+.!######code_to_optimize.tests.pytest.test_bubble_sort_import:test_sort:bubble_sorter:1_1######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_import:test_sort:bubble_sorter:4_1######!
+!######code_to_optimize.tests.pytest.test_bubble_sort_import:test_sort:bubble_sorter:7_1######!
+.!######code_to_optimize.tests.pytest.test_bubble_sort:test_sort:sorter:1_1######!
+!######code_to_optimize.tests.pytest.test_bubble_sort:test_sort:sorter:4_1######!
+!######code_to_optimize.tests.pytest.test_bubble_sort:test_sort:sorter:7_1######!
+.               [100%]
+=================================== FAILURES ===================================
+______________________ test_stress_test_large_inputs[1-2] ______________________
+
+    def test_stress_test_large_inputs():
+        random.seed(42)
+        large_list = [random.randint(-1000, 1000) for _ in range(100000)]
+        sorted_large_list = sorted(large_list)
+        _call__bound__arguments = inspect.signature(sorter).bind(large_list)
+        _call__bound__arguments.apply_defaults()
+>       codeflash_return_value, codeflash_duration, codeflash_invocation_id = codeflash_wrap(sorter, 'code_to_optimize.tests.pytest.test_sorter__unit_test_0', None, 'test_stress_test_large_inputs', 'sorter', '2', **_call__bound__arguments.arguments)
+
+code_to_optimize/tests/pytest/test_sorter__unit_test_0.py:202:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+code_to_optimize/tests/pytest/test_sorter__unit_test_0.py:38: in codeflash_wrap
+    return_value = wrapped(*args, **kwargs)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+arr = [-1000, -999, -998, -997, -996, -995, ...]
+
+    def sorter(arr):
+        for i in range(len(arr)):
+            for j in range(len(arr) - 1):
+                if arr[j] > arr[j + 1]:
+                    temp = arr[j]
+                    arr[j] = arr[j + 1]
+>                   arr[j + 1] = temp
+E                   Failed: Timeout >15.0s
+
+code_to_optimize/bubble_sort.py:7: Failed
+----------------------------- Captured stdout call -----------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_stress_test_large_inputs:sorter:2_0######!
+______________________ test_stress_test_large_inputs[2-2] ______________________
+
+    def test_stress_test_large_inputs():
+        random.seed(42)
+        large_list = [random.randint(-1000, 1000) for _ in range(100000)]
+        sorted_large_list = sorted(large_list)
+        _call__bound__arguments = inspect.signature(sorter).bind(large_list)
+        _call__bound__arguments.apply_defaults()
+>       codeflash_return_value, codeflash_duration, codeflash_invocation_id = codeflash_wrap(sorter, 'code_to_optimize.tests.pytest.test_sorter__unit_test_0', None, 'test_stress_test_large_inputs', 'sorter', '2', **_call__bound__arguments.arguments)
+
+code_to_optimize/tests/pytest/test_sorter__unit_test_0.py:202:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+code_to_optimize/tests/pytest/test_sorter__unit_test_0.py:38: in codeflash_wrap
+    return_value = wrapped(*args, **kwargs)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+arr = [-1000, -999, -998, -997, -996, -995, ...]
+
+    def sorter(arr):
+        for i in range(len(arr)):
+            for j in range(len(arr) - 1):
+                if arr[j] > arr[j + 1]:
+                    temp = arr[j]
+                    arr[j] = arr[j + 1]
+>                   arr[j + 1] = temp
+E                   Failed: Timeout >15.0s
+
+code_to_optimize/bubble_sort.py:7: Failed
+----------------------------- Captured stdout call -----------------------------
+!######code_to_optimize.tests.pytest.test_sorter__unit_test_0:test_stress_test_large_inputs:sorter:2_1######!
+- generated xml file: /var/folders/wg/xqtxrnxj7273nzvy7ncc2bj00000gn/T/codeflash_bocfr7v1/pytest_results.xml -
+=========================== short test summary info ============================
+FAILED code_to_optimize/tests/pytest/test_sorter__unit_test_0.py::test_stress_test_large_inputs[1-2]
+FAILED code_to_optimize/tests/pytest/test_sorter__unit_test_0.py::test_stress_test_large_inputs[2-2]
+2 failed, 56 passed in 36.73s
