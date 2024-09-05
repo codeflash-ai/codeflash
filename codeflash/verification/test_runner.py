@@ -16,7 +16,7 @@ def run_tests(
     pytest_timeout: int | None = None,
     pytest_cmd: str = "pytest",
     verbose: bool = False,
-    only_run_these_test_functions: list[str | None] = None,
+    only_run_these_test_functions: list[str | None] | None = None,
     count: int = REPEAT_COUNT,
 ) -> tuple[str, subprocess.CompletedProcess]:
     assert test_framework in ["pytest", "unittest"]
@@ -66,5 +66,7 @@ def run_tests(
             check=False,
         )
     else:
-        raise ValueError("Invalid test framework -- I only support Pytest and Unittest currently.")
+        raise ValueError(
+            "Invalid test framework -- I only support Pytest and Unittest currently."
+        )
     return result_file_path, results
