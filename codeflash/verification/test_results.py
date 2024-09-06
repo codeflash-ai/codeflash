@@ -29,6 +29,7 @@ class TestType(Enum):
 
 @dataclass(frozen=True)
 class InvocationId:
+    loop_id: str  # The loop id of the test, set to "0" if the test is not looped
     test_module_path: str  # The fully qualified name of the test module
     test_class_name: Optional[str]  # The name of the class where the test is defined
     test_function_name: str  # The name of the test_function. Does not include the components of the file_name
@@ -36,7 +37,7 @@ class InvocationId:
     iteration_id: Optional[str]
 
     # test_module_path:TestSuiteClass.test_function_name:function_tested:iteration_id
-    def id(self):
+    def id(self) -> str:
         return f"{self.test_module_path}:{(self.test_class_name + '.' if self.test_class_name else '')}{self.test_function_name}:{self.function_getting_tested}:{self.iteration_id}"
 
     @staticmethod
@@ -163,7 +164,7 @@ class TestResults(BaseModel):
 
     def __eq__(self, other: object) -> bool:
         # Unordered comparison
-        if type(self) != type(other):
+        if type(self) is not type(other):
             return False
         if len(self) != len(other):
             return False

@@ -101,6 +101,7 @@ def parse_sqlite_test_results(
             test_results.add(
                 FunctionTestInvocation(
                     id=InvocationId(
+                        loop_id="0",
                         test_module_path=val[0],
                         test_class_name=val[1],
                         test_function_name=val[2],
@@ -127,8 +128,8 @@ def parse_sqlite_test_results(
 
 def parse_test_xml(
     test_xml_file_path: str,
-    test_py_file_paths: list[str],
-    tests_type: list[TestType],
+    test_py_file_path: str,
+    test_type: TestType,
     test_config: TestConfig,
     run_result: Optional[subprocess.CompletedProcess] = None,
 ) -> TestResults:
@@ -141,12 +142,16 @@ def parse_test_xml(
     try:
         xml = JUnitXml.fromfile(test_xml_file_path)
     except Exception as e:
-        logging.warning(f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}")
+        logging.warning(
+            f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}",
+        )
         return test_results
     test_module_paths = []
-    for file_name in test_py_file_paths:
+    for file_name in test_py_file_path:
         assert os.path.exists(file_name), f"File {file_name} doesn't exist."
-        test_module_paths.append(module_name_from_file_path(file_name, test_config.project_root_path))
+        test_module_paths.append(
+            module_name_from_file_path(file_name, test_config.project_root_path),
+        )
 
     for suite in xml:
         for testcase in suite:
@@ -193,7 +198,9 @@ def parse_test_xml(
             timed_out = False
             if test_config.test_framework == "pytest":
                 if len(testcase.result) > 1:
-                    print(f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!")
+                    print(
+                        f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!",
+                    )
                 if len(testcase.result) == 1:
                     message = testcase.result[0].message.lower()
                     if "failed: timeout >" in message:
@@ -220,6 +227,7 @@ def parse_test_xml(
                 test_results.add(
                     FunctionTestInvocation(
                         id=InvocationId(
+                            loop_id="0",
                             test_module_path=test_module_path,
                             test_class_name=test_class,
                             test_function_name=test_function,
@@ -230,7 +238,7 @@ def parse_test_xml(
                         runtime=None,
                         test_framework=test_config.test_framework,
                         did_pass=result,
-                        test_type=tests_type,
+                        test_type=test_type,
                         return_value=None,
                         timed_out=timed_out,
                     ),
@@ -240,6 +248,7 @@ def parse_test_xml(
                     test_results.add(
                         FunctionTestInvocation(
                             id=InvocationId(
+                                loop_id="0",
                                 test_module_path=match[0],
                                 test_class_name=None if match[1] == "" else match[1][:-1],
                                 test_function_name=match[2],
@@ -282,9 +291,14 @@ def merge_test_results(
 
     # This is done to match the right iteration_id which might not be available in the xml
     for result in xml_test_results:
+        loop_id = "0"
         if test_framework == "pytest":
-            if "[" in result.id.test_function_name:  # handle parameterized test
+            if (
+                result.id.test_function_name.endswith("]") and "[" in result.id.test_function_name
+            ):  # parameterized test
                 test_function_name = result.id.test_function_name[: result.id.test_function_name.index("[")]
+                if "/" in result.id.test_function_name:  # looped tests, e.g. test_name[...-43/41]
+                    loop_id = result.id.test_function_name[:-1].rsplit("/", 1)[-1].split("-")[0]
             else:
                 test_function_name = result.id.test_function_name
 
@@ -297,7 +311,13 @@ def merge_test_results(
                 test_function_name = new_test_function_name
 
         grouped_xml_results[
-            result.id.test_module_path + ":" + (result.id.test_class_name or "") + ":" + test_function_name
+            loop_id
+            + ":"
+            + result.id.test_module_path
+            + ":"
+            + (result.id.test_class_name or "")
+            + ":"
+            + test_function_name
         ].add(result)
     for result in bin_test_results:
         grouped_bin_results[
@@ -396,7 +416,7 @@ def parse_test_results(
     test_results_xml = parse_test_xml(
         test_xml_path,
         test_py_path,
-        tests_type=test_type,
+        test_type=test_type,
         test_config=test_config,
         run_result=run_result,
     )
@@ -431,10 +451,14 @@ def parse_test_results(
 
     # We Probably want to remove deleting this file here later, because we want to preserve the reference to the
     # pickle blob in the test_results
-    pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin")).unlink(
+    pathlib.Path(
+        get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
+    ).unlink(
         missing_ok=True,
     )
-    pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite")).unlink(
+    pathlib.Path(
+        get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite"),
+    ).unlink(
         missing_ok=True,
     )
 
