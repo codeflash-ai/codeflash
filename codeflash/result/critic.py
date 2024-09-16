@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import logging
-
+from codeflash.code_utils import env_utils
 from codeflash.code_utils.config_consts import MIN_IMPROVEMENT_THRESHOLD
-from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.models.models import OptimizedCandidateResult
 
 
@@ -40,6 +38,7 @@ def speedup_critic(
 
 def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool:
     test_results = candidate_result.best_test_results.test_results
+    in_github_actions_mode = bool(env_utils.get_pr_number())
 
     passed_test = None
     count = 0
@@ -49,6 +48,8 @@ def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool
             count += 1
             if count == 1:
                 passed_test = test_result
+            if in_github_actions_mode and count >= 4:
+                return True
             elif count > 1:
                 return True
 
