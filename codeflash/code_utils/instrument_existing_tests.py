@@ -47,7 +47,7 @@ class InjectPerfOnly(ast.NodeTransformer):
         node_name: str,
         index: str,
         test_class_name: str | None = None,
-    ) -> Iterable[ast.stmt]:
+    ) -> Iterable[ast.stmt] | None:
         call_node = None
         for node in ast.walk(test_node):
             if node_in_call_position(node, self.call_positions):
@@ -104,6 +104,9 @@ class InjectPerfOnly(ast.NodeTransformer):
     def visit_FunctionDef(self, node: ast.FunctionDef, test_class_name: str | None = None) -> ast.FunctionDef:
         if node.name.startswith("test_"):
             did_update = False
+            if self.test_framework == "pytest":
+
+
             if self.test_framework == "unittest":
                 node.decorator_list.append(
                     ast.Call(
@@ -152,6 +155,26 @@ class InjectPerfOnly(ast.NodeTransformer):
             if did_update:
                 node.body = (
                     [
+                        ast.Assign(
+                            targets=[ast.Name(id="loop_id", ctx=ast.Store())],
+                            value=ast.Subscript(
+                                value=ast.Attribute(
+                                    value=ast.Attribute(
+                                        value=ast.Attribute(
+                                            value=ast.Name(id="request", ctx=ast.Load()),
+                                            attr="node",
+                                            ctx=ast.Load(),
+                                        ),
+                                        attr="callspec",
+                                        ctx=ast.Load(),
+                                    ),
+                                    attr="params",
+                                    ctx=ast.Load(),
+                                ),
+                                slice=ast.Constant(value="__pytest_loop_step_number"),
+                                ctx=ast.Load(),
+                            ),
+                        ),
                         ast.Assign(
                             targets=[ast.Name(id="codeflash_iteration", ctx=ast.Store())],
                             value=ast.Subscript(
@@ -219,7 +242,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                 ),
                                 args=[
                                     ast.Constant(
-                                        value="CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT,"
+                                        value="CREATE TABLE IF NOT EXISTS test_results (loop_id TEXT, test_module_path TEXT,"
                                         " test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT,"
                                         " iteration_id TEXT, runtime INTEGER, return_value BLOB)",
                                     ),
@@ -249,7 +272,8 @@ class InjectPerfOnly(ast.NodeTransformer):
 
 
 class FunctionImportedAsVisitor(ast.NodeVisitor):
-    """This checks if a function has been imported as an alias. We only care about the alias then.
+    """Checks if a function has been imported as an alias. We only care about the alias then.
+
     from numpy import array as np_array
     np_array is what we want
     """
@@ -297,7 +321,7 @@ def inject_profiling_into_existing_test(
     try:
         tree = ast.parse(test_code)
     except SyntaxError:
-        logging.exception(f"Syntax error in code in file - {test_path}")
+        logging.exception("Syntax error in code in file - %s", test_path)
         return False, None
     # TODO: Pass the full name of function here, otherwise we can run into namespace clashes
     module_path = module_name_from_file_path(test_path, root_path)
@@ -325,6 +349,7 @@ def create_wrapper_function() -> ast.FunctionDef:
         name="codeflash_wrap",
         args=ast.arguments(
             args=[
+                ast.arg(arg="loop_id", annotation=None),
                 ast.arg(arg="wrapped", annotation=None),
                 ast.arg(arg="test_module_name", annotation=None),
                 ast.arg(arg="test_class_name", annotation=None),
@@ -346,6 +371,11 @@ def create_wrapper_function() -> ast.FunctionDef:
                 targets=[ast.Name(id="test_id", ctx=ast.Store())],
                 value=ast.JoinedStr(
                     values=[
+                        ast.FormattedValue(
+                            value=ast.Name(id="loop_id", ctx=ast.Load()),
+                            conversion=-1,
+                        ),
+                        ast.Constant(value=":"),
                         ast.FormattedValue(
                             value=ast.Name(id="test_module_name", ctx=ast.Load()),
                             conversion=-1,
@@ -592,9 +622,10 @@ def create_wrapper_function() -> ast.FunctionDef:
                         ctx=ast.Load(),
                     ),
                     args=[
-                        ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)"),
+                        ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
                         ast.Tuple(
                             elts=[
+                                ast.Name(id="loop_id", ctx=ast.Load()),
                                 ast.Name(id="test_module_name", ctx=ast.Load()),
                                 ast.Name(id="test_class_name", ctx=ast.Load()),
                                 ast.Name(id="test_name", ctx=ast.Load()),
