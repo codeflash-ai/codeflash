@@ -22,6 +22,7 @@ def speedup_critic(
     Ensures that the optimization is actually faster than the original code, above the noise floor.
     The noise floor is a function of the original code runtime. Currently, the noise floor is 2xMIN_IMPROVEMENT_THRESHOLD
     when the original runtime is less than 10 microseconds, and becomes MIN_IMPROVEMENT_THRESHOLD for any higher runtime.
+    The noise floor is doubled when benchmarking on a (noisy) GitHub Action virtual instance, also we want to be more confident there.
     """
     in_github_actions_mode = bool(env_utils.get_pr_number())
     if original_code_runtime < 10_000:
