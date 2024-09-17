@@ -48,10 +48,7 @@ class ReturnStatementVisitor(cst.CSTVisitor):
 
 
 class FunctionVisitor(cst.CSTVisitor):
-    METADATA_DEPENDENCIES = (
-        cst.metadata.PositionProvider,
-        cst.metadata.ParentNodeProvider,
-    )
+    METADATA_DEPENDENCIES = (cst.metadata.PositionProvider, cst.metadata.ParentNodeProvider)
 
     def __init__(self, file_path: str) -> None:
         super().__init__()
@@ -63,21 +60,12 @@ class FunctionVisitor(cst.CSTVisitor):
         node.visit(return_visitor)
         if return_visitor.has_return_statement:
             pos: CodeRange = self.get_metadata(cst.metadata.PositionProvider, node)
-            parents: CSTNode | None = self.get_metadata(
-                cst.metadata.ParentNodeProvider,
-                node,
-            )
+            parents: CSTNode | None = self.get_metadata(cst.metadata.ParentNodeProvider, node)
             ast_parents: list[FunctionParent] = []
             while parents is not None:
                 if isinstance(parents, (cst.FunctionDef, cst.ClassDef)):
-                    ast_parents.append(
-                        FunctionParent(parents.name.value, parents.__class__.__name__),
-                    )
-                parents = self.get_metadata(
-                    cst.metadata.ParentNodeProvider,
-                    parents,
-                    default=None,
-                )
+                    ast_parents.append(FunctionParent(parents.name.value, parents.__class__.__name__))
+                parents = self.get_metadata(cst.metadata.ParentNodeProvider, parents, default=None)
             self.functions.append(
                 FunctionToOptimize(
                     function_name=node.name.value,
@@ -285,9 +273,7 @@ def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
     return modified_functions
 
 
-def get_all_files_and_functions(
-    module_root_path: str,
-) -> dict[str, list[FunctionToOptimize]]:
+def get_all_files_and_functions(module_root_path: str) -> dict[str, list[FunctionToOptimize]]:
     functions: dict[str, list[FunctionToOptimize]] = {}
     for root, dirs, files in os.walk(module_root_path):
         for file in files:
@@ -320,14 +306,9 @@ def find_all_functions_in_file(file_path: str) -> dict[str, list[FunctionToOptim
 
 
 def get_all_replay_test_functions(
-    replay_test: str,
-    test_cfg: TestConfig,
-    project_root_path: str,
+    replay_test: str, test_cfg: TestConfig, project_root_path: str
 ) -> dict[str, list[FunctionToOptimize]]:
-    function_tests = discover_unit_tests(
-        test_cfg,
-        discover_only_these_tests=[replay_test],
-    )
+    function_tests = discover_unit_tests(test_cfg, discover_only_these_tests=[replay_test])
     # Get the absolute file paths for each function, excluding class name if present
     filtered_valid_functions = defaultdict(list)
     file_to_functions_map = defaultdict(list)
@@ -591,9 +572,7 @@ def filter_files_optimized(
     return True
 
 
-def function_has_return_statement(
-    function_node: Union[FunctionDef, AsyncFunctionDef],
-) -> bool:
+def function_has_return_statement(function_node: Union[FunctionDef, AsyncFunctionDef]) -> bool:
     for node in ast.walk(function_node):
         if isinstance(node, ast.Return):
             return True
