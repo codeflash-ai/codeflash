@@ -16,14 +16,12 @@ from libcst import CSTNode
 from libcst.metadata import CodeRange
 from pydantic.dataclasses import dataclass
 
-from codeflash.api.cfapi import make_cfapi_request
+from codeflash.api.cfapi import get_blacklisted_functions
 from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
     path_belongs_to_site_packages,
 )
-from codeflash.code_utils.env_utils import get_pr_number
-from codeflash.code_utils.git_utils import get_git_diff, get_repo_owner_and_name
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.telemetry.posthog import ph
 from codeflash.verification.verification_utils import TestConfig
@@ -153,27 +151,6 @@ class FunctionToOptimize:
 
     def qualified_name_with_modules_from_root(self, project_root_path: str) -> str:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
-
-
-def get_blacklisted_functions() -> dict[str, str]:
-    pr_number = get_pr_number()
-    if pr_number is None:
-        return {}
-
-    owner, repo = get_repo_owner_and_name()
-    information = {
-        "pr_number": pr_number,
-        "repo_owner": owner,
-        "repo_name": repo,
-    }
-
-    req = make_cfapi_request(
-        endpoint="/verify-existing-optimizations",
-        method="POST",
-        payload=information,
-    )
-    content: dict[str, list[str]] = req.json()
-    return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
 
 
 def get_functions_to_optimize(
@@ -306,7 +283,9 @@ def find_all_functions_in_file(file_path: str) -> dict[str, list[FunctionToOptim
 
 
 def get_all_replay_test_functions(
-    replay_test: str, test_cfg: TestConfig, project_root_path: str
+    replay_test: str,
+    test_cfg: TestConfig,
+    project_root_path: str,
 ) -> dict[str, list[FunctionToOptimize]]:
     function_tests = discover_unit_tests(test_cfg, discover_only_these_tests=[replay_test])
     # Get the absolute file paths for each function, excluding class name if present
