@@ -185,7 +185,6 @@ def get_blacklisted_functions() -> dict[str, str]:
         payload=information,
     )
     content: dict[str, list[str]] = req.json()
-    logging.info("Blacklisted functions: %s", content)
     return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
 
 
