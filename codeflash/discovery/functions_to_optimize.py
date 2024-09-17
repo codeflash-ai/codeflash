@@ -7,6 +7,7 @@ import random
 from _ast import AsyncFunctionDef, ClassDef, FunctionDef
 from collections import defaultdict
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional, Union
 
 import git
@@ -15,6 +16,7 @@ from libcst import CSTNode
 from libcst.metadata import CodeRange
 from pydantic.dataclasses import dataclass
 
+from codeflash.api.cfapi import get_blacklisted_functions
 from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
@@ -61,9 +63,7 @@ class FunctionVisitor(cst.CSTVisitor):
             ast_parents: list[FunctionParent] = []
             while parents is not None:
                 if isinstance(parents, (cst.FunctionDef, cst.ClassDef)):
-                    ast_parents.append(
-                        FunctionParent(parents.name.value, parents.__class__.__name__),
-                    )
+                    ast_parents.append(FunctionParent(parents.name.value, parents.__class__.__name__))
                 parents = self.get_metadata(cst.metadata.ParentNodeProvider, parents, default=None)
             self.functions.append(
                 FunctionToOptimize(
@@ -455,6 +455,7 @@ def filter_functions(
     module_root: str,
     disable_logs: bool = False,
 ) -> tuple[dict[str, list[FunctionToOptimize]], int]:
+    blocklist_funcs = get_blacklisted_functions()
     # Remove any function that we don't want to optimize
 
     # Ignore files with submodule path, cache the submodule paths
@@ -494,6 +495,16 @@ def filter_functions(
         except SyntaxError:
             malformed_paths_count += 1
             continue
+        if blocklist_funcs:
+            for function in functions.copy():
+                path = Path(function.file_path).name
+                if path in blocklist_funcs and function.function_name in blocklist_funcs[path]:
+                    functions.remove(function)
+                    logging.debug(
+                        f"Skipping {function.function_name} in {path} as it has already been optimized"
+                    )
+                    continue
+
         filtered_modified_functions[file_path] = functions
         functions_count += len(functions)
     if not disable_logs:
@@ -508,7 +519,6 @@ def filter_functions(
         log_string: str
         if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
             logging.info(f"Ignoring:\n{log_string}")
-
     return {k: v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 
