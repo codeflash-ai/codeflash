@@ -7,6 +7,7 @@ import random
 from _ast import AsyncFunctionDef, ClassDef, FunctionDef
 from collections import defaultdict
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional, Union
 
 import git
@@ -15,12 +16,14 @@ from libcst import CSTNode
 from libcst.metadata import CodeRange
 from pydantic.dataclasses import dataclass
 
+from codeflash.api.cfapi import make_cfapi_request
 from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
     path_belongs_to_site_packages,
 )
-from codeflash.code_utils.git_utils import get_git_diff
+from codeflash.code_utils.env_utils import get_pr_number
+from codeflash.code_utils.git_utils import get_git_diff, get_repo_owner_and_name
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.telemetry.posthog import ph
 from codeflash.verification.verification_utils import TestConfig
@@ -45,7 +48,10 @@ class ReturnStatementVisitor(cst.CSTVisitor):
 
 
 class FunctionVisitor(cst.CSTVisitor):
-    METADATA_DEPENDENCIES = (cst.metadata.PositionProvider, cst.metadata.ParentNodeProvider)
+    METADATA_DEPENDENCIES = (
+        cst.metadata.PositionProvider,
+        cst.metadata.ParentNodeProvider,
+    )
 
     def __init__(self, file_path: str) -> None:
         super().__init__()
@@ -57,14 +63,21 @@ class FunctionVisitor(cst.CSTVisitor):
         node.visit(return_visitor)
         if return_visitor.has_return_statement:
             pos: CodeRange = self.get_metadata(cst.metadata.PositionProvider, node)
-            parents: CSTNode | None = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+            parents: CSTNode | None = self.get_metadata(
+                cst.metadata.ParentNodeProvider,
+                node,
+            )
             ast_parents: list[FunctionParent] = []
             while parents is not None:
                 if isinstance(parents, (cst.FunctionDef, cst.ClassDef)):
                     ast_parents.append(
                         FunctionParent(parents.name.value, parents.__class__.__name__),
                     )
-                parents = self.get_metadata(cst.metadata.ParentNodeProvider, parents, default=None)
+                parents = self.get_metadata(
+                    cst.metadata.ParentNodeProvider,
+                    parents,
+                    default=None,
+                )
             self.functions.append(
                 FunctionToOptimize(
                     function_name=node.name.value,
@@ -152,6 +165,28 @@ class FunctionToOptimize:
 
     def qualified_name_with_modules_from_root(self, project_root_path: str) -> str:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
+
+
+def get_blacklisted_functions() -> dict[str, str]:
+    pr_number = get_pr_number()
+    if pr_number is None:
+        return {}
+
+    owner, repo = get_repo_owner_and_name()
+    information = {
+        "pr_number": pr_number,
+        "repo_owner": owner,
+        "repo_name": repo,
+    }
+
+    req = make_cfapi_request(
+        endpoint="/verify-existing-optimizations",
+        method="POST",
+        payload=information,
+    )
+    content: dict[str, list[str]] = req.json()
+    logging.info("Blacklisted functions: %s", content)
+    return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
 
 
 def get_functions_to_optimize(
@@ -251,7 +286,9 @@ def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
     return modified_functions
 
 
-def get_all_files_and_functions(module_root_path: str) -> dict[str, list[FunctionToOptimize]]:
+def get_all_files_and_functions(
+    module_root_path: str,
+) -> dict[str, list[FunctionToOptimize]]:
     functions: dict[str, list[FunctionToOptimize]] = {}
     for root, dirs, files in os.walk(module_root_path):
         for file in files:
@@ -288,7 +325,10 @@ def get_all_replay_test_functions(
     test_cfg: TestConfig,
     project_root_path: str,
 ) -> dict[str, list[FunctionToOptimize]]:
-    function_tests = discover_unit_tests(test_cfg, discover_only_these_tests=[replay_test])
+    function_tests = discover_unit_tests(
+        test_cfg,
+        discover_only_these_tests=[replay_test],
+    )
     # Get the absolute file paths for each function, excluding class name if present
     filtered_valid_functions = defaultdict(list)
     file_to_functions_map = defaultdict(list)
@@ -455,6 +495,7 @@ def filter_functions(
     module_root: str,
     disable_logs: bool = False,
 ) -> tuple[dict[str, list[FunctionToOptimize]], int]:
+    blacklisted_funcs = get_blacklisted_functions()
     # Remove any function that we don't want to optimize
 
     # Ignore files with submodule path, cache the submodule paths
@@ -494,6 +535,16 @@ def filter_functions(
         except SyntaxError:
             malformed_paths_count += 1
             continue
+        if blacklisted_funcs:
+            for function in functions.copy():
+                path = Path(function.file_path).name
+                if path in blacklisted_funcs and function.function_name in blacklisted_funcs[path]:
+                    functions.remove(function)
+                    logging.info(
+                        f"Skipping {function.function_name} in {path} as it has already been optimized"
+                    )
+                    continue
+
         filtered_modified_functions[file_path] = functions
         functions_count += len(functions)
     if not disable_logs:
@@ -508,7 +559,6 @@ def filter_functions(
         log_string: str
         if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
             logging.info(f"Ignoring:\n{log_string}")
-
     return {k: v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 
@@ -542,7 +592,9 @@ def filter_files_optimized(
     return True
 
 
-def function_has_return_statement(function_node: Union[FunctionDef, AsyncFunctionDef]) -> bool:
+def function_has_return_statement(
+    function_node: Union[FunctionDef, AsyncFunctionDef],
+) -> bool:
     for node in ast.walk(function_node):
         if isinstance(node, ast.Return):
             return True
