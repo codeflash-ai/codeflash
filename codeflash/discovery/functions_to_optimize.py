@@ -539,7 +539,7 @@ def filter_functions(
                 path = Path(function.file_path).name
                 if path in blacklisted_funcs and function.function_name in blacklisted_funcs[path]:
                     functions.remove(function)
-                    logging.info(
+                    logging.debug(
                         f"Skipping {function.function_name} in {path} as it has already been optimized"
                     )
                     continue
