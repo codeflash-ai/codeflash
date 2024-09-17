@@ -22,6 +22,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
     path_belongs_to_site_packages,
 )
+from codeflash.code_utils.git_utils import get_git_diff
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.telemetry.posthog import ph
 from codeflash.verification.verification_utils import TestConfig
@@ -454,7 +455,7 @@ def filter_functions(
     module_root: str,
     disable_logs: bool = False,
 ) -> tuple[dict[str, list[FunctionToOptimize]], int]:
-    blacklisted_funcs = get_blacklisted_functions()
+    blocklist_funcs = get_blacklisted_functions()
     # Remove any function that we don't want to optimize
 
     # Ignore files with submodule path, cache the submodule paths
@@ -494,10 +495,10 @@ def filter_functions(
         except SyntaxError:
             malformed_paths_count += 1
             continue
-        if blacklisted_funcs:
+        if blocklist_funcs:
             for function in functions.copy():
                 path = Path(function.file_path).name
-                if path in blacklisted_funcs and function.function_name in blacklisted_funcs[path]:
+                if path in blocklist_funcs and function.function_name in blocklist_funcs[path]:
                     functions.remove(function)
                     logging.debug(
                         f"Skipping {function.function_name} in {path} as it has already been optimized"
