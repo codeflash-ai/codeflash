@@ -24,6 +24,16 @@ def node_in_call_position(node: ast.stmt, call_positions: list[CodePosition]) ->
     return False
 
 
+def is_argument_name(name: str, arguments_node: ast.arguments) -> bool:
+    return any(
+        element.arg == name
+        for attribute_name in dir(arguments_node)
+        if isinstance(attribute := getattr(arguments_node, attribute_name), list)
+        for element in attribute
+        if isinstance(element, ast.arg)
+    )
+
+
 class InjectPerfOnly(ast.NodeTransformer):
     def __init__(
         self,
@@ -57,6 +67,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                     node.func = ast.Name(id="codeflash_wrap", ctx=ast.Load())
                     node.args = [
                         ast.Name(id=function_name, ctx=ast.Load()),
+                        ast.Name(id="loop_id", ctx=ast.Load()),
                         ast.Constant(value=self.module_path),
                         ast.Constant(value=test_class_name or None),
                         ast.Constant(value=node_name),
@@ -76,6 +87,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                         node.func = ast.Name(id="codeflash_wrap", ctx=ast.Load())
                         node.args = [
                             ast.Name(id=function_name, ctx=ast.Load()),
+                            ast.Name(id="loop_id", ctx=ast.Load()),
                             ast.Constant(value=self.module_path),
                             ast.Constant(value=test_class_name or None),
                             ast.Constant(value=node_name),
@@ -104,9 +116,8 @@ class InjectPerfOnly(ast.NodeTransformer):
     def visit_FunctionDef(self, node: ast.FunctionDef, test_class_name: str | None = None) -> ast.FunctionDef:
         if node.name.startswith("test_"):
             did_update = False
-            if self.test_framework == "pytest":
-
-
+            if self.test_framework == "pytest" and not is_argument_name("request", arguments := node.args):
+                arguments.args.append(ast.arg(arg="request"))
             if self.test_framework == "unittest":
                 node.decorator_list.append(
                     ast.Call(
@@ -154,27 +165,42 @@ class InjectPerfOnly(ast.NodeTransformer):
                 i -= 1
             if did_update:
                 node.body = (
-                    [
-                        ast.Assign(
-                            targets=[ast.Name(id="loop_id", ctx=ast.Store())],
-                            value=ast.Subscript(
-                                value=ast.Attribute(
+                    (
+                        [
+                            ast.Assign(
+                                targets=[ast.Name(id="loop_id", ctx=ast.Store())],
+                                value=ast.Subscript(
                                     value=ast.Attribute(
                                         value=ast.Attribute(
-                                            value=ast.Name(id="request", ctx=ast.Load()),
-                                            attr="node",
+                                            value=ast.Attribute(
+                                                value=ast.Name(id="request", ctx=ast.Load()),
+                                                attr="node",
+                                                ctx=ast.Load(),
+                                            ),
+                                            attr="callspec",
                                             ctx=ast.Load(),
                                         ),
-                                        attr="callspec",
+                                        attr="params",
                                         ctx=ast.Load(),
                                     ),
-                                    attr="params",
+                                    slice=ast.Constant(value="__pytest_loop_step_number"),
                                     ctx=ast.Load(),
                                 ),
-                                slice=ast.Constant(value="__pytest_loop_step_number"),
-                                ctx=ast.Load(),
+                                lineno=node.lineno + 1,
+                                col_offset=node.col_offset,
                             ),
-                        ),
+                        ]
+                        if self.test_framework == "pytest"
+                        else [
+                            ast.Assign(
+                                targets=[ast.Name(id="loop_id", ctx=ast.Store())],
+                                value=ast.Constant(value=1),
+                                lineno=node.lineno + 1,
+                                col_offset=node.col_offset,
+                            ),
+                        ]
+                    )
+                    + [
                         ast.Assign(
                             targets=[ast.Name(id="codeflash_iteration", ctx=ast.Store())],
                             value=ast.Subscript(
@@ -186,7 +212,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                 slice=ast.Constant(value="CODEFLASH_TEST_ITERATION"),
                                 ctx=ast.Load(),
                             ),
-                            lineno=node.lineno + 1,
+                            lineno=node.lineno + 2,
                             col_offset=node.col_offset,
                         ),
                         ast.Assign(
@@ -216,7 +242,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                 ],
                                 keywords=[],
                             ),
-                            lineno=node.lineno + 2,
+                            lineno=node.lineno + 3,
                             col_offset=node.col_offset,
                         ),
                         ast.Assign(
@@ -230,7 +256,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                 args=[],
                                 keywords=[],
                             ),
-                            lineno=node.lineno + 3,
+                            lineno=node.lineno + 4,
                             col_offset=node.col_offset,
                         ),
                         ast.Expr(
@@ -249,7 +275,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                 ],
                                 keywords=[],
                             ),
-                            lineno=node.lineno + 4,
+                            lineno=node.lineno + 5,
                             col_offset=node.col_offset,
                         ),
                     ]
@@ -349,8 +375,8 @@ def create_wrapper_function() -> ast.FunctionDef:
         name="codeflash_wrap",
         args=ast.arguments(
             args=[
-                ast.arg(arg="loop_id", annotation=None),
                 ast.arg(arg="wrapped", annotation=None),
+                ast.arg(arg="loop_id", annotation=None),
                 ast.arg(arg="test_module_name", annotation=None),
                 ast.arg(arg="test_class_name", annotation=None),
                 ast.arg(arg="test_name", annotation=None),
@@ -513,6 +539,11 @@ def create_wrapper_function() -> ast.FunctionDef:
                         ast.JoinedStr(
                             values=[
                                 ast.Constant(value="!######"),
+                                ast.FormattedValue(
+                                    value=ast.Name(id="loop_id", ctx=ast.Load()),
+                                    conversion=-1,
+                                ),
+                                ast.Constant(value=":"),
                                 ast.FormattedValue(
                                     value=ast.Name(id="test_module_name", ctx=ast.Load()),
                                     conversion=-1,

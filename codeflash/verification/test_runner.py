@@ -56,7 +56,7 @@ def run_tests(
         results = subprocess.run(
             ["python", "-m", "xmlrunner"]
             + (["-v"] if verbose else [])
-            + [test_paths]
+            + test_paths
             + ["--output-file", result_file_path],
             capture_output=True,
             cwd=cwd,
@@ -67,6 +67,6 @@ def run_tests(
         )
     else:
         raise ValueError(
-            "Invalid test framework -- I only support Pytest and Unittest currently."
+            "Invalid test framework -- I only support Pytest and Unittest currently.",
         )
     return result_file_path, results

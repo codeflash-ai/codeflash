@@ -29,7 +29,6 @@ class TestType(Enum):
 
 @dataclass(frozen=True)
 class InvocationId:
-    loop_id: str  # The loop id of the test, set to "0" if the test is not looped
     test_module_path: str  # The fully qualified name of the test module
     test_class_name: Optional[str]  # The name of the class where the test is defined
     test_function_name: str  # The name of the test_function. Does not include the components of the file_name
@@ -73,6 +72,12 @@ class FunctionTestInvocation:
 
     def test_executed(self) -> bool:
         return self.test_type != TestType.EXISTING_UNIT_TEST or self.id.function_getting_tested
+
+
+@dataclass(frozen=True)
+class LoopedFunctionTestInvocation:
+    loop_id: str  # The loop id of the function invocation
+    result: FunctionTestInvocation  # The function invocation result
 
 
 class TestResults(BaseModel):
@@ -132,14 +137,13 @@ class TestResults(BaseModel):
                 logging.debug(
                     f"Ignoring test case that passed but had no runtime -> {result.id}",
                 )
-        timing = sum(
+        return sum(
             [
                 result.runtime
                 for result in self.test_results
                 if (result.did_pass and result.runtime is not None)
             ],
         )
-        return timing
 
     def __iter__(self) -> Iterator[FunctionTestInvocation]:
         return iter(self.test_results)

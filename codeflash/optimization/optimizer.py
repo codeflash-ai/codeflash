@@ -1097,7 +1097,7 @@ class Optimizer:
                     )
                 candidate_existing_test_result = self.run_and_parse_tests(
                     test_env,
-                    instrumented_test_file,
+                    [instrumented_test_file],
                     relevant_tests_in_file[0].test_type,
                     optimization_index,
                     relevant_tests_in_file[0].test_function if is_replay_test else None,
@@ -1132,7 +1132,7 @@ class Optimizer:
             if run_generated_tests:
                 candidate_generated_test_results = self.run_and_parse_tests(
                     test_env,
-                    generated_tests_path,
+                    [generated_tests_path],
                     TestType.GENERATED_REGRESSION,
                     optimization_index,
                 )
@@ -1205,7 +1205,7 @@ class Optimizer:
                             )
                         candidate_existing_test_result = self.run_and_parse_tests(
                             test_env,
-                            instrumented_test_file,
+                            [instrumented_test_file],
                             relevant_tests_in_file[0].test_type,
                             optimization_index,
                             relevant_tests_in_file[0].test_function if is_replay_test else None,
@@ -1248,7 +1248,7 @@ class Optimizer:
                     if run_generated_tests:
                         candidate_generated_test_results = self.run_and_parse_tests(
                             test_env,
-                            generated_tests_path,
+                            [generated_tests_path],
                             TestType.GENERATED_REGRESSION,
                             optimization_index,
                         )
