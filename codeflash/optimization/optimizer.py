@@ -260,7 +260,7 @@ class Optimizer:
                 f"Generated test {i + 1}/{count_tests}:\n{generated_test.instrumented_test_source}",
             )
 
-        # TODO: work on this next
+        # TODO: @KRRT work on this next
         baseline_result, test_functions_to_remove = self.establish_original_code_baseline(
             function_to_optimize.qualified_name,
             instrumented_unittests_created_for_function,
@@ -1198,8 +1198,8 @@ class Optimizer:
         helper_function_names: list[str],
         module_path: str,
         function_trace_id: str,
-    ) -> set[tuple[str, str]] | None:
-        n_tests = 10
+    ) -> list[tuple[str, str]] | None:
+        n_tests = 2
         futures = [
             executor.submit(
                 generate_tests,
@@ -1216,17 +1216,21 @@ class Optimizer:
             for _ in range(n_tests)
         ]
         try:
-            tests = {future.result() for future in concurrent.futures.as_completed(futures)}
-            logging.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}.")
+            tests = []
+            for future in concurrent.futures.as_completed(futures):
+                res = future.result()
+                if res:
+                    tests.append(res)
+            logging.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
         except Exception as e:
             logging.warning(
-                f"Failed to generate and instrument tests for {function_to_optimize.function_name}: {e}",
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}: {e}"
             )
             return None
 
         if not tests:
             logging.warning(
-                f"Failed to generate and instrument tests for {function_to_optimize.function_name}",
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}"
             )
             return None
         return tests
