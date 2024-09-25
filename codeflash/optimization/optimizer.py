@@ -260,18 +260,18 @@ class Optimizer:
                 f"Generated test {i + 1}/{count_tests}:\n{generated_test.instrumented_test_source}",
             )
 
-        # TODO: @KRRT work on this next
         baseline_result, test_functions_to_remove = self.establish_original_code_baseline(
             function_to_optimize.qualified_name,
             instrumented_unittests_created_for_function,
-            generated_tests_path,
+            generated_tests_paths,
             function_to_tests.get(module_path + "." + function_to_optimize.qualified_name, []),
         )
         if not is_successful(baseline_result):
-            pathlib.Path(generated_tests_path).unlink(missing_ok=True)
+            for generated_test_path in generated_tests_paths:
+                pathlib.Path(generated_test_path).unlink(missing_ok=True)
+
             for instrumented_path in instrumented_unittests_created_for_function:
                 pathlib.Path(instrumented_path).unlink(missing_ok=True)
-            return Failure(baseline_result.failure())
         original_code_baseline: OriginalCodeBaseline = baseline_result.unwrap()
         # # TODO: Postprocess the optimized function to include the original docstring and such
 
@@ -291,7 +291,7 @@ class Optimizer:
                 candidates,
                 code_context,
                 function_to_optimize,
-                generated_tests_path,
+                generated_tests_paths,
                 instrumented_unittests_created_for_function,
                 original_code,
                 original_code_baseline,
@@ -379,7 +379,7 @@ class Optimizer:
         candidates: list[OptimizedCandidate],
         code_context: CodeOptimizationContext,
         function_to_optimize: FunctionToOptimize,
-        generated_tests_path: str,
+        generated_tests_paths: list[str],
         instrumented_unittests_created_for_function: set[str],
         original_code: str,
         original_code_baseline: OriginalCodeBaseline,
@@ -450,7 +450,7 @@ class Optimizer:
                     overall_original_test_results=original_code_baseline.overall_test_results,
                     original_existing_test_results=original_code_baseline.existing_test_results,
                     original_generated_test_results=original_code_baseline.generated_test_results,
-                    generated_tests_path=generated_tests_path,
+                    generated_tests_paths=generated_tests_paths,
                     best_runtime_until_now=best_runtime_until_now,
                     tests_in_file=only_run_this_test_function,
                     run_generated_tests=run_generated_tests,
@@ -819,7 +819,7 @@ class Optimizer:
         self,
         function_name: str,
         instrumented_unittests_created_for_function: set[str],
-        generated_tests_path: str,
+        generated_tests_paths: list[str],
         tests_in_file: list[TestsInFile],
     ) -> Result[OriginalCodeBaseline, str]:
         original_runtime = None
@@ -887,12 +887,25 @@ class Optimizer:
                         f"Existing unit test results for original code: {original_test_results_iter.get_test_pass_fail_report()}",
                     )
 
+                paths_copy = generated_tests_paths.copy()
                 original_gen_results = self.run_and_parse_tests(
                     test_env,
-                    generated_tests_path,
+                    paths_copy.pop(0),
                     TestType.GENERATED_REGRESSION,
                     0,
                 )
+
+                if paths_copy:
+                    for path in paths_copy:
+                        original_gen_results.merge(
+                            self.run_and_parse_tests(
+                                test_env,
+                                path,
+                                TestType.GENERATED_REGRESSION,
+                                0,
+                            ),
+                        )
+
                 functions_to_remove = [
                     result.id.test_function_name
                     for result in original_gen_results.test_results
@@ -979,7 +992,7 @@ class Optimizer:
         overall_original_test_results: TestResults,
         original_existing_test_results: TestResults,
         original_generated_test_results: TestResults,
-        generated_tests_path: str,
+        generated_tests_paths: list[str],
         best_runtime_until_now: int,
         tests_in_file: list[TestsInFile] | None,
         run_generated_tests: bool,
@@ -1074,12 +1087,24 @@ class Optimizer:
 
                 candidate_generated_test_results = None
                 if run_generated_tests:
-                    candidate_generated_test_results = self.run_and_parse_tests(
+                    paths_copy = generated_tests_paths.copy()
+                    original_gen_results = self.run_and_parse_tests(
                         test_env,
-                        generated_tests_path,
+                        paths_copy.pop(0),
                         TestType.GENERATED_REGRESSION,
-                        optimization_index,
+                        0,
                     )
+
+                    if paths_copy:
+                        for path in paths_copy:
+                            original_gen_results.merge(
+                                self.run_and_parse_tests(
+                                    test_env,
+                                    path,
+                                    TestType.GENERATED_REGRESSION,
+                                    0,
+                                ),
+                            )
 
                 if candidate_generated_test_results and first_run and test_index == 0:
                     logging.info(
