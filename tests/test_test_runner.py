@@ -27,18 +27,20 @@ class TestUnittestRunnerSorter(unittest.TestCase):
 """
     cur_dir_path = os.path.dirname(os.path.abspath(__file__))
     config = TestConfig(
-        tests_root=cur_dir_path, project_root_path=cur_dir_path, test_framework="unittest",
+        tests_root=cur_dir_path,
+        project_root_path=cur_dir_path,
+        test_framework="unittest",
     )
 
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         fp.write(code.encode("utf-8"))
         fp.flush()
         result_file, process = run_tests(
-            fp.name,
+            [fp.name],
             test_framework=config.test_framework,
             cwd=config.project_root_path,
         )
-        results = parse_test_xml(result_file, fp.name, TestType.EXISTING_UNIT_TEST, config, process)
+        results = parse_test_xml(result_file, [fp.name], TestType.EXISTING_UNIT_TEST, config, process)
     assert results[0].did_pass, "Test did not pass as expected"
     pathlib.Path(result_file).unlink(missing_ok=True)
 
@@ -56,20 +58,24 @@ def test_sort():
 """
     cur_dir_path = os.path.dirname(os.path.abspath(__file__))
     config = TestConfig(
-        tests_root=cur_dir_path, project_root_path=cur_dir_path, test_framework="pytest",
+        tests_root=cur_dir_path,
+        project_root_path=cur_dir_path,
+        test_framework="pytest",
     )
+    test_env = os.environ.copy()
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         fp.write(code.encode("utf-8"))
         fp.flush()
         result_file, process = run_tests(
-            fp.name,
+            [fp.name],
             test_framework=config.test_framework,
             cwd=os.path.join(cur_dir_path),
             pytest_timeout=1,
+            test_env=test_env,
         )
         results = parse_test_xml(
             test_xml_file_path=result_file,
-            test_py_file_path=fp.name,
+            test_py_file_paths=[fp.name],
             test_type=TestType.EXISTING_UNIT_TEST,
             test_config=config,
             run_result=process,

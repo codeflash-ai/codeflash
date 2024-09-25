@@ -1,6 +1,3 @@
-# This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at https://www.mozilla.org/en-US/MPL/2.0/.
 from __future__ import annotations
 
 # System Imports
@@ -36,30 +33,30 @@ class UnexpectedError(Exception):
 
 
 def pytest_addoption(parser: Parser) -> None:
-    """Add our command line options."""
-    pytest_loop = parser.getgroup("loop")
-    pytest_loop.addoption(
+    """Add command line options."""
+    pytest_loops = parser.getgroup("loops")
+    pytest_loops.addoption(
         "--delay",
         action="store",
         default=0,
         type=float,
         help="The amount of time to wait between each test loop.",
     )
-    pytest_loop.addoption(
+    pytest_loops.addoption(
         "--hours",
         action="store",
         default=0,
         type=float,
         help="The number of hours to loop the tests for.",
     )
-    pytest_loop.addoption(
+    pytest_loops.addoption(
         "--minutes",
         action="store",
         default=0,
         type=float,
         help="The number of minutes to loop the tests for.",
     )
-    pytest_loop.addoption(
+    pytest_loops.addoption(
         "--seconds",
         action="store",
         default=0,
@@ -67,16 +64,16 @@ def pytest_addoption(parser: Parser) -> None:
         help="The number of seconds to loop the tests for.",
     )
 
-    pytest_loop.addoption(
-        "--loop",
+    pytest_loops.addoption(
+        "--loops",
         action="store",
         default=1,
         type=int,
         help="The number of times to loop each test",
     )
 
-    pytest_loop.addoption(
-        "--loop-scope",
+    pytest_loops.addoption(
+        "--loops-scope",
         action="store",
         default="function",
         type=str,
@@ -89,16 +86,16 @@ def pytest_addoption(parser: Parser) -> None:
 def pytest_configure(config: Config) -> None:
     config.addinivalue_line(
         "markers",
-        "loop(n): run the given test function `n` times.",
+        "loops(n): run the given test function `n` times.",
     )
-    config.pluginmanager.register(PyTest_Loop(config), PyTest_Loop.name)
+    config.pluginmanager.register(PyTest_Loops(config), PyTest_Loops.name)
 
 
-class PyTest_Loop:
-    name = "pytest-loop"
+class PyTest_Loops:
+    name: str = "pytest-loops"
 
     def __init__(self, config: Config) -> None:
-        # turn debug prints on only if "-vv" or more passed
+        # Turn debug prints on only if "-vv" or more passed
         level = logging.DEBUG if config.option.verbose > 1 else logging.INFO
         logging.basicConfig(level=level)
         self.logger = logging.getLogger(self.name)
@@ -106,10 +103,7 @@ class PyTest_Loop:
     @hookspec(firstresult=True)
     def pytest_runtestloop(self, session: Session) -> bool:
         """Reimplement the test loop but loop for the user defined amount of time."""
-        if (
-            session.testsfailed
-            and not session.config.option.continue_on_collection_errors
-        ):
+        if session.testsfailed and not session.config.option.continue_on_collection_errors:
             raise session.Interrupted(
                 "%d error%s during collection"
                 % (session.testsfailed, "s" if session.testsfailed != 1 else ""),
@@ -123,9 +117,7 @@ class PyTest_Loop:
 
         count: int = 0
 
-        while (
-            total_time >= SHORTEST_AMOUNT_OF_TIME
-        ):  # need to run at least one for normal tests
+        while total_time >= SHORTEST_AMOUNT_OF_TIME:  # need to run at least one for normal tests
             count += 1
             total_time = self._get_total_time(session)
 
@@ -137,9 +129,7 @@ class PyTest_Loop:
                     self._print_loop_count(count)
                     item._nodeid = self._set_nodeid(item._nodeid, count)
 
-                next_item: pytest.Item = (
-                    session.items[index + 1] if index + 1 < len(session.items) else None
-                )
+                next_item: pytest.Item = session.items[index + 1] if index + 1 < len(session.items) else None
                 item.config.hook.pytest_runtest_protocol(item=item, nextitem=next_item)
                 if session.shouldfail:
                     raise session.Failed(session.shouldfail)
@@ -151,7 +141,7 @@ class PyTest_Loop:
         return True
 
     def _set_nodeid(self, nodeid: str, count: int) -> str:
-        """Helper function to set the loop count when using duration.
+        """Set loop count when using duration.
 
         :param nodeid: Name of test function.
         :param count: Current loop count.
@@ -159,14 +149,10 @@ class PyTest_Loop:
         """
         pattern = r"\[ \d+ \]"
         run_str = f"[ {count} ]"
-        if re.search(pattern, nodeid):
-            nodeid = re.sub(pattern, run_str, nodeid)
-        else:
-            nodeid = nodeid + run_str
-        return nodeid
+        return re.sub(pattern, run_str, nodeid) if re.search(pattern, nodeid) else nodeid + run_str
 
     def _get_delay_time(self, session: Session) -> float:
-        """Helper function to extract the delay time from the session.
+        """Extract delay time from session.
 
         :param session: Pytest session object.
         :return: Returns the delay time for each test loop.
@@ -174,7 +160,7 @@ class PyTest_Loop:
         return session.config.option.delay
 
     def _get_total_time(self, session: Session) -> float:
-        """Takes all the user available time options, adds them and returns it in seconds.
+        """Take all the user available time options, add them and return it in seconds.
 
         :param session: Pytest session object.
         :return: Returns total amount of time in seconds.
@@ -190,7 +176,7 @@ class PyTest_Loop:
         return total_time
 
     def _timed_out(self, session: Session, start_time: float) -> bool:
-        """Helper function to check if the user specified amount of time has lapsed.
+        """Check if the user specified amount of time has lapsed.
 
         :param session: Pytest session object.
         :return: Returns True if the timeout has expired, False otherwise.
@@ -198,7 +184,7 @@ class PyTest_Loop:
         return time.time() - start_time > self._get_total_time(session)
 
     def _print_loop_count(self, count: int) -> None:
-        """Helper function to simply print out what loop number we're on.
+        """Print out current loop number.
 
         :param count: The number to print.
         :return: None.
@@ -210,13 +196,13 @@ class PyTest_Loop:
 
     @pytest.fixture
     def __pytest_loop_step_number(self, request: pytest.FixtureRequest) -> int:
-        """Fixture function to set step number for loop.
+        """Set step number for loop.
 
         :param request: The number to print.
         :return: request.param.
         """
-        marker = request.node.get_closest_marker("loop")
-        count = marker and marker.args[0] or request.config.option.loop
+        marker = request.node.get_closest_marker("loops")
+        count = marker and marker.args[0] or request.config.option.loops
         if count > 1:
             try:
                 return request.param
@@ -225,20 +211,20 @@ class PyTest_Loop:
                     warnings.warn("Repeating unittest class tests not supported")
                 else:
                     raise UnexpectedError(
-                        "This call couldn't work with pytest-loop. "
+                        "This call couldn't work with pytest-loops. "
                         "Please consider raising an issue with your usage.",
                     )
         return count
 
     @pytest.hookimpl(trylast=True)
     def pytest_generate_tests(self, metafunc: Metafunc) -> None:
-        """Hook function to create tests based on loop value.
+        """Create tests based on loop value.
 
         :param metafunc: pytest metafunction
         :return: None.
         """
-        count = metafunc.config.option.loop
-        m = metafunc.definition.get_closest_marker("loop")
+        count = metafunc.config.option.loops
+        m = metafunc.definition.get_closest_marker("loops")
 
         if m is not None:
             count = int(m.args[0])
@@ -248,7 +234,7 @@ class PyTest_Loop:
             def make_progress_id(i: int, n: int = count) -> str:
                 return f"{n}/{i+1}"
 
-            scope = metafunc.config.option.loop_scope
+            scope = metafunc.config.option.loops_scope
             metafunc.parametrize(
                 "__pytest_loop_step_number",
                 range(count),

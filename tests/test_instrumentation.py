@@ -81,7 +81,7 @@ class TestPigLatin(unittest.TestCase):
 
     @timeout_decorator.timeout(15)
     def test_sort(self):
-        loop_id = 1
+        loop_id = 0
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
@@ -937,7 +937,7 @@ class TestPigLatin(unittest.TestCase):
 
     @timeout_decorator.timeout(15)
     def test_sort(self):
-        loop_id = 1
+        loop_id = 0
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
@@ -1019,7 +1019,6 @@ class TestPigLatin(unittest.TestCase):
             run_result=run_result,
             optimization_iteration=0,
         )
-        assert test_results[0].id.loop_id == "1"
         assert test_results[0].id.function_getting_tested == "sorter"
         assert test_results[0].id.iteration_id == "1_0"
         assert test_results[0].id.test_class_name == "TestPigLatin"
@@ -1031,7 +1030,6 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[0].runtime > 0
         assert test_results[0].did_pass
 
-        assert test_results[1].id.loop_id == "1"
         assert test_results[1].id.function_getting_tested == "sorter"
         assert test_results[1].id.iteration_id == "4_0"
         assert test_results[1].id.test_class_name == "TestPigLatin"
@@ -1043,7 +1041,6 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
 
-        assert test_results[2].id.loop_id == "1"
         assert test_results[2].id.function_getting_tested == "sorter"
         assert test_results[2].id.iteration_id == "7_0"
         assert test_results[2].id.test_class_name == "TestPigLatin"
@@ -1116,7 +1113,7 @@ class TestPigLatin(unittest.TestCase):
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
     @timeout_decorator.timeout(15)
     def test_sort(self, input, expected_output):
-        loop_id = 1
+        loop_id = 0
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
@@ -1280,7 +1277,7 @@ class TestPigLatin(unittest.TestCase):
 
     @timeout_decorator.timeout(15)
     def test_sort(self):
-        loop_id = 1
+        loop_id = 0
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
@@ -1451,7 +1448,7 @@ class TestPigLatin(unittest.TestCase):
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
     @timeout_decorator.timeout(15)
     def test_sort(self, input, expected_output):
-        loop_id = 1
+        loop_id = 0
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()

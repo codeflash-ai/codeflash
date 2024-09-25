@@ -194,7 +194,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                         else [
                             ast.Assign(
                                 targets=[ast.Name(id="loop_id", ctx=ast.Store())],
-                                value=ast.Constant(value=1),
+                                value=ast.Constant(value=0),
                                 lineno=node.lineno + 1,
                                 col_offset=node.col_offset,
                             ),
