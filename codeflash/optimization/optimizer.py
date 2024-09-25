@@ -366,8 +366,8 @@ class Optimizer:
                             original_helper_code,
                             function_to_optimize.file_path,
                         )
-        # Delete all the generated tests to not cause any clutter.
-        pathlib.Path(generated_tests_path).unlink(missing_ok=True)
+        for generated_test_path in generated_tests_paths:
+            pathlib.Path(generated_test_path).unlink(missing_ok=True)
         for test_paths in instrumented_unittests_created_for_function:
             pathlib.Path(test_paths).unlink(missing_ok=True)
         if not best_optimization:
