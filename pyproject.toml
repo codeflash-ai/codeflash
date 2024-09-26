@@ -39,6 +39,7 @@ parameterized = ">=0.9.0"
 returns = ">=0.22"
 isort = ">=5.11.0"
 dill = "^0.3.8"
+rich = "^13.8.1"
 
 [tool.poetry.group.dev]
 optional = true
