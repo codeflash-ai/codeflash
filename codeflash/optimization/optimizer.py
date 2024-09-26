@@ -272,6 +272,8 @@ class Optimizer:
 
             for instrumented_path in instrumented_unittests_created_for_function:
                 pathlib.Path(instrumented_path).unlink(missing_ok=True)
+            return Failure(baseline_result.failure())
+
         original_code_baseline: OriginalCodeBaseline = baseline_result.unwrap()
         # # TODO: Postprocess the optimized function to include the original docstring and such
 
