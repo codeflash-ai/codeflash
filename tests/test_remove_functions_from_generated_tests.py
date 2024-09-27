@@ -3,7 +3,7 @@ import pytest
 from codeflash.code_utils.remove_generated_tests import (
     remove_functions_from_generated_tests,
 )
-from codeflash.models.models import GeneratedTests
+from codeflash.models.models import GeneratedTests, GeneratedTestsList
 
 
 def test_simple_removal():
@@ -25,6 +25,7 @@ def test_sorted_list():
         generated_original_test_source=generated_test_source,
         instrumented_test_source="",
     )
+    generated_tests_list = GeneratedTestsList(generated_tests=[generated_tests])
     functions_to_remove = ["test_single_element"]
 
     expected = """def test_empty_list():
@@ -38,10 +39,9 @@ def test_sorted_list():
     codeflash_output = sorter([1, 2, 3, 4, 5])
     # Outputs were verified to be equal to the original implementation"""
 
-    generated_tests = remove_functions_from_generated_tests(
-        generated_tests, functions_to_remove
-    )
-    assert generated_tests.generated_original_test_source == expected
+    generated_tests = remove_functions_from_generated_tests(generated_tests, functions_to_remove)
+
+    assert generated_tests_list.generated_tests[0].generated_original_test_source == expected
 
 
 def test_multiple_removals():
@@ -63,6 +63,7 @@ def test_sorted_list():
         generated_original_test_source=generated_test_source,
         instrumented_test_source="",
     )
+    generated_tests_list = GeneratedTestsList(generated_tests=[generated_tests])
     functions_to_remove = ["test_single_element", "test_sorted_list"]
 
     expected = """def test_empty_list():
@@ -73,10 +74,8 @@ def test_sorted_list():
 
 """
 
-    generated_tests_1 = remove_functions_from_generated_tests(
-        generated_tests, functions_to_remove
-    )
-    assert generated_tests_1.generated_original_test_source == expected
+    generated_tests_1 = remove_functions_from_generated_tests(generated_tests, functions_to_remove)
+    assert generated_tests_list.generated_tests[0].generated_original_test_source == expected
 
     functions_to_remove = ["test_single_element", "test_empty_list"]
 
@@ -90,11 +89,8 @@ def test_sorted_list():
         generated_original_test_source=generated_test_source,
         instrumented_test_source="",
     )
-
-    generated_tests_2 = remove_functions_from_generated_tests(
-        generated_tests, functions_to_remove
-    )
-    assert generated_tests_2.generated_original_test_source == expected
+    generated_tests_list = GeneratedTestsList(generated_tests=[generated_tests])
+    assert generated_tests_list.generated_tests[0].generated_original_test_source == expected
 
 
 def test_remove_complex_functions():
@@ -139,6 +135,7 @@ def test_list_with_mixed_orderable_and_non_orderable_types():
         generated_original_test_source=generated_test_source,
         instrumented_test_source="",
     )
+    generated_tests_list = GeneratedTestsList(generated_tests=[generated_tests])
     functions_to_remove = ["test_list_with_custom_objects"]
 
     expected = """def test_list_with_complex_numbers():
@@ -159,10 +156,8 @@ def test_list_with_mixed_orderable_and_non_orderable_types():
         sorter([True, 1, "string", [1, 2]])
     # Outputs were verified to be equal to the original implementation"""
 
-    generated_tests = remove_functions_from_generated_tests(
-        generated_tests, functions_to_remove
-    )
-    assert generated_tests.generated_original_test_source == expected
+    generated_tests = remove_functions_from_generated_tests(generated_tests, functions_to_remove)
+    assert generated_tests_list.generated_tests[0].generated_original_test_source == expected
 
 
 def test_keep_parametrized_tests():
@@ -196,6 +191,7 @@ def test_sorted_list():
         generated_original_test_source=generated_test_source,
         instrumented_test_source="",
     )
+    generated_tests_list = GeneratedTestsList(generated_tests=[generated_tests])
     functions_to_remove = ["test_empty_list", "test_sort_parametrized"]
 
     expected = """
@@ -221,10 +217,8 @@ def test_sorted_list():
     codeflash_output = sorter([1, 2, 3, 4, 5])
     # Outputs were verified to be equal to the original implementation"""
 
-    generated_tests = remove_functions_from_generated_tests(
-        generated_tests, functions_to_remove
-    )
-    assert generated_tests.generated_original_test_source == expected
+    generated_tests = remove_functions_from_generated_tests(generated_tests, functions_to_remove)
+    assert generated_tests_list.generated_tests[0].generated_original_test_source == expected
 
 
 @pytest.mark.skip(
@@ -261,6 +255,7 @@ def test_sorted_list():
         generated_original_test_source=generated_test_source,
         instrumented_test_source="",
     )
+    generated_tests_list = GeneratedTestsList(generated_tests=[generated_tests])
     functions_to_remove = ["test_empty_list", "test_sort_parametrized"]
 
     expected = """
@@ -286,7 +281,5 @@ def test_sorted_list():
     codeflash_output = sorter([1, 2, 3, 4, 5])
     # Outputs were verified to be equal to the original implementation"""
 
-    generated_tests = remove_functions_from_generated_tests(
-        generated_tests, functions_to_remove
-    )
-    assert generated_tests.generated_original_test_source == expected
+    generated_tests = remove_functions_from_generated_tests(generated_tests, functions_to_remove)
+    assert generated_tests_list.generated_tests[0].generated_original_test_source == expected
