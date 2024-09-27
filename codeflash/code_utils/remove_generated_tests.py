@@ -6,7 +6,7 @@ from codeflash.models.models import GeneratedTestsList
 def remove_functions_from_generated_tests(
     generated_tests: GeneratedTestsList, test_functions_to_remove: list[str]
 ) -> GeneratedTestsList:
-    new_generated_tests = GeneratedTestsList(generated_tests=[])
+    new_generated_tests = []
     for generated_test in generated_tests.generated_tests:
         for test_function in test_functions_to_remove:
             function_pattern = re.compile(
@@ -23,6 +23,6 @@ def remove_functions_from_generated_tests(
                 "", generated_test.generated_original_test_source
             )
 
-        new_generated_tests.generated_tests.append(new_generated_test)
+        new_generated_tests.append(generated_test)
 
-    return new_generated_tests
+    return GeneratedTestsList(generated_tests=new_generated_tests)
