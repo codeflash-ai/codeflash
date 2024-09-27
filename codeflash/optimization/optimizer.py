@@ -1224,11 +1224,18 @@ class Optimizer:
             for _ in range(N_TESTS_TO_GENERATE)
         ]
         try:
-            tests = []
+            tests: list[GeneratedTests] = []
             for future in concurrent.futures.as_completed(futures):
                 res = future.result()
                 if res:
-                    tests.append(res)
+                    generated_test_source, instrumented_test_source = res
+                    tests.append(
+                        GeneratedTests(
+                            generated_original_test_source=generated_test_source,
+                            instrumented_test_source=instrumented_test_source,
+                        ),
+                    )
+
             logging.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
         except Exception as e:
             logging.warning(
