@@ -275,7 +275,7 @@ class Optimizer:
             return Failure(baseline_result.failure())
 
         original_code_baseline: OriginalCodeBaseline = baseline_result.unwrap()
-        # # TODO: Postprocess the optimized function to include the original docstring and such
+        # TODO: Postprocess the optimized function to include the original docstring and such
 
         best_optimization = None
         for u, candidates in enumerate(
