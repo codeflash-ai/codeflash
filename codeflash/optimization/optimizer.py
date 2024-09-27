@@ -765,7 +765,7 @@ class Optimizer:
         function_trace_id: str,
         run_experiment: bool = False,
     ) -> Result[tuple[GeneratedTestsList, OptimizationSet], str]:
-        max_workers = 4 if not run_experiment else 8  # 4 for control, 4 for experiment
+        max_workers = 3 if not run_experiment else 4
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             logging.info(f"Generating new tests for function {function_to_optimize.function_name} ...")
 
