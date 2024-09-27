@@ -1207,7 +1207,7 @@ class Optimizer:
         module_path: str,
         function_trace_id: str,
     ) -> GeneratedTestsList | None:
-        logging.info(f"Generating new tests for function {function_to_optimize.function_name}) ...")
+        logging.info(f"Generating new tests for function {function_to_optimize.function_name} ...")
         futures = [
             executor.submit(
                 generate_tests,
