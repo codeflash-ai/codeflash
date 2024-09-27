@@ -39,7 +39,7 @@ def test_sorted_list():
     codeflash_output = sorter([1, 2, 3, 4, 5])
     # Outputs were verified to be equal to the original implementation"""
 
-    generated_tests = remove_functions_from_generated_tests(generated_tests, functions_to_remove)
+    generated_tests = remove_functions_from_generated_tests(generated_tests_list, functions_to_remove)
 
     assert generated_tests_list.generated_tests[0].generated_original_test_source == expected
 
@@ -63,7 +63,7 @@ def test_sorted_list():
         generated_original_test_source=generated_test_source,
         instrumented_test_source="",
     )
-    generated_tests_list = GeneratedTestsList(generated_tests=[generated_tests])
+    generated_tests_list_1 = GeneratedTestsList(generated_tests=[generated_tests])
     functions_to_remove = ["test_single_element", "test_sorted_list"]
 
     expected = """def test_empty_list():
@@ -73,9 +73,8 @@ def test_sorted_list():
 
 
 """
-
-    generated_tests_1 = remove_functions_from_generated_tests(generated_tests, functions_to_remove)
-    assert generated_tests_list.generated_tests[0].generated_original_test_source == expected
+    generated_tests_1 = remove_functions_from_generated_tests(generated_tests_list_1, functions_to_remove)
+    assert generated_tests_1.generated_tests[0].generated_original_test_source == expected
 
     functions_to_remove = ["test_single_element", "test_empty_list"]
 
@@ -85,12 +84,15 @@ def test_sorted_list():
     codeflash_output = sorter([1, 2, 3, 4, 5])
     # Outputs were verified to be equal to the original implementation"""
 
-    generated_tests = GeneratedTests(
+    generated_tests_2 = GeneratedTests(
         generated_original_test_source=generated_test_source,
         instrumented_test_source="",
     )
-    generated_tests_list = GeneratedTestsList(generated_tests=[generated_tests])
-    assert generated_tests_list.generated_tests[0].generated_original_test_source == expected
+
+    generated_tests_list_2 = GeneratedTestsList(generated_tests=[generated_tests_2])
+
+    generated_tests_2 = remove_functions_from_generated_tests(generated_tests_list_2, functions_to_remove)
+    assert generated_tests_list_2.generated_tests[0].generated_original_test_source == expected
 
 
 def test_remove_complex_functions():
@@ -156,8 +158,8 @@ def test_list_with_mixed_orderable_and_non_orderable_types():
         sorter([True, 1, "string", [1, 2]])
     # Outputs were verified to be equal to the original implementation"""
 
-    generated_tests = remove_functions_from_generated_tests(generated_tests, functions_to_remove)
-    assert generated_tests_list.generated_tests[0].generated_original_test_source == expected
+    generated_tests = remove_functions_from_generated_tests(generated_tests_list, functions_to_remove)
+    assert generated_tests.generated_tests[0].generated_original_test_source == expected
 
 
 def test_keep_parametrized_tests():
@@ -217,7 +219,7 @@ def test_sorted_list():
     codeflash_output = sorter([1, 2, 3, 4, 5])
     # Outputs were verified to be equal to the original implementation"""
 
-    generated_tests = remove_functions_from_generated_tests(generated_tests, functions_to_remove)
+    generated_tests = remove_functions_from_generated_tests(generated_tests_list, functions_to_remove)
     assert generated_tests_list.generated_tests[0].generated_original_test_source == expected
 
 
@@ -281,5 +283,5 @@ def test_sorted_list():
     codeflash_output = sorter([1, 2, 3, 4, 5])
     # Outputs were verified to be equal to the original implementation"""
 
-    generated_tests = remove_functions_from_generated_tests(generated_tests, functions_to_remove)
+    generated_tests = remove_functions_from_generated_tests(generated_tests_list, functions_to_remove)
     assert generated_tests_list.generated_tests[0].generated_original_test_source == expected
