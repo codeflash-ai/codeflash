@@ -1085,7 +1085,7 @@ class Optimizer:
                                 test_env,
                                 path,
                                 TestType.GENERATED_REGRESSION,
-                                0,
+                                optimization_index,
                             ),
                         )
 
@@ -1225,14 +1225,17 @@ class Optimizer:
         ]
         try:
             tests: list[GeneratedTests] = []
+            test_count = 0
             for future in concurrent.futures.as_completed(futures):
                 res = future.result()
                 if res:
+                    test_count += 1
                     generated_test_source, instrumented_test_source = res
                     tests.append(
                         GeneratedTests(
                             generated_original_test_source=generated_test_source,
                             instrumented_test_source=instrumented_test_source,
+                            test_number=test_count,
                         ),
                     )
 
