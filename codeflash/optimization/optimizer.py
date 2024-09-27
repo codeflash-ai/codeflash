@@ -303,7 +303,9 @@ class Optimizer:
             )
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
-            generated_tests = remove_functions_from_generated_tests(generated_tests, test_functions_to_remove)
+            generated_tests = remove_functions_from_generated_tests(
+                generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
+            )
 
             if best_optimization:
                 logging.info(
@@ -525,17 +527,19 @@ class Optimizer:
         explanation: Explanation,
         function_to_optimize: FunctionToOptimize,
         function_trace_id: str,
-        generated_tests: GeneratedTests,
+        generated_tests: GeneratedTestsList,
     ) -> None:
         logging.info(
             f"⚡️ Optimization successful! 📄 {function_to_optimize.qualified_name} in {explanation.file_path}",
         )
         logging.info(f"📈 {explanation.perf_improvement_line}")
         logging.info(f"Explanation: \n{explanation.to_console_string()}")
+
         logging.info(
-            f"Optimization was validated for correctness by running the following tests - "
-            f"\n{generated_tests.generated_original_test_source}",
+            "Optimization was validated for correctness by running the following tests - %s",
+            "\n".join([test.generated_original_test_source for test in generated_tests.generated_tests]),
         )
+
         ph(
             "cli-optimize-success",
             {
@@ -823,7 +827,7 @@ class Optimizer:
         instrumented_unittests_created_for_function: set[str],
         generated_tests_paths: list[str],
         tests_in_file: list[TestsInFile],
-    ) -> Result[OriginalCodeBaseline, str]:
+    ) -> Result[OriginalCodeBaseline, list[str]]:
         original_runtime = None
         best_runtime = None
         original_gen_results = None
