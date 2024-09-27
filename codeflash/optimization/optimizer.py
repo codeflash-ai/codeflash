@@ -20,6 +20,7 @@ from codeflash.api.aiservice import (
     OptimizedCandidate,
 )
 from codeflash.code_utils import env_utils
+from codeflash.code_utils.config_consts import N_TESTS_TO_GENERATE
 from codeflash.code_utils.code_extractor import (
     add_needed_imports_from_module,
     extract_code,
@@ -765,11 +766,11 @@ class Optimizer:
         function_trace_id: str,
         run_experiment: bool = False,
     ) -> Result[tuple[GeneratedTestsList, OptimizationSet], str]:
-        max_workers = 3 if not run_experiment else 4
+        max_workers = N_TESTS_TO_GENERATE + 1 if not run_experiment else 3
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             logging.info(f"Generating new tests for function {function_to_optimize.function_name} ...")
 
-            future_test = self.generate_and_instrument_tests(
+            tests = self.generate_and_instrument_tests(
                 executor,
                 code_to_optimize_with_helpers,
                 function_to_optimize,
@@ -798,22 +799,14 @@ class Optimizer:
 
             candidates_experiment = future_candidates_exp.result() if run_experiment else None
 
-        if not future_test:
+        if not tests:
             return Failure(f"/!\\ NO TESTS GENERATED for {function_to_optimize.function_name}")
         if not candidates:
             return Failure(f"/!\\ NO OPTIMIZATIONS GENERATED for {function_to_optimize.function_name}")
 
-        generated_tests = [
-            GeneratedTests(
-                generated_original_test_source=generated_original_test_source,
-                instrumented_test_source=instrumented_test_source,
-            )
-            for generated_original_test_source, instrumented_test_source in future_test
-        ]
-
         return Success(
             (
-                GeneratedTestsList(generated_tests=generated_tests),
+                tests,
                 OptimizationSet(
                     control=candidates,
                     experiment=candidates_experiment,
@@ -893,24 +886,16 @@ class Optimizer:
                         f"Existing unit test results for original code: {original_test_results_iter.get_test_pass_fail_report()}",
                     )
 
-                paths_copy = generated_tests_paths.copy()
-                original_gen_results = self.run_and_parse_tests(
-                    test_env,
-                    paths_copy.pop(0),
-                    TestType.GENERATED_REGRESSION,
-                    0,
-                )
-
-                if paths_copy:
-                    for path in paths_copy:
-                        original_gen_results.merge(
-                            self.run_and_parse_tests(
-                                test_env,
-                                path,
-                                TestType.GENERATED_REGRESSION,
-                                0,
-                            ),
-                        )
+                original_gen_results = TestResults()
+                for path in generated_tests_paths:
+                    original_gen_results.merge(
+                        self.run_and_parse_tests(
+                            test_env,
+                            path,
+                            TestType.GENERATED_REGRESSION,
+                            0,
+                        ),
+                    )
 
                 functions_to_remove = [
                     result.id.test_function_name
@@ -1093,24 +1078,16 @@ class Optimizer:
 
                 candidate_generated_test_results = None
                 if run_generated_tests:
-                    paths_copy = generated_tests_paths.copy()
-                    original_gen_results = self.run_and_parse_tests(
-                        test_env,
-                        paths_copy.pop(0),
-                        TestType.GENERATED_REGRESSION,
-                        0,
-                    )
-
-                    if paths_copy:
-                        for path in paths_copy:
-                            original_gen_results.merge(
-                                self.run_and_parse_tests(
-                                    test_env,
-                                    path,
-                                    TestType.GENERATED_REGRESSION,
-                                    0,
-                                ),
-                            )
+                    original_gen_results = TestResults()
+                    for path in generated_tests_paths:
+                        original_gen_results.merge(
+                            self.run_and_parse_tests(
+                                test_env,
+                                path,
+                                TestType.GENERATED_REGRESSION,
+                                0,
+                            ),
+                        )
 
                 if candidate_generated_test_results and first_run and test_index == 0:
                     logging.info(
@@ -1229,8 +1206,8 @@ class Optimizer:
         helper_function_names: list[str],
         module_path: str,
         function_trace_id: str,
-    ) -> list[tuple[str, str]] | None:
-        n_tests = 2
+    ) -> GeneratedTestsList | None:
+        logging.info(f"Generating new tests for function {function_to_optimize.function_name}) ...")
         futures = [
             executor.submit(
                 generate_tests,
@@ -1244,7 +1221,7 @@ class Optimizer:
                 self.args.use_cached_tests,
                 function_trace_id,
             )
-            for _ in range(n_tests)
+            for _ in range(N_TESTS_TO_GENERATE)
         ]
         try:
             tests = []
@@ -1264,7 +1241,8 @@ class Optimizer:
                 f"Failed to generate and instrument tests for {function_to_optimize.function_name}"
             )
             return None
-        return tests
+
+        return GeneratedTestsList(generated_tests=tests)
 
 
 def run_with_args(args: Namespace) -> None:
