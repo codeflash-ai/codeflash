@@ -1,4 +1,4 @@
-import logging
+from codeflash.terminal.console import logger
 import os
 import re
 import shlex
@@ -79,7 +79,7 @@ def run_pytest_discovery_new_process(queue: Queue, cwd: str, tests_root: str) ->
             plugins=[PytestCollectionPlugin()],
         )
     except Exception as e:
-        logging.exception(f"Failed to collect tests: {e!s}")
+        logger.exception(f"Failed to collect tests: {e!s}")
         exitcode = -1
         queue.put((exitcode, tests))
     tests = parse_pytest_collection_results(collected_tests)
@@ -124,7 +124,7 @@ def discover_tests_pytest(
     p.start()
     exitcode, tests = q.get()
     p.join()
-    logging.debug(f"Pytest collection exit code: {exitcode}")
+    logger.debug(f"Pytest collection exit code: {exitcode}")
 
     file_to_test_map = defaultdict(list)
     for test in tests:
@@ -172,7 +172,7 @@ def discover_tests_unittest(
     for _test_suite in tests._tests:
         for test_suite_2 in _test_suite._tests:
             if not hasattr(test_suite_2, "_tests"):
-                logging.warning(f"Didn't find tests for {test_suite_2}")
+                logger.warning(f"Didn't find tests for {test_suite_2}")
                 continue
 
             for test in test_suite_2._tests:
@@ -180,7 +180,7 @@ def discover_tests_unittest(
                 if not hasattr(test, "_testMethodName") and hasattr(test, "_tests"):
                     for test_2 in test._tests:
                         if not hasattr(test_2, "_testMethodName"):
-                            logging.warning(
+                            logger.warning(
                                 f"Didn't find tests for {test_2}",
                             )  # it goes deeper?
                             continue
@@ -286,7 +286,7 @@ def process_test_files(
                         follow_builtin_imports=False,
                     )
                 except Exception as e:
-                    logging.exception(str(e))
+                    logger.exception(str(e))
                     continue
                 if definition and definition[0].type == "function":
                     definition_path = str(definition[0].module_path)

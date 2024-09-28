@@ -30,5 +30,6 @@ def paneled_text(text: str, panel_args=None, text_args=None) -> None:
 
 def code_print(code_str: str) -> None:
     from rich.syntax import Syntax
-
+    console.rule()
     console.print(Syntax(code_str, "python", line_numbers=True, theme="github-dark"))
+    console.rule()

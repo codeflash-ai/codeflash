@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ast
-import logging
+from codeflash.terminal.console import logger
 import os
 import site
 from tempfile import TemporaryDirectory
@@ -35,7 +35,7 @@ def get_imports_from_file(
         try:
             file_ast = ast.parse(file_string)
         except SyntaxError as e:
-            logging.exception(f"Syntax error in code: {e}")
+            logger.exception(f"Syntax error in code: {e}")
             return []
     imports = []
     for node in ast.walk(file_ast):
@@ -48,7 +48,7 @@ def get_all_function_names(code: str) -> tuple[bool, list[str]]:
     try:
         module = ast.parse(code)
     except SyntaxError as e:
-        logging.exception(f"Syntax error in code: {e}")
+        logger.exception(f"Syntax error in code: {e}")
         return False, []
 
     function_names = []

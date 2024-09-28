@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from codeflash.terminal.console import logger
 import sys
 from enum import Enum
 from typing import Iterator, Optional
@@ -100,7 +100,7 @@ class TestResults(BaseModel):
                 if test_result.did_pass:
                     passed += 1
                 else:
-                    logging.info(f"Failed test: {test_result.id}")
+                    logger.info(f"Failed test: {test_result.id}")
                     failed += 1
         return f"Passed: {passed}, Failed: {failed}"
 
@@ -128,7 +128,7 @@ class TestResults(BaseModel):
     def total_passed_runtime(self) -> int:
         for result in self.test_results:
             if result.did_pass and result.runtime is None:
-                logging.debug(
+                logger.debug(
                     f"Ignoring test case that passed but had no runtime -> {result.id}",
                 )
         timing = sum(

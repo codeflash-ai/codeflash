@@ -1,4 +1,5 @@
 import logging
+from codeflash.terminal.console import logger
 from typing import Any, Dict, Optional
 
 from posthog import Posthog
@@ -45,4 +46,4 @@ def ph(event: str, properties: Optional[Dict[str, Any]] = None) -> None:
             properties=properties,
         )
     else:
-        logging.debug("Failed to log event to PostHog: User ID could not be retrieved.")
+        logger.debug("Failed to log event to PostHog: User ID could not be retrieved.")

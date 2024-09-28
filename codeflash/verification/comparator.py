@@ -1,7 +1,7 @@
 import datetime
 import decimal
 import enum
-import logging
+from codeflash.terminal.console import logger
 import math
 import types
 from typing import Any
@@ -207,9 +207,9 @@ def comparator(orig: Any, new: Any) -> bool:
             return True
 
         # TODO : Add other types here
-        logging.warning(f"Unknown comparator input type: {type(orig)}")
+        logger.warning(f"Unknown comparator input type: {type(orig)}")
         return False
     except RecursionError as e:
-        logging.exception(f"RecursionError while comparing objects: {e}")
+        logger.error(f"RecursionError while comparing objects: {e}")
         sentry_sdk.capture_exception(e)
         return False

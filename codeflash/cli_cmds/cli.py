@@ -16,8 +16,8 @@ from codeflash.code_utils.git_utils import (
     confirm_proceeding_with_no_git_repo,
     get_repo_owner_and_name,
 )
-from codeflash.terminal.console import logger
 from codeflash.code_utils.github_utils import get_github_secrets_page_url, require_github_app_or_exit
+from codeflash.terminal.console import logger
 from codeflash.version import __version__ as version
 
 

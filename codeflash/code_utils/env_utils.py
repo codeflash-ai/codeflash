@@ -1,9 +1,10 @@
-import logging
+
 import os
 from functools import lru_cache
 from typing import Optional
 
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
+from codeflash.terminal.console import logger
 
 
 @lru_cache(maxsize=1)
@@ -27,7 +28,7 @@ def ensure_codeflash_api_key() -> bool:
     try:
         get_codeflash_api_key()
     except OSError:
-        logging.error(  # noqa: TRY400
+        logger.error(  # noqa: TRY400
             "Codeflash API key not found in your environment.\nYou can generate one at "
             "https://app.codeflash.ai/app/apikeys,\nthen set it as a CODEFLASH_API_KEY environment variable.",
         )

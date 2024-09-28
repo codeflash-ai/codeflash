@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import logging
 from typing import TYPE_CHECKING
 
 import libcst as cst
@@ -11,6 +10,7 @@ from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, Rem
 from libcst.helpers import calculate_module_and_package
 
 from codeflash.discovery.functions_to_optimize import FunctionParent
+from codeflash.terminal.console import logger
 
 if TYPE_CHECKING:
     from libcst.helpers import ModuleNameAndPackage
@@ -80,7 +80,7 @@ def add_needed_imports_from_module(
                 AddImportsVisitor.add_needed_import(dst_context, mod, obj)
                 RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
     except Exception as e:
-        logging.exception(f"Error adding imports to destination module code: {e}")
+        logger.exception(f"Error adding imports to destination module code: {e}")
         return dst_module_code
     for mod, asname in gatherer.module_aliases.items():
         AddImportsVisitor.add_needed_import(dst_context, mod, asname=asname)
@@ -100,14 +100,14 @@ def add_needed_imports_from_module(
     try:
         parsed_module = cst.parse_module(dst_module_code)
     except cst.ParserSyntaxError as e:
-        logging.exception(f"Syntax error in destination module code: {e}")
+        logger.exception(f"Syntax error in destination module code: {e}")
         return dst_module_code  # Return the original code if there's a syntax error
     try:
         transformed_module = AddImportsVisitor(dst_context).transform_module(parsed_module)
         transformed_module = RemoveImportsVisitor(dst_context).transform_module(transformed_module)
         return transformed_module.code.lstrip("\n")
     except Exception as e:
-        logging.exception(f"Error adding imports to destination module code: {e}")
+        logger.exception(f"Error adding imports to destination module code: {e}")
         return dst_module_code
 
 
@@ -200,7 +200,7 @@ def get_code(
     try:
         module_node: ast.Module = ast.parse(source_code)
     except SyntaxError:
-        logging.exception("get_code - Syntax error while parsing code")
+        logger.exception("get_code - Syntax error while parsing code")
         return None, set()
     # Get the source code lines for the target node
     lines: list[str] = source_code.splitlines(keepends=True)
@@ -213,14 +213,14 @@ def get_code(
             ]
 
         else:
-            logging.error(
+            logger.error(
                 f"Error: get_code does not support inner functions: {functions_to_optimize[0].parents}",
             )
             return None, set()
     elif len(functions_to_optimize[0].parents) == 0:
         qualified_name_parts_list = [(functions_to_optimize[0].function_name,)]
     else:
-        logging.error(
+        logger.error(
             "Error: get_code does not support more than one level of nesting for now. "
             f"Parents: {functions_to_optimize[0].parents}",
         )
@@ -257,7 +257,7 @@ def extract_code(
     try:
         compile(edited_code, "edited_code", "exec")
     except SyntaxError as e:
-        logging.exception(
+        logger.exception(
             f"extract_code - Syntax error in extracted optimization candidate code: {e}",
         )
         return None, set()
@@ -270,7 +270,7 @@ def find_preexisting_objects(source_code: str) -> list[tuple[str, list[FunctionP
     try:
         module_node: ast.Module = ast.parse(source_code)
     except SyntaxError:
-        logging.exception("find_preexisting_objects - Syntax error while parsing code")
+        logger.exception("find_preexisting_objects - Syntax error while parsing code")
         return preexisting_objects
     for node in module_node.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
