@@ -9,14 +9,23 @@ def set_level(level: int, *, echo_setting: bool = True) -> None:
     import logging
     import sys
     import time
+    from codeflash.terminal.console import console
+    from rich.logging import RichHandler
 
-    logging.basicConfig(format=LOGGING_FORMAT, stream=sys.stdout, force=True)
+    logging.basicConfig(
+        level=level,
+        handlers=[RichHandler(rich_tracebacks=True, markup=True, console=console)],
+        format=BARE_LOGGING_FORMAT,
+    )
     logging.getLogger().setLevel(level)
-
     if echo_setting:
         if level == logging.DEBUG:
             logging.Formatter.converter = time.gmtime
-            logging.basicConfig(format=VERBOSE_LOGGING_FORMAT, stream=sys.stdout, force=True)
-            logging.debug("Verbose DEBUG logging enabled")
+            logging.basicConfig(
+                format=VERBOSE_LOGGING_FORMAT,
+                handlers=[RichHandler(rich_tracebacks=True, markup=True, console=console)],
+                force=True,
+            )
+            logging.info("Verbose DEBUG logging enabled")
         else:
             logging.info("Logging level set to INFO")

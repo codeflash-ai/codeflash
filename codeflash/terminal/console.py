@@ -9,7 +9,7 @@ console = Console(record=True)
 
 logging.basicConfig(
     level=logging.INFO,
-    handlers=[RichHandler(rich_tracebacks=True, markup=True, show_path=True, console=console)],
+    handlers=[RichHandler(rich_tracebacks=True, markup=True, console=console)],
     format=BARE_LOGGING_FORMAT,
 )
 
