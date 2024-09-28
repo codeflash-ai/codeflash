@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -12,10 +11,11 @@ from requests import Response
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
 from codeflash.code_utils.git_utils import get_repo_owner_and_name
 from codeflash.github.PrComment import FileDiffContent, PrComment
+from codeflash.terminal.console import logger
 
 if os.environ.get("CODEFLASH_CFAPI_SERVER", default="prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
-    logging.info(f"Using local CF API at {CFAPI_BASE_URL}.")
+    logger.info(f"Using local CF API at {CFAPI_BASE_URL}.")
 else:
     CFAPI_BASE_URL = "https://app.codeflash.ai"
 
@@ -54,7 +54,7 @@ def get_user_id() -> Optional[str]:
     if response.status_code == 200:
         return response.text
     else:
-        logging.error(
+        logger.error(
             f"Failed to look up your userid; is your CF API key valid? ({response.reason})",
         )
         return None
@@ -139,7 +139,7 @@ def is_github_app_installed_on_repo(owner: str, repo: str) -> bool:
         method="GET",
     )
     if not response.ok or response.text != "true":
-        logging.error(f"Error: {response.text}")
+        logger.error(f"Error: {response.text}")
         return False
     return True
 
@@ -163,6 +163,6 @@ def get_blacklisted_functions() -> dict[str, str]:
         )
         content: dict[str, list[str]] = req.json()
     except Exception as e:
-        logging.error(f"Error getting blacklisted functions: {e}")
+        logger.error(f"Error getting blacklisted functions: {e}")
         return {}
     return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}

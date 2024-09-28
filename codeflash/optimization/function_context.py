@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import logging
 import os
 import re
 from collections import defaultdict
@@ -14,6 +13,7 @@ from codeflash.code_utils.code_extractor import get_code
 from codeflash.code_utils.code_utils import module_name_from_file_path, path_belongs_to_site_packages
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 from codeflash.models.models import FunctionSource
+from codeflash.terminal.console import logger
 
 
 def belongs_to_class(name: Name, class_name: str) -> bool:
@@ -45,7 +45,7 @@ def get_type_annotation_context(
     try:
         module: ast.Module = ast.parse(file_contents)
     except SyntaxError as e:
-        logging.exception(f"get_type_annotation_context - Syntax error in code: {e}")
+        logger.exception(f"get_type_annotation_context - Syntax error in code: {e}")
         return []
     sources: list[FunctionSource] = []
     ast_parents: list[FunctionParent] = []
@@ -67,11 +67,9 @@ def get_type_annotation_context(
             )
         except Exception as ex:
             if hasattr(name, "full_name"):
-                logging.exception(
-                    f"Error while getting definition for {name.full_name}: {ex}",
-                )
+                logger.exception(f"Error while getting definition for {name.full_name}: {ex}")
             else:
-                logging.exception(f"Error while getting definition: {ex}")
+                logger.exception(f"Error while getting definition: {ex}")
             definition = []
         if definition:  # TODO can be multiple definitions
             definition_path = str(definition[0].module_path)
@@ -197,10 +195,10 @@ def get_function_variables_definitions(
             )
         except Exception as e:
             try:
-                logging.exception(f"Error while getting definition for {name.full_name}: {e}")
+                logger.exception(f"Error while getting definition for {name.full_name}: {e}")
             except Exception as e:
                 # name.full_name can also throw exceptions sometimes
-                logging.exception(f"Error while getting definition: {e}")
+                logger.exception(f"Error while getting definition: {e}")
             definitions = []
         if definitions:
             # TODO: there can be multiple definitions, see how to handle such cases
@@ -307,14 +305,14 @@ def get_constrained_function_context_and_helper_functions(
 
     context_list = []
     context_len = len(code_to_optimize_tokens)
-    logging.debug(f"ORIGINAL CODE TOKENS LENGTH: {context_len}")
-    logging.debug(f"ALL DEPENDENCIES TOKENS LENGTH: {sum(helper_functions_tokens)}")
+    logger.debug(f"ORIGINAL CODE TOKENS LENGTH: {context_len}")
+    logger.debug(f"ALL DEPENDENCIES TOKENS LENGTH: {sum(helper_functions_tokens)}")
     for function_source, source_len in zip(helper_functions_sources, helper_functions_tokens):
         if context_len + source_len <= max_tokens:
             context_list.append(function_source)
             context_len += source_len
         else:
             break
-    logging.debug(f"FINAL OPTIMIZATION CONTEXT TOKENS LENGTH: {context_len}")
+    logger.debug(f"FINAL OPTIMIZATION CONTEXT TOKENS LENGTH: {context_len}")
     helper_code: str = "\n".join(context_list)
     return helper_code, helper_functions, dunder_methods

@@ -36,6 +36,7 @@ from codeflash.discovery.functions_to_optimize import filter_files_optimized
 from codeflash.tracing.replay_test import create_trace_replay_test
 from codeflash.tracing.tracing_utils import FunctionModules
 from codeflash.verification.verification_utils import get_test_file_path
+from codeflash.terminal.console import console
 
 
 class Tracer:
@@ -63,13 +64,13 @@ class Tracer:
         if functions is None:
             functions = []
         if os.environ.get("CODEFLASH_TRACER_DISABLE", "0") == "1":
-            print("Codeflash: Tracer disabled by environment variable CODEFLASH_TRACER_DISABLE")
+            console.print("Codeflash: Tracer disabled by environment variable CODEFLASH_TRACER_DISABLE")
             disable = True
         self.disable = disable
         if self.disable:
             return
         if sys.getprofile() is not None or sys.gettrace() is not None:
-            print(
+            console.print(
                 "WARNING - Codeflash: Another profiler, debugger or coverage tool is already running. "
                 "Please disable it before starting the Codeflash Tracer, both can't run. Codeflash Tracer is DISABLED.",
             )
@@ -129,7 +130,7 @@ class Tracer:
         if self.disable:
             return
         if getattr(Tracer, "used_once", False):
-            print(
+            console.print(
                 "Codeflash: Tracer can only be used once per program run. "
                 "Please only enable the Tracer once. Skipping tracing this section.",
             )
@@ -138,7 +139,7 @@ class Tracer:
         Tracer.used_once = True
 
         if pathlib.Path(self.output_file).exists():
-            print("Codeflash: Removing existing trace file")
+            console.print("Codeflash: Removing existing trace file")
         pathlib.Path(self.output_file).unlink(missing_ok=True)
 
         self.con = sqlite3.connect(self.output_file)
@@ -149,7 +150,7 @@ class Tracer:
             "CREATE TABLE function_calls(type TEXT, function TEXT, classname TEXT, filename TEXT, "
             "line_number INTEGER, last_frame_address INTEGER, time_ns INTEGER, args BLOB)",
         )
-        print("Codeflash: Tracing started!")
+        console.print("Codeflash: Tracing started!")
         frame = sys._getframe(0)  # Get this frame and simulate a call to it
         self.dispatch["call"](self, frame, 0)
         self.start_time = time.time()
@@ -224,7 +225,7 @@ class Tracer:
         with open(test_file_path, "w", encoding="utf8") as file:
             file.write(replay_test)
 
-        print(
+        console.print(
             f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}",
         )
 
@@ -234,7 +235,7 @@ class Tracer:
         if self.timeout is not None:
             if (time.time() - self.start_time) > self.timeout:
                 sys.setprofile(None)
-                print(
+                console.print(
                     f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds.",
                 )
                 return
@@ -517,14 +518,14 @@ class Tracer:
         stats_obj = pstats.Stats(copy(self), stream=s)
         stats_obj.strip_dirs().sort_stats(*sort).print_stats(25)
         self.total_tt = stats_obj.total_tt
-        print("total_tt", self.total_tt)
+        console.print("total_tt", self.total_tt)
         raw_stats = s.getvalue()
         m = re.search(r"function calls?.*in (\d+)\.\d+ (seconds?)", raw_stats)
         total_time = None
         if m:
             total_time = int(m.group(1))
         if total_time is None:
-            print("Failed to get total time from stats")
+            console.print("Failed to get total time from stats")
         total_time_ms = total_time / 1e6
         raw_stats = re.sub(
             r"(function calls?.*)in (\d+)\.\d+ (seconds?)",
@@ -559,7 +560,7 @@ class Tracer:
                     times_index += 1
             new_stats.append(replaced)
 
-        print("\n".join(new_stats))
+        console.print("\n".join(new_stats))
 
     def make_pstats_compatible(self):
         # delete the extra class_name item from the function tuple
