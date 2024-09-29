@@ -100,7 +100,8 @@ class Optimizer:
 
     def run(self) -> None:
         ph("cli-optimize-run-start")
-        console.print("Running optimizer.")
+        # console.print("Running optimizer.")
+        logger.info("Running optimizer.")
         if not env_utils.ensure_codeflash_api_key():
             return
 
@@ -131,23 +132,29 @@ class Optimizer:
                 {"num_functions": num_optimizable_functions},
             )
             if num_optimizable_functions == 0:
-                console.print("No functions found to optimize. Exiting...")
+                # console.print("No functions found to optimize. Exiting...")
+                logger.info("No functions found to optimize. Exiting...")
                 return
-            console.print(
-                f"Discovering existing unit tests in {self.test_cfg.tests_root} ...",
-            )
+            # console.print(
+            #     f"Discovering existing unit tests in {self.test_cfg.tests_root} ...",
+            # )
+            logger.info(f"Discovering existing unit tests in {self.test_cfg.tests_root} ...")
             function_to_tests: dict[str, list[TestsInFile]] = discover_unit_tests(
                 self.test_cfg,
             )
             num_discovered_tests: int = sum(
                 [len(value) for value in function_to_tests.values()],
             )
-            console.print(
+            # console.print(
+            #     f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}",
+            # )
+            logger.info(
                 f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}",
             )
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
             for path in file_to_funcs_to_optimize:
-                console.print(f"Examining file {path} ...")
+                # console.print(f"Examining file {path} ...")
+                logger.info(f"Examining file {path} ...")
                 # TODO @afik.cohen: Sequence the functions one goes through intelligently. If we are
                 #  optimizing f(g(x)), then we might want to first optimize f rather than g because optimizing
                 #  f would already optimize g as it is a dependency.
@@ -156,8 +163,12 @@ class Optimizer:
 
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
                     function_iterator_count += 1
-                    console.print(
-                        f"Optimizing function {function_iterator_count} of {num_optimizable_functions} - {function_to_optimize.qualified_name}",
+                    # console.print(
+                    #     f"Optimizing function {function_iterator_count} of {num_optimizable_functions} - {function_to_optimize.qualified_name}",
+                    # )
+                    logger.info(
+                        f"Optimizing function {function_iterator_count} of {num_optimizable_functions} - "
+                        f"{function_to_optimize.qualified_name}",
                     )
                     best_optimization = self.optimize_function(
                         function_to_optimize,
@@ -171,9 +182,11 @@ class Optimizer:
                         continue
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
             if optimizations_found == 0:
-                console.print("❌ No optimizations found.")
+                # console.print("❌ No optimizations found.")
+                logger.info("No optimizations found.")
             elif self.args.all:
-                console.print("✨ All functions have been optimized! ✨")
+                # console.print("✨ All functions have been optimized! ✨")
+                logger.info("All functions have been optimized!")
         finally:
             for test_file in self.instrumented_unittests_created:
                 pathlib.Path(test_file).unlink(missing_ok=True)
@@ -246,7 +259,9 @@ class Optimizer:
         )
         with pathlib.Path(generated_tests_path).open("w", encoding="utf8") as file:
             file.write(generated_tests.instrumented_test_source)
-        console.print(f"Generated tests:\n{generated_tests.generated_original_test_source}")
+        # console.print(f"Generated tests saved to {generated_tests_path}")
+        logger.info(f"Generated tests saved to {generated_tests_path}")
+        code_print(generated_tests.instrumented_test_source)
         self.test_files_created.add(generated_tests_path)
         baseline_result, test_functions_to_remove = self.establish_original_code_baseline(
             function_to_optimize.qualified_name,
@@ -291,10 +306,12 @@ class Optimizer:
             generated_tests = remove_functions_from_generated_tests(generated_tests, test_functions_to_remove)
 
             if best_optimization:
-                console.print(
-                    f"Best candidate:\n{best_optimization.candidate.source_code}, {best_optimization.candidate.explanation}",
-                )
-
+                # console.print(
+                #     f"Best candidate:\n{best_optimization.candidate.source_code}, {best_optimization.candidate.explanation}",
+                # )
+                logger.info("Best candidate:")
+                code_print(best_optimization.candidate.source_code)
+                logger.info(best_optimization.candidate.explanation)
                 explanation = Explanation(
                     raw_explanation_message=best_optimization.candidate.explanation,
                     winning_test_results=best_optimization.winning_test_results,
@@ -381,7 +398,10 @@ class Optimizer:
         optimized_runtimes: dict[str, float | None] = {}
         is_correct = {}
 
-        console.print(
+        # console.print(
+        #     f"Determining best optimized candidate (out of {len(candidates)}) for {function_to_optimize.qualified_name} ...",
+        # )
+        logger.info(
             f"Determining best optimized candidate (out of {len(candidates)}) for {function_to_optimize.qualified_name} ...",
         )
         try:
@@ -395,8 +415,10 @@ class Optimizer:
                 pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.sqlite")).unlink(
                     missing_ok=True,
                 )
-                console.print(f"Optimized candidate {j}/{len(candidates)}:")
-                console.print(candidate.source_code)
+                # console.print(f"Optimized candidate {j}/{len(candidates)}:")
+                # console.print(candidate.source_code)
+                logger.info(f"Optimized candidate {j}/{len(candidates)}:")
+                code_print(candidate.source_code)
                 try:
                     did_update = self.replace_function_and_helpers_with_optimized_code(
                         code_context=code_context,
@@ -456,7 +478,12 @@ class Optimizer:
                         optimized_runtime_ns=best_test_runtime,
                     )
                     speedup_ratios[candidate.optimization_id] = perf_gain
-                    console.print(
+                    # console.print(
+                    #     f"Candidate runtime measured over {candidate_result.times_run} run{'s' if candidate_result.times_run > 1 else ''}: "
+                    #     f"{humanize_runtime(best_test_runtime)}, speedup ratio = "
+                    #     f"{perf_gain:.3f}",
+                    # )
+                    logger.info(
                         f"Candidate runtime measured over {candidate_result.times_run} run{'s' if candidate_result.times_run > 1 else ''}: "
                         f"{humanize_runtime(best_test_runtime)}, speedup ratio = "
                         f"{perf_gain:.3f}",
@@ -467,8 +494,14 @@ class Optimizer:
                         original_code_baseline.runtime,
                         best_runtime_until_now,
                     ) and quantity_of_tests_critic(candidate_result):
-                        console.print("This candidate is better than the previous best candidate.")
-                        console.print(
+                        # console.print("This candidate is better than the previous best candidate.")
+                        # console.print(
+                        #     f"Original runtime: {humanize_runtime(original_code_baseline.runtime)} Best test runtime: "
+                        #     f"{humanize_runtime(candidate_result.best_test_runtime)}, ratio = "
+                        #     f"{perf_gain:.3f}",
+                        # )
+                        logger.info("This candidate is better than the previous best candidate.")
+                        logger.info(
                             f"Original runtime: {humanize_runtime(original_code_baseline.runtime)} Best test runtime: "
                             f"{humanize_runtime(candidate_result.best_test_runtime)}, ratio = "
                             f"{perf_gain:.3f}",
@@ -486,7 +519,8 @@ class Optimizer:
                     original_helper_code,
                     function_to_optimize.file_path,
                 )
-                console.print("----------------")
+                # console.print("----------------")
+                logger.info("----------------")
         except KeyboardInterrupt as e:
             self.write_code_and_helpers(
                 original_code,
@@ -512,15 +546,22 @@ class Optimizer:
         function_trace_id: str,
         generated_tests: GeneratedTests,
     ) -> None:
-        console.print(
-            f"⚡️ Optimization successful! 📄 {function_to_optimize.qualified_name} in {explanation.file_path}",
-        )
-        console.print(f"📈 {explanation.perf_improvement_line}")
-        console.print(f"Explanation: \n{explanation.to_console_string()}")
-        console.print(
-            f"Optimization was validated for correctness by running the following tests - "
-            f"\n{generated_tests.generated_original_test_source}",
-        )
+        # console.print(
+        #     f"⚡️ Optimization successful! 📄 {function_to_optimize.qualified_name} in {explanation.file_path}",
+        # )
+        # console.print(f"📈 {explanation.perf_improvement_line}")
+        # console.print(f"Explanation: \n{explanation.to_console_string()}")
+        # console.print(
+        #     f"Optimization was validated for correctness by running the following tests - "
+        #     f"\n{generated_tests.generated_original_test_source}",
+        # )
+        logger.info(
+            f"⚡️ Optimization successful! 📄 {function_to_optimize.qualified_name} in {explanation.file_path}"
+            )
+        logger.info(f"📈 {explanation.perf_improvement_line}")
+        logger.info(f"Explanation: \n{explanation.to_console_string()}")
+        logger.info(f"Optimization was validated for correctness by running the following tests - ")
+        code_print(generated_tests.generated_original_test_source)
         ph(
             "cli-optimize-success",
             {
@@ -707,7 +748,10 @@ class Optimizer:
             self.args.project_root,
         )
         if func_qualname not in function_to_tests:
-            console.print(
+            # console.print(
+            #     f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.",
+            # )
+            logger.info(
                 f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.",
             )
         else:
@@ -731,7 +775,11 @@ class Optimizer:
                 with pathlib.Path(new_test_path).open("w", encoding="utf8") as f:
                     f.write(injected_test)
                 unique_instrumented_test_files.add(new_test_path)
-            console.print(
+            # console.print(
+            #     f"Discovered {relevant_test_files_count} existing unit test file"
+            #     f"{'s' if relevant_test_files_count != 1 else ''} for {func_qualname}",
+            # )
+            logger.info(
                 f"Discovered {relevant_test_files_count} existing unit test file"
                 f"{'s' if relevant_test_files_count != 1 else ''} for {func_qualname}",
             )
@@ -817,7 +865,8 @@ class Optimizer:
         generated_tests_elapsed_time = 0.0
 
         # For the original function - run the tests and get the runtime
-        console.print(f"Establishing original code baseline runtime for {function_name}.")
+        # console.print(f"Establishing original code baseline runtime for {function_name}.")
+        logger.info(f"Establishing original code baseline runtime for {function_name}.")
         # TODO: Compare the function return values over the multiple runs and check if they are any different,
         #  if they are different, then we can't optimize this function because it is a non-deterministic function
         test_env = os.environ.copy()
@@ -867,7 +916,10 @@ class Optimizer:
                     existing_test_results.merge(unittest_results)
                     instrumented_existing_test_timing.append(timing)
                 if i == 0 and first_run:
-                    console.print(
+                    # console.print(
+                    #     f"Existing unit test results for original code: {original_test_results_iter.get_test_pass_fail_report()}",
+                    # )
+                    logger.info(
                         f"Existing unit test results for original code: {original_test_results_iter.get_test_pass_fail_report()}",
                     )
 
@@ -898,7 +950,10 @@ class Optimizer:
                 #  the execution to not reach the runtime measurement part. We are currently ignoring such tests, because the performance
                 #  for such a execution that raises an exception should not matter.
                 if i == 0 and first_run:
-                    console.print(
+                    # console.print(
+                    #     f"Generated tests results for original code: {original_gen_results.get_test_pass_fail_report()}",
+                    # )
+                    logger.info(
                         f"Generated tests results for original code: {original_gen_results.get_test_pass_fail_report()}",
                     )
 
@@ -918,7 +973,10 @@ class Optimizer:
                     break
                 original_test_results_iter.merge(original_gen_results)
                 if i == 0 and first_run:
-                    console.print(
+                    # console.print(
+                    #     f"Overall test results for original code: {TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}",
+                    # )
+                    logger.info(
                         f"Overall test results for original code: {TestResults.report_to_string(original_test_results_iter.get_test_pass_fail_report_by_type())}",
                     )
                 test_times_list.append(original_total_runtime_iter)
@@ -940,7 +998,10 @@ class Optimizer:
             success = False
         if not success:
             return Failure("Failed to establish a baseline for the original code."), []
-        console.print(
+        # console.print(
+        #     f"Original code runtime measured over {times_run} run{'s' if times_run > 1 else ''}: {humanize_runtime(original_runtime)}",
+        # )
+        logger.info(
             f"Original code runtime measured over {times_run} run{'s' if times_run > 1 else ''}: {humanize_runtime(original_runtime)}",
         )
         logger.debug(f"Original code test runtimes: {test_times_list}")
@@ -1027,7 +1088,10 @@ class Optimizer:
                     instrumented_test_timing.append(timing)
                 if first_run and test_index == 0:
                     equal_results = True
-                    console.print(
+                    # console.print(
+                    #     f"Existing unit tests results for candidate: {candidate_existing_test_results.get_test_pass_fail_report()}",
+                    # )
+                    logger.info(
                         f"Existing unit tests results for candidate: {candidate_existing_test_results.get_test_pass_fail_report()}",
                     )
                     return_values_are_equal = compare_test_results(
@@ -1043,12 +1107,16 @@ class Optimizer:
                             and not original_test_invocation.timed_out
                             and (test_invocation.did_pass != original_test_invocation.did_pass)
                         ) or not return_values_are_equal:
-                            console.print(
+                            # console.print(
+                            #     "Test results did not match the test results of the original code.",
+                            # )
+                            # console.print(
+                            #     f"Test {test_invocation.id} failed. Skipping this candidate.",
+                            # )
+                            logger.info(
                                 "Test results did not match the test results of the original code.",
                             )
-                            console.print(
-                                f"Test {test_invocation.id} failed. Skipping this candidate.",
-                            )
+                            logger.info(f"Test {test_invocation.id} failed. Skipping this candidate.")
                             equal_results = False
                             do_break = True
                             break
@@ -1066,7 +1134,10 @@ class Optimizer:
                     )
 
                 if candidate_generated_test_results and first_run and test_index == 0:
-                    console.print(
+                    # console.print(
+                    #     f"Generated tests results for candidate: {candidate_generated_test_results.get_test_pass_fail_report()}",
+                    # )
+                    logger.info(
                         f"Generated tests results for candidate: {candidate_generated_test_results.get_test_pass_fail_report()}",
                     )
                     if compare_test_results(
@@ -1074,9 +1145,11 @@ class Optimizer:
                         candidate_generated_test_results,
                     ):
                         equal_results = True
-                        console.print("Test results matched!")
+                        # console.print("Test results matched!")
+                        logger.info("Test results matched!")
                     else:
-                        console.print("Test results did not match the test results of the original code.")
+                        # console.print("Test results did not match the test results of the original code.")
+                        logger.info("Test results did not match the test results of the original code.")
                         equal_results = False
                 if not equal_results:
                     do_break = True

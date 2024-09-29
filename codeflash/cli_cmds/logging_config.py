@@ -1,5 +1,9 @@
+# VERBOSE_LOGGING_FORMAT = (
+#     "%(asctime)s %(levelname)s [%(pathname)s:%(lineno)s in function %(funcName)s] %(message)s"
+# )
+
 VERBOSE_LOGGING_FORMAT = (
-    "%(asctime)s %(levelname)s [%(pathname)s:%(lineno)s in function %(funcName)s] %(message)s"
+    "[ %(filename)s:%(lineno)s in function %(funcName)s ] %(message)s"
 )
 LOGGING_FORMAT = "[%(levelname)s] %(message)s"
 BARE_LOGGING_FORMAT = "%(message)s"
@@ -13,7 +17,7 @@ def set_level(level: int, *, echo_setting: bool = True) -> None:
 
     logging.basicConfig(
         level=level,
-        handlers=[RichHandler(rich_tracebacks=True, markup=True, console=console)],
+        handlers=[RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)],
         format=BARE_LOGGING_FORMAT,
     )
     logging.getLogger().setLevel(level)
@@ -22,7 +26,7 @@ def set_level(level: int, *, echo_setting: bool = True) -> None:
             logging.Formatter.converter = time.gmtime
             logging.basicConfig(
                 format=VERBOSE_LOGGING_FORMAT,
-                handlers=[RichHandler(rich_tracebacks=True, markup=True, console=console)],
+                handlers=[RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)],
                 force=True,
             )
             logging.info("Verbose DEBUG logging enabled")
