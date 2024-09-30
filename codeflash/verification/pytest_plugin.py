@@ -74,6 +74,22 @@ def pytest_addoption(parser: Parser) -> None:
     )
 
     pytest_loops.addoption(
+        "--min_loops",
+        action="store",
+        default=2,
+        type=int,
+        help="The minimum number of times to loop each test",
+    )
+
+    pytest_loops.addoption(
+        "--max_loops",
+        action="store",
+        default=100_000,
+        type=int,
+        help="The maximum number of times to loop each test",
+    )
+
+    pytest_loops.addoption(
         "--loops-scope",
         action="store",
         default="function",
@@ -150,10 +166,7 @@ class PyTest_Loops:
         """
         pattern = r"\[ \d+ \]"
         run_str = f"[ {count} ]"
-        print("HIIII")
-        os.environ["CODEFLASH_TEST_ITERATION_TEST"] = str(count)
-        # with open("/tmp/codeflash_loop_count.txt", "w") as f:
-        #     f.write(str(count))
+        os.environ["CODEFLASH_LOOP_ID"] = str(count)
         return re.sub(pattern, run_str, nodeid) if re.search(pattern, nodeid) else nodeid + run_str
 
     def _get_delay_time(self, session: Session) -> float:
@@ -186,11 +199,9 @@ class PyTest_Loops:
         :param session: Pytest session object.
         :return: Returns True if the timeout has expired, False otherwise.
         """
-        if count < 5:
-            return False
-        if count > 100_000:
-            return True
-        return time.time() - start_time > self._get_total_time(session)
+        return (session.config.option.min_loops <= count <= session.config.option.min_loops) and (
+            time.time() - start_time > self._get_total_time(session)
+        )
 
     def _print_loop_count(self, count: int) -> None:
         """Print out current loop number.

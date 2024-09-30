@@ -62,13 +62,16 @@ def parse_test_return_values_bin(
             len_next = file.read(4)
             len_next = int.from_bytes(len_next, byteorder="big")
             invocation_id = file.read(len_next).decode("ascii")
+            len_next = file.read(4)
+            len_next = int.from_bytes(len_next, byteorder="big")
+            loop_id = file.read(len_next).decode("ascii")
             # TODO : Remove the fully loaded unpickled object from the test_results.
             #  replace it with a link to the pickle object. Load it only on demand.
             #  The problem is that the unpickled object might be huge. This could cause codeflash to crash
             #  due to out-of-memory. Plus as we fill memory, the benchmarking results will get skewed.
             looped_test_results.append(
                 LoopedFunctionTestInvocation(
-                    loop_id="",
+                    loop_id=loop_id,
                     result=FunctionTestInvocation(
                         id=InvocationId.from_str_id(encoded_test_name, invocation_id),
                         file_name="",
@@ -84,30 +87,6 @@ def parse_test_return_values_bin(
             # Hardcoding the test result to True because the test did execute and we are only interested in the return values,
             # the did_pass comes from the xml results file
     return looped_test_results
-    # all_ids = {looped_result.result.id for looped_result in looped_test_results}
-    # id_to_looped_test_result = {
-    #     result_id: [
-    #         looped_test_result
-    #         for looped_test_result in looped_test_results
-    #         if looped_test_result.result.id == result_id
-    #     ]
-    #     for result_id in all_ids
-    # }
-    # return [
-    #     FunctionTestInvocation(
-    #         id=result_id,
-    #         file_name=result.file_name,
-    #         did_pass=result.did_pass,
-    #         runtime=min(looped_test_result.result.runtime for looped_test_result in looped_test_result_list),
-    #         test_framework=result.test_framework,
-    #         test_type=result.test_type,
-    #         return_value=result.return_value,
-    #         timed_out=result.timed_out,
-    #     )
-    #     for result_id in all_ids
-    #     if bool(looped_test_result_list := id_to_looped_test_result[result_id])
-    #     & bool(result := looped_test_result_list[0].result)
-    # ]
 
 
 def parse_sqlite_test_results(
@@ -123,8 +102,8 @@ def parse_sqlite_test_results(
         db = sqlite3.connect(sqlite_file_path)
         cur = db.cursor()
         data = cur.execute(
-            "SELECT test_module_path , test_class_name , test_function_name , "
-            "function_getting_tested , iteration_id , runtime, return_value  FROM test_results",
+            "SELECT loop_id , test_module_path , test_class_name , test_function_name , "
+            "function_getting_tested , iteration_id , runtime, return_value FROM test_results",
         ).fetchall()
     finally:
         db.close()
@@ -132,7 +111,7 @@ def parse_sqlite_test_results(
         try:
             looped_test_results.append(
                 LoopedFunctionTestInvocation(
-                    loop_id="",
+                    loop_id=val[0],
                     result=FunctionTestInvocation(
                         id=InvocationId(
                             test_module_path=val[1],
@@ -158,30 +137,6 @@ def parse_sqlite_test_results(
         # Hardcoding the test result to True because the test did execute and we are only interested in the return values,
         # the did_pass comes from the xml results file
     return looped_test_results
-    # all_ids = {looped_result.result.id for looped_result in looped_test_results}
-    # id_to_looped_test_result = {
-    #     result_id: [
-    #         looped_test_result
-    #         for looped_test_result in looped_test_results
-    #         if looped_test_result.result.id == result_id
-    #     ]
-    #     for result_id in all_ids
-    # }
-    # return [
-    #     FunctionTestInvocation(
-    #         id=result_id,
-    #         file_name=result.file_name,
-    #         did_pass=result.did_pass,
-    #         runtime=min(looped_test_result.result.runtime for looped_test_result in looped_test_result_list),
-    #         test_framework=result.test_framework,
-    #         test_type=result.test_type,
-    #         return_value=result.return_value,
-    #         timed_out=result.timed_out,
-    #     )
-    #     for result_id in all_ids
-    #     if bool(looped_test_result_list := id_to_looped_test_result[result_id])
-    #     & bool(result := looped_test_result_list[0].result)
-    # ]
 
 
 def parse_test_xml(
