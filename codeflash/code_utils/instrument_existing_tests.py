@@ -72,6 +72,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                         ast.Constant(value=node_name),
                         ast.Constant(value=self.function_object.qualified_name),
                         ast.Constant(value=index),
+                        ast.Name(id="codeflash_loop_index", ctx=ast.Load()),
                         ast.Name(id="codeflash_cur", ctx=ast.Load()),
                         ast.Name(id="codeflash_con", ctx=ast.Load()),
                         *call_node.args,
@@ -91,6 +92,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                             ast.Constant(value=node_name),
                             ast.Constant(value=self.function_object.qualified_name),
                             ast.Constant(value=index),
+                            ast.Name(id="codeflash_loop_index", ctx=ast.Load()),
                             ast.Name(id="codeflash_cur", ctx=ast.Load()),
                             ast.Name(id="codeflash_con", ctx=ast.Load()),
                             *call_node.args,
@@ -177,6 +179,20 @@ class InjectPerfOnly(ast.NodeTransformer):
                             col_offset=node.col_offset,
                         ),
                         ast.Assign(
+                            targets=[ast.Name(id="codeflash_loop_index", ctx=ast.Store())],
+                            value=ast.Subscript(
+                                value=ast.Attribute(
+                                    value=ast.Name(id="os", ctx=ast.Load()),
+                                    attr="environ",
+                                    ctx=ast.Load(),
+                                ),
+                                slice=ast.Constant(value="CODEFLASH_LOOP_INDEX"),
+                                ctx=ast.Load(),
+                            ),
+                            lineno=node.lineno + 2,
+                            col_offset=node.col_offset,
+                        ),
+                        ast.Assign(
                             targets=[ast.Name(id="codeflash_con", ctx=ast.Store())],
                             value=ast.Call(
                                 func=ast.Attribute(
@@ -203,7 +219,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                 ],
                                 keywords=[],
                             ),
-                            lineno=node.lineno + 2,
+                            lineno=node.lineno + 3,
                             col_offset=node.col_offset,
                         ),
                         ast.Assign(
@@ -217,7 +233,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                 args=[],
                                 keywords=[],
                             ),
-                            lineno=node.lineno + 3,
+                            lineno=node.lineno + 4,
                             col_offset=node.col_offset,
                         ),
                         ast.Expr(
@@ -231,12 +247,12 @@ class InjectPerfOnly(ast.NodeTransformer):
                                     ast.Constant(
                                         value="CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT,"
                                         " test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT,"
-                                        " iteration_id TEXT, runtime INTEGER, return_value BLOB)",
+                                        " codeflash_loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)",
                                     ),
                                 ],
                                 keywords=[],
                             ),
-                            lineno=node.lineno + 4,
+                            lineno=node.lineno + 5,
                             col_offset=node.col_offset,
                         ),
                     ]
@@ -342,6 +358,7 @@ def create_wrapper_function() -> ast.FunctionDef:
                 ast.arg(arg="test_name", annotation=None),
                 ast.arg(arg="function_name", annotation=None),
                 ast.arg(arg="line_id", annotation=None),
+                ast.arg(arg="loop_index", annotation=None),
                 ast.arg(arg="codeflash_cur", annotation=None),
                 ast.arg(arg="codeflash_con", annotation=None),
             ],
@@ -374,6 +391,11 @@ def create_wrapper_function() -> ast.FunctionDef:
                         ast.Constant(value=":"),
                         ast.FormattedValue(
                             value=ast.Name(id="line_id", ctx=ast.Load()),
+                            conversion=-1,
+                        ),
+                        ast.Constant(value=":"),
+                        ast.FormattedValue(
+                            value=ast.Name(id="loop_index", ctx=ast.Load()),
                             conversion=-1,
                         ),
                     ],
@@ -522,6 +544,11 @@ def create_wrapper_function() -> ast.FunctionDef:
                                 ),
                                 ast.Constant(value=":"),
                                 ast.FormattedValue(
+                                    value=ast.Name(id="loop_index", ctx=ast.Load()),
+                                    conversion=-1,
+                                ),
+                                ast.Constant(value=":"),
+                                ast.FormattedValue(
                                     value=ast.Name(id="invocation_id", ctx=ast.Load()),
                                     conversion=-1,
                                 ),
@@ -610,6 +637,7 @@ def create_wrapper_function() -> ast.FunctionDef:
                                 ast.Name(id="test_class_name", ctx=ast.Load()),
                                 ast.Name(id="test_name", ctx=ast.Load()),
                                 ast.Name(id="function_name", ctx=ast.Load()),
+                                ast.Name(id="loop_index", ctx=ast.Load()),
                                 ast.Name(id="invocation_id", ctx=ast.Load()),
                                 ast.Name(id="codeflash_duration", ctx=ast.Load()),
                                 ast.Call(
