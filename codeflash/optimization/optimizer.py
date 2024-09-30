@@ -20,6 +20,7 @@ from codeflash.api.aiservice import (
     OptimizedCandidate,
 )
 from codeflash.code_utils import env_utils
+from codeflash.code_utils.config_consts import N_TESTS_TO_GENERATE
 from codeflash.code_utils.code_extractor import (
     add_needed_imports_from_module,
     extract_code,
@@ -63,6 +64,7 @@ from codeflash.models.models import (
     CodeOptimizationContext,
     FunctionSource,
     GeneratedTests,
+    GeneratedTestsList,
     OptimizationSet,
     OptimizedCandidateResult,
     OriginalCodeBaseline,
@@ -161,6 +163,7 @@ class Optimizer:
                     logging.info(
                         f"Optimizing function {function_iterator_count} of {num_optimizable_functions} - {function_to_optimize.qualified_name}",
                     )
+
                     best_optimization = self.optimize_function(
                         function_to_optimize,
                         function_to_tests,
@@ -169,7 +172,7 @@ class Optimizer:
                     if is_successful(best_optimization):
                         optimizations_found += 1
                     else:
-                        logging.warning(best_optimization.failure())
+                        logging.info(best_optimization.failure())
                         continue
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
             if optimizations_found == 0:
@@ -235,30 +238,45 @@ class Optimizer:
             function_trace_id,
             run_experiment=should_run_experiment,
         )
+
         if not is_successful(generated_results):
             return Failure(generated_results.failure())
-        tests_and_opts: tuple[GeneratedTests, OptimizationSet] = generated_results.unwrap()
+        tests_and_opts: tuple[GeneratedTestsList, OptimizationSet] = generated_results.unwrap()
         generated_tests, optimizations_set = tests_and_opts
-        generated_tests_path = get_test_file_path(
-            self.args.tests_root,
-            function_to_optimize.function_name,
-            0,
-        )
-        with pathlib.Path(generated_tests_path).open("w", encoding="utf8") as file:
-            file.write(generated_tests.instrumented_test_source)
-        logging.info(f"Generated tests:\n{generated_tests.generated_original_test_source}")
-        self.test_files_created.add(generated_tests_path)
+
+        generated_tests_paths = [
+            get_test_file_path(
+                self.args.tests_root,
+                function_to_optimize.function_name,
+                i,
+            )
+            for i in range(len(generated_tests.generated_tests))
+        ]
+
+        count_tests = len(generated_tests.generated_tests)
+        for i, generated_test in enumerate(generated_tests.generated_tests):
+            generated_tests_path = generated_tests_paths[i]
+            with pathlib.Path(generated_tests_path).open("w", encoding="utf8") as f:
+                f.write(generated_test.instrumented_test_source)
+            self.test_files_created.add(generated_tests_path)
+            logging.info(
+                f"Generated test {i + 1}/{count_tests}:\n{generated_test.instrumented_test_source}",
+            )
+
         baseline_result, test_functions_to_remove = self.establish_original_code_baseline(
             function_to_optimize.qualified_name,
             instrumented_unittests_created_for_function,
-            generated_tests_path,
+            generated_tests_paths,
             function_to_tests.get(module_path + "." + function_to_optimize.qualified_name, []),
         )
         if not is_successful(baseline_result):
-            pathlib.Path(generated_tests_path).unlink(missing_ok=True)
+            for generated_test_path in generated_tests_paths:
+                pathlib.Path(generated_test_path).unlink(missing_ok=True)
+
             for instrumented_path in instrumented_unittests_created_for_function:
                 pathlib.Path(instrumented_path).unlink(missing_ok=True)
             return Failure(baseline_result.failure())
+
         original_code_baseline: OriginalCodeBaseline = baseline_result.unwrap()
         # TODO: Postprocess the optimized function to include the original docstring and such
 
@@ -278,7 +296,7 @@ class Optimizer:
                 candidates,
                 code_context,
                 function_to_optimize,
-                generated_tests_path,
+                generated_tests_paths,
                 instrumented_unittests_created_for_function,
                 original_code,
                 original_code_baseline,
@@ -288,7 +306,9 @@ class Optimizer:
             )
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
-            generated_tests = remove_functions_from_generated_tests(generated_tests, test_functions_to_remove)
+            generated_tests = remove_functions_from_generated_tests(
+                generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
+            )
 
             if best_optimization:
                 logging.info(
@@ -353,8 +373,8 @@ class Optimizer:
                             original_helper_code,
                             function_to_optimize.file_path,
                         )
-        # Delete all the generated tests to not cause any clutter.
-        pathlib.Path(generated_tests_path).unlink(missing_ok=True)
+        for generated_test_path in generated_tests_paths:
+            pathlib.Path(generated_test_path).unlink(missing_ok=True)
         for test_paths in instrumented_unittests_created_for_function:
             pathlib.Path(test_paths).unlink(missing_ok=True)
         if not best_optimization:
@@ -366,7 +386,7 @@ class Optimizer:
         candidates: list[OptimizedCandidate],
         code_context: CodeOptimizationContext,
         function_to_optimize: FunctionToOptimize,
-        generated_tests_path: str,
+        generated_tests_paths: list[str],
         instrumented_unittests_created_for_function: set[str],
         original_code: str,
         original_code_baseline: OriginalCodeBaseline,
@@ -437,7 +457,7 @@ class Optimizer:
                     overall_original_test_results=original_code_baseline.overall_test_results,
                     original_existing_test_results=original_code_baseline.existing_test_results,
                     original_generated_test_results=original_code_baseline.generated_test_results,
-                    generated_tests_path=generated_tests_path,
+                    generated_tests_paths=generated_tests_paths,
                     best_runtime_until_now=best_runtime_until_now,
                     tests_in_file=only_run_this_test_function,
                     run_generated_tests=run_generated_tests,
@@ -510,17 +530,19 @@ class Optimizer:
         explanation: Explanation,
         function_to_optimize: FunctionToOptimize,
         function_trace_id: str,
-        generated_tests: GeneratedTests,
+        generated_tests: GeneratedTestsList,
     ) -> None:
         logging.info(
             f"⚡️ Optimization successful! 📄 {function_to_optimize.qualified_name} in {explanation.file_path}",
         )
         logging.info(f"📈 {explanation.perf_improvement_line}")
         logging.info(f"Explanation: \n{explanation.to_console_string()}")
+
         logging.info(
-            f"Optimization was validated for correctness by running the following tests - "
-            f"\n{generated_tests.generated_original_test_source}",
+            "Optimization was validated for correctness by running the following tests - %s",
+            "\n".join([test.generated_original_test_source for test in generated_tests.generated_tests]),
         )
+
         ph(
             "cli-optimize-success",
             {
@@ -745,17 +767,20 @@ class Optimizer:
         module_path: str,
         function_trace_id: str,
         run_experiment: bool = False,
-    ) -> Result[tuple[GeneratedTests, OptimizationSet], str]:
-        max_workers = 2 if not run_experiment else 3
+    ) -> Result[tuple[GeneratedTestsList, OptimizationSet], str]:
+        max_workers = N_TESTS_TO_GENERATE + 1 if not run_experiment else N_TESTS_TO_GENERATE + 2
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_tests = executor.submit(
-                self.generate_and_instrument_tests,
+            logging.info(f"Generating new tests for function {function_to_optimize.function_name} ...")
+
+            tests = self.generate_and_instrument_tests(
+                executor,
                 code_to_optimize_with_helpers,
                 function_to_optimize,
                 [definition.fully_qualified_name for definition in helper_functions],
                 module_path,
-                function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id,
+                (function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id),
             )
+
             future_optimization_candidates = executor.submit(
                 self.aiservice_client.optimize_python_code,
                 code_to_optimize_with_helpers,
@@ -772,27 +797,18 @@ class Optimizer:
                     ExperimentMetadata(id=self.experiment_id, group="experiment"),
                 )
 
-            future_tests_result = future_tests.result()
             candidates: list[OptimizedCandidate] = future_optimization_candidates.result()
 
             candidates_experiment = future_candidates_exp.result() if run_experiment else None
 
-        if future_tests_result and isinstance(future_tests_result, tuple) and len(future_tests_result) == 2:
-            (
-                generated_original_test_source,
-                instrumented_test_source,
-            ) = future_tests_result
-
-        else:
+        if not tests:
             return Failure(f"/!\\ NO TESTS GENERATED for {function_to_optimize.function_name}")
         if not candidates:
             return Failure(f"/!\\ NO OPTIMIZATIONS GENERATED for {function_to_optimize.function_name}")
+
         return Success(
             (
-                GeneratedTests(
-                    generated_original_test_source=generated_original_test_source,
-                    instrumented_test_source=instrumented_test_source,
-                ),
+                tests,
                 OptimizationSet(
                     control=candidates,
                     experiment=candidates_experiment,
@@ -804,7 +820,7 @@ class Optimizer:
         self,
         function_name: str,
         instrumented_unittests_created_for_function: set[str],
-        generated_tests_path: str,
+        generated_tests_paths: list[str],
         tests_in_file: list[TestsInFile],
     ) -> Result[OriginalCodeBaseline, str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
@@ -961,8 +977,8 @@ class Optimizer:
                         )
                     original_gen_results = self.run_and_parse_tests(
                         test_env,
-                        [generated_tests_path],
-                        [TestType.GENERATED_REGRESSION],
+                        generated_tests_paths,
+                        [TestType.GENERATED_REGRESSION] * len(generated_tests_paths),
                         0,
                     )
                     functions_to_remove = [
@@ -1051,7 +1067,7 @@ class Optimizer:
         overall_original_test_results: TestResults,
         original_existing_test_results: TestResults,
         original_generated_test_results: TestResults,
-        generated_tests_path: str,
+        generated_tests_paths: list[str],
         best_runtime_until_now: int,
         tests_in_file: list[TestsInFile] | None,
         run_generated_tests: bool,
@@ -1245,7 +1261,7 @@ class Optimizer:
                     if run_generated_tests:
                         candidate_generated_test_results = self.run_and_parse_tests(
                             test_env,
-                            [generated_tests_path],
+                            generated_tests_paths,
                             TestType.GENERATED_REGRESSION,
                             optimization_index,
                         )
@@ -1363,32 +1379,59 @@ class Optimizer:
 
     def generate_and_instrument_tests(
         self,
+        executor: concurrent.futures.ThreadPoolExecutor,
         source_code_being_tested: str,
         function_to_optimize: FunctionToOptimize,
         helper_function_names: list[str],
         module_path: str,
         function_trace_id: str,
-    ) -> tuple[str, str] | None:
-        tests = generate_tests(
-            self.aiservice_client,
-            source_code_being_tested=source_code_being_tested,
-            function_to_optimize=function_to_optimize,
-            helper_function_names=helper_function_names,
-            module_path=module_path,
-            test_cfg=self.test_cfg,
-            test_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-            use_cached_tests=self.args.use_cached_tests,
-            function_trace_id=function_trace_id,
-        )
-        if tests is None:
+    ) -> GeneratedTestsList | None:
+        logging.info(f"Generating new tests for function {function_to_optimize.function_name} ...")
+        futures = [
+            executor.submit(
+                generate_tests,
+                self.aiservice_client,
+                source_code_being_tested,
+                function_to_optimize,
+                helper_function_names,
+                module_path,
+                self.test_cfg,
+                INDIVIDUAL_TESTCASE_TIMEOUT,
+                self.args.use_cached_tests,
+                function_trace_id,
+            )
+            for _ in range(N_TESTS_TO_GENERATE)
+        ]
+        try:
+            tests: list[GeneratedTests] = []
+            test_count = 0
+            for future in concurrent.futures.as_completed(futures):
+                res = future.result()
+                if res:
+                    test_count += 1
+                    generated_test_source, instrumented_test_source = res
+                    tests.append(
+                        GeneratedTests(
+                            generated_original_test_source=generated_test_source,
+                            instrumented_test_source=instrumented_test_source,
+                            test_number=test_count,
+                        ),
+                    )
+
+            logging.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
+        except Exception as e:
             logging.warning(
-                f"Failed to generate and instrument tests for {function_to_optimize.function_name}",
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}: {e}"
             )
             return None
 
-        generated_original_test_source, instrumented_test_source = tests
+        if not tests:
+            logging.warning(
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}"
+            )
+            return None
 
-        return generated_original_test_source, instrumented_test_source
+        return GeneratedTestsList(generated_tests=tests)
 
 
 def run_with_args(args: Namespace) -> None:
