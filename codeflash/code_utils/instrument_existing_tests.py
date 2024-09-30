@@ -630,7 +630,7 @@ def create_wrapper_function() -> ast.FunctionDef:
                         ctx=ast.Load(),
                     ),
                     args=[
-                        ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)"),
+                        ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
                         ast.Tuple(
                             elts=[
                                 ast.Name(id="test_module_name", ctx=ast.Load()),
