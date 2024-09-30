@@ -247,7 +247,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                     ast.Constant(
                                         value="CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT,"
                                         " test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT,"
-                                        " codeflash_loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)",
+                                        " loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)",
                                     ),
                                 ],
                                 keywords=[],
