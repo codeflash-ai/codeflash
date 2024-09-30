@@ -2,13 +2,15 @@ import json
 import logging
 import os
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import requests
 from pydantic.json import pydantic_encoder
 from requests import Response
 
-from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key
+from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
+from codeflash.code_utils.git_utils import get_repo_owner_and_name
 from codeflash.github.PrComment import FileDiffContent, PrComment
 
 if os.environ.get("CODEFLASH_CFAPI_SERVER", default="prod").lower() == "local":
@@ -140,3 +142,27 @@ def is_github_app_installed_on_repo(owner: str, repo: str) -> bool:
         logging.error(f"Error: {response.text}")
         return False
     return True
+
+
+def get_blacklisted_functions() -> dict[str, str]:
+    pr_number = get_pr_number()
+    if pr_number is None:
+        return {}
+
+    owner, repo = get_repo_owner_and_name()
+    information = {
+        "pr_number": pr_number,
+        "repo_owner": owner,
+        "repo_name": repo,
+    }
+    try:
+        req = make_cfapi_request(
+            endpoint="/verify-existing-optimizations",
+            method="POST",
+            payload=information,
+        )
+        content: dict[str, list[str]] = req.json()
+    except Exception as e:
+        logging.error(f"Error getting blacklisted functions: {e}")
+        return {}
+    return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
