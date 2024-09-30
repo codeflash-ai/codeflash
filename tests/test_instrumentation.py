@@ -149,8 +149,8 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
 from codeflash.validation.equivalence import compare_results
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
+def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
     if not hasattr(codeflash_wrap, 'index'):
         codeflash_wrap.index = {{}}
     if test_id in codeflash_wrap.index:
@@ -161,24 +161,25 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
     """
     if sys.version_info < (3, 12):
-        expected += """print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")"""
+        expected += """print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")"""
     else:
-        expected += """print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')"""
+        expected += """print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!')"""
     expected += """
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
 
 def test_prepare_image_for_yolo():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
+    codeflash_loop_index = os.environ['CODEFLASH_LOOP_INDEX']
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
-    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, codeflash_loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
 """
     if sys.version_info < (3, 11):
         expected += """    for (arg_val_pkl, return_val_pkl) in get_next_arg_and_return('/home/saurabh/packagename/traces/first.trace', 3):
@@ -188,7 +189,7 @@ def test_prepare_image_for_yolo():
 """
     expected += """        args = pickle.loads(arg_val_pkl)
         return_val_1 = pickle.loads(return_val_pkl)
-        ret = codeflash_wrap(packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo, '{module_path}', None, 'test_prepare_image_for_yolo', 'packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo', '0_2', codeflash_cur, codeflash_con, **args)
+        ret = codeflash_wrap(packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo, '{module_path}', None, 'test_prepare_image_for_yolo', 'packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo', '0_2', codeflash_loop_index, codeflash_cur, codeflash_con, **args)
         assert compare_results(return_val_1, ret)
     codeflash_con.close()
 """
