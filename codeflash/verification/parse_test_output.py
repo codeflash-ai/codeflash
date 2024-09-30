@@ -165,9 +165,6 @@ def parse_test_xml(
     for suite in xml:
         for testcase in suite:
             class_name = testcase.classname
-            file_name = suite._elem.attrib.get(
-                "file",
-            )  # file_path_from_module_name(generated_tests_path, test_config.project_root_path)
             test_module_path = (
                 class_name[: -len("__perfinstrumented")]
                 if class_name.endswith("__perfinstrumented")
@@ -305,7 +302,6 @@ def merge_test_results(
 
     # This is done to match the right iteration_id which might not be available in the xml
     for result in xml_test_results:
-        loop_id: str = "1"
         if test_framework == "pytest":
             if (
                 result.id.test_function_name.endswith("]") and "[" in result.id.test_function_name
@@ -349,7 +345,7 @@ def merge_test_results(
             for result_bin in bin_results:
                 merged_test_results.add(
                     FunctionTestInvocation(
-                        loop_id=loop_id,
+                        loop_id=result_bin.loop_id,
                         id=result_bin.id,
                         file_name=xml_result.file_name,
                         runtime=result_bin.runtime,
@@ -373,6 +369,7 @@ def merge_test_results(
                     continue
                 merged_test_results.add(
                     FunctionTestInvocation(
+                        loop_id=xml_result.loop_id,
                         id=xml_result.id,
                         file_name=xml_result.file_name,
                         runtime=bin_result.runtime,
@@ -397,6 +394,7 @@ def merge_test_results(
                     continue
                 merged_test_results.add(
                     FunctionTestInvocation(
+                        loop_id=bin_result.loop_id,
                         id=bin_result.id,
                         file_name=bin_result.file_name,
                         runtime=bin_result.runtime,

@@ -12,7 +12,7 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
     original_recursion_limit = sys.getrecursionlimit()
     if original_recursion_limit < INCREASED_RECURSION_LIMIT:
         sys.setrecursionlimit(INCREASED_RECURSION_LIMIT)  # Increase recursion limit to avoid RecursionError
-    test_ids_superset = set(original_results.get_all_ids()).union(set(candidate_results.get_all_ids()))
+    test_ids_superset = original_results.get_all_ids().union(set(candidate_results.get_all_ids()))
     are_equal: bool = True
     did_all_timeout: bool = True
     for test_id in test_ids_superset:
