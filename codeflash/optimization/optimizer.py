@@ -20,7 +20,6 @@ from codeflash.api.aiservice import (
     OptimizedCandidate,
 )
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.config_consts import N_TESTS_TO_GENERATE
 from codeflash.code_utils.code_extractor import (
     add_needed_imports_from_module,
     extract_code,
@@ -38,7 +37,7 @@ from codeflash.code_utils.config_consts import (
     MAX_TEST_FUNCTION_RUNS,
     MAX_TEST_RUN_ITERATIONS,
     N_CANDIDATES,
-    REPEAT_COUNT,
+    N_TESTS_TO_GENERATE,
     TOTAL_LOOPING_TIME,
 )
 from codeflash.code_utils.formatter import format_code, sort_imports
@@ -244,16 +243,16 @@ class Optimizer:
         tests_and_opts: tuple[GeneratedTestsList, OptimizationSet] = generated_results.unwrap()
         generated_tests, optimizations_set = tests_and_opts
 
+        count_tests = len(generated_tests.generated_tests)
         generated_tests_paths = [
             get_test_file_path(
                 self.args.tests_root,
                 function_to_optimize.function_name,
                 i,
             )
-            for i in range(len(generated_tests.generated_tests))
+            for i in range(count_tests)
         ]
 
-        count_tests = len(generated_tests.generated_tests)
         for i, generated_test in enumerate(generated_tests.generated_tests):
             generated_tests_path = generated_tests_paths[i]
             with pathlib.Path(generated_tests_path).open("w", encoding="utf8") as f:
@@ -307,7 +306,8 @@ class Optimizer:
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
             generated_tests = remove_functions_from_generated_tests(
-                generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
+                generated_tests=generated_tests,
+                test_functions_to_remove=test_functions_to_remove,
             )
 
             if best_optimization:
@@ -846,8 +846,7 @@ class Optimizer:
             test_env["PYTHONPATH"] += os.pathsep + self.args.project_root
 
         if test_framework == "pytest":
-            original_test_results_iter = TestResults()  # needed? results for generat
-            # ed?
+            original_test_results_iter = TestResults()  # needed? results for generated? iter???
             existing_test_results = TestResults()  # needed? results for existing?
             first_test_types = []
             first_test_functions = []
@@ -868,10 +867,9 @@ class Optimizer:
                     logging.warning(
                         f"Multiple tests found for the replay test {test_file}. Should not happen",
                     )
-
-            instrumented_unittests_created_for_function.add(generated_tests_path)
-            first_test_types.append(TestType.GENERATED_REGRESSION)
-            first_test_functions.append(None)
+            instrumented_unittests_created_for_function |= generated_tests_paths
+            first_test_types.extend([TestType.GENERATED_REGRESSION] * len(generated_tests_paths))
+            first_test_functions.extend([None] * len(generated_tests_paths))
 
             unittest_results = self.run_and_parse_tests(
                 test_env,
@@ -1421,13 +1419,13 @@ class Optimizer:
             logging.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
         except Exception as e:
             logging.warning(
-                f"Failed to generate and instrument tests for {function_to_optimize.function_name}: {e}"
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}: {e}",
             )
             return None
 
         if not tests:
             logging.warning(
-                f"Failed to generate and instrument tests for {function_to_optimize.function_name}"
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}",
             )
             return None
 
