@@ -247,7 +247,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                     ast.Constant(
                                         value="CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT,"
                                         " test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT,"
-                                        " codeflash_loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)",
+                                        " loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)",
                                     ),
                                 ],
                                 keywords=[],
@@ -630,7 +630,7 @@ def create_wrapper_function() -> ast.FunctionDef:
                         ctx=ast.Load(),
                     ),
                     args=[
-                        ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)"),
+                        ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
                         ast.Tuple(
                             elts=[
                                 ast.Name(id="test_module_name", ctx=ast.Load()),
