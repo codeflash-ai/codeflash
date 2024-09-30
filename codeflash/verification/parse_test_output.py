@@ -69,7 +69,7 @@ def parse_test_return_values_bin(
             #  The problem is that the unpickled object might be huge. This could cause codeflash to crash
             #  due to out-of-memory. Plus as we fill memory, the benchmarking results will get skewed.
             test_results.add(
-                FunctionTestInvocation(
+                function_test_invocation=FunctionTestInvocation(
                     loop_id=loop_id,
                     id=InvocationId.from_str_id(encoded_test_name, invocation_id),
                     file_name="",
@@ -107,8 +107,8 @@ def parse_sqlite_test_results(
     for val in data:
         try:
             (
-                test_results.append(
-                    FunctionTestInvocation(
+                test_results.add(
+                    function_test_invocation=FunctionTestInvocation(
                         loop_id=val[0],
                         id=InvocationId(
                             test_module_path=val[1],
@@ -202,7 +202,7 @@ def parse_test_xml(
             # if test_module_path.endswith("__perfinstrumented"):
             #     test_module_path = test_module_path[: -len("__perfinstrumented")]
             test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
-            loop_id = testcase.name.split("[ ", 1)[1][:-2] if "[" in testcase.name else "1"
+            loop_id = "1"
             if test_function is None:
                 with sentry_sdk.push_scope() as scope:
                     xml_file_contents = open(test_xml_file_path).read()
@@ -213,6 +213,7 @@ def parse_test_xml(
                 continue
             timed_out = False
             if test_config.test_framework == "pytest":
+                loop_id = testcase.name.split("[ ", 1)[1][:-2] if "[" in testcase.name else "1"
                 if len(testcase.result) > 1:
                     print(
                         f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!",
@@ -235,10 +236,10 @@ def parse_test_xml(
                 testcase.system_out or "",
             )
             if not matches or not len(matches):
-                looped_test_results.append(
-                    LoopedFunctionTestInvocation(
-                        loop_id=loop_id,
-                        result=FunctionTestInvocation(
+                (
+                    test_results.add(
+                        FunctionTestInvocation(
+                            loop_id=loop_id,
                             id=InvocationId(
                                 test_module_path=test_module_path,
                                 test_class_name=test_class,
@@ -258,25 +259,27 @@ def parse_test_xml(
                 )
             else:
                 for match in matches:
-                    looped_test_results.append(
-                        LoopedFunctionTestInvocation(
+                    test_results.add(
+                        FunctionTestInvocation(
                             loop_id=loop_id,
-                            result=FunctionTestInvocation(
-                                id=InvocationId(
-                                    test_module_path=match[0],
-                                    test_class_name=None if match[1] == "" else match[1][:-1],
-                                    test_function_name=match[2],
-                                    function_getting_tested=match[3],
-                                    iteration_id=match[4],
-                                ),
-                                file_name=file_name,
-                                runtime=None,
-                                test_framework=test_config.test_framework,
+                            id=InvocationId(
+                                test_module_path=match[0],
+                                test_class_name=None if match[1] == "" else match[1][:-1],
+                                test_function_name=match[2],
+                                function_getting_tested=match[3],
+                                iteration_id=match[4],
                             ),
+                            file_name=file_name,
+                            runtime=None,
+                            test_framework=test_config.test_framework,
+                            did_pass=result,
+                            test_type=test_type,
+                            return_value=None,
+                            timed_out=timed_out,
                         ),
                     )
 
-    if len(looped_test_results.looped_test_result_list) == 0:
+    if not test_results:
         logging.info(f"Tests '{test_py_file_paths}' failed to run, skipping")
         if run_result is not None:
             try:
@@ -287,12 +290,12 @@ def parse_test_xml(
             logging.debug(
                 f"Test log - STDOUT : {stdout} \n STDERR : {stderr}",
             )
-    return looped_test_results
+    return test_results
 
 
 def merge_test_results(
-    xml_test_results: list[LoopedFunctionTestInvocation],
-    bin_test_results: list[LoopedFunctionTestInvocation],
+    xml_test_results: TestResults,
+    bin_test_results: TestResults,
     test_framework: str,
 ) -> TestResults:
     merged_test_results = TestResults()
@@ -346,6 +349,7 @@ def merge_test_results(
             for result_bin in bin_results:
                 merged_test_results.add(
                     FunctionTestInvocation(
+                        loop_id=loop_id,
                         id=result_bin.id,
                         file_name=xml_result.file_name,
                         runtime=result_bin.runtime,
