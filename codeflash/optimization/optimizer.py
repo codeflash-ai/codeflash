@@ -20,7 +20,6 @@ from codeflash.api.aiservice import (
     OptimizedCandidate,
 )
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.config_consts import N_TESTS_TO_GENERATE
 from codeflash.code_utils.code_extractor import (
     add_needed_imports_from_module,
     extract_code,
@@ -38,7 +37,7 @@ from codeflash.code_utils.config_consts import (
     MAX_TEST_FUNCTION_RUNS,
     MAX_TEST_RUN_ITERATIONS,
     N_CANDIDATES,
-    REPEAT_COUNT,
+    N_TESTS_TO_GENERATE,
     TOTAL_LOOPING_TIME,
 )
 from codeflash.code_utils.formatter import format_code, sort_imports
@@ -307,7 +306,8 @@ class Optimizer:
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
             generated_tests = remove_functions_from_generated_tests(
-                generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
+                generated_tests=generated_tests,
+                test_functions_to_remove=test_functions_to_remove,
             )
 
             if best_optimization:
@@ -1421,13 +1421,13 @@ class Optimizer:
             logging.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
         except Exception as e:
             logging.warning(
-                f"Failed to generate and instrument tests for {function_to_optimize.function_name}: {e}"
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}: {e}",
             )
             return None
 
         if not tests:
             logging.warning(
-                f"Failed to generate and instrument tests for {function_to_optimize.function_name}"
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}",
             )
             return None
 
