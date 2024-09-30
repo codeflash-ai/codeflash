@@ -47,13 +47,22 @@ class TestUnittestRunnerSorter(unittest.TestCase):
 
 def test_pytest_runner():
     code = """
+import os
 def sorter(arr):
     arr.sort()
     return arr
 
 def test_sort():
     arr = [5, 4, 3, 2, 1, 0]
+    print(os.environ["CODEFLASH_TEST_ITERATION_TEST"])
+    #loop_id = capsys.readouterr().out.rsplit("= Loop # ", 1)[1].split(" =", 1)[0]
+    #print("stdout, dudes")
+    #print(capsys.readouterr().out)
+    print("stdout out!")
     output = sorter(arr)
+    # with open("/tmp/codeflash_loop_count.txt", "r") as f:
+    #     loop_id = f.read()
+    #     print(f"LOOP ID IS {loop_id}")
     assert output == [0, 1, 2, 3, 4, 5]
 """
     cur_dir_path = os.path.dirname(os.path.abspath(__file__))

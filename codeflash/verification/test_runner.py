@@ -29,6 +29,7 @@ def run_tests(
         result_file_path = get_run_tmp_file("pytest_results.xml")
         pytest_cmd_list = shlex.split(pytest_cmd, posix=os.name != "nt")
         pytest_test_env = test_env.copy()
+
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
 
         results = subprocess.run(
@@ -41,7 +42,9 @@ def run_tests(
                 f"--junitxml={result_file_path}",
                 "-o",
                 "junit_logging=all",
-                f"--loops={count}",
+                # f"--codeflash_loop={count}",
+                f"--seconds={1}",
+                # f"--loops={2}",
                 "--loops-scope=session",
             ],
             capture_output=True,

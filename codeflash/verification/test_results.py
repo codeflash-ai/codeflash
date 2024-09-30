@@ -195,3 +195,7 @@ class TestResults(BaseModel):
                 return False
         sys.setrecursionlimit(original_recursion_limit)
         return True
+
+
+class LoopedTestResults(BaseModel):
+    looped_test_result_list: list[LoopedFunctionTestInvocation] = []

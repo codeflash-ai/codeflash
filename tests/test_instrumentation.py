@@ -52,8 +52,8 @@ import timeout_decorator
 from code_to_optimize.bubble_sort import sorter
 
 
-def codeflash_wrap(wrapped, loop_id, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{loop_id}}:{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
+def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
     if not hasattr(codeflash_wrap, 'index'):
         codeflash_wrap.index = {{}}
     if test_id in codeflash_wrap.index:
@@ -64,16 +64,16 @@ def codeflash_wrap(wrapped, loop_id, test_module_name, test_class_name, test_nam
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
     """
     if sys.version_info < (3, 12):
-        expected += """print(f"!######{{loop_id}}:{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")"""
+        expected += """print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")"""
     else:
-        expected += """print(f'!######{{loop_id}}:{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')"""
+        expected += """print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')"""
     expected += """
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (loop_id, test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
 
@@ -81,19 +81,18 @@ class TestPigLatin(unittest.TestCase):
 
     @timeout_decorator.timeout(15)
     def test_sort(self):
-        loop_id = 0
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
-        codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (loop_id TEXT, test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+        codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
         input = [5, 4, 3, 2, 1, 0]
-        output = codeflash_wrap(sorter, loop_id, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_cur, codeflash_con, input)
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_cur, codeflash_con, input)
         self.assertEqual(output, [0, 1, 2, 3, 4, 5])
         input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-        output = codeflash_wrap(sorter, loop_id, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_cur, codeflash_con, input)
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_cur, codeflash_con, input)
         self.assertEqual(output, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
         input = list(reversed(range(5000)))
-        self.assertEqual(codeflash_wrap(sorter, loop_id, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_cur, codeflash_con, input), list(range(5000)))
+        self.assertEqual(codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_cur, codeflash_con, input), list(range(5000)))
         codeflash_con.close()
 """
     with tempfile.NamedTemporaryFile(mode="w") as f:
@@ -150,8 +149,8 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
 from codeflash.validation.equivalence import compare_results
 
 
-def codeflash_wrap(wrapped, loop_id, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{loop_id}}:{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
+def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
     if not hasattr(codeflash_wrap, 'index'):
         codeflash_wrap.index = {{}}
     if test_id in codeflash_wrap.index:
@@ -162,25 +161,24 @@ def codeflash_wrap(wrapped, loop_id, test_module_name, test_class_name, test_nam
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
     """
     if sys.version_info < (3, 12):
-        expected += """print(f"!######{{loop_id}}:{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")"""
+        expected += """print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")"""
     else:
-        expected += """print(f'!######{{loop_id}}:{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')"""
+        expected += """print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!')"""
     expected += """
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (loop_id, test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
 
-def test_prepare_image_for_yolo(request):
-    loop_id = request.node.callspec.params['__pytest_loop_step_number']
+def test_prepare_image_for_yolo():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
-    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (loop_id TEXT, test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
 """
     if sys.version_info < (3, 11):
         expected += """    for (arg_val_pkl, return_val_pkl) in get_next_arg_and_return('/home/saurabh/packagename/traces/first.trace', 3):
@@ -190,7 +188,7 @@ def test_prepare_image_for_yolo(request):
 """
     expected += """        args = pickle.loads(arg_val_pkl)
         return_val_1 = pickle.loads(return_val_pkl)
-        ret = codeflash_wrap(packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo, loop_id, '{module_path}', None, 'test_prepare_image_for_yolo', 'packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo', '0_2', codeflash_cur, codeflash_con, **args)
+        ret = codeflash_wrap(packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo, '{module_path}', None, 'test_prepare_image_for_yolo', 'packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo', '0_2', codeflash_cur, codeflash_con, **args)
         assert compare_results(return_val_1, ret)
     codeflash_con.close()
 """
@@ -243,8 +241,8 @@ import dill as pickle
 from code_to_optimize.bubble_sort import sorter
 
 
-def codeflash_wrap(wrapped, loop_id, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{loop_id}}:{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
+def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
     if not hasattr(codeflash_wrap, 'index'):
         codeflash_wrap.index = {{}}
     if test_id in codeflash_wrap.index:
@@ -253,27 +251,26 @@ def codeflash_wrap(wrapped, loop_id, test_module_name, test_class_name, test_nam
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{loop_id}}:{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")
+    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (loop_id, test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
 
-def test_sort(request):
-    loop_id = request.node.callspec.params['__pytest_loop_step_number']
+def test_sort():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
-    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (loop_id TEXT, test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     input = [5, 4, 3, 2, 1, 0]
-    output = codeflash_wrap(sorter, loop_id, '{module_path}', None, 'test_sort', 'sorter', '1', codeflash_cur, codeflash_con, input)
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '1', codeflash_cur, codeflash_con, input)
     assert output == [0, 1, 2, 3, 4, 5]
     input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-    output = codeflash_wrap(sorter, loop_id, '{module_path}', None, 'test_sort', 'sorter', '4', codeflash_cur, codeflash_con, input)
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '4', codeflash_cur, codeflash_con, input)
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()
 """
@@ -391,8 +388,8 @@ import pytest
 from code_to_optimize.bubble_sort import sorter
 
 
-def codeflash_wrap(wrapped, loop_id, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{loop_id}}:{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
+def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}'
     if not hasattr(codeflash_wrap, 'index'):
         codeflash_wrap.index = {{}}
     if test_id in codeflash_wrap.index:
@@ -401,24 +398,23 @@ def codeflash_wrap(wrapped, loop_id, test_module_name, test_class_name, test_nam
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{loop_id}}:{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")
+    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{invocation_id}}######!")
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (loop_id, test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, invocation_id, codeflash_duration, pickle.dumps(return_value)))
     codeflash_con.commit()
     return return_value
 
 @pytest.mark.parametrize('input, expected_output', [([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
-def test_sort_parametrized(input, expected_output, request):
-    loop_id = request.node.callspec.params['__pytest_loop_step_number']
+def test_sort_parametrized(input, expected_output):
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
-    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (loop_id TEXT, test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
-    output = codeflash_wrap(sorter, loop_id, '{module_path}', None, 'test_sort_parametrized', 'sorter', '0', codeflash_cur, codeflash_con, input)
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized', 'sorter', '0', codeflash_cur, codeflash_con, input)
     assert output == expected_output
     codeflash_con.close()
 """
@@ -937,7 +933,7 @@ class TestPigLatin(unittest.TestCase):
 
     @timeout_decorator.timeout(15)
     def test_sort(self):
-        loop_id = 0
+        loop_id = 1
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
@@ -1113,7 +1109,7 @@ class TestPigLatin(unittest.TestCase):
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
     @timeout_decorator.timeout(15)
     def test_sort(self, input, expected_output):
-        loop_id = 0
+        loop_id = 1
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
@@ -1277,7 +1273,7 @@ class TestPigLatin(unittest.TestCase):
 
     @timeout_decorator.timeout(15)
     def test_sort(self):
-        loop_id = 0
+        loop_id = 1
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
@@ -1448,7 +1444,7 @@ class TestPigLatin(unittest.TestCase):
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
     @timeout_decorator.timeout(15)
     def test_sort(self, input, expected_output):
-        loop_id = 0
+        loop_id = 1
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
