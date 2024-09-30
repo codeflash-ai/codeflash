@@ -61,6 +61,7 @@ class InvocationId:
 
 @dataclass(frozen=True)
 class FunctionTestInvocation:
+    loop_id: str  # The loop id of the function invocation
     id: InvocationId  # The fully qualified name of the function invocation (id)
     file_name: str  # The file where the test is defined
     did_pass: bool  # Whether the test this function invocation was part of, passed or failed
@@ -72,12 +73,6 @@ class FunctionTestInvocation:
 
     def test_executed(self) -> bool:
         return self.test_type != TestType.EXISTING_UNIT_TEST or self.id.function_getting_tested
-
-
-@dataclass(frozen=True)
-class LoopedFunctionTestInvocation:
-    loop_id: str  # The loop id of the function invocation
-    result: FunctionTestInvocation  # The function invocation result
 
 
 class TestResults(BaseModel):
@@ -137,11 +132,13 @@ class TestResults(BaseModel):
                 logging.debug(
                     f"Ignoring test case that passed but had no runtime -> {result.id}",
                 )
+        all_ids = {result.id for result in self.test_results}
         return sum(
             [
-                result.runtime
+                min(result.runtime for result in self.test_results)
                 for result in self.test_results
-                if (result.did_pass and result.runtime is not None)
+                if (result.did_pass and result.runtime is not None and result.id == invocation_id)
+                for invocation_id in all_ids
             ],
         )
 
@@ -195,7 +192,3 @@ class TestResults(BaseModel):
                 return False
         sys.setrecursionlimit(original_recursion_limit)
         return True
-
-
-class LoopedTestResults(BaseModel):
-    looped_test_result_list: list[LoopedFunctionTestInvocation] = []
