@@ -90,8 +90,8 @@ class TestResults(BaseModel):
     ) -> FunctionTestInvocation | None:
         return next((r for r in self.test_results if r.id == invocation_id), None)
 
-    def get_all_ids(self) -> list[InvocationId]:
-        return [test_result.id for test_result in self.test_results]
+    def get_all_ids(self) -> set[InvocationId]:
+        return {test_result.id for test_result in self.test_results}
 
     def get_test_pass_fail_report(self) -> str:
         passed = 0
@@ -132,13 +132,12 @@ class TestResults(BaseModel):
                 logging.debug(
                     f"Ignoring test case that passed but had no runtime -> {result.id}",
                 )
-        all_ids = {result.id for result in self.test_results}
         return sum(
             [
                 min(result.runtime for result in self.test_results)
                 for result in self.test_results
                 if (result.did_pass and result.runtime is not None and result.id == invocation_id)
-                for invocation_id in all_ids
+                for invocation_id in self.get_all_ids()
             ],
         )
 

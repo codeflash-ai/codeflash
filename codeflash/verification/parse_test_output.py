@@ -21,7 +21,6 @@ from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.verification.test_results import (
     FunctionTestInvocation,
     InvocationId,
-    LoopedFunctionTestInvocation,
     TestResults,
     TestType,
 )
@@ -36,29 +35,29 @@ def parse_test_return_values_bin(
     file_location: str,
     test_framework: str,
     test_type: TestType,
-) -> list[LoopedFunctionTestInvocation]:
-    looped_test_results: list[LoopedFunctionTestInvocation] = []
+) -> TestResults:
+    test_results = TestResults
     if not os.path.exists(file_location):
         logging.warning(f"No test results for {file_location} found.")
-        return looped_test_results
+        return test_results
     with open(file_location, "rb") as file:
         while file:
             len_next = file.read(4)
             if not len_next:
-                return looped_test_results
+                return test_results
             len_next = int.from_bytes(len_next, byteorder="big")
             encoded_test_name = file.read(len_next).decode("ascii")
             len_next = file.read(8)
             duration = int.from_bytes(len_next, byteorder="big")
             len_next = file.read(4)
             if not len_next:
-                return looped_test_results
+                return test_results
             len_next = int.from_bytes(len_next, byteorder="big")
             try:
                 test_pickle = pickle.loads(file.read(len_next))
             except Exception as e:
                 logging.exception(f"Failed to load pickle file. Exception: {e}")
-                return looped_test_results
+                return test_results
             len_next = file.read(4)
             len_next = int.from_bytes(len_next, byteorder="big")
             invocation_id = file.read(len_next).decode("ascii")
@@ -69,35 +68,33 @@ def parse_test_return_values_bin(
             #  replace it with a link to the pickle object. Load it only on demand.
             #  The problem is that the unpickled object might be huge. This could cause codeflash to crash
             #  due to out-of-memory. Plus as we fill memory, the benchmarking results will get skewed.
-            looped_test_results.append(
-                LoopedFunctionTestInvocation(
+            test_results.add(
+                function_test_invocation=FunctionTestInvocation(
                     loop_id=loop_id,
-                    result=FunctionTestInvocation(
-                        id=InvocationId.from_str_id(encoded_test_name, invocation_id),
-                        file_name="",
-                        did_pass=True,
-                        runtime=duration,
-                        test_framework=test_framework,
-                        test_type=test_type,
-                        return_value=test_pickle,
-                        timed_out=False,
-                    ),
+                    id=InvocationId.from_str_id(encoded_test_name, invocation_id),
+                    file_name="",
+                    did_pass=True,
+                    runtime=duration,
+                    test_framework=test_framework,
+                    test_type=test_type,
+                    return_value=test_pickle,
+                    timed_out=False,
                 ),
             )
             # Hardcoding the test result to True because the test did execute and we are only interested in the return values,
             # the did_pass comes from the xml results file
-    return looped_test_results
+    return test_results
 
 
 def parse_sqlite_test_results(
     sqlite_file_path: str,
     test_type: TestType,
     test_config: TestConfig,
-) -> list[LoopedFunctionTestInvocation]:
-    looped_test_results: list[LoopedFunctionTestInvocation] = []
+) -> TestResults:
+    test_results = TestResults()
     if not os.path.exists(sqlite_file_path):
         logging.warning(f"No test results for {sqlite_file_path} found.")
-        return looped_test_results
+        return test_results
     try:
         db = sqlite3.connect(sqlite_file_path)
         cur = db.cursor()
@@ -109,10 +106,10 @@ def parse_sqlite_test_results(
         db.close()
     for val in data:
         try:
-            looped_test_results.append(
-                LoopedFunctionTestInvocation(
-                    loop_id=val[0],
-                    result=FunctionTestInvocation(
+            (
+                test_results.add(
+                    function_test_invocation=FunctionTestInvocation(
+                        loop_id=val[0],
                         id=InvocationId(
                             test_module_path=val[1],
                             test_class_name=val[2],
@@ -136,7 +133,7 @@ def parse_sqlite_test_results(
         # to read the return_value from the sqlite file as well.
         # Hardcoding the test result to True because the test did execute and we are only interested in the return values,
         # the did_pass comes from the xml results file
-    return looped_test_results
+    return test_results
 
 
 def parse_test_xml(
@@ -145,19 +142,19 @@ def parse_test_xml(
     test_type: TestType,
     test_config: TestConfig,
     run_result: subprocess.CompletedProcess | None = None,
-) -> list[LoopedFunctionTestInvocation]:
-    looped_test_results: list[LoopedFunctionTestInvocation] = []
+) -> TestResults:
+    test_results = TestResults()
     # Parse unittest output
     if not os.path.exists(test_xml_file_path):
         logging.warning(f"No test results for {test_xml_file_path} found.")
-        return looped_test_results
+        return test_results
     try:
         xml = JUnitXml.fromfile(test_xml_file_path)
     except Exception as e:
         logging.warning(
             f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}",
         )
-        return looped_test_results
+        return test_results
     test_module_paths = []
     for file_path in test_py_file_paths:
         assert os.path.exists(file_path), f"File {file_path} doesn't exist."
@@ -168,9 +165,6 @@ def parse_test_xml(
     for suite in xml:
         for testcase in suite:
             class_name = testcase.classname
-            file_name = suite._elem.attrib.get(
-                "file",
-            )  # file_path_from_module_name(generated_tests_path, test_config.project_root_path)
             test_module_path = (
                 class_name[: -len("__perfinstrumented")]
                 if class_name.endswith("__perfinstrumented")
@@ -189,7 +183,7 @@ def parse_test_xml(
                     logging.info(
                         f"Test log - STDOUT : {run_result.stdout.decode()} \n STDERR : {run_result.stderr.decode()}",
                     )
-                return looped_test_results
+                return test_results
             # file_name = test_py_file_path
             result = testcase.is_passed  # TODO: See for the cases of ERROR and SKIPPED
             # test_module_path = module_name_from_file_path(file_name, test_config.project_root_path)
@@ -205,7 +199,7 @@ def parse_test_xml(
             # if test_module_path.endswith("__perfinstrumented"):
             #     test_module_path = test_module_path[: -len("__perfinstrumented")]
             test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
-            loop_id = testcase.name.split("[ ", 1)[1][:-2] if "[" in testcase.name else "1"
+            loop_id = "1"
             if test_function is None:
                 with sentry_sdk.push_scope() as scope:
                     xml_file_contents = open(test_xml_file_path).read()
@@ -216,6 +210,7 @@ def parse_test_xml(
                 continue
             timed_out = False
             if test_config.test_framework == "pytest":
+                loop_id = testcase.name.split("[ ", 1)[1][:-2] if "[" in testcase.name else "1"
                 if len(testcase.result) > 1:
                     print(
                         f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!",
@@ -238,10 +233,10 @@ def parse_test_xml(
                 testcase.system_out or "",
             )
             if not matches or not len(matches):
-                looped_test_results.append(
-                    LoopedFunctionTestInvocation(
-                        loop_id=loop_id,
-                        result=FunctionTestInvocation(
+                (
+                    test_results.add(
+                        FunctionTestInvocation(
+                            loop_id=loop_id,
                             id=InvocationId(
                                 test_module_path=test_module_path,
                                 test_class_name=test_class,
@@ -261,26 +256,27 @@ def parse_test_xml(
                 )
             else:
                 for match in matches:
-                    if match[0] == "1":  # First loop only
-                        looped_test_results.append(
-                            LoopedFunctionTestInvocation(
-                                loop_id=loop_id,
-                                result=FunctionTestInvocation(
-                                    id=InvocationId(
-                                        test_module_path=match[1],
-                                        test_class_name=None if match[2] == "" else match[2][:-1],
-                                        test_function_name=match[3],
-                                        function_getting_tested=match[4],
-                                        iteration_id=match[5],
-                                    ),
-                                    file_name=file_name,
-                                    runtime=None,
-                                    test_framework=test_config.test_framework,
-                                ),
+                    test_results.add(
+                        FunctionTestInvocation(
+                            loop_id=loop_id,
+                            id=InvocationId(
+                                test_module_path=match[0],
+                                test_class_name=None if match[1] == "" else match[1][:-1],
+                                test_function_name=match[2],
+                                function_getting_tested=match[3],
+                                iteration_id=match[4],
                             ),
-                        )
+                            file_name=file_name,
+                            runtime=None,
+                            test_framework=test_config.test_framework,
+                            did_pass=result,
+                            test_type=test_type,
+                            return_value=None,
+                            timed_out=timed_out,
+                        ),
+                    )
 
-    if len(looped_test_results.looped_test_result_list) == 0:
+    if not test_results:
         logging.info(f"Tests '{test_py_file_paths}' failed to run, skipping")
         if run_result is not None:
             try:
@@ -291,12 +287,12 @@ def parse_test_xml(
             logging.debug(
                 f"Test log - STDOUT : {stdout} \n STDERR : {stderr}",
             )
-    return looped_test_results
+    return test_results
 
 
 def merge_test_results(
-    xml_test_results: list[LoopedFunctionTestInvocation],
-    bin_test_results: list[LoopedFunctionTestInvocation],
+    xml_test_results: TestResults,
+    bin_test_results: TestResults,
     test_framework: str,
 ) -> TestResults:
     merged_test_results = TestResults()
@@ -306,7 +302,6 @@ def merge_test_results(
 
     # This is done to match the right iteration_id which might not be available in the xml
     for result in xml_test_results:
-        loop_id: str = "1"
         if test_framework == "pytest":
             if (
                 result.id.test_function_name.endswith("]") and "[" in result.id.test_function_name
@@ -350,6 +345,7 @@ def merge_test_results(
             for result_bin in bin_results:
                 merged_test_results.add(
                     FunctionTestInvocation(
+                        loop_id=result_bin.loop_id,
                         id=result_bin.id,
                         file_name=xml_result.file_name,
                         runtime=result_bin.runtime,
@@ -373,6 +369,7 @@ def merge_test_results(
                     continue
                 merged_test_results.add(
                     FunctionTestInvocation(
+                        loop_id=xml_result.loop_id,
                         id=xml_result.id,
                         file_name=xml_result.file_name,
                         runtime=bin_result.runtime,
@@ -397,6 +394,7 @@ def merge_test_results(
                     continue
                 merged_test_results.add(
                     FunctionTestInvocation(
+                        loop_id=bin_result.loop_id,
                         id=bin_result.id,
                         file_name=bin_result.file_name,
                         runtime=bin_result.runtime,

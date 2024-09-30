@@ -38,6 +38,7 @@ from codeflash.code_utils.config_consts import (
     MAX_TEST_RUN_ITERATIONS,
     N_CANDIDATES,
     REPEAT_COUNT,
+    TOTAL_LOOPING_TIME,
 )
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import (
@@ -812,7 +813,6 @@ class Optimizer:
         best_runtime = None
         original_gen_results = None
         overall_original_test_results = None
-        times_run = 0
         success = True
         # Keep the runtime in some acceptable range
         generated_tests_elapsed_time = 0.0
@@ -830,9 +830,9 @@ class Optimizer:
             test_env["PYTHONPATH"] += os.pathsep + self.args.project_root
 
         if test_framework == "pytest":
-            instrumented_existing_test_timing = []
-            original_test_results_iter = TestResults()
-            existing_test_results = TestResults()
+            original_test_results_iter = TestResults()  # needed? results for generat
+            # ed?
+            existing_test_results = TestResults()  # needed? results for existing?
             first_test_types = []
             first_test_functions = []
             for test_file in instrumented_unittests_created_for_function:
@@ -863,14 +863,13 @@ class Optimizer:
                 first_test_types,
                 0,
                 first_test_functions,
-                REPEAT_COUNT,
+                TOTAL_LOOPING_TIME,
             )
             # Handle these one by one? (unittest results should be all results for everything). Or can merge, append all
             # at once? This is only for existing tests suites, one by one
             timing = unittest_results.total_passed_runtime()
             original_test_results_iter.merge(unittest_results)
             existing_test_results.merge(unittest_results)
-            instrumented_existing_test_timing.append(timing)
             logging.info(
                 f"Existing unit test results for original code: {original_test_results_iter.get_test_pass_fail_report()}",
             )
@@ -883,7 +882,7 @@ class Optimizer:
             # TODO: Implement the logic to disregard the timing info of the tests that errored out. That is remove test cases that failed to run.
             # based on generated test results, need to extract them? Same thing for all following statements in the
             # pytest branch
-            if not original_gen_results and len(instrumented_existing_test_timing) == 0:
+            if not original_gen_results:
                 logging.warning(
                     f"Couldn't run any tests for original function {function_name}. SKIPPING OPTIMIZING THIS FUNCTION.",
                 )
@@ -897,11 +896,9 @@ class Optimizer:
             )
 
             if not original_gen_results:
-                original_total_runtime_iter = sum(instrumented_existing_test_timing)
+                original_total_runtime_iter = timing
             else:
-                original_total_runtime_iter = original_gen_results.total_passed_runtime() + sum(
-                    instrumented_existing_test_timing,
-                )
+                original_total_runtime_iter = original_gen_results.total_passed_runtime() + timing
 
             if original_total_runtime_iter == 0:
                 logging.warning(
@@ -916,9 +913,9 @@ class Optimizer:
             if original_runtime is None or original_total_runtime_iter < original_runtime:
                 original_runtime = best_runtime = original_total_runtime_iter
                 overall_original_test_results = original_test_results_iter
-            times_run += 1
 
         else:
+            times_run = 0
             cumulative_test_runtime = 0
             cumulative_test_runs = 0
             test_times_list = []
@@ -1329,7 +1326,7 @@ class Optimizer:
         test_types: list[TestType],
         optimization_iteration: int,
         test_functions: list[str | None] | None = None,
-        count: int = REPEAT_COUNT,
+        testing_time: int = TOTAL_LOOPING_TIME,
     ) -> TestResults:
         try:
             result_file_path, run_result = run_tests(
@@ -1341,7 +1338,7 @@ class Optimizer:
                 verbose=True,
                 test_env=test_env,
                 only_run_these_test_functions=test_functions,
-                count=count,
+                testing_time=testing_time,
             )
         except subprocess.TimeoutExpired:
             logging.exception(
