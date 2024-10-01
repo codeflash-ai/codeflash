@@ -243,16 +243,16 @@ class Optimizer:
         tests_and_opts: tuple[GeneratedTestsList, OptimizationSet] = generated_results.unwrap()
         generated_tests, optimizations_set = tests_and_opts
 
+        count_tests = len(generated_tests.generated_tests)
         generated_tests_paths = [
             get_test_file_path(
                 self.args.tests_root,
                 function_to_optimize.function_name,
                 i,
             )
-            for i in range(len(generated_tests.generated_tests))
+            for i in range(count_tests)
         ]
 
-        count_tests = len(generated_tests.generated_tests)
         for i, generated_test in enumerate(generated_tests.generated_tests):
             generated_tests_path = generated_tests_paths[i]
             with pathlib.Path(generated_tests_path).open("w", encoding="utf8") as f:
@@ -846,9 +846,6 @@ class Optimizer:
             test_env["PYTHONPATH"] += os.pathsep + self.args.project_root
 
         if test_framework == "pytest":
-            original_test_results_iter = TestResults()  # needed? results for generat
-            # ed?
-            existing_test_results = TestResults()  # needed? results for existing?
             first_test_types = []
             first_test_functions = []
             for test_file in instrumented_unittests_created_for_function:
@@ -868,10 +865,9 @@ class Optimizer:
                     logging.warning(
                         f"Multiple tests found for the replay test {test_file}. Should not happen",
                     )
-
-            instrumented_unittests_created_for_function.add(generated_tests_path)
-            first_test_types.append(TestType.GENERATED_REGRESSION)
-            first_test_functions.append(None)
+            instrumented_unittests_created_for_function |= generated_tests_paths
+            first_test_types.extend([TestType.GENERATED_REGRESSION] * len(generated_tests_paths))
+            first_test_functions.extend([None] * len(generated_tests_paths))
 
             unittest_results = self.run_and_parse_tests(
                 test_env,
@@ -884,10 +880,8 @@ class Optimizer:
             # Handle these one by one? (unittest results should be all results for everything). Or can merge, append all
             # at once? This is only for existing tests suites, one by one
             timing = unittest_results.total_passed_runtime()
-            original_test_results_iter.merge(unittest_results)
-            existing_test_results.merge(unittest_results)
             logging.info(
-                f"Existing unit test results for original code: {original_test_results_iter.get_test_pass_fail_report()}",
+                f"Existing unit test results for original code: {unittest_results.get_test_pass_fail_report()}",
             )
             functions_to_remove = [
                 result.id.test_function_name

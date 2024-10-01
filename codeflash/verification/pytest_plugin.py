@@ -199,7 +199,7 @@ class PyTest_Loops:
         :param session: Pytest session object.
         :return: Returns True if the timeout has expired, False otherwise.
         """
-        return (session.config.option.min_loops <= count <= session.config.option.min_loops) and (
+        return count > session.config.option.max_loops or (count >= session.config.option.min_loops and
             time.time() - start_time > self._get_total_time(session)
         )
 
