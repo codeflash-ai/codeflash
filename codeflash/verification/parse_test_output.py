@@ -216,7 +216,7 @@ def parse_test_xml(
             # if test_module_path.endswith("__perfinstrumented"):
             #     test_module_path = test_module_path[: -len("__perfinstrumented")]
             test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
-            loop_id = "1"
+            loop_index = "1"
             if test_function is None:
                 with sentry_sdk.push_scope() as scope:
                     xml_file_contents = open(test_xml_file_path).read()
@@ -227,7 +227,7 @@ def parse_test_xml(
                 continue
             timed_out = False
             if test_config.test_framework == "pytest":
-                loop_id = testcase.name.split("[ ", 1)[1][:-2] if "[" in testcase.name else "1"
+                loop_index = testcase.name.split("[ ", 1)[1][:-2] if "[" in testcase.name else "1"
                 if len(testcase.result) > 1:
                     print(
                         f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!",
@@ -253,7 +253,7 @@ def parse_test_xml(
                 (
                     test_results.add(
                         FunctionTestInvocation(
-                            loop_index=loop_id,
+                            loop_index=loop_index,
                             id=InvocationId(
                                 test_module_path=test_module_path,
                                 test_class_name=test_class,
@@ -275,13 +275,13 @@ def parse_test_xml(
                 for match in matches:
                     test_results.add(
                         FunctionTestInvocation(
-                            loop_index=loop_id,
+                            loop_index=match[4],
                             id=InvocationId(
                                 test_module_path=match[0],
                                 test_class_name=None if match[1] == "" else match[1][:-1],
                                 test_function_name=match[2],
                                 function_getting_tested=match[3],
-                                iteration_id=match[4],
+                                iteration_id=match[5],
                             ),
                             file_name=file_name,
                             runtime=None,
@@ -336,7 +336,13 @@ def merge_test_results(
                 test_function_name = new_test_function_name
 
         grouped_xml_results[
-            result.id.test_module_path + ":" + (result.id.test_class_name or "") + ":" + test_function_name
+            result.id.test_module_path
+            + ":"
+            + (result.id.test_class_name or "")
+            + ":"
+            + test_function_name
+            + ":"
+            + result.loop_index
         ].add(result)
 
     for result in bin_test_results:
@@ -346,6 +352,8 @@ def merge_test_results(
             + (result.id.test_class_name or "")
             + ":"
             + result.id.test_function_name
+            + ":"
+            + result.loop_index
         ].add(result)
 
     for result_id in grouped_xml_results:
@@ -362,7 +370,7 @@ def merge_test_results(
             for result_bin in bin_results:
                 merged_test_results.add(
                     FunctionTestInvocation(
-                        loop_index=result_bin.loop_index,
+                        loop_index=xml_result.loop_index,
                         id=result_bin.id,
                         file_name=xml_result.file_name,
                         runtime=result_bin.runtime,
