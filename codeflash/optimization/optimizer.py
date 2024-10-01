@@ -1397,10 +1397,10 @@ class Optimizer:
                 test_files,
                 test_framework=self.args.test_framework,
                 cwd=self.args.project_root,
+                test_env=test_env,
                 pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                 pytest_cmd=self.test_cfg.pytest_cmd,
                 verbose=True,
-                test_env=test_env,
                 only_run_these_test_functions=test_functions,
                 testing_time=testing_time,
             )
@@ -1417,9 +1417,9 @@ class Optimizer:
             )
         unittest_results = parse_test_results(
             test_xml_path=result_file_path,
-            test_py_path=test_files,
+            test_py_paths=test_files,
             test_config=self.test_cfg,
-            test_type=test_types,
+            test_types=test_types,
             run_result=run_result,
             optimization_iteration=optimization_iteration,
         )
@@ -1462,7 +1462,6 @@ class Optimizer:
                         GeneratedTests(
                             generated_original_test_source=generated_test_source,
                             instrumented_test_source=instrumented_test_source,
-                            test_number=test_count,
                         ),
                     )
 

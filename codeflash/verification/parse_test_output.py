@@ -438,14 +438,14 @@ def parse_test_results(
     test_xml_path: str,
     test_py_paths: list[str],
     test_config: TestConfig,
-    test_type: TestType,
+    test_types: list[TestType],
     optimization_iteration: int,
     run_result: subprocess.CompletedProcess | None = None,
 ) -> TestResults:
     test_results_xml = parse_test_xml(
         test_xml_path,
         test_py_file_paths=test_py_paths,
-        test_type=test_type,
+        test_types=test_types,
         test_config=test_config,
         run_result=run_result,
     )

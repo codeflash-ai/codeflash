@@ -5,6 +5,7 @@ import shlex
 import subprocess
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
+from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME
 
 
 def run_tests(
@@ -16,6 +17,7 @@ def run_tests(
     pytest_cmd: str = "pytest",
     verbose: bool = False,
     only_run_these_test_functions: list[str | None] | None = None,
+    testing_time: int = TOTAL_LOOPING_TIME,
 ) -> tuple[str, subprocess.CompletedProcess]:
     assert test_framework in ["pytest", "unittest"]
     # TODO: Make this work for replay tests
@@ -40,7 +42,7 @@ def run_tests(
                 f"--junitxml={result_file_path}",
                 "-o",
                 "junit_logging=all",
-                f"--seconds={1}",
+                f"--seconds={testing_time}",
                 f"--min_loops={5}",
                 f"--max_loops={100_000}",
                 "--loops-scope=session",
