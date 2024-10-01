@@ -160,7 +160,7 @@ def parse_sqlite_test_results(
 def parse_test_xml(
     test_xml_file_path: str,
     test_py_file_paths: list[str],
-    test_type: TestType,
+    test_types: list[TestType],
     test_config: TestConfig,
     run_result: subprocess.CompletedProcess | None = None,
 ) -> TestResults:
