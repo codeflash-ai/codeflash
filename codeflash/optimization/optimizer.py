@@ -846,8 +846,6 @@ class Optimizer:
             test_env["PYTHONPATH"] += os.pathsep + self.args.project_root
 
         if test_framework == "pytest":
-            original_test_results_iter = TestResults()  # needed? results for generated? iter???
-            existing_test_results = TestResults()  # needed? results for existing?
             first_test_types = []
             first_test_functions = []
             for test_file in instrumented_unittests_created_for_function:
@@ -882,10 +880,8 @@ class Optimizer:
             # Handle these one by one? (unittest results should be all results for everything). Or can merge, append all
             # at once? This is only for existing tests suites, one by one
             timing = unittest_results.total_passed_runtime()
-            original_test_results_iter.merge(unittest_results)
-            existing_test_results.merge(unittest_results)
             logging.info(
-                f"Existing unit test results for original code: {original_test_results_iter.get_test_pass_fail_report()}",
+                f"Existing unit test results for original code: {unittest_results.get_test_pass_fail_report()}",
             )
             functions_to_remove = [
                 result.id.test_function_name
