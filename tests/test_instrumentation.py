@@ -995,6 +995,7 @@ class TestPigLatin(unittest.TestCase):
 
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
+        test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
 
         test_cfg = TestConfig(
@@ -1329,6 +1330,7 @@ class TestPigLatin(unittest.TestCase):
 
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
+        test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
 
         test_cfg = TestConfig(
@@ -1500,6 +1502,7 @@ class TestPigLatin(unittest.TestCase):
 
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
+        test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
 
         test_cfg = TestConfig(
