@@ -332,6 +332,9 @@ def test_sort():
             pytest_cmd="pytest",
             verbose=True,
             test_env=test_env,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            pytest_target_runtime_seconds=0.1,
         )
         test_results = parse_test_results(
             test_xml_path=result_file_path,
@@ -477,6 +480,9 @@ def test_sort_parametrized(input, expected_output):
             pytest_cmd="pytest",
             verbose=True,
             test_env=test_env,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            pytest_target_runtime_seconds=0.1,
         )
 
         test_results = parse_test_results(
@@ -641,6 +647,9 @@ def test_sort_parametrized_loop(input, expected_output):
             pytest_cmd="pytest",
             verbose=True,
             test_env=test_env,
+            pytest_max_loops=1,
+            pytest_min_loops=1,
+            pytest_target_runtime_seconds=0.1,
         )
 
         test_results = parse_test_results(
@@ -835,6 +844,9 @@ def test_sort():
             pytest_cmd="pytest",
             verbose=True,
             test_env=test_env,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            pytest_target_runtime_seconds=0.1,
         )
         test_results = parse_test_results(
             test_xml_path=result_file_path,
