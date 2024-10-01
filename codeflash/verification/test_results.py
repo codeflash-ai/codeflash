@@ -61,7 +61,7 @@ class InvocationId:
 
 @dataclass(frozen=True)
 class FunctionTestInvocation:
-    loop_id: str  # The loop id of the function invocation
+    loop_index: str  # The loop id of the function invocation
     id: InvocationId  # The fully qualified name of the function invocation (id)
     file_name: str  # The file where the test is defined
     did_pass: bool  # Whether the test this function invocation was part of, passed or failed
