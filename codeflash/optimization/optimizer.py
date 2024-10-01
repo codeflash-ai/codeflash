@@ -881,7 +881,7 @@ class Optimizer:
             )
             existing_test_results = TestResults(
                 test_results=[
-                    result for result in unittest_results if result.test_type != TestType.EXISTING_UNIT_TEST
+                    result for result in unittest_results if result.test_type == TestType.EXISTING_UNIT_TEST
                 ],
             )
             logging.info(
@@ -1123,8 +1123,8 @@ class Optimizer:
                     if test_in_file.test_file == instrumented_test_file.replace("__perfinstrumented", "")
                 ]
                 is_replay_test = (
-                                     first_test_type := relevant_tests_in_file[0].test_type
-                                 ) == TestType.REPLAY_TEST
+                    first_test_type := relevant_tests_in_file[0].test_type
+                ) == TestType.REPLAY_TEST
                 first_test_types.append(first_test_type)
                 first_test_functions.append(
                     relevant_tests_in_file[0].test_function if is_replay_test else None,
@@ -1133,42 +1133,63 @@ class Optimizer:
                     logging.warning(
                         f"Multiple tests found for the replay test {instrumented_test_file}. Should not happen",
                     )
-
-            instrumented_unittests_created_for_function |= generated_tests_paths
+            instrumented_unittests_created_for_function.update(generated_tests_paths)
             first_test_types.extend([TestType.GENERATED_REGRESSION] * len(generated_tests_paths))
             first_test_functions.extend([None] * len(generated_tests_paths))
-                candidate_existing_test_result = self.run_and_parse_tests(
-                    test_env,
-                    [instrumented_test_file],
-                    first_test_type,
-                    optimization_index,
-                    relevant_tests_in_file[0].test_function if is_replay_test else None,
+
+            candidate_results = self.run_and_parse_tests(
+                test_env,
+                list(instrumented_unittests_created_for_function),
+                first_test_types,
+                optimization_index,
+                first_test_functions,
+                TOTAL_LOOPING_TIME,
+            )
+            logging.info(
+                f"Overall test results for original code: {TestResults.report_to_string(candidate_results.get_test_pass_fail_report_by_type())}",
+            )
+
+            candidate_existing_test_results = TestResults(
+                test_results=[
+                    result for result in candidate_results if result.test_type == TestType.EXISTING_UNIT_TEST
+                ],
+            )
+            logging.info(
+                f"Existing test results for original code: {candidate_existing_test_results.get_test_pass_fail_report()}",
+            )
+            return_values_are_equal = compare_test_results(
+                {result for result in original_existing_test_results if result.loop_index == "1"},
+                {result for result in candidate_existing_test_results if result.loop_index == "1"},
+            )
+            for test_invocation in candidate_existing_test_results:
+                original_test_invocation = original_existing_test_results.get_by_id(
+                    test_invocation.id,
                 )
-                timing = candidate_existing_test_result.total_passed_runtime()
-                candidate_existing_test_results.merge(candidate_existing_test_result)
-                instrumented_test_timing.append(timing)
-                logging.info(
-                    f"Existing unit tests results for candidate: {candidate_existing_test_results.get_test_pass_fail_report()}",
-                )
-                return_values_are_equal = compare_test_results(
-                    original_existing_test_results,
-                    candidate_existing_test_results,
-                )
-                for test_invocation in candidate_existing_test_results:
-                    original_test_invocation = original_existing_test_results.get_by_id(
-                        test_invocation.id,
+                if (
+                    original_test_invocation is not None
+                    and not original_test_invocation.timed_out
+                    and (test_invocation.did_pass != original_test_invocation.did_pass)
+                ) or not return_values_are_equal:
+                    logging.info(
+                        "Test results did not match the test results of the original code.",
                     )
-                    if (
-                        original_test_invocation is not None
-                        and not original_test_invocation.timed_out
-                        and (test_invocation.did_pass != original_test_invocation.did_pass)
-                    ) or not return_values_are_equal:
-                        logging.info(
-                            "Test results did not match the test results of the original code.",
-                        )
-                        logging.info(
-                            f"Test {test_invocation.id} failed. Skipping this candidate.",
-                        )
+                    logging.info(
+                        f"Test {test_invocation.id} failed. Skipping this candidate.",
+                    )
+
+            generated_test_results = TestResults(
+                test_results=[
+                    result
+                    for result in candidate_results
+                    if result.test_type == TestType.GENERATED_REGRESSION
+                ],
+            )
+            logging.info(
+                f"Generated test results for original code: {generated_test_results.get_test_pass_fail_report()}",
+            )
+
+            total_timing = candidate_results.total_passed_runtime()
+            existing_test_timing = existing_test_results.total_passed_runtime()
 
             candidate_generated_test_results = None
             if run_generated_tests:
