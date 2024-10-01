@@ -47,22 +47,13 @@ class TestUnittestRunnerSorter(unittest.TestCase):
 
 def test_pytest_runner():
     code = """
-import os
 def sorter(arr):
     arr.sort()
     return arr
 
 def test_sort():
     arr = [5, 4, 3, 2, 1, 0]
-    print(os.environ["CODEFLASH_TEST_ITERATION_TEST"])
-    #loop_id = capsys.readouterr().out.rsplit("= Loop # ", 1)[1].split(" =", 1)[0]
-    #print("stdout, dudes")
-    #print(capsys.readouterr().out)
-    print("stdout out!")
     output = sorter(arr)
-    # with open("/tmp/codeflash_loop_count.txt", "r") as f:
-    #     loop_id = f.read()
-    #     print(f"LOOP ID IS {loop_id}")
     assert output == [0, 1, 2, 3, 4, 5]
 """
     cur_dir_path = os.path.dirname(os.path.abspath(__file__))
@@ -71,16 +62,19 @@ def test_sort():
         project_root_path=cur_dir_path,
         test_framework="pytest",
     )
-    test_env = os.environ.copy()
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         fp.write(code.encode("utf-8"))
         fp.flush()
+        test_env = os.environ.copy()
         result_file, process = run_tests(
             [fp.name],
             test_framework=config.test_framework,
             cwd=os.path.join(cur_dir_path),
-            pytest_timeout=1,
             test_env=test_env,
+            pytest_timeout=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            pytest_target_runtime_seconds=1,
         )
         results = parse_test_xml(
             test_xml_file_path=result_file,
