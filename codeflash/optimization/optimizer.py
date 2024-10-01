@@ -1390,7 +1390,7 @@ class Optimizer:
         test_types: list[TestType],
         optimization_iteration: int,
         test_functions: list[str | None] | None = None,
-        testing_time: int = TOTAL_LOOPING_TIME,
+        testing_time: float = TOTAL_LOOPING_TIME,
     ) -> TestResults:
         try:
             result_file_path, run_result = run_tests(
@@ -1402,7 +1402,7 @@ class Optimizer:
                 pytest_cmd=self.test_cfg.pytest_cmd,
                 verbose=True,
                 only_run_these_test_functions=test_functions,
-                testing_time=testing_time,
+                pytest_target_runtime_seconds=testing_time,
             )
         except subprocess.TimeoutExpired:
             logging.exception(
