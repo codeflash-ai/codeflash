@@ -166,7 +166,7 @@ class PyTest_Loops:
         """
         pattern = r"\[ \d+ \]"
         run_str = f"[ {count} ]"
-        os.environ["CODEFLASH_LOOP_ID"] = str(count)
+        os.environ["CODEFLASH_LOOP_INDEX"] = str(count)
         return re.sub(pattern, run_str, nodeid) if re.search(pattern, nodeid) else nodeid + run_str
 
     def _get_delay_time(self, session: Session) -> float:
@@ -199,8 +199,9 @@ class PyTest_Loops:
         :param session: Pytest session object.
         :return: Returns True if the timeout has expired, False otherwise.
         """
-        return count > session.config.option.max_loops or (count >= session.config.option.min_loops and
-            time.time() - start_time > self._get_total_time(session)
+        return count > session.config.option.max_loops or (
+            count >= session.config.option.min_loops
+            and time.time() - start_time > self._get_total_time(session)
         )
 
     def _print_loop_count(self, count: int) -> None:
