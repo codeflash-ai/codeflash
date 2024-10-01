@@ -454,7 +454,6 @@ class Optimizer:
                 run_results = self.run_optimized_candidate(
                     optimization_index=j,
                     instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
-                    overall_original_test_results=original_code_baseline.overall_test_results,
                     original_existing_test_results=original_code_baseline.existing_test_results,
                     original_generated_test_results=original_code_baseline.generated_test_results,
                     generated_tests_paths=generated_tests_paths,
@@ -865,7 +864,7 @@ class Optimizer:
                     logging.warning(
                         f"Multiple tests found for the replay test {test_file}. Should not happen",
                     )
-            instrumented_unittests_created_for_function |= generated_tests_paths
+            instrumented_unittests_created_for_function.update(generated_tests_paths)
             first_test_types.extend([TestType.GENERATED_REGRESSION] * len(generated_tests_paths))
             first_test_functions.extend([None] * len(generated_tests_paths))
 
@@ -1083,7 +1082,6 @@ class Optimizer:
         self,
         optimization_index: int,
         instrumented_unittests_created_for_function: set[str],
-        overall_original_test_results: TestResults,
         original_existing_test_results: TestResults,
         original_generated_test_results: TestResults,
         generated_tests_paths: list[str],
@@ -1107,30 +1105,42 @@ class Optimizer:
             test_env["PYTHONPATH"] = self.args.project_root
         else:
             test_env["PYTHONPATH"] += os.pathsep + self.args.project_root
+
         if test_framework == "pytest":
+            first_test_types = []
+            first_test_functions = []
             pathlib.Path(
                 get_run_tmp_file(f"test_return_values_{optimization_index}.bin"),
             ).unlink(missing_ok=True)
             pathlib.Path(
                 get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite"),
             ).unlink(missing_ok=True)
-            candidate_existing_test_results = TestResults()
-            instrumented_test_timing = []
+
             for instrumented_test_file in instrumented_unittests_created_for_function:
                 relevant_tests_in_file = [
                     test_in_file
                     for test_in_file in tests_in_file
                     if test_in_file.test_file == instrumented_test_file.replace("__perfinstrumented", "")
                 ]
-                is_replay_test = relevant_tests_in_file[0].test_type == TestType.REPLAY_TEST
+                is_replay_test = (
+                                     first_test_type := relevant_tests_in_file[0].test_type
+                                 ) == TestType.REPLAY_TEST
+                first_test_types.append(first_test_type)
+                first_test_functions.append(
+                    relevant_tests_in_file[0].test_function if is_replay_test else None,
+                )
                 if is_replay_test and len(relevant_tests_in_file) > 1:
                     logging.warning(
                         f"Multiple tests found for the replay test {instrumented_test_file}. Should not happen",
                     )
+
+            instrumented_unittests_created_for_function |= generated_tests_paths
+            first_test_types.extend([TestType.GENERATED_REGRESSION] * len(generated_tests_paths))
+            first_test_functions.extend([None] * len(generated_tests_paths))
                 candidate_existing_test_result = self.run_and_parse_tests(
                     test_env,
                     [instrumented_test_file],
-                    relevant_tests_in_file[0].test_type,
+                    first_test_type,
                     optimization_index,
                     relevant_tests_in_file[0].test_function if is_replay_test else None,
                 )
