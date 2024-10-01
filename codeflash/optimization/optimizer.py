@@ -826,8 +826,7 @@ class Optimizer:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
         original_runtime = None
-        best_runtime = None
-        original_gen_results = None
+        original_gen_results = TestResults()
         overall_original_test_results = None
         success = True
         # Keep the runtime in some acceptable range
@@ -1090,14 +1089,14 @@ class Optimizer:
         original_generated_test_results: TestResults,
         generated_tests_paths: list[str],
         best_runtime_until_now: int,
-        tests_in_file: list[TestsInFile] | None,
+        tests_in_file: list[TestsInFile],
         run_generated_tests: bool,
     ) -> Result[OptimizedCandidateResult, str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
         success = True
-        best_test_runtime = None
-        best_test_results = None
+        best_test_runtime: int
+        best_test_results = TestResults()
         equal_results = True
         generated_tests_elapsed_time = 0.0
 
@@ -1267,9 +1266,9 @@ class Optimizer:
                     candidate_existing_test_result = self.run_and_parse_tests(
                         test_env,
                         [instrumented_test_file],
-                        relevant_tests_in_file[0].test_type,
+                        [relevant_tests_in_file[0].test_type],
                         optimization_index,
-                        relevant_tests_in_file[0].test_function if is_replay_test else None,
+                        [relevant_tests_in_file[0].test_function] if is_replay_test else [None],
                     )
                     timing = candidate_existing_test_result.total_passed_runtime()
                     candidate_existing_test_results.merge(candidate_existing_test_result)
@@ -1305,12 +1304,12 @@ class Optimizer:
                         do_break = True
                         break
 
-                candidate_generated_test_results = None
+                candidate_generated_test_results = TestResults()
                 if run_generated_tests:
                     candidate_generated_test_results = self.run_and_parse_tests(
                         test_env,
                         generated_tests_paths,
-                        TestType.GENERATED_REGRESSION,
+                        [TestType.GENERATED_REGRESSION],
                         optimization_index,
                     )
 
