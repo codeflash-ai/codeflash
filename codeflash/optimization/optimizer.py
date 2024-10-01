@@ -881,7 +881,7 @@ class Optimizer:
             )
             existing_test_results = TestResults(
                 test_results=[
-                    result for result in unittest_results if result.test_type != TestType.EXISTING_UNIT_TEST
+                    result for result in unittest_results if result.test_type == TestType.EXISTING_UNIT_TEST
                 ],
             )
             logging.info(
@@ -1123,8 +1123,8 @@ class Optimizer:
                     if test_in_file.test_file == instrumented_test_file.replace("__perfinstrumented", "")
                 ]
                 is_replay_test = (
-                                     first_test_type := relevant_tests_in_file[0].test_type
-                                 ) == TestType.REPLAY_TEST
+                    first_test_type := relevant_tests_in_file[0].test_type
+                ) == TestType.REPLAY_TEST
                 first_test_types.append(first_test_type)
                 first_test_functions.append(
                     relevant_tests_in_file[0].test_function if is_replay_test else None,
@@ -1149,28 +1149,26 @@ class Optimizer:
                 f"Overall test results for original code: {TestResults.report_to_string(candidate_results.get_test_pass_fail_report_by_type())}",
             )
 
-            existing_test_results = TestResults(
+            candidate_existing_test_results = TestResults(
                 test_results=[
-                    result for result in candidate_results if result.test_type != TestType.EXISTING_UNIT_TEST
+                    result for result in candidate_results if result.test_type == TestType.EXISTING_UNIT_TEST
                 ],
             )
             logging.info(
-                f"Existing test results for original code: {existing_test_results.get_test_pass_fail_report()}",
+                f"Existing test results for original code: {candidate_existing_test_results.get_test_pass_fail_report()}",
             )
-
-
             return_values_are_equal = compare_test_results(
-                original_existing_test_results,
-                candidate_existing_test_results,
+                {result for result in original_existing_test_results if result.loop_index == "1"},
+                {result for result in candidate_existing_test_results if result.loop_index == "1"},
             )
             for test_invocation in candidate_existing_test_results:
                 original_test_invocation = original_existing_test_results.get_by_id(
                     test_invocation.id,
                 )
                 if (
-                        original_test_invocation is not None
-                        and not original_test_invocation.timed_out
-                        and (test_invocation.did_pass != original_test_invocation.did_pass)
+                    original_test_invocation is not None
+                    and not original_test_invocation.timed_out
+                    and (test_invocation.did_pass != original_test_invocation.did_pass)
                 ) or not return_values_are_equal:
                     logging.info(
                         "Test results did not match the test results of the original code.",
@@ -1179,10 +1177,11 @@ class Optimizer:
                         f"Test {test_invocation.id} failed. Skipping this candidate.",
                     )
 
-
             generated_test_results = TestResults(
                 test_results=[
-                    result for result in candidate_results if result.test_type == TestType.GENERATED_REGRESSION
+                    result
+                    for result in candidate_results
+                    if result.test_type == TestType.GENERATED_REGRESSION
                 ],
             )
             logging.info(
