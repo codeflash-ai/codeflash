@@ -37,28 +37,28 @@ def pytest_addoption(parser: Parser) -> None:
     """Add command line options."""
     pytest_loops = parser.getgroup("loops")
     pytest_loops.addoption(
-        "--delay",
+        "--codeflash_delay",
         action="store",
         default=0,
         type=float,
         help="The amount of time to wait between each test loop.",
     )
     pytest_loops.addoption(
-        "--hours",
+        "--codeflash_hours",
         action="store",
         default=0,
         type=float,
         help="The number of hours to loop the tests for.",
     )
     pytest_loops.addoption(
-        "--minutes",
+        "--codeflash_minutes",
         action="store",
         default=0,
         type=float,
         help="The number of minutes to loop the tests for.",
     )
     pytest_loops.addoption(
-        "--seconds",
+        "--codeflash_seconds",
         action="store",
         default=0,
         type=float,
@@ -66,7 +66,7 @@ def pytest_addoption(parser: Parser) -> None:
     )
 
     pytest_loops.addoption(
-        "--loops",
+        "--codeflash_loops",
         action="store",
         default=1,
         type=int,
@@ -74,7 +74,7 @@ def pytest_addoption(parser: Parser) -> None:
     )
 
     pytest_loops.addoption(
-        "--min_loops",
+        "--codeflash_min_loops",
         action="store",
         default=2,
         type=int,
@@ -82,7 +82,7 @@ def pytest_addoption(parser: Parser) -> None:
     )
 
     pytest_loops.addoption(
-        "--max_loops",
+        "--codeflash_max_loops",
         action="store",
         default=100_000,
         type=int,
@@ -90,7 +90,7 @@ def pytest_addoption(parser: Parser) -> None:
     )
 
     pytest_loops.addoption(
-        "--loops-scope",
+        "--codeflash_loops_scope",
         action="store",
         default="function",
         type=str,
@@ -175,7 +175,7 @@ class PyTest_Loops:
         :param session: Pytest session object.
         :return: Returns the delay time for each test loop.
         """
-        return session.config.option.delay
+        return session.config.option.codeflash_delay
 
     def _get_total_time(self, session: Session) -> float:
         """Take all the user available time options, add them and return it in seconds.
@@ -183,9 +183,9 @@ class PyTest_Loops:
         :param session: Pytest session object.
         :return: Returns total amount of time in seconds.
         """
-        hours_in_seconds = session.config.option.hours * SECONDS_IN_HOUR
-        minutes_in_seconds = session.config.option.minutes * SECONDS_IN_MINUTE
-        seconds = session.config.option.seconds
+        hours_in_seconds = session.config.option.codeflash_hours * SECONDS_IN_HOUR
+        minutes_in_seconds = session.config.option.codeflash_minutes * SECONDS_IN_MINUTE
+        seconds = session.config.option.codeflash_seconds
         total_time = hours_in_seconds + minutes_in_seconds + seconds
         if total_time < SHORTEST_AMOUNT_OF_TIME:
             raise InvalidTimeParameterError(
@@ -199,8 +199,8 @@ class PyTest_Loops:
         :param session: Pytest session object.
         :return: Returns True if the timeout has expired, False otherwise.
         """
-        return count > session.config.option.max_loops or (
-            count >= session.config.option.min_loops
+        return count > session.config.option.codeflash_max_loops or (
+            count >= session.config.option.codeflash_min_loops
             and time.time() - start_time > self._get_total_time(session)
         )
 
@@ -223,7 +223,7 @@ class PyTest_Loops:
         :return: request.param.
         """
         marker = request.node.get_closest_marker("loops")
-        count = marker and marker.args[0] or request.config.option.loops
+        count = marker and marker.args[0] or request.config.option.codeflash_loops
         if count > 1:
             try:
                 return request.param
@@ -244,7 +244,7 @@ class PyTest_Loops:
         :param metafunc: pytest metafunction
         :return: None.
         """
-        count = metafunc.config.option.loops
+        count = metafunc.config.option.codeflash_loops
         m = metafunc.definition.get_closest_marker("loops")
 
         if m is not None:
@@ -255,7 +255,7 @@ class PyTest_Loops:
             def make_progress_id(i: int, n: int = count) -> str:
                 return f"{n}/{i+1}"
 
-            scope = metafunc.config.option.loops_scope
+            scope = metafunc.config.option.codeflash_loops_scope
             metafunc.parametrize(
                 "__pytest_loop_step_number",
                 range(count),

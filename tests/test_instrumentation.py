@@ -332,6 +332,9 @@ def test_sort():
             pytest_cmd="pytest",
             verbose=True,
             test_env=test_env,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            pytest_target_runtime_seconds=0.1,
         )
         test_results = parse_test_results(
             test_xml_path=result_file_path,
@@ -477,6 +480,9 @@ def test_sort_parametrized(input, expected_output):
             pytest_cmd="pytest",
             verbose=True,
             test_env=test_env,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            pytest_target_runtime_seconds=0.1,
         )
 
         test_results = parse_test_results(
@@ -641,6 +647,9 @@ def test_sort_parametrized_loop(input, expected_output):
             pytest_cmd="pytest",
             verbose=True,
             test_env=test_env,
+            pytest_max_loops=1,
+            pytest_min_loops=1,
+            pytest_target_runtime_seconds=0.1,
         )
 
         test_results = parse_test_results(
@@ -835,6 +844,9 @@ def test_sort():
             pytest_cmd="pytest",
             verbose=True,
             test_env=test_env,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            pytest_target_runtime_seconds=0.1,
         )
         test_results = parse_test_results(
             test_xml_path=result_file_path,
@@ -995,6 +1007,7 @@ class TestPigLatin(unittest.TestCase):
 
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
+        test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
 
         test_cfg = TestConfig(
@@ -1329,6 +1342,7 @@ class TestPigLatin(unittest.TestCase):
 
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
+        test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
 
         test_cfg = TestConfig(
@@ -1500,6 +1514,7 @@ class TestPigLatin(unittest.TestCase):
 
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
+        test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
 
         test_cfg = TestConfig(

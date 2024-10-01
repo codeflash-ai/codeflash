@@ -56,7 +56,7 @@ def parse_test_return_values_bin(
                 return test_results
             len_next = int.from_bytes(len_next, byteorder="big")
             try:
-                test_pickle = pickle.loads(file.read(len_next))
+                test_pickle_bin = file.read(len_next)
             except Exception as e:
                 logging.exception(f"Failed to load pickle file. Exception: {e}")
                 return test_results
@@ -79,6 +79,8 @@ def parse_test_return_values_bin(
                     test_config.project_root_path,
                 )
             )
+            # TODO : Don't write the pickled object to disk when loop_index is not 1
+            test_pickle = pickle.loads(test_pickle_bin) if loop_index == "1" else None
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
                     loop_index=loop_index,
@@ -127,9 +129,10 @@ def parse_sqlite_test_results(
                     test_config.project_root_path,
                 )
             )
+            loop_index = val[4]
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
-                    loop_index=val[4],
+                    loop_index=loop_index,
                     id=InvocationId(
                         test_module_path=val[0],
                         test_class_name=val[1],
@@ -142,7 +145,8 @@ def parse_sqlite_test_results(
                     runtime=val[6],
                     test_framework=test_config.test_framework,
                     test_type=test_type,
-                    return_value=pickle.loads(val[7]),
+                    # TODO : Don't write the pickled object to disk when loop_index is not 1
+                    return_value=pickle.loads(val[7]) if loop_index == "1" else None,
                     timed_out=False,
                 ),
             )

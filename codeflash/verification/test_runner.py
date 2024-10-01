@@ -17,7 +17,9 @@ def run_tests(
     pytest_cmd: str = "pytest",
     verbose: bool = False,
     only_run_these_test_functions: list[str | None] | None = None,
-    testing_time: int = TOTAL_LOOPING_TIME,
+    pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME,
+    pytest_min_loops: int = 5,
+    pytest_max_loops: int = 100_000,
 ) -> tuple[str, subprocess.CompletedProcess]:
     assert test_framework in ["pytest", "unittest"]
     # TODO: Make this work for replay tests
@@ -42,10 +44,10 @@ def run_tests(
                 f"--junitxml={result_file_path}",
                 "-o",
                 "junit_logging=all",
-                f"--seconds={testing_time}",
-                f"--min_loops={5}",
-                f"--max_loops={100_000}",
-                "--loops-scope=session",
+                f"--codeflash_seconds={pytest_target_runtime_seconds}",
+                f"--codeflash_min_loops={pytest_min_loops}",
+                f"--codeflash_max_loops={pytest_max_loops}",
+                "--codeflash_loops_scope=session",
             ],
             capture_output=True,
             cwd=cwd,
