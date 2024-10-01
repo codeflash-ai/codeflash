@@ -943,7 +943,7 @@ class Optimizer:
                     OriginalCodeBaseline(
                         generated_test_results=generated_test_results,
                         existing_test_results=existing_test_results,
-                        overall_test_results=overall_original_test_results,
+                        overall_test_results=unittest_results,
                         runtime=total_timing,
                     ),
                 ),
@@ -1164,7 +1164,7 @@ class Optimizer:
             if run_generated_tests:
                 candidate_generated_test_results = self.run_and_parse_tests(
                     test_env,
-                    [generated_tests_path],
+                    generated_tests_paths,
                     TestType.GENERATED_REGRESSION,
                     optimization_index,
                 )
