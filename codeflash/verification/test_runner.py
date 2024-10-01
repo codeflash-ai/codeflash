@@ -29,7 +29,6 @@ def run_tests(
 
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
-        pytest_test_env["CODEFLASH_LOOP_ID"] = "1"
 
         results = subprocess.run(
             pytest_cmd_list
@@ -42,8 +41,8 @@ def run_tests(
                 "-o",
                 "junit_logging=all",
                 f"--seconds={1}",
-                f"--loops_min={5}",
-                f"--loops_max={100_000}",
+                f"--min_loops={5}",
+                f"--max_loops={100_000}",
                 "--loops-scope=session",
             ],
             capture_output=True,
