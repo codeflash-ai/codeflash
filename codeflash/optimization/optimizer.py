@@ -822,10 +822,10 @@ class Optimizer:
         instrumented_unittests_created_for_function: set[str],
         generated_tests_paths: list[str],
         tests_in_file: list[TestsInFile],
-    ) -> Result[OriginalCodeBaseline, str]:
+    ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
-        original_runtime = None
+        original_runtime: int | None = None
         original_gen_results = TestResults()
         overall_original_test_results = None
         success = True
@@ -932,23 +932,23 @@ class Optimizer:
                 )
                 success = False
             if not success:
-                return Failure("Failed to establish a baseline for the original code."), []
+                return Failure("Failed to establish a baseline for the original code.")
 
             loop_count = max([int(result.loop_index) for result in unittest_results.test_results])
             logging.info(
                 f"Original code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: {humanize_runtime(loop_count)}",
             )
             logging.debug(f"Original code test runtime: {total_timing}")
-            return (
-                Success(
+            return Success(
+                (
                     OriginalCodeBaseline(
                         generated_test_results=generated_test_results,
                         existing_test_results=existing_test_results,
                         overall_test_results=unittest_results,
                         runtime=total_timing,
                     ),
+                    functions_to_remove,
                 ),
-                functions_to_remove,
             )
 
         times_run = 0
@@ -1063,21 +1063,22 @@ class Optimizer:
             )
             success = False
         if not success:
-            return Failure("Failed to establish a baseline for the original code."), []
-        logging.info(
-            f"Original code runtime measured over {times_run} run{'s' if times_run > 1 else ''}: {humanize_runtime(original_runtime)}",
-        )
+            return Failure("Failed to establish a baseline for the original code.")
+        if original_runtime:
+            logging.info(
+                f"Original code runtime measured over {times_run} run{'s' if times_run > 1 else ''}: {humanize_runtime(original_runtime)}",
+            )
         logging.debug(f"Original code test runtimes: {test_times_list}")
-        return (
-            Success(
+        return Success(
+            (
                 OriginalCodeBaseline(
                     generated_test_results=original_gen_results,
                     existing_test_results=existing_test_results,
                     overall_test_results=overall_original_test_results,
                     runtime=best_runtime,
                 ),
+                functions_to_remove,
             ),
-            functions_to_remove,
         )
 
     def run_optimized_candidate(
