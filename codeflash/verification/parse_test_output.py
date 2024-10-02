@@ -35,7 +35,7 @@ def parse_test_return_values_bin(
     file_location: str,
     test_framework: str,
     test_type: TestType,
-    test_file_paths: list[str],
+    test_file_path: str,
     test_config: TestConfig,
 ) -> TestResults:
     test_results = TestResults()
@@ -71,14 +71,6 @@ def parse_test_return_values_bin(
             #  The problem is that the unpickled object might be huge. This could cause codeflash to crash
             #  due to out-of-memory. Plus as we fill memory, the benchmarking results will get skewed.
             invocation_id_object = InvocationId.from_str_id(encoded_test_name, invocation_id)
-            test_file_path = (
-                test_file_paths[0]
-                if len(test_file_paths) == 1
-                else file_path_from_module_name(
-                    invocation_id_object.test_module_path,
-                    test_config.project_root_path,
-                )
-            )
             # TODO : Don't write the pickled object to disk when loop_index is not 1
             test_pickle = pickle.loads(test_pickle_bin) if loop_index == "1" else None
             test_results.add(
@@ -101,7 +93,7 @@ def parse_test_return_values_bin(
 
 def parse_sqlite_test_results(
     sqlite_file_path: str,
-    test_py_file_paths: list[str],
+    test_py_file_path: str,
     test_type: TestType,
     test_config: TestConfig,
 ) -> TestResults:
@@ -121,14 +113,6 @@ def parse_sqlite_test_results(
     for val in data:
         try:
             test_module_path = val[0]
-            test_file_path: str = (
-                test_py_file_paths[0]
-                if len(test_py_file_paths) == 1
-                else file_path_from_module_name(
-                    test_module_path,
-                    test_config.project_root_path,
-                )
-            )
             loop_index = val[4]
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
@@ -140,7 +124,7 @@ def parse_sqlite_test_results(
                         function_getting_tested=val[3],
                         iteration_id=val[5],
                     ),
-                    file_name=test_file_path,
+                    file_name=test_py_file_path,
                     did_pass=True,
                     runtime=val[6],
                     test_framework=test_config.test_framework,
@@ -455,15 +439,18 @@ def parse_test_results(
         run_result=run_result,
     )
     # TODO: Merge these different conditions into one single unified sqlite parser
+    test_results_bin_file = TestResults()
     for test_py_path, test_type in list(zip(test_py_paths, test_types)):
         if test_type == TestType.GENERATED_REGRESSION:
             try:
-                test_results_bin_file = parse_test_return_values_bin(
-                    get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
-                    test_framework=test_config.test_framework,
-                    test_type=TestType.GENERATED_REGRESSION,
-                    test_file_paths=test_py_paths,
-                    test_config=test_config,
+                test_results_bin_file.test_results.extend(
+                    parse_test_return_values_bin(
+                        get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
+                        test_framework=test_config.test_framework,
+                        test_type=TestType.GENERATED_REGRESSION,
+                        test_file_path=test_py_path,
+                        test_config=test_config,
+                    ).test_results,
                 )
             except AttributeError as e:
                 logging.exception(e)
@@ -473,15 +460,18 @@ def parse_test_results(
                 ).unlink(missing_ok=True)
         elif test_type in [TestType.EXISTING_UNIT_TEST, TestType.REPLAY_TEST]:
             try:
-                test_results_bin_file = parse_sqlite_test_results(
-                    sqlite_file_path=get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite"),
-                    test_py_file_paths=test_py_paths,
-                    test_type=test_type,
-                    test_config=test_config,
+                test_results_bin_file.extend(
+                    parse_sqlite_test_results(
+                        sqlite_file_path=get_run_tmp_file(
+                            f"test_return_values_{optimization_iteration}.sqlite",
+                        ),
+                        test_py_file_path=test_py_path,
+                        test_type=test_type,
+                        test_config=test_config,
+                    ).test_results,
                 )
             except AttributeError as e:
                 logging.exception(e)
-                test_results_bin_file = TestResults()
         else:
             raise ValueError(f"Invalid test type: {test_type}")
 
