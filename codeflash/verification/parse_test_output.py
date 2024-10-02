@@ -33,15 +33,15 @@ if TYPE_CHECKING:
 
 def parse_test_return_values_bin(
     file_location: str,
-    test_framework: str,
-    test_type: TestType,
-    test_file_path: str,
+    test_types: list[TestType],
+    test_file_paths: list[str],
     test_config: TestConfig,
 ) -> TestResults:
     test_results = TestResults()
     if not os.path.exists(file_location):
         logging.warning(f"No test results for {file_location} found.")
         return test_results
+
     with open(file_location, "rb") as file:
         while file:
             len_next = file.read(4)
@@ -67,12 +67,12 @@ def parse_test_return_values_bin(
             len_next = int.from_bytes(len_next, byteorder="big")
             invocation_id = file.read(len_next).decode("ascii")
 
-            # TODO : Remove the fully loaded unpickled object from the test_results.
-            #  replace it with a link to the pickle object. Load it only on demand.
-            #  The problem is that the unpickled object might be huge. This could cause codeflash to crash
-            #  due to out-of-memory. Plus as we fill memory, the benchmarking results will get skewed.
             invocation_id_object = InvocationId.from_str_id(encoded_test_name, invocation_id)
-            # TODO : Don't write the pickled object to disk when loop_index is not 1
+            test_file_path = file_path_from_module_name(
+                invocation_id_object.test_module_path,
+                test_config.project_root_path,
+            )
+            test_type = test_types[test_file_paths.index(test_file_path)]
             test_pickle = pickle.loads(test_pickle_bin) if loop_index == "1" else None
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
@@ -81,21 +81,19 @@ def parse_test_return_values_bin(
                     file_name=test_file_path,
                     did_pass=True,
                     runtime=duration,
-                    test_framework=test_framework,
+                    test_framework=test_config.test_framework,
                     test_type=test_type,
                     return_value=test_pickle,
                     timed_out=False,
                 ),
             )
-            # Hardcoding the test result to True because the test did execute and we are only interested in the return values,
-            # the did_pass comes from the xml results file
     return test_results
 
 
 def parse_sqlite_test_results(
     sqlite_file_path: str,
-    test_py_file_path: str,
-    test_type: TestType,
+    test_file_paths: list[str],
+    test_types: list[TestType],
     test_config: TestConfig,
 ) -> TestResults:
     test_results = TestResults()
@@ -114,6 +112,8 @@ def parse_sqlite_test_results(
     for val in data:
         try:
             test_module_path = val[0]
+            test_file_path = file_path_from_module_name(test_module_path, test_config.project_root_path)
+            test_type = test_types[test_file_paths.index(test_file_path)]
             loop_index = val[4]
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
@@ -125,12 +125,11 @@ def parse_sqlite_test_results(
                         function_getting_tested=val[3],
                         iteration_id=val[5],
                     ),
-                    file_name=test_py_file_path,
+                    file_name=test_file_path,
                     did_pass=True,
                     runtime=val[6],
                     test_framework=test_config.test_framework,
                     test_type=test_type,
-                    # TODO : Don't write the pickled object to disk when loop_index is not 1
                     return_value=pickle.loads(val[7]) if loop_index == "1" else None,
                     timed_out=False,
                 ),
@@ -191,20 +190,14 @@ def parse_test_xml(
                         f"Test log - STDOUT : {run_result.stdout.decode()} \n STDERR : {run_result.stderr.decode()}",
                     )
                 return test_results
-            # file_name = test_py_file_path
+
             result = testcase.is_passed  # TODO: See for the cases of ERROR and SKIPPED
-            # test_module_path = module_name_from_file_path(file_name, test_config.project_root_path)
             test_class = None
             if class_name is not None:
                 for test_module_path in test_module_paths:
                     if class_name.startswith(test_module_path):
-                        test_class = class_name[
-                            len(test_module_path) + 1 :
-                        ]  # +1 for the dot, gets Unittest class name
-            # test_name = (test_class + "." if test_class else "") + testcase.name
+                        test_class = class_name[len(test_module_path) + 1 :]
 
-            # if test_module_path.endswith("__perfinstrumented"):
-            #     test_module_path = test_module_path[: -len("__perfinstrumented")]
             test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
             loop_index = "1"
             if test_function is None:
@@ -439,42 +432,33 @@ def parse_test_results(
         test_config=test_config,
         run_result=run_result,
     )
-    # TODO: Merge these different conditions into one single unified sqlite parser
-    test_results_bin_file = TestResults()
-    for test_py_path, test_type in list(zip(test_py_paths, test_types)):
-        if test_type == TestType.GENERATED_REGRESSION:
-            try:
-                test_results_bin_file.test_results.extend(
-                    parse_test_return_values_bin(
-                        get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
-                        test_framework=test_config.test_framework,
-                        test_type=TestType.GENERATED_REGRESSION,
-                        test_file_path=test_py_path,
-                        test_config=test_config,
-                    ).test_results,
-                )
-            except AttributeError as e:
-                logging.exception(e)
-                test_results_bin_file = TestResults()
-                pathlib.Path(
-                    get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
-                ).unlink(missing_ok=True)
-        elif test_type in [TestType.EXISTING_UNIT_TEST, TestType.REPLAY_TEST]:
-            try:
-                test_results_bin_file.extend(
-                    parse_sqlite_test_results(
-                        sqlite_file_path=get_run_tmp_file(
-                            f"test_return_values_{optimization_iteration}.sqlite",
-                        ),
-                        test_py_file_path=test_py_path,
-                        test_type=test_type,
-                        test_config=test_config,
-                    ).test_results,
-                )
-            except AttributeError as e:
-                logging.exception(e)
-        else:
-            raise ValueError(f"Invalid test type: {test_type}")
+
+    try:
+        test_results_bin_file = parse_test_return_values_bin(
+            get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
+            test_types=test_types,
+            test_file_paths=test_py_paths,
+            test_config=test_config,
+        )
+    except AttributeError as e:
+        logging.exception(e)
+        test_results_bin_file = TestResults()
+        pathlib.Path(
+            get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
+        ).unlink(missing_ok=True)
+
+    try:
+        test_results_bin_file = parse_sqlite_test_results(
+            sqlite_file_path=get_run_tmp_file(
+                f"test_return_values_{optimization_iteration}.sqlite",
+            ),
+            test_file_paths=test_py_paths,
+            test_types=test_types,
+            test_config=test_config,
+        )
+    except AttributeError as e:
+        logging.exception(e)
+        test_results_bin_file = TestResults()
 
     # We Probably want to remove deleting this file here later, because we want to preserve the reference to the
     # pickle blob in the test_results
