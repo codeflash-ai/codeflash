@@ -192,6 +192,7 @@ def parse_test_xml(
                 if class_name.endswith("__perfinstrumented")
                 else class_name
             )
+            test_type = test_types[test_module_paths.index(test_module_path)]
             file_name = file_path_from_module_name(test_module_path, test_config.project_root_path)
             if (
                 file_name == f"unittest{os.sep}loader.py"
@@ -455,34 +456,35 @@ def parse_test_results(
         run_result=run_result,
     )
     # TODO: Merge these different conditions into one single unified sqlite parser
-    if test_type == TestType.GENERATED_REGRESSION:
-        try:
-            test_results_bin_file = parse_test_return_values_bin(
-                get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
-                test_framework=test_config.test_framework,
-                test_type=TestType.GENERATED_REGRESSION,
-                test_file_paths=test_py_paths,
-                test_config=test_config,
-            )
-        except AttributeError as e:
-            logging.exception(e)
-            test_results_bin_file = TestResults()
-            pathlib.Path(
-                get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
-            ).unlink(missing_ok=True)
-    elif test_type in [TestType.EXISTING_UNIT_TEST, TestType.REPLAY_TEST]:
-        try:
-            test_results_bin_file = parse_sqlite_test_results(
-                sqlite_file_path=get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite"),
-                test_py_file_paths=test_py_paths,
-                test_type=test_type,
-                test_config=test_config,
-            )
-        except AttributeError as e:
-            logging.exception(e)
-            test_results_bin_file = TestResults()
-    else:
-        raise ValueError(f"Invalid test type: {test_type}")
+    for test_py_path, test_type in list(zip(test_py_paths, test_types)):
+        if test_type == TestType.GENERATED_REGRESSION:
+            try:
+                test_results_bin_file = parse_test_return_values_bin(
+                    get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
+                    test_framework=test_config.test_framework,
+                    test_type=TestType.GENERATED_REGRESSION,
+                    test_file_paths=test_py_paths,
+                    test_config=test_config,
+                )
+            except AttributeError as e:
+                logging.exception(e)
+                test_results_bin_file = TestResults()
+                pathlib.Path(
+                    get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
+                ).unlink(missing_ok=True)
+        elif test_type in [TestType.EXISTING_UNIT_TEST, TestType.REPLAY_TEST]:
+            try:
+                test_results_bin_file = parse_sqlite_test_results(
+                    sqlite_file_path=get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite"),
+                    test_py_file_paths=test_py_paths,
+                    test_type=test_type,
+                    test_config=test_config,
+                )
+            except AttributeError as e:
+                logging.exception(e)
+                test_results_bin_file = TestResults()
+        else:
+            raise ValueError(f"Invalid test type: {test_type}")
 
     # We Probably want to remove deleting this file here later, because we want to preserve the reference to the
     # pickle blob in the test_results
