@@ -62,10 +62,11 @@ def parse_test_return_values_bin(
                 return test_results
             len_next = file.read(4)
             len_next = int.from_bytes(len_next, byteorder="big")
-            invocation_id = file.read(len_next).decode("ascii")
+            loop_index = file.read(len_next).decode("ascii")
             len_next = file.read(4)
             len_next = int.from_bytes(len_next, byteorder="big")
-            loop_index = file.read(len_next).decode("ascii")
+            invocation_id = file.read(len_next).decode("ascii")
+
             # TODO : Remove the fully loaded unpickled object from the test_results.
             #  replace it with a link to the pickle object. Load it only on demand.
             #  The problem is that the unpickled object might be huge. This could cause codeflash to crash

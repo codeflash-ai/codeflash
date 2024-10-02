@@ -259,7 +259,7 @@ class Optimizer:
                 f.write(generated_test.instrumented_test_source)
             self.test_files_created.add(generated_tests_path)
             logging.info(
-                f"Generated test {i + 1}/{count_tests}:\n{generated_test.instrumented_test_source}",
+                f"Generated test {i + 1}/{count_tests}:\n{generated_test.generated_original_test_source}",
             )
 
         baseline_result, test_functions_to_remove = self.establish_original_code_baseline(
