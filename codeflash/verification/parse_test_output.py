@@ -163,9 +163,10 @@ def parse_test_xml(
     test_module_paths = []
     for file_path in test_py_file_paths:
         assert os.path.exists(file_path), f"File {file_path} doesn't exist."
-        test_module_paths.append(
-            module_name_from_file_path(file_path, test_config.project_root_path),
-        )
+        test_module_path = module_name_from_file_path(file_path, test_config.project_root_path)
+        if test_module_path.endswith("__perfinstrumented"):
+            test_module_path = test_module_path[: -len("__perfinstrumented")]
+        test_module_paths.append(test_module_path)
 
     for suite in xml:
         for testcase in suite:
