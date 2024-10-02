@@ -202,12 +202,9 @@ def parse_test_xml(
             test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
             loop_index = "1"
             if test_function is None:
-                with sentry_sdk.push_scope() as scope:
-                    xml_file_contents = open(test_xml_file_path).read()
-                    scope.set_extra("file", xml_file_contents)
-                    sentry_sdk.capture_message(
-                        f"testcase.name is None in parse_test_xml for testcase {testcase!r} in file {xml_file_contents}",
-                    )
+                logging.warning(
+                    f"testcase.name is None in parse_test_xml for testcase {testcase!r} in file {test_xml_file_path}"
+                )
                 continue
             timed_out = False
             if test_config.test_framework == "pytest":
