@@ -448,20 +448,19 @@ def parse_test_results(
         ).unlink(missing_ok=True)
 
     try:
-        test_results_bin_file = parse_sqlite_test_results(
-            sqlite_file_path=get_run_tmp_file(
-                f"test_return_values_{optimization_iteration}.sqlite",
+        test_results_bin_file.merge(
+            parse_sqlite_test_results(
+                sqlite_file_path=get_run_tmp_file(
+                    f"test_return_values_{optimization_iteration}.sqlite",
+                ),
+                test_file_paths=test_py_paths,
+                test_types=test_types,
+                test_config=test_config,
             ),
-            test_file_paths=test_py_paths,
-            test_types=test_types,
-            test_config=test_config,
         )
     except AttributeError as e:
         logging.exception(e)
-        test_results_bin_file = TestResults()
 
-    # We Probably want to remove deleting this file here later, because we want to preserve the reference to the
-    # pickle blob in the test_results
     pathlib.Path(
         get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
     ).unlink(
