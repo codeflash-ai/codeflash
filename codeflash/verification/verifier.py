@@ -27,7 +27,6 @@ def generate_tests(
 ) -> tuple[str, str] | None:
     # TODO: Sometimes this recreates the original Class definition. This overrides and messes up the original
     #  class import. Remove the recreation of the class definition
-    logger.info(f"Generating new tests for function {function_to_optimize.function_name} ...")
     if use_cached_tests:
         import importlib
 

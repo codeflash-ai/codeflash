@@ -207,7 +207,7 @@ class AiServiceClient:
 
         if response.status_code == 200:
             response_json = response.json()
-            logging.debug(f"Generated tests for function {function_to_optimize.function_name}")
+            logger.debug(f"Generated tests for function {function_to_optimize.function_name}")
             return response_json["generated_tests"], response_json["instrumented_tests"]
         try:
             error = response.json()["error"]

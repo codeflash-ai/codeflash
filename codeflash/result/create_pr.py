@@ -58,7 +58,7 @@ def check_create_pr(
             if not is_zero_diff(original_code[p], new_code[p])
         }
         if not build_file_changes:
-            logging.info("No changes to suggest to PR.")
+            logger.info("No changes to suggest to PR.")
             return
         response = cfapi.suggest_changes(
             owner=owner,
