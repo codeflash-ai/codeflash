@@ -167,21 +167,7 @@ def parse_test_xml(
     for suite in xml:
         for testcase in suite:
             class_name = testcase.classname
-            test_module_path = (
-                class_name[: -len("__perfinstrumented")]
-                if class_name.endswith("__perfinstrumented")
-                else class_name
-            )
-            test_file_path = file_path_from_module_name(test_module_path, test_config.project_root_path)
-            test_type = next(
-                (
-                    test_file.test_type
-                    for test_file in test_files.test_files
-                    if test_file.instrumented_file_path == test_file_path
-                ),
-                None,
-            )
-            file_name = file_path_from_module_name(test_module_path, test_config.project_root_path)
+            file_name = suite._elem.attrib.get("file")
             if (
                 file_name == f"unittest{os.sep}loader.py"
                 and class_name == "unittest.loader._FailedTest"
@@ -196,8 +182,19 @@ def parse_test_xml(
                     )
                 return test_results
 
+            test_module_path = testcase.classname
+            test_file_path = file_path_from_module_name(test_module_path, test_config.project_root_path)
+            assert os.path.exists(test_file_path), f"File {file_name} doesn't exist."
+            test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
+            assert test_type is not None, f"Test type not found for {test_file_path}"
+            # file_name = file_path_from_module_name(test_module_path, test_config.project_root_path)
+
             result = testcase.is_passed  # TODO: See for the cases of ERROR and SKIPPED
-            test_class = class_name[len(test_module_path) + 1 :] if class_name is not None else None
+            test_class = None
+            if class_name is not None and class_name.startswith(test_module_path):
+                test_class = class_name[
+                    len(test_module_path) + 1 :
+                ]  # +1 for the dot, gets Unittest class name
 
             test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
             loop_index = 1
@@ -242,7 +239,7 @@ def parse_test_xml(
                                 function_getting_tested="",  # FIXME
                                 iteration_id=None,
                             ),
-                            file_name=file_name,
+                            file_name=test_file_path,
                             runtime=None,
                             test_framework=test_config.test_framework,
                             did_pass=result,
@@ -264,7 +261,7 @@ def parse_test_xml(
                                 function_getting_tested=match[3],
                                 iteration_id=match[5],
                             ),
-                            file_name=file_name,
+                            file_name=test_file_path,
                             runtime=None,
                             test_framework=test_config.test_framework,
                             did_pass=result,
