@@ -93,8 +93,7 @@ def parse_test_return_values_bin(
 
 def parse_sqlite_test_results(
     sqlite_file_path: str,
-    test_file_paths: list[str],
-    test_types: list[TestType],
+    test_files: TestFiles,
     test_config: TestConfig,
 ) -> TestResults:
     test_results = TestResults()
@@ -114,7 +113,14 @@ def parse_sqlite_test_results(
         try:
             test_module_path = val[0]
             test_file_path = file_path_from_module_name(test_module_path, test_config.project_root_path)
-            test_type = test_types[test_file_paths.index(test_file_path)]
+            test_type = next(
+                (
+                    test_file.test_type
+                    for test_file in test_files.test_files
+                    if test_file.instrumented_file_path == test_file_path
+                ),
+                None,
+            )
             loop_index = val[4]
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
@@ -144,8 +150,7 @@ def parse_sqlite_test_results(
 
 def parse_test_xml(
     test_xml_file_path: str,
-    test_py_file_paths: list[str],
-    test_types: list[TestType],
+    test_files: TestFiles,
     test_config: TestConfig,
     run_result: subprocess.CompletedProcess | None = None,
 ) -> TestResults:
@@ -161,13 +166,13 @@ def parse_test_xml(
             f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}",
         )
         return test_results
-    test_module_paths = []
-    for file_path in test_py_file_paths:
-        assert os.path.exists(file_path), f"File {file_path} doesn't exist."
-        test_module_path = module_name_from_file_path(file_path, test_config.project_root_path)
-        if test_module_path.endswith("__perfinstrumented"):
-            test_module_path = test_module_path[: -len("__perfinstrumented")]
-        test_module_paths.append(test_module_path)
+    # test_module_paths = []
+    # for file_path in test_py_file_paths:
+    #     assert os.path.exists(file_path), f"File {file_path} doesn't exist."
+    #     test_module_path = module_name_from_file_path(file_path, test_config.project_root_path)
+    #     if test_module_path.endswith("__perfinstrumented"):
+    #         test_module_path = test_module_path[: -len("__perfinstrumented")]
+    #     test_module_paths.append(test_module_path)
 
     for suite in xml:
         for testcase in suite:
@@ -177,7 +182,15 @@ def parse_test_xml(
                 if class_name.endswith("__perfinstrumented")
                 else class_name
             )
-            test_type = test_types[test_module_paths.index(test_module_path)]
+            test_file_path = file_path_from_module_name(test_module_path, test_config.project_root_path)
+            test_type = next(
+                (
+                    test_file.test_type
+                    for test_file in test_files.test_files
+                    if test_file.instrumented_file_path == test_file_path
+                ),
+                None,
+            )
             file_name = file_path_from_module_name(test_module_path, test_config.project_root_path)
             if (
                 file_name == f"unittest{os.sep}loader.py"
