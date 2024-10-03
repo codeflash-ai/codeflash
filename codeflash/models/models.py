@@ -8,7 +8,7 @@ from pydantic.dataclasses import dataclass
 
 from codeflash.api.aiservice import OptimizedCandidate
 from codeflash.discovery.functions_to_optimize import FunctionParent
-from codeflash.verification.test_results import TestResults
+from codeflash.verification.test_results import TestResults, TestType
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
 # qualified name of the method is foo.eggs.Ham.spam, its qualified name is Ham.spam, and its name is spam. The full name
@@ -52,6 +52,37 @@ class GeneratedTests(BaseModel):
 
 class GeneratedTestsList(BaseModel):
     generated_tests: list[GeneratedTests]
+
+
+class TestFile(BaseModel):
+    instrumented_file_path: str
+    original_file_path: Optional[str]
+    original_source: Optional[str]
+    test_type: TestType
+
+
+class TestFiles(BaseModel):
+    test_files: list[TestFile]
+
+    def get_by_type(self, test_type: TestType) -> TestFiles | None:
+        return TestFiles(
+            test_files=[test_file for test_file in self.test_files if test_file.test_type == test_type],
+        )
+
+    def add(self, test_file: TestFile) -> None:
+        if test_file not in self.test_files:
+            self.test_files.append(test_file)
+        else:
+            raise ValueError("Test file already exists in the list")
+
+    def get_by_original_file_path(self, file_path: str) -> TestFile | None:
+        return next(
+            (test_file for test_file in self.test_files if test_file.original_file_path == file_path),
+            None,
+        )
+
+    def __iter__(self):
+        return iter(self.test_files)
 
 
 class OriginalCodeBaseline(BaseModel):

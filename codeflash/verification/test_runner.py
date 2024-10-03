@@ -6,10 +6,12 @@ import subprocess
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME
+from codeflash.models.models import TestFiles
+from codeflash.verification.test_results import TestType
 
 
 def run_tests(
-    test_paths: list[str],
+    test_paths: TestFiles,
     test_framework: str,
     cwd: str | None = None,
     test_env: dict[str, str] | None = None,
@@ -23,10 +25,12 @@ def run_tests(
 ) -> tuple[str, subprocess.CompletedProcess]:
     assert test_framework in ["pytest", "unittest"]
     # TODO: Make this work for replay tests
-    for i, test_path in enumerate(test_paths):
-        if only_run_these_test_functions and "__replay_test" in test_path:
+    for i, test_file in enumerate(test_paths):
+        if (
+            only_run_these_test_functions and test_file.test_type == TestType.REPLAY_TEST
+        ):  # "__replay_test" in test_path:
             # TODO: This might not work for replay tests
-            test_paths[i] = test_path + "::" + only_run_these_test_functions
+            test_paths[i] = test_file.instrumented_file_path + "::" + only_run_these_test_functions
 
     if test_framework == "pytest":
         result_file_path = get_run_tmp_file("pytest_results.xml")
@@ -37,7 +41,7 @@ def run_tests(
 
         results = subprocess.run(
             pytest_cmd_list
-            + test_paths
+            + [file.instrumented_file_path for file in test_paths.test_files]
             + [
                 "--capture=tee-sys",
                 f"--timeout={pytest_timeout}",
@@ -62,7 +66,7 @@ def run_tests(
         results = subprocess.run(
             ["python", "-m", "xmlrunner"]
             + (["-v"] if verbose else [])
-            + test_paths
+            + [file.instrumented_file_path for file in test_paths.test_files]
             + ["--output-file", result_file_path],
             capture_output=True,
             cwd=cwd,

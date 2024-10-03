@@ -67,6 +67,8 @@ from codeflash.models.models import (
     OptimizationSet,
     OptimizedCandidateResult,
     OriginalCodeBaseline,
+    TestFile,
+    TestFiles,
 )
 from codeflash.optimization.function_context import (
     get_constrained_function_context_and_helper_functions,
@@ -99,6 +101,7 @@ class Optimizer:
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
 
         self.test_files_created: set[str] = set()
+        self.test_files = TestFiles(test_files=[])
         self.instrumented_unittests_created: set[str] = set()
 
     def run(self) -> None:
@@ -179,10 +182,14 @@ class Optimizer:
             elif self.args.all:
                 logging.info("✨ All functions have been optimized! ✨")
         finally:
-            for test_file in self.instrumented_unittests_created:
-                pathlib.Path(test_file).unlink(missing_ok=True)
-            for test_file in self.test_files_created:
-                pathlib.Path(test_file).unlink(missing_ok=True)
+            for test_file in self.test_files.get_by_type(TestType.GENERATED_REGRESSION).test_files:
+                pathlib.Path(test_file.instrumented_file_path).unlink(missing_ok=True)
+            for test_file in self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
+                pathlib.Path(test_file.instrumented_file_path).unlink(missing_ok=True)
+            # for test_file in self.instrumented_unittests_created:
+            #     pathlib.Path(test_file).unlink(missing_ok=True)
+            # for test_file in self.test_files_created:
+            #     pathlib.Path(test_file).unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
 
@@ -257,6 +264,14 @@ class Optimizer:
             generated_tests_path = generated_tests_paths[i]
             with pathlib.Path(generated_tests_path).open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_test_source)
+            self.test_files.add(
+                TestFile(
+                    instrumented_file_path=generated_tests_path,
+                    original_file_path=None,
+                    original_source=generated_test.generated_original_test_source,
+                    test_type=TestType.GENERATED_REGRESSION,
+                ),
+            )
             self.test_files_created.add(generated_tests_path)
             logging.info(
                 f"Generated test {i + 1}/{count_tests}:\n{generated_test.generated_original_test_source}",
@@ -753,6 +768,15 @@ class Optimizer:
                 with pathlib.Path(new_test_path).open("w", encoding="utf8") as f:
                     f.write(injected_test)
                 unique_instrumented_test_files.add(new_test_path)
+                if not self.test_files.get_by_original_file_path(test_file):
+                    self.test_files.add(
+                        TestFile(
+                            instrumented_file_path=new_test_path,
+                            original_source=None,
+                            original_file_path=test_file,
+                            test_type=TestType.EXISTING_UNIT_TEST,
+                        ),
+                    )
             logging.info(
                 f"Discovered {relevant_test_files_count} existing unit test file"
                 f"{'s' if relevant_test_files_count != 1 else ''} for {func_qualname}",
@@ -845,11 +869,13 @@ class Optimizer:
         if test_framework == "pytest":
             first_test_types = []
             first_test_functions = []
-            for test_file in instrumented_unittests_created_for_function:
+            # test_files = {}
+
+            for test_file in self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
                 relevant_tests_in_file = [
                     test_in_file
                     for test_in_file in tests_in_file
-                    if test_in_file.test_file == test_file.replace("__perfinstrumented", "")
+                    if test_in_file.test_file == test_file.original_file_path
                 ]
                 is_replay_test = (
                     first_test_type := relevant_tests_in_file[0].test_type
@@ -862,17 +888,16 @@ class Optimizer:
                     logging.warning(
                         f"Multiple tests found for the replay test {test_file}. Should not happen",
                     )
-            instrumented_unittests_created_for_function.update(generated_tests_paths)
-            first_test_types.extend([TestType.GENERATED_REGRESSION] * len(generated_tests_paths))
+            # instrumented_unittests_created_for_function.update(generated_tests_paths)
+            # first_test_types.extend([TestType.GENERATED_REGRESSION] * len(generated_tests_paths))
             first_test_functions.extend([None] * len(generated_tests_paths))
 
             unittest_results = self.run_and_parse_tests(
-                test_env,
-                list(instrumented_unittests_created_for_function),
-                first_test_types,
-                0,
-                first_test_functions,
-                TOTAL_LOOPING_TIME,
+                test_env=test_env,
+                test_files=self.test_files,
+                optimization_iteration=0,
+                test_functions=first_test_functions,
+                testing_time=TOTAL_LOOPING_TIME,
             )
             initial_loop_unittest_results = TestResults(
                 test_results=[result for result in unittest_results.test_results if result.loop_index == "1"],
@@ -1386,8 +1411,7 @@ class Optimizer:
     def run_and_parse_tests(
         self,
         test_env: dict[str, str],
-        test_files: list[str],
-        test_types: list[TestType],
+        test_files: TestFiles,
         optimization_iteration: int,
         test_functions: list[str | None] | None = None,
         testing_time: float = TOTAL_LOOPING_TIME,
@@ -1411,7 +1435,7 @@ class Optimizer:
             return TestResults()
         if run_result.returncode != 0:
             logging.debug(
-                f'Nonzero return code {run_result.returncode} when running tests in {", ".join(test_files)}.\n'
+                f'Nonzero return code {run_result.returncode} when running tests in {", ".join([f.instrumented_file_path for f in test_files.test_files])}.\n'
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n",
             )
