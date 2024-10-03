@@ -81,6 +81,16 @@ class TestFiles(BaseModel):
             None,
         )
 
+    def get_test_type_by_instrumented_file_path(self, file_path: str) -> TestType | None:
+        return next(
+            (
+                test_file.test_type
+                for test_file in self.test_files
+                if test_file.instrumented_file_path == file_path
+            ),
+            None,
+        )
+
     def __iter__(self) -> Iterator[TestFile]:
         return iter(self.test_files)
 

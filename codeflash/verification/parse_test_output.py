@@ -71,21 +71,8 @@ def parse_test_return_values_bin(
                 invocation_id_object.test_module_path,
                 test_config.project_root_path,
             )
-            # test_type = test_types[test_file_paths.index(test_file_path)]
 
-            test_type = next(
-                (
-                    test_file.test_type
-                    for test_file in test_files.test_files
-                    if test_file.instrumented_file_path == test_file_path
-                ),
-                None,
-            )
-
-            # instrumented_file_path: str
-            # original_file_path: Optional[str]
-            # original_source: Optional[str]
-            # test_type: TestType
+            test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
 
             test_pickle = pickle.loads(test_pickle_bin) if loop_index == "1" else None
             test_results.add(
