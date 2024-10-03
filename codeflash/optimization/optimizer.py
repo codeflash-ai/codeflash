@@ -1441,11 +1441,10 @@ class Optimizer:
             )
         unittest_results = parse_test_results(
             test_xml_path=result_file_path,
-            test_py_paths=test_files,
+            test_files=test_files,
             test_config=self.test_cfg,
-            test_types=test_types,
-            run_result=run_result,
             optimization_iteration=optimization_iteration,
+            run_result=run_result,
         )
         return unittest_results
 

@@ -9,7 +9,6 @@ from collections import defaultdict
 from typing import TYPE_CHECKING
 
 import dill as pickle
-import sentry_sdk
 from junitparser.xunit2 import JUnitXml
 
 from codeflash.code_utils.code_utils import (
@@ -18,6 +17,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
+from codeflash.models.models import TestFiles
 from codeflash.verification.test_results import (
     FunctionTestInvocation,
     InvocationId,
@@ -33,8 +33,7 @@ if TYPE_CHECKING:
 
 def parse_test_return_values_bin(
     file_location: str,
-    test_types: list[TestType],
-    test_file_paths: list[str],
+    test_files: TestFiles,
     test_config: TestConfig,
 ) -> TestResults:
     test_results = TestResults()
@@ -72,7 +71,22 @@ def parse_test_return_values_bin(
                 invocation_id_object.test_module_path,
                 test_config.project_root_path,
             )
-            test_type = test_types[test_file_paths.index(test_file_path)]
+            # test_type = test_types[test_file_paths.index(test_file_path)]
+
+            test_type = next(
+                (
+                    test_file.test_type
+                    for test_file in test_files.test_files
+                    if test_file.instrumented_file_path == test_file_path
+                ),
+                None,
+            )
+
+            # instrumented_file_path: str
+            # original_file_path: Optional[str]
+            # original_source: Optional[str]
+            # test_type: TestType
+
             test_pickle = pickle.loads(test_pickle_bin) if loop_index == "1" else None
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
@@ -203,7 +217,7 @@ def parse_test_xml(
             loop_index = "1"
             if test_function is None:
                 logging.warning(
-                    f"testcase.name is None in parse_test_xml for testcase {testcase!r} in file {test_xml_file_path}"
+                    f"testcase.name is None in parse_test_xml for testcase {testcase!r} in file {test_xml_file_path}",
                 )
                 continue
             timed_out = False
@@ -417,16 +431,14 @@ def merge_test_results(
 
 def parse_test_results(
     test_xml_path: str,
-    test_py_paths: list[str],
+    test_files: TestFiles,
     test_config: TestConfig,
-    test_types: list[TestType],
     optimization_iteration: int,
     run_result: subprocess.CompletedProcess | None = None,
 ) -> TestResults:
     test_results_xml = parse_test_xml(
         test_xml_path,
-        test_py_file_paths=test_py_paths,
-        test_types=test_types,
+        test_files=test_files,
         test_config=test_config,
         run_result=run_result,
     )
@@ -434,8 +446,7 @@ def parse_test_results(
     try:
         test_results_bin_file = parse_test_return_values_bin(
             get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
-            test_types=test_types,
-            test_file_paths=test_py_paths,
+            test_files=test_files,
             test_config=test_config,
         )
     except AttributeError as e:
@@ -451,8 +462,7 @@ def parse_test_results(
                 sqlite_file_path=get_run_tmp_file(
                     f"test_return_values_{optimization_iteration}.sqlite",
                 ),
-                test_file_paths=test_py_paths,
-                test_types=test_types,
+                test_files=test_files,
                 test_config=test_config,
             ),
         )

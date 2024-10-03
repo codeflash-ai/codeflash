@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Generator, Iterator, Optional
 
 from jedi.api.classes import Name
 from pydantic import BaseModel
@@ -81,7 +81,7 @@ class TestFiles(BaseModel):
             None,
         )
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[TestFile]:
         return iter(self.test_files)
 
 

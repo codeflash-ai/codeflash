@@ -40,7 +40,7 @@ class TestUnittestRunnerSorter(unittest.TestCase):
             test_framework=config.test_framework,
             cwd=config.project_root_path,
         )
-        results = parse_test_xml(result_file, [fp.name], TestType.EXISTING_UNIT_TEST, config, process)
+        results = parse_test_xml(result_file, [fp.name], [TestType.EXISTING_UNIT_TEST], config, process)
     assert results[0].did_pass, "Test did not pass as expected"
     pathlib.Path(result_file).unlink(missing_ok=True)
 
