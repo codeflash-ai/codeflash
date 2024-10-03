@@ -50,6 +50,10 @@ class GeneratedTests(BaseModel):
     instrumented_test_source: str
 
 
+class GeneratedTestsList(BaseModel):
+    generated_tests: list[GeneratedTests]
+
+
 class OriginalCodeBaseline(BaseModel):
     generated_test_results: TestResults
     existing_test_results: TestResults

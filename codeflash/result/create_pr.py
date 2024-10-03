@@ -9,6 +9,7 @@ import git
 
 from codeflash.api import cfapi
 from codeflash.code_utils import env_utils
+from codeflash.code_utils.code_replacer import is_zero_diff
 from codeflash.code_utils.git_utils import (
     check_and_push_branch,
     get_current_branch,
@@ -48,17 +49,22 @@ def check_create_pr(
         logger.info(f"Suggesting changes to PR #{pr_number} ...")
         owner, repo = get_repo_owner_and_name(git_repo)
         relative_path = str(pathlib.Path(os.path.relpath(explanation.file_path, git_root_dir())).as_posix())
+        build_file_changes = {
+            str(pathlib.Path(os.path.relpath(p, git_root_dir())).as_posix()): FileDiffContent(
+                oldContent=original_code[p],
+                newContent=new_code[p],
+            )
+            for p in original_code
+            if not is_zero_diff(original_code[p], new_code[p])
+        }
+        if not build_file_changes:
+            logging.info("No changes to suggest to PR.")
+            return
         response = cfapi.suggest_changes(
             owner=owner,
             repo=repo,
             pr_number=pr_number,
-            file_changes={
-                str(pathlib.Path(os.path.relpath(p, git_root_dir())).as_posix()): FileDiffContent(
-                    oldContent=original_code[p],
-                    newContent=new_code[p],
-                )
-                for p in original_code
-            },
+            file_changes=build_file_changes,
             pr_comment=PrComment(
                 optimization_explanation=explanation.explanation_message(),
                 best_runtime=explanation.best_runtime_ns,
