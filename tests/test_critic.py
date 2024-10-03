@@ -59,7 +59,7 @@ def test_generated_test_critic():
         test_type=TestType.GENERATED_REGRESSION,
         return_value=None,
         timed_out=False,
-        loop_index="1",
+        loop_index=1,
     )
 
     test_2 = FunctionTestInvocation(
@@ -77,7 +77,7 @@ def test_generated_test_critic():
         test_type=TestType.GENERATED_REGRESSION,
         return_value=None,
         timed_out=False,
-        loop_index="1",
+        loop_index=1,
     )
 
     test_3 = FunctionTestInvocation(
@@ -95,7 +95,7 @@ def test_generated_test_critic():
         test_type=TestType.EXISTING_UNIT_TEST,
         return_value=None,
         timed_out=False,
-        loop_index="1",
+        loop_index=1,
     )
 
     test_4 = FunctionTestInvocation(
@@ -113,7 +113,7 @@ def test_generated_test_critic():
         test_type=TestType.GENERATED_REGRESSION,
         return_value=None,
         timed_out=False,
-        loop_index="1",
+        loop_index=1,
     )
 
     test_5 = FunctionTestInvocation(
@@ -131,7 +131,7 @@ def test_generated_test_critic():
         test_type=TestType.REPLAY_TEST,
         return_value=None,
         timed_out=False,
-        loop_index="1",
+        loop_index=1,
     )
 
     test_results = [test_1, test_2, test_3]

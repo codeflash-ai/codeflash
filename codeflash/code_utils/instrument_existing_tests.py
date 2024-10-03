@@ -180,14 +180,20 @@ class InjectPerfOnly(ast.NodeTransformer):
                         ),
                         ast.Assign(
                             targets=[ast.Name(id="codeflash_loop_index", ctx=ast.Store())],
-                            value=ast.Subscript(
-                                value=ast.Attribute(
-                                    value=ast.Name(id="os", ctx=ast.Load()),
-                                    attr="environ",
-                                    ctx=ast.Load(),
-                                ),
-                                slice=ast.Constant(value="CODEFLASH_LOOP_INDEX"),
-                                ctx=ast.Load(),
+                            value=ast.Call(
+                                func=ast.Name(id="int", ctx=ast.Load()),
+                                args=[
+                                    ast.Subscript(
+                                        value=ast.Attribute(
+                                            value=ast.Name(id="os", ctx=ast.Load()),
+                                            attr="environ",
+                                            ctx=ast.Load(),
+                                        ),
+                                        slice=ast.Constant(value="CODEFLASH_LOOP_INDEX"),
+                                        ctx=ast.Load(),
+                                    ),
+                                ],
+                                keywords=[],
                             ),
                             lineno=node.lineno + 2,
                             col_offset=node.col_offset,
@@ -247,7 +253,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                     ast.Constant(
                                         value="CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT,"
                                         " test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT,"
-                                        " loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)",
+                                        " loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)",
                                     ),
                                 ],
                                 keywords=[],
