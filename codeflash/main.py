@@ -11,7 +11,7 @@ from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.optimization import optimizer
 from codeflash.telemetry import posthog
 from codeflash.telemetry.sentry import init_sentry
-from codeflash.terminal.console import paneled_text
+from codeflash.cli_cmds.console import paneled_text
 
 
 def main() -> None:
