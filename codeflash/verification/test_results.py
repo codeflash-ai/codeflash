@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from codeflash.terminal.console import logger
+from codeflash.cli_cmds.console import logger
 import sys
 from enum import Enum
 from typing import Iterator, Optional

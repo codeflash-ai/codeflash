@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from codeflash.terminal.console import logger
+from codeflash.cli_cmds.console import logger
 import os.path
 import pathlib
 from typing import Dict, Optional

@@ -36,7 +36,7 @@ from codeflash.discovery.functions_to_optimize import filter_files_optimized
 from codeflash.tracing.replay_test import create_trace_replay_test
 from codeflash.tracing.tracing_utils import FunctionModules
 from codeflash.verification.verification_utils import get_test_file_path
-from codeflash.terminal.console import console
+from codeflash.cli_cmds.console import console
 
 
 class Tracer:

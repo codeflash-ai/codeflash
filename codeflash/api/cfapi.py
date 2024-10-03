@@ -11,7 +11,7 @@ from requests import Response
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
 from codeflash.code_utils.git_utils import get_repo_owner_and_name
 from codeflash.github.PrComment import FileDiffContent, PrComment
-from codeflash.terminal.console import logger
+from codeflash.cli_cmds.console import logger
 
 if os.environ.get("CODEFLASH_CFAPI_SERVER", default="prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"

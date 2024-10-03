@@ -1,4 +1,4 @@
-from codeflash.terminal.console import logger
+from codeflash.cli_cmds.console import logger
 from typing import Optional
 
 from git import Repo

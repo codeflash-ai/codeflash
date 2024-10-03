@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ast
-from codeflash.terminal.console import logger
+from codeflash.cli_cmds.console import logger
 import os
 import random
 from _ast import AsyncFunctionDef, ClassDef, FunctionDef

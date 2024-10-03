@@ -10,7 +10,7 @@ from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, Rem
 from libcst.helpers import calculate_module_and_package
 
 from codeflash.discovery.functions_to_optimize import FunctionParent
-from codeflash.terminal.console import logger
+from codeflash.cli_cmds.console import logger
 
 if TYPE_CHECKING:
     from libcst.helpers import ModuleNameAndPackage

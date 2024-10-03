@@ -1,5 +1,5 @@
 import logging
-from codeflash.terminal.console import logger
+from codeflash.cli_cmds.console import logger
 from typing import Any, Dict, Optional
 
 from posthog import Posthog

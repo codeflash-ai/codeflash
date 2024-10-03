@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ast
-from codeflash.terminal.console import logger
+from codeflash.cli_cmds.console import logger
 from typing import Iterable
 
 import isort

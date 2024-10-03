@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ast
-from codeflash.terminal.console import logger
+from codeflash.cli_cmds.console import logger
 
 from codeflash.api.aiservice import AiServiceClient
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path

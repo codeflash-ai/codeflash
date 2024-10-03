@@ -12,7 +12,7 @@ BARE_LOGGING_FORMAT = "%(message)s"
 def set_level(level: int, *, echo_setting: bool = True) -> None:
     import logging
     import time
-    from codeflash.terminal.console import console
+    from codeflash.cli_cmds.console import console
     from rich.logging import RichHandler
 
     logging.basicConfig(
