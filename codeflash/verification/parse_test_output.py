@@ -14,7 +14,6 @@ from junitparser.xunit2 import JUnitXml
 from codeflash.code_utils.code_utils import (
     file_path_from_module_name,
     get_run_tmp_file,
-    module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.models.models import TestFiles
@@ -22,7 +21,6 @@ from codeflash.verification.test_results import (
     FunctionTestInvocation,
     InvocationId,
     TestResults,
-    TestType,
 )
 
 if TYPE_CHECKING:
@@ -172,13 +170,6 @@ def parse_test_xml(
             f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}",
         )
         return test_results
-    # test_module_paths = []
-    # for file_path in test_py_file_paths:
-    #     assert os.path.exists(file_path), f"File {file_path} doesn't exist."
-    #     test_module_path = module_name_from_file_path(file_path, test_config.project_root_path)
-    #     if test_module_path.endswith("__perfinstrumented"):
-    #         test_module_path = test_module_path[: -len("__perfinstrumented")]
-    #     test_module_paths.append(test_module_path)
 
     for suite in xml:
         for testcase in suite:
@@ -213,11 +204,7 @@ def parse_test_xml(
                 return test_results
 
             result = testcase.is_passed  # TODO: See for the cases of ERROR and SKIPPED
-            test_class = None
-            if class_name is not None:
-                for test_module_path in test_module_paths:
-                    if class_name.startswith(test_module_path):
-                        test_class = class_name[len(test_module_path) + 1 :]
+            test_class = class_name[len(test_module_path) + 1 :] if class_name is not None else None
 
             test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
             loop_index = "1"
@@ -295,13 +282,15 @@ def parse_test_xml(
                     )
 
     if not test_results:
-        logging.info(f"Tests '{test_py_file_paths}' failed to run, skipping")
+        logging.info(
+            f"Tests '{[test_file.original_file_path for test_file in test_files.test_files]}' failed to run, skipping",
+        )
         if run_result is not None:
             try:
                 stdout = run_result.stdout.decode()
                 stderr = run_result.stderr.decode()
             except AttributeError:
-                stdout = run_result.std_result.stderr
+                stdout = run_result.stderr
             logging.debug(
                 f"Test log - STDOUT : {stdout} \n STDERR : {stderr}",
             )
