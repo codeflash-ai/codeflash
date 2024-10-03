@@ -82,10 +82,10 @@ class TestPigLatin(unittest.TestCase):
     @timeout_decorator.timeout(15)
     def test_sort(self):
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
-        codeflash_loop_index = os.environ['CODEFLASH_LOOP_INDEX']
+        codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
-        codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+        codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
         input = [5, 4, 3, 2, 1, 0]
         output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, input)
         self.assertEqual(output, [0, 1, 2, 3, 4, 5])
@@ -177,10 +177,10 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
 
 def test_prepare_image_for_yolo():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
-    codeflash_loop_index = os.environ['CODEFLASH_LOOP_INDEX']
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
-    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
 """
     if sys.version_info < (3, 11):
         expected += """    for (arg_val_pkl, return_val_pkl) in get_next_arg_and_return('/home/saurabh/packagename/traces/first.trace', 3):
@@ -265,10 +265,10 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
 
 def test_sort():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
-    codeflash_loop_index = os.environ['CODEFLASH_LOOP_INDEX']
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
-    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     input = [5, 4, 3, 2, 1, 0]
     output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, input)
     assert output == [0, 1, 2, 3, 4, 5]
@@ -418,10 +418,10 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
 @pytest.mark.parametrize('input, expected_output', [([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
 def test_sort_parametrized(input, expected_output):
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
-    codeflash_loop_index = os.environ['CODEFLASH_LOOP_INDEX']
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
-    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized', 'sorter', '0', codeflash_loop_index, codeflash_cur, codeflash_con, input)
     assert output == expected_output
     codeflash_con.close()
@@ -583,10 +583,10 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
 @pytest.mark.parametrize('input, expected_output', [([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
 def test_sort_parametrized_loop(input, expected_output):
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
-    codeflash_loop_index = os.environ['CODEFLASH_LOOP_INDEX']
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
-    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     for i in range(2):
         output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized_loop', 'sorter', '0_0', codeflash_loop_index, codeflash_cur, codeflash_con, input)
         assert output == expected_output
@@ -776,10 +776,10 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
 
 def test_sort():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
-    codeflash_loop_index = os.environ['CODEFLASH_LOOP_INDEX']
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
-    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     inputs = [[5, 4, 3, 2, 1, 0], [5.0, 4.0, 3.0, 2.0, 1.0, 0.0], list(reversed(range(50)))]
     expected_outputs = [[0, 1, 2, 3, 4, 5], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0], list(range(50))]
     for i in range(3):
@@ -951,10 +951,10 @@ class TestPigLatin(unittest.TestCase):
     @timeout_decorator.timeout(15)
     def test_sort(self):
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
-        codeflash_loop_index = os.environ['CODEFLASH_LOOP_INDEX']
+        codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
-        codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+        codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
         input = [5, 4, 3, 2, 1, 0]
         output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, input)
         self.assertEqual(output, [0, 1, 2, 3, 4, 5])
@@ -1128,10 +1128,10 @@ class TestPigLatin(unittest.TestCase):
     @timeout_decorator.timeout(15)
     def test_sort(self, input, expected_output):
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
-        codeflash_loop_index = os.environ['CODEFLASH_LOOP_INDEX']
+        codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
-        codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+        codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
         output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0', codeflash_loop_index, codeflash_cur, codeflash_con, input)
         self.assertEqual(output, expected_output)
         codeflash_con.close()
@@ -1293,10 +1293,10 @@ class TestPigLatin(unittest.TestCase):
     @timeout_decorator.timeout(15)
     def test_sort(self):
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
-        codeflash_loop_index = os.environ['CODEFLASH_LOOP_INDEX']
+        codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
-        codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+        codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
         inputs = [[5, 4, 3, 2, 1, 0], [5.0, 4.0, 3.0, 2.0, 1.0, 0.0], list(reversed(range(50)))]
         expected_outputs = [[0, 1, 2, 3, 4, 5], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0], list(range(50))]
         for i in range(3):
@@ -1465,10 +1465,10 @@ class TestPigLatin(unittest.TestCase):
     @timeout_decorator.timeout(15)
     def test_sort(self, input, expected_output):
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
-        codeflash_loop_index = os.environ['CODEFLASH_LOOP_INDEX']
+        codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
-        codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+        codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
         for i in range(2):
             output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0_0', codeflash_loop_index, codeflash_cur, codeflash_con, input)
             self.assertEqual(output, expected_output)
@@ -1696,10 +1696,10 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
 
 def test_class_name_A_function_name():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
-    codeflash_loop_index = os.environ['CODEFLASH_LOOP_INDEX']
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
-    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     ret = codeflash_wrap(class_name_A.function_name, '{module_path}', None, 'test_class_name_A_function_name', 'class_name_A.function_name', '0', codeflash_loop_index, codeflash_cur, codeflash_con, **args)
     codeflash_con.close()
 """
@@ -1784,10 +1784,10 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
 
 def test_common_tags_1():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
-    codeflash_loop_index = os.environ['CODEFLASH_LOOP_INDEX']
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
-    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     articles_1 = [1, 2, 3]
     assert codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '1', codeflash_loop_index, codeflash_cur, codeflash_con, articles_1) == set(1, 2)
     articles_2 = [1, 2]
@@ -1872,10 +1872,10 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
 
 def test_sort():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
-    codeflash_loop_index = os.environ['CODEFLASH_LOOP_INDEX']
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
-    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     input = [5, 4, 3, 2, 1, 0]
     if len(input) > 0:
         assert codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '1_0', codeflash_loop_index, codeflash_cur, codeflash_con, input) == [0, 1, 2, 3, 4, 5]
@@ -1962,10 +1962,10 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
 
 def test_sort():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
-    codeflash_loop_index = os.environ['CODEFLASH_LOOP_INDEX']
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
-    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     input = [5, 4, 3, 2, 1, 0]
     output = codeflash_wrap(BubbleSorter.sorter, 'tests.pytest.test_perfinjector_bubble_sort_results_temp', None, 'test_sort', 'BubbleSorter.sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, input)
     assert output == [0, 1, 2, 3, 4, 5]
@@ -2087,10 +2087,10 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
 
 def test_code_replacement10() -> None:
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
-    codeflash_loop_index = os.environ['CODEFLASH_LOOP_INDEX']
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
-    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index TEXT, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     get_code_output = 'random code'
     file_path = Path(__file__).resolve()
     opt = Optimizer(Namespace(project_root=str(file_path.parent.resolve()), disable_telemetry=True, tests_root='tests', test_framework='pytest', pytest_cmd='pytest', experiment_id=None))

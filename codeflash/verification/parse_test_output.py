@@ -57,9 +57,8 @@ def parse_test_return_values_bin(
             except Exception as e:
                 logging.exception(f"Failed to load pickle file. Exception: {e}")
                 return test_results
-            len_next = file.read(4)
-            len_next = int.from_bytes(len_next, byteorder="big")
-            loop_index = file.read(len_next).decode("ascii")
+            len_next = file.read(8)
+            loop_index = int.from_bytes(len_next, byteorder="big")
             len_next = file.read(4)
             len_next = int.from_bytes(len_next, byteorder="big")
             invocation_id = file.read(len_next).decode("ascii")
@@ -69,16 +68,10 @@ def parse_test_return_values_bin(
                 invocation_id_object.test_module_path,
                 test_config.project_root_path,
             )
-            test_type = next(
-                (
-                    test_file.test_type
-                    for test_file in test_files.test_files
-                    if test_file.instrumented_file_path == test_file_path
-                ),
-                None,
-            )
 
-            test_pickle = pickle.loads(test_pickle_bin) if loop_index == "1" else None
+            test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
+
+            test_pickle = pickle.loads(test_pickle_bin) if loop_index == 1 else None
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
                     loop_index=loop_index,
@@ -141,7 +134,7 @@ def parse_sqlite_test_results(
                     runtime=val[6],
                     test_framework=test_config.test_framework,
                     test_type=test_type,
-                    return_value=pickle.loads(val[7]) if loop_index == "1" else None,
+                    return_value=pickle.loads(val[7]) if loop_index == 1 else None,
                     timed_out=False,
                 ),
             )
@@ -207,7 +200,7 @@ def parse_test_xml(
             test_class = class_name[len(test_module_path) + 1 :] if class_name is not None else None
 
             test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
-            loop_index = "1"
+            loop_index = 1
             if test_function is None:
                 logging.warning(
                     f"testcase.name is None in parse_test_xml for testcase {testcase!r} in file {test_xml_file_path}",
@@ -215,7 +208,7 @@ def parse_test_xml(
                 continue
             timed_out = False
             if test_config.test_framework == "pytest":
-                loop_index = testcase.name.split("[ ", 1)[1][:-2] if "[" in testcase.name else "1"
+                loop_index = int(testcase.name.split("[ ", 1)[1][:-2]) if "[" in testcase.name else 1
                 if len(testcase.result) > 1:
                     print(
                         f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!",
@@ -263,7 +256,7 @@ def parse_test_xml(
                 for match in matches:
                     test_results.add(
                         FunctionTestInvocation(
-                            loop_index=match[4],
+                            loop_index=int(match[4]),
                             id=InvocationId(
                                 test_module_path=match[0],
                                 test_class_name=None if match[1] == "" else match[1][:-1],
@@ -332,7 +325,7 @@ def merge_test_results(
             + ":"
             + test_function_name
             + ":"
-            + result.loop_index
+            + str(result.loop_index)
         ].add(result)
 
     for result in bin_test_results:
@@ -343,7 +336,7 @@ def merge_test_results(
             + ":"
             + result.id.test_function_name
             + ":"
-            + result.loop_index
+            + str(result.loop_index)
         ].add(result)
 
     for result_id in grouped_xml_results:

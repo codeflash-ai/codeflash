@@ -691,7 +691,7 @@ def test_compare_results_fn():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=5,
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
         ],
     )
@@ -713,7 +713,7 @@ def test_compare_results_fn():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=5,
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
         ],
     )
@@ -737,7 +737,7 @@ def test_compare_results_fn():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=[5],
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
         ],
     )
@@ -761,7 +761,7 @@ def test_compare_results_fn():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=5,
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -778,7 +778,7 @@ def test_compare_results_fn():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=5,
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
         ],
     )

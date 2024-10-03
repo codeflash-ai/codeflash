@@ -25,7 +25,7 @@ def test_merge_test_results_1():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -42,7 +42,7 @@ def test_merge_test_results_1():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -59,7 +59,7 @@ def test_merge_test_results_1():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
         ],
     )
@@ -81,7 +81,7 @@ def test_merge_test_results_1():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -98,7 +98,7 @@ def test_merge_test_results_1():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -115,7 +115,7 @@ def test_merge_test_results_1():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
         ],
     )
@@ -137,7 +137,7 @@ def test_merge_test_results_1():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -154,7 +154,7 @@ def test_merge_test_results_1():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -171,7 +171,7 @@ def test_merge_test_results_1():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
         ],
     )
@@ -199,7 +199,7 @@ def test_merge_test_results_1():
                 test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
         ],
     )
@@ -245,7 +245,7 @@ def test_merge_test_results_1():
                 test_type=TestType.GENERATED_REGRESSION,
                 return_value=None,
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
         ],
     )
@@ -267,7 +267,7 @@ def test_merge_test_results_1():
                 test_type=TestType.GENERATED_REGRESSION,
                 return_value=[2],
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
             FunctionTestInvocation(
                 id=InvocationId(
@@ -284,7 +284,7 @@ def test_merge_test_results_1():
                 test_type=TestType.GENERATED_REGRESSION,
                 return_value=[3],
                 timed_out=False,
-                loop_index="1",
+                loop_index=1,
             ),
         ],
     )
