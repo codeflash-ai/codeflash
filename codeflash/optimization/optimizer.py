@@ -277,7 +277,7 @@ class Optimizer:
                 f"Generated test {i + 1}/{count_tests}:\n{generated_test.generated_original_test_source}",
             )
 
-        baseline_result, test_functions_to_remove = self.establish_original_code_baseline(
+        baseline_result = self.establish_original_code_baseline(
             function_to_optimize.qualified_name,
             instrumented_unittests_created_for_function,
             generated_tests_paths,
@@ -291,7 +291,7 @@ class Optimizer:
                 pathlib.Path(instrumented_path).unlink(missing_ok=True)
             return Failure(baseline_result.failure())
 
-        original_code_baseline: OriginalCodeBaseline = baseline_result.unwrap()
+        original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
         # TODO: Postprocess the optimized function to include the original docstring and such
 
         best_optimization = None
