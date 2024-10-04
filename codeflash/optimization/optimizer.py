@@ -359,7 +359,9 @@ class Optimizer:
                         new_code=new_code_combined,
                         explanation=explanation,
                         existing_tests_source=existing_tests,
-                        generated_original_test_source=generated_tests.generated_original_test_source,
+                        generated_original_test_source="\n".join(
+                            [test.generated_original_test_source for test in generated_tests.generated_tests],
+                        ),
                         function_trace_id=function_trace_id,
                     )
                     if self.args.all or env_utils.get_pr_number():
