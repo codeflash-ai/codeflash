@@ -110,14 +110,8 @@ def parse_sqlite_test_results(
         try:
             test_module_path = val[0]
             test_file_path = file_path_from_module_name(test_module_path, test_config.project_root_path)
-            test_type = next(
-                (
-                    test_file.test_type
-                    for test_file in test_files.test_files
-                    if test_file.instrumented_file_path == test_file_path
-                ),
-                None,
-            )
+            # TODO : this is because sqlite writes original file module path. Should make it consistent
+            test_type = test_files.get_test_type_by_original_file_path(test_file_path)
             loop_index = val[4]
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
@@ -442,15 +436,14 @@ def parse_test_results(
         ).unlink(missing_ok=True)
 
     try:
-        test_results_bin_file.merge(
-            parse_sqlite_test_results(
-                sqlite_file_path=get_run_tmp_file(
-                    f"test_return_values_{optimization_iteration}.sqlite",
-                ),
-                test_files=test_files,
-                test_config=test_config,
+        test_results_sqlite_file = parse_sqlite_test_results(
+            sqlite_file_path=get_run_tmp_file(
+                f"test_return_values_{optimization_iteration}.sqlite",
             ),
+            test_files=test_files,
+            test_config=test_config,
         )
+        test_results_bin_file.merge(test_results_sqlite_file)
     except AttributeError as e:
         logging.exception(e)
 
