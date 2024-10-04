@@ -469,7 +469,7 @@ class Optimizer:
                 run_results = self.run_optimized_candidate(
                     optimization_index=j,
                     instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
-                    original_overall_test_results=original_code_baseline.overall_test_results,
+                    original_test_results=original_code_baseline.overall_test_results,
                     original_existing_test_results=original_code_baseline.existing_test_results,
                     original_generated_test_results=original_code_baseline.generated_test_results,
                     generated_tests_paths=generated_tests_paths,
@@ -944,9 +944,9 @@ class Optimizer:
 
             loop_count = max([int(result.loop_index) for result in unittest_results.test_results])
             logging.info(
-                f"Original code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: {humanize_runtime(loop_count)}",
+                f"Original code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: {humanize_runtime(total_timing / loop_count)} per full loop",
             )
-            logging.debug(f"Original code test runtime: {total_timing}")
+            logging.debug(f"Total original code runtime (ns): {total_timing}")
             return Success(
                 (
                     OriginalCodeBaseline(
@@ -989,8 +989,16 @@ class Optimizer:
                         )
                     unittest_results = self.run_and_parse_tests(
                         test_env,
-                        [test_file],
-                        [relevant_tests_in_file[0].test_type],
+                        TestFiles(
+                            test_files=[
+                                TestFile(
+                                    instrumented_file_path=test_file,
+                                    original_file_path=None,
+                                    original_source=None,
+                                    test_type=relevant_tests_in_file[0].test_type,
+                                ),
+                            ],
+                        ),
                         0,
                         [relevant_tests_in_file[0].test_function if is_replay_test else None],
                     )
@@ -1005,8 +1013,17 @@ class Optimizer:
                     )
                 original_gen_results = self.run_and_parse_tests(
                     test_env,
-                    generated_tests_paths,
-                    [TestType.GENERATED_REGRESSION] * len(generated_tests_paths),
+                    TestFiles(
+                        test_files=[
+                            TestFile(
+                                instrumented_file_path=test_file,
+                                original_file_path=None,
+                                original_source=None,
+                                test_type=relevant_tests_in_file[0].test_type,
+                            ),
+                        ],
+                    ),
+                    0,
                     0,
                 )
                 functions_to_remove = [
@@ -1093,7 +1110,7 @@ class Optimizer:
         self,
         optimization_index: int,
         instrumented_unittests_created_for_function: set[str],
-        original_overall_results: TestResults,
+        original_test_results: TestResults,
         original_existing_test_results: TestResults,
         original_generated_test_results: TestResults,
         generated_tests_paths: list[str],
@@ -1149,12 +1166,27 @@ class Optimizer:
             first_test_types.extend([TestType.GENERATED_REGRESSION] * len(generated_tests_paths))
             first_test_functions.extend([None] * len(generated_tests_paths))
 
+            candidate_test_files = [
+                TestFile(
+                    instrumented_file_path=test_file,
+                    original_file_path=None,
+                    original_source=None,
+                    test_type=first_test_type,
+                )
+                for test_file, first_test_type in zip(
+                    instrumented_unittests_created_for_function,
+                    first_test_types,
+                )
+                for test_file, test_type in zip(
+                    list(instrumented_unittests_created_for_function),
+                    first_test_types,
+                )
+            ]
             candidate_results = self.run_and_parse_tests(
                 test_env,
-                list(instrumented_unittests_created_for_function),
-                first_test_types,
+                TestFiles(test_files=candidate_test_files),
+                0,
                 optimization_index,
-                first_test_functions,
                 TOTAL_LOOPING_TIME,
             )
             initial_loop_candidate_results = TestResults(
@@ -1165,9 +1197,9 @@ class Optimizer:
             logging.info(
                 f"Overall initial loop test results for candidate code: {TestResults.report_to_string(initial_loop_candidate_results.get_test_pass_fail_report_by_type())}",
             )
-            initial_loop_original_overall_results = TestResults(
+            initial_loop_original_test_results = TestResults(
                 test_results=[
-                    result for result in original_overall_results.test_results if result.loop_index == "1"
+                    result for result in original_test_results.test_results if result.loop_index == "1"
                 ],
             )
             candidate_existing_test_results = TestResults(
@@ -1204,7 +1236,7 @@ class Optimizer:
             )
 
             if compare_test_results(
-                initial_loop_original_overall_results,
+                initial_loop_original_test_results,
                 initial_loop_candidate_results,
             ):
                 logging.info("Test results matched!")
@@ -1216,7 +1248,7 @@ class Optimizer:
                 logging.warning(
                     "The overall test runtime of the optimized function is 0, couldn't run tests.",
                 )
-            if best_test_runtime is None or total_candidate_timing < best_test_runtime:
+            if best_runtime_until_now is None or total_candidate_timing < best_runtime_until_now:
                 best_test_runtime = total_candidate_timing
                 best_test_results = candidate_results
             pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.bin")).unlink(
