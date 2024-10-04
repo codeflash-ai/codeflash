@@ -900,7 +900,7 @@ class Optimizer:
                 testing_time=TOTAL_LOOPING_TIME,
             )
             initial_loop_unittest_results = TestResults(
-                test_results=[result for result in unittest_results.test_results if result.loop_index == "1"],
+                test_results=[result for result in unittest_results.test_results if result.loop_index == 1],
             )
             logging.info(
                 f"Overall initial loop test results for original code: {TestResults.report_to_string(initial_loop_unittest_results.get_test_pass_fail_report_by_type())}",
@@ -912,7 +912,7 @@ class Optimizer:
             )
             initial_loop_existing_test_results = TestResults(
                 test_results=[
-                    result for result in existing_test_results.test_results if result.loop_index == "1"
+                    result for result in existing_test_results.test_results if result.loop_index == 1
                 ],
             )
             logging.info(
@@ -925,7 +925,7 @@ class Optimizer:
             )
             initial_loop_generated_test_results = TestResults(
                 test_results=[
-                    result for result in generated_test_results.test_results if result.loop_index == "1"
+                    result for result in generated_test_results.test_results if result.loop_index == 1
                 ],
             )
             logging.info(
