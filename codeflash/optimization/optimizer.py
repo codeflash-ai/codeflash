@@ -910,30 +910,13 @@ class Optimizer:
                     result for result in unittest_results if result.test_type == TestType.EXISTING_UNIT_TEST
                 ],
             )
-            initial_loop_existing_test_results = TestResults(
-                test_results=[
-                    result for result in existing_test_results.test_results if result.loop_index == 1
-                ],
-            )
-            logging.info(
-                f"Existing initial loop test results for original code: {initial_loop_existing_test_results.get_test_pass_fail_report()}",
-            )
             generated_test_results = TestResults(
                 test_results=[
                     result for result in unittest_results if result.test_type == TestType.GENERATED_REGRESSION
                 ],
             )
-            initial_loop_generated_test_results = TestResults(
-                test_results=[
-                    result for result in generated_test_results.test_results if result.loop_index == 1
-                ],
-            )
-            logging.info(
-                f"Generated initial loop test results for original code: {initial_loop_generated_test_results.get_test_pass_fail_report()}",
-            )
 
             total_timing = unittest_results.total_passed_runtime()
-            existing_test_timing = existing_test_results.total_passed_runtime()
 
             functions_to_remove = [
                 result.id.test_function_name
