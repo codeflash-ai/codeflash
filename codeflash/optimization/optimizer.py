@@ -1177,10 +1177,6 @@ class Optimizer:
                     instrumented_unittests_created_for_function,
                     first_test_types,
                 )
-                for test_file, test_type in zip(
-                    list(instrumented_unittests_created_for_function),
-                    first_test_types,
-                )
             ]
             candidate_results = self.run_and_parse_tests(
                 test_env,

@@ -127,6 +127,11 @@ class TestResults(BaseModel):
         )
 
     def total_passed_runtime(self) -> int:
+        """Calculate the sum of runtimes of all test cases that passed, where a testcase runtime
+        is the minimum value of all looped execution runtimes.
+
+        :return: The runtime in nanoseconds.
+        """
         for result in self.test_results:
             if result.did_pass and result.runtime is None:
                 logging.debug(
