@@ -490,10 +490,10 @@ class Optimizer:
                         optimized_runtime_ns=best_test_runtime,
                     )
                     speedup_ratios[candidate.optimization_id] = perf_gain
+                    loop_count = max([int(result.loop_index) for result in candidate_result.test_results])
                     logging.info(
-                        f"Candidate runtime measured over {candidate_result.times_run} run{'s' if candidate_result.times_run > 1 else ''}: "
-                        f"{humanize_runtime(best_test_runtime)}, speedup ratio = "
-                        f"{perf_gain:.3f}",
+                        f"Candidate code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: {humanize_runtime(best_test_runtime) / loop_count} per full loop ",
+                        f"speedup ratio = {perf_gain:.3f}",
                     )
 
                     if speedup_critic(
@@ -501,11 +501,10 @@ class Optimizer:
                         original_code_baseline.runtime,
                         best_runtime_until_now,
                     ) and quantity_of_tests_critic(candidate_result):
-                        logging.info("This candidate is better than the previous best candidate.")
+                        logging.info("This candidate is faster than the previous best candidate.")
                         logging.info(
-                            f"Original runtime: {humanize_runtime(original_code_baseline.runtime)} Best test runtime: "
-                            f"{humanize_runtime(candidate_result.best_test_runtime)}, ratio = "
-                            f"{perf_gain:.3f}",
+                            f"Original runtime: {humanize_runtime(original_code_baseline.runtime)}\nBest test runtime: "
+                            f"{humanize_runtime(candidate_result.best_test_runtime)}, ratio = {perf_gain:.3f}",
                         )
                         best_optimization = BestOptimization(
                             candidate=candidate,
@@ -1219,7 +1218,9 @@ class Optimizer:
 
             if not success:
                 return Failure("Failed to run the optimized candidate.")
-            logging.debug(f"Optimized code {optimization_candidate_index} runtime: {total_candidate_timing}")
+            logging.debug(
+                f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}",
+            )
             return Success(
                 OptimizedCandidateResult(
                     times_run=times_run,
