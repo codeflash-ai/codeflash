@@ -307,16 +307,16 @@ class Optimizer:
             )
 
             best_optimization = self.determine_best_candidate(
-                candidates,
-                code_context,
-                function_to_optimize,
-                generated_tests_paths,
-                instrumented_unittests_created_for_function,
-                original_code,
-                original_code_baseline,
-                original_helper_code,
-                function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
-                tests_in_file,
+                candidates=candidates,
+                code_context=code_context,
+                function_to_optimize=function_to_optimize,
+                original_code=original_code,
+                original_code_baseline=original_code_baseline,
+                original_helper_code=original_helper_code,
+                function_trace_id=function_trace_id[:-4] + f"EXP{u}"
+                if should_run_experiment
+                else function_trace_id,
+                only_run_this_test_function=tests_in_file,
             )
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
@@ -398,11 +398,10 @@ class Optimizer:
 
     def determine_best_candidate(
         self,
+        *,
         candidates: list[OptimizedCandidate],
         code_context: CodeOptimizationContext,
         function_to_optimize: FunctionToOptimize,
-        generated_tests_paths: list[str],
-        instrumented_unittests_created_for_function: set[str],
         original_code: str,
         original_code_baseline: OriginalCodeBaseline,
         original_helper_code: dict[str, str],
@@ -420,17 +419,17 @@ class Optimizer:
             f"Determining best optimized candidate (out of {len(candidates)}) for {function_to_optimize.qualified_name} ...",
         )
         try:
-            for j, candidate in enumerate(candidates, start=1):
+            for candidate_index, candidate in enumerate(candidates, start=1):
                 if candidate.source_code is None:
                     continue
                 # remove left overs from previous run
-                pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.bin")).unlink(
+                pathlib.Path(get_run_tmp_file(f"test_return_values_{candidate_index}.bin")).unlink(
                     missing_ok=True,
                 )
-                pathlib.Path(get_run_tmp_file(f"test_return_values_{j}.sqlite")).unlink(
+                pathlib.Path(get_run_tmp_file(f"test_return_values_{candidate_index}.sqlite")).unlink(
                     missing_ok=True,
                 )
-                logging.info(f"Optimized candidate {j}/{len(candidates)}:")
+                logging.info(f"Optimized candidate {candidate_index}/{len(candidates)}:")
                 logging.info(candidate.source_code)
                 try:
                     did_update = self.replace_function_and_helpers_with_optimized_code(
@@ -467,12 +466,10 @@ class Optimizer:
                             break
 
                 run_results = self.run_optimized_candidate(
-                    optimization_index=j,
-                    instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
+                    optimization_candidate_index=candidate_index,
                     original_test_results=original_code_baseline.overall_test_results,
                     original_existing_test_results=original_code_baseline.existing_test_results,
                     original_generated_test_results=original_code_baseline.generated_test_results,
-                    generated_tests_paths=generated_tests_paths,
                     best_runtime_until_now=best_runtime_until_now,
                     tests_in_file=only_run_this_test_function,
                     run_generated_tests=run_generated_tests,
@@ -871,6 +868,7 @@ class Optimizer:
             first_test_functions = []
             # test_files = {}
 
+            # TODO: Break this into a function
             for test_file in self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
                 relevant_tests_in_file = [
                     test_in_file
@@ -1108,17 +1106,20 @@ class Optimizer:
 
     def run_optimized_candidate(
         self,
-        optimization_index: int,
-        instrumented_unittests_created_for_function: set[str],
+        *,
+        optimization_candidate_index: int,
         original_test_results: TestResults,
         original_existing_test_results: TestResults,
         original_generated_test_results: TestResults,
-        generated_tests_paths: list[str],
         best_runtime_until_now: int,
         tests_in_file: list[TestsInFile],
         run_generated_tests: bool,
     ) -> Result[OptimizedCandidateResult, str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
+
+        # TODO : rename the variables below to something better
+        instrumented_unittests_created_for_function = self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST)
+        generated_tests_paths = self.test_files.get_by_type(TestType.GENERATED_REGRESSION)
 
         success = True
         best_test_runtime: int
@@ -1128,7 +1129,7 @@ class Optimizer:
 
         times_run = 0
         test_env = os.environ.copy()
-        test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_index)
+        test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_candidate_index)
         test_env["CODEFLASH_TRACER_DISABLE"] = "1"
         if "PYTHONPATH" not in test_env:
             test_env["PYTHONPATH"] = self.args.project_root
@@ -1139,17 +1140,18 @@ class Optimizer:
             first_test_types = []
             first_test_functions = []
             pathlib.Path(
-                get_run_tmp_file(f"test_return_values_{optimization_index}.bin"),
+                get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.bin"),
             ).unlink(missing_ok=True)
             pathlib.Path(
-                get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite"),
+                get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.sqlite"),
             ).unlink(missing_ok=True)
 
-            for instrumented_test_file in instrumented_unittests_created_for_function:
+            # TODO: Break this into a function
+            for test_file in instrumented_unittests_created_for_function:
                 relevant_tests_in_file = [
                     test_in_file
                     for test_in_file in tests_in_file
-                    if test_in_file.test_file == instrumented_test_file.replace("__perfinstrumented", "")
+                    if test_in_file.test_file == test_file.original_file_path
                 ]
                 is_replay_test = (
                     first_test_type := relevant_tests_in_file[0].test_type
@@ -1160,10 +1162,8 @@ class Optimizer:
                 )
                 if is_replay_test and len(relevant_tests_in_file) > 1:
                     logging.warning(
-                        f"Multiple tests found for the replay test {instrumented_test_file}. Should not happen",
+                        f"Multiple tests found for the replay test {test_file.original_file_path}. Should not happen",
                     )
-            instrumented_unittests_created_for_function.update(generated_tests_paths)
-            first_test_types.extend([TestType.GENERATED_REGRESSION] * len(generated_tests_paths))
             first_test_functions.extend([None] * len(generated_tests_paths))
 
             candidate_test_files = [
@@ -1179,66 +1179,35 @@ class Optimizer:
                 )
             ]
             candidate_results = self.run_and_parse_tests(
-                test_env,
-                TestFiles(test_files=candidate_test_files),
-                0,
-                optimization_index,
-                TOTAL_LOOPING_TIME,
+                test_env=test_env,
+                test_files=self.test_files,
+                optimization_iteration=optimization_candidate_index,
+                test_functions=first_test_functions,
+                testing_time=TOTAL_LOOPING_TIME,
             )
             initial_loop_candidate_results = TestResults(
-                test_results=[
-                    result for result in candidate_results.test_results if result.loop_index == "1"
-                ],
+                test_results=[result for result in candidate_results.test_results if result.loop_index == 1],
             )
             logging.info(
                 f"Overall initial loop test results for candidate code: {TestResults.report_to_string(initial_loop_candidate_results.get_test_pass_fail_report_by_type())}",
             )
             initial_loop_original_test_results = TestResults(
                 test_results=[
-                    result for result in original_test_results.test_results if result.loop_index == "1"
+                    result for result in original_test_results.test_results if result.loop_index == 1
                 ],
-            )
-            candidate_existing_test_results = TestResults(
-                test_results=[
-                    result for result in candidate_results if result.test_type == TestType.EXISTING_UNIT_TEST
-                ],
-            )
-            initial_loop_candidate_existing_test_results = TestResults(
-                test_results=[
-                    result
-                    for result in candidate_existing_test_results.test_results
-                    if result.loop_index == "1"
-                ],
-            )
-            logging.info(
-                f"Existing initial loop test results for original code: {initial_loop_candidate_existing_test_results.get_test_pass_fail_report()}",
-            )
-            candidate_generated_test_results = TestResults(
-                test_results=[
-                    result
-                    for result in candidate_results
-                    if result.test_type == TestType.GENERATED_REGRESSION
-                ],
-            )
-            initial_loop_candidate_generated_test_results = TestResults(
-                test_results=[
-                    result
-                    for result in candidate_generated_test_results.test_results
-                    if result.loop_index == "1"
-                ],
-            )
-            logging.info(
-                f"Generated initial loop tests results for candidate: {initial_loop_candidate_generated_test_results.get_test_pass_fail_report()}",
             )
 
+            # TODO : Start fixing from here
             if compare_test_results(
                 initial_loop_original_test_results,
                 initial_loop_candidate_results,
             ):
                 logging.info("Test results matched!")
+                equal_results = True
             else:
                 logging.info("Test results did not match the test results of the original code.")
                 success = False
+                equal_results = False
 
             if (total_candidate_timing := candidate_results.total_passed_runtime()) == 0:
                 logging.warning(
@@ -1247,10 +1216,12 @@ class Optimizer:
             if best_runtime_until_now is None or total_candidate_timing < best_runtime_until_now:
                 best_test_runtime = total_candidate_timing
                 best_test_results = candidate_results
-            pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.bin")).unlink(
+            pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.bin")).unlink(
                 missing_ok=True,
             )
-            pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite")).unlink(
+            pathlib.Path(
+                get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.sqlite"),
+            ).unlink(
                 missing_ok=True,
             )
             if not equal_results:
@@ -1258,7 +1229,7 @@ class Optimizer:
 
             if not success:
                 return Failure("Failed to run the optimized candidate.")
-            logging.debug(f"Optimized code {optimization_index} runtime: {total_candidate_timing}")
+            logging.debug(f"Optimized code {optimization_candidate_index} runtime: {total_candidate_timing}")
             return Success(
                 OptimizedCandidateResult(
                     times_run=times_run,
@@ -1278,10 +1249,10 @@ class Optimizer:
         ):
             for test_index in range(MAX_TEST_RUN_ITERATIONS):
                 pathlib.Path(
-                    get_run_tmp_file(f"test_return_values_{optimization_index}.bin"),
+                    get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.bin"),
                 ).unlink(missing_ok=True)
                 pathlib.Path(
-                    get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite"),
+                    get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.sqlite"),
                 ).unlink(missing_ok=True)
                 if generated_tests_elapsed_time > MAX_FUNCTION_TEST_SECONDS:
                     do_break = True
@@ -1304,7 +1275,7 @@ class Optimizer:
                         test_env,
                         [instrumented_test_file],
                         [relevant_tests_in_file[0].test_type],
-                        optimization_index,
+                        optimization_candidate_index,
                         [relevant_tests_in_file[0].test_function] if is_replay_test else [None],
                     )
                     timing = candidate_existing_test_result.total_passed_runtime()
@@ -1347,7 +1318,7 @@ class Optimizer:
                         test_env,
                         generated_tests_paths,
                         [TestType.GENERATED_REGRESSION],
-                        optimization_index,
+                        optimization_candidate_index,
                     )
 
                 if candidate_generated_test_results and first_run and test_index == 0:
@@ -1399,10 +1370,10 @@ class Optimizer:
             if do_break:
                 break
 
-        pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.bin")).unlink(
+        pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.bin")).unlink(
             missing_ok=True,
         )
-        pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_index}.sqlite")).unlink(
+        pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(
             missing_ok=True,
         )
         if not (equal_results and times_run > 0):
@@ -1410,7 +1381,7 @@ class Optimizer:
 
         if not success:
             return Failure("Failed to run the optimized candidate.")
-        logging.debug(f"Optimized code {optimization_index} runtime: {test_times_list}")
+        logging.debug(f"Optimized code {optimization_candidate_index} runtime: {test_times_list}")
         return Success(
             OptimizedCandidateResult(
                 times_run=times_run,

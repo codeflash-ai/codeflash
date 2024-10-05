@@ -104,6 +104,9 @@ class TestFiles(BaseModel):
     def __iter__(self) -> Iterator[TestFile]:
         return iter(self.test_files)
 
+    def __len__(self):
+        return len(self.test_files)
+
 
 class OriginalCodeBaseline(BaseModel):
     generated_test_results: TestResults
