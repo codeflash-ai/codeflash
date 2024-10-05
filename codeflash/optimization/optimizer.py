@@ -491,10 +491,10 @@ class Optimizer:
                     )
                     speedup_ratios[candidate.optimization_id] = perf_gain
                     loop_count = max(
-                        [int(result.loop_index) for result in candidate_result.best_test_results],
+                        [result.loop_index for result in candidate_result.best_test_results],
                     )
                     logging.info(
-                        f"Candidate code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: {humanize_runtime(best_test_runtime)} per full loop ",
+                        f"Candidate code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: {humanize_runtime(best_test_runtime)} per full loop.",
                         f"speedup ratio = {perf_gain:.3f}",
                     )
 
