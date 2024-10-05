@@ -1273,8 +1273,16 @@ class Optimizer:
                         )
                     candidate_existing_test_result = self.run_and_parse_tests(
                         test_env,
-                        [instrumented_test_file],
-                        [relevant_tests_in_file[0].test_type],
+                        TestFiles(
+                            test_files=[
+                                TestFile(
+                                    instrumented_file_path=instrumented_test_file,
+                                    original_file_path=None,
+                                    original_source=None,
+                                    test_type=relevant_tests_in_file[0].test_type,
+                                ),
+                            ],
+                        ),
                         optimization_candidate_index,
                         [relevant_tests_in_file[0].test_function] if is_replay_test else [None],
                     )
@@ -1317,7 +1325,6 @@ class Optimizer:
                     candidate_generated_test_results = self.run_and_parse_tests(
                         test_env,
                         generated_tests_paths,
-                        [TestType.GENERATED_REGRESSION],
                         optimization_candidate_index,
                     )
 
