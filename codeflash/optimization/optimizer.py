@@ -491,7 +491,7 @@ class Optimizer:
                     )
                     speedup_ratios[candidate.optimization_id] = perf_gain
                     loop_count = max(
-                        [int(result.loop_index) for result in candidate_result.best_test_results]
+                        [int(result.loop_index) for result in candidate_result.best_test_results],
                     )
                     logging.info(
                         f"Candidate code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: {humanize_runtime(best_test_runtime)} per full loop ",
@@ -1205,7 +1205,6 @@ class Optimizer:
                     "The overall test runtime of the optimized function is 0, couldn't run tests.",
                 )
             if best_runtime_until_now is None or total_candidate_timing < best_runtime_until_now:
-                best_test_runtime = total_candidate_timing
                 best_test_results = candidate_results
             pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.bin")).unlink(
                 missing_ok=True,
@@ -1226,7 +1225,7 @@ class Optimizer:
             return Success(
                 OptimizedCandidateResult(
                     times_run=times_run,
-                    best_test_runtime=best_test_runtime,
+                    best_test_runtime=total_candidate_timing,
                     best_test_results=best_test_results,
                 ),
             )
