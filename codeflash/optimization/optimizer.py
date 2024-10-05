@@ -1166,18 +1166,6 @@ class Optimizer:
                     )
             first_test_functions.extend([None] * len(generated_tests_paths))
 
-            candidate_test_files = [
-                TestFile(
-                    instrumented_file_path=test_file,
-                    original_file_path=None,
-                    original_source=None,
-                    test_type=first_test_type,
-                )
-                for test_file, first_test_type in zip(
-                    instrumented_unittests_created_for_function,
-                    first_test_types,
-                )
-            ]
             candidate_results = self.run_and_parse_tests(
                 test_env=test_env,
                 test_files=self.test_files,
