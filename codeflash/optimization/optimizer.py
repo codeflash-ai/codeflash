@@ -20,7 +20,6 @@ from codeflash.api.aiservice import (
     OptimizedCandidate,
 )
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.config_consts import N_TESTS_TO_GENERATE
 from codeflash.code_utils.code_extractor import (
     add_needed_imports_from_module,
     extract_code,
@@ -38,6 +37,7 @@ from codeflash.code_utils.config_consts import (
     MAX_TEST_FUNCTION_RUNS,
     MAX_TEST_RUN_ITERATIONS,
     N_CANDIDATES,
+    N_TESTS_TO_GENERATE,
 )
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import (
@@ -258,7 +258,7 @@ class Optimizer:
                 f.write(generated_test.instrumented_test_source)
             self.test_files_created.add(generated_tests_path)
             logging.info(
-                f"Generated test {i + 1}/{count_tests}:\n{generated_test.instrumented_test_source}",
+                f"Generated test {i + 1}/{count_tests}:\n{generated_test.generated_original_test_source}",
             )
 
         baseline_result, test_functions_to_remove = self.establish_original_code_baseline(
@@ -305,7 +305,8 @@ class Optimizer:
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
             generated_tests = remove_functions_from_generated_tests(
-                generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
+                generated_tests=generated_tests,
+                test_functions_to_remove=test_functions_to_remove,
             )
 
             if best_optimization:
@@ -1222,8 +1223,9 @@ class Optimizer:
                 INDIVIDUAL_TESTCASE_TIMEOUT,
                 self.args.use_cached_tests,
                 function_trace_id,
+                test_index,
             )
-            for _ in range(N_TESTS_TO_GENERATE)
+            for test_index in range(N_TESTS_TO_GENERATE)
         ]
         try:
             tests: list[GeneratedTests] = []
@@ -1244,13 +1246,13 @@ class Optimizer:
             logging.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
         except Exception as e:
             logging.warning(
-                f"Failed to generate and instrument tests for {function_to_optimize.function_name}: {e}"
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}: {e}",
             )
             return None
 
         if not tests:
             logging.warning(
-                f"Failed to generate and instrument tests for {function_to_optimize.function_name}"
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}",
             )
             return None
 

@@ -14,6 +14,7 @@ from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.telemetry.posthog import ph
+from codeflash.version import __version__ as codeflash_version
 
 
 @dataclass(frozen=True)
@@ -87,6 +88,7 @@ class AiServiceClient:
             "trace_id": trace_id,
             "python_version": platform.python_version(),
             "experiment_metadata": experiment_metadata,
+            "codeflash_version": codeflash_version,
         }
         logging.info("Generating optimized candidates ...")
         try:
@@ -147,6 +149,7 @@ class AiServiceClient:
             "original_runtime": original_runtime,
             "optimized_runtime": optimized_runtime,
             "is_correct": is_correct,
+            "codeflash_version": codeflash_version,
         }
         try:
             self.make_ai_service_request("/log_features", payload=payload, timeout=5)
@@ -163,6 +166,7 @@ class AiServiceClient:
         test_framework: str,
         test_timeout: int,
         trace_id: str,
+        test_index: int,
     ) -> tuple[str, str] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
 
@@ -175,6 +179,7 @@ class AiServiceClient:
         - test_module_path (str): The module path for the test code.
         - test_framework (str): The test framework to use, e.g., "pytest".
         - test_timeout (int): The timeout for each test in seconds.
+        - test_index (int): The index from 0-(n-1) if n tests are generated for a single trace_id
 
         Returns
         -------
@@ -194,7 +199,9 @@ class AiServiceClient:
             "test_framework": test_framework,
             "test_timeout": test_timeout,
             "trace_id": trace_id,
+            "test_index": test_index,
             "python_version": platform.python_version(),
+            "codeflash_version": codeflash_version,
         }
         try:
             response = self.make_ai_service_request("/testgen", payload=payload, timeout=600)
