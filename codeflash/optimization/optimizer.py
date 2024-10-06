@@ -490,12 +490,18 @@ class Optimizer:
                         optimized_runtime_ns=best_test_runtime,
                     )
                     speedup_ratios[candidate.optimization_id] = perf_gain
-                    loop_count = max(
-                        [result.loop_index for result in candidate_result.best_test_results],
+                    loop_count = (
+                        max(all_loop_indices)
+                        if (
+                            all_loop_indices := {
+                                result.loop_index for result in candidate_result.best_test_results
+                            }
+                        )
+                        else 1
                     )
                     logging.info(
-                        f"Candidate code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: {humanize_runtime(best_test_runtime)} per full loop.",
-                        f"speedup ratio = {perf_gain:.3f}",
+                        f"Candidate code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: {humanize_runtime(best_test_runtime)} per full loop.\n"
+                        f"Speedup ratio: {perf_gain:.3f}",
                     )
 
                     if speedup_critic(
@@ -505,8 +511,9 @@ class Optimizer:
                     ) and quantity_of_tests_critic(candidate_result):
                         logging.info("This candidate is faster than the previous best candidate.")
                         logging.info(
-                            f"Original runtime: {humanize_runtime(original_code_baseline.runtime)}\nBest test runtime: "
-                            f"{humanize_runtime(candidate_result.best_test_runtime)}, ratio = {perf_gain:.3f}",
+                            f"Original runtime: {humanize_runtime(original_code_baseline.runtime)}\n"
+                            f"Best test runtime: {humanize_runtime(candidate_result.best_test_runtime)}\n"
+                            f"Speedup ratio: {perf_gain:.3f}",
                         )
                         best_optimization = BestOptimization(
                             candidate=candidate,
