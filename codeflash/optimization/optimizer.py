@@ -1086,6 +1086,7 @@ class Optimizer:
                                 optimization_index,
                             ),
                         )
+                    candidate_generated_test_results = original_gen_results
 
                 if candidate_generated_test_results and first_run and test_index == 0:
                     logger.info(
