@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ast
-import logging
+from codeflash.cli_cmds.console import logger
 from typing import Iterable
 
 import isort
@@ -297,7 +297,7 @@ def inject_profiling_into_existing_test(
     try:
         tree = ast.parse(test_code)
     except SyntaxError:
-        logging.exception(f"Syntax error in code in file - {test_path}")
+        logger.exception(f"Syntax error in code in file - {test_path}")
         return False, None
     # TODO: Pass the full name of function here, otherwise we can run into namespace clashes
     module_path = module_name_from_file_path(test_path, root_path)

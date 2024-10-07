@@ -17,6 +17,7 @@ from codeflash.code_utils.git_utils import (
     get_repo_owner_and_name,
 )
 from codeflash.code_utils.github_utils import get_github_secrets_page_url, require_github_app_or_exit
+from codeflash.cli_cmds.console import logger
 from codeflash.version import __version__ as version
 
 
@@ -92,19 +93,19 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
     else:
         logging_config.set_level(logging.INFO, echo_setting=not is_init)
     if args.version:
-        logging.info(f"Codeflash version {version}")
+        logger.info(f"Codeflash version {version}")
         sys.exit()
     if not check_running_in_git_repo(module_root=args.module_root):
         if not confirm_proceeding_with_no_git_repo():
-            logging.critical("No git repository detected and user aborted run. Exiting...")
+            logger.critical("No git repository detected and user aborted run. Exiting...")
             sys.exit(1)
         args.no_pr = True
     if args.function and not args.file:
-        logging.error("If you specify a --function, you must specify the --file it is in")
+        logger.error("If you specify a --function, you must specify the --file it is in")
         sys.exit(1)
     if args.file:
         if not os.path.exists(args.file):
-            logging.error(f"File {args.file} does not exist")
+            logger.error(f"File {args.file} does not exist")
             sys.exit(1)
         args.file = os.path.realpath(args.file)
         if not args.no_pr:
@@ -112,7 +113,7 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
             require_github_app_or_exit(owner, repo)
     if args.replay_test:
         if not os.path.isfile(args.replay_test):
-            logging.error(f"Replay test file {args.replay_test} does not exist")
+            logger.error(f"Replay test file {args.replay_test} does not exist")
             sys.exit(1)
         args.replay_test = os.path.realpath(args.replay_test)
 
@@ -123,7 +124,7 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     try:
         pyproject_config, pyproject_file_path = parse_config_file(args.config_file)
     except ValueError as e:
-        logging.exception(e.args[0])
+        logger.error(e.args[0])
         sys.exit(1)
     supported_keys = [
         "module_root",
@@ -185,13 +186,13 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
         try:
             git_repo = git.Repo(search_parent_directories=True)
         except git.exc.InvalidGitRepositoryError:
-            logging.exception(
+            logger.exception(
                 "I couldn't find a git repository in the current directory. "
                 "I need a git repository to run --all and open PRs for optimizations. Exiting...",
             )
             apologize_and_exit()
         if not args.no_pr and not check_and_push_branch(git_repo):
-            logging.critical("❌ Branch is not pushed. Exiting...")
+            logger.critical("❌ Branch is not pushed. Exiting...")
             sys.exit(1)
         owner, repo = get_repo_owner_and_name(git_repo)
         if not args.no_pr:
