@@ -1,6 +1,5 @@
 from __future__ import annotations
-
-import logging
+from codeflash.cli_cmds.console import logger
 import os
 import sys
 import time
@@ -42,7 +41,7 @@ def get_git_diff(
         if not file_path.endswith(".py"):
             continue
         file_path = os.path.join(repository.working_dir, file_path)
-        logging.debug("file name :" + file_path)
+        logger.debug("file name :" + file_path)
         add_line_no: list[int] = [
             line.target_line_no
             for hunk in patched_file
@@ -50,7 +49,7 @@ def get_git_diff(
             if line.is_added and line.value.strip() != ""
         ]  # the row number of deleted lines
 
-        logging.debug("added lines : " + str(add_line_no))
+        logger.debug("added lines : " + str(add_line_no))
         del_line_no: list[int] = [
             line.source_line_no
             for hunk in patched_file
@@ -58,7 +57,7 @@ def get_git_diff(
             if line.is_removed and line.value.strip() != ""
         ]  # the row number of added liens
 
-        logging.debug("deleted lines : " + str(del_line_no))
+        logger.debug("deleted lines : " + str(del_line_no))
 
         change_list[file_path] = add_line_no
     return change_list
@@ -122,9 +121,9 @@ def check_and_push_branch(repo: git.Repo, wait_for_push: bool = False) -> bool:
 
     # Check if the branch is pushed
     if f"origin/{current_branch}" not in repo.refs:
-        logging.warning(f"⚠️ The branch '{current_branch}' is not pushed to the remote repository.")
+        logger.warning(f"⚠️ The branch '{current_branch}' is not pushed to the remote repository.")
         if not sys.__stdin__.isatty():
-            logging.warning("Non-interactive shell detected. Branch will not be pushed.")
+            logger.warning("Non-interactive shell detected. Branch will not be pushed.")
             return False
         if sys.__stdin__.isatty() and inquirer_wrapper(
             inquirer.confirm,
@@ -133,12 +132,12 @@ def check_and_push_branch(repo: git.Repo, wait_for_push: bool = False) -> bool:
             default=False,
         ):
             origin.push(current_branch)
-            logging.info(f"⬆️ Branch '{current_branch}' has been pushed to origin.")
+            logger.info(f"⬆️ Branch '{current_branch}' has been pushed to origin.")
             if wait_for_push:
                 time.sleep(3)  # adding this to give time for the push to register with GitHub,
                 # so that our modifications to it are not rejected
             return True
-        logging.info(f"🔘 Branch '{current_branch}' has not been pushed to origin.")
+        logger.info(f"🔘 Branch '{current_branch}' has not been pushed to origin.")
         return False
-    logging.debug(f"The branch '{current_branch}' is present in the remote repository.")
+    logger.debug(f"The branch '{current_branch}' is present in the remote repository.")
     return True

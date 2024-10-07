@@ -1,4 +1,4 @@
-import logging
+from codeflash.cli_cmds.console import logger
 import os
 import pathlib
 import re
@@ -33,7 +33,7 @@ def parse_test_return_values_bin(
 ) -> TestResults:
     test_results = TestResults()
     if not os.path.exists(file_location):
-        logging.warning(f"No test results for {file_location} found.")
+        logger.warning(f"No test results for {file_location} found.")
         return test_results
     with open(file_location, "rb") as file:
         while file:
@@ -51,7 +51,7 @@ def parse_test_return_values_bin(
             try:
                 test_pickle = pickle.loads(file.read(len_next))
             except Exception as e:
-                logging.exception(f"Failed to load pickle file. Exception: {e}")
+                logger.exception(f"Failed to load pickle file. Exception: {e}")
                 return test_results
             len_next = file.read(4)
             len_next = int.from_bytes(len_next, byteorder="big")
@@ -85,7 +85,7 @@ def parse_sqlite_test_results(
 ):
     test_results = TestResults()
     if not os.path.exists(sqlite_file_path):
-        logging.warning(f"No test results for {sqlite_file_path} found.")
+        logger.warning(f"No test results for {sqlite_file_path} found.")
         return test_results
     try:
         db = sqlite3.connect(sqlite_file_path)
@@ -117,7 +117,7 @@ def parse_sqlite_test_results(
                 ),
             )
         except Exception:
-            logging.exception("Failed to load pickle file.")
+            logger.exception("Failed to load pickle file.")
         # return_value is only None temporarily as this is only being used for the existing tests. This should generalize
         # to read the return_value from the sqlite file as well.
         # Hardcoding the test result to True because the test did execute and we are only interested in the return values,
@@ -136,12 +136,12 @@ def parse_test_xml(
 
     # Parse unittest output
     if not os.path.exists(test_xml_file_path):
-        logging.warning(f"No test results for {test_xml_file_path} found.")
+        logger.warning(f"No test results for {test_xml_file_path} found.")
         return test_results
     try:
         xml = JUnitXml.fromfile(test_xml_file_path)
     except Exception as e:
-        logging.warning(f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}")
+        logger.warning(f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}")
         return test_results
 
     for suite in xml:
@@ -157,9 +157,9 @@ def parse_test_xml(
                 and suite.tests == 1
             ):
                 # This means that the test failed to load, so we don't want to crash on it
-                logging.info("Test failed to load, skipping it.")
+                logger.info("Test failed to load, skipping it.")
                 if run_result is not None:
-                    logging.info(
+                    logger.info(
                         f"Test log - STDOUT : {run_result.stdout.decode()} \n STDERR : {run_result.stderr.decode()}",
                     )
                 return test_results
@@ -246,7 +246,7 @@ def parse_test_xml(
                         ),
                     )
     if len(test_results) == 0:
-        logging.info(f"Test '{test_py_file_path}' failed to run, skipping it")
+        logger.info(f"Test '{test_py_file_path}' failed to run, skipping it")
         if run_result is not None:
             try:
                 stdout = run_result.stdout.decode()
@@ -254,7 +254,7 @@ def parse_test_xml(
             except AttributeError:
                 stdout = run_result.stdout
                 stderr = run_result.stderr
-            logging.debug(
+            logger.debug(
                 f"Test log - STDOUT : {stdout} \n STDERR : {stderr}",
             )
     return test_results
@@ -400,7 +400,7 @@ def parse_test_results(
                 test_file_path=test_py_path,
             )
         except AttributeError as e:
-            logging.exception(e)
+            logger.exception(e)
             test_results_bin_file = TestResults()
             pathlib.Path(
                 get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
@@ -414,7 +414,7 @@ def parse_test_results(
                 test_config=test_config,
             )
         except AttributeError as e:
-            logging.exception(e)
+            logger.exception(e)
             test_results_bin_file = TestResults()
     else:
         raise ValueError(f"Invalid test type: {test_type}")

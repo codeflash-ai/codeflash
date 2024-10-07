@@ -2,23 +2,25 @@
 solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 """
 
-import logging
-import sys
 from pathlib import Path
+
 
 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO, ask_run_end_to_end_test
-from codeflash.cli_cmds.logging_config import LOGGING_FORMAT
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.optimization import optimizer
 from codeflash.telemetry import posthog
 from codeflash.telemetry.sentry import init_sentry
+from codeflash.cli_cmds.console import paneled_text
 
 
 def main() -> None:
     """Entry point for the codeflash command-line interface."""
-    logging.basicConfig(level=logging.INFO, format=LOGGING_FORMAT, stream=sys.stdout)
-    logging.info(CODEFLASH_LOGO)
+    paneled_text(
+        CODEFLASH_LOGO,
+        panel_args={"title": "https://codeflash.ai", "expand": False},
+        text_args={"style": "bold gold3"},
+    )
     args = parse_args()
     if args.command:
         if args.config_file and Path.exists(args.config_file):

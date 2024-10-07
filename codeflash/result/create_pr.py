@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from codeflash.cli_cmds.console import logger
 import os.path
 import pathlib
 from typing import Dict, Optional
@@ -46,7 +46,7 @@ def check_create_pr(
     git_repo = git.Repo(search_parent_directories=True)
 
     if pr_number is not None:
-        logging.info(f"Suggesting changes to PR #{pr_number} ...")
+        logger.info(f"Suggesting changes to PR #{pr_number} ...")
         owner, repo = get_repo_owner_and_name(git_repo)
         relative_path = str(pathlib.Path(os.path.relpath(explanation.file_path, git_root_dir())).as_posix())
         build_file_changes = {
@@ -58,7 +58,7 @@ def check_create_pr(
             if not is_zero_diff(original_code[p], new_code[p])
         }
         if not build_file_changes:
-            logging.info("No changes to suggest to PR.")
+            logger.info("No changes to suggest to PR.")
             return
         response = cfapi.suggest_changes(
             owner=owner,
@@ -80,18 +80,18 @@ def check_create_pr(
             trace_id=function_trace_id,
         )
         if response.ok:
-            logging.info(f"Suggestions were successfully made to PR #{pr_number}")
+            logger.info(f"Suggestions were successfully made to PR #{pr_number}")
         else:
-            logging.error(
+            logger.error(
                 f"Optimization was successful, but I failed to suggest changes to PR #{pr_number}."
                 f" Response from server was: {response.text}",
             )
     else:
-        logging.info("Creating a new PR with the optimized code...")
+        logger.info("Creating a new PR with the optimized code...")
         owner, repo = get_repo_owner_and_name(git_repo)
 
         if not check_and_push_branch(git_repo, wait_for_push=True):
-            logging.warning("⏭️ Branch is not pushed, skipping PR creation...")
+            logger.warning("⏭️ Branch is not pushed, skipping PR creation...")
             return
         relative_path = str(pathlib.Path(os.path.relpath(explanation.file_path, git_root_dir())).as_posix())
         base_branch = get_current_branch()
@@ -121,9 +121,9 @@ def check_create_pr(
             trace_id=function_trace_id,
         )
         if response.ok:
-            logging.info(f"Successfully created a new PR #{response.text} with the optimized code.")
+            logger.info(f"Successfully created a new PR #{response.text} with the optimized code.")
         else:
-            logging.error(
+            logger.error(
                 f"Optimization was successful, but I failed to create a PR with the optimized code."
                 f" Response from server was: {response.text}",
             )

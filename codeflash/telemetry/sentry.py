@@ -5,6 +5,7 @@ from sentry_sdk.integrations.logging import LoggingIntegration
 
 
 def init_sentry(enabled: bool = False, exclude_errors: bool = False):
+    return
     if enabled:
         sentry_logging = LoggingIntegration(
             level=logging.INFO,  # Capture info and above as breadcrumbs

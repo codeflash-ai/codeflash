@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 import platform
 from typing import Any
@@ -14,6 +13,7 @@ from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.telemetry.posthog import ph
+from codeflash.cli_cmds.console import logger
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,7 @@ class AiServiceClient:
 
     def get_aiservice_base_url(self) -> str:
         if os.environ.get("CODEFLASH_AIS_SERVER", default="prod").lower() == "local":
-            logging.info("Using local AI Service at http://localhost:8000")
+            logger.info("Using local AI Service at http://localhost:8000")
             return "http://localhost:8000"
         return "https://app.codeflash.ai"
 
@@ -88,7 +88,7 @@ class AiServiceClient:
             "python_version": platform.python_version(),
             "experiment_metadata": experiment_metadata,
         }
-        logging.info("Generating optimized candidates ...")
+        logger.info("Generating optimized candidates ...")
         try:
             response = self.make_ai_service_request(
                 "/optimize",
@@ -96,13 +96,13 @@ class AiServiceClient:
                 timeout=600,
             )
         except requests.exceptions.RequestException as e:
-            logging.exception(f"Error generating optimized candidates: {e}")
+            logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
             return []
 
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
-            logging.info(f"Generated {len(optimizations_json)} candidates.")
+            logger.info(f"Generated {len(optimizations_json)} candidates.")
             return [
                 OptimizedCandidate(
                     source_code=opt["source_code"],
@@ -115,7 +115,7 @@ class AiServiceClient:
             error = response.json()["error"]
         except Exception:
             error = response.text
-        logging.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
         ph(
             "cli-optimize-error-response",
             {"response_status_code": response.status_code, "error": error},
@@ -151,7 +151,7 @@ class AiServiceClient:
         try:
             self.make_ai_service_request("/log_features", payload=payload, timeout=5)
         except requests.exceptions.RequestException as e:
-            logging.exception(f"Error logging features: {e}")
+            logger.exception(f"Error logging features: {e}")
 
     def generate_regression_tests(
         self,
@@ -199,7 +199,7 @@ class AiServiceClient:
         try:
             response = self.make_ai_service_request("/testgen", payload=payload, timeout=600)
         except requests.exceptions.RequestException as e:
-            logging.exception(f"Error generating tests: {e}")
+            logger.exception(f"Error generating tests: {e}")
             ph("cli-testgen-error-caught", {"error": str(e)})
             return None
 
@@ -207,18 +207,18 @@ class AiServiceClient:
 
         if response.status_code == 200:
             response_json = response.json()
-            logging.debug(f"Generated tests for function {function_to_optimize.function_name}")
+            logger.debug(f"Generated tests for function {function_to_optimize.function_name}")
             return response_json["generated_tests"], response_json["instrumented_tests"]
         try:
             error = response.json()["error"]
-            logging.error(f"Error generating tests: {response.status_code} - {error}")
+            logger.error(f"Error generating tests: {response.status_code} - {error}")
             ph(
                 "cli-testgen-error-response",
                 {"response_status_code": response.status_code, "error": error},
             )
             return None
         except Exception:
-            logging.error(f"Error generating tests: {response.status_code} - {response.text}")  # noqa: TRY400
+            logger.error(f"Error generating tests: {response.status_code} - {response.text}")  # noqa: TRY400
             ph(
                 "cli-testgen-error-response",
                 {"response_status_code": response.status_code, "error": response.text},

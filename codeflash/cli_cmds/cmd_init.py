@@ -44,7 +44,6 @@ CODEFLASH_LOGO: str = (
     r"/ __/ _ \/ _  / -_) _/ / _ `(_-</ _ \ " + f"{LF}"
     r"\__/\___/\_,_/\__/_//_/\_,_/___/_//_/" + f"{LF}"
     f"{('v'+version).rjust(46)}{LF}"
-    f"                          https://codeflash.ai{LF}"
     f"{LF}"
 )
 

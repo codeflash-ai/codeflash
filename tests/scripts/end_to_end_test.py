@@ -35,18 +35,15 @@ def main():
 
     for line in process.stdout:
         print(line, end="")  # Print each line in real-time
-        output.append(line)  # Store each line in the output variable
+        output.append(line.strip())  # Store each line in the output variable
     return_code = process.wait()
     stdout = "".join(output)
     assert return_code == 0, f"The codeflash command returned exit code {return_code} instead of 0"
 
-    m = re.search(
-        r"Optimization successful! 📄 sorter in .+\n.+📈\s+([\d+,]+)% improvement \(([\d+,.]+)x faster\)\.",
-        stdout,
-    )
-    assert m, "Failed to find performance improvement at all"
-    improvement_pct = int(m.group(1).replace(",", ""))
-    improvement_x = float(m.group(2).replace(",", ""))
+    assert "⚡️ Optimization successful! 📄 " in stdout, "Failed to find performance improvement at all"
+
+    improvement_pct = int(re.search(r"📈 ([\d,]+)% improvement", stdout).group(1).replace(",", ""))
+    improvement_x = float(improvement_pct) / 100
 
     assert (
         improvement_pct > 30000
