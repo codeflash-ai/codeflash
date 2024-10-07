@@ -56,8 +56,8 @@ class GeneratedTestsList(BaseModel):
 
 class TestFile(BaseModel):
     instrumented_file_path: str
-    original_file_path: Optional[str]
-    original_source: Optional[str]
+    original_file_path: Optional[str] = None
+    original_source: Optional[str] = None
     test_type: TestType
 
 
