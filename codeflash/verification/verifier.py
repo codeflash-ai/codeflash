@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import ast
-import logging
 
 from codeflash.api.aiservice import AiServiceClient
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.verification.verification_utils import (
@@ -24,6 +24,7 @@ def generate_tests(
     test_timeout: int,
     use_cached_tests: bool,
     function_trace_id: str,
+    test_index: int,
 ) -> tuple[str, str] | None:
     # TODO: Sometimes this recreates the original Class definition. This overrides and messes up the original
     #  class import. Remove the recreation of the class definition
@@ -38,7 +39,7 @@ def generate_tests(
             "{codeflash_run_tmp_dir_client_side}",
             path,
         )
-        logging.info(f"Using cached tests from {module_path}.CACHED_TESTS")
+        logger.info(f"Using cached tests from {module_path}.CACHED_TESTS")
     else:
         test_module_path = module_name_from_file_path(
             get_test_file_path(test_cfg.tests_root, function_to_optimize.function_name, 0),
@@ -53,6 +54,7 @@ def generate_tests(
             test_framework=test_cfg.test_framework,
             test_timeout=test_timeout,
             trace_id=function_trace_id,
+            test_index=test_index,
         )
         if response and isinstance(response, tuple) and len(response) == 2:
             generated_test_source, instrumented_test_source = response
@@ -62,8 +64,8 @@ def generate_tests(
                 path,
             )
         else:
-            logging.warning(
-                f"Failed to generate and instrument tests for {function_to_optimize.function_name}"
+            logger.warning(
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}",
             )
             return None
 
@@ -82,7 +84,7 @@ def merge_unit_tests(unit_test_source: str, inspired_unit_tests: str, test_frame
         inspired_unit_tests_ast = ast.parse(inspired_unit_tests)
         unit_test_source_ast = ast.parse(unit_test_source)
     except SyntaxError as e:
-        logging.exception(f"Syntax error in code: {e}")
+        logger.exception(f"Syntax error in code: {e}")
         return unit_test_source
     import_list: list[ast.stmt] = list()
     modified_ast = ModifyInspiredTests(import_list, test_framework).visit(inspired_unit_tests_ast)

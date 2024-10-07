@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import sys
 from enum import Enum
 from typing import Iterator, Optional
@@ -8,6 +7,7 @@ from typing import Iterator, Optional
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 
+from codeflash.cli_cmds.console import logger
 from codeflash.verification.comparator import comparator
 
 
@@ -101,7 +101,7 @@ class TestResults(BaseModel):
                 if test_result.did_pass:
                     passed += 1
                 else:
-                    logging.info(f"Failed test: {test_result.id}")
+                    logger.info(f"Failed test: {test_result.id}")
                     failed += 1
         return f"Passed: {passed}, Failed: {failed}"
 
@@ -134,7 +134,7 @@ class TestResults(BaseModel):
         """
         for result in self.test_results:
             if result.did_pass and result.runtime is None:
-                logging.debug(
+                logger.debug(
                     f"Ignoring test case that passed but had no runtime -> {result.id}, Loop # {result.loop_index}",
                 )
         usable_results = [

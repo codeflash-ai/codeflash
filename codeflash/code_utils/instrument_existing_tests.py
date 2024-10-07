@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import ast
-import logging
 from typing import Iterable
 
 import isort
 
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 from codeflash.discovery.discover_unit_tests import CodePosition
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
@@ -330,7 +330,7 @@ def inject_profiling_into_existing_test(
     try:
         tree = ast.parse(test_code)
     except SyntaxError:
-        logging.exception("Syntax error in code in file - %s", test_path)
+        logger.exception(f"Syntax error in code in file - {test_path}")
         return False, None
     # TODO: Pass the full name of function here, otherwise we can run into namespace clashes
     module_path = module_name_from_file_path(test_path, root_path)

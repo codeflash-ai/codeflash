@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import logging
 import os
 import random
 from _ast import AsyncFunctionDef, ClassDef, FunctionDef
@@ -17,6 +16,7 @@ from libcst.metadata import CodeRange
 from pydantic.dataclasses import dataclass
 
 from codeflash.api.cfapi import get_blacklisted_functions
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
@@ -176,7 +176,7 @@ def get_functions_to_optimize(
     ), "Only one of optimize_all, replay_test, or file should be provided"
     functions: dict[str, list[FunctionToOptimize]]
     if optimize_all:
-        logging.info("Finding all functions in the module '%s' ...", optimize_all)
+        logger.info("Finding all functions in the module '%s' ...", optimize_all)
         functions = get_all_files_and_functions(optimize_all)
     elif replay_test is not None:
         functions = get_all_replay_test_functions(
@@ -186,7 +186,7 @@ def get_functions_to_optimize(
         )
 
     elif file is not None:
-        logging.info("Finding all functions in the file '%s' ...", file)
+        logger.info("Finding all functions in the file '%s' ...", file)
         functions = find_all_functions_in_file(file)
         if only_get_this_function is not None:
             split_function = only_get_this_function.split(".")
@@ -212,7 +212,7 @@ def get_functions_to_optimize(
                 )
             functions[file] = [found_function]
     else:
-        logging.info("Finding all functions modified in the current git diff ...")
+        logger.info("Finding all functions modified in the current git diff ...")
         ph("cli-optimizing-git-diff")
         functions = get_functions_within_git_diff()
     filtered_modified_functions, functions_count = filter_functions(
@@ -222,7 +222,7 @@ def get_functions_to_optimize(
         project_root,
         module_root,
     )
-    logging.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
+    logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
     return filtered_modified_functions, functions_count
 
 
@@ -237,7 +237,7 @@ def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
             try:
                 wrapper = cst.metadata.MetadataWrapper(cst.parse_module(file_content))
             except Exception as e:
-                logging.exception(e)
+                logger.exception(e)
                 continue
             function_lines = FunctionVisitor(file_path=path)
             wrapper.visit(function_lines)
@@ -275,7 +275,7 @@ def find_all_functions_in_file(file_path: str) -> dict[str, list[FunctionToOptim
         try:
             ast_module = ast.parse(f.read())
         except Exception as e:
-            logging.exception(e)
+            logger.exception(e)
             return functions
         function_name_visitor = FunctionWithReturnStatement(file_path)
         function_name_visitor.visit(ast_module)
@@ -427,7 +427,7 @@ def inspect_top_level_functions_or_methods(
         try:
             ast_module = ast.parse(file.read())
         except Exception as e:
-            logging.exception(e)
+            logger.exception(e)
             return False
     visitor = TopLevelFunctionOrMethodVisitor(
         file_name=file_name,
@@ -499,7 +499,7 @@ def filter_functions(
                 path = Path(function.file_path).name
                 if path in blocklist_funcs and function.function_name in blocklist_funcs[path]:
                     functions.remove(function)
-                    logging.debug(
+                    logger.debug(
                         f"Skipping {function.function_name} in {path} as it has already been optimized",
                     )
                     continue
@@ -517,7 +517,7 @@ def filter_functions(
         }
         log_string: str
         if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
-            logging.info(f"Ignoring:\n{log_string}")
+            logger.info(f"Ignoring:\n{log_string}")
     return {k: v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 

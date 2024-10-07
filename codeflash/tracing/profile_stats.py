@@ -3,6 +3,7 @@ import os.path
 import pstats
 import sqlite3
 from copy import copy
+from codeflash.cli_cmds.console import logger
 
 
 class ProfileStats(pstats.Stats):
@@ -11,7 +12,7 @@ class ProfileStats(pstats.Stats):
         assert time_unit in ["ns", "us", "ms", "s"], f"Invalid time unit {time_unit}"
         self.trace_file_path = trace_file_path
         self.time_unit = time_unit
-        print(hasattr(self, "create_stats"))
+        logger.debug(hasattr(self, "create_stats"))
         super().__init__(copy(self))
 
     def create_stats(self):
