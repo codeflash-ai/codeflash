@@ -14,6 +14,7 @@ from junitparser.xunit2 import JUnitXml
 from codeflash.code_utils.code_utils import (
     file_path_from_module_name,
     get_run_tmp_file,
+    module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.models.models import TestFiles
@@ -161,9 +162,9 @@ def parse_test_xml(
     for suite in xml:
         for testcase in suite:
             class_name = testcase.classname
-            file_name = suite._elem.attrib.get("file")
+            test_file_name = suite._elem.attrib.get("file")
             if (
-                file_name == f"unittest{os.sep}loader.py"
+                test_file_name == f"unittest{os.sep}loader.py"
                 and class_name == "unittest.loader._FailedTest"
                 and suite.errors == 1
                 and suite.tests == 1
@@ -176,12 +177,17 @@ def parse_test_xml(
                     )
                 return test_results
 
-            test_module_path = testcase.classname
-            test_file_path = file_path_from_module_name(test_module_path, test_config.project_root_path)
-            assert os.path.exists(test_file_path), f"File {file_name} doesn't exist."
+            test_class_path = testcase.classname
+            if test_file_name is None:
+                # TODO : This might not be true if the test is organized under a class
+                test_file_path = file_path_from_module_name(test_class_path, test_config.project_root_path)
+            else:
+                test_file_path = os.path.join(test_config.project_root_path, test_file_name)
+            assert os.path.exists(test_file_path), f"File {test_file_path} doesn't exist."
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
             assert test_type is not None, f"Test type not found for {test_file_path}"
             # file_name = file_path_from_module_name(test_module_path, test_config.project_root_path)
+            test_module_path = module_name_from_file_path(test_file_path, test_config.project_root_path)
 
             result = testcase.is_passed  # TODO: See for the cases of ERROR and SKIPPED
             test_class = None

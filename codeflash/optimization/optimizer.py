@@ -981,28 +981,30 @@ class Optimizer:
                 if generated_tests_elapsed_time > MAX_FUNCTION_TEST_SECONDS:
                     do_break = True
                     break
+                test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
                 instrumented_existing_test_timing = []
                 original_test_results_iter = TestResults()
                 existing_test_results = TestResults()
-                for test_file in instrumented_unittests_created_for_function:
+                for test_file in self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
                     relevant_tests_in_file = [
                         test_in_file
                         for test_in_file in tests_in_file
-                        if test_in_file.test_file == test_file.replace("__perfinstrumented", "")
+                        if test_in_file.test_file == test_file.original_file_path
                     ]
                     is_replay_test = relevant_tests_in_file[0].test_type == TestType.REPLAY_TEST
                     if is_replay_test and len(relevant_tests_in_file) > 1:
                         logging.warning(
                             f"Multiple tests found for the replay test {test_file}. Should not happen",
                         )
+
                     unittest_results = self.run_and_parse_tests(
                         test_env,
                         TestFiles(
                             test_files=[
                                 TestFile(
-                                    instrumented_file_path=test_file,
-                                    original_file_path=None,
-                                    original_source=None,
+                                    instrumented_file_path=test_file.instrumented_file_path,
+                                    original_file_path=test_file.original_file_path,
+                                    original_source=test_file.original_source,
                                     test_type=relevant_tests_in_file[0].test_type,
                                 ),
                             ],
