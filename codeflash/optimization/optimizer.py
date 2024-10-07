@@ -261,7 +261,7 @@ class Optimizer:
                 f.write(generated_test.instrumented_test_source)
             self.test_files_created.add(generated_tests_path)
             logger.info(f"Generated test {i + 1}/{count_tests}:")
-            code_print(generated_test.instrumented_test_source)
+            code_print(generated_test.generated_original_test_source)
 
         baseline_result, test_functions_to_remove = self.establish_original_code_baseline(
             function_to_optimize.qualified_name,
@@ -307,7 +307,8 @@ class Optimizer:
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
             generated_tests = remove_functions_from_generated_tests(
-                generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
+                generated_tests=generated_tests,
+                test_functions_to_remove=test_functions_to_remove,
             )
 
             if best_optimization:
@@ -1218,8 +1219,9 @@ class Optimizer:
                 INDIVIDUAL_TESTCASE_TIMEOUT,
                 self.args.use_cached_tests,
                 function_trace_id,
+                test_index,
             )
-            for _ in range(N_TESTS_TO_GENERATE)
+            for test_index in range(N_TESTS_TO_GENERATE)
         ]
         try:
             tests: list[GeneratedTests] = []
@@ -1240,13 +1242,13 @@ class Optimizer:
             logger.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
         except Exception as e:
             logger.warning(
-                f"Failed to generate and instrument tests for {function_to_optimize.function_name}: {e}"
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}: {e}",
             )
             return None
 
         if not tests:
             logger.warning(
-                f"Failed to generate and instrument tests for {function_to_optimize.function_name}"
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}",
             )
             return None
 
