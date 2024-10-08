@@ -1,6 +1,4 @@
-VERBOSE_LOGGING_FORMAT = (
-    "%(asctime)s %(levelname)s [%(filename)s:%(lineno)s in function %(funcName)s] %(message)s"
-)
+VERBOSE_LOGGING_FORMAT = "%(asctime)s [%(pathname)s:%(lineno)s in function %(funcName)s] %(message)s"
 LOGGING_FORMAT = "[%(levelname)s] %(message)s"
 BARE_LOGGING_FORMAT = "%(message)s"
 
@@ -17,7 +15,11 @@ def set_level(level: int, *, echo_setting: bool = True) -> None:
         level=level,
         handlers=[
             RichHandler(
-                rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False
+                rich_tracebacks=True,
+                markup=False,
+                console=console,
+                show_path=False,
+                show_time=False,
             ),
         ],
         format=BARE_LOGGING_FORMAT,
