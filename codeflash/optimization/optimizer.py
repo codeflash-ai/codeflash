@@ -1025,26 +1025,24 @@ class Optimizer:
                     logger.info(
                         f"Existing unit test results for original code: {original_test_results_iter.get_test_pass_fail_report()}",
                     )
-                original_gen_results = self.run_and_parse_tests(
-                    test_env,
-                    TestFiles(
-                        test_files=[
-                            TestFile(
-                                instrumented_file_path=test_file,
-                                original_file_path=None,
-                                original_source=None,
-                                test_type=relevant_tests_in_file[0].test_type,
-                            ),
-                        ],
-                    ),
-                    0,
-                    0,
-                )
-                functions_to_remove = [
-                    result.id.test_function_name
-                    for result in original_gen_results.test_results
-                    if not result.did_pass
-                ]
+                for test_file in self.test_files.get_by_type(TestType.GENERATED_REGRESSION).test_files:
+                    original_gen_results = self.run_and_parse_tests(
+                        test_env,
+                        TestFiles(
+                            test_files=[test_file],
+                        ),
+                        0,
+                        None,
+                    )
+                    functions_to_remove = [
+                        result.id.test_function_name
+                        for result in original_gen_results.test_results
+                        if not result.did_pass
+                    ]
+                    timing = original_gen_results.total_passed_runtime()
+                    original_test_results_iter.merge(original_gen_results)
+                    existing_test_results.merge(original_gen_results)
+                    instrumented_existing_test_timing.append(timing)
 
                 # TODO: Implement the logic to disregard the timing info of the tests that errored out. That is remove test cases that failed to run.
 
