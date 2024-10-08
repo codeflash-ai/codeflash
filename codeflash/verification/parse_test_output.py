@@ -430,11 +430,16 @@ def parse_test_results(
     )
 
     try:
-        test_results_bin_file = parse_test_return_values_bin(
-            get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
-            test_files=test_files,
-            test_config=test_config,
-        )
+        if os.path.exists(
+            bin_results_file := get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
+        ):
+            test_results_bin_file = parse_test_return_values_bin(
+                bin_results_file,
+                test_files=test_files,
+                test_config=test_config,
+            )
+        else:
+            test_results_bin_file = TestResults()
     except AttributeError as e:
         logger.exception(e)
         test_results_bin_file = TestResults()
@@ -443,14 +448,15 @@ def parse_test_results(
         ).unlink(missing_ok=True)
 
     try:
-        test_results_sqlite_file = parse_sqlite_test_results(
-            sqlite_file_path=get_run_tmp_file(
-                f"test_return_values_{optimization_iteration}.sqlite",
-            ),
-            test_files=test_files,
-            test_config=test_config,
-        )
-        test_results_bin_file.merge(test_results_sqlite_file)
+        if os.path.exists(
+            sql_results_file := get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite"),
+        ):
+            test_results_sqlite_file = parse_sqlite_test_results(
+                sqlite_file_path=sql_results_file,
+                test_files=test_files,
+                test_config=test_config,
+            )
+            test_results_bin_file.merge(test_results_sqlite_file)
     except AttributeError as e:
         logger.exception(e)
 
