@@ -108,7 +108,7 @@ class TestResults(BaseModel):
     def number_of_loops(self) -> int:
         if not self.test_results:
             return 0
-        return max({test_result.loop_index for test_result in self.test_results})
+        return max(test_result.loop_index for test_result in self.test_results)
 
     def get_test_pass_fail_report_by_type(self) -> dict[TestType, dict[str, int]]:
         report = {}
