@@ -32,10 +32,6 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
-    MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS,
-    MAX_FUNCTION_TEST_SECONDS,
-    MAX_TEST_FUNCTION_RUNS,
-    MAX_TEST_RUN_ITERATIONS,
     N_CANDIDATES,
     N_TESTS_TO_GENERATE,
     TOTAL_LOOPING_TIME,
@@ -49,7 +45,6 @@ from codeflash.code_utils.remove_generated_tests import (
 )
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import (
-    FunctionCalledInTest,
     discover_unit_tests,
 )
 from codeflash.discovery.functions_to_optimize import (
@@ -92,6 +87,7 @@ if TYPE_CHECKING:
         OptimizedCandidate,
     )
     from codeflash.discovery.discover_unit_tests import (
+        FunctionCalledInTest,
         TestsInFile,
     )
     from codeflash.models.models import (
@@ -114,9 +110,7 @@ class Optimizer:
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
 
-        self.test_files_created: set[str] = set()
         self.test_files = TestFiles(test_files=[])
-        self.instrumented_unittests_created: set[str] = set()
 
     def run(self) -> None:
         ph("cli-optimize-run-start")
@@ -182,6 +176,7 @@ class Optimizer:
                         function_to_tests,
                         original_code,
                     )
+                    self.test_files = TestFiles(test_files=[])
                     if is_successful(best_optimization):
                         optimizations_found += 1
                     else:
@@ -244,7 +239,6 @@ class Optimizer:
             function_to_optimize=function_to_optimize,
             function_to_tests=function_to_tests,
         )
-        self.instrumented_unittests_created.update(instrumented_unittests_created_for_function)
 
         logger.info(f"Generating new tests for function {function_to_optimize.function_name} ...")
         generated_results = self.generate_tests_and_optimizations(
@@ -283,7 +277,6 @@ class Optimizer:
                     test_type=TestType.GENERATED_REGRESSION,
                 ),
             )
-            self.test_files_created.add(generated_tests_path)
             logger.info(f"Generated test {i + 1}/{count_tests}:")
             code_print(generated_test.generated_original_test_source)
 
