@@ -6,9 +6,9 @@ import os.path
 import pathlib
 import sys
 import tempfile
+from argparse import Namespace
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
-from codeflash.code_utils.config_consts import INDIVIDUAL_TESTCASE_TIMEOUT
 from codeflash.code_utils.instrument_existing_tests import (
     FunctionImportedAsVisitor,
     inject_profiling_into_existing_test,
@@ -16,10 +16,8 @@ from codeflash.code_utils.instrument_existing_tests import (
 from codeflash.discovery.discover_unit_tests import CodePosition
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 from codeflash.models.models import TestFile, TestFiles
-from codeflash.verification.parse_test_output import parse_test_results
+from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.test_results import TestType
-from codeflash.verification.test_runner import run_tests
-from codeflash.verification.verification_utils import TestConfig
 
 
 def test_perfinjector_bubble_sort() -> None:
@@ -315,6 +313,17 @@ def test_sort():
         with open(test_path, "w") as f:
             f.write(new_test)
 
+        opt = Optimizer(
+            Namespace(
+                project_root=str(project_root_path),
+                disable_telemetry=True,
+                tests_root=str(tests_root),
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+            ),
+        )
+
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
@@ -322,30 +331,14 @@ def test_sort():
         test_files = TestFiles(
             test_files=[TestFile(instrumented_file_path=str(test_path), test_type=test_type)],
         )
-        test_cfg = TestConfig(
-            tests_root=str(tests_root),
-            project_root_path=str(project_root_path),
-            test_framework="pytest",
-            pytest_cmd="pytest",
-        )
-        result_file_path, run_result = run_tests(
-            test_files,
-            test_framework="pytest",
-            cwd=str(project_root_path),
-            pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-            pytest_cmd="pytest",
-            verbose=True,
+        test_results = opt.run_and_parse_tests(
             test_env=test_env,
+            test_files=test_files,
+            optimization_iteration=0,
+            test_functions=None,
             pytest_min_loops=1,
             pytest_max_loops=1,
-            pytest_target_runtime_seconds=0.1,
-        )
-        test_results = parse_test_results(
-            test_xml_path=result_file_path,
-            test_files=test_files,
-            test_config=test_cfg,
-            run_result=run_result,
-            optimization_iteration=0,
+            testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
         assert test_results[0].id.iteration_id == "1_0"

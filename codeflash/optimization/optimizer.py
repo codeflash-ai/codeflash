@@ -32,10 +32,6 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
-    MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS,
-    MAX_FUNCTION_TEST_SECONDS,
-    MAX_TEST_FUNCTION_RUNS,
-    MAX_TEST_RUN_ITERATIONS,
     N_CANDIDATES,
     N_TESTS_TO_GENERATE,
     TOTAL_LOOPING_TIME,
@@ -1107,6 +1103,8 @@ class Optimizer:
         optimization_iteration: int,
         test_functions: list[str | None] | None = None,
         testing_time: float = TOTAL_LOOPING_TIME,
+        pytest_min_loops: int = 5,
+        pytest_max_loops: int = 100_000,
     ) -> TestResults:
         try:
             result_file_path, run_result = run_tests(
@@ -1119,6 +1117,8 @@ class Optimizer:
                 verbose=True,
                 only_run_these_test_functions=test_functions,
                 pytest_target_runtime_seconds=testing_time,
+                pytest_min_loops=pytest_min_loops,
+                pytest_max_loops=pytest_max_loops,
             )
         except subprocess.TimeoutExpired:
             logger.exception(
