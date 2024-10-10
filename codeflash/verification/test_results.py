@@ -97,7 +97,7 @@ class TestResults(BaseModel):
         passed = 0
         failed = 0
         for test_result in self.test_results:
-            if test_result.test_executed():
+            if test_result.loop_index == 1 and test_result.test_executed():
                 if test_result.did_pass:
                     passed += 1
                 else:
@@ -110,7 +110,7 @@ class TestResults(BaseModel):
         for test_type in TestType:
             report[test_type] = {"passed": 0, "failed": 0}
         for test_result in self.test_results:
-            if test_result.test_executed():
+            if test_result.loop_index == 1 and test_result.test_executed():
                 if test_result.did_pass:
                     report[test_result.test_type]["passed"] += 1
                 else:
