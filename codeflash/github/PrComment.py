@@ -27,6 +27,7 @@ class PrComment:
             "file_path": self.relative_file_path,
             "speedup_x": self.speedup_x,
             "speedup_pct": self.speedup_pct,
+            "loop_count": self.winning_test_results.number_of_loops(),
             "report_table": {
                 test_type.to_name(): result
                 for test_type, result in self.winning_test_results.get_test_pass_fail_report_by_type().items()
