@@ -1,40 +1,46 @@
-from codeflash.cli_cmds.console import logger
+from __future__ import annotations
+
+import logging
 import os
 import pathlib
 import re
 import sqlite3
-import subprocess
 from collections import defaultdict
-from typing import Optional
+from typing import TYPE_CHECKING
 
 import dill as pickle
-import sentry_sdk
 from junitparser.xunit2 import JUnitXml
 
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import (
+    file_path_from_module_name,
     get_run_tmp_file,
     module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
+from codeflash.models.models import TestFiles
 from codeflash.verification.test_results import (
     FunctionTestInvocation,
     InvocationId,
     TestResults,
-    TestType,
 )
-from codeflash.verification.verification_utils import TestConfig
+
+if TYPE_CHECKING:
+    import subprocess
+
+    from codeflash.verification.verification_utils import TestConfig
 
 
 def parse_test_return_values_bin(
     file_location: str,
-    test_framework: str,
-    test_type: TestType,
-    test_file_path: str,
+    test_files: TestFiles,
+    test_config: TestConfig,
 ) -> TestResults:
     test_results = TestResults()
     if not os.path.exists(file_location):
         logger.warning(f"No test results for {file_location} found.")
         return test_results
+
     with open(file_location, "rb") as file:
         while file:
             len_next = file.read(4)
@@ -49,40 +55,46 @@ def parse_test_return_values_bin(
                 return test_results
             len_next = int.from_bytes(len_next, byteorder="big")
             try:
-                test_pickle = pickle.loads(file.read(len_next))
+                test_pickle_bin = file.read(len_next)
             except Exception as e:
                 logger.exception(f"Failed to load pickle file. Exception: {e}")
                 return test_results
+            len_next = file.read(8)
+            loop_index = int.from_bytes(len_next, byteorder="big")
             len_next = file.read(4)
             len_next = int.from_bytes(len_next, byteorder="big")
             invocation_id = file.read(len_next).decode("ascii")
-            # TODO : Remove the fully loaded unpickled object from the test_results.
-            #  replace it with a link to the pickle object. Load it only on demand.
-            #  The problem is that the unpickled object might be huge. This could cause codeflash to crash
-            #  due to out-of-memory. Plus as we fill memory, the benchmarking results will get skewed.
+
+            invocation_id_object = InvocationId.from_str_id(encoded_test_name, invocation_id)
+            test_file_path = file_path_from_module_name(
+                invocation_id_object.test_module_path,
+                test_config.project_root_path,
+            )
+
+            test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
+
+            test_pickle = pickle.loads(test_pickle_bin) if loop_index == 1 else None
             test_results.add(
-                FunctionTestInvocation(
-                    id=InvocationId.from_str_id(encoded_test_name, invocation_id),
+                function_test_invocation=FunctionTestInvocation(
+                    loop_index=loop_index,
+                    id=invocation_id_object,
                     file_name=test_file_path,
                     did_pass=True,
                     runtime=duration,
-                    test_framework=test_framework,
+                    test_framework=test_config.test_framework,
                     test_type=test_type,
                     return_value=test_pickle,
                     timed_out=False,
                 ),
             )
-            # Hardcoding the test result to True because the test did execute and we are only interested in the return values,
-            # the did_pass comes from the xml results file
     return test_results
 
 
 def parse_sqlite_test_results(
     sqlite_file_path: str,
-    test_py_file_path: str,
-    test_type: TestType,
+    test_files: TestFiles,
     test_config: TestConfig,
-):
+) -> TestResults:
     test_results = TestResults()
     if not os.path.exists(sqlite_file_path):
         logger.warning(f"No test results for {sqlite_file_path} found.")
@@ -91,35 +103,39 @@ def parse_sqlite_test_results(
         db = sqlite3.connect(sqlite_file_path)
         cur = db.cursor()
         data = cur.execute(
-            "SELECT test_module_path , test_class_name , test_function_name , "
-            "function_getting_tested , iteration_id , runtime, return_value  FROM test_results",
+            "SELECT test_module_path, test_class_name, test_function_name, "
+            "function_getting_tested, loop_index, iteration_id, runtime, return_value FROM test_results",
         ).fetchall()
     finally:
         db.close()
     for val in data:
         try:
+            test_module_path = val[0]
+            test_file_path = file_path_from_module_name(test_module_path, test_config.project_root_path)
+            # TODO : this is because sqlite writes original file module path. Should make it consistent
+            test_type = test_files.get_test_type_by_original_file_path(test_file_path)
+            loop_index = val[4]
             test_results.add(
-                FunctionTestInvocation(
+                function_test_invocation=FunctionTestInvocation(
+                    loop_index=loop_index,
                     id=InvocationId(
                         test_module_path=val[0],
                         test_class_name=val[1],
                         test_function_name=val[2],
                         function_getting_tested=val[3],
-                        iteration_id=val[4],
+                        iteration_id=val[5],
                     ),
-                    file_name=test_py_file_path,
+                    file_name=test_file_path,
                     did_pass=True,
-                    runtime=val[5],
+                    runtime=val[6],
                     test_framework=test_config.test_framework,
                     test_type=test_type,
-                    return_value=pickle.loads(val[6]),
+                    return_value=pickle.loads(val[7]) if loop_index == 1 else None,
                     timed_out=False,
                 ),
             )
         except Exception:
             logger.exception("Failed to load pickle file.")
-        # return_value is only None temporarily as this is only being used for the existing tests. This should generalize
-        # to read the return_value from the sqlite file as well.
         # Hardcoding the test result to True because the test did execute and we are only interested in the return values,
         # the did_pass comes from the xml results file
     return test_results
@@ -127,13 +143,11 @@ def parse_sqlite_test_results(
 
 def parse_test_xml(
     test_xml_file_path: str,
-    test_py_file_path: str,
-    test_type: TestType,
+    test_files: TestFiles,
     test_config: TestConfig,
-    run_result: Optional[subprocess.CompletedProcess] = None,
+    run_result: subprocess.CompletedProcess | None = None,
 ) -> TestResults:
     test_results = TestResults()
-
     # Parse unittest output
     if not os.path.exists(test_xml_file_path):
         logger.warning(f"No test results for {test_xml_file_path} found.")
@@ -141,17 +155,17 @@ def parse_test_xml(
     try:
         xml = JUnitXml.fromfile(test_xml_file_path)
     except Exception as e:
-        logger.warning(f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}")
+        logger.warning(
+            f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}",
+        )
         return test_results
 
     for suite in xml:
         for testcase in suite:
             class_name = testcase.classname
-            file_name = suite._elem.attrib.get(
-                "file",
-            )  # file_path_from_module_name(generated_tests_path, test_config.project_root_path)
+            test_file_name = suite._elem.attrib.get("file")
             if (
-                file_name == f"unittest{os.sep}loader.py"
+                test_file_name == f"unittest{os.sep}loader.py"
                 and class_name == "unittest.loader._FailedTest"
                 and suite.errors == 1
                 and suite.tests == 1
@@ -163,32 +177,40 @@ def parse_test_xml(
                         f"Test log - STDOUT : {run_result.stdout.decode()} \n STDERR : {run_result.stderr.decode()}",
                     )
                 return test_results
-            file_name = test_py_file_path
 
-            assert os.path.exists(file_name), f"File {file_name} doesn't exist."
+            test_class_path = testcase.classname
+            if test_file_name is None:
+                # TODO : This might not be true if the test is organized under a class
+                test_file_path = file_path_from_module_name(test_class_path, test_config.project_root_path)
+            else:
+                test_file_path = os.path.join(test_config.project_root_path, test_file_name)
+            assert os.path.exists(test_file_path), f"File {test_file_path} doesn't exist."
+            test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
+            assert test_type is not None, f"Test type not found for {test_file_path}"
+            # file_name = file_path_from_module_name(test_module_path, test_config.project_root_path)
+            test_module_path = module_name_from_file_path(test_file_path, test_config.project_root_path)
+
             result = testcase.is_passed  # TODO: See for the cases of ERROR and SKIPPED
-            test_module_path = module_name_from_file_path(file_name, test_config.project_root_path)
             test_class = None
             if class_name is not None and class_name.startswith(test_module_path):
                 test_class = class_name[
                     len(test_module_path) + 1 :
                 ]  # +1 for the dot, gets Unittest class name
-            # test_name = (test_class + "." if test_class else "") + testcase.name
-            if test_module_path.endswith("__perfinstrumented"):
-                test_module_path = test_module_path[: -len("__perfinstrumented")]
-            test_function = testcase.name
+
+            test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
+            loop_index = 1
             if test_function is None:
-                with sentry_sdk.push_scope() as scope:
-                    xml_file_contents = open(test_xml_file_path).read()
-                    scope.set_extra("file", xml_file_contents)
-                    sentry_sdk.capture_message(
-                        f"testcase.name is None in parse_test_xml for testcase {testcase!r} in file {xml_file_contents}",
-                    )
+                logging.warning(
+                    f"testcase.name is None in parse_test_xml for testcase {testcase!r} in file {test_xml_file_path}",
+                )
                 continue
             timed_out = False
             if test_config.test_framework == "pytest":
+                loop_index = int(testcase.name.split("[ ", 1)[1][:-2]) if "[" in testcase.name else 1
                 if len(testcase.result) > 1:
-                    print(f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!")
+                    print(
+                        f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!",
+                    )
                 if len(testcase.result) == 1:
                     message = testcase.result[0].message.lower()
                     if "failed: timeout >" in message:
@@ -203,40 +225,44 @@ def parse_test_xml(
                     if "timed out" in message:
                         timed_out = True
             matches = re.findall(
-                r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?)######!",
+                r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!",
                 testcase.system_out or "",
             )
             if not matches or not len(matches):
-                test_results.add(
-                    FunctionTestInvocation(
-                        id=InvocationId(
-                            test_module_path=test_module_path,
-                            test_class_name=test_class,
-                            test_function_name=test_function,
-                            function_getting_tested="",  # FIXME,
-                            iteration_id=None,
+                (
+                    test_results.add(
+                        FunctionTestInvocation(
+                            loop_index=loop_index,
+                            id=InvocationId(
+                                test_module_path=test_module_path,
+                                test_class_name=test_class,
+                                test_function_name=test_function,
+                                function_getting_tested="",  # FIXME
+                                iteration_id=None,
+                            ),
+                            file_name=test_file_path,
+                            runtime=None,
+                            test_framework=test_config.test_framework,
+                            did_pass=result,
+                            test_type=test_type,
+                            return_value=None,
+                            timed_out=timed_out,
                         ),
-                        file_name=file_name,
-                        runtime=None,
-                        test_framework=test_config.test_framework,
-                        did_pass=result,
-                        test_type=test_type,
-                        return_value=None,
-                        timed_out=timed_out,
                     ),
                 )
             else:
                 for match in matches:
                     test_results.add(
                         FunctionTestInvocation(
+                            loop_index=int(match[4]),
                             id=InvocationId(
                                 test_module_path=match[0],
                                 test_class_name=None if match[1] == "" else match[1][:-1],
                                 test_function_name=match[2],
                                 function_getting_tested=match[3],
-                                iteration_id=match[4],
+                                iteration_id=match[5],
                             ),
-                            file_name=file_name,
+                            file_name=test_file_path,
                             runtime=None,
                             test_framework=test_config.test_framework,
                             did_pass=result,
@@ -245,15 +271,17 @@ def parse_test_xml(
                             timed_out=timed_out,
                         ),
                     )
-    if len(test_results) == 0:
-        logger.info(f"Test '{test_py_file_path}' failed to run, skipping it")
+
+    if not test_results:
+        logger.info(
+            f"Tests '{[test_file.original_file_path for test_file in test_files.test_files]}' failed to run, skipping",
+        )
         if run_result is not None:
             try:
                 stdout = run_result.stdout.decode()
                 stderr = run_result.stderr.decode()
             except AttributeError:
-                stdout = run_result.stdout
-                stderr = run_result.stderr
+                stdout = run_result.stderr
             logger.debug(
                 f"Test log - STDOUT : {stdout} \n STDERR : {stderr}",
             )
@@ -273,7 +301,9 @@ def merge_test_results(
     # This is done to match the right iteration_id which might not be available in the xml
     for result in xml_test_results:
         if test_framework == "pytest":
-            if "[" in result.id.test_function_name:  # handle parameterized test
+            if (
+                result.id.test_function_name.endswith("]") and "[" in result.id.test_function_name
+            ):  # parameterized test
                 test_function_name = result.id.test_function_name[: result.id.test_function_name.index("[")]
             else:
                 test_function_name = result.id.test_function_name
@@ -287,8 +317,15 @@ def merge_test_results(
                 test_function_name = new_test_function_name
 
         grouped_xml_results[
-            result.id.test_module_path + ":" + (result.id.test_class_name or "") + ":" + test_function_name
+            result.id.test_module_path
+            + ":"
+            + (result.id.test_class_name or "")
+            + ":"
+            + test_function_name
+            + ":"
+            + str(result.loop_index)
         ].add(result)
+
     for result in bin_test_results:
         grouped_bin_results[
             result.id.test_module_path
@@ -296,6 +333,8 @@ def merge_test_results(
             + (result.id.test_class_name or "")
             + ":"
             + result.id.test_function_name
+            + ":"
+            + str(result.loop_index)
         ].add(result)
 
     for result_id in grouped_xml_results:
@@ -312,6 +351,7 @@ def merge_test_results(
             for result_bin in bin_results:
                 merged_test_results.add(
                     FunctionTestInvocation(
+                        loop_index=xml_result.loop_index,
                         id=result_bin.id,
                         file_name=xml_result.file_name,
                         runtime=result_bin.runtime,
@@ -325,8 +365,7 @@ def merge_test_results(
         elif xml_results.test_results[0].id.iteration_id is not None:
             # This means that we have multiple iterations of the same test function
             # We need to match the iteration_id to the bin results
-            for i in range(len(xml_results.test_results)):
-                xml_result = xml_results.test_results[i]
+            for xml_result in xml_results.test_results:
                 try:
                     bin_result = bin_results.get_by_id(xml_result.id)
                 except AttributeError:
@@ -336,6 +375,7 @@ def merge_test_results(
                     continue
                 merged_test_results.add(
                     FunctionTestInvocation(
+                        loop_index=xml_result.loop_index,
                         id=xml_result.id,
                         file_name=xml_result.file_name,
                         runtime=bin_result.runtime,
@@ -350,8 +390,7 @@ def merge_test_results(
                 )
         else:
             # Should happen only if the xml did not have any test invocation id info
-            for i in range(len(bin_results.test_results)):
-                bin_result = bin_results.test_results[i]
+            for i, bin_result in enumerate(bin_results.test_results):
                 try:
                     xml_result = xml_results.test_results[i]
                 except IndexError:
@@ -361,6 +400,7 @@ def merge_test_results(
                     continue
                 merged_test_results.add(
                     FunctionTestInvocation(
+                        loop_index=bin_result.loop_index,
                         id=bin_result.id,
                         file_name=bin_result.file_name,
                         runtime=bin_result.runtime,
@@ -377,60 +417,62 @@ def merge_test_results(
 
 def parse_test_results(
     test_xml_path: str,
-    test_py_path: str,
+    test_files: TestFiles,
     test_config: TestConfig,
-    test_type: TestType,
     optimization_iteration: int,
-    run_result: Optional[subprocess.CompletedProcess] = None,
+    run_result: subprocess.CompletedProcess | None = None,
 ) -> TestResults:
     test_results_xml = parse_test_xml(
         test_xml_path,
-        test_py_path,
-        test_type=test_type,
+        test_files=test_files,
         test_config=test_config,
         run_result=run_result,
     )
-    # TODO: Merge these different conditions into one single unified sqlite parser
-    if test_type == TestType.GENERATED_REGRESSION:
-        try:
+
+    try:
+        if os.path.exists(
+            bin_results_file := get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
+        ):
             test_results_bin_file = parse_test_return_values_bin(
-                get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
-                test_framework=test_config.test_framework,
-                test_type=TestType.GENERATED_REGRESSION,
-                test_file_path=test_py_path,
-            )
-        except AttributeError as e:
-            logger.exception(e)
-            test_results_bin_file = TestResults()
-            pathlib.Path(
-                get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
-            ).unlink(missing_ok=True)
-    elif test_type in [TestType.EXISTING_UNIT_TEST, TestType.REPLAY_TEST]:
-        try:
-            test_results_bin_file = parse_sqlite_test_results(
-                get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite"),
-                test_py_file_path=test_py_path,
-                test_type=test_type,
+                bin_results_file,
+                test_files=test_files,
                 test_config=test_config,
             )
-        except AttributeError as e:
-            logger.exception(e)
+        else:
             test_results_bin_file = TestResults()
-    else:
-        raise ValueError(f"Invalid test type: {test_type}")
+    except AttributeError as e:
+        logger.exception(e)
+        test_results_bin_file = TestResults()
+        pathlib.Path(
+            get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
+        ).unlink(missing_ok=True)
 
-    # We Probably want to remove deleting this file here later, because we want to preserve the reference to the
-    # pickle blob in the test_results
-    pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin")).unlink(
+    try:
+        if os.path.exists(
+            sql_results_file := get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite"),
+        ):
+            test_results_sqlite_file = parse_sqlite_test_results(
+                sqlite_file_path=sql_results_file,
+                test_files=test_files,
+                test_config=test_config,
+            )
+            test_results_bin_file.merge(test_results_sqlite_file)
+    except AttributeError as e:
+        logger.exception(e)
+
+    pathlib.Path(
+        get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
+    ).unlink(
         missing_ok=True,
     )
-    pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite")).unlink(
+    pathlib.Path(
+        get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite"),
+    ).unlink(
         missing_ok=True,
     )
 
-    merged_results = merge_test_results(
+    return merge_test_results(
         test_results_xml,
         test_results_bin_file,
         test_config.test_framework,
     )
-    return merged_results

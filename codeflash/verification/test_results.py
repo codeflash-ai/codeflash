@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from codeflash.cli_cmds.console import logger
 import sys
 from enum import Enum
 from typing import Iterator, Optional
@@ -8,6 +7,7 @@ from typing import Iterator, Optional
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 
+from codeflash.cli_cmds.console import logger
 from codeflash.verification.comparator import comparator
 
 
@@ -36,7 +36,7 @@ class InvocationId:
     iteration_id: Optional[str]
 
     # test_module_path:TestSuiteClass.test_function_name:function_tested:iteration_id
-    def id(self):
+    def id(self) -> str:
         return f"{self.test_module_path}:{(self.test_class_name + '.' if self.test_class_name else '')}{self.test_function_name}:{self.function_getting_tested}:{self.iteration_id}"
 
     @staticmethod
@@ -61,6 +61,7 @@ class InvocationId:
 
 @dataclass(frozen=True)
 class FunctionTestInvocation:
+    loop_index: int  # The loop index of the function invocation, starts at 1
     id: InvocationId  # The fully qualified name of the function invocation (id)
     file_name: str  # The file where the test is defined
     did_pass: bool  # Whether the test this function invocation was part of, passed or failed
@@ -89,14 +90,14 @@ class TestResults(BaseModel):
     ) -> FunctionTestInvocation | None:
         return next((r for r in self.test_results if r.id == invocation_id), None)
 
-    def get_all_ids(self) -> list[InvocationId]:
-        return [test_result.id for test_result in self.test_results]
+    def get_all_ids(self) -> set[InvocationId]:
+        return {test_result.id for test_result in self.test_results}
 
     def get_test_pass_fail_report(self) -> str:
         passed = 0
         failed = 0
         for test_result in self.test_results:
-            if test_result.test_executed():
+            if test_result.loop_index == 1 and test_result.test_executed():
                 if test_result.did_pass:
                     passed += 1
                 else:
@@ -109,7 +110,7 @@ class TestResults(BaseModel):
         for test_type in TestType:
             report[test_type] = {"passed": 0, "failed": 0}
         for test_result in self.test_results:
-            if test_result.test_executed():
+            if test_result.loop_index == 1 and test_result.test_executed():
                 if test_result.did_pass:
                     report[test_result.test_type]["passed"] += 1
                 else:
@@ -126,19 +127,25 @@ class TestResults(BaseModel):
         )
 
     def total_passed_runtime(self) -> int:
+        """Calculate the sum of runtimes of all test cases that passed, where a testcase runtime
+        is the minimum value of all looped execution runtimes.
+
+        :return: The runtime in nanoseconds.
+        """
         for result in self.test_results:
             if result.did_pass and result.runtime is None:
                 logger.debug(
-                    f"Ignoring test case that passed but had no runtime -> {result.id}",
+                    f"Ignoring test case that passed but had no runtime -> {result.id}, Loop # {result.loop_index}",
                 )
-        timing = sum(
+        usable_results = [
+            result for result in self.test_results if result.did_pass and result.runtime is not None
+        ]
+        return sum(
             [
-                result.runtime
-                for result in self.test_results
-                if (result.did_pass and result.runtime is not None)
+                min([result.runtime for result in usable_results if result.id == invocation_id])
+                for invocation_id in {result.id for result in usable_results}
             ],
         )
-        return timing
 
     def __iter__(self) -> Iterator[FunctionTestInvocation]:
         return iter(self.test_results)
@@ -163,7 +170,7 @@ class TestResults(BaseModel):
 
     def __eq__(self, other: object) -> bool:
         # Unordered comparison
-        if type(self) != type(other):
+        if type(self) is not type(other):
             return False
         if len(self) != len(other):
             return False

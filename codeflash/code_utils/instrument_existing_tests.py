@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import ast
-from codeflash.cli_cmds.console import logger
 from typing import Iterable
 
 import isort
 
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 from codeflash.discovery.discover_unit_tests import CodePosition
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
@@ -22,6 +22,16 @@ def node_in_call_position(node: ast.stmt, call_positions: list[CodePosition]) ->
                 if node.lineno < pos.line_no < node.end_lineno:
                     return True
     return False
+
+
+def is_argument_name(name: str, arguments_node: ast.arguments) -> bool:
+    return any(
+        element.arg == name
+        for attribute_name in dir(arguments_node)
+        if isinstance(attribute := getattr(arguments_node, attribute_name), list)
+        for element in attribute
+        if isinstance(element, ast.arg)
+    )
 
 
 class InjectPerfOnly(ast.NodeTransformer):
@@ -47,7 +57,7 @@ class InjectPerfOnly(ast.NodeTransformer):
         node_name: str,
         index: str,
         test_class_name: str | None = None,
-    ) -> Iterable[ast.stmt]:
+    ) -> Iterable[ast.stmt] | None:
         call_node = None
         for node in ast.walk(test_node):
             if node_in_call_position(node, self.call_positions):
@@ -62,6 +72,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                         ast.Constant(value=node_name),
                         ast.Constant(value=self.function_object.qualified_name),
                         ast.Constant(value=index),
+                        ast.Name(id="codeflash_loop_index", ctx=ast.Load()),
                         ast.Name(id="codeflash_cur", ctx=ast.Load()),
                         ast.Name(id="codeflash_con", ctx=ast.Load()),
                         *call_node.args,
@@ -81,6 +92,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                             ast.Constant(value=node_name),
                             ast.Constant(value=self.function_object.qualified_name),
                             ast.Constant(value=index),
+                            ast.Name(id="codeflash_loop_index", ctx=ast.Load()),
                             ast.Name(id="codeflash_cur", ctx=ast.Load()),
                             ast.Name(id="codeflash_con", ctx=ast.Load()),
                             *call_node.args,
@@ -167,6 +179,26 @@ class InjectPerfOnly(ast.NodeTransformer):
                             col_offset=node.col_offset,
                         ),
                         ast.Assign(
+                            targets=[ast.Name(id="codeflash_loop_index", ctx=ast.Store())],
+                            value=ast.Call(
+                                func=ast.Name(id="int", ctx=ast.Load()),
+                                args=[
+                                    ast.Subscript(
+                                        value=ast.Attribute(
+                                            value=ast.Name(id="os", ctx=ast.Load()),
+                                            attr="environ",
+                                            ctx=ast.Load(),
+                                        ),
+                                        slice=ast.Constant(value="CODEFLASH_LOOP_INDEX"),
+                                        ctx=ast.Load(),
+                                    ),
+                                ],
+                                keywords=[],
+                            ),
+                            lineno=node.lineno + 2,
+                            col_offset=node.col_offset,
+                        ),
+                        ast.Assign(
                             targets=[ast.Name(id="codeflash_con", ctx=ast.Store())],
                             value=ast.Call(
                                 func=ast.Attribute(
@@ -193,7 +225,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                 ],
                                 keywords=[],
                             ),
-                            lineno=node.lineno + 2,
+                            lineno=node.lineno + 3,
                             col_offset=node.col_offset,
                         ),
                         ast.Assign(
@@ -207,7 +239,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                 args=[],
                                 keywords=[],
                             ),
-                            lineno=node.lineno + 3,
+                            lineno=node.lineno + 4,
                             col_offset=node.col_offset,
                         ),
                         ast.Expr(
@@ -221,12 +253,12 @@ class InjectPerfOnly(ast.NodeTransformer):
                                     ast.Constant(
                                         value="CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT,"
                                         " test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT,"
-                                        " iteration_id TEXT, runtime INTEGER, return_value BLOB)",
+                                        " loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)",
                                     ),
                                 ],
                                 keywords=[],
                             ),
-                            lineno=node.lineno + 4,
+                            lineno=node.lineno + 5,
                             col_offset=node.col_offset,
                         ),
                     ]
@@ -249,7 +281,8 @@ class InjectPerfOnly(ast.NodeTransformer):
 
 
 class FunctionImportedAsVisitor(ast.NodeVisitor):
-    """This checks if a function has been imported as an alias. We only care about the alias then.
+    """Checks if a function has been imported as an alias. We only care about the alias then.
+
     from numpy import array as np_array
     np_array is what we want
     """
@@ -331,6 +364,7 @@ def create_wrapper_function() -> ast.FunctionDef:
                 ast.arg(arg="test_name", annotation=None),
                 ast.arg(arg="function_name", annotation=None),
                 ast.arg(arg="line_id", annotation=None),
+                ast.arg(arg="loop_index", annotation=None),
                 ast.arg(arg="codeflash_cur", annotation=None),
                 ast.arg(arg="codeflash_con", annotation=None),
             ],
@@ -363,6 +397,11 @@ def create_wrapper_function() -> ast.FunctionDef:
                         ast.Constant(value=":"),
                         ast.FormattedValue(
                             value=ast.Name(id="line_id", ctx=ast.Load()),
+                            conversion=-1,
+                        ),
+                        ast.Constant(value=":"),
+                        ast.FormattedValue(
+                            value=ast.Name(id="loop_index", ctx=ast.Load()),
                             conversion=-1,
                         ),
                     ],
@@ -511,6 +550,11 @@ def create_wrapper_function() -> ast.FunctionDef:
                                 ),
                                 ast.Constant(value=":"),
                                 ast.FormattedValue(
+                                    value=ast.Name(id="loop_index", ctx=ast.Load()),
+                                    conversion=-1,
+                                ),
+                                ast.Constant(value=":"),
+                                ast.FormattedValue(
                                     value=ast.Name(id="invocation_id", ctx=ast.Load()),
                                     conversion=-1,
                                 ),
@@ -592,13 +636,14 @@ def create_wrapper_function() -> ast.FunctionDef:
                         ctx=ast.Load(),
                     ),
                     args=[
-                        ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?)"),
+                        ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
                         ast.Tuple(
                             elts=[
                                 ast.Name(id="test_module_name", ctx=ast.Load()),
                                 ast.Name(id="test_class_name", ctx=ast.Load()),
                                 ast.Name(id="test_name", ctx=ast.Load()),
                                 ast.Name(id="function_name", ctx=ast.Load()),
+                                ast.Name(id="loop_index", ctx=ast.Load()),
                                 ast.Name(id="invocation_id", ctx=ast.Load()),
                                 ast.Name(id="codeflash_duration", ctx=ast.Load()),
                                 ast.Call(

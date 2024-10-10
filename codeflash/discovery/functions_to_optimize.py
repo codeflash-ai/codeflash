@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-from codeflash.cli_cmds.console import logger
 import os
 import random
 from _ast import AsyncFunctionDef, ClassDef, FunctionDef
@@ -17,6 +16,7 @@ from libcst.metadata import CodeRange
 from pydantic.dataclasses import dataclass
 
 from codeflash.api.cfapi import get_blacklisted_functions
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
@@ -222,7 +222,7 @@ def get_functions_to_optimize(
         project_root,
         module_root,
     )
-    logger.info("Found %d functions to optimize", functions_count)
+    logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
     return filtered_modified_functions, functions_count
 
 
@@ -352,8 +352,7 @@ def ignored_submodule_paths(module_root: str) -> list[str]:
             os.path.realpath(os.path.join(git_repo.working_tree_dir, submodule.path))
             for submodule in git_repo.submodules
         ]
-    else:
-        return []
+    return []
 
 
 class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
@@ -501,7 +500,7 @@ def filter_functions(
                 if path in blocklist_funcs and function.function_name in blocklist_funcs[path]:
                     functions.remove(function)
                     logger.debug(
-                        f"Skipping {function.function_name} in {path} as it has already been optimized"
+                        f"Skipping {function.function_name} in {path} as it has already been optimized",
                     )
                     continue
 

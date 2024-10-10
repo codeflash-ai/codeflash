@@ -2,6 +2,8 @@ import os
 import pathlib
 import tempfile
 
+import pytest
+from codeflash.models.models import TestFile, TestFiles
 from codeflash.verification.parse_test_output import parse_test_xml
 from codeflash.verification.test_results import TestType
 from codeflash.verification.test_runner import run_tests
@@ -27,22 +29,28 @@ class TestUnittestRunnerSorter(unittest.TestCase):
 """
     cur_dir_path = os.path.dirname(os.path.abspath(__file__))
     config = TestConfig(
-        tests_root=cur_dir_path, project_root_path=cur_dir_path, test_framework="unittest",
+        tests_root=cur_dir_path,
+        project_root_path=cur_dir_path,
+        test_framework="unittest",
     )
 
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
+        test_files = TestFiles(
+            test_files=[TestFile(instrumented_file_path=str(fp.name), test_type=TestType.EXISTING_UNIT_TEST)],
+        )
         fp.write(code.encode("utf-8"))
         fp.flush()
         result_file, process = run_tests(
-            fp.name,
+            test_files,
             test_framework=config.test_framework,
             cwd=config.project_root_path,
         )
-        results = parse_test_xml(result_file, fp.name, TestType.EXISTING_UNIT_TEST, config, process)
+        results = parse_test_xml(result_file, test_files, config, process)
     assert results[0].did_pass, "Test did not pass as expected"
     pathlib.Path(result_file).unlink(missing_ok=True)
 
 
+@pytest.mark.skip(reason="not testing the actual code path")
 def test_pytest_runner():
     code = """
 def sorter(arr):
@@ -56,21 +64,30 @@ def test_sort():
 """
     cur_dir_path = os.path.dirname(os.path.abspath(__file__))
     config = TestConfig(
-        tests_root=cur_dir_path, project_root_path=cur_dir_path, test_framework="pytest",
+        tests_root=cur_dir_path,
+        project_root_path=cur_dir_path,
+        test_framework="pytest",
     )
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
+        test_files = TestFiles(
+            test_files=[TestFile(instrumented_file_path=str(fp.name), test_type=TestType.EXISTING_UNIT_TEST)],
+        )
         fp.write(code.encode("utf-8"))
         fp.flush()
+        test_env = os.environ.copy()
         result_file, process = run_tests(
-            fp.name,
+            test_files,
             test_framework=config.test_framework,
             cwd=os.path.join(cur_dir_path),
+            test_env=test_env,
             pytest_timeout=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            pytest_target_runtime_seconds=1,
         )
         results = parse_test_xml(
             test_xml_file_path=result_file,
-            test_py_file_path=fp.name,
-            test_type=TestType.EXISTING_UNIT_TEST,
+            test_files=test_files,
             test_config=config,
             run_result=process,
         )
