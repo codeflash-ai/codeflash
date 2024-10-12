@@ -1,13 +1,14 @@
 import logging
-import os
 import sys
 from argparse import SUPPRESS, ArgumentParser, Namespace
+from pathlib import Path
 
 import git
 
 from codeflash.cli_cmds import logging_config
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.git_utils import (
@@ -17,7 +18,6 @@ from codeflash.code_utils.git_utils import (
     get_repo_owner_and_name,
 )
 from codeflash.code_utils.github_utils import get_github_secrets_page_url, require_github_app_or_exit
-from codeflash.cli_cmds.console import logger
 from codeflash.version import __version__ as version
 
 
@@ -104,18 +104,18 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
         logger.error("If you specify a --function, you must specify the --file it is in")
         sys.exit(1)
     if args.file:
-        if not os.path.exists(args.file):
+        if not Path(args.file).exists():
             logger.error(f"File {args.file} does not exist")
             sys.exit(1)
-        args.file = os.path.realpath(args.file)
+        args.file = Path(args.file).resolve()
         if not args.no_pr:
             owner, repo = get_repo_owner_and_name()
             require_github_app_or_exit(owner, repo)
     if args.replay_test:
-        if not os.path.isfile(args.replay_test):
+        if not Path(args.replay_test).is_file():
             logger.error(f"Replay test file {args.replay_test} does not exist")
             sys.exit(1)
-        args.replay_test = os.path.realpath(args.replay_test)
+        args.replay_test = Path(args.replay_test).resolve()
 
     return args
 
@@ -142,11 +142,11 @@ def process_pyproject_config(args: Namespace) -> Namespace:
             or not hasattr(args, key.replace("-", "_"))
         ):
             setattr(args, key.replace("-", "_"), pyproject_config[key])
-    assert args.module_root is not None and os.path.isdir(
-        args.module_root,
+    assert (
+        args.module_root is not None and Path(args.module_root).is_dir()
     ), f"--module-root {args.module_root} must be a valid directory"
-    assert args.tests_root is not None and os.path.isdir(
-        args.tests_root,
+    assert (
+        args.tests_root is not None and Path(args.tests_root).is_dir()
     ), f"--tests-root {args.tests_root} must be a valid directory"
 
     assert not (env_utils.get_pr_number() is not None and not env_utils.ensure_codeflash_api_key()), (
@@ -160,24 +160,23 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     if hasattr(args, "ignore_paths") and args.ignore_paths is not None:
         normalized_ignore_paths = []
         for path in args.ignore_paths:
-            assert os.path.exists(
-                path,
-            ), f"ignore-paths config must be a valid path. Path {path} does not exist"
-            normalized_ignore_paths.append(os.path.realpath(path))
+            path_obj = Path(path)
+            assert path_obj.exists(), f"ignore-paths config must be a valid path. Path {path} does not exist"
+            normalized_ignore_paths.append(path_obj.resolve())
         args.ignore_paths = normalized_ignore_paths
     # Project root path is one level above the specified directory, because that's where the module can be imported from
-    args.module_root = os.path.realpath(args.module_root)
+    args.module_root = Path(args.module_root).resolve()
     # If module-root is "." then all imports are relatives to it.
     # in this case, the ".." becomes outside project scope, causing issues with un-importable paths
     args.project_root = project_root_from_module_root(args.module_root, pyproject_file_path)
-    args.tests_root = os.path.realpath(args.tests_root)
+    args.tests_root = Path(args.tests_root).resolve()
     return handle_optimize_all_arg_parsing(args)
 
 
-def project_root_from_module_root(module_root: str, pyproject_file_path: str) -> str:
-    if os.path.dirname(pyproject_file_path) == module_root:
+def project_root_from_module_root(module_root: Path, pyproject_file_path: Path) -> Path:
+    if pyproject_file_path.parent == module_root:
         return module_root
-    return os.path.realpath(os.path.join(module_root, ".."))
+    return module_root.parent.resolve()
 
 
 def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
@@ -203,5 +202,5 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
         # The default behavior of --all is to optimize everything in args.module_root
         args.all = args.module_root
     else:
-        args.all = os.path.realpath(args.all)
+        args.all = Path(args.all).resolve()
     return args

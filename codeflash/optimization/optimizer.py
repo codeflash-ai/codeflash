@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import concurrent.futures
 import os
-import pathlib
 import subprocess
 import time
 import uuid
 from collections import defaultdict
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import isort
@@ -623,7 +623,7 @@ class Optimizer:
     def replace_function_and_helpers_with_optimized_code(
         self,
         code_context: CodeOptimizationContext,
-        function_to_optimize_file_path: str,
+        function_to_optimize_file_path: Path,
         optimized_code: str,
         qualified_function_name: str,
     ) -> bool:
@@ -660,7 +660,7 @@ class Optimizer:
     def get_code_optimization_context(
         self,
         function_to_optimize: FunctionToOptimize,
-        project_root: str,
+        project_root: Path,
         original_source_code: str,
     ) -> Result[CodeOptimizationContext, str]:
         code_to_optimize, contextual_dunder_methods = extract_code(
@@ -687,7 +687,7 @@ class Optimizer:
             optimizable_methods = [
                 FunctionToOptimize(
                     df.qualified_name.split(".")[-1],
-                    df.file_path,
+                    Path(df.file_path),
                     [FunctionParent(df.qualified_name.split(".")[0], "ClassDef")],
                     None,
                     None,
@@ -730,18 +730,14 @@ class Optimizer:
     @staticmethod
     def cleanup_leftover_test_return_values() -> None:
         # remove leftovers from previous run
-        pathlib.Path(get_run_tmp_file("test_return_values_0.bin")).unlink(
-            missing_ok=True,
-        )
-        pathlib.Path(get_run_tmp_file("test_return_values_0.sqlite")).unlink(
-            missing_ok=True,
-        )
+        get_run_tmp_file(Path("test_return_values_0.bin")).unlink(missing_ok=True)
+        get_run_tmp_file(Path("test_return_values_0.sqlite")).unlink(missing_ok=True)
 
     def instrument_existing_tests(
         self,
         function_to_optimize: FunctionToOptimize,
         function_to_tests: dict[str, list[TestsInFile]],
-    ) -> set[str]:
+    ) -> set[Path]:
         relevant_test_files_count = 0
         unique_instrumented_test_files = set()
 
@@ -767,10 +763,8 @@ class Optimizer:
                 )
                 if not success:
                     continue
-                new_test_path = (
-                    f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}"
-                )
-                with pathlib.Path(new_test_path).open("w", encoding="utf8") as f:
+                new_test_path = Path(test_file).with_suffix(f"__perfinstrumented{Path(test_file).suffix}")
+                with new_test_path.open("w", encoding="utf8") as f:
                     f.write(injected_test)
                 unique_instrumented_test_files.add(new_test_path)
                 if not self.test_files.get_by_original_file_path(test_file):
@@ -793,7 +787,7 @@ class Optimizer:
         code_to_optimize_with_helpers: str,
         function_to_optimize: FunctionToOptimize,
         helper_functions: list[FunctionSource],
-        module_path: str,
+        module_path: Path,
         function_trace_id: str,
         run_experiment: bool = False,
     ) -> Result[tuple[GeneratedTestsList, OptimizationSet], str]:
@@ -995,12 +989,12 @@ class Optimizer:
 
         first_test_types = []
         first_test_functions = []
-        pathlib.Path(
-            get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.bin"),
-        ).unlink(missing_ok=True)
-        pathlib.Path(
-            get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.sqlite"),
-        ).unlink(missing_ok=True)
+        Path(get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.bin")).unlink(
+            missing_ok=True,
+        )
+        Path(get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(
+            missing_ok=True,
+        )
 
         for test_file in instrumented_unittests_created_for_function:
             relevant_tests_in_file = [
@@ -1069,12 +1063,10 @@ class Optimizer:
             )
         if best_runtime_until_now is None or total_candidate_timing < best_runtime_until_now:
             best_test_results = candidate_results
-        pathlib.Path(get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.bin")).unlink(
+        Path(get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.bin")).unlink(
             missing_ok=True,
         )
-        pathlib.Path(
-            get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.sqlite"),
-        ).unlink(
+        Path(get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(
             missing_ok=True,
         )
         if not equal_results:
@@ -1142,7 +1134,7 @@ class Optimizer:
         source_code_being_tested: str,
         function_to_optimize: FunctionToOptimize,
         helper_function_names: list[str],
-        module_path: str,
+        module_path: Path,
         function_trace_id: str,
     ) -> GeneratedTestsList | None:
         futures = [

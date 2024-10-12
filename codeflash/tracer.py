@@ -9,6 +9,8 @@
 #  Licensed under the Apache License, Version 2.0 (the "License").
 #  http://www.apache.org/licenses/LICENSE-2.0
 #
+from __future__ import annotations
+
 import importlib.machinery
 import io
 import json
@@ -23,20 +25,21 @@ import time
 from collections import defaultdict
 from copy import copy
 from io import StringIO
+from pathlib import Path
 from types import FrameType
-from typing import Any, List, Optional
+from typing import Any, ClassVar, List, Optional
 
 import dill
 import isort
 
 from codeflash.cli_cmds.cli import project_root_from_module_root
+from codeflash.cli_cmds.console import console
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.discovery.functions_to_optimize import filter_files_optimized
 from codeflash.tracing.replay_test import create_trace_replay_test
 from codeflash.tracing.tracing_utils import FunctionModules
 from codeflash.verification.verification_utils import get_test_file_path
-from codeflash.cli_cmds.console import console
 
 
 class Tracer:
@@ -49,7 +52,7 @@ class Tracer:
         output: str = "codeflash.trace",
         functions: Optional[List[str]] = None,
         disable: bool = False,
-        config_file_path: Optional[str] = None,
+        config_file_path: Path | None = None,
         max_function_count: int = 256,
         timeout: Optional[int] = None,  # seconds
     ) -> None:
@@ -77,13 +80,14 @@ class Tracer:
             self.disable = True
             return
         self.con = None
-        self.output_file = os.path.abspath(output)
+        self.output_file = Path(output).resolve()
         self.functions = functions
         self.function_modules: List[FunctionModules] = []
         self.function_count = defaultdict(int)
+        self.current_file_path = Path(__file__).resolve()
         self.ignored_qualified_functions = {
-            f"{os.path.realpath(__file__)}:Tracer:__exit__",
-            f"{os.path.realpath(__file__)}:Tracer:__enter__",
+            f"{self.current_file_path}:Tracer:__exit__",
+            f"{self.current_file_path}:Tracer:__enter__",
         }
         self.max_function_count = max_function_count
         self.config, found_config_path = parse_config_file(config_file_path)
@@ -99,13 +103,9 @@ class Tracer:
             "<lambda>",
             "<module>",
         }
-        self.file_being_called_from: str = str(
-            os.path.basename(
-                os.path.realpath(sys._getframe().f_back.f_code.co_filename),
-            ).replace(
-                ".",
-                "_",
-            ),
+
+        self.file_being_called_from: str = str(Path(sys._getframe().f_back.f_code.co_filename).name).replace(
+            ".", "_"
         )
 
         assert timeout is None or timeout > 0, "Timeout should be greater than 0"
@@ -175,7 +175,7 @@ class Tracer:
             cur.execute(
                 "INSERT INTO pstats VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    os.path.realpath(func[0]),
+                    Path(func[0]).resolve(),
                     func[1],
                     func[2],
                     func[3],
@@ -245,7 +245,7 @@ class Tracer:
 
         if code.co_name in self.ignored_functions:
             return
-        if not os.path.exists(file_name):
+        if not Path(file_name).exists():
             return
         if self.functions:
             if code.co_name not in self.functions:
@@ -264,7 +264,7 @@ class Tracer:
         except:
             # someone can override the getattr method and raise an exception. I'm looking at you wrapt
             return
-        file_name = os.path.realpath(file_name)
+        file_name = Path(file_name).resolve()
         function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
         if function_qualified_name in self.ignored_qualified_functions:
             return
@@ -311,7 +311,7 @@ class Tracer:
             # We do not pickle self for __init__ to avoid recursion errors, and instead instantiate its class
             # directly with the rest of the arguments in the replay tests. We copy the arguments to avoid memory
             # leaks, bad references or side-effects when unpickling.
-            arguments = {k: v for k, v in arguments.items()}
+            arguments = dict(arguments.items())
             if class_name and code.co_name == "__init__":
                 del arguments["self"]
             local_vars = pickle.dumps(
@@ -463,7 +463,7 @@ class Tracer:
 
         return 1
 
-    dispatch = {
+    dispatch: ClassVar[dict[str, callable]] = {
         "call": trace_dispatch_call,
         "exception": trace_dispatch_exception,
         "return": trace_dispatch_return,
@@ -648,7 +648,7 @@ def main():
     # The script that we're profiling may chdir, so capture the absolute path
     # to the output file at startup.
     if args.outfile is not None:
-        args.outfile = os.path.abspath(args.outfile)
+        args.outfile = Path(args.outfile).resolve()
 
     if len(unknown_args) > 0:
         if args.module:
@@ -661,7 +661,7 @@ def main():
             }
         else:
             progname = unknown_args[0]
-            sys.path.insert(0, os.path.dirname(progname))
+            sys.path.insert(0, str(Path(progname).parent))
             with io.open_code(progname) as fp:
                 code = compile(fp.read(), progname, "exec")
             spec = importlib.machinery.ModuleSpec(name="__main__", loader=None, origin=progname)

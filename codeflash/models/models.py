@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Generator, Iterator, Optional
 
 from jedi.api.classes import Name
@@ -17,7 +18,7 @@ from codeflash.verification.test_results import TestResults, TestType
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
 class FunctionSource:
-    file_path: str
+    file_path: Path
     qualified_name: str
     fully_qualified_name: str
     only_function_name: str
@@ -55,7 +56,7 @@ class GeneratedTestsList(BaseModel):
 
 
 class TestFile(BaseModel):
-    instrumented_file_path: str
+    instrumented_file_path: Path
     original_file_path: Optional[str] = None
     original_source: Optional[str] = None
     test_type: TestType

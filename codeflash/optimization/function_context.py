@@ -4,16 +4,20 @@ import ast
 import os
 import re
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
 import jedi
 import tiktoken
 from jedi.api.classes import Name
 
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import get_code
 from codeflash.code_utils.code_utils import module_name_from_file_path, path_belongs_to_site_packages
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 from codeflash.models.models import FunctionSource
-from codeflash.cli_cmds.console import logger
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def belongs_to_class(name: Name, class_name: str) -> bool:
@@ -36,12 +40,11 @@ def belongs_to_function(name: Name, function_name: str) -> bool:
 def get_type_annotation_context(
     function: FunctionToOptimize,
     jedi_script: jedi.Script,
-    project_root_path: str,
+    project_root_path: Path,
 ) -> list[FunctionSource]:
     function_name: str = function.function_name
-    file_path: str = function.file_path
-    with open(file_path, encoding="utf8") as file:
-        file_contents: str = file.read()
+    file_path: Path = function.file_path
+    file_contents: str = file_path.read_text(encoding="utf8")
     try:
         module: ast.Module = ast.parse(file_contents)
     except SyntaxError as e:
@@ -72,14 +75,15 @@ def get_type_annotation_context(
                 logger.exception(f"Error while getting definition: {ex}")
             definition = []
         if definition:  # TODO can be multiple definitions
-            definition_path = str(definition[0].module_path)
+            definition_path = definition[0].module_path
             # The definition is part of this project and not defined within the original function
             if (
-                definition_path.startswith(project_root_path + os.sep)
+                str(definition_path).startswith(str(project_root_path) + os.sep)
                 and definition[0].full_name
                 and not path_belongs_to_site_packages(definition_path)
                 and not belongs_to_function(definition[0], function_name)
             ):
+                assert definition_path is not None
                 source_code = get_code(
                     [
                         FunctionToOptimize(
@@ -164,7 +168,7 @@ def get_type_annotation_context(
 
 def get_function_variables_definitions(
     function_to_optimize: FunctionToOptimize,
-    project_root_path: str,
+    project_root_path: Path,
 ) -> tuple[list[FunctionSource], set[tuple[str, str]]]:
     function_name = function_to_optimize.function_name
     file_path = function_to_optimize.file_path
@@ -203,10 +207,11 @@ def get_function_variables_definitions(
         if definitions:
             # TODO: there can be multiple definitions, see how to handle such cases
             definition = definitions[0]
-            definition_path = str(definition.module_path)
+            definition_path = definition.module_path
+            assert definition_path is not None
             # The definition is part of this project and not defined within the original function
             if (
-                definition_path.startswith(project_root_path + os.sep)
+                str(definition_path).startswith(str(project_root_path) + os.sep)
                 and not path_belongs_to_site_packages(definition_path)
                 and definition.full_name
                 and not belongs_to_function(definition, function_name)
@@ -255,7 +260,7 @@ def get_function_variables_definitions(
     for source in sources:
         if (fully_qualified_name := source.fully_qualified_name) not in existing_fully_qualified_names:
             if not source.qualified_name.count("."):
-                no_parent_sources[source.file_path][source.qualified_name].add(source)
+                no_parent_sources[str(source.file_path)][source.qualified_name].add(source)
             else:
                 parent_sources.add(source)
             existing_fully_qualified_names.add(fully_qualified_name)
@@ -263,7 +268,7 @@ def get_function_variables_definitions(
         source
         for source in parent_sources
         if source.file_path not in no_parent_sources
-        or source.qualified_name.rpartition(".")[0] not in no_parent_sources[source.file_path]
+        or source.qualified_name.rpartition(".")[0] not in no_parent_sources[str(source.file_path)]
     ]
     deduped_no_parent_sources = [
         source
@@ -279,7 +284,7 @@ MAX_PROMPT_TOKENS = 4096  # 128000  # gpt-4-128k
 
 def get_constrained_function_context_and_helper_functions(
     function_to_optimize: FunctionToOptimize,
-    project_root_path: str,
+    project_root_path: Path,
     code_to_optimize: str,
     max_tokens: int = MAX_PROMPT_TOKENS,
 ) -> tuple[str, list[FunctionSource], set[tuple[str, str]]]:

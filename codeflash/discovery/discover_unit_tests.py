@@ -1,15 +1,16 @@
-from codeflash.cli_cmds.console import logger
 import os
 import re
 import shlex
 import unittest
 from collections import defaultdict
 from multiprocessing import Process, Queue
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import jedi
 from pydantic.dataclasses import dataclass
 
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.verification.test_results import TestType
 from codeflash.verification.verification_utils import TestConfig
@@ -139,7 +140,7 @@ def discover_tests_unittest(
     cfg: TestConfig,
     discover_only_these_tests: Optional[List[str]] = None,
 ) -> Dict[str, List[FunctionCalledInTest]]:
-    tests_root = cfg.tests_root
+    tests_root = Path(cfg.tests_root)
     loader = unittest.TestLoader()
     tests = loader.discover(str(tests_root))
     file_to_test_map = defaultdict(list)
@@ -151,18 +152,18 @@ def discover_tests_unittest(
             _test.__class__.__qualname__,
         )
 
-        _test_module_path = _test_module.replace(".", os.sep)
-        _test_module_path = os.path.normpath(os.path.join(str(tests_root), _test_module_path) + ".py")
-        if not os.path.exists(_test_module_path) or (
-            discover_only_these_tests and _test_module_path not in discover_only_these_tests
+        _test_module_path = Path(_test_module.replace(".", os.sep)).with_suffix(".py")
+        _test_module_path = tests_root / _test_module_path
+        if not _test_module_path.exists() or (
+            discover_only_these_tests and str(_test_module_path) not in discover_only_these_tests
         ):
             return None
-        if "__replay_test" in _test_module_path:
+        if "__replay_test" in str(_test_module_path):
             test_type = TestType.REPLAY_TEST
         else:
             test_type = TestType.EXISTING_UNIT_TEST
         return TestsInFile(
-            test_file=_test_module_path,
+            test_file=str(_test_module_path),
             test_suite=_test_suite_name,
             test_function=_test_function,
             test_type=test_type,
@@ -186,11 +187,11 @@ def discover_tests_unittest(
                             continue
                         details = get_test_details(test_2)
                         if details is not None:
-                            file_to_test_map[details.test_file].append(details)
+                            file_to_test_map[str(details.test_file)].append(details)
                 else:
                     details = get_test_details(test)
                     if details is not None:
-                        file_to_test_map[details.test_file].append(details)
+                        file_to_test_map[str(details.test_file)].append(details)
     return process_test_files(file_to_test_map, cfg)
 
 

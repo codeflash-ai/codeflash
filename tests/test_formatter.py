@@ -1,7 +1,9 @@
 import os
 import tempfile
+from pathlib import Path
 
 import pytest
+
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.formatter import format_code, sort_imports
 
@@ -34,12 +36,13 @@ def test_sort_imports_without_formatting():
     with tempfile.NamedTemporaryFile() as tmp:
         tmp.write(b"import sys\nimport unittest\nimport os\n")
         tmp.flush()
-        tmp_path = tmp.name
+        tmp_path = Path(tmp.name)
 
         new_code = format_code(
             formatter_cmds=["disabled"],
             path=tmp_path,
         )
+        assert new_code is not None
         new_code = sort_imports(new_code)
         assert new_code == "import os\nimport sys\nimport unittest\n"
 
@@ -108,7 +111,7 @@ ignore-paths = []
     with tempfile.NamedTemporaryFile(suffix=".toml", delete=False) as tmp:
         tmp.write(config_data.encode())
         tmp.flush()
-        tmp_path = tmp.name
+        tmp_path = Path(tmp.name)
 
     try:
         config, _ = parse_config_file(tmp_path)
@@ -135,7 +138,7 @@ def foo():
 
         actual = format_code(
             formatter_cmds=["black $file"],
-            path=tmp_path,
+            path=Path(tmp_path),
         )
         assert actual == expected
 
@@ -160,7 +163,7 @@ def foo():
 
         actual = format_code(
             formatter_cmds=["black $file"],
-            path=tmp_path,
+            path=Path(tmp_path),
         )
         assert actual == expected
 
@@ -189,6 +192,6 @@ def foo():
 
         actual = format_code(
             formatter_cmds=["ruff check --exit-zero --fix $file", "ruff format $file"],
-            path=tmp_path,
+            path=Path(tmp_path),
         )
         assert actual == expected

@@ -1,28 +1,31 @@
-from codeflash.cli_cmds.console import logger
-import os.path
+from __future__ import annotations
+
+import os
 import shlex
 import subprocess
+from pathlib import Path
 
 import isort
+
+from codeflash.cli_cmds.console import logger
 
 
 def format_code(
     formatter_cmds: list[str],
-    path: str,
-) -> str:
+    path: Path,
+) -> str | None:
     # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
-    if not os.path.exists(path):
+    if not path.exists():
         logger.error(f"File {path} does not exist. Cannot format the file.")
         return None
     if formatter_cmds[0].lower() == "disabled":
-        with open(path, encoding="utf8") as f:
-            new_code = f.read()
+        new_code = path.read_text(encoding="utf8")
         return new_code
     file_token = "$file"
 
     for command in formatter_cmds:
         formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
-        formatter_cmd_list = [path if chunk == file_token else chunk for chunk in formatter_cmd_list]
+        formatter_cmd_list = [str(path) if chunk == file_token else chunk for chunk in formatter_cmd_list]
         logger.info(f"Formatting code with {' '.join(formatter_cmd_list)} ...")
 
         try:
@@ -40,8 +43,7 @@ def format_code(
         else:
             logger.error(f"Failed to format code with {' '.join(formatter_cmd_list)}")
 
-    with open(path, encoding="utf8") as f:
-        new_code = f.read()
+    new_code = path.read_text(encoding="utf8")
 
     return new_code
 
