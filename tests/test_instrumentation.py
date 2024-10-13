@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import ast
 import os
-from pathlib import Path
 import sys
 import tempfile
 from argparse import Namespace
+from pathlib import Path
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.instrument_existing_tests import (
@@ -116,7 +116,7 @@ class TestPigLatin(unittest.TestCase):
     assert success
     assert new_test == expected.format(
         module_path=Path(f.name).name,
-        tmp_dir_path=get_run_tmp_file("test_return_values"),
+        tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
     )
 
 
@@ -213,8 +213,8 @@ def test_prepare_image_for_yolo():
         os.chdir(original_cwd)
     assert success
     assert new_test == expected.format(
-        module_path=os.path.basename(f.name),
-        tmp_dir_path=get_run_tmp_file("test_return_values"),
+        module_path=Path(f.name).name,
+        tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
     )
 
 
@@ -303,9 +303,10 @@ def test_sort():
         )
         os.chdir(original_cwd)
         assert success
+        assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_results_temp",
-            tmp_dir_path=get_run_tmp_file("test_return_values"),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
         ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
@@ -457,9 +458,10 @@ def test_sort_parametrized(input, expected_output):
         )
         os.chdir(original_cwd)
         assert success
+        assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp",
-            tmp_dir_path=get_run_tmp_file("test_return_values"),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
         ).replace('"', "'")
         #
         # Overwrite old test with new instrumented test
@@ -652,9 +654,10 @@ def test_sort_parametrized_loop(input, expected_output):
         )
         os.chdir(original_cwd)
         assert success
+        assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file("test_return_values"),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
         ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
@@ -849,9 +852,10 @@ def test_sort():
         )
         os.chdir(original_cwd)
         assert success
+        assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file("test_return_values"),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
         ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
@@ -1029,9 +1033,10 @@ class TestPigLatin(unittest.TestCase):
         os.chdir(original_cwd)
 
         assert success
+        assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_results_temp",
-            tmp_dir_path=get_run_tmp_file("test_return_values"),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
         ).replace('"', "'")
         #
         # Overwrite old test with new instrumented test
@@ -1201,9 +1206,10 @@ class TestPigLatin(unittest.TestCase):
         )
         os.chdir(original_cwd)
         assert success
+        assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_results_temp",
-            tmp_dir_path=get_run_tmp_file("test_return_values"),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
         ).replace('"', "'")
         #
         # Overwrite old test with new instrumented test
@@ -1370,9 +1376,10 @@ class TestPigLatin(unittest.TestCase):
         )
         os.chdir(original_cwd)
         assert success
+        assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file("test_return_values"),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
         ).replace('"', "'")
         #
         # # Overwrite old test with new instrumented test
@@ -1544,14 +1551,15 @@ class TestPigLatin(unittest.TestCase):
         )
         os.chdir(original_cwd)
         assert success
+        assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file("test_return_values"),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
         ).replace('"', "'")
         #
         # Overwrite old test with new instrumented test
-        with test_path.open("w") as f:
-            f.write(new_test)
+        with test_path.open("w") as _f:
+            _f.write(new_test)
 
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
@@ -1775,8 +1783,9 @@ def test_class_name_A_function_name():
     finally:
         test_path.unlink(missing_ok=True)
     assert success
+    assert new_test is not None
     assert new_test.replace('"', "'") == expected.format(
-        tmp_dir_path=get_run_tmp_file("test_return_values"),
+        tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
         module_path="tests.pytest.test_class_function_instrumentation_temp",
     ).replace('"', "'")
 
@@ -1866,9 +1875,10 @@ def test_common_tags_1():
         )
         os.chdir(original_cwd)
         assert success
+        assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_wrong_function_instrumentation_temp",
-            tmp_dir_path=get_run_tmp_file("test_return_values"),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
         ).replace('"', "'")
     finally:
         test_path.unlink(missing_ok=True)
@@ -1952,9 +1962,10 @@ def test_sort():
         )
         os.chdir(original_cwd)
         assert success
+        assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_conditional_instrumentation_temp",
-            tmp_dir_path=get_run_tmp_file("test_return_values"),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
         ).replace('"', "'")
     finally:
         test_path.unlink(missing_ok=True)
@@ -2048,10 +2059,12 @@ def test_sort():
         )
         os.chdir(original_cwd)
         assert success
-        assert new_test.replace('"', "'") == expected.format(
+        formatted_expected = expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_results_temp",
-            tmp_dir_path=get_run_tmp_file("test_return_values"),
-        ).replace('"', "'")
+            tmp_dir_path=str(get_run_tmp_file(Path("test_return_values"))),
+        )
+        assert new_test is not None
+        assert new_test.replace('"', "'") == formatted_expected.replace('"', "'")
     finally:
         test_path.unlink(missing_ok=True)
 
@@ -2167,6 +2180,6 @@ def test_code_replacement10() -> None:
         os.chdir(original_cwd)
     assert success
     assert new_test == expected.format(
-        module_path=os.path.basename(f.name),
-        tmp_dir_path=get_run_tmp_file("test_return_values"),
+        module_path=Path(f.name).name,
+        tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
     )

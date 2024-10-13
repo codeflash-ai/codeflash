@@ -170,7 +170,7 @@ def foo():
 
 def test_formatter_ruff():
     try:
-        import ruff
+        import ruff  # type: ignore
     except ImportError:
         pytest.skip("ruff is not installed")
     original_code = b"""
