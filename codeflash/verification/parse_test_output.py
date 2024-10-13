@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import logging
 import os
-import pathlib
 import re
 import sqlite3
 from collections import defaultdict
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import dill as pickle
@@ -32,16 +32,16 @@ if TYPE_CHECKING:
 
 
 def parse_test_return_values_bin(
-    file_location: str,
+    file_location: Path,
     test_files: TestFiles,
     test_config: TestConfig,
 ) -> TestResults:
     test_results = TestResults()
-    if not os.path.exists(file_location):
+    if not file_location.exists():
         logger.warning(f"No test results for {file_location} found.")
         return test_results
 
-    with open(file_location, "rb") as file:
+    with file_location.open("rb") as file:
         while file:
             len_next = file.read(4)
             if not len_next:
@@ -91,12 +91,12 @@ def parse_test_return_values_bin(
 
 
 def parse_sqlite_test_results(
-    sqlite_file_path: str,
+    sqlite_file_path: Path,
     test_files: TestFiles,
     test_config: TestConfig,
 ) -> TestResults:
     test_results = TestResults()
-    if not os.path.exists(sqlite_file_path):
+    if not sqlite_file_path.exists():
         logger.warning(f"No test results for {sqlite_file_path} found.")
         return test_results
     try:
@@ -142,18 +142,18 @@ def parse_sqlite_test_results(
 
 
 def parse_test_xml(
-    test_xml_file_path: str,
+    test_xml_file_path: Path,
     test_files: TestFiles,
     test_config: TestConfig,
     run_result: subprocess.CompletedProcess | None = None,
 ) -> TestResults:
     test_results = TestResults()
     # Parse unittest output
-    if not os.path.exists(test_xml_file_path):
+    if not test_xml_file_path.exists():
         logger.warning(f"No test results for {test_xml_file_path} found.")
         return test_results
     try:
-        xml = JUnitXml.fromfile(test_xml_file_path)
+        xml = JUnitXml.fromfile(str(test_xml_file_path))
     except Exception as e:
         logger.warning(
             f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}",
@@ -183,8 +183,8 @@ def parse_test_xml(
                 # TODO : This might not be true if the test is organized under a class
                 test_file_path = file_path_from_module_name(test_class_path, test_config.project_root_path)
             else:
-                test_file_path = os.path.join(test_config.project_root_path, test_file_name)
-            assert os.path.exists(test_file_path), f"File {test_file_path} doesn't exist."
+                test_file_path = Path(test_config.project_root_path) / test_file_name
+            assert test_file_path.exists(), f"File {test_file_path} doesn't exist."
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
             assert test_type is not None, f"Test type not found for {test_file_path}"
             # file_name = file_path_from_module_name(test_module_path, test_config.project_root_path)
@@ -200,15 +200,14 @@ def parse_test_xml(
             test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
             loop_index = 1
             if test_function is None:
-                logging.warning(
-                    f"testcase.name is None in parse_test_xml for testcase {testcase!r} in file {test_xml_file_path}",
-                )
+                msg = f"testcase.name is None in parse_test_xml for testcase {testcase!r} in file {test_xml_file_path}"
+                logging.warning(msg)
                 continue
             timed_out = False
             if test_config.test_framework == "pytest":
                 loop_index = int(testcase.name.split("[ ", 1)[1][:-2]) if "[" in testcase.name else 1
                 if len(testcase.result) > 1:
-                    print(
+                    logger.warning(
                         f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!",
                     )
                 if len(testcase.result) == 1:
@@ -217,7 +216,7 @@ def parse_test_xml(
                         timed_out = True
             else:
                 if len(testcase.result) > 1:
-                    print(
+                    logger.warning(
                         f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!",
                     )
                 if len(testcase.result) == 1:
@@ -416,7 +415,7 @@ def merge_test_results(
 
 
 def parse_test_results(
-    test_xml_path: str,
+    test_xml_path: Path,
     test_files: TestFiles,
     test_config: TestConfig,
     optimization_iteration: int,
@@ -430,27 +429,20 @@ def parse_test_results(
     )
 
     try:
-        if os.path.exists(
-            bin_results_file := get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
-        ):
-            test_results_bin_file = parse_test_return_values_bin(
-                bin_results_file,
-                test_files=test_files,
-                test_config=test_config,
-            )
-        else:
-            test_results_bin_file = TestResults()
+        bin_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin"))
+        test_results_bin_file = (
+            parse_test_return_values_bin(bin_results_file, test_files=test_files, test_config=test_config)
+            if bin_results_file.exists()
+            else TestResults()
+        )
     except AttributeError as e:
         logger.exception(e)
         test_results_bin_file = TestResults()
-        pathlib.Path(
-            get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
-        ).unlink(missing_ok=True)
+        get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin")).unlink(missing_ok=True)
 
     try:
-        if os.path.exists(
-            sql_results_file := get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite"),
-        ):
+        sql_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite"))
+        if sql_results_file.exists():
             test_results_sqlite_file = parse_sqlite_test_results(
                 sqlite_file_path=sql_results_file,
                 test_files=test_files,
@@ -460,16 +452,9 @@ def parse_test_results(
     except AttributeError as e:
         logger.exception(e)
 
-    pathlib.Path(
-        get_run_tmp_file(f"test_return_values_{optimization_iteration}.bin"),
-    ).unlink(
-        missing_ok=True,
-    )
-    pathlib.Path(
-        get_run_tmp_file(f"test_return_values_{optimization_iteration}.sqlite"),
-    ).unlink(
-        missing_ok=True,
-    )
+    get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin")).unlink(missing_ok=True)
+
+    get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
 
     return merge_test_results(
         test_results_xml,

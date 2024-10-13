@@ -57,7 +57,7 @@ class GeneratedTestsList(BaseModel):
 
 class TestFile(BaseModel):
     instrumented_file_path: Path
-    original_file_path: Optional[str] = None
+    original_file_path: Optional[Path] = None
     original_source: Optional[str] = None
     test_type: TestType
 
@@ -76,13 +76,13 @@ class TestFiles(BaseModel):
         else:
             raise ValueError("Test file already exists in the list")
 
-    def get_by_original_file_path(self, file_path: str) -> TestFile | None:
+    def get_by_original_file_path(self, file_path: Path) -> TestFile | None:
         return next(
             (test_file for test_file in self.test_files if test_file.original_file_path == file_path),
             None,
         )
 
-    def get_test_type_by_instrumented_file_path(self, file_path: str) -> TestType | None:
+    def get_test_type_by_instrumented_file_path(self, file_path: Path) -> TestType | None:
         return next(
             (
                 test_file.test_type
@@ -92,7 +92,7 @@ class TestFiles(BaseModel):
             None,
         )
 
-    def get_test_type_by_original_file_path(self, file_path: str) -> TestType | None:
+    def get_test_type_by_original_file_path(self, file_path: Path) -> TestType | None:
         return next(
             (
                 test_file.test_type

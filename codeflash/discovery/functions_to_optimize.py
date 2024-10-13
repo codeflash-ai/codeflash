@@ -177,7 +177,7 @@ def get_functions_to_optimize(
     functions: dict[str, list[FunctionToOptimize]]
     if optimize_all:
         logger.info("Finding all functions in the module '%s' ...", optimize_all)
-        functions = get_all_files_and_functions(optimize_all)
+        functions = get_all_files_and_functions(Path(optimize_all))
     elif replay_test is not None:
         functions = get_all_replay_test_functions(
             replay_test=replay_test,
@@ -199,7 +199,7 @@ def get_functions_to_optimize(
                 class_name = None
                 only_function_name = split_function[0]
             found_function = None
-            for fn in functions.get(file, []):
+            for fn in functions.get(str(file), []):
                 if only_function_name == fn.function_name and (
                     class_name is None or class_name == fn.top_level_parent_name
                 ):
@@ -207,7 +207,7 @@ def get_functions_to_optimize(
             if found_function is None:
                 msg = f"Function {only_function_name} not found in file {file} or the function does not have a 'return' statement."
                 raise ValueError(msg)
-            functions[file] = [found_function]
+            functions[str(file)] = [found_function]
     else:
         logger.info("Finding all functions modified in the current git diff ...")
         ph("cli-optimizing-git-diff")
@@ -254,7 +254,7 @@ def get_all_files_and_functions(module_root_path: Path) -> dict[str, list[Functi
     module_root_path = Path(module_root_path)
     for file_path in module_root_path.rglob("*.py"):
         # Find all the functions in the file
-        functions.update(find_all_functions_in_file(str(file_path)))
+        functions.update(find_all_functions_in_file(file_path).items())
     # Randomize the order of the files to optimize to avoid optimizing the same file in the same order every time.
     # Helpful if an optimize-all run is stuck and we restart it.
     files_list = list(functions.items())
@@ -296,7 +296,7 @@ def get_all_replay_test_functions(
             if module_path_parts
             and is_class_defined_in_file(
                 module_path_parts[-1],
-                str(Path(project_root_path, *module_path_parts[:-1])) + ".py",
+                Path(project_root_path, *module_path_parts[:-1]).with_suffix(".py"),
             )
             else None
         )
@@ -440,10 +440,10 @@ def inspect_top_level_functions_or_methods(
 
 def filter_functions(
     modified_functions: dict[str, list[FunctionToOptimize]],
-    tests_root: str,
+    tests_root: Path,
     ignore_paths: list[Path],
-    project_root: str,
-    module_root: str,
+    project_root: Path,
+    module_root: Path,
     disable_logs: bool = False,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     blocklist_funcs = get_blacklisted_functions()
@@ -460,13 +460,17 @@ def filter_functions(
     ignore_paths_removed_count: int = 0
     malformed_paths_count: int = 0
     submodule_ignored_paths_count: int = 0
+    tests_root_str = str(tests_root)
+    module_root_str = str(module_root)
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path, functions in modified_functions.items():
-        if file_path.startswith(tests_root + os.sep):
+        if file_path.startswith(tests_root_str + os.sep):
             test_functions_removed_count += len(functions)
             continue
         if file_path in ignore_paths or any(
-            file_path.startswith(ignore_path + os.sep) for ignore_path in ignore_paths if ignore_path
+            # file_path.startswith(ignore_path + os.sep) for ignore_path in ignore_paths if ignore_path
+            file_path.startswith(str(ignore_path) + os.sep)
+            for ignore_path in ignore_paths
         ):
             ignore_paths_removed_count += 1
             continue
@@ -475,14 +479,14 @@ def filter_functions(
         ):
             submodule_ignored_paths_count += 1
             continue
-        if path_belongs_to_site_packages(file_path):
+        if path_belongs_to_site_packages(Path(file_path)):
             site_packages_removed_count += len(functions)
             continue
-        if not file_path.startswith(module_root + os.sep):
+        if not file_path.startswith(module_root_str + os.sep):
             non_modules_removed_count += len(functions)
             continue
         try:
-            ast.parse(f"import {module_name_from_file_path(file_path, project_root)}")
+            ast.parse(f"import {module_name_from_file_path(Path(file_path), project_root)}")
         except SyntaxError:
             malformed_paths_count += 1
             continue
@@ -510,7 +514,7 @@ def filter_functions(
         log_string: str
         if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
             logger.info(f"Ignoring:\n{log_string}")
-    return {k: v for k, v in filtered_modified_functions.items() if v}, functions_count
+    return {Path(k): v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 
 def filter_files_optimized(
