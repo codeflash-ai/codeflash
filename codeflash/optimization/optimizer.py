@@ -750,9 +750,10 @@ class Optimizer:
             for tests_in_file in function_to_tests.get(func_qualname):
                 test_file_invocation_positions[tests_in_file.test_file].append(tests_in_file.position)
             for test_file, positions in test_file_invocation_positions.items():
+                path_obj_test_file = Path(test_file)
                 relevant_test_files_count += 1
                 success, injected_test = inject_profiling_into_existing_test(
-                    test_file,
+                    path_obj_test_file,
                     positions,
                     function_to_optimize,
                     self.args.project_root,
@@ -761,15 +762,15 @@ class Optimizer:
                 if not success:
                     continue
                 new_test_path = Path(test_file).with_suffix(f"__perfinstrumented{Path(test_file).suffix}")
-                with new_test_path.open("w", encoding="utf8") as f:
-                    f.write(injected_test)
+                with new_test_path.open("w", encoding="utf8") as _f:
+                    _f.write(injected_test)
                 unique_instrumented_test_files.add(new_test_path)
-                if not self.test_files.get_by_original_file_path(test_file):
+                if not self.test_files.get_by_original_file_path(path_obj_test_file):
                     self.test_files.add(
                         TestFile(
                             instrumented_file_path=new_test_path,
                             original_source=None,
-                            original_file_path=test_file,
+                            original_file_path=Path(test_file),
                             test_type=TestType.EXISTING_UNIT_TEST,
                         ),
                     )
@@ -986,10 +987,10 @@ class Optimizer:
 
         first_test_types = []
         first_test_functions = []
-        Path(get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.bin")).unlink(
+        get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(
             missing_ok=True,
         )
-        Path(get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(
+        get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(
             missing_ok=True,
         )
 
@@ -1060,10 +1061,11 @@ class Optimizer:
             )
         if best_runtime_until_now is None or total_candidate_timing < best_runtime_until_now:
             best_test_results = candidate_results
-        Path(get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.bin")).unlink(
+        get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.bin")).unlink(
             missing_ok=True,
         )
-        Path(get_run_tmp_file(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(
+
+        get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(
             missing_ok=True,
         )
         if not equal_results:
@@ -1108,12 +1110,12 @@ class Optimizer:
             )
         except subprocess.TimeoutExpired:
             logger.exception(
-                f'Error running tests in {", ".join(test_files)}.\nTimeout Error',
+                f'Error running tests in {", ".join(str(f) for f in test_files.test_files)}.\nTimeout Error',
             )
             return TestResults()
         if run_result.returncode != 0:
             logger.debug(
-                f'Nonzero return code {run_result.returncode} when running tests in {", ".join([f.instrumented_file_path for f in test_files.test_files])}.\n'
+                f'Nonzero return code {run_result.returncode} when running tests in {", ".join([str(f.instrumented_file_path) for f in test_files.test_files])}.\n'
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n",
             )

@@ -1,5 +1,6 @@
 import os
 import unittest
+from pathlib import Path
 from unittest.mock import mock_open, patch
 
 from returns.result import Failure, Success
@@ -49,8 +50,9 @@ class TestReadApiKeyFromShellConfig(unittest.TestCase):
 
     def tearDown(self):
         """Cleanup the temporary shell configuration file after testing."""
-        if os.path.exists(self.test_rc_path):
-            os.remove(self.test_rc_path)
+        test_rc_path = Path(self.test_rc_path)
+        if test_rc_path.exists():
+            test_rc_path.unlink()
         del os.environ["SHELL"]  # Remove the SHELL environment variable
 
     def test_valid_api_key(self):

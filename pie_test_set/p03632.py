@@ -3,9 +3,8 @@ def problem_p03632(input_data):
 
     sys.setrecursionlimit(4100000)
 
-    import math
-
     import itertools
+    import math
 
     INF = float("inf")
 

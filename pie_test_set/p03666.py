@@ -1,5 +1,12 @@
 def problem_p03666(input_data):
-    import sys, queue, math, copy, itertools, bisect, collections, heapq
+    import bisect
+    import collections
+    import copy
+    import heapq
+    import itertools
+    import math
+    import queue
+    import sys
 
     def main():
 

@@ -1,10 +1,10 @@
 import logging
-from codeflash.cli_cmds.console import logger
 from typing import Any, Dict, Optional
 
 from posthog import Posthog
 
 from codeflash.api.cfapi import get_user_id
+from codeflash.cli_cmds.console import logger
 from codeflash.version import __version__, __version_tuple__
 
 _posthog = None

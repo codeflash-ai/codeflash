@@ -1,5 +1,18 @@
 def problem_p02957(input_data):
-    import math, string, itertools, fractions, heapq, collections, re, array, bisect, sys, random, time, queue, copy
+    import array
+    import bisect
+    import collections
+    import copy
+    import fractions
+    import heapq
+    import itertools
+    import math
+    import queue
+    import random
+    import re
+    import string
+    import sys
+    import time
 
     sys.setrecursionlimit(10**7)
 

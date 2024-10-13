@@ -1,7 +1,6 @@
 def problem_p03253(input_data):
-    from math import floor, sqrt
-
     from collections import defaultdict
+    from math import floor, sqrt
 
     def factors(n):
 

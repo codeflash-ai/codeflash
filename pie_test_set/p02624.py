@@ -46,7 +46,6 @@ def problem_p02624(input_data):
     if sys.argv[-1] == "ONLINE_JUDGE":
 
         import numba
-
         from numba.pycc import CC
 
         i8 = numba.int64

@@ -1,5 +1,5 @@
 def problem_p02900(input_data):
-    from math import sqrt, ceil
+    from math import ceil, sqrt
 
     a, b = list(map(int, input_data.split()))
 

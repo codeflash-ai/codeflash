@@ -1,5 +1,6 @@
-from code_to_optimize.final_test_set.gradient import gradient
 import numpy as np
+
+from code_to_optimize.final_test_set.gradient import gradient
 
 
 def test_simple_case():

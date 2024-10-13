@@ -1,7 +1,6 @@
 def problem_p03088(input_data):
-    from itertools import product
-
     from collections import defaultdict
+    from itertools import product
 
     MOD = 10**9 + 7
 

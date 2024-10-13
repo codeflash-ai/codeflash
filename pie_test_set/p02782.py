@@ -1,15 +1,11 @@
 def problem_p02782(input_data):
+    import collections
+    import heapq
+    import sys
+    from functools import cmp_to_key
     from sys import stdin
 
-    import sys
-
     import numpy as np
-
-    import collections
-
-    from functools import cmp_to_key
-
-    import heapq
 
     ##  input functions for me
 

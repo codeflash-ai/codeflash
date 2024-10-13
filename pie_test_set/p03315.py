@@ -1,15 +1,10 @@
 def problem_p03315(input_data):
-    import math
-
-    import queue
-
     import bisect
-
     import heapq
-
-    import time
-
     import itertools
+    import math
+    import queue
+    import time
 
     mod = int(1e9 + 7)
 

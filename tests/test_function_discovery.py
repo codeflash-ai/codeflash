@@ -1,4 +1,3 @@
-import os.path
 import tempfile
 from pathlib import Path
 
@@ -124,8 +123,8 @@ def functionA():
             only_get_this_function="A.functionA",
             test_cfg=test_config,
             ignore_paths=[Path("/bruh/")],
-            project_root=Path(os.path.dirname(f.name)),
-            module_root=Path(os.path.dirname(f.name)),
+            project_root=path_obj_name.parent,
+            module_root=path_obj_name.parent,
         )
         assert len(functions) == 1
         for file in functions:

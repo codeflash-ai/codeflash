@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
+from pathlib import Path
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME
@@ -13,7 +14,7 @@ from codeflash.verification.test_results import TestType
 def run_tests(
     test_paths: TestFiles,
     test_framework: str,
-    cwd: str | None = None,
+    cwd: Path | None = None,
     test_env: dict[str, str] | None = None,
     pytest_timeout: int | None = None,
     pytest_cmd: str = "pytest",
@@ -22,7 +23,7 @@ def run_tests(
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME,
     pytest_min_loops: int = 5,
     pytest_max_loops: int = 100_000,
-) -> tuple[str, subprocess.CompletedProcess]:
+) -> tuple[Path, subprocess.CompletedProcess]:
     assert test_framework in ["pytest", "unittest"]
     # TODO: Make this work for replay tests
     for i, test_file in enumerate(test_paths):
@@ -30,10 +31,10 @@ def run_tests(
             only_run_these_test_functions and test_file.test_type == TestType.REPLAY_TEST
         ):  # "__replay_test" in test_path:
             # TODO: This might not work for replay tests
-            test_paths[i] = test_file.instrumented_file_path + "::" + only_run_these_test_functions
+            test_paths[i] = str(test_file.instrumented_file_path) + "::" + only_run_these_test_functions
 
     if test_framework == "pytest":
-        result_file_path = get_run_tmp_file("pytest_results.xml")
+        result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         pytest_cmd_list = shlex.split(pytest_cmd, posix=os.name != "nt")
 
         pytest_test_env = test_env.copy()
@@ -62,7 +63,7 @@ def run_tests(
             check=False,
         )
     elif test_framework == "unittest":
-        result_file_path = get_run_tmp_file("unittest_results.xml")
+        result_file_path = get_run_tmp_file(Path("unittest_results.xml"))
         results = subprocess.run(
             ["python", "-m", "xmlrunner"]
             + (["-v"] if verbose else [])

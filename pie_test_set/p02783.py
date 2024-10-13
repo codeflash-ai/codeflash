@@ -1,8 +1,6 @@
 def problem_p02783(input_data):
     import collections
-
     import itertools as it
-
     import math
 
     # import numpy as np

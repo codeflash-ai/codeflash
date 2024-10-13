@@ -1,6 +1,5 @@
 def problem_p02738(input_data):
     from functools import lru_cache, reduce
-
     from itertools import accumulate
 
     N, M = list(map(int, input_data.split()))

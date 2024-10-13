@@ -1,6 +1,6 @@
 def problem_p03999(input_data):
-    from itertools import combinations, chain
     from functools import reduce
+    from itertools import chain, combinations
 
     def eval_str(string):
 

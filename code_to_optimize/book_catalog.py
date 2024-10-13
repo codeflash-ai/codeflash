@@ -1,10 +1,7 @@
+from time import time
 from typing import List
 
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, Text, func
-from sqlalchemy.orm import Session, relationship
-from time import time
-
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, Text
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
 from sqlalchemy.orm.relationships import Relationship

@@ -1,5 +1,6 @@
-from code_to_optimize.final_test_set.hamming_distance import _hamming_distance
 import numpy as np
+
+from code_to_optimize.final_test_set.hamming_distance import _hamming_distance
 
 
 def test_no_differences():

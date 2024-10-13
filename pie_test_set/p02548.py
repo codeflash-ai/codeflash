@@ -1,5 +1,14 @@
 def problem_p02548(input_data):
-    import sys, os, math, bisect, itertools, collections, heapq, queue, copy, array
+    import array
+    import bisect
+    import collections
+    import copy
+    import heapq
+    import itertools
+    import math
+    import os
+    import queue
+    import sys
 
     # from scipy.sparse.csgraph import csgraph_from_dense, floyd_warshall
 
