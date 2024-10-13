@@ -1,4 +1,4 @@
-﻿def OptimizeMe(a, b, c):
+def OptimizeMe(a, b, c):
     return HelperClass().helper_method(a, b, c)
 
 

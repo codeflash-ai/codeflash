@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from sqlalchemy import ForeignKey, Integer, String, create_engine
 from sqlalchemy.engine.base import Engine
