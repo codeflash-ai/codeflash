@@ -628,6 +628,37 @@ def create_wrapper_function() -> ast.FunctionDef:
                 ),
                 lineno=lineno + 13,
             ),
+            ast.If(
+                test=ast.Compare(
+                    left=ast.Name(id="loop_index", ctx=ast.Load()),
+                    ops=[ast.Eq()],
+                    comparators=[ast.Constant(value=1)],
+                    lineno=lineno + 14,
+                ),
+                body=[
+                    ast.Assign(
+                        targets=[ast.Name(id="pickled_return_value", ctx=ast.Store())],
+                        value=ast.Call(
+                            func=ast.Attribute(
+                                value=ast.Name(id="pickle", ctx=ast.Load()),
+                                attr="dumps",
+                                ctx=ast.Load(),
+                            ),
+                            args=[ast.Name(id="return_value", ctx=ast.Load())],
+                            keywords=[],
+                        ),
+                        lineno=lineno + 15,
+                    ),
+                ],
+                orelse=[
+                    ast.Assign(
+                        targets=[ast.Name(id="pickled_return_value", ctx=ast.Store())],
+                        value=ast.Constant(value=None),
+                        lineno=lineno + 16,
+                    ),
+                ],
+                # lineno=lineno + 16,
+            ),
             ast.Expr(
                 value=ast.Call(
                     func=ast.Attribute(
@@ -646,22 +677,14 @@ def create_wrapper_function() -> ast.FunctionDef:
                                 ast.Name(id="loop_index", ctx=ast.Load()),
                                 ast.Name(id="invocation_id", ctx=ast.Load()),
                                 ast.Name(id="codeflash_duration", ctx=ast.Load()),
-                                ast.Call(
-                                    func=ast.Attribute(
-                                        value=ast.Name(id="pickle", ctx=ast.Load()),
-                                        attr="dumps",
-                                        ctx=ast.Load(),
-                                    ),
-                                    args=[ast.Name(id="return_value", ctx=ast.Load())],
-                                    keywords=[],
-                                ),
+                                ast.Name(id="pickled_return_value", ctx=ast.Load()),
                             ],
                             ctx=ast.Load(),
                         ),
                     ],
                     keywords=[],
                 ),
-                lineno=lineno + 14,
+                lineno=lineno + 17,
             ),
             ast.Expr(
                 value=ast.Call(
@@ -673,9 +696,9 @@ def create_wrapper_function() -> ast.FunctionDef:
                     args=[],
                     keywords=[],
                 ),
-                lineno=lineno + 15,
+                lineno=lineno + 18,
             ),
-            ast.Return(value=ast.Name(id="return_value", ctx=ast.Load()), lineno=lineno + 16),
+            ast.Return(value=ast.Name(id="return_value", ctx=ast.Load()), lineno=lineno + 19),
         ],
         lineno=lineno,
         decorator_list=[],
