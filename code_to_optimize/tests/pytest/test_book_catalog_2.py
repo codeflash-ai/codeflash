@@ -1,4 +1,4 @@
-﻿from code_to_optimize.book_catalog import get_authors2
+from code_to_optimize.book_catalog import get_authors2
 
 
 def test_get_authors_basic() -> None:
