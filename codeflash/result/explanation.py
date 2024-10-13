@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic.dataclasses import dataclass
 
 from codeflash.code_utils.time_utils import humanize_runtime
@@ -11,7 +13,7 @@ class Explanation:
     original_runtime_ns: int
     best_runtime_ns: int
     function_name: str
-    file_path: str
+    file_path: Path
 
     @property
     def perf_improvement_line(self) -> str:

@@ -18,7 +18,7 @@ from codeflash.verification.verification_utils import TestConfig
 
 @dataclass(frozen=True)
 class TestsInFile:
-    test_file: str
+    test_file: Path
     test_class: Optional[str]  # This might be unused...
     test_function: str
     test_suite: Optional[str]
@@ -33,7 +33,7 @@ class CodePosition:
 
 @dataclass(frozen=True)
 class FunctionCalledInTest:
-    test_file: str
+    test_file: Path
     test_class: Optional[str]  # This might be unused...
     test_function: str
     test_suite: Optional[str]

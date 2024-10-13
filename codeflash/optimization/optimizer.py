@@ -367,9 +367,9 @@ class Optimizer:
                 )
 
                 original_code_combined = original_helper_code.copy()
-                original_code_combined[explanation.file_path] = original_code
+                original_code_combined[str(explanation.file_path)] = original_code
                 new_code_combined = new_helper_code.copy()
-                new_code_combined[explanation.file_path] = new_code
+                new_code_combined[str(explanation.file_path)] = new_code
                 if not self.args.no_pr:
                     check_create_pr(
                         original_code=original_code_combined,
@@ -761,7 +761,9 @@ class Optimizer:
                 )
                 if not success:
                     continue
-                new_test_path = Path(test_file).with_suffix(f"__perfinstrumented{Path(test_file).suffix}")
+                new_test_path = path_obj_test_file.with_name(
+                    path_obj_test_file.stem + "__perfinstrumented" + path_obj_test_file.suffix,
+                )
                 with new_test_path.open("w", encoding="utf8") as _f:
                     _f.write(injected_test)
                 unique_instrumented_test_files.add(new_test_path)
@@ -854,7 +856,7 @@ class Optimizer:
         if "PYTHONPATH" not in test_env:
             test_env["PYTHONPATH"] = self.args.project_root
         else:
-            test_env["PYTHONPATH"] += os.pathsep + self.args.project_root
+            test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
 
         first_test_types = []
         first_test_functions = []
@@ -983,7 +985,7 @@ class Optimizer:
         if "PYTHONPATH" not in test_env:
             test_env["PYTHONPATH"] = self.args.project_root
         else:
-            test_env["PYTHONPATH"] += os.pathsep + self.args.project_root
+            test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
 
         first_test_types = []
         first_test_functions = []

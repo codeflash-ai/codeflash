@@ -23,7 +23,7 @@ from codeflash.result.explanation import Explanation
 def existing_tests_source_for(
     function_qualified_name_with_modules_from_root: str,
     function_to_tests: Dict[str, list[TestsInFile]],
-    tests_root: str,
+    tests_root: Path,
 ) -> str:
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
     existing_tests_unique = set()
@@ -47,7 +47,7 @@ def check_create_pr(
     if pr_number is not None:
         logger.info(f"Suggesting changes to PR #{pr_number} ...")
         owner, repo = get_repo_owner_and_name(git_repo)
-        relative_path = Path(explanation.file_path).relative_to(git_root_dir()).as_posix()
+        relative_path = explanation.file_path.relative_to(git_root_dir()).as_posix()
         build_file_changes = {
             Path(p).relative_to(git_root_dir()).as_posix(): FileDiffContent(
                 oldContent=original_code[p],
@@ -92,7 +92,7 @@ def check_create_pr(
         if not check_and_push_branch(git_repo, wait_for_push=True):
             logger.warning("⏭️ Branch is not pushed, skipping PR creation...")
             return
-        relative_path = Path(explanation.file_path).relative_to(git_root_dir()).as_posix()
+        relative_path = explanation.file_path.relative_to(git_root_dir()).as_posix()
         base_branch = get_current_branch()
         response = cfapi.create_pr(
             owner=owner,
