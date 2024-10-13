@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module
 

@@ -1,6 +1,7 @@
+import os.path
 import tempfile
 from pathlib import Path
-import os.path
+
 from codeflash.discovery.functions_to_optimize import (
     find_all_functions_in_file,
     get_functions_to_optimize,
@@ -66,10 +67,14 @@ def non_classmethod_function(cls, name):
         assert not inspect_top_level_functions_or_methods(path_obj_name, "functionB").is_top_level
         assert inspect_top_level_functions_or_methods(path_obj_name, "functionC", class_name="A").is_top_level
         assert not inspect_top_level_functions_or_methods(
-            path_obj_name, "functionD", class_name="A"
+            path_obj_name,
+            "functionD",
+            class_name="A",
         ).is_top_level
         assert not inspect_top_level_functions_or_methods(
-            path_obj_name, "functionF", class_name="E"
+            path_obj_name,
+            "functionF",
+            class_name="E",
         ).is_top_level
         assert not inspect_top_level_functions_or_methods(path_obj_name, "functionA").has_args
         staticmethod_func = inspect_top_level_functions_or_methods(
@@ -86,7 +91,9 @@ def non_classmethod_function(cls, name):
             class_name="AirbyteEntrypoint",
         ).is_classmethod
         assert not inspect_top_level_functions_or_methods(
-            path_obj_name, "non_classmethod_function", class_name="AirbyteEntrypoint"
+            path_obj_name,
+            "non_classmethod_function",
+            class_name="AirbyteEntrypoint",
         ).is_top_level
         # needed because this will be traced with a class_name being passed
 

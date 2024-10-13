@@ -5,9 +5,7 @@ import subprocess
 
 
 def main():
-    module_root = (
-        pathlib.Path(__file__).parent.parent.parent / "code_to_optimize"
-    ).resolve()
+    module_root = (pathlib.Path(__file__).parent.parent.parent / "code_to_optimize").resolve()
     test_root = module_root / "tests" / "pytest"
     print("cwd", module_root)
     command = [
@@ -40,13 +38,9 @@ def main():
         output.append(line)  # Store each line in the output variable
     return_code = process.wait()
     stdout = "".join(output)
-    assert (
-        return_code == 0
-    ), f"The codeflash command returned exit code {return_code} instead of 0"
+    assert return_code == 0, f"The codeflash command returned exit code {return_code} instead of 0"
 
-    assert (
-        "⚡️ Optimization successful! 📄 " in stdout
-    ), "Failed to find performance improvement at all"
+    assert "⚡️ Optimization successful! 📄 " in stdout, "Failed to find performance improvement at all"
 
     improvement_pct = int(re.search(r"📈 ([\d,]+)% improvement", stdout).group(1))
     improvement_x = float(improvement_pct) / 100

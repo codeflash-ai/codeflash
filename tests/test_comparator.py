@@ -5,6 +5,8 @@ from enum import Enum, Flag, IntFlag, auto
 
 import pydantic
 import pytest
+from returns.result import Failure, Success
+
 from codeflash.verification.comparator import comparator
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.test_results import (
@@ -13,7 +15,6 @@ from codeflash.verification.test_results import (
     TestResults,
     TestType,
 )
-from returns.result import Failure, Success
 
 
 def test_basic_python_objects():

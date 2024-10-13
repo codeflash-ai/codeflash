@@ -3,10 +3,10 @@ from __future__ import annotations
 import ast
 import os
 import site
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from codeflash.cli_cmds.console import logger
-from pathlib import Path
 
 
 def module_name_from_file_path(file_path: Path, project_root_path: Path) -> str:

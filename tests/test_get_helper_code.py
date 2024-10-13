@@ -3,9 +3,10 @@ import tempfile
 from argparse import Namespace
 
 import pytest
+from returns.pipeline import is_successful
+
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 from codeflash.optimization.optimizer import Optimizer
-from returns.pipeline import is_successful
 
 
 class HelperClass:
@@ -17,7 +18,7 @@ def OptimizeMe(a, b, c):
     return HelperClass().helper_method(a, b, c)
 
 
-@pytest.mark.skip()
+@pytest.mark.skip
 def test_get_outside_method_helper() -> None:
     file_path = pathlib.Path(__file__).resolve()
     opt = Optimizer(

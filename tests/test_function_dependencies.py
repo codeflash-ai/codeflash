@@ -3,10 +3,11 @@ from argparse import Namespace
 from dataclasses import dataclass
 
 import pytest
+from returns.pipeline import is_successful
+
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 from codeflash.optimization.function_context import get_function_variables_definitions
 from codeflash.optimization.optimizer import Optimizer
-from returns.pipeline import is_successful
 
 
 def calculate_something(data):
