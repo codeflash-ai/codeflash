@@ -137,14 +137,12 @@ class TestResults(BaseModel):
 
         :return: The runtime in nanoseconds.
         """
+        usable_results = {result for result in self.test_results if result.did_pass and result.runtime}
         for result in self.test_results:
-            if result.did_pass and result.runtime is None:
+            if result not in usable_results:
                 logger.debug(
                     f"Ignoring test case that passed but had no runtime -> {result.id}, Loop # {result.loop_index}",
                 )
-        usable_results = [
-            result for result in self.test_results if result.did_pass and result.runtime is not None
-        ]
         return sum(
             [
                 min([result.runtime for result in usable_results if result.id == invocation_id])
