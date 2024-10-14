@@ -67,8 +67,8 @@ def test_discover_tests_pytest_with_temp_dir_root():
         # Check if the dummy test file is discovered
         assert len(discovered_tests) == 1
         assert len(discovered_tests["dummy_code.dummy_function"]) == 2
-        assert discovered_tests["dummy_code.dummy_function"][0].test_file == str(test_file_path)
-        assert discovered_tests["dummy_code.dummy_function"][1].test_file == str(test_file_path)
+        assert discovered_tests["dummy_code.dummy_function"][0].test_file == test_file_path
+        assert discovered_tests["dummy_code.dummy_function"][1].test_file == test_file_path
         assert {
             discovered_tests["dummy_code.dummy_function"][0].test_function,
             discovered_tests["dummy_code.dummy_function"][1].test_function,
@@ -141,12 +141,12 @@ def test_discover_tests_pytest_with_multi_level_dirs():
 
         # Check if the test files at all levels are discovered
         assert len(discovered_tests) == 3
-        assert discovered_tests["root_code.root_function"][0].test_file == str(root_test_file_path)
-        assert discovered_tests["level1.level1_code.level1_function"][0].test_file == str(
-            level1_test_file_path,
-        )
-        assert discovered_tests["level1.level2.level2_code.level2_function"][0].test_file == str(
-            level2_test_file_path,
+        assert discovered_tests["root_code.root_function"][0].test_file == root_test_file_path
+        assert discovered_tests["level1.level1_code.level1_function"][0].test_file == level1_test_file_path
+
+        assert (
+            discovered_tests["level1.level2.level2_code.level2_function"][0].test_file
+            == level2_test_file_path
         )
 
 
@@ -228,15 +228,16 @@ def test_discover_tests_pytest_dirs():
 
         # Check if the test files at all levels are discovered
         assert len(discovered_tests) == 4
-        assert discovered_tests["root_code.root_function"][0].test_file == str(root_test_file_path)
-        assert discovered_tests["level1.level1_code.level1_function"][0].test_file == str(
-            level1_test_file_path,
+        assert discovered_tests["root_code.root_function"][0].test_file == root_test_file_path
+        assert discovered_tests["level1.level1_code.level1_function"][0].test_file == level1_test_file_path
+        assert (
+            discovered_tests["level1.level2.level2_code.level2_function"][0].test_file
+            == level2_test_file_path
         )
-        assert discovered_tests["level1.level2.level2_code.level2_function"][0].test_file == str(
-            level2_test_file_path,
-        )
-        assert discovered_tests["level1.level3.level3_code.level3_function"][0].test_file == str(
-            level3_test_file_path,
+
+        assert (
+            discovered_tests["level1.level3.level3_code.level3_function"][0].test_file
+            == level3_test_file_path
         )
 
 
@@ -270,9 +271,7 @@ def test_discover_tests_pytest_with_class():
 
         # Check if the test class and method are discovered
         assert len(discovered_tests) == 1
-        assert discovered_tests["some_class_code.SomeClass.some_method"][0].test_file == str(
-            test_file_path,
-        )
+        assert discovered_tests["some_class_code.SomeClass.some_method"][0].test_file == test_file_path
 
 
 def test_discover_tests_pytest_with_double_nested_directories():
@@ -309,10 +308,9 @@ def test_discover_tests_pytest_with_double_nested_directories():
 
         # Check if the test class and method are discovered
         assert len(discovered_tests) == 1
-        assert discovered_tests["nested.more_nested.nested_class_code.NestedClass.nested_method"][
-            0
-        ].test_file == str(
-            test_file_path,
+        assert (
+            discovered_tests["nested.more_nested.nested_class_code.NestedClass.nested_method"][0].test_file
+            == test_file_path
         )
 
 
@@ -356,7 +354,7 @@ def test_discover_tests_with_code_in_dir_and_test_in_subdir():
 
         # Check if the test file is discovered and associated with the code file
         assert len(discovered_tests) == 1
-        assert discovered_tests["code.some_code.some_function"][0].test_file == str(test_file_path)
+        assert discovered_tests["code.some_code.some_function"][0].test_file == test_file_path
 
 
 def test_discover_tests_pytest_with_nested_class():
@@ -394,6 +392,7 @@ def test_discover_tests_pytest_with_nested_class():
 
         # Check if the test for the nested class method is discovered
         assert len(discovered_tests) == 1
-        assert discovered_tests["nested_class_code.OuterClass.InnerClass.inner_method"][0].test_file == str(
-            test_file_path,
+        assert (
+            discovered_tests["nested_class_code.OuterClass.InnerClass.inner_method"][0].test_file
+            == test_file_path
         )
