@@ -34,8 +34,8 @@ def existing_tests_source_for(
 
 
 def check_create_pr(
-    original_code: dict[str, str],
-    new_code: dict[str, str],
+    original_code: dict[Path, str],
+    new_code: dict[Path, str],
     explanation: Explanation,
     existing_tests_source: str,
     generated_original_test_source: str,
@@ -99,7 +99,7 @@ def check_create_pr(
             repo=repo,
             base_branch=base_branch,
             file_changes={
-                Path(p).relative_to(git_root_dir()).as_posix(): FileDiffContent(
+                Path(p).relative_to(git_root_dir()): FileDiffContent(
                     oldContent=original_code[p],
                     newContent=new_code[p],
                 )

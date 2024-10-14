@@ -215,7 +215,7 @@ class Optimizer:
         if not is_successful(ctx_result):
             return Failure(ctx_result.failure())
         code_context: CodeOptimizationContext = ctx_result.unwrap()
-        original_helper_code = {}
+        original_helper_code: dict[Path, str] = {}
         helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
         for helper_function_path in helper_function_paths:
             with helper_function_path.open(encoding="utf8") as f:
@@ -367,9 +367,9 @@ class Optimizer:
                 )
 
                 original_code_combined = original_helper_code.copy()
-                original_code_combined[str(explanation.file_path)] = original_code
+                original_code_combined[explanation.file_path] = original_code
                 new_code_combined = new_helper_code.copy()
-                new_code_combined[str(explanation.file_path)] = new_code
+                new_code_combined[explanation.file_path] = new_code
                 if not self.args.no_pr:
                     check_create_pr(
                         original_code=original_code_combined,
@@ -407,7 +407,7 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         original_code: str,
         original_code_baseline: OriginalCodeBaseline,
-        original_helper_code: dict[str, str],
+        original_helper_code: dict[Path, str],
         function_trace_id: str,
         only_run_this_test_function: list[TestsInFile] | None = None,
     ) -> BestOptimization | None:
@@ -577,7 +577,7 @@ class Optimizer:
     @staticmethod
     def write_code_and_helpers(
         original_code: str,
-        original_helper_code: dict[str, str],
+        original_helper_code: dict[Path, str],
         path: Path,
     ) -> None:
         with path.open("w", encoding="utf8") as f:
@@ -761,11 +761,16 @@ class Optimizer:
                 )
                 if not success:
                     continue
-                new_test_path = path_obj_test_file.with_name(
-                    path_obj_test_file.stem + "__perfinstrumented" + path_obj_test_file.suffix,
+
+                new_test_path = Path(
+                    f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}"
                 )
-                with new_test_path.open("w", encoding="utf8") as _f:
-                    _f.write(injected_test)
+                if injected_test is not None:
+                    with new_test_path.open("w", encoding="utf8") as _f:
+                        _f.write(injected_test)
+                else:
+                    raise ValueError("injected_test is None")
+
                 unique_instrumented_test_files.add(new_test_path)
                 if not self.test_files.get_by_original_file_path(path_obj_test_file):
                     self.test_files.add(

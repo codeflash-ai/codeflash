@@ -18,7 +18,6 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
-from codeflash.models.models import TestFiles
 from codeflash.verification.test_results import (
     FunctionTestInvocation,
     InvocationId,
@@ -28,6 +27,7 @@ from codeflash.verification.test_results import (
 if TYPE_CHECKING:
     import subprocess
 
+    from codeflash.models.models import TestFiles
     from codeflash.verification.verification_utils import TestConfig
 
 
@@ -43,26 +43,26 @@ def parse_test_return_values_bin(
 
     with file_location.open("rb") as file:
         while file:
-            len_next = file.read(4)
-            if not len_next:
+            len_next_bytes = file.read(4)
+            if not len_next_bytes:
                 return test_results
-            len_next = int.from_bytes(len_next, byteorder="big")
+            len_next = int.from_bytes(len_next_bytes, byteorder="big")
             encoded_test_name = file.read(len_next).decode("ascii")
-            len_next = file.read(8)
-            duration = int.from_bytes(len_next, byteorder="big")
-            len_next = file.read(4)
-            if not len_next:
+            duration_bytes = file.read(8)
+            duration = int.from_bytes(duration_bytes, byteorder="big")
+            len_next_bytes = file.read(4)
+            if not len_next_bytes:
                 return test_results
-            len_next = int.from_bytes(len_next, byteorder="big")
+            len_next = int.from_bytes(len_next_bytes, byteorder="big")
             try:
                 test_pickle_bin = file.read(len_next)
             except Exception as e:
                 logger.exception(f"Failed to load pickle file. Exception: {e}")
                 return test_results
-            len_next = file.read(8)
-            loop_index = int.from_bytes(len_next, byteorder="big")
-            len_next = file.read(4)
-            len_next = int.from_bytes(len_next, byteorder="big")
+            loop_index_bytes = file.read(8)
+            loop_index = int.from_bytes(loop_index_bytes, byteorder="big")
+            len_next_bytes = file.read(4)
+            len_next = int.from_bytes(len_next_bytes, byteorder="big")
             invocation_id = file.read(len_next).decode("ascii")
 
             invocation_id_object = InvocationId.from_str_id(encoded_test_name, invocation_id)
@@ -74,6 +74,7 @@ def parse_test_return_values_bin(
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
 
             test_pickle = pickle.loads(test_pickle_bin) if loop_index == 1 else None
+            assert test_type is not None, f"Test type not found for {test_file_path}"
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
                     loop_index=loop_index,
@@ -228,27 +229,26 @@ def parse_test_xml(
                 testcase.system_out or "",
             )
             if not matches or not len(matches):
-                (
-                    test_results.add(
-                        FunctionTestInvocation(
-                            loop_index=loop_index,
-                            id=InvocationId(
-                                test_module_path=test_module_path,
-                                test_class_name=test_class,
-                                test_function_name=test_function,
-                                function_getting_tested="",  # FIXME
-                                iteration_id=None,
-                            ),
-                            file_name=test_file_path,
-                            runtime=None,
-                            test_framework=test_config.test_framework,
-                            did_pass=result,
-                            test_type=test_type,
-                            return_value=None,
-                            timed_out=timed_out,
+                test_results.add(
+                    FunctionTestInvocation(
+                        loop_index=loop_index,
+                        id=InvocationId(
+                            test_module_path=test_module_path,
+                            test_class_name=test_class,
+                            test_function_name=test_function,
+                            function_getting_tested="",  # FIXME
+                            iteration_id=None,
                         ),
+                        file_name=test_file_path,
+                        runtime=None,
+                        test_framework=test_config.test_framework,
+                        did_pass=result,
+                        test_type=test_type,
+                        return_value=None,
+                        timed_out=timed_out,
                     ),
                 )
+
             else:
                 for match in matches:
                     test_results.add(
@@ -294,8 +294,8 @@ def merge_test_results(
 ) -> TestResults:
     merged_test_results = TestResults()
 
-    grouped_xml_results = defaultdict(TestResults)
-    grouped_bin_results = defaultdict(TestResults)
+    grouped_xml_results: defaultdict[str, TestResults] = defaultdict(TestResults)
+    grouped_bin_results: defaultdict[str, TestResults] = defaultdict(TestResults)
 
     # This is done to match the right iteration_id which might not be available in the xml
     for result in xml_test_results:

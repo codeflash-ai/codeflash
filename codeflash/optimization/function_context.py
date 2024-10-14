@@ -22,9 +22,7 @@ if TYPE_CHECKING:
 
 def belongs_to_class(name: Name, class_name: str) -> bool:
     """Check if the given name belongs to the specified class."""
-    if name.full_name and name.full_name.startswith(f"{name.module_name}.{class_name}."):
-        return True
-    return False
+    return bool(name.full_name and name.full_name.startswith(f"{name.module_name}.{class_name}."))
 
 
 def belongs_to_function(name: Name, function_name: str) -> bool:
@@ -76,6 +74,8 @@ def get_type_annotation_context(
             definition = []
         if definition:  # TODO can be multiple definitions
             definition_path = definition[0].module_path
+            assert definition_path is not None
+
             # The definition is part of this project and not defined within the original function
             if (
                 str(definition_path).startswith(str(project_root_path) + os.sep)
@@ -83,7 +83,6 @@ def get_type_annotation_context(
                 and not path_belongs_to_site_packages(definition_path)
                 and not belongs_to_function(definition[0], function_name)
             ):
-                assert definition_path is not None
                 source_code = get_code(
                     [
                         FunctionToOptimize(
