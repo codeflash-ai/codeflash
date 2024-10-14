@@ -807,7 +807,7 @@ class MainClass:
     file_path = Path(__file__).resolve()
     opt = Optimizer(
         Namespace(
-            project_root=str(file_path.parent.resolve()),
+            project_root=file_path.parent.resolve(),
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
