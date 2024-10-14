@@ -137,7 +137,7 @@ class TestResults(BaseModel):
 
         :return: The runtime in nanoseconds.
         """
-        usable_results = {result for result in self.test_results if result.did_pass and result.runtime}
+        usable_results = {result for result in self.test_results if result.did_pass and not result.runtime}
         for result in self.test_results:
             if result not in usable_results:
                 logger.debug(
