@@ -612,10 +612,10 @@ def create_bubble_sort_file_and_test(args: Namespace) -> tuple[str, str]:
 """
     if args.test_framework == "unittest":
         bubble_sort_test_content = f"""import unittest
-    from {Path(args.module_root).name}.bubble_sort import sorter
+from {Path(args.module_root).name}.bubble_sort import sorter
 
-    class TestBubbleSort(unittest.TestCase):
-        def test_sort(self):
+class TestBubbleSort(unittest.TestCase):
+    def test_sort(self):
         input = [5, 4, 3, 2, 1, 0]
         output = sorter(input)
         self.assertEqual(output, [0, 1, 2, 3, 4, 5])
@@ -627,7 +627,7 @@ def create_bubble_sort_file_and_test(args: Namespace) -> tuple[str, str]:
         input = list(reversed(range(100)))
         output = sorter(input)
         self.assertEqual(output, list(range(100)))
-    """
+"""
     elif args.test_framework == "pytest":
         bubble_sort_test_content = f"""from {Path(args.module_root).name}.bubble_sort import sorter
 

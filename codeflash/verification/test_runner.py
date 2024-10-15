@@ -40,21 +40,23 @@ def run_tests(
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
 
+        pytest_args = [
+            "--capture=tee-sys",
+            f"--timeout={pytest_timeout}",
+            "-q",
+            f"--junitxml={result_file_path}",
+            "-o",
+            "junit_logging=all",
+            f"--codeflash_seconds={pytest_target_runtime_seconds}",
+            f"--codeflash_min_loops={pytest_min_loops}",
+            f"--codeflash_max_loops={pytest_max_loops}",
+            "--codeflash_loops_scope=session",
+        ]
+
+        test_files = [str(file.instrumented_file_path) for file in test_paths.test_files]
+
         results = subprocess.run(
-            pytest_cmd_list
-            + [file.instrumented_file_path for file in test_paths.test_files]
-            + [
-                "--capture=tee-sys",
-                f"--timeout={pytest_timeout}",
-                "-q",
-                f"--junitxml={result_file_path}",
-                "-o",
-                "junit_logging=all",
-                f"--codeflash_seconds={pytest_target_runtime_seconds}",
-                f"--codeflash_min_loops={pytest_min_loops}",
-                f"--codeflash_max_loops={pytest_max_loops}",
-                "--codeflash_loops_scope=session",
-            ],
+            pytest_cmd_list + test_files + pytest_args,
             capture_output=True,
             cwd=cwd,
             env=pytest_test_env,
@@ -67,8 +69,8 @@ def run_tests(
         results = subprocess.run(
             ["python", "-m", "xmlrunner"]
             + (["-v"] if verbose else [])
-            + [file.instrumented_file_path for file in test_paths.test_files]
-            + ["--output-file", result_file_path],
+            + [str(file.instrumented_file_path) for file in test_paths.test_files]
+            + ["--output-file", str(result_file_path)],
             capture_output=True,
             cwd=cwd,
             env=test_env,
