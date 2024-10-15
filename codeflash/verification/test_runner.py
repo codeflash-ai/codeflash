@@ -36,10 +36,9 @@ def run_tests(
     if test_framework == "pytest":
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         pytest_cmd_list = shlex.split(pytest_cmd, posix=os.name != "nt")
-
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
-
+        pytest_test_env["PYTHONPATH"] = str(pytest_test_env["PYTHONPATH"])
         pytest_args = [
             "--capture=tee-sys",
             f"--timeout={pytest_timeout}",
