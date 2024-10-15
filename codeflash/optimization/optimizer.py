@@ -684,7 +684,7 @@ class Optimizer:
             optimizable_methods = [
                 FunctionToOptimize(
                     df.qualified_name.split(".")[-1],
-                    Path(df.file_path),
+                    df.file_path,
                     [FunctionParent(df.qualified_name.split(".")[0], "ClassDef")],
                     None,
                     None,
