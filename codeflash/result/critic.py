@@ -53,7 +53,10 @@ def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool
             count += 1
             if count == 1:
                 passed_test = test_result
-            if in_github_actions_mode and count >= 4 or count > 1:
+            if in_github_actions_mode:
+                if count >= 4:
+                    return True
+            elif count >= 2:
                 return True
 
     # If only one test passed, check if it's a REPLAY_TEST
