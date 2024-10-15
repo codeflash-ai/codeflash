@@ -160,6 +160,9 @@ def parse_test_xml(
             f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}",
         )
         return test_results
+    with open(test_xml_file_path) as file:
+        xml_file_contents = file.read()
+    logger.info(f"XML FILE CONTENTS: {xml_file_contents}")
 
     for suite in xml:
         for testcase in suite:
@@ -180,6 +183,8 @@ def parse_test_xml(
                 return test_results
 
             test_class_path = testcase.classname
+            logger.info(f"XML test_file_name :  {test_file_name}")
+            logger.info(f"XML testcase.classname :  {test_class_path}")
             if test_file_name is None:
                 # TODO : This might not be true if the test is organized under a class
                 test_file_path = file_path_from_module_name(test_class_path, test_config.project_root_path)
