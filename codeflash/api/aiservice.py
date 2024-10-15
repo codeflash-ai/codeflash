@@ -13,7 +13,7 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
-from codeflash.telemetry.posthog import ph
+from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
 
 
