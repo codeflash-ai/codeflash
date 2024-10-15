@@ -39,7 +39,7 @@ def get_type_annotation_context(
     function: FunctionToOptimize,
     jedi_script: jedi.Script,
     project_root_path: Path,
-) -> list[FunctionSource]:
+) -> tuple[list[FunctionSource], set[tuple[str, str]]]:
     function_name: str = function.function_name
     file_path: Path = function.file_path
     file_contents: str = file_path.read_text(encoding="utf8")
@@ -47,7 +47,7 @@ def get_type_annotation_context(
         module: ast.Module = ast.parse(file_contents)
     except SyntaxError as e:
         logger.exception(f"get_type_annotation_context - Syntax error in code: {e}")
-        return []
+        return [], set()
     sources: list[FunctionSource] = []
     ast_parents: list[FunctionParent] = []
     contextual_dunder_methods = set()
@@ -252,14 +252,14 @@ def get_function_variables_definitions(
     sources[:0] = annotation_sources  # prepend the annotation sources
     contextual_dunder_methods.update(annotation_dunder_methods)
     existing_fully_qualified_names = set()
-    no_parent_sources: dict[str, dict[str, set[FunctionSource]]] = defaultdict(
+    no_parent_sources: dict[Path, dict[str, set[FunctionSource]]] = defaultdict(
         lambda: defaultdict(set),
     )
     parent_sources = set()
     for source in sources:
         if (fully_qualified_name := source.fully_qualified_name) not in existing_fully_qualified_names:
             if not source.qualified_name.count("."):
-                no_parent_sources[str(source.file_path)][source.qualified_name].add(source)
+                no_parent_sources[source.file_path][source.qualified_name].add(source)
             else:
                 parent_sources.add(source)
             existing_fully_qualified_names.add(fully_qualified_name)
@@ -267,7 +267,7 @@ def get_function_variables_definitions(
         source
         for source in parent_sources
         if source.file_path not in no_parent_sources
-        or source.qualified_name.rpartition(".")[0] not in no_parent_sources[str(source.file_path)]
+        or source.qualified_name.rpartition(".")[0] not in no_parent_sources[source.file_path]
     ]
     deduped_no_parent_sources = [
         source
