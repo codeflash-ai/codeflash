@@ -469,13 +469,12 @@ def filter_functions(
             continue
         if file_path in ignore_paths or any(
             # file_path.startswith(ignore_path + os.sep) for ignore_path in ignore_paths if ignore_path
-            file_path.startswith(str(ignore_path) + os.sep)
-            for ignore_path in ignore_paths
+            file_path.startswith(str(ignore_path) + os.sep) for ignore_path in ignore_paths
         ):
             ignore_paths_removed_count += 1
             continue
         if file_path in submodule_paths or any(
-            file_path.startswith(submodule_path + os.sep) for submodule_path in submodule_paths
+            file_path.startswith(str(submodule_path) + os.sep) for submodule_path in submodule_paths
         ):
             submodule_ignored_paths_count += 1
             continue
