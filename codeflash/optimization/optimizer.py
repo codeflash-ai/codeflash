@@ -70,7 +70,7 @@ from codeflash.optimization.function_context import (
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
 from codeflash.result.critic import performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.result.explanation import Explanation
-from codeflash.telemetry.posthog import ph
+from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestResults, TestType

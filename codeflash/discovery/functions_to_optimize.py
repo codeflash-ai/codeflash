@@ -24,7 +24,7 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.code_utils.git_utils import get_git_diff
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
-from codeflash.telemetry.posthog import ph
+from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
 
 

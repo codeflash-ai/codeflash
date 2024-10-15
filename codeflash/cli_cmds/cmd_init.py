@@ -34,7 +34,7 @@ from codeflash.code_utils.shell_utils import (
     get_shell_rc_path,
     save_api_key_to_rc,
 )
-from codeflash.telemetry.posthog import ph
+from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as version
 
 CODEFLASH_LOGO: str = (
