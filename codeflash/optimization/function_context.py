@@ -74,7 +74,6 @@ def get_type_annotation_context(
             definition = []
         if definition:  # TODO can be multiple definitions
             definition_path = definition[0].module_path
-            assert definition_path is not None
 
             # The definition is part of this project and not defined within the original function
             if (
