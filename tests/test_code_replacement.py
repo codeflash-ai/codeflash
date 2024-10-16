@@ -25,7 +25,7 @@ class JediDefinition:
 
 @dataclasses.dataclass
 class FakeFunctionSource:
-    file_path: str
+    file_path: Path
     qualified_name: str
     fully_qualified_name: str
     only_function_name: str
@@ -81,11 +81,11 @@ print("Hello world")
         source_code=original_code,
         function_names=[function_name],
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
-        module_abspath=str(Path(__file__).resolve()),
+        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
+        module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         contextual_functions=contextual_functions,
-        project_root_path=str(Path(__file__).resolve().parent.resolve()),
+        project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
 
@@ -145,11 +145,11 @@ print("Hello world")
         source_code=original_code,
         function_names=[function_name],
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
-        module_abspath=str(Path(__file__).resolve()),
+        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
+        module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         contextual_functions=contextual_functions,
-        project_root_path=str(Path(__file__).resolve().parent.resolve()),
+        project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
 
@@ -206,11 +206,11 @@ print("Salut monde")
         source_code=original_code,
         function_names=function_names,
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
-        module_abspath=str(Path(__file__).resolve()),
+        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
+        module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         contextual_functions=contextual_functions,
-        project_root_path=str(Path(__file__).resolve().parent.resolve()),
+        project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
 
@@ -270,11 +270,11 @@ print("Salut monde")
         source_code=original_code,
         function_names=function_names,
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
-        module_abspath=str(Path(__file__).resolve()),
+        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
+        module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         contextual_functions=contextual_functions,
-        project_root_path=str(Path(__file__).resolve().parent.resolve()),
+        project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
 
@@ -326,11 +326,11 @@ def supersort(doink):
         source_code=original_code,
         function_names=function_names,
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
-        module_abspath=str(Path(__file__).resolve()),
+        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
+        module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         contextual_functions=contextual_functions,
-        project_root_path=str(Path(__file__).resolve().parent.resolve()),
+        project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
 
@@ -402,11 +402,11 @@ print("Not cool")
         source_code=original_code_main,
         function_names=["other_function"],
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
-        module_abspath=str(Path(__file__).resolve()),
+        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
+        module_abspath=Path(__file__).resolve(),
         preexisting_objects=[("other_function", []), ("yet_another_function", []), ("blob", [])],
         contextual_functions=set(),
-        project_root_path=str(Path(__file__).resolve().parent.resolve()),
+        project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_main_code == expected_main
 
@@ -414,11 +414,11 @@ print("Not cool")
         source_code=original_code_helper,
         function_names=["blob"],
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
-        module_abspath=str(Path(__file__).resolve()),
+        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
+        module_abspath=Path(__file__).resolve(),
         preexisting_objects=[],
         contextual_functions=set(),
-        project_root_path=str(Path(__file__).resolve().parent.resolve()),
+        project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_helper_code == expected_helper
 
@@ -619,11 +619,11 @@ class CacheConfig(BaseConfig):
         source_code=original_code,
         function_names=function_names,
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
-        module_abspath=str(Path(__file__).resolve()),
+        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
+        module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         contextual_functions=contextual_functions,
-        project_root_path=str(Path(__file__).resolve().parent.resolve()),
+        project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
 
@@ -694,11 +694,11 @@ def test_test_libcst_code_replacement8() -> None:
         source_code=original_code,
         function_names=function_names,
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
-        module_abspath=str(Path(__file__).resolve()),
+        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
+        module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         contextual_functions=contextual_functions,
-        project_root_path=str(Path(__file__).resolve().parent.resolve()),
+        project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
 
@@ -757,11 +757,11 @@ print("Hello world")
         source_code=original_code,
         function_names=[function_name],
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
-        module_abspath=str(Path(__file__).resolve()),
+        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
+        module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         contextual_functions=contextual_functions,
-        project_root_path=str(Path(__file__).resolve().parent.resolve()),
+        project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
 
@@ -807,7 +807,7 @@ class MainClass:
     file_path = Path(__file__).resolve()
     opt = Optimizer(
         Namespace(
-            project_root=str(file_path.parent.resolve()),
+            project_root=file_path.parent.resolve(),
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
@@ -817,17 +817,16 @@ class MainClass:
     )
     func_top_optimize = FunctionToOptimize(
         function_name="main_method",
-        file_path=str(file_path),
+        file_path=file_path,
         parents=[FunctionParent("MainClass", "ClassDef")],
     )
-    with open(file_path) as f:
-        original_code = f.read()
-        code_context = opt.get_code_optimization_context(
-            function_to_optimize=func_top_optimize,
-            project_root=str(file_path.parent),
-            original_source_code=original_code,
-        ).unwrap()
-        assert code_context.code_to_optimize_with_helpers == get_code_output
+    original_code = file_path.read_text()
+    code_context = opt.get_code_optimization_context(
+        function_to_optimize=func_top_optimize,
+        project_root=file_path.parent,
+        original_source_code=original_code,
+    ).unwrap()
+    assert code_context.code_to_optimize_with_helpers == get_code_output
 
 
 def test_code_replacement11() -> None:
@@ -946,11 +945,11 @@ def test_test_libcst_code_replacement13() -> None:
         source_code=original_code,
         function_names=function_names,
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
-        module_abspath=str(Path(__file__).resolve()),
+        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
+        module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         contextual_functions=contextual_functions,
-        project_root_path=str(Path(__file__).resolve().parent.resolve()),
+        project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == original_code
 
@@ -1143,7 +1142,9 @@ class TestResults(BaseModel):
 
     helper_functions = [
         FakeFunctionSource(
-            file_path="/Users/saurabh/Library/CloudStorage/Dropbox/codeflash/cli/codeflash/verification/test_results.py",
+            file_path=Path(
+                "/Users/saurabh/Library/CloudStorage/Dropbox/codeflash/cli/codeflash/verification/test_results.py",
+            ),
             qualified_name="TestType",
             fully_qualified_name="codeflash.verification.test_results.TestType",
             only_function_name="TestType",
@@ -1156,11 +1157,11 @@ class TestResults(BaseModel):
         source_code=original_code,
         function_names=["TestResults.get_test_pass_fail_report_by_type"],
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
-        module_abspath=str(Path(__file__).resolve()),
+        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
+        module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         contextual_functions=contextual_functions,
-        project_root_path=str(Path(__file__).parent.resolve()),
+        project_root_path=Path(__file__).parent.resolve(),
     )
 
     helper_functions_by_module_abspath = defaultdict(set)
@@ -1177,11 +1178,11 @@ class TestResults(BaseModel):
             source_code=new_code,
             function_names=list(qualified_names),
             optimized_code=optim_code,
-            file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
+            file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
             module_abspath=module_abspath,
             preexisting_objects=preexisting_objects,
             contextual_functions=contextual_functions,
-            project_root_path=str(Path(__file__).parent.resolve()),
+            project_root_path=Path(__file__).parent.resolve(),
         )
 
     assert (
@@ -1361,12 +1362,16 @@ def cosine_similarity_top_k(
     
     return ret_idxs, scores
 '''
-    preexisting_objects = [("cosine_similarity_top_k", []), ("Matrix", []), ("cosine_similarity", [])]
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = [
+        ("cosine_similarity_top_k", []),
+        ("Matrix", []),
+        ("cosine_similarity", []),
+    ]
 
-    contextual_functions = set()
+    contextual_functions: set[tuple[str, str]] = set()
     helper_functions = [
         FakeFunctionSource(
-            file_path=str((Path(__file__).parent / "code_to_optimize" / "math_utils.py").resolve()),
+            file_path=(Path(__file__).parent / "code_to_optimize" / "math_utils.py").resolve(),
             qualified_name="Matrix",
             fully_qualified_name="code_to_optimize.math_utils.Matrix",
             only_function_name="Matrix",
@@ -1374,7 +1379,7 @@ def cosine_similarity_top_k(
             jedi_definition=JediDefinition(type="class"),
         ),
         FakeFunctionSource(
-            file_path=str((Path(__file__).parent / "code_to_optimize" / "math_utils.py").resolve()),
+            file_path=(Path(__file__).parent / "code_to_optimize" / "math_utils.py").resolve(),
             qualified_name="cosine_similarity",
             fully_qualified_name="code_to_optimize.math_utils.cosine_similarity",
             only_function_name="cosine_similarity",
@@ -1387,11 +1392,11 @@ def cosine_similarity_top_k(
         source_code=original_code,
         function_names=["cosine_similarity_top_k"],
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
-        module_abspath=str((Path(__file__).parent / "code_to_optimize").resolve()),
+        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
+        module_abspath=(Path(__file__).parent / "code_to_optimize").resolve(),
         preexisting_objects=preexisting_objects,
         contextual_functions=contextual_functions,
-        project_root_path=str(Path(__file__).parent.parent.resolve()),
+        project_root_path=Path(__file__).parent.parent.resolve(),
     )
     assert (
         new_code
@@ -1452,11 +1457,11 @@ def cosine_similarity_top_k(
             source_code=new_code,
             function_names=list(qualified_names),
             optimized_code=optim_code,
-            file_path_of_module_with_function_to_optimize=str(Path(__file__).resolve()),
+            file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
             module_abspath=module_abspath,
             preexisting_objects=preexisting_objects,
             contextual_functions=contextual_functions,
-            project_root_path=str(Path(__file__).parent.parent.resolve()),
+            project_root_path=Path(__file__).parent.parent.resolve(),
         )
 
     assert (

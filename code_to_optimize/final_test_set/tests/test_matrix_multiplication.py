@@ -1,5 +1,6 @@
-from code_to_optimize.final_test_set.matrix_multiplication import matrix_multiply
 import pytest
+
+from code_to_optimize.final_test_set.matrix_multiplication import matrix_multiply
 
 
 def test_matrix_multiplication_basic():

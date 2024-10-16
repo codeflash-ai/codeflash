@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import ast
+from pathlib import Path
+from typing import TYPE_CHECKING
 
-from codeflash.api.aiservice import AiServiceClient
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.verification.verification_utils import (
     ModifyInspiredTests,
-    TestConfig,
     delete_multiple_if_name_main,
     get_test_file_path,
 )
+
+if TYPE_CHECKING:
+    from codeflash.api.aiservice import AiServiceClient
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.verification.verification_utils import TestConfig
 
 
 def generate_tests(
@@ -19,7 +23,7 @@ def generate_tests(
     source_code_being_tested: str,
     function_to_optimize: FunctionToOptimize,
     helper_function_names: list[str],
-    module_path: str,
+    module_path: Path,
     test_cfg: TestConfig,
     test_timeout: int,
     use_cached_tests: bool,
@@ -31,19 +35,22 @@ def generate_tests(
     if use_cached_tests:
         import importlib
 
-        module = importlib.import_module(module_path)
+        module = importlib.import_module(str(module_path))
         generated_test_source = module.CACHED_TESTS
         instrumented_test_source = module.CACHED_INSTRUMENTED_TESTS
-        path = get_run_tmp_file("").replace("\\", "\\\\")  # Escape backslash for windows paths
+        temp_run_dir = get_run_tmp_file(Path(""))
+        path = str(temp_run_dir).replace("\\", "\\\\")  # Escape backslash for windows paths
         instrumented_test_source = instrumented_test_source.replace(
             "{codeflash_run_tmp_dir_client_side}",
             path,
         )
         logger.info(f"Using cached tests from {module_path}.CACHED_TESTS")
     else:
-        test_module_path = module_name_from_file_path(
-            get_test_file_path(test_cfg.tests_root, function_to_optimize.function_name, 0),
-            test_cfg.project_root_path,
+        test_module_path = Path(
+            module_name_from_file_path(
+                get_test_file_path(test_cfg.tests_root, function_to_optimize.function_name, 0),
+                test_cfg.project_root_path,
+            ),
         )
         response = aiservice_client.generate_regression_tests(
             source_code_being_tested=source_code_being_tested,
@@ -58,7 +65,8 @@ def generate_tests(
         )
         if response and isinstance(response, tuple) and len(response) == 2:
             generated_test_source, instrumented_test_source = response
-            path = get_run_tmp_file("").replace("\\", "\\\\")  # Escape backslash for windows paths
+            temp_run_dir = get_run_tmp_file(Path(""))
+            path = str(temp_run_dir).replace("\\", "\\\\")
             instrumented_test_source = instrumented_test_source.replace(
                 "{codeflash_run_tmp_dir_client_side}",
                 path,

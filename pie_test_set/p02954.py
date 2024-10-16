@@ -1,7 +1,11 @@
 def problem_p02954(input_data):
-    import sys, math, itertools, bisect, copy, re
-
-    from collections import Counter, deque, defaultdict
+    import bisect
+    import copy
+    import itertools
+    import math
+    import re
+    import sys
+    from collections import Counter, defaultdict, deque
 
     # from itertools import accumulate, permutations, combinations, takewhile, compress, cycle
 

@@ -1,5 +1,6 @@
-from code_to_optimize.final_test_set.integration import integrate_f
 import pytest
+
+from code_to_optimize.final_test_set.integration import integrate_f
 
 
 def isclose(a, b, rel_tol=1e-5, abs_tol=0.0):

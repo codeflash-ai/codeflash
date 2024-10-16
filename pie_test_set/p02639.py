@@ -1,9 +1,7 @@
 def problem_p02639(input_data):
-    from sys import stdin, stdout
-
-    from math import gcd, sqrt
-
     from collections import deque
+    from math import gcd, sqrt
+    from sys import stdin, stdout
 
     input = stdin.readline
 

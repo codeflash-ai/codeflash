@@ -1,14 +1,15 @@
 import json
-import os.path
 import pstats
 import sqlite3
 from copy import copy
+from pathlib import Path
+
 from codeflash.cli_cmds.console import logger
 
 
 class ProfileStats(pstats.Stats):
     def __init__(self, trace_file_path: str, time_unit: str = "ns"):
-        assert os.path.isfile(trace_file_path), f"Trace file {trace_file_path} does not exist"
+        assert Path(trace_file_path).is_file(), f"Trace file {trace_file_path} does not exist"
         assert time_unit in ["ns", "us", "ms", "s"], f"Invalid time unit {time_unit}"
         self.trace_file_path = trace_file_path
         self.time_unit = time_unit
@@ -72,8 +73,8 @@ class ProfileStats(pstats.Stats):
         return self
 
 
-def get_trace_total_run_time_ns(trace_file_path: str) -> int:
-    if not os.path.isfile(trace_file_path):
+def get_trace_total_run_time_ns(trace_file_path: Path) -> int:
+    if not trace_file_path.is_file():
         return 0
     con = sqlite3.connect(trace_file_path)
     cur = con.cursor()

@@ -1,7 +1,6 @@
 def problem_p02786(input_data):
-    from functools import lru_cache
-
     import sys
+    from functools import lru_cache
 
     sys.setrecursionlimit(10**7)
 

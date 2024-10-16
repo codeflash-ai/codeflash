@@ -4,23 +4,25 @@ import ast
 import os
 import re
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
 import jedi
 import tiktoken
 from jedi.api.classes import Name
 
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import get_code
 from codeflash.code_utils.code_utils import module_name_from_file_path, path_belongs_to_site_packages
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 from codeflash.models.models import FunctionSource
-from codeflash.cli_cmds.console import logger
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def belongs_to_class(name: Name, class_name: str) -> bool:
     """Check if the given name belongs to the specified class."""
-    if name.full_name and name.full_name.startswith(f"{name.module_name}.{class_name}."):
-        return True
-    return False
+    return bool(name.full_name and name.full_name.startswith(f"{name.module_name}.{class_name}."))
 
 
 def belongs_to_function(name: Name, function_name: str) -> bool:
@@ -36,17 +38,16 @@ def belongs_to_function(name: Name, function_name: str) -> bool:
 def get_type_annotation_context(
     function: FunctionToOptimize,
     jedi_script: jedi.Script,
-    project_root_path: str,
-) -> list[FunctionSource]:
+    project_root_path: Path,
+) -> tuple[list[FunctionSource], set[tuple[str, str]]]:
     function_name: str = function.function_name
-    file_path: str = function.file_path
-    with open(file_path, encoding="utf8") as file:
-        file_contents: str = file.read()
+    file_path: Path = function.file_path
+    file_contents: str = file_path.read_text(encoding="utf8")
     try:
         module: ast.Module = ast.parse(file_contents)
     except SyntaxError as e:
         logger.exception(f"get_type_annotation_context - Syntax error in code: {e}")
-        return []
+        return [], set()
     sources: list[FunctionSource] = []
     ast_parents: list[FunctionParent] = []
     contextual_dunder_methods = set()
@@ -72,10 +73,11 @@ def get_type_annotation_context(
                 logger.exception(f"Error while getting definition: {ex}")
             definition = []
         if definition:  # TODO can be multiple definitions
-            definition_path = str(definition[0].module_path)
+            definition_path = definition[0].module_path
+
             # The definition is part of this project and not defined within the original function
             if (
-                definition_path.startswith(project_root_path + os.sep)
+                str(definition_path).startswith(str(project_root_path) + os.sep)
                 and definition[0].full_name
                 and not path_belongs_to_site_packages(definition_path)
                 and not belongs_to_function(definition[0], function_name)
@@ -164,7 +166,7 @@ def get_type_annotation_context(
 
 def get_function_variables_definitions(
     function_to_optimize: FunctionToOptimize,
-    project_root_path: str,
+    project_root_path: Path,
 ) -> tuple[list[FunctionSource], set[tuple[str, str]]]:
     function_name = function_to_optimize.function_name
     file_path = function_to_optimize.file_path
@@ -203,10 +205,11 @@ def get_function_variables_definitions(
         if definitions:
             # TODO: there can be multiple definitions, see how to handle such cases
             definition = definitions[0]
-            definition_path = str(definition.module_path)
+            definition_path = definition.module_path
+
             # The definition is part of this project and not defined within the original function
             if (
-                definition_path.startswith(project_root_path + os.sep)
+                str(definition_path).startswith(str(project_root_path) + os.sep)
                 and not path_belongs_to_site_packages(definition_path)
                 and definition.full_name
                 and not belongs_to_function(definition, function_name)
@@ -248,7 +251,7 @@ def get_function_variables_definitions(
     sources[:0] = annotation_sources  # prepend the annotation sources
     contextual_dunder_methods.update(annotation_dunder_methods)
     existing_fully_qualified_names = set()
-    no_parent_sources: dict[str, dict[str, set[FunctionSource]]] = defaultdict(
+    no_parent_sources: dict[Path, dict[str, set[FunctionSource]]] = defaultdict(
         lambda: defaultdict(set),
     )
     parent_sources = set()
@@ -279,7 +282,7 @@ MAX_PROMPT_TOKENS = 4096  # 128000  # gpt-4-128k
 
 def get_constrained_function_context_and_helper_functions(
     function_to_optimize: FunctionToOptimize,
-    project_root_path: str,
+    project_root_path: Path,
     code_to_optimize: str,
     max_tokens: int = MAX_PROMPT_TOKENS,
 ) -> tuple[str, list[FunctionSource], set[tuple[str, str]]]:

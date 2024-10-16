@@ -1,4 +1,5 @@
 import unittest
+
 from parameterized import parameterized
 
 from code_to_optimize.bubble_sort import sorter

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Generator, Iterator, Optional
 
 from jedi.api.classes import Name
@@ -17,7 +18,7 @@ from codeflash.verification.test_results import TestResults, TestType
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
 class FunctionSource:
-    file_path: str
+    file_path: Path
     qualified_name: str
     fully_qualified_name: str
     only_function_name: str
@@ -55,8 +56,8 @@ class GeneratedTestsList(BaseModel):
 
 
 class TestFile(BaseModel):
-    instrumented_file_path: str
-    original_file_path: Optional[str] = None
+    instrumented_file_path: Path
+    original_file_path: Optional[Path] = None
     original_source: Optional[str] = None
     test_type: TestType
 
@@ -75,13 +76,13 @@ class TestFiles(BaseModel):
         else:
             raise ValueError("Test file already exists in the list")
 
-    def get_by_original_file_path(self, file_path: str) -> TestFile | None:
+    def get_by_original_file_path(self, file_path: Path) -> TestFile | None:
         return next(
             (test_file for test_file in self.test_files if test_file.original_file_path == file_path),
             None,
         )
 
-    def get_test_type_by_instrumented_file_path(self, file_path: str) -> TestType | None:
+    def get_test_type_by_instrumented_file_path(self, file_path: Path) -> TestType | None:
         return next(
             (
                 test_file.test_type
@@ -91,7 +92,7 @@ class TestFiles(BaseModel):
             None,
         )
 
-    def get_test_type_by_original_file_path(self, file_path: str) -> TestType | None:
+    def get_test_type_by_original_file_path(self, file_path: Path) -> TestType | None:
         return next(
             (
                 test_file.test_type

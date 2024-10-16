@@ -1,7 +1,6 @@
 def problem_p02696(input_data):
-    from sys import stdin
-
     import sys
+    from sys import stdin
 
     A, B, N = [int(x) for x in stdin.readline().rstrip().split()]
 

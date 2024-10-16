@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from pathlib import Path
 from typing import Iterable
 
 import isort
@@ -319,13 +320,13 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
 
 
 def inject_profiling_into_existing_test(
-    test_path: str,
+    test_path: Path,
     call_positions: list[CodePosition],
     function_to_optimize: FunctionToOptimize,
-    root_path: str,
+    root_path: Path,
     test_framework: str,
 ) -> tuple[bool, str | None]:
-    with open(test_path, encoding="utf8") as f:
+    with test_path.open(encoding="utf8") as f:
         test_code = f.read()
     try:
         tree = ast.parse(test_code)

@@ -3,9 +3,8 @@ def problem_p02969(input_data):
 
     input = sys.stdin.readline
 
-    import math
-
     import collections
+    import math
 
     def I():
         return int(eval(input_data))

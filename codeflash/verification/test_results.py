@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from enum import Enum
+from pathlib import Path
 from typing import Iterator, Optional
 
 from pydantic import BaseModel
@@ -63,7 +64,7 @@ class InvocationId:
 class FunctionTestInvocation:
     loop_index: int  # The loop index of the function invocation, starts at 1
     id: InvocationId  # The fully qualified name of the function invocation (id)
-    file_name: str  # The file where the test is defined
+    file_name: Path  # The file where the test is defined
     did_pass: bool  # Whether the test this function invocation was part of, passed or failed
     runtime: Optional[int]  # Time in nanoseconds
     test_framework: str  # unittest or pytest

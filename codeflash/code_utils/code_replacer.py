@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import ast
-from typing import IO
+from typing import IO, TYPE_CHECKING
 
 import libcst as cst
 from libcst import FunctionDef
 
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module
 from codeflash.discovery.functions_to_optimize import FunctionParent
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class OptimFunctionCollector(cst.CSTVisitor):
@@ -200,11 +203,11 @@ def replace_functions_and_add_imports(
     source_code: str,
     function_names: list[str],
     optimized_code: str,
-    file_path_of_module_with_function_to_optimize: str,
-    module_abspath: str,
+    file_path_of_module_with_function_to_optimize: Path,
+    module_abspath: Path,
     preexisting_objects: list[tuple[str, list[FunctionParent]]],
     contextual_functions: set[tuple[str, str]],
-    project_root_path: str,
+    project_root_path: Path,
 ) -> str:
     return add_needed_imports_from_module(
         optimized_code,
@@ -224,11 +227,11 @@ def replace_functions_and_add_imports(
 def replace_function_definitions_in_module(
     function_names: list[str],
     optimized_code: str,
-    file_path_of_module_with_function_to_optimize: str,
-    module_abspath: str,
+    file_path_of_module_with_function_to_optimize: Path,
+    module_abspath: Path,
     preexisting_objects: list[tuple[str, list[FunctionParent]]],
     contextual_functions: set[tuple[str, str]],
-    project_root_path: str,
+    project_root_path: Path,
 ) -> bool:
     """:param function_names: List of qualified (not fully qualified) function names (function_name or
     class_name.method_name).
@@ -241,8 +244,7 @@ def replace_function_definitions_in_module(
     :return:
     """
     file: IO[str]
-    with open(module_abspath, encoding="utf8") as file:
-        source_code: str = file.read()
+    source_code: str = module_abspath.read_text(encoding="utf8")
     new_code: str = replace_functions_and_add_imports(
         source_code,
         function_names,
@@ -255,8 +257,7 @@ def replace_function_definitions_in_module(
     )
     if is_zero_diff(source_code, new_code):
         return False
-    with open(module_abspath, "w", encoding="utf8") as file:
-        file.write(new_code)
+    module_abspath.write_text(new_code, encoding="utf8")
     return True
 
 

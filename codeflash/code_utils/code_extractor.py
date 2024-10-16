@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import libcst as cst
@@ -9,8 +10,8 @@ from libcst.codemod import CodemodContext
 from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, RemoveImportsVisitor
 from libcst.helpers import calculate_module_and_package
 
-from codeflash.discovery.functions_to_optimize import FunctionParent
 from codeflash.cli_cmds.console import logger
+from codeflash.discovery.functions_to_optimize import FunctionParent
 
 if TYPE_CHECKING:
     from libcst.helpers import ModuleNameAndPackage
@@ -43,9 +44,9 @@ def delete___future___aliased_imports(module_code: str) -> str:
 def add_needed_imports_from_module(
     src_module_code: str,
     dst_module_code: str,
-    src_path: str,
-    dst_path: str,
-    project_root: str,
+    src_path: Path,
+    dst_path: Path,
+    project_root: Path,
     helper_functions: list[FunctionSource] | None = None,
 ) -> str:
     """Add all needed and used source module code imports to the destination module code, and return it."""
@@ -57,13 +58,13 @@ def add_needed_imports_from_module(
     dst_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, dst_path)
 
     dst_context: CodemodContext = CodemodContext(
-        filename=src_path,
+        filename=src_path.name,
         full_module_name=dst_module_and_package.name,
         full_package_name=dst_module_and_package.package,
     )
     gatherer: GatherImportsVisitor = GatherImportsVisitor(
         CodemodContext(
-            filename=src_path,
+            filename=src_path.name,
             full_module_name=src_module_and_package.name,
             full_package_name=src_module_and_package.package,
         ),
@@ -129,7 +130,7 @@ def get_code(
     ):
         return None, set()
 
-    file_path: str = functions_to_optimize[0].file_path
+    file_path: Path = functions_to_optimize[0].file_path
     class_skeleton: set[tuple[int, int | None]] = set()
     contextual_dunder_methods: set[tuple[str, str]] = set()
     target_code: str = ""

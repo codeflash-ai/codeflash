@@ -10,7 +10,6 @@ def problem_p03502(input_data):
     import sys
 
     # import itertools
-
     import numpy as np
 
     read = sys.stdin.buffer.read

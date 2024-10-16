@@ -1,7 +1,6 @@
 def problem_p03213(input_data):
-    from operator import mul
-
     from functools import reduce
+    from operator import mul
 
     nCr = {}
 

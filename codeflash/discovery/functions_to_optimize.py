@@ -128,7 +128,7 @@ class FunctionToOptimize:
     """
 
     function_name: str
-    file_path: str
+    file_path: Path
     parents: list[FunctionParent]  # list[ClassDef | FunctionDef | AsyncFunctionDef]
     starting_line: Optional[int] = None
     ending_line: Optional[int] = None
@@ -150,20 +150,20 @@ class FunctionToOptimize:
     def qualified_name(self) -> str:
         return self.function_name if self.parents == [] else f"{self.parents[0].name}.{self.function_name}"
 
-    def qualified_name_with_modules_from_root(self, project_root_path: str) -> str:
+    def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
 
 
 def get_functions_to_optimize(
     optimize_all: str | None,
     replay_test: str | None,
-    file: str | None,
+    file: Path | None,
     only_get_this_function: str | None,
     test_cfg: TestConfig,
-    ignore_paths: list[str],
-    project_root: str,
-    module_root: str,
-) -> tuple[dict[str, list[FunctionToOptimize]], int]:
+    ignore_paths: list[Path],
+    project_root: Path,
+    module_root: Path,
+) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     assert (
         sum(
             [  # Ensure only one of the options is provided
@@ -177,7 +177,7 @@ def get_functions_to_optimize(
     functions: dict[str, list[FunctionToOptimize]]
     if optimize_all:
         logger.info("Finding all functions in the module '%s' ...", optimize_all)
-        functions = get_all_files_and_functions(optimize_all)
+        functions = get_all_files_and_functions(Path(optimize_all))
     elif replay_test is not None:
         functions = get_all_replay_test_functions(
             replay_test=replay_test,
@@ -191,26 +191,23 @@ def get_functions_to_optimize(
         if only_get_this_function is not None:
             split_function = only_get_this_function.split(".")
             if len(split_function) > 2:
-                raise ValueError(
-                    "Function name should be in the format 'function_name' or 'class_name.function_name'",
-                )
+                msg = "Function name should be in the format 'function_name' or 'class_name.function_name'"
+                raise ValueError(msg)
             if len(split_function) == 2:
                 class_name, only_function_name = split_function
             else:
                 class_name = None
                 only_function_name = split_function[0]
             found_function = None
-            for fn in functions.get(file, []):
+            for fn in functions.get(str(file), []):
                 if only_function_name == fn.function_name and (
                     class_name is None or class_name == fn.top_level_parent_name
                 ):
                     found_function = fn
             if found_function is None:
-                raise ValueError(
-                    f"Function {only_function_name} not found in file {file} or"
-                    f" the function does not have a 'return' statement.",
-                )
-            functions[file] = [found_function]
+                msg = f"Function {only_function_name} not found in file {file} or the function does not have a 'return' statement."
+                raise ValueError(msg)
+            functions[str(file)] = [found_function]
     else:
         logger.info("Finding all functions modified in the current git diff ...")
         ph("cli-optimizing-git-diff")
@@ -229,64 +226,60 @@ def get_functions_to_optimize(
 def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
     modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=False)
     modified_functions: dict[str, list[FunctionToOptimize]] = {}
-    for path in modified_lines:
-        if not os.path.exists(path):
+    for path_str in modified_lines:
+        path = Path(path_str)
+        if not path.exists():
             continue
-        with open(path, encoding="utf8") as f:
+        with path.open(encoding="utf8") as f:
             file_content = f.read()
             try:
                 wrapper = cst.metadata.MetadataWrapper(cst.parse_module(file_content))
             except Exception as e:
                 logger.exception(e)
                 continue
-            function_lines = FunctionVisitor(file_path=path)
+            function_lines = FunctionVisitor(file_path=str(path))
             wrapper.visit(function_lines)
-            modified_functions[path] = [
+            modified_functions[str(path)] = [
                 function_to_optimize
                 for function_to_optimize in function_lines.functions
                 if (start_line := function_to_optimize.starting_line) is not None
                 and (end_line := function_to_optimize.ending_line) is not None
-                and any(start_line <= line <= end_line for line in modified_lines[path])
+                and any(start_line <= line <= end_line for line in modified_lines[path_str])
             ]
     return modified_functions
 
 
-def get_all_files_and_functions(module_root_path: str) -> dict[str, list[FunctionToOptimize]]:
+def get_all_files_and_functions(module_root_path: Path) -> dict[str, list[FunctionToOptimize]]:
     functions: dict[str, list[FunctionToOptimize]] = {}
-    for root, dirs, files in os.walk(module_root_path):
-        for file in files:
-            if not file.endswith(".py"):
-                continue
-            file_path = os.path.join(root, file)
-
-            # Find all the functions in the file
-            functions.update(find_all_functions_in_file(file_path))
+    module_root_path = Path(module_root_path)
+    for file_path in module_root_path.rglob("*.py"):
+        # Find all the functions in the file
+        functions.update(find_all_functions_in_file(file_path).items())
     # Randomize the order of the files to optimize to avoid optimizing the same file in the same order every time.
     # Helpful if an optimize-all run is stuck and we restart it.
     files_list = list(functions.items())
     random.shuffle(files_list)
-    functions_shuffled = dict(files_list)
-    return functions_shuffled
+    return dict(files_list)
 
 
-def find_all_functions_in_file(file_path: str) -> dict[str, list[FunctionToOptimize]]:
+def find_all_functions_in_file(file_path: Path) -> dict[str, list[FunctionToOptimize]]:
     functions: dict[str, list[FunctionToOptimize]] = {}
-    with open(file_path, encoding="utf8") as f:
+    with file_path.open(encoding="utf8") as f:
         try:
             ast_module = ast.parse(f.read())
         except Exception as e:
             logger.exception(e)
             return functions
-        function_name_visitor = FunctionWithReturnStatement(file_path)
+        function_name_visitor = FunctionWithReturnStatement(str(file_path))
         function_name_visitor.visit(ast_module)
-        functions[file_path] = function_name_visitor.functions
+        functions[str(file_path)] = function_name_visitor.functions
     return functions
 
 
 def get_all_replay_test_functions(
     replay_test: str,
     test_cfg: TestConfig,
-    project_root_path: str,
+    project_root_path: Path,
 ) -> dict[str, list[FunctionToOptimize]]:
     function_tests = discover_unit_tests(test_cfg, discover_only_these_tests=[replay_test])
     # Get the absolute file paths for each function, excluding class name if present
@@ -303,7 +296,7 @@ def get_all_replay_test_functions(
             if module_path_parts
             and is_class_defined_in_file(
                 module_path_parts[-1],
-                os.path.join(project_root_path, *module_path_parts[:-1]) + ".py",
+                Path(project_root_path, *module_path_parts[:-1]).with_suffix(".py"),
             )
             else None
         )
@@ -314,7 +307,7 @@ def get_all_replay_test_functions(
         else:
             function = function_name
             file_path_parts = module_path_parts
-        file_path = os.path.join(project_root_path, *file_path_parts) + ".py"
+        file_path = Path(project_root_path, *file_path_parts).with_suffix(".py")
         file_to_functions_map[file_path].append((function, function_name, class_name))
     for file_path, functions in file_to_functions_map.items():
         all_valid_functions: dict[str, list[FunctionToOptimize]] = find_all_functions_in_file(
@@ -349,8 +342,7 @@ def ignored_submodule_paths(module_root: str) -> list[str]:
     if is_git_repo(module_root):
         git_repo = git.Repo(module_root, search_parent_directories=True)
         return [
-            os.path.realpath(os.path.join(git_repo.working_tree_dir, submodule.path))
-            for submodule in git_repo.submodules
+            Path(git_repo.working_tree_dir, submodule.path).resolve() for submodule in git_repo.submodules
         ]
     return []
 
@@ -358,7 +350,7 @@ def ignored_submodule_paths(module_root: str) -> list[str]:
 class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
     def __init__(
         self,
-        file_name: str,
+        file_name: Path,
         function_or_method_name: str,
         class_name: str | None = None,
         line_no: int | None = None,
@@ -418,7 +410,7 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
 
 
 def inspect_top_level_functions_or_methods(
-    file_name: str,
+    file_name: Path,
     function_or_method_name: str,
     class_name: str | None = None,
     line_no: int | None = None,
@@ -448,12 +440,12 @@ def inspect_top_level_functions_or_methods(
 
 def filter_functions(
     modified_functions: dict[str, list[FunctionToOptimize]],
-    tests_root: str,
-    ignore_paths: list[str],
-    project_root: str,
-    module_root: str,
+    tests_root: Path,
+    ignore_paths: list[Path],
+    project_root: Path,
+    module_root: Path,
     disable_logs: bool = False,
-) -> tuple[dict[str, list[FunctionToOptimize]], int]:
+) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     blocklist_funcs = get_blacklisted_functions()
     # Remove any function that we don't want to optimize
 
@@ -468,29 +460,32 @@ def filter_functions(
     ignore_paths_removed_count: int = 0
     malformed_paths_count: int = 0
     submodule_ignored_paths_count: int = 0
+    tests_root_str = str(tests_root)
+    module_root_str = str(module_root)
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path, functions in modified_functions.items():
-        if file_path.startswith(tests_root + os.sep):
+        if file_path.startswith(tests_root_str + os.sep):
             test_functions_removed_count += len(functions)
             continue
         if file_path in ignore_paths or any(
-            file_path.startswith(ignore_path + os.sep) for ignore_path in ignore_paths if ignore_path
+            # file_path.startswith(ignore_path + os.sep) for ignore_path in ignore_paths if ignore_path
+            file_path.startswith(str(ignore_path) + os.sep) for ignore_path in ignore_paths
         ):
             ignore_paths_removed_count += 1
             continue
         if file_path in submodule_paths or any(
-            file_path.startswith(submodule_path + os.sep) for submodule_path in submodule_paths
+            file_path.startswith(str(submodule_path) + os.sep) for submodule_path in submodule_paths
         ):
             submodule_ignored_paths_count += 1
             continue
-        if path_belongs_to_site_packages(file_path):
+        if path_belongs_to_site_packages(Path(file_path)):
             site_packages_removed_count += len(functions)
             continue
-        if not file_path.startswith(module_root + os.sep):
+        if not file_path.startswith(module_root_str + os.sep):
             non_modules_removed_count += len(functions)
             continue
         try:
-            ast.parse(f"import {module_name_from_file_path(file_path, project_root)}")
+            ast.parse(f"import {module_name_from_file_path(Path(file_path), project_root)}")
         except SyntaxError:
             malformed_paths_count += 1
             continue
@@ -518,41 +513,37 @@ def filter_functions(
         log_string: str
         if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
             logger.info(f"Ignoring:\n{log_string}")
-    return {k: v for k, v in filtered_modified_functions.items() if v}, functions_count
+    return {Path(k): v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 
 def filter_files_optimized(
-    file_path: str,
-    tests_root: str,
-    ignore_paths: list[str],
-    module_root: str,
+    file_path: Path,
+    tests_root: Path,
+    ignore_paths: list[Path],
+    module_root: Path,
 ) -> bool:
     """Optimized version of the filter_functions function above.
+
     Takes in file paths and returns the count of files that are to be optimized.
     """
     submodule_paths = None
-    if file_path.startswith(tests_root + os.sep):
+    if file_path.is_relative_to(tests_root):
         return False
     if file_path in ignore_paths or any(
-        file_path.startswith(ignore_path + os.sep) for ignore_path in ignore_paths
+        file_path.is_relative_to(ignore_path) for ignore_path in ignore_paths
     ):
         return False
     if path_belongs_to_site_packages(file_path):
         return False
-    if not file_path.startswith(module_root + os.sep):
+    if not file_path.is_relative_to(module_root):
         return False
     if submodule_paths is None:
         submodule_paths = ignored_submodule_paths(module_root)
-    if file_path in submodule_paths or any(
-        file_path.startswith(submodule_path + os.sep) for submodule_path in submodule_paths
-    ):
-        return False
-
-    return True
+    return not (
+        file_path in submodule_paths
+        or any(file_path.is_relative_to(submodule_path) for submodule_path in submodule_paths)
+    )
 
 
-def function_has_return_statement(function_node: Union[FunctionDef, AsyncFunctionDef]) -> bool:
-    for node in ast.walk(function_node):
-        if isinstance(node, ast.Return):
-            return True
-    return False
+def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
+    return any(isinstance(node, ast.Return) for node in ast.walk(function_node))

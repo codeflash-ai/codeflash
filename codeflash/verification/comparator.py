@@ -1,12 +1,13 @@
 import datetime
 import decimal
 import enum
-from codeflash.cli_cmds.console import logger
 import math
 import types
 from typing import Any
 
 import sentry_sdk
+
+from codeflash.cli_cmds.console import logger
 
 try:
     import numpy as np

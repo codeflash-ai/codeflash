@@ -1,9 +1,9 @@
-import os
 import subprocess
+from pathlib import Path
 
 
 def run_pie_test_case(script_path, test_input, expected_output):
-    assert os.path.exists(script_path), f"Script file does not exist: {script_path}"
+    assert Path(script_path).exists(), f"Script file does not exist: {script_path}"
     process = subprocess.Popen(
         ["python", script_path],
         stdin=subprocess.PIPE,
@@ -17,6 +17,4 @@ def run_pie_test_case(script_path, test_input, expected_output):
     if stderr:
         print(f"Error in stderr: {stderr}")
         assert False, f"Script error: {stderr}"
-    assert (
-        stdout.strip() == expected_output
-    ), f"Expected '{expected_output}' but got '{stdout.strip()}'"
+    assert stdout.strip() == expected_output, f"Expected '{expected_output}' but got '{stdout.strip()}'"

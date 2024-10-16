@@ -2,8 +2,8 @@ import os
 from functools import lru_cache
 from typing import Optional
 
-from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
 from codeflash.cli_cmds.console import logger
+from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
 
 
 @lru_cache(maxsize=1)

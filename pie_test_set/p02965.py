@@ -1,19 +1,12 @@
 def problem_p02965(input_data):
-    from collections import defaultdict, deque, Counter
-
-    from heapq import heappush, heappop, heapify
-
     import math
-
-    from bisect import bisect_left, bisect_right
-
     import random
-
-    from itertools import permutations, accumulate, combinations
-
-    import sys
-
     import string
+    import sys
+    from bisect import bisect_left, bisect_right
+    from collections import Counter, defaultdict, deque
+    from heapq import heapify, heappop, heappush
+    from itertools import accumulate, combinations, permutations
 
     INF = float("inf")
 

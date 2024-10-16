@@ -1,10 +1,10 @@
-from codeflash.cli_cmds.console import logger
 from typing import Optional
 
 from git import Repo
 
 from codeflash.api.cfapi import is_github_app_installed_on_repo
 from codeflash.cli_cmds.cli_common import apologize_and_exit
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.git_utils import get_repo_owner_and_name
 

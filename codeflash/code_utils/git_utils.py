@@ -1,9 +1,9 @@
 from __future__ import annotations
-from codeflash.cli_cmds.console import logger
-import os
+
 import sys
 import time
 from io import StringIO
+from pathlib import Path
 from typing import Optional
 
 import git
@@ -12,10 +12,11 @@ from git import Repo
 from unidiff import PatchSet
 
 from codeflash.cli_cmds.cli_common import inquirer_wrapper
+from codeflash.cli_cmds.console import logger
 
 
 def get_git_diff(
-    repo_directory: str = os.getcwd(),
+    repo_directory: Path = Path.cwd(),
     uncommitted_changes: bool = False,
 ) -> dict[str, list[int]]:
     repository = git.Repo(repo_directory, search_parent_directories=True)
@@ -37,11 +38,12 @@ def get_git_diff(
     patch_set = PatchSet(StringIO(uni_diff_text))
     change_list: dict[str, list[int]] = {}  # list of changes
     for patched_file in patch_set:
-        file_path: str = patched_file.path  # file name
-        if not file_path.endswith(".py"):
+        file_path: Path = Path(patched_file.path)
+        if file_path.suffix != ".py":
             continue
-        file_path = os.path.join(repository.working_dir, file_path)
-        logger.debug("file name :" + file_path)
+        file_path = Path(repository.working_dir) / file_path
+        logger.debug(f"file name: {file_path}")
+
         add_line_no: list[int] = [
             line.target_line_no
             for hunk in patched_file
@@ -49,15 +51,16 @@ def get_git_diff(
             if line.is_added and line.value.strip() != ""
         ]  # the row number of deleted lines
 
-        logger.debug("added lines : " + str(add_line_no))
+        logger.debug(f"added lines: {add_line_no}")
+
         del_line_no: list[int] = [
             line.source_line_no
             for hunk in patched_file
             for line in hunk
             if line.is_removed and line.value.strip() != ""
-        ]  # the row number of added liens
+        ]  # the row number of added lines
 
-        logger.debug("deleted lines : " + str(del_line_no))
+        logger.debug(f"deleted lines: {del_line_no}")
 
         change_list[file_path] = add_line_no
     return change_list

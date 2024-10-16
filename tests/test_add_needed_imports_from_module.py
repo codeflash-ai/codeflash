@@ -1,4 +1,6 @@
-﻿from codeflash.code_utils.code_extractor import add_needed_imports_from_module
+from pathlib import Path
+
+from codeflash.code_utils.code_extractor import add_needed_imports_from_module
 
 
 def test_add_needed_imports_from_module0() -> None:
@@ -46,9 +48,9 @@ class Source:
     expected = """def heyjude() -> None:
     print("Hey Jude, don't make it bad")
 """
-    src_path = "/home/roger/repos/codeflash/cli/codeflash/optimization/function_context.py"
-    dst_path = "/home/roger/repos/codeflash/cli/codeflash/optimization/function_context.py"
-    project_root = "/home/roger/repos/codeflash"
+    src_path = Path("/home/roger/repos/codeflash/cli/codeflash/optimization/function_context.py")
+    dst_path = Path("/home/roger/repos/codeflash/cli/codeflash/optimization/function_context.py")
+    project_root = Path("/home/roger/repos/codeflash")
     new_module = add_needed_imports_from_module(
         src_module,
         dst_module,
@@ -120,9 +122,9 @@ def belongs_to_function(name: Name, function_name: str) -> bool:
     # The name is defined inside the function or is the function itself
     return f".{function_name}." in subname or f".{function_name}" == subname
 '''
-    src_path = "/home/roger/repos/codeflash/cli/codeflash/optimization/function_context.py"
-    dst_path = "/home/roger/repos/codeflash/cli/codeflash/optimization/function_context.py"
-    project_root = "/home/roger/repos/codeflash"
+    src_path = Path("/home/roger/repos/codeflash/cli/codeflash/optimization/function_context.py")
+    dst_path = Path("/home/roger/repos/codeflash/cli/codeflash/optimization/function_context.py")
+    project_root = Path("/home/roger/repos/codeflash")
     new_module = add_needed_imports_from_module(
         src_module,
         dst_module,

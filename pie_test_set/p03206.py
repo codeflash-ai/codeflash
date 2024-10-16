@@ -2,10 +2,9 @@ def problem_p03206(input_data):
     # encoding:utf-8
 
     import copy
+    import random
 
     import numpy as np
-
-    import random
 
     d = int(eval(input_data))
 

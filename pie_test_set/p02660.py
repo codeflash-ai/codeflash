@@ -11,19 +11,13 @@ def problem_p02660(input_data):
 
         return list(map(int, input_data.split()))
 
-    from collections import defaultdict, deque
-
-    from sys import exit
-
-    import math
-
     import copy
-
-    from bisect import bisect_left, bisect_right
-
-    from heapq import *
-
+    import math
     import sys
+    from bisect import bisect_left, bisect_right
+    from collections import defaultdict, deque
+    from heapq import *
+    from sys import exit
 
     # sys.setrecursionlimit(1000000)
 

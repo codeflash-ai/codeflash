@@ -1,16 +1,20 @@
 import ast
 import os
+from pathlib import Path
 
 from pydantic.dataclasses import dataclass
 
 
 def get_test_file_path(
-    test_dir: str, function_name: str, iteration: int = 0, test_type: str = "unit",
-) -> str:
+    test_dir: Path,
+    function_name: str,
+    iteration: int = 0,
+    test_type: str = "unit",
+) -> Path:
     assert test_type in ["unit", "inspired", "replay"]
     function_name = function_name.replace(".", "_")
-    path = os.path.join(test_dir, f"test_{function_name}__{test_type}_test_{iteration}.py")
-    if os.path.exists(path):
+    path = test_dir / f"test_{function_name}__{test_type}_test_{iteration}.py"
+    if path.exists():
         return get_test_file_path(test_dir, function_name, iteration + 1, test_type)
     return path
 
@@ -18,13 +22,12 @@ def get_test_file_path(
 def delete_multiple_if_name_main(test_ast: ast.Module) -> ast.Module:
     if_indexes = []
     for index, node in enumerate(test_ast.body):
-        if isinstance(node, ast.If):
-            if (
-                node.test.comparators[0].value == "__main__"
-                and node.test.left.id == "__name__"
-                and isinstance(node.test.ops[0], ast.Eq)
-            ):
-                if_indexes.append(index)
+        if isinstance(node, ast.If) and (
+            node.test.comparators[0].value == "__main__"
+            and node.test.left.id == "__name__"
+            and isinstance(node.test.ops[0], ast.Eq)
+        ):
+            if_indexes.append(index)
     for index in list(reversed(if_indexes))[1:]:
         del test_ast.body[index]
     return test_ast
@@ -66,7 +69,7 @@ class ModifyInspiredTests(ast.NodeTransformer):
 
 @dataclass(frozen=True)
 class TestConfig:
-    tests_root: str
-    project_root_path: str
+    tests_root: Path
+    project_root_path: Path
     test_framework: str
     pytest_cmd: str = "pytest"

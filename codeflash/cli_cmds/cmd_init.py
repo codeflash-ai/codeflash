@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import ast
 import os
-import pathlib
 import re
 import subprocess
 import sys
 from argparse import Namespace
+from pathlib import Path
 from typing import Optional
 
 import click
@@ -107,7 +107,7 @@ def ask_run_end_to_end_test(args: Namespace) -> None:
 
 
 def collect_setup_info() -> SetupInfo:
-    curdir = os.getcwd()
+    curdir = Path.cwd()
     # Check if the cwd is writable
     if not os.access(curdir, os.W_OK):
         click.echo(
@@ -170,20 +170,22 @@ def collect_setup_info() -> SetupInfo:
     )
 
     if tests_root_answer == create_for_me_option:
-        tests_root = os.path.join(curdir, default_tests_subdir)
-        os.mkdir(tests_root)
-        click.echo(f"✅ Created directory {tests_root}{os.pathsep}{LF}")
+        tests_root = Path(curdir) / default_tests_subdir
+        tests_root.mkdir()
+        click.echo(f"✅ Created directory {tests_root}{os.path.sep}{LF}")
     elif tests_root_answer == custom_dir_option:
         custom_tests_root_answer = inquirer_wrapper_path(
             "path",
-            message=f"Enter the path to your tests directory inside {os.path.abspath('.') + os.path.sep} ",
+            message=f"Enter the path to your tests directory inside {Path(curdir).resolve()}{os.path.sep} ",
             path_type=inquirer.Path.DIRECTORY,
             exists=True,
         )
-        tests_root = custom_tests_root_answer["path"] if custom_tests_root_answer else apologize_and_exit()
+        tests_root = (
+            Path(custom_tests_root_answer["path"]) if custom_tests_root_answer else apologize_and_exit()
+        )
     else:
-        tests_root = tests_root_answer
-    tests_root = os.path.relpath(tests_root, curdir)
+        tests_root = Path(tests_root_answer)
+    tests_root = tests_root.relative_to(curdir)
     ph("cli-tests-root-provided")
 
     # Autodiscover test framework
@@ -224,7 +226,7 @@ def collect_setup_info() -> SetupInfo:
     )
 
 
-def detect_test_framework(curdir, tests_root) -> Optional[str]:
+def detect_test_framework(curdir: Path, tests_root: Path) -> Optional[str]:
     test_framework = None
     pytest_files = ["pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg"]
     pytest_config_patterns = {
@@ -234,9 +236,9 @@ def detect_test_framework(curdir, tests_root) -> Optional[str]:
         "setup.cfg": "[tool:pytest]",
     }
     for pytest_file in pytest_files:
-        file_path = os.path.join(curdir, pytest_file)
-        if os.path.exists(file_path):
-            with open(file_path, encoding="utf8") as file:
+        file_path = curdir / pytest_file
+        if file_path.exists():
+            with file_path.open(encoding="utf8") as file:
                 contents = file.read()
                 if pytest_config_patterns[pytest_file] in contents:
                     test_framework = "pytest"
@@ -244,9 +246,9 @@ def detect_test_framework(curdir, tests_root) -> Optional[str]:
         test_framework = "pytest"
     else:
         # Check if any python files contain a class that inherits from unittest.TestCase
-        for filename in os.listdir(tests_root):
-            if filename.endswith(".py"):
-                with open(os.path.join(tests_root, filename), encoding="utf8") as file:
+        for filename in tests_root.iterdir():
+            if filename.suffix == ".py":
+                with filename.open(encoding="utf8") as file:
                     contents = file.read()
                     try:
                         node = ast.parse(contents)
@@ -271,14 +273,13 @@ def detect_test_framework(curdir, tests_root) -> Optional[str]:
 def check_for_toml_or_setup_file() -> Optional[str]:
     click.echo()
     click.echo("Checking for pyproject.toml or setup.py ...\r", nl=False)
-    curdir = os.getcwd()
-    pyproject_toml_path = os.path.join(curdir, "pyproject.toml")
-    setup_py_path = os.path.join(curdir, "setup.py")
+    curdir = Path.cwd()
+    pyproject_toml_path = curdir / "pyproject.toml"
+    setup_py_path = curdir / "setup.py"
     project_name = None
-    if os.path.exists(pyproject_toml_path):
+    if pyproject_toml_path.exists():
         try:
-            with open(pyproject_toml_path, encoding="utf8") as f:
-                pyproject_toml_content = f.read()
+            pyproject_toml_content = pyproject_toml_path.read_text(encoding="utf8")
             project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]
             click.echo(f"✅ I found a pyproject.toml for your project {project_name}.")
             ph("cli-pyproject-toml-found-name")
@@ -286,9 +287,8 @@ def check_for_toml_or_setup_file() -> Optional[str]:
             click.echo("✅ I found a pyproject.toml for your project.")
             ph("cli-pyproject-toml-found")
     else:
-        if os.path.exists(setup_py_path):
-            with open(setup_py_path, encoding="utf8") as f:
-                setup_py_content = f.read()
+        if setup_py_path.exists():
+            setup_py_content = setup_py_path.read_text(encoding="utf8")
             project_name_match = re.search(
                 r"setup\s*\([^)]*?name\s*=\s*['\"](.*?)['\"]",
                 setup_py_content,
@@ -321,11 +321,10 @@ def check_for_toml_or_setup_file() -> Optional[str]:
             new_pyproject_toml = tomlkit.document()
             new_pyproject_toml["tool"] = {"codeflash": {}}
             try:
-                with open(pyproject_toml_path, "w", encoding="utf8") as pyproject_file:
-                    pyproject_file.write(tomlkit.dumps(new_pyproject_toml))
+                pyproject_toml_path.write_text(tomlkit.dumps(new_pyproject_toml), encoding="utf8")
 
                 # Check if the pyproject.toml file was created
-                if os.path.exists(pyproject_toml_path):
+                if pyproject_toml_path.exists():
                     click.echo(
                         f"✅ Created a pyproject.toml file at {pyproject_toml_path}",
                     )
@@ -356,9 +355,9 @@ def install_github_actions() -> None:
         owner, repo_name = get_repo_owner_and_name(repo)
         require_github_app_or_exit(owner, repo_name)
 
-        git_root = repo.git.rev_parse("--show-toplevel")
-        workflows_path = os.path.join(git_root, ".github", "workflows")
-        optimize_yaml_path = os.path.join(workflows_path, "codeflash-optimize.yaml")
+        git_root = Path(repo.git.rev_parse("--show-toplevel"))
+        workflows_path = git_root / ".github" / "workflows"
+        optimize_yaml_path = workflows_path / "codeflash-optimize.yaml"
 
         confirm_creation_yes = inquirer_wrapper(
             inquirer.confirm,
@@ -373,7 +372,7 @@ def install_github_actions() -> None:
             click.echo("⏩️ Exiting workflow creation.")
             ph("cli-github-workflow-skipped")
             apologize_and_exit()
-        os.makedirs(workflows_path, exist_ok=True)
+        workflows_path.mkdir(parents=True, exist_ok=True)
         from importlib.resources import files
 
         py_version = sys.version_info
@@ -387,13 +386,13 @@ def install_github_actions() -> None:
             "{{ python_version }}",
             python_version_string,
         )
-        with open(optimize_yaml_path, "w", encoding="utf8") as optimize_yml_file:
+        with optimize_yaml_path.open("w", encoding="utf8") as optimize_yml_file:
             optimize_yml_file.write(optimize_yml_content)
         click.echo(f"✅ Created {optimize_yaml_path}{LF}")
         click.prompt(
             f"Next, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.{LF}"
-            + f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} ...{LF}"
-            + f"Then, click 'New repository secret' to add your api key with the variable name CODEFLASH_API_KEY.{LF}",
+            f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} ...{LF}"
+            f"Then, click 'New repository secret' to add your api key with the variable name CODEFLASH_API_KEY.{LF}",
             default="",
             type=click.STRING,
             prompt_suffix="",
@@ -402,7 +401,7 @@ def install_github_actions() -> None:
         click.launch(get_github_secrets_page_url(repo))
         click.echo(
             "🐙 I opened your Github secrets page! Note: if you see a 404, you probably don't have access to this "
-            + "repo's secrets; ask a repo admin to add it for you, or (not super recommended) you can temporarily "
+            "repo's secrets; ask a repo admin to add it for you, or (not super recommended) you can temporarily "
             f"hard-code your api key into the workflow file.{LF}",
         )
         click.pause()
@@ -410,7 +409,7 @@ def install_github_actions() -> None:
         click.prompt(
             f"Finally, for the workflow to work, you'll need to edit the workflow file to install the right "
             f"Python version and any project dependencies.{LF}"
-            + f"Press Enter to open {optimize_yaml_path} in your editor.{LF}",
+            f"Press Enter to open {optimize_yaml_path} in your editor.{LF}",
             default="",
             type=click.STRING,
             prompt_suffix="",
@@ -419,7 +418,7 @@ def install_github_actions() -> None:
         click.launch(optimize_yaml_path)
         click.echo(
             "📝 I opened the workflow file in your editor! You'll need to edit the steps that install the right Python "
-            + f"version and any project dependencies. See the comments in the file for more details.{LF}",
+            f"version and any project dependencies. See the comments in the file for more details.{LF}",
         )
         click.pause()
         click.echo()
@@ -434,9 +433,9 @@ def install_github_actions() -> None:
 
 # Create or update the pyproject.toml file with the Codeflash dependency & configuration
 def configure_pyproject_toml(setup_info: SetupInfo) -> None:
-    toml_path = os.path.join(os.getcwd(), "pyproject.toml")
+    toml_path = Path.cwd() / "pyproject.toml"
     try:
-        with open(toml_path, encoding="utf8") as pyproject_file:
+        with toml_path.open(encoding="utf8") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
         click.echo(
@@ -470,7 +469,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     pyproject_data["tool"] = tool_section
 
     click.echo("Writing Codeflash configuration ...\r", nl=False)
-    with open(toml_path, "w", encoding="utf8") as pyproject_file:
+    with toml_path.open("w", encoding="utf8") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
     click.echo(f"✅ Added Codeflash configuration to {toml_path}")
     click.echo()
@@ -488,8 +487,8 @@ def install_github_app() -> None:
     else:
         click.prompt(
             f"Finally, you'll need install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
-            + f"I will attempt to open the github app page - https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-            + f"Press Enter to open the page to let you install the app ...{LF}",
+            f"I will attempt to open the github app page - https://github.com/apps/codeflash-ai/installations/select_target {LF}"
+            f"Press Enter to open the page to let you install the app ...{LF}",
             default="",
             type=click.STRING,
             prompt_suffix="",
@@ -601,7 +600,7 @@ def enter_api_key_and_save_to_rc() -> None:
     os.environ["CODEFLASH_API_KEY"] = api_key
 
 
-def create_bubble_sort_file_and_test(args: Namespace) -> None:
+def create_bubble_sort_file_and_test(args: Namespace) -> tuple[str, str]:
     bubble_sort_content = """def sorter(arr):
     for i in range(len(arr)):
         for j in range(len(arr) - 1):
@@ -613,7 +612,7 @@ def create_bubble_sort_file_and_test(args: Namespace) -> None:
 """
     if args.test_framework == "unittest":
         bubble_sort_test_content = f"""import unittest
-from {os.path.basename(args.module_root)}.bubble_sort import sorter
+from {os.path.basename(args.module_root)}.bubble_sort import sorter # Keep usage of os.path.basename to avoid pathlib potential incompatibility https://github.com/codeflash-ai/codeflash/pull/1066#discussion_r1801628022
 
 class TestBubbleSort(unittest.TestCase):
     def test_sort(self):
@@ -630,7 +629,7 @@ class TestBubbleSort(unittest.TestCase):
         self.assertEqual(output, list(range(100)))
 """
     elif args.test_framework == "pytest":
-        bubble_sort_test_content = f"""from {os.path.basename(args.module_root)}.bubble_sort import sorter
+        bubble_sort_test_content = f"""from {Path(args.module_root).name}.bubble_sort import sorter
 
 def test_sort():
     input = [5, 4, 3, 2, 1, 0]
@@ -648,15 +647,17 @@ def test_sort():
     else:
         click.echo(f"❌ Unsupported test framework: {args.test_framework}")
         apologize_and_exit()
-    bubble_sort_path = os.path.join(args.module_root, "bubble_sort.py")
-    with open(bubble_sort_path, "w", encoding="utf8") as bubble_sort_file:
-        bubble_sort_file.write(bubble_sort_content)
-    bubble_sort_test_path = os.path.join(args.tests_root, "test_bubble_sort.py")
-    with open(bubble_sort_test_path, "w", encoding="utf8") as bubble_sort_test_file:
-        bubble_sort_test_file.write(bubble_sort_test_content)
+
+    bubble_sort_path = Path(args.module_root) / "bubble_sort.py"
+    bubble_sort_path.write_text(bubble_sort_content, encoding="utf8")
+
+    bubble_sort_test_path = Path(args.tests_root) / "test_bubble_sort.py"
+    bubble_sort_test_path.write_text(bubble_sort_test_content, encoding="utf8")
+
     click.echo(f"✅ Created {bubble_sort_path}")
     click.echo(f"✅ Created {bubble_sort_test_path}")
-    return bubble_sort_path, bubble_sort_test_path
+
+    return str(bubble_sort_path), str(bubble_sort_test_path)
 
 
 def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test_path: str) -> None:

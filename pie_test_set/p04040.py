@@ -1,7 +1,6 @@
 def problem_p04040(input_data):
-    from sys import stdin, stdout, stderr, setrecursionlimit
-
     from functools import lru_cache
+    from sys import setrecursionlimit, stderr, stdin, stdout
 
     setrecursionlimit(10**7)
 

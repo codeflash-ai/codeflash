@@ -1,9 +1,16 @@
 from __future__ import annotations
 
-from sqlalchemy import create_engine, Integer, String, ForeignKey
+from sqlalchemy import ForeignKey, Integer, String, create_engine
 from sqlalchemy.engine.base import Engine
-from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.orm import sessionmaker, relationship, Relationship, Session, DeclarativeBase
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    Relationship,
+    Session,
+    mapped_column,
+    relationship,
+    sessionmaker,
+)
 
 
 # Custom base class

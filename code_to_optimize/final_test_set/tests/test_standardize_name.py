@@ -1,5 +1,6 @@
-from code_to_optimize.final_test_set.standardize_name import standardize_name
 import pytest
+
+from code_to_optimize.final_test_set.standardize_name import standardize_name
 
 
 def test_exact_match():

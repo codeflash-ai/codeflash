@@ -1,6 +1,5 @@
 def problem_p02840(input_data):
     from fractions import gcd
-
     from itertools import accumulate
 
     n, x, d = list(map(int, input_data.split()))

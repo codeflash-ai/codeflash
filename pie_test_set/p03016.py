@@ -1,27 +1,16 @@
 def problem_p03016(input_data):
-    from collections import defaultdict, deque, Counter
-
-    from heapq import heappush, heappop, heapify
-
-    import math
-
     import bisect
-
+    import math
     import random
-
-    from itertools import permutations, accumulate, combinations, product
-
-    import sys
-
     import string
-
+    import sys
     from bisect import bisect_left, bisect_right
-
-    from math import factorial, ceil, floor
-
-    from operator import mul
-
+    from collections import Counter, defaultdict, deque
     from functools import reduce
+    from heapq import heapify, heappop, heappush
+    from itertools import accumulate, combinations, permutations, product
+    from math import ceil, factorial, floor
+    from operator import mul
 
     sys.setrecursionlimit(2147483647)
 

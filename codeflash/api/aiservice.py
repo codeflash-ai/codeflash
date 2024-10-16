@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import platform
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import requests
 from pydantic.dataclasses import dataclass
@@ -15,6 +15,12 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.models.ExperimentMetadata import ExperimentMetadata
 
 
 @dataclass(frozen=True)
@@ -161,8 +167,8 @@ class AiServiceClient:
         source_code_being_tested: str,
         function_to_optimize: FunctionToOptimize,
         helper_function_names: list[str],
-        module_path: str,
-        test_module_path: str,
+        module_path: Path,
+        test_module_path: Path,
         test_framework: str,
         test_timeout: int,
         trace_id: str,
@@ -175,8 +181,8 @@ class AiServiceClient:
         - source_code_being_tested (str): The source code of the function being tested.
         - function_to_optimize (FunctionToOptimize): The function to optimize.
         - helper_function_names (list[Source]): List of helper function names.
-        - module_path (str): The module path where the function is located.
-        - test_module_path (str): The module path for the test code.
+        - module_path (Path): The module path where the function is located.
+        - test_module_path (Path): The module path for the test code.
         - test_framework (str): The test framework to use, e.g., "pytest".
         - test_timeout (int): The timeout for each test in seconds.
         - test_index (int): The index from 0-(n-1) if n tests are generated for a single trace_id

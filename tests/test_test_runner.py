@@ -1,8 +1,9 @@
 import os
-import pathlib
 import tempfile
+from pathlib import Path
 
 import pytest
+
 from codeflash.models.models import TestFile, TestFiles
 from codeflash.verification.parse_test_output import parse_test_xml
 from codeflash.verification.test_results import TestType
@@ -27,7 +28,7 @@ class TestUnittestRunnerSorter(unittest.TestCase):
         gc.enable()
         print(f"#####test_sorter__unit_test_0:TestUnittestRunnerSorter.test_sort:sorter:0#####{duration}^^^^^")
 """
-    cur_dir_path = os.path.dirname(os.path.abspath(__file__))
+    cur_dir_path = Path(__file__).resolve().parent
     config = TestConfig(
         tests_root=cur_dir_path,
         project_root_path=cur_dir_path,
@@ -36,18 +37,20 @@ class TestUnittestRunnerSorter(unittest.TestCase):
 
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_file_path=str(fp.name), test_type=TestType.EXISTING_UNIT_TEST)],
+            test_files=[
+                TestFile(instrumented_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)
+            ],
         )
         fp.write(code.encode("utf-8"))
         fp.flush()
         result_file, process = run_tests(
             test_files,
             test_framework=config.test_framework,
-            cwd=config.project_root_path,
+            cwd=Path(config.project_root_path),
         )
         results = parse_test_xml(result_file, test_files, config, process)
     assert results[0].did_pass, "Test did not pass as expected"
-    pathlib.Path(result_file).unlink(missing_ok=True)
+    result_file.unlink(missing_ok=True)
 
 
 @pytest.mark.skip(reason="not testing the actual code path")
@@ -62,7 +65,7 @@ def test_sort():
     output = sorter(arr)
     assert output == [0, 1, 2, 3, 4, 5]
 """
-    cur_dir_path = os.path.dirname(os.path.abspath(__file__))
+    cur_dir_path = Path(__file__).resolve().parent
     config = TestConfig(
         tests_root=cur_dir_path,
         project_root_path=cur_dir_path,
@@ -70,7 +73,9 @@ def test_sort():
     )
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_file_path=str(fp.name), test_type=TestType.EXISTING_UNIT_TEST)],
+            test_files=[
+                TestFile(instrumented_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)
+            ],
         )
         fp.write(code.encode("utf-8"))
         fp.flush()
@@ -78,7 +83,7 @@ def test_sort():
         result_file, process = run_tests(
             test_files,
             test_framework=config.test_framework,
-            cwd=os.path.join(cur_dir_path),
+            cwd=Path(config.project_root_path),
             test_env=test_env,
             pytest_timeout=1,
             pytest_min_loops=1,
@@ -92,4 +97,4 @@ def test_sort():
             run_result=process,
         )
     assert results[0].did_pass, "Test did not pass as expected"
-    pathlib.Path(result_file).unlink(missing_ok=True)
+    result_file.unlink(missing_ok=True)

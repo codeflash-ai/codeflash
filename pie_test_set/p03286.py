@@ -1,9 +1,8 @@
 def problem_p03286(input_data):
     # coding: utf-8
 
-    import sys
-
     import bisect
+    import sys
 
     """Template"""
 

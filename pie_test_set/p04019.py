@@ -1,7 +1,11 @@
 def problem_p04019(input_data):
     #!/usr/bin/env python3
 
-    import sys, math, itertools, collections, bisect
+    import bisect
+    import collections
+    import itertools
+    import math
+    import sys
 
     input = lambda: sys.stdin.buffer.readline().rstrip().decode("utf-8")
 

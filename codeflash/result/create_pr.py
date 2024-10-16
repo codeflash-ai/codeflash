@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from codeflash.cli_cmds.console import logger
-import os.path
-import pathlib
+from pathlib import Path
 from typing import Dict, Optional
 
 import git
 
 from codeflash.api import cfapi
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_replacer import is_zero_diff
 from codeflash.code_utils.git_utils import (
@@ -24,19 +23,19 @@ from codeflash.result.explanation import Explanation
 def existing_tests_source_for(
     function_qualified_name_with_modules_from_root: str,
     function_to_tests: Dict[str, list[TestsInFile]],
-    tests_root: str,
+    tests_root: Path,
 ) -> str:
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
     existing_tests_unique = set()
     if test_files:
         for test_file in test_files:
-            existing_tests_unique.add("- " + os.path.relpath(test_file.test_file, tests_root))
+            existing_tests_unique.add("- " + str(Path(test_file.test_file).relative_to(tests_root)))
     return "\n".join(sorted(existing_tests_unique))
 
 
 def check_create_pr(
-    original_code: dict[str, str],
-    new_code: dict[str, str],
+    original_code: dict[Path, str],
+    new_code: dict[Path, str],
     explanation: Explanation,
     existing_tests_source: str,
     generated_original_test_source: str,
@@ -48,9 +47,9 @@ def check_create_pr(
     if pr_number is not None:
         logger.info(f"Suggesting changes to PR #{pr_number} ...")
         owner, repo = get_repo_owner_and_name(git_repo)
-        relative_path = str(pathlib.Path(os.path.relpath(explanation.file_path, git_root_dir())).as_posix())
+        relative_path = explanation.file_path.relative_to(git_root_dir()).as_posix()
         build_file_changes = {
-            str(pathlib.Path(os.path.relpath(p, git_root_dir())).as_posix()): FileDiffContent(
+            Path(p).relative_to(git_root_dir()).as_posix(): FileDiffContent(
                 oldContent=original_code[p],
                 newContent=new_code[p],
             )
@@ -93,19 +92,21 @@ def check_create_pr(
         if not check_and_push_branch(git_repo, wait_for_push=True):
             logger.warning("⏭️ Branch is not pushed, skipping PR creation...")
             return
-        relative_path = str(pathlib.Path(os.path.relpath(explanation.file_path, git_root_dir())).as_posix())
+        relative_path = explanation.file_path.relative_to(git_root_dir()).as_posix()
         base_branch = get_current_branch()
+        build_file_changes = {
+            Path(p).relative_to(git_root_dir()).as_posix(): FileDiffContent(
+                oldContent=original_code[p],
+                newContent=new_code[p],
+            )
+            for p in original_code
+        }
+
         response = cfapi.create_pr(
             owner=owner,
             repo=repo,
             base_branch=base_branch,
-            file_changes={
-                str(pathlib.Path(os.path.relpath(p, git_root_dir())).as_posix()): FileDiffContent(
-                    oldContent=original_code[p],
-                    newContent=new_code[p],
-                )
-                for p in original_code
-            },
+            file_changes=build_file_changes,
             pr_comment=PrComment(
                 optimization_explanation=explanation.explanation_message(),
                 best_runtime=explanation.best_runtime_ns,

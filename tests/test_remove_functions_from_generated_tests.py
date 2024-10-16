@@ -224,7 +224,7 @@ def test_sorted_list():
 
 
 @pytest.mark.skip(
-    "We don't handle the edge case where the parametrized test appears right after the test to remove"
+    "We don't handle the edge case where the parametrized test appears right after the test to remove",
 )
 def test_keep_parametrized_test2():
     generated_test_source = """def test_empty_list():
