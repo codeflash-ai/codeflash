@@ -1,3 +1,6 @@
+import os
+
+from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.models.models import OptimizedCandidateResult
 from codeflash.result.critic import quantity_of_tests_critic, speedup_critic
 from codeflash.verification.test_results import (
@@ -213,3 +216,37 @@ def test_generated_test_critic():
     )
 
     assert quantity_of_tests_critic(candidate_result)
+
+    get_pr_number.cache_clear()
+    os.environ["CODEFLASH_PR_NUMBER"] = "1234"
+    test_results = [test_1, test_2, test_3]
+
+    candidate_result = OptimizedCandidateResult(
+        times_run=5,
+        best_test_runtime=100,
+        best_test_results=TestResults(test_results=test_results),
+    )
+
+    assert not quantity_of_tests_critic(candidate_result)
+
+    test_results = [test_1, test_2, test_3, test_4]
+
+    candidate_result = OptimizedCandidateResult(
+        times_run=5,
+        best_test_runtime=100,
+        best_test_results=TestResults(test_results=test_results),
+    )
+
+    assert not quantity_of_tests_critic(candidate_result)
+
+    test_results = [test_1, test_2, test_3, test_5]
+
+    candidate_result = OptimizedCandidateResult(
+        times_run=5,
+        best_test_runtime=100,
+        best_test_results=TestResults(test_results=test_results),
+    )
+
+    assert quantity_of_tests_critic(candidate_result)
+
+    del os.environ["CODEFLASH_PR_NUMBER"]
