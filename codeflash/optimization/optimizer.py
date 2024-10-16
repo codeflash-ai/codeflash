@@ -988,7 +988,7 @@ class Optimizer:
         test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_candidate_index)
         test_env["CODEFLASH_TRACER_DISABLE"] = "1"
         if "PYTHONPATH" not in test_env:
-            test_env["PYTHONPATH"] = self.args.project_root
+            test_env["PYTHONPATH"] = str(self.args.project_root)
         else:
             test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
 
