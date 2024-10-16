@@ -161,7 +161,6 @@ def parse_test_xml(
         return test_results
     with open(test_xml_file_path) as file:
         xml_file_contents = file.read()
-    logger.info(f"XML FILE CONTENTS: {xml_file_contents}")
 
     for suite in xml:
         for testcase in suite:
@@ -182,10 +181,7 @@ def parse_test_xml(
                 return test_results
 
             test_class_path = testcase.classname
-            logger.info(f"XML test_file_name :  {test_file_name}")
-            logger.info(f"XML testcase.classname :  {test_class_path}")
             test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
-            logger.info(f"XML test_function :  {test_function}")
             if test_file_name is None:
                 if test_class_path:
                     # TODO : This might not be true if the test is organized under a class
