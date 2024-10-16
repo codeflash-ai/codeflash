@@ -159,8 +159,6 @@ def parse_test_xml(
             f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}",
         )
         return test_results
-    with open(test_xml_file_path) as file:
-        xml_file_contents = file.read()
 
     for suite in xml:
         for testcase in suite:

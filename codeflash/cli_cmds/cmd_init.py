@@ -612,7 +612,7 @@ def create_bubble_sort_file_and_test(args: Namespace) -> tuple[str, str]:
 """
     if args.test_framework == "unittest":
         bubble_sort_test_content = f"""import unittest
-from {os.path.basename(args.module_root)}.bubble_sort import sorter
+from {os.path.basename(args.module_root)}.bubble_sort import sorter # Keep usage of os.path.basename to avoid pathlib potential incompatibility https://github.com/codeflash-ai/codeflash/pull/1066#discussion_r1801628022
 
 class TestBubbleSort(unittest.TestCase):
     def test_sort(self):

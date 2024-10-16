@@ -206,7 +206,7 @@ def get_function_variables_definitions(
             # TODO: there can be multiple definitions, see how to handle such cases
             definition = definitions[0]
             definition_path = definition.module_path
-            assert definition_path is not None
+
             # The definition is part of this project and not defined within the original function
             if (
                 str(definition_path).startswith(str(project_root_path) + os.sep)
