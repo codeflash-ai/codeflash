@@ -612,7 +612,7 @@ def create_bubble_sort_file_and_test(args: Namespace) -> tuple[str, str]:
 """
     if args.test_framework == "unittest":
         bubble_sort_test_content = f"""import unittest
-from {Path(args.module_root).name}.bubble_sort import sorter
+from {os.path.basename(args.module_root)}.bubble_sort import sorter
 
 class TestBubbleSort(unittest.TestCase):
     def test_sort(self):
