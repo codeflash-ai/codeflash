@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import os
 import re
 import sqlite3
@@ -162,7 +161,6 @@ def parse_test_xml(
         return test_results
     with open(test_xml_file_path) as file:
         xml_file_contents = file.read()
-    logger.info(f"XML FILE CONTENTS: {xml_file_contents}")
 
     for suite in xml:
         for testcase in suite:
@@ -183,19 +181,24 @@ def parse_test_xml(
                 return test_results
 
             test_class_path = testcase.classname
-            logger.info(f"XML test_file_name :  {test_file_name}")
-            logger.info(f"XML testcase.classname :  {test_class_path}")
+            test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
             if test_file_name is None:
-                # TODO : This might not be true if the test is organized under a class
-                test_file_path = file_path_from_module_name(test_class_path, test_config.project_root_path)
+                if test_class_path:
+                    # TODO : This might not be true if the test is organized under a class
+                    test_file_path = file_path_from_module_name(
+                        test_class_path,
+                        test_config.project_root_path,
+                    )
+                else:
+                    test_file_path = file_path_from_module_name(test_function, test_config.project_root_path)
             else:
-                test_file_path = Path(test_config.project_root_path) / test_file_name
-            assert test_file_path.exists(), f"File {test_file_path} doesn't exist."
+                test_file_path = test_config.project_root_path / test_file_name
+            if not test_file_path.exists():
+                logger.warning(f"Could not find the test for file name - {test_file_path} ")
+                continue
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
             assert test_type is not None, f"Test type not found for {test_file_path}"
-            # file_name = file_path_from_module_name(test_module_path, test_config.project_root_path)
             test_module_path = module_name_from_file_path(test_file_path, test_config.project_root_path)
-
             result = testcase.is_passed  # TODO: See for the cases of ERROR and SKIPPED
             test_class = None
             if class_name is not None and class_name.startswith(test_module_path):
@@ -203,11 +206,10 @@ def parse_test_xml(
                     len(test_module_path) + 1 :
                 ]  # +1 for the dot, gets Unittest class name
 
-            test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
             loop_index = 1
             if test_function is None:
                 msg = f"testcase.name is None in parse_test_xml for testcase {testcase!r} in file {test_xml_file_path}"
-                logging.warning(msg)
+                logger.warning(msg)
                 continue
             timed_out = False
             if test_config.test_framework == "pytest":
