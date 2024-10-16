@@ -101,7 +101,7 @@ def create_pr(
     owner: str,
     repo: str,
     base_branch: str,
-    file_changes: dict[Path, FileDiffContent],
+    file_changes: dict[str, FileDiffContent],
     pr_comment: PrComment,
     existing_tests: str,
     generated_tests: str,
@@ -117,12 +117,11 @@ def create_pr(
     :return: The response object.
     """
     # convert Path objects to strings
-    payload_file_changes = {str(k): v for k, v in file_changes.items()}
     payload = {
         "owner": owner,
         "repo": repo,
         "baseBranch": base_branch,
-        "diffContents": payload_file_changes,
+        "diffContents": file_changes,
         "prCommentFields": pr_comment.to_json(),
         "existingTests": existing_tests,
         "generatedTests": generated_tests,

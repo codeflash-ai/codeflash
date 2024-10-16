@@ -94,17 +94,19 @@ def check_create_pr(
             return
         relative_path = explanation.file_path.relative_to(git_root_dir()).as_posix()
         base_branch = get_current_branch()
+        build_file_changes = {
+            Path(p).relative_to(git_root_dir()).as_posix(): FileDiffContent(
+                oldContent=original_code[p],
+                newContent=new_code[p],
+            )
+            for p in original_code
+        }
+
         response = cfapi.create_pr(
             owner=owner,
             repo=repo,
             base_branch=base_branch,
-            file_changes={
-                Path(p).relative_to(git_root_dir()): FileDiffContent(
-                    oldContent=original_code[p],
-                    newContent=new_code[p],
-                )
-                for p in original_code
-            },
+            file_changes=build_file_changes,
             pr_comment=PrComment(
                 optimization_explanation=explanation.explanation_message(),
                 best_runtime=explanation.best_runtime_ns,
