@@ -281,6 +281,7 @@ def parse_test_xml(
             f"Tests '{[test_file.original_file_path for test_file in test_files.test_files]}' failed to run, skipping",
         )
         if run_result is not None:
+            stdout, stderr = "", ""
             try:
                 stdout = run_result.stdout.decode()
                 stderr = run_result.stderr.decode()
