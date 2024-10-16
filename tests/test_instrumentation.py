@@ -2364,7 +2364,7 @@ def test_sleepfunc():
         )
         assert test_results[0].runtime == pytest.approx(
             0.02 * 1e9,
-            rel=1e6,
+            rel=1e-2,
         ), "Test failed with pytest's approx."
         assert test_results[0].did_pass
 
@@ -2377,8 +2377,8 @@ def test_sleepfunc():
             == "code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp"
         )
         assert test_results[1].runtime == pytest.approx(
-            0.02 * 1e9,
-            rel=1e6,
+            0.04 * 1e9,
+            rel=1e-2,
         ), "Test failed with pytest's approx."
 
         assert test_results[1].did_pass
