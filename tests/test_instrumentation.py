@@ -71,7 +71,11 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
     return return_value
 
@@ -169,7 +173,11 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
     return return_value
 
@@ -257,7 +265,11 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
     return return_value
 
@@ -415,7 +427,11 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
     return return_value
 
@@ -500,33 +516,6 @@ def test_sort_parametrized(input, expected_output):
             pytest_max_loops=1,
             testing_time=0.1,
         )
-        # test_cfg = TestConfig(
-        #     tests_root=str(tests_root),
-        #     project_root_path=str(project_root_path),
-        #     test_framework="pytest",
-        #     pytest_cmd="pytest",
-        # )
-        # result_file_path, run_result = run_tests(
-        #     test_files,
-        #     test_framework="pytest",
-        #     cwd=str(project_root_path),
-        #     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-        #     pytest_cmd="pytest",
-        #     verbose=True,
-        #     test_env=test_env,
-        #     pytest_min_loops=1,
-        #     pytest_max_loops=1,
-        #     pytest_target_runtime_seconds=0.1,
-        # )
-        #
-        # test_results = parse_test_results(
-        #     test_xml_path=result_file_path,
-        #     test_files=test_files,
-        #     test_config=test_cfg,
-        #     run_result=run_result,
-        #     optimization_iteration=0,
-        # )
-        #
         assert test_results[0].id.function_getting_tested == "sorter"
         assert test_results[0].id.iteration_id == "0_0"
         assert test_results[0].id.test_class_name is None
@@ -609,7 +598,11 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
     return return_value
 
@@ -804,7 +797,11 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
     return return_value
 
@@ -979,7 +976,11 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
     return return_value
 
@@ -1160,7 +1161,11 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
     return return_value
 
@@ -1329,7 +1334,11 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
     return return_value
 
@@ -1504,7 +1513,11 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
     return return_value
 
@@ -1741,7 +1754,11 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
     return return_value
 
@@ -1830,7 +1847,11 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
     return return_value
 
@@ -1919,7 +1940,11 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
     return return_value
 
@@ -2010,7 +2035,11 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
     return return_value
 
@@ -2136,7 +2165,11 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
     return return_value
 
