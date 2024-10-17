@@ -1,16 +1,38 @@
 from __future__ import annotations
 
 import ast
-from typing import IO, TYPE_CHECKING
+from functools import lru_cache
+from typing import TYPE_CHECKING, TypeVar
 
 import libcst as cst
-from libcst import FunctionDef
 
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module
 from codeflash.discovery.functions_to_optimize import FunctionParent
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from libcst import FunctionDef
+
+ASTNodeT = TypeVar("ASTNodeT", bound=ast.AST)
+
+
+def normalize_node(node: ASTNodeT) -> ASTNodeT:
+    if isinstance(
+        node,
+        (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef),
+    ) and ast.get_docstring(node):
+        node.body = node.body[1:]
+    if hasattr(node, "body"):
+        node.body = [
+            normalize_node(node) for node in node.body if not isinstance(node, (ast.Import, ast.ImportFrom))
+        ]
+    return node
+
+
+@lru_cache(maxsize=3)
+def normalize_code(code: str) -> str:
+    return ast.unparse(normalize_node(ast.parse(code)))
 
 
 class OptimFunctionCollector(cst.CSTVisitor):
@@ -171,7 +193,7 @@ def replace_functions_in_file(
 
     module = cst.metadata.MetadataWrapper(cst.parse_module(optimized_code))
 
-    for i, (function_name, class_name) in enumerate(parsed_function_names):
+    for function_name, class_name in parsed_function_names:
         visitor = OptimFunctionCollector(
             function_name,
             class_name,
@@ -243,7 +265,6 @@ def replace_function_definitions_in_module(
     :param project_root_path:
     :return:
     """
-    file: IO[str]
     source_code: str = module_abspath.read_text(encoding="utf8")
     new_code: str = replace_functions_and_add_imports(
         source_code,
@@ -262,10 +283,4 @@ def replace_function_definitions_in_module(
 
 
 def is_zero_diff(original_code: str, new_code: str) -> bool:
-    def normalize_for_diff(tree: ast.Module) -> ast.Module:
-        tree.body = [node for node in tree.body if not isinstance(node, (ast.Import, ast.ImportFrom))]
-        return tree
-
-    original_code_unparsed = ast.unparse(normalize_for_diff(ast.parse(original_code)))
-    new_code_unparsed = ast.unparse(normalize_for_diff(ast.parse(new_code)))
-    return original_code_unparsed == new_code_unparsed
+    return normalize_code(original_code) == normalize_code(new_code)
