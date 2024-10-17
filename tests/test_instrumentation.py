@@ -2266,7 +2266,12 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
+"""
+    if sys.version_info < (3, 12):
+        expected += """    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")"""
+    else:
+        expected += """    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!')"""
+    expected += """
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -2305,13 +2310,13 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
 
     test_path = (
         Path(__file__).parent.resolve()
-        / "../code_to_optimize/tests/pytest/test_time_correction_instrumentation_temp.py"
+        / "../code_to_optimize/tests/unittest/test_time_correction_instrumentation_temp.py"
     ).resolve()
     try:
         with test_path.open("w") as f:
             f.write(code)
 
-        tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/").resolve()
+        tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/").resolve()
         project_root_path = (Path(__file__).parent.resolve() / "../").resolve()
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
@@ -2337,7 +2342,7 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
         assert success, "Test for time evaluation failed"
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
-            module_path="code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp",
+            module_path="code_to_optimize.tests.unittest.test_time_correction_instrumentation_temp",
             tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
         ).replace('"', "'")
 
@@ -2395,7 +2400,7 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
         assert test_results[0].id.test_function_name == "test_sleepfunc_sequence_short"
         assert (
             test_results[0].id.test_module_path
-            == "code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp"
+            == "code_to_optimize.tests.unittest.test_time_correction_instrumentation_temp"
         )
         sum_short_sleep_test_cases_runtime = sum(test_results[i].runtime for i in range(4))
         assert sum_short_sleep_test_cases_runtime == pytest.approx(
@@ -2411,7 +2416,7 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
         assert test_results[4].id.test_function_name == "test_sleepfunc_sequence_long"
         assert (
             test_results[4].id.test_module_path
-            == "code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp"
+            == "code_to_optimize.tests.unittest.test_time_correction_instrumentation_temp"
         )
         sum_long_sleep_test_cases_runtime = sum(test_results[i].runtime for i in range(4, 8))
         assert sum_long_sleep_test_cases_runtime == pytest.approx(
