@@ -30,7 +30,7 @@ def normalize_node(node: ASTNodeT) -> ASTNodeT:
     return node
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=3)
 def normalize_code(code: str) -> str:
     return ast.unparse(normalize_node(ast.parse(code)))
 
