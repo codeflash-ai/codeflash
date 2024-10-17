@@ -763,7 +763,7 @@ class Optimizer:
                     continue
 
                 new_test_path = Path(
-                    f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}"
+                    f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}",
                 )
                 if injected_test is not None:
                     with new_test_path.open("w", encoding="utf8") as _f:
@@ -1120,12 +1120,11 @@ class Optimizer:
                 f'Error running tests in {", ".join(str(f) for f in test_files.test_files)}.\nTimeout Error',
             )
             return TestResults()
-        if run_result.returncode != 0:
-            logger.debug(
-                f'Nonzero return code {run_result.returncode} when running tests in {", ".join([str(f.instrumented_file_path) for f in test_files.test_files])}.\n'
-                f"stdout: {run_result.stdout}\n"
-                f"stderr: {run_result.stderr}\n",
-            )
+        logger.debug(
+            f'Nonzero return code {run_result.returncode} when running tests in {", ".join([str(f.instrumented_file_path) for f in test_files.test_files])}.\n'
+            f"stdout: {run_result.stdout}\n"
+            f"stderr: {run_result.stderr}\n",
+        )
         return parse_test_results(
             test_xml_path=result_file_path,
             test_files=test_files,
