@@ -2275,7 +2275,11 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     return_value = wrapped(*args, **kwargs)
     codeflash_duration = time.perf_counter_ns() - counter
     gc.enable()
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickle.dumps(return_value)))
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
     return return_value
 
@@ -2303,23 +2307,23 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
 """
 
     test_path = (
-        pathlib.Path(__file__).parent.resolve()
+        Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/pytest/test_time_correction_instrumentation_temp.py"
     ).resolve()
     try:
-        with open(test_path, "w") as f:
+        with test_path.open("w") as f:
             f.write(code)
 
-        tests_root = pathlib.Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
-        project_root_path = (pathlib.Path(__file__).parent / "..").resolve()
-        original_cwd = os.getcwd()
-        run_cwd = pathlib.Path(__file__).parent.parent.resolve()
+        tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/").resolve()
+        project_root_path = (Path(__file__).parent.resolve() / "../").resolve()
+        run_cwd = Path(__file__).parent.parent.resolve()
+        original_cwd = Path.cwd()
         func = FunctionToOptimize(
             function_name="sleepfunc_sequence",
             parents=[],
-            file_path="module.py",
+            file_path=Path("module.py"),
         )
-        os.chdir(str(run_cwd))
+        os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
             test_path,
             [CodePosition(10, 13), CodePosition(20, 13)],
@@ -2334,13 +2338,22 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
         test_env["CODEFLASH_LOOP_INDEX"] = "3"
         test_type = TestType.EXISTING_UNIT_TEST
         assert success, "Test for time evaluation failed"
+        assert new_test is not None
+        print("--new_test--", new_test.replace('"', "'"))
+        print(
+            "--expected--",
+            expected.format(
+                module_path="code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp",
+                tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            ).replace('"', "'"),
+        )
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp",
-            tmp_dir_path=get_run_tmp_file("test_return_values"),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
         ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
-        with open(test_path, "w") as f:
+        with test_path.open("w") as f:
             f.write(new_test)
 
         opt = Optimizer(
@@ -2356,9 +2369,9 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
         test_files = TestFiles(
             test_files=[
                 TestFile(
-                    instrumented_file_path=str(test_path),
+                    instrumented_file_path=test_path,
                     test_type=test_type,
-                    original_file_path=str(test_path),
+                    original_file_path=test_path,
                 ),
             ],
         )
@@ -2418,4 +2431,4 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
 
         assert test_results[t2].did_pass
     finally:
-        pathlib.Path(test_path).unlink(missing_ok=True)
+        test_path.unlink(missing_ok=True)
