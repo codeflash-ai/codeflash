@@ -1602,9 +1602,24 @@ def functionA():
     assert is_zero_diff(original_code, optim_code_c)
 
     optim_code_d = """from __future__ import annotations
-    
+
 import numpy as np
 def functionA():
     return np.array([1, 2, 3, 4])
 """
     assert not is_zero_diff(original_code, optim_code_d)
+
+    optim_code_e = '''"""
+Zis a Docstring?
+"""
+from __future__ import annotations
+
+import ast
+def functionA():
+    """
+    Und Zis?
+    """
+    import numpy as np
+    return np.array([1, 2, 3])
+    '''
+    assert is_zero_diff(original_code, optim_code_e)
