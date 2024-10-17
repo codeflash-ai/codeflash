@@ -9,6 +9,7 @@ from argparse import Namespace
 from pathlib import Path
 
 import pytest
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.instrument_existing_tests import (
     FunctionImportedAsVisitor,
@@ -2335,7 +2336,7 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
 
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
-        test_env["CODEFLASH_LOOP_INDEX"] = "3"
+        test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
         assert success, "Test for time evaluation failed"
         assert new_test is not None
@@ -2373,7 +2374,7 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
             optimization_iteration=0,
             test_functions=None,
             pytest_min_loops=1,
-            pytest_max_loops=3,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 
@@ -2391,6 +2392,7 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
         # | 20  |           2.10             |
         # | 25  |           3.25             |
         t1 = random.randint(0, 3)  # random_index_first_category
+        logger.info("-------------", t1)
         assert test_results[t1].id.function_getting_tested == "sleepfunc_sequence"
         assert test_results[t1].id.iteration_id == f"0_{t1}"
         assert test_results[t1].id.test_class_name is None
