@@ -1120,11 +1120,12 @@ class Optimizer:
                 f'Error running tests in {", ".join(str(f) for f in test_files.test_files)}.\nTimeout Error',
             )
             return TestResults()
-        logger.debug(
-            f'Nonzero return code {run_result.returncode} when running tests in {", ".join([str(f.instrumented_file_path) for f in test_files.test_files])}.\n'
-            f"stdout: {run_result.stdout}\n"
-            f"stderr: {run_result.stderr}\n",
-        )
+        if run_result.returncode != 0:
+            logger.debug(
+                f'Nonzero return code {run_result.returncode} when running tests in {", ".join([str(f.instrumented_file_path) for f in test_files.test_files])}.\n'
+                f"stdout: {run_result.stdout}\n"
+                f"stderr: {run_result.stderr}\n",
+            )
         return parse_test_results(
             test_xml_path=result_file_path,
             test_files=test_files,
