@@ -2393,12 +2393,12 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
         # | 25  |           3.25             |
         t1 = random.randint(0, 3)  # random_index_first_category
         logger.info("-------------", t1)
-        assert test_results[t1].id.function_getting_tested == "sleepfunc_sequence"
-        assert test_results[t1].id.iteration_id == f"0_{t1}"
-        assert test_results[t1].id.test_class_name is None
-        assert test_results[t1].id.test_function_name == "test_sleepfunc_sequence_short"
+        assert test_results[0].id.function_getting_tested == "sleepfunc_sequence"
+        assert test_results[0].id.iteration_id == "0_0"
+        assert test_results[0].id.test_class_name is None
+        assert test_results[0].id.test_function_name == "test_sleepfunc_sequence_short"
         assert (
-            test_results[t1].id.test_module_path
+            test_results[0].id.test_module_path
             == "code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp"
         )
         sum_short_sleep_test_cases_runtime = sum(test_results[i].runtime for i in range(4))
@@ -2406,15 +2406,15 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
             0.5 * 1e9,
             rel=1e-1,
         ), "Test failed with pytest's approx."
-        assert test_results[t1].did_pass
+        assert test_results[0].did_pass
 
         t2 = random.randint(4, 7)  # random_index_second_category
-        assert test_results[t2].id.function_getting_tested == "sleepfunc_sequence"
-        assert test_results[t2].id.iteration_id == f"0_{t2-4}"  # second test suite iteration starts from 0
-        assert test_results[t2].id.test_class_name is None
-        assert test_results[t2].id.test_function_name == "test_sleepfunc_sequence_long"
+        assert test_results[4].id.function_getting_tested == "sleepfunc_sequence"
+        assert test_results[4].id.iteration_id == "0_0"  # second test suite iteration starts from 0
+        assert test_results[4].id.test_class_name is None
+        assert test_results[4].id.test_function_name == "test_sleepfunc_sequence_long"
         assert (
-            test_results[t2].id.test_module_path
+            test_results[4].id.test_module_path
             == "code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp"
         )
         sum_long_sleep_test_cases_runtime = sum(test_results[i].runtime for i in range(4, 8))
@@ -2423,6 +2423,6 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
             rel=1e-1,
         ), "Test failed with pytest's approx."
 
-        assert test_results[t2].did_pass
+        assert test_results[4].did_pass
     finally:
         test_path.unlink(missing_ok=True)
