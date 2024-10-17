@@ -2266,12 +2266,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    """
-    if sys.version_info < (3, 12):
-        expected += """print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")"""
-    else:
-        expected += """print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!')"""
-    expected += """
+    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
     gc.disable()
     counter = time.perf_counter_ns()
     return_value = wrapped(*args, **kwargs)
@@ -2316,10 +2311,10 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
         with test_path.open("w") as f:
             f.write(code)
 
-        tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/").resolve()
+        tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/").resolve()
         project_root_path = (Path(__file__).parent.resolve() / "../").resolve()
-        run_cwd = Path(__file__).parent.parent.resolve()
         original_cwd = Path.cwd()
+        run_cwd = Path(__file__).parent.parent.resolve()
         func = FunctionToOptimize(
             function_name="sleepfunc_sequence",
             parents=[],
@@ -2341,14 +2336,6 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
         test_type = TestType.EXISTING_UNIT_TEST
         assert success, "Test for time evaluation failed"
         assert new_test is not None
-        print("--new_test--", new_test.replace('"', "'"))
-        print(
-            "--expected--",
-            expected.format(
-                module_path="code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp",
-                tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
-            ).replace('"', "'"),
-        )
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp",
             tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
