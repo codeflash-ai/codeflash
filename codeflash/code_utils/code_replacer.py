@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from functools import lru_cache
 from typing import TYPE_CHECKING, TypeVar
 
 import libcst as cst
@@ -29,6 +30,7 @@ def normalize_node(node: ASTNodeT) -> ASTNodeT:
     return node
 
 
+@lru_cache(maxsize=None)
 def normalize_code(code: str) -> str:
     return ast.unparse(normalize_node(ast.parse(code)))
 
