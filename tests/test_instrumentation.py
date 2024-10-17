@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import os
+import random
 import sys
 import tempfile
 from argparse import Namespace
@@ -2220,14 +2221,27 @@ def test_code_replacement10() -> None:
 
 
 def test_time_correction_instrumentation() -> None:
-    code = """from code_to_optimize.sleeptime import sleepfunc
-def test_sleepfunc():
-    t=2
-    output= sleepfunc(t)
-    assert output==1
-    t=4
-    output= sleepfunc(t)
-    assert output==1
+    code = """from code_to_optimize.sleeptime import sleepfunc_sequence
+import pytest
+@pytest.mark.parametrize("n, expected_total_sleep_time", [
+    (1, 0.01),
+    (2, 0.01 + 0.02),
+    (4, sum(i / 100 for i in range(5))),
+    (8, sum(i / 100 for i in range(9))),
+])
+def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
+    output= sleepfunc_sequence(n)
+    assert output == 1
+
+@pytest.mark.parametrize("n, expected_total_sleep_time", [
+    (10, sum(i / 100 for i in range(11))),
+    (15, sum(i / 100 for i in range(16))),
+    (20, sum(i / 100 for i in range(21))),
+    (25, sum(i / 100 for i in range(26))),
+])
+def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
+    output= sleepfunc_sequence(n)
+    assert output == 1
 """
 
     expected = """import gc
@@ -2237,7 +2251,7 @@ import time
 
 import dill as pickle
 
-from code_to_optimize.sleeptime import sleepfunc
+from code_to_optimize.sleeptime import sleepfunc_sequence
 
 
 def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
@@ -2265,17 +2279,25 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_con.commit()
     return return_value
 
-def test_sleepfunc():
+@pytest.mark.parametrize('n, expected_total_sleep_time', [(1, 0.01), (2, 0.01 + 0.02), (4, sum((i / 100 for i in range(5)))), (8, sum((i / 100 for i in range(9))))])
+def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
-    t = 2
-    output = codeflash_wrap(sleepfunc, '{module_path}', None, 'test_sleepfunc', 'sleepfunc', '1', codeflash_loop_index, codeflash_cur, codeflash_con, t)
+    output = codeflash_wrap(sleepfunc_sequence, '{module_path}', None, 'test_sleepfunc_sequence_short', 'sleepfunc_sequence', '0', codeflash_loop_index, codeflash_cur, codeflash_con, n)
     assert output == 1
-    t = 4
-    output = codeflash_wrap(sleepfunc, '{module_path}', None, 'test_sleepfunc', 'sleepfunc', '4', codeflash_loop_index, codeflash_cur, codeflash_con, t)
+    codeflash_con.close()
+
+@pytest.mark.parametrize('n, expected_total_sleep_time', [(10, sum((i / 100 for i in range(11)))), (15, sum((i / 100 for i in range(16)))), (20, sum((i / 100 for i in range(21)))), (25, sum((i / 100 for i in range(26))))])
+def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
+    codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
+    codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
+    codeflash_cur = codeflash_con.cursor()
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+    output = codeflash_wrap(sleepfunc_sequence, '{module_path}', None, 'test_sleepfunc_sequence_long', 'sleepfunc_sequence', '0', codeflash_loop_index, codeflash_cur, codeflash_con, n)
     assert output == 1
     codeflash_con.close()
 """
@@ -2293,14 +2315,14 @@ def test_sleepfunc():
         original_cwd = os.getcwd()
         run_cwd = pathlib.Path(__file__).parent.parent.resolve()
         func = FunctionToOptimize(
-            function_name="sleepfunc",
+            function_name="sleepfunc_sequence",
             parents=[],
             file_path="module.py",
         )
         os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
             test_path,
-            [CodePosition(4, 8), CodePosition(7, 8)],
+            [CodePosition(10, 13), CodePosition(20, 13)],
             func,
             project_root_path,
             "pytest",
@@ -2309,10 +2331,9 @@ def test_sleepfunc():
 
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
-        test_env["CODEFLASH_LOOP_INDEX"] = "1"
+        test_env["CODEFLASH_LOOP_INDEX"] = "3"
         test_type = TestType.EXISTING_UNIT_TEST
         assert success, "Test for time evaluation failed"
-
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp",
             tmp_dir_path=get_run_tmp_file("test_return_values"),
@@ -2332,10 +2353,6 @@ def test_sleepfunc():
                 experiment_id=None,
             ),
         )
-        test_env = os.environ.copy()
-        test_env["CODEFLASH_TEST_ITERATION"] = "0"
-        test_env["CODEFLASH_LOOP_INDEX"] = "1"
-        test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
             test_files=[
                 TestFile(
@@ -2351,36 +2368,54 @@ def test_sleepfunc():
             optimization_iteration=0,
             test_functions=None,
             pytest_min_loops=1,
-            pytest_max_loops=1,
+            pytest_max_loops=3,
             testing_time=0.1,
         )
-        assert test_results[0].id.function_getting_tested == "sleepfunc"
-        assert test_results[0].id.iteration_id == "1_0"
-        assert test_results[0].id.test_class_name is None
-        assert test_results[0].id.test_function_name == "test_sleepfunc"
+
+        # Summary of Calculated Sleep Times
+        #
+        # |  n  | Total Sleep Time (seconds) |
+        # |-----|----------------------------|
+        # |  0  |           0.00             |
+        # |  1  |           0.01             |
+        # |  2  |           0.03             |
+        # |  4  |           0.10             |
+        # |  8  |           0.36             |
+        # | 10  |           0.55             |
+        # | 15  |           1.20             |
+        # | 20  |           2.10             |
+        # | 25  |           3.25             |
+        t1 = random.randint(0, 3)  # random_index_first_category
+        assert test_results[t1].id.function_getting_tested == "sleepfunc_sequence"
+        assert test_results[t1].id.iteration_id == f"0_{t1}"
+        assert test_results[t1].id.test_class_name is None
+        assert test_results[t1].id.test_function_name == "test_sleepfunc_sequence_short"
         assert (
-            test_results[0].id.test_module_path
+            test_results[t1].id.test_module_path
             == "code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp"
         )
-        assert test_results[0].runtime == pytest.approx(
-            0.02 * 1e9,
-            rel=1e-2,
+        sum_short_sleep_test_cases_runtime = sum(test_results[i].runtime for i in range(4))
+        assert sum_short_sleep_test_cases_runtime == pytest.approx(
+            0.5 * 1e9,
+            rel=1e-1,
         ), "Test failed with pytest's approx."
-        assert test_results[0].did_pass
+        assert test_results[t1].did_pass
 
-        assert test_results[1].id.function_getting_tested == "sleepfunc"
-        assert test_results[1].id.iteration_id == "4_0"
-        assert test_results[1].id.test_class_name is None
-        assert test_results[1].id.test_function_name == "test_sleepfunc"
+        t2 = random.randint(4, 7)  # random_index_second_category
+        assert test_results[t2].id.function_getting_tested == "sleepfunc_sequence"
+        assert test_results[t2].id.iteration_id == f"0_{t2-4}"  # second test suite iteration starts from 0
+        assert test_results[t2].id.test_class_name is None
+        assert test_results[t2].id.test_function_name == "test_sleepfunc_sequence_long"
         assert (
-            test_results[1].id.test_module_path
+            test_results[t2].id.test_module_path
             == "code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp"
         )
-        assert test_results[1].runtime == pytest.approx(
-            0.04 * 1e9,
-            rel=1e-2,
+        sum_long_sleep_test_cases_runtime = sum(test_results[i].runtime for i in range(4, 8))
+        assert sum_long_sleep_test_cases_runtime == pytest.approx(
+            7.11 * 1e9,
+            rel=1e-1,
         ), "Test failed with pytest's approx."
 
-        assert test_results[1].did_pass
+        assert test_results[t2].did_pass
     finally:
         pathlib.Path(test_path).unlink(missing_ok=True)
