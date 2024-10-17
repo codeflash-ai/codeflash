@@ -2339,14 +2339,6 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
         test_type = TestType.EXISTING_UNIT_TEST
         assert success, "Test for time evaluation failed"
         assert new_test is not None
-        print("--new_test--", new_test.replace('"', "'"))
-        print(
-            "--expected--",
-            expected.format(
-                module_path="code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp",
-                tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
-            ).replace('"', "'"),
-        )
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp",
             tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
