@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import ast
+import math
 import os
 import sys
 import tempfile
 from argparse import Namespace
 from pathlib import Path
 
-import pytest
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.instrument_existing_tests import (
     FunctionImportedAsVisitor,
@@ -2230,7 +2230,7 @@ import pytest
 ])
 def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
     output = sleepfunc_sequence(n)
-    assert output == 1
+    assert output == expected_total_sleep_time
 
 @pytest.mark.parametrize("n, expected_total_sleep_time", [
     (10, 0.10),
@@ -2240,7 +2240,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
 ])
 def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
     output = sleepfunc_sequence(n)
-    assert output == 1
+    assert output == expected_total_sleep_time
 """
 
     expected = """import gc
@@ -2286,7 +2286,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     output = codeflash_wrap(sleepfunc_sequence, '{module_path}', None, 'test_sleepfunc_sequence_short', 'sleepfunc_sequence', '0', codeflash_loop_index, codeflash_cur, codeflash_con, n)
-    assert output == 1
+    assert output == expected_total_sleep_time
     codeflash_con.close()
 
 @pytest.mark.parametrize('n, expected_total_sleep_time', [(10, 0.1), (20, 0.2), (30, 0.3), (40, 0.4)])
@@ -2297,7 +2297,7 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
     output = codeflash_wrap(sleepfunc_sequence, '{module_path}', None, 'test_sleepfunc_sequence_long', 'sleepfunc_sequence', '0', codeflash_loop_index, codeflash_cur, codeflash_con, n)
-    assert output == 1
+    assert output == expected_total_sleep_time
     codeflash_con.close()
 """
 
@@ -2338,7 +2338,6 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
             module_path="code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp",
             tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
         ).replace('"', "'")
-
         # Overwrite old test with new instrumented test
         with test_path.open("w") as f:
             f.write(new_test)
@@ -2382,13 +2381,23 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
             == "code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp"
         )
         assert test_results[4].did_pass
-
+        total_passed_runtime: int = 0
         # time validation with 10% for test suite 1 and 1% tolerance for test suite 2, i.e. ~0.001 to ~0.004 seconds
         for i, test_result in enumerate(test_results):
-            assert test_result.runtime == pytest.approx(
-                (i % 8 + 1) * 1e7 if (i % 8) < 4 else (i % 8 - 3) * 1e8,
-                rel=1e-1 if i < 4 else 9e-2,
-            ), "Test failed with pytest's approx."
+            total_passed_runtime += test_result.runtime or 0  # Defaults to 0 if runtime is None
+            expected_runtime = (i % 8 + 1) * 1e7 if (i % 8) < 4 else (i % 8 - 3) * 1e8
+            rel_tolerance = 1e-1 if i < 4 else 9e-2
+            is_close = math.isclose(test_result.runtime, expected_runtime, rel_tol=rel_tolerance)
+            assert is_close, f"Test {i} failed: runtime {test_result.runtime} not within tolerance of {expected_runtime} with rel_tol={rel_tolerance}"
+
+        # Validate total_passed_runtime
+
+        expected_total = (sum((i + 1) * 1e7 for i in range(4)) + sum((i - 3) * 1e8 for i in range(4, 8))) * 3
+        assert math.isclose(
+            total_passed_runtime,
+            expected_total,
+            rel_tol=1e-2,
+        ), f"Total passed runtime: {total_passed_runtime} does not match the expected: {expected_total} sum."
 
     finally:
         test_path.unlink(missing_ok=True)

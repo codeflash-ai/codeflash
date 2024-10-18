@@ -1,6 +1,8 @@
+import math
 import time
 
 
-def sleepfunc_sequence(t) -> int:
-    time.sleep(t / 100)
-    return 1
+def sleepfunc_sequence(t) -> float:
+    output = t / 100
+    time.sleep(output)
+    return output
