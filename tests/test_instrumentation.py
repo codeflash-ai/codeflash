@@ -2405,7 +2405,7 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
 
 def test_time_correction_only_replay_test() -> None:
     code = """import dill as pickle
-import unittest
+import pytest
 from codeflash.tracing.replay_test import get_next_arg_and_return
 from codeflash.validation.equivalence import compare_results
 from code_to_optimize.sleeptime import sleepfunc_sequence
@@ -2429,10 +2429,8 @@ import time
 
 import dill as pickle
 import pytest
-from packagename.ml.yolo.image_reshaping_utils import \\
-    prepare_image_for_yolo as \\
-    packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo
 
+from code_to_optimize.sleeptime import sleepfunc_sequence
 from codeflash.tracing.replay_test import get_next_arg_and_return
 from codeflash.validation.equivalence import compare_results
 
@@ -2466,7 +2464,8 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_con.commit()
     return return_value
 
-def test_prepare_image_for_yolo():
+@pytest.mark.parametrize('n, expected_total_sleep_time', [(1, 0.01), (2, 0.02), (3, 0.03), (4, 0.04)])
+def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
@@ -2481,7 +2480,7 @@ def test_prepare_image_for_yolo():
 """
     expected += """        args = pickle.loads(arg_val_pkl)
         return_val_1 = pickle.loads(return_val_pkl)
-        ret = codeflash_wrap(sleepfunc_sequence, '{module_path}', None, 'test_prepare_image_for_yolo', 'packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo', '0_2', codeflash_loop_index, codeflash_cur, codeflash_con, **args)
+        ret = codeflash_wrap(sleepfunc_sequence, '{module_path}', None, 'test_sleepfunc_sequence_short', 'sleepfunc_sequence', '0_2', codeflash_loop_index, codeflash_cur, codeflash_con, **args)
         assert compare_results(return_val_1, ret)
     codeflash_con.close()
 """
@@ -2498,7 +2497,7 @@ def test_prepare_image_for_yolo():
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
             Path(f.name),
-            [CodePosition(10, 13), CodePosition(20, 13)],
+            [CodePosition(16, 15)],
             func,
             Path(f.name).parent,
             "pytest",
