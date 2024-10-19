@@ -2401,3 +2401,305 @@ def test_sleepfunc_sequence_long(n, expected_total_sleep_time):
 
     finally:
         test_path.unlink(missing_ok=True)
+
+
+def test_time_correction_only_replay_test() -> None:
+    code = """import dill as pickle
+import unittest
+from codeflash.tracing.replay_test import get_next_arg_and_return
+from codeflash.validation.equivalence import compare_results
+from code_to_optimize.sleeptime import sleepfunc_sequence
+@pytest.mark.parametrize("n, expected_total_sleep_time", [
+    (1, 0.010),
+    (2, 0.020),
+    (3, 0.030),
+    (4, 0.040),
+])
+def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
+    for arg_val_pkl, return_val_pkl in get_next_arg_and_return('/home/saurabh/packagename/traces/first.trace', 3):
+        args = pickle.loads(arg_val_pkl)
+        return_val_1= pickle.loads(return_val_pkl)
+        ret = sleepfunc_sequence(**args)
+        assert compare_results(return_val_1, ret)
+"""
+    expected = """import gc
+import os
+import sqlite3
+import time
+
+import dill as pickle
+import pytest
+from packagename.ml.yolo.image_reshaping_utils import \\
+    prepare_image_for_yolo as \\
+    packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo
+
+from codeflash.tracing.replay_test import get_next_arg_and_return
+from codeflash.validation.equivalence import compare_results
+
+
+def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
+    if not hasattr(codeflash_wrap, 'index'):
+        codeflash_wrap.index = {{}}
+    if test_id in codeflash_wrap.index:
+        codeflash_wrap.index[test_id] += 1
+    else:
+        codeflash_wrap.index[test_id] = 0
+    codeflash_test_index = codeflash_wrap.index[test_id]
+    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    """
+    if sys.version_info < (3, 12):
+        expected += """print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")"""
+    else:
+        expected += """print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!')"""
+    expected += """
+    gc.disable()
+    counter = time.perf_counter_ns()
+    return_value = wrapped(*args, **kwargs)
+    codeflash_duration = time.perf_counter_ns() - counter
+    gc.enable()
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
+    codeflash_con.commit()
+    return return_value
+
+def test_prepare_image_for_yolo():
+    codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
+    codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
+    codeflash_cur = codeflash_con.cursor()
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+"""
+    if sys.version_info < (3, 11):
+        expected += """    for (arg_val_pkl, return_val_pkl) in get_next_arg_and_return('/home/saurabh/packagename/traces/first.trace', 3):
+"""
+    else:
+        expected += """    for arg_val_pkl, return_val_pkl in get_next_arg_and_return('/home/saurabh/packagename/traces/first.trace', 3):
+"""
+    expected += """        args = pickle.loads(arg_val_pkl)
+        return_val_1 = pickle.loads(return_val_pkl)
+        ret = codeflash_wrap(sleepfunc_sequence, '{module_path}', None, 'test_prepare_image_for_yolo', 'packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo', '0_2', codeflash_loop_index, codeflash_cur, codeflash_con, **args)
+        assert compare_results(return_val_1, ret)
+    codeflash_con.close()
+"""
+    with tempfile.NamedTemporaryFile(mode="w") as f:
+        f.write(code)
+        f.flush()
+        func = FunctionToOptimize(
+            function_name="sleepfunc_sequence",
+            parents=[],
+            file_path=Path("module.py"),
+        )
+        original_cwd = Path.cwd()
+        run_cwd = Path(__file__).parent.parent.resolve()
+        os.chdir(run_cwd)
+        success, new_test = inject_profiling_into_existing_test(
+            Path(f.name),
+            [CodePosition(10, 13), CodePosition(20, 13)],
+            func,
+            Path(f.name).parent,
+            "pytest",
+        )
+        os.chdir(original_cwd)
+    assert success
+    assert new_test == expected.format(
+        module_path=Path(f.name).name,
+        tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+    )
+
+
+def test_time_correction_instrumentation_unittest() -> None:
+    code = """import unittest
+from parameterized import parameterized
+
+from code_to_optimize.sleeptime import sleepfunc_sequence
+
+class TestPigLatin(unittest.TestCase):
+    @parameterized.expand([
+        (1, 0.010),
+        (2, 0.020),
+        (3, 0.030),
+        (4, 0.040),
+    ])
+    def test_sleepfunc_sequence_short(self, n, expected_total_sleep_time):
+        output = sleepfunc_sequence(n)
+        self.assertEqual(n, expected_total_sleep_time)
+
+    @parameterized.expand([
+        (10, 0.10),
+        (20, 0.20),
+        (30, 0.30),
+        (40, 0.40),
+    ])
+    def test_sleepfunc_sequence_slightlong(self, n, expected_total_sleep_time):
+        output = sleepfunc_sequence(n)
+        self.assertEqual(n, expected_total_sleep_time)
+"""
+
+    expected = """import gc
+import os
+import sqlite3
+import time
+import unittest
+
+import dill as pickle
+import timeout_decorator
+from parameterized import parameterized
+
+from code_to_optimize.sleeptime import sleepfunc_sequence
+
+
+def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
+    if not hasattr(codeflash_wrap, 'index'):
+        codeflash_wrap.index = {{}}
+    if test_id in codeflash_wrap.index:
+        codeflash_wrap.index[test_id] += 1
+    else:
+        codeflash_wrap.index[test_id] = 0
+    codeflash_test_index = codeflash_wrap.index[test_id]
+    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
+    gc.disable()
+    counter = time.perf_counter_ns()
+    return_value = wrapped(*args, **kwargs)
+    codeflash_duration = time.perf_counter_ns() - counter
+    gc.enable()
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
+    codeflash_con.commit()
+    return return_value
+
+class TestPigLatin(unittest.TestCase):
+
+    @parameterized.expand([(1, 0.01), (2, 0.02), (3, 0.03), (4, 0.04)])
+    @timeout_decorator.timeout(15)
+    def test_sleepfunc_sequence_short(self, n, expected_total_sleep_time):
+        codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
+        codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
+        codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
+        codeflash_cur = codeflash_con.cursor()
+        codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+        output = codeflash_wrap(sleepfunc_sequence, '{module_path}', 'TestPigLatin', 'test_sleepfunc_sequence_short', 'sleepfunc_sequence', '0', codeflash_loop_index, codeflash_cur, codeflash_con, n)
+        self.assertEqual(n, expected_total_sleep_time)
+        codeflash_con.close()
+
+    @parameterized.expand([(10, 0.1), (20, 0.2), (30, 0.3), (40, 0.4)])
+    @timeout_decorator.timeout(15)
+    def test_sleepfunc_sequence_slightlong(self, n, expected_total_sleep_time):
+        codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
+        codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
+        codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
+        codeflash_cur = codeflash_con.cursor()
+        codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
+        output = codeflash_wrap(sleepfunc_sequence, '{module_path}', 'TestPigLatin', 'test_sleepfunc_sequence_slightlong', 'sleepfunc_sequence', '0', codeflash_loop_index, codeflash_cur, codeflash_con, n)
+        self.assertEqual(n, expected_total_sleep_time)
+        codeflash_con.close()
+"""
+
+    test_path = (
+        Path(__file__).parent.resolve()
+        / "../code_to_optimize/tests/unittest/test_time_correction_instrumentation_unittest_temp.py"
+    ).resolve()
+    try:
+        with test_path.open("w") as f:
+            f.write(code)
+
+        tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/unittest/").resolve()
+        project_root_path = (Path(__file__).parent.resolve() / "../").resolve()
+        original_cwd = Path.cwd()
+        run_cwd = Path(__file__).parent.parent.resolve()
+        func = FunctionToOptimize(
+            function_name="sleepfunc_sequence",
+            parents=[],
+            file_path=Path("module.py"),
+        )
+        os.chdir(run_cwd)
+        success, new_test = inject_profiling_into_existing_test(
+            test_path,
+            [CodePosition(14, 18), CodePosition(24, 18)],
+            func,
+            project_root_path,
+            "unittest",
+        )
+        os.chdir(original_cwd)
+
+        test_env = os.environ.copy()
+        test_env["CODEFLASH_TEST_ITERATION"] = "0"
+        test_env["CODEFLASH_LOOP_INDEX"] = "1"
+        test_type = TestType.EXISTING_UNIT_TEST
+        assert success, "Test instrumentation failed"
+        assert new_test is not None
+        assert new_test.replace('"', "'") == expected.format(
+            module_path="code_to_optimize.tests.unittest.test_time_correction_instrumentation_unittest_temp",
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+        ).replace('"', "'")
+        # Overwrite old test with new instrumented test
+        with test_path.open("w") as f:
+            f.write(new_test)
+
+        opt = Optimizer(
+            Namespace(
+                project_root=str(project_root_path),
+                disable_telemetry=True,
+                tests_root=str(tests_root),
+                test_framework="unittest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+            ),
+        )
+        test_files = TestFiles(
+            test_files=[
+                TestFile(
+                    instrumented_file_path=test_path,
+                    test_type=test_type,
+                    original_file_path=test_path,
+                ),
+            ],
+        )
+        test_results = opt.run_and_parse_tests(
+            test_env=test_env,
+            test_files=test_files,
+            optimization_iteration=0,
+            test_functions=None,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+
+        # random validations for successful excution of the test
+        assert test_results[0].id.function_getting_tested == "sleepfunc_sequence"
+        assert test_results[0].id.iteration_id == "0_0"
+        assert test_results[0].id.test_class_name == "TestPigLatin"
+        assert test_results[0].id.test_function_name == "test_sleepfunc_sequence_short"
+        assert (
+            test_results[0].id.test_module_path
+            == "code_to_optimize.tests.unittest.test_time_correction_instrumentation_unittest_temp"
+        )
+        assert test_results[4].did_pass
+        total_passed_runtime: int = 0
+        # time validation with 10% for test suite 1 and 1% tolerance for test suite 2, i.e. ~0.001 to ~0.004 seconds
+        for i, test_result in enumerate(test_results):
+            total_passed_runtime += test_result.runtime or 0  # Defaults to 0 if runtime is None
+            expected_runtime = (i % 8 + 1) * 1e7 if (i % 8) < 4 else (i % 8 - 3) * 1e8
+            rel_tolerance = 1e-1 if i < 4 else 9e-2
+            is_close = math.isclose(test_result.runtime, expected_runtime, rel_tol=rel_tolerance)
+            assert is_close, f"Test {i} failed: runtime {test_result.runtime} not within tolerance of {expected_runtime} with rel_tol={rel_tolerance}"
+
+        # Validate total_passed_runtime
+
+        expected_total = sum((i + 1) * 1e7 for i in range(4)) + sum((i - 3) * 1e8 for i in range(4, 8))
+        assert math.isclose(
+            total_passed_runtime,
+            expected_total,
+            rel_tol=1e-2,
+        ), f"Total passed runtime: {total_passed_runtime} does not match the expected: {expected_total} sum."
+
+    finally:
+        test_path.unlink(missing_ok=True)
