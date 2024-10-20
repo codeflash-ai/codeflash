@@ -763,7 +763,7 @@ class Optimizer:
                     continue
 
                 new_test_path = Path(
-                    f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}"
+                    f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}",
                 )
                 if injected_test is not None:
                     with new_test_path.open("w", encoding="utf8") as _f:
