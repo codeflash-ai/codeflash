@@ -5,7 +5,7 @@ import sys
 from typing import Callable, NoReturn
 
 import click
-import inquirer
+import inquirer  # type: ignore[import-untyped]
 
 
 def apologize_and_exit() -> NoReturn:
@@ -16,7 +16,7 @@ def apologize_and_exit() -> NoReturn:
     sys.exit(1)
 
 
-def inquirer_wrapper(func: Callable, *args, **kwargs) -> str | bool:
+def inquirer_wrapper(func: Callable[..., str | bool], *args, **kwargs) -> str | bool:
     message = None
     response = None
     new_args = []
@@ -65,9 +65,8 @@ def split_string_to_cli_width(string: str, is_confirm: bool = False) -> list[str
     return lines
 
 
-def inquirer_wrapper_path(*args, **kwargs) -> dict[str]:
+def inquirer_wrapper_path(*args: str, **kwargs: str) -> dict[str, str]:
     message = None
-    response = None
     new_args = []
     new_kwargs = {}
 
@@ -86,7 +85,8 @@ def inquirer_wrapper_path(*args, **kwargs) -> dict[str]:
             inquirer.Path(*new_args, **new_kwargs),
         ],
     )
-    return response
+
+    return response or {}
 
 
 def split_string_to_fit_width(string: str, width: int) -> list[str]:
