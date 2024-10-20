@@ -88,7 +88,6 @@ if TYPE_CHECKING:
     )
     from codeflash.discovery.discover_unit_tests import (
         FunctionCalledInTest,
-        TestsInFile,
     )
     from codeflash.models.models import (
         FunctionSource,
@@ -118,7 +117,7 @@ class Optimizer:
         if not env_utils.ensure_codeflash_api_key():
             return
 
-        file_to_funcs_to_optimize: dict[str, list[FunctionToOptimize]]
+        file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
         num_optimizable_functions: int
 
         (
@@ -199,7 +198,7 @@ class Optimizer:
     def optimize_function(
         self,
         function_to_optimize: FunctionToOptimize,
-        function_to_tests: dict[str, list[TestsInFile]],
+        function_to_tests: dict[str, list[FunctionCalledInTest]],
         original_code: str,
     ) -> Result[BestOptimization, str]:
         should_run_experiment = self.experiment_id is not None
@@ -303,7 +302,7 @@ class Optimizer:
             if candidates is None:
                 continue
 
-            tests_in_file: list[TestsInFile] = function_to_tests.get(
+            tests_in_file: list[FunctionCalledInTest] = function_to_tests.get(
                 function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root),
                 [],
             )
@@ -409,7 +408,7 @@ class Optimizer:
         original_code_baseline: OriginalCodeBaseline,
         original_helper_code: dict[Path, str],
         function_trace_id: str,
-        only_run_this_test_function: list[TestsInFile] | None = None,
+        only_run_this_test_function: list[FunctionCalledInTest] | None = None,
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime  # The fastest code runtime until now
@@ -423,9 +422,6 @@ class Optimizer:
         )
         try:
             for candidate_index, candidate in enumerate(candidates, start=1):
-                if candidate.source_code is None:
-                    continue
-                # remove left overs from previous run
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
                 logger.info(f"Optimized candidate {candidate_index}/{len(candidates)}:")
@@ -591,7 +587,7 @@ class Optimizer:
         helper_functions: list[FunctionSource],
         path: Path,
         original_code: str,
-    ) -> tuple[str, dict[str, str]]:
+    ) -> tuple[str, dict[Path, str]]:
         should_sort_imports = not self.args.disable_imports_sorting
         if should_sort_imports and isort.code(original_code) != original_code:
             should_sort_imports = False
@@ -603,7 +599,7 @@ class Optimizer:
         if should_sort_imports and new_code is not None:
             new_code = sort_imports(new_code)
 
-        new_helper_code: dict[str, str] = {}
+        new_helper_code: dict[Path, str] = {}
         helper_functions_paths = {hf.file_path for hf in helper_functions}
         for module_abspath in helper_functions_paths:
             formatted_helper_code = format_code(
@@ -613,7 +609,7 @@ class Optimizer:
             if should_sort_imports and formatted_helper_code is not None:
                 formatted_helper_code = sort_imports(formatted_helper_code)
             if formatted_helper_code is not None:
-                new_helper_code[str(module_abspath)] = formatted_helper_code
+                new_helper_code[module_abspath] = formatted_helper_code
 
         return new_code or "", new_helper_code
 
@@ -733,7 +729,7 @@ class Optimizer:
     def instrument_existing_tests(
         self,
         function_to_optimize: FunctionToOptimize,
-        function_to_tests: dict[str, list[TestsInFile]],
+        function_to_tests: dict[str, list[FunctionCalledInTest]],
     ) -> set[Path]:
         relevant_test_files_count = 0
         unique_instrumented_test_files = set()
@@ -748,7 +744,9 @@ class Optimizer:
         else:
             test_file_invocation_positions = defaultdict(list)
             for tests_in_file in function_to_tests.get(func_qualname):
-                test_file_invocation_positions[tests_in_file.test_file].append(tests_in_file.position)
+                test_file_invocation_positions[tests_in_file.tests_in_file.test_file].append(
+                    tests_in_file.position,
+                )
             for test_file, positions in test_file_invocation_positions.items():
                 path_obj_test_file = Path(test_file)
                 relevant_test_files_count += 1
@@ -848,7 +846,7 @@ class Optimizer:
         self,
         function_name: str,
         generated_tests_paths: list[Path],
-        tests_in_file: list[TestsInFile],
+        tests_in_file: list[FunctionCalledInTest],
     ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
         success = True
@@ -870,12 +868,14 @@ class Optimizer:
             relevant_tests_in_file = [
                 test_in_file
                 for test_in_file in tests_in_file
-                if test_in_file.test_file == test_file.original_file_path
+                if test_in_file.tests_in_file.test_file == test_file.original_file_path
             ]
-            is_replay_test = (first_test_type := relevant_tests_in_file[0].test_type) == TestType.REPLAY_TEST
+            is_replay_test = (
+                first_test_type := relevant_tests_in_file[0].tests_in_file.test_type
+            ) == TestType.REPLAY_TEST
             first_test_types.append(first_test_type)
             first_test_functions.append(
-                relevant_tests_in_file[0].test_function if is_replay_test else None,
+                relevant_tests_in_file[0].tests_in_file.test_function if is_replay_test else None,
             )
             if is_replay_test and len(relevant_tests_in_file) > 1:
                 logger.warning(
@@ -971,9 +971,9 @@ class Optimizer:
         self,
         *,
         optimization_candidate_index: int,
-        original_test_results: TestResults,
+        original_test_results: TestResults | None,
         best_runtime_until_now: int,
-        tests_in_file: list[TestsInFile],
+        tests_in_file: list[FunctionCalledInTest] | None,
     ) -> Result[OptimizedCandidateResult, str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
@@ -1005,12 +1005,14 @@ class Optimizer:
             relevant_tests_in_file = [
                 test_in_file
                 for test_in_file in tests_in_file
-                if test_in_file.test_file == test_file.original_file_path
+                if test_in_file.tests_in_file.test_file == test_file.original_file_path
             ]
-            is_replay_test = (first_test_type := relevant_tests_in_file[0].test_type) == TestType.REPLAY_TEST
+            is_replay_test = (
+                first_test_type := relevant_tests_in_file[0].tests_in_file.test_type
+            ) == TestType.REPLAY_TEST
             first_test_types.append(first_test_type)
             first_test_functions.append(
-                relevant_tests_in_file[0].test_function if is_replay_test else None,
+                relevant_tests_in_file[0].tests_in_file.test_function if is_replay_test else None,
             )
             if is_replay_test and len(relevant_tests_in_file) > 1:
                 logger.warning(
