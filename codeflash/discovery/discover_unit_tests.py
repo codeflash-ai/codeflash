@@ -36,11 +36,7 @@ class CodePosition:
 
 @dataclass(frozen=True)
 class FunctionCalledInTest:
-    test_file: Path
-    test_class: Optional[str]  # This might be unused…
-    test_function: str
-    test_suite: Optional[str]
-    test_type: TestType
+    tests_in_file: TestsInFile
     position: CodePosition
 
 
@@ -307,11 +303,13 @@ def process_test_files(
                         qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
                         function_to_test_map[qualified_name_with_modules_from_root].append(
                             FunctionCalledInTest(
-                                test_file=test_file,
-                                test_class=None,
-                                test_function=scope_test_function,
-                                test_suite=scope_test_suite,
-                                test_type=test_type,
+                                tests_in_file=TestsInFile(
+                                    test_file=test_file,
+                                    test_class=None,
+                                    test_function=scope_test_function,
+                                    test_suite=scope_test_suite,
+                                    test_type=test_type,
+                                ),
                                 position=CodePosition(
                                     line_no=name.line,
                                     col_no=name.column,
