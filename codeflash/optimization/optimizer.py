@@ -866,14 +866,16 @@ class Optimizer:
 
         for test_file in self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
             relevant_tests_in_file = [
-                test_in_file.tests_in_file
+                test_in_file
                 for test_in_file in tests_in_file
                 if test_in_file.tests_in_file.test_file == test_file.original_file_path
             ]
-            is_replay_test = (first_test_type := relevant_tests_in_file[0].test_type) == TestType.REPLAY_TEST
+            is_replay_test = (
+                first_test_type := relevant_tests_in_file[0].tests_in_file.test_type
+            ) == TestType.REPLAY_TEST
             first_test_types.append(first_test_type)
             first_test_functions.append(
-                relevant_tests_in_file[0].test_function if is_replay_test else None,
+                relevant_tests_in_file[0].tests_in_file.test_function if is_replay_test else None,
             )
             if is_replay_test and len(relevant_tests_in_file) > 1:
                 logger.warning(
@@ -1001,14 +1003,16 @@ class Optimizer:
 
         for test_file in instrumented_unittests_created_for_function:
             relevant_tests_in_file = [
-                test_in_file.tests_in_file
+                test_in_file
                 for test_in_file in tests_in_file
-                if test_in_file.test_file == test_file.original_file_path
+                if test_in_file.tests_in_file.test_file == test_file.original_file_path
             ]
-            is_replay_test = (first_test_type := relevant_tests_in_file[0].test_type) == TestType.REPLAY_TEST
+            is_replay_test = (
+                first_test_type := relevant_tests_in_file[0].tests_in_file.test_type
+            ) == TestType.REPLAY_TEST
             first_test_types.append(first_test_type)
             first_test_functions.append(
-                relevant_tests_in_file[0].test_function if is_replay_test else None,
+                relevant_tests_in_file[0].tests_in_file.test_function if is_replay_test else None,
             )
             if is_replay_test and len(relevant_tests_in_file) > 1:
                 logger.warning(
