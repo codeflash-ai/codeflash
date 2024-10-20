@@ -93,28 +93,29 @@ def get_repo_owner_and_name(repo: Optional[Repo] = None) -> tuple[str, str]:
     return repo_owner, repo_name
 
 
-def git_root_dir(repo: Optional[Repo] = None) -> str:
+def git_root_dir(repo: Optional[Repo] = None) -> Path:
     repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
-    return repository.working_dir
+    return Path(repository.working_dir)
 
 
 def check_running_in_git_repo(module_root: str) -> bool:
     try:
         _ = git.Repo(module_root, search_parent_directories=True).git_dir
-        return True
-    except git.exc.InvalidGitRepositoryError:
+    except git.InvalidGitRepositoryError:
         return confirm_proceeding_with_no_git_repo()
+    else:
+        return True
 
 
 def confirm_proceeding_with_no_git_repo() -> bool:
-    if sys.__stdin__.isatty():
+    if sys.__stdin__ is not None and sys.__stdin__.isatty():
         return inquirer_wrapper(
             inquirer.confirm,
             message="WARNING: I did not find a git repository for your code. If you proceed in running codeflash, optimized code will"
             " be written over your current code and you could irreversibly lose your current code. Proceed?",
             default=False,
-        )
-    # continue running on non-interactive environments, important for GitHub actions
+        )  # type: ignore[return-value]
+        # we have the default value set to False, so we can safely ignore the return value
     return True
 
 
