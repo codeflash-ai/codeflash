@@ -5,9 +5,8 @@ import os
 import re
 import subprocess
 import sys
-from argparse import Namespace
 from pathlib import Path
-from typing import Optional, NoReturn
+from typing import TYPE_CHECKING, Optional
 
 import click
 import git
@@ -36,6 +35,9 @@ from codeflash.code_utils.shell_utils import (
 )
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as version
+
+if TYPE_CHECKING:
+    from argparse import Namespace
 
 CODEFLASH_LOGO: str = (
     f"{LF}"
