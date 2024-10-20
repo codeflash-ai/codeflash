@@ -1,11 +1,12 @@
+from __future__ import annotations
+
 import os
 import re
-import shlex
 import unittest
 from collections import defaultdict
 from multiprocessing import Process, Queue
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Optional
 
 import jedi
 from pydantic.dataclasses import dataclass
@@ -13,7 +14,9 @@ from pydantic.dataclasses import dataclass
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.verification.test_results import TestType
-from codeflash.verification.verification_utils import TestConfig
+
+if TYPE_CHECKING:
+    from codeflash.verification.verification_utils import TestConfig
 
 
 @dataclass(frozen=True)
@@ -34,7 +37,7 @@ class CodePosition:
 @dataclass(frozen=True)
 class FunctionCalledInTest:
     test_file: Path
-    test_class: Optional[str]  # This might be unused...
+    test_class: Optional[str]  # This might be unused…
     test_function: str
     test_suite: Optional[str]
     test_type: TestType
@@ -51,27 +54,25 @@ class TestFunction:
 
 def discover_unit_tests(
     cfg: TestConfig,
-    discover_only_these_tests: Optional[List[str]] = None,
-) -> Dict[str, List[FunctionCalledInTest]]:
-    test_frameworks = {
-        "pytest": discover_tests_pytest,
-        "unittest": discover_tests_unittest,
-    }
-    discover_tests = test_frameworks.get(cfg.test_framework)
-    if discover_tests is None:
-        raise ValueError(f"Unsupported test framework: {cfg.test_framework}")
-    return discover_tests(cfg, discover_only_these_tests)
+    discover_only_these_tests: list[str] | None = None,
+) -> dict[str, list[FunctionCalledInTest]]:
+    if cfg.test_framework == "pytest":
+        return discover_tests_pytest(cfg, discover_only_these_tests)
+    if cfg.test_framework == "unittest":
+        return discover_tests_unittest(cfg, discover_only_these_tests)
+    msg = f"Unsupported test framework: {cfg.test_framework}"
+    raise ValueError(msg)
 
 
-def run_pytest_discovery_new_process(queue: Queue, cwd: str, tests_root: str) -> Tuple[int, List]:
+def run_pytest_discovery_new_process(queue: Queue, cwd: str, tests_root: str) -> tuple[int, list] | None:
     import pytest
 
     os.chdir(cwd)
     collected_tests = []
-    tests = []
+    tests: list[TestsInFile] = []
 
     class PytestCollectionPlugin:
-        def pytest_collection_finish(self, session):
+        def pytest_collection_finish(self, session) -> None:
             collected_tests.extend(session.items)
 
     try:
@@ -89,8 +90,8 @@ def run_pytest_discovery_new_process(queue: Queue, cwd: str, tests_root: str) ->
 
 def parse_pytest_collection_results(
     pytest_tests: str,
-) -> List[TestsInFile]:
-    test_results = []
+) -> list[TestsInFile]:
+    test_results: list[TestsInFile] = []
     for test in pytest_tests:
         test_class = None
         test_file_path = str(test.path)
@@ -111,17 +112,13 @@ def parse_pytest_collection_results(
 
 def discover_tests_pytest(
     cfg: TestConfig,
-    discover_only_these_tests: Optional[List[str]] = None,
-) -> Dict[str, List[FunctionCalledInTest]]:
+    discover_only_these_tests: list[str] | None = None,
+) -> dict[str, list[FunctionCalledInTest]]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
-    pytest_cmd_list = shlex.split(
-        cfg.pytest_cmd,
-        posix=os.name != "nt",
-    )  # TODO: Do we need this for test collection?
 
-    q = Queue()
-    p = Process(target=run_pytest_discovery_new_process, args=(q, project_root, tests_root))
+    q: Queue = Queue()
+    p: Process = Process(target=run_pytest_discovery_new_process, args=(q, project_root, tests_root))
     p.start()
     exitcode, tests = q.get()
     p.join()
@@ -138,14 +135,14 @@ def discover_tests_pytest(
 
 def discover_tests_unittest(
     cfg: TestConfig,
-    discover_only_these_tests: Optional[List[str]] = None,
-) -> Dict[str, List[FunctionCalledInTest]]:
-    tests_root = Path(cfg.tests_root)
-    loader = unittest.TestLoader()
-    tests = loader.discover(str(tests_root))
-    file_to_test_map = defaultdict(list)
+    discover_only_these_tests: list[str] | None = None,
+) -> dict[str, list[FunctionCalledInTest]]:
+    tests_root: Path = cfg.tests_root
+    loader: unittest.TestLoader = unittest.TestLoader()
+    tests: unittest.TestSuite = loader.discover(str(tests_root))
+    file_to_test_map: defaultdict[str, list[TestsInFile]] = defaultdict(list)
 
-    def get_test_details(_test) -> Optional[TestsInFile]:
+    def get_test_details(_test: unittest.TestCase) -> TestsInFile | None:
         _test_function, _test_module, _test_suite_name = (
             _test._testMethodName,
             _test.__class__.__module__,
@@ -195,7 +192,7 @@ def discover_tests_unittest(
     return process_test_files(file_to_test_map, cfg)
 
 
-def discover_parameters_unittest(function_name: str):
+def discover_parameters_unittest(function_name: str) -> tuple[bool, str, str | None]:
     function_name = function_name.split("_")
     if len(function_name) > 1 and function_name[-1].isdigit():
         return True, "_".join(function_name[:-1]), function_name[-1]
@@ -204,9 +201,9 @@ def discover_parameters_unittest(function_name: str):
 
 
 def process_test_files(
-    file_to_test_map: Dict[str, List[TestsInFile]],
+    file_to_test_map: dict[str, list[TestsInFile]],
     cfg: TestConfig,
-) -> Dict[str, List[FunctionCalledInTest]]:
+) -> dict[str, list[FunctionCalledInTest]]:
     project_root_path = cfg.project_root_path
     test_framework = cfg.test_framework
     function_to_test_map = defaultdict(list)
@@ -224,8 +221,8 @@ def process_test_files(
                 functions_to_search = [elem.test_function for elem in functions]
                 for i, function in enumerate(functions_to_search):
                     if "[" in function:
-                        function_name = re.split(r"\[|\]", function)[0]
-                        parameters = re.split(r"\[|\]", function)[1]
+                        function_name = re.split(r"[\[\]]", function)[0]
+                        parameters = re.split(r"[\[\]]", function)[1]
                         if name.name == function_name and name.type == "function":
                             test_functions.add(
                                 TestFunction(name.name, None, parameters, functions[i].test_type),

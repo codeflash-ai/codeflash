@@ -681,8 +681,8 @@ def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test
         )
     finally:
         # Delete the bubble_sort.py file after the test
-        pathlib.Path(bubble_sort_path).unlink(missing_ok=True)
-        pathlib.Path(bubble_sort_test_path).unlink(missing_ok=True)
+        Path(bubble_sort_path).unlink(missing_ok=True)
+        Path(bubble_sort_test_path).unlink(missing_ok=True)
         click.echo(f"{LF}🗑️ Deleted {bubble_sort_path}")
         click.echo(f"{LF}🗑️ Deleted {bubble_sort_test_path}")
 
