@@ -184,7 +184,7 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
         # Ensure that the user can actually open PRs on the repo.
         try:
             git_repo = git.Repo(search_parent_directories=True)
-        except git.exc.InvalidGitRepositoryError:
+        except git.InvalidGitRepositoryError:
             logger.exception(
                 "I couldn't find a git repository in the current directory. "
                 "I need a git repository to run --all and open PRs for optimizations. Exiting...",
