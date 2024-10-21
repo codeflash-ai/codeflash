@@ -5,13 +5,14 @@ import os
 import re
 import subprocess
 import sys
+from argparse import Namespace
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 import click
 import git
-import inquirer  # type: ignore[import-untyped]
-import inquirer.themes  # type: ignore[import-untyped]
+import inquirer
+import inquirer.themes
 import tomlkit
 from git import Repo
 from pydantic.dataclasses import dataclass
@@ -35,9 +36,6 @@ from codeflash.code_utils.shell_utils import (
 )
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as version
-
-if TYPE_CHECKING:
-    from argparse import Namespace
 
 CODEFLASH_LOGO: str = (
     f"{LF}"
@@ -140,8 +138,8 @@ def collect_setup_info() -> SetupInfo:
 
     valid_module_subdirs = [d for d in valid_subdirs if d != "tests"]
 
-    curdir_option = f"current directory ({curdir})"
-    module_subdir_options = [*valid_module_subdirs, curdir_option]
+    curdir_option = "current directory (" + curdir + ")"
+    module_subdir_options = valid_module_subdirs + [curdir_option]
 
     module_root_answer = inquirer_wrapper(
         inquirer.list_input,
@@ -180,13 +178,13 @@ def collect_setup_info() -> SetupInfo:
             "path",
             message=f"Enter the path to your tests directory inside {Path(curdir).resolve()}{os.path.sep} ",
             path_type=inquirer.Path.DIRECTORY,
+            exists=True,
         )
-        if custom_tests_root_answer:
-            tests_root = Path(custom_tests_root_answer["path"])
-        else:
-            apologize_and_exit()
+        tests_root = (
+            Path(custom_tests_root_answer["path"]) if custom_tests_root_answer else apologize_and_exit()
+        )
     else:
-        tests_root = Path(str(tests_root_answer))
+        tests_root = Path(tests_root_answer)
     tests_root = tests_root.relative_to(curdir)
     ph("cli-tests-root-provided")
 
@@ -218,13 +216,13 @@ def collect_setup_info() -> SetupInfo:
     #                                   default='', show_default=False)
     # ignore_paths = ignore_paths_input.split(',') if ignore_paths_input else [f'tests{os.pathsep}']
     ignore_paths: list[str] = []
-    # for the below, all of these str() calls are unnecessary since their default values are already strings, but let's make mypy happy for
+
     return SetupInfo(
-        module_root=str(module_root),
-        tests_root=str(tests_root),
-        test_framework=str(test_framework),
+        module_root=module_root,
+        tests_root=tests_root,
+        test_framework=test_framework,
         ignore_paths=ignore_paths,
-        formatter=str(formatter),
+        formatter=formatter,
     )
 
 
@@ -282,7 +280,7 @@ def check_for_toml_or_setup_file() -> Optional[str]:
     if pyproject_toml_path.exists():
         try:
             pyproject_toml_content = pyproject_toml_path.read_text(encoding="utf8")
-            project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]  # type: ignore[index]
+            project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]
             click.echo(f"✅ I found a pyproject.toml for your project {project_name}.")
             ph("cli-pyproject-toml-found-name")
         except Exception:
@@ -341,10 +339,7 @@ def check_for_toml_or_setup_file() -> Optional[str]:
             click.echo("⏩️ Skipping pyproject.toml creation.")
             apologize_and_exit()
     click.echo()
-
-    if project_name:
-        return str(project_name)
-    return None
+    return project_name
 
 
 def install_github_actions() -> None:
@@ -420,7 +415,7 @@ def install_github_actions() -> None:
             prompt_suffix="",
             show_default=False,
         )
-        click.launch(optimize_yaml_path.as_posix())
+        click.launch(optimize_yaml_path)
         click.echo(
             "📝 I opened the workflow file in your editor! You'll need to edit the steps that install the right Python "
             f"version and any project dependencies. See the comments in the file for more details.{LF}",
@@ -532,7 +527,7 @@ def install_github_app() -> None:
 class CFAPIKeyType(click.ParamType):
     name = "cfapi-key"
 
-    def convert(self, value: str, param: click.Parameter | None, ctx: click.Context | None) -> str:
+    def convert(self, value, param, ctx):
         value = value.strip()
         if value.startswith("cf-") or value == "":
             return value
@@ -541,7 +536,6 @@ class CFAPIKeyType(click.ParamType):
             param,
             ctx,
         )
-        return ""
 
 
 # Returns True if the user entered a new API key, False if they used an existing one
