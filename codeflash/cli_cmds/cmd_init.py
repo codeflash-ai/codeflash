@@ -185,7 +185,7 @@ def collect_setup_info() -> SetupInfo:
             tests_root = Path(custom_tests_root_answer["path"])
         else:
             apologize_and_exit()
-    elif tests_root_answer in valid_subdirs:
+    else:
         tests_root = Path(cast(str, tests_root_answer))
     tests_root = tests_root.relative_to(curdir)
     ph("cli-tests-root-provided")
