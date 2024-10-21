@@ -6,12 +6,12 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, cast
 
 import click
 import git
-import inquirer  # type: ignore[import-untyped]
-import inquirer.themes  # type: ignore[import-untyped]
+import inquirer
+import inquirer.themes
 import tomlkit
 from git import Repo
 from pydantic.dataclasses import dataclass
@@ -185,8 +185,8 @@ def collect_setup_info() -> SetupInfo:
             tests_root = Path(custom_tests_root_answer["path"])
         else:
             apologize_and_exit()
-    else:
-        tests_root = Path(str(tests_root_answer))
+    elif tests_root_answer in valid_subdirs:
+        tests_root = Path(cast(str, tests_root_answer))
     tests_root = tests_root.relative_to(curdir)
     ph("cli-tests-root-provided")
 
@@ -218,17 +218,16 @@ def collect_setup_info() -> SetupInfo:
     #                                   default='', show_default=False)
     # ignore_paths = ignore_paths_input.split(',') if ignore_paths_input else [f'tests{os.pathsep}']
     ignore_paths: list[str] = []
-    # for the below, all of these str() calls are unnecessary since their default values are already strings, but let's make mypy happy for
     return SetupInfo(
-        module_root=str(module_root),
-        tests_root=str(tests_root),
-        test_framework=str(test_framework),
+        module_root=cast(str, module_root),
+        tests_root=cast(str, tests_root),
+        test_framework=cast(str, test_framework),
         ignore_paths=ignore_paths,
-        formatter=str(formatter),
+        formatter=cast(str, formatter),
     )
 
 
-def detect_test_framework(curdir: Path, tests_root: Path) -> Optional[str]:
+def detect_test_framework(curdir: Path, tests_root: Path) -> str | None:
     test_framework = None
     pytest_files = ["pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg"]
     pytest_config_patterns = {
@@ -272,7 +271,7 @@ def detect_test_framework(curdir: Path, tests_root: Path) -> Optional[str]:
     return test_framework
 
 
-def check_for_toml_or_setup_file() -> Optional[str]:
+def check_for_toml_or_setup_file() -> str | None:
     click.echo()
     click.echo("Checking for pyproject.toml or setup.py ...\r", nl=False)
     curdir = Path.cwd()
@@ -282,7 +281,7 @@ def check_for_toml_or_setup_file() -> Optional[str]:
     if pyproject_toml_path.exists():
         try:
             pyproject_toml_content = pyproject_toml_path.read_text(encoding="utf8")
-            project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]  # type: ignore[index]
+            project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]
             click.echo(f"✅ I found a pyproject.toml for your project {project_name}.")
             ph("cli-pyproject-toml-found-name")
         except Exception:
@@ -341,10 +340,7 @@ def check_for_toml_or_setup_file() -> Optional[str]:
             click.echo("⏩️ Skipping pyproject.toml creation.")
             apologize_and_exit()
     click.echo()
-
-    if project_name:
-        return str(project_name)
-    return None
+    return cast(str, project_name)
 
 
 def install_github_actions() -> None:
@@ -532,7 +528,7 @@ def install_github_app() -> None:
 class CFAPIKeyType(click.ParamType):
     name = "cfapi-key"
 
-    def convert(self, value: str, param: click.Parameter | None, ctx: click.Context | None) -> str:
+    def convert(self, value: str, param: click.Parameter | None, ctx: click.Context | None) -> str | None:
         value = value.strip()
         if value.startswith("cf-") or value == "":
             return value
@@ -541,7 +537,7 @@ class CFAPIKeyType(click.ParamType):
             param,
             ctx,
         )
-        return ""
+        return None
 
 
 # Returns True if the user entered a new API key, False if they used an existing one

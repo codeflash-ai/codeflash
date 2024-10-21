@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import shutil
 import sys
-from typing import Callable, NoReturn
+from typing import Callable
 
 import click
-import inquirer  # type: ignore[import-untyped]
+import inquirer
 
 
-def apologize_and_exit() -> NoReturn:
+def apologize_and_exit() -> None:
     click.echo(
         "💡 If you're having trouble, see https://docs.codeflash.ai/getting-started/local-installation for further help getting started with Codeflash!",
     )
@@ -41,9 +41,7 @@ def inquirer_wrapper(func: Callable[..., str | bool], *args, **kwargs) -> str | 
     else:
         new_kwargs["message"] = last_message
 
-    response = func(*new_args, **new_kwargs)
-
-    return response
+    return func(*new_args, **new_kwargs)
 
 
 def split_string_to_cli_width(string: str, is_confirm: bool = False) -> list[str]:

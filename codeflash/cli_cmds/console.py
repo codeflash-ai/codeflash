@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -13,7 +12,7 @@ console = Console(record=True)
 logging.basicConfig(
     level=logging.INFO,
     handlers=[
-        RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)
+        RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False),
     ],
     format=BARE_LOGGING_FORMAT,
 )
@@ -23,8 +22,8 @@ logger = logging.getLogger("rich")
 
 def paneled_text(
     text: str,
-    panel_args: dict[str, Any] | None = None,
-    text_args: dict[str, Any] | None = None,
+    panel_args: dict[str, str | bool] | None = None,
+    text_args: dict[str, str] | None = None,
 ) -> None:
     from rich.panel import Panel
     from rich.text import Text

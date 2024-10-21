@@ -4,15 +4,17 @@ import sys
 import time
 from io import StringIO
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING
 
 import git
 import inquirer
-from git import Repo
 from unidiff import PatchSet
 
 from codeflash.cli_cmds.cli_common import inquirer_wrapper
 from codeflash.cli_cmds.console import logger
+
+if TYPE_CHECKING:
+    from git import Repo
 
 
 def get_git_diff(
@@ -66,7 +68,7 @@ def get_git_diff(
     return change_list
 
 
-def get_current_branch(repo: Optional[Repo] = None) -> str:
+def get_current_branch(repo: Repo | None = None) -> str:
     """Returns the name of the current branch in the given repository.
 
     :param repo: An optional Repo object. If not provided, the function will
@@ -77,12 +79,12 @@ def get_current_branch(repo: Optional[Repo] = None) -> str:
     return repository.active_branch.name
 
 
-def get_remote_url(repo: Optional[Repo] = None) -> str:
+def get_remote_url(repo: Repo | None = None) -> str:
     repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
     return repository.remote().url
 
 
-def get_repo_owner_and_name(repo: Optional[Repo] = None) -> tuple[str, str]:
+def get_repo_owner_and_name(repo: Repo | None = None) -> tuple[str, str]:
     remote_url = get_remote_url(repo)  # call only once
     remote_url = get_remote_url(repo).removesuffix(".git") if remote_url.endswith(".git") else remote_url
     split_url = remote_url.split("/")
@@ -93,7 +95,7 @@ def get_repo_owner_and_name(repo: Optional[Repo] = None) -> tuple[str, str]:
     return repo_owner, repo_name
 
 
-def git_root_dir(repo: Optional[Repo] = None) -> Path:
+def git_root_dir(repo: Repo | None = None) -> Path:
     repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
     return Path(repository.working_dir)
 
@@ -107,16 +109,17 @@ def check_running_in_git_repo(module_root: str) -> bool:
         return True
 
 
-def confirm_proceeding_with_no_git_repo() -> bool:
-    if sys.__stdin__ is not None and sys.__stdin__.isatty():
-        return inquirer_wrapper(
+def confirm_proceeding_with_no_git_repo() -> str | bool:
+    return (
+        inquirer_wrapper(
             inquirer.confirm,
             message="WARNING: I did not find a git repository for your code. If you proceed in running codeflash, optimized code will"
             " be written over your current code and you could irreversibly lose your current code. Proceed?",
             default=False,
-        )  # type: ignore[return-value]
-        # we have the default value set to False, so we can safely ignore the return value
-    return True
+        )
+        if sys.__stdin__ is not None and sys.__stdin__.isatty()
+        else True
+    )
 
 
 def check_and_push_branch(repo: git.Repo, wait_for_push: bool = False) -> bool:
