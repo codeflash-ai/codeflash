@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import shutil
 import sys
-from typing import Callable
+from typing import Callable, cast
 
 import click
 import inquirer
@@ -17,7 +17,9 @@ def apologize_and_exit() -> None:
 
 
 def inquirer_wrapper(
-    func: Callable, *args: tuple[str | bool, ...], **kwargs: dict[str, str | bool]
+    func: Callable[[*tuple[str], *tuple[str]], str | bool],
+    *args: str,
+    **kwargs: str,
 ) -> str | bool:
     new_args = []
     new_kwargs = {}
@@ -63,12 +65,8 @@ def split_string_to_cli_width(string: str, is_confirm: bool = False) -> list[str
     return lines
 
 
-def inquirer_wrapper_path(*args, **kwargs) -> dict[str]:
-    message = None
-    response = None
+def inquirer_wrapper_path(*args: str, **kwargs: str) -> dict[str, str]:
     new_args = []
-    new_kwargs = {}
-
     message = kwargs["message"]
     new_kwargs = kwargs.copy()
     split_messages = split_string_to_cli_width(message)
@@ -79,12 +77,14 @@ def inquirer_wrapper_path(*args, **kwargs) -> dict[str]:
     new_kwargs["message"] = last_message
     new_args.append(args[0])
 
-    response = inquirer.prompt(
-        [
-            inquirer.Path(*new_args, **new_kwargs),
-        ],
+    return cast(
+        dict[str, str],
+        inquirer.prompt(
+            [
+                inquirer.Path(*new_args, **new_kwargs),
+            ],
+        ),
     )
-    return response
 
 
 def split_string_to_fit_width(string: str, width: int) -> list[str]:
