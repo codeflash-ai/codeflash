@@ -16,9 +16,9 @@ def apologize_and_exit() -> None:
     sys.exit(1)
 
 
-def inquirer_wrapper(func: Callable, *args, **kwargs) -> str | bool:
-    message = None
-    response = None
+def inquirer_wrapper(
+    func: Callable, *args: tuple[str | bool, ...], **kwargs: dict[str, str | bool]
+) -> str | bool:
     new_args = []
     new_kwargs = {}
 
