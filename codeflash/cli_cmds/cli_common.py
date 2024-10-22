@@ -17,9 +17,9 @@ def apologize_and_exit() -> None:
 
 
 def inquirer_wrapper(
-    func: Callable[[*tuple[str], *tuple[str]], str | bool],
-    *args: str,
-    **kwargs: str,
+    func: Callable[..., str | bool],
+    *args: str | bool,
+    **kwargs: str | bool,
 ) -> str | bool:
     new_args = []
     new_kwargs = {}
