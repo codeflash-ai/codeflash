@@ -816,7 +816,7 @@ class Optimizer:
                 ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             )
             future_candidates_exp = None
-            futures: list = [future_tests, future_optimization_candidates]
+            futures: list = future_tests + [future_optimization_candidates]
             if run_experiment:
                 future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
@@ -828,7 +828,7 @@ class Optimizer:
                 futures.append(future_candidates_exp)
 
             # Wait for all futures to complete
-            concurrent.futures.wait(futuresfuture_optimization_candidates)
+            concurrent.futures.wait(futures)
 
             # Retrieve results
             candidates: list[OptimizedCandidate] = future_optimization_candidates.result()
@@ -1188,35 +1188,6 @@ class Optimizer:
             for test_index in range(N_TESTS_TO_GENERATE)
         ]
         return futures
-        # try:
-        #     tests: list[GeneratedTests] = []
-        #     test_count = 0
-        #     for future in concurrent.futures.as_completed(futures):
-        #         res = future.result()
-        #         if res:
-        #             test_count += 1
-        #             generated_test_source, instrumented_test_source = res
-        #             tests.append(
-        #                 GeneratedTests(
-        #                     generated_original_test_source=generated_test_source,
-        #                     instrumented_test_source=instrumented_test_source,
-        #                 ),
-        #             )
-        #
-        #     logger.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
-        # except Exception as e:
-        #     logger.warning(
-        #         f"Failed to generate and instrument tests for {function_to_optimize.function_name}: {e}",
-        #     )
-        #     return None
-        #
-        # if not tests:
-        #     logger.warning(
-        #         f"Failed to generate and instrument tests for {function_to_optimize.function_name}",
-        #     )
-        #     return None
-        #
-        # return GeneratedTestsList(generated_tests=tests)
 
 
 def run_with_args(args: Namespace) -> None:
