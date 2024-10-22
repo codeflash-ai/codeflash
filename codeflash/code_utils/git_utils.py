@@ -104,7 +104,7 @@ def check_running_in_git_repo(module_root: str) -> bool:
     try:
         _ = git.Repo(module_root, search_parent_directories=True).git_dir
     except git.InvalidGitRepositoryError:
-        return confirm_proceeding_with_no_git_repo()
+        return False
     else:
         return True
 
@@ -113,7 +113,7 @@ def confirm_proceeding_with_no_git_repo() -> str | bool:
     if sys.__stdin__.isatty():
         return inquirer_wrapper(
             inquirer.confirm,
-            message="WARNING: I did not find a git repository for your code. If you proceed in running codeflash, optimized code will"
+            message="WARNING: I did not find a git repository for your code. If you proceed with running codeflash, optimized code will"
             " be written over your current code and you could irreversibly lose your current code. Proceed?",
             default=False,
         )

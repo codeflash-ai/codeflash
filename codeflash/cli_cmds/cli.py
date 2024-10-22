@@ -124,7 +124,7 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     try:
         pyproject_config, pyproject_file_path = parse_config_file(args.config_file)
     except ValueError as e:
-        logger.error(e.args[0])
+        logger.error(e)
         sys.exit(1)
     supported_keys = [
         "module_root",
