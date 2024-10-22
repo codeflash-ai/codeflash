@@ -182,11 +182,11 @@ def collect_setup_info() -> SetupInfo:
             path_type=inquirer.Path.DIRECTORY,
         )
         if custom_tests_root_answer:
-            tests_root = Path(custom_tests_root_answer["path"])
+            tests_root = Path(curdir) / Path(custom_tests_root_answer["path"])
         else:
             apologize_and_exit()
     else:
-        tests_root = Path(cast(str, tests_root_answer))
+        tests_root = Path(curdir) / Path(cast(str, tests_root_answer))
     tests_root = tests_root.relative_to(curdir)
     ph("cli-tests-root-provided")
 
@@ -219,8 +219,8 @@ def collect_setup_info() -> SetupInfo:
     # ignore_paths = ignore_paths_input.split(',') if ignore_paths_input else [f'tests{os.pathsep}']
     ignore_paths: list[str] = []
     return SetupInfo(
-        module_root=cast(str, module_root),
-        tests_root=cast(str, tests_root),
+        module_root=str(module_root),
+        tests_root=str(tests_root),
         test_framework=cast(str, test_framework),
         ignore_paths=ignore_paths,
         formatter=cast(str, formatter),
@@ -477,7 +477,11 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
 
 
 def install_github_app() -> None:
-    git_repo = git.Repo(search_parent_directories=True)
+    try:
+        git_repo = git.Repo(search_parent_directories=True)
+    except git.InvalidGitRepositoryError:
+        click.echo("Skipping GitHub app installation because you're not in a git repository.")
+        return
     owner, repo = get_repo_owner_and_name(git_repo)
 
     if is_github_app_installed_on_repo(owner, repo):
