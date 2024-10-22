@@ -799,9 +799,8 @@ class Optimizer:
             logger.info(f"Generating new tests for function {function_to_optimize.function_name} ...")
 
             # Submit the test generation task as future
-            future_tests = executor.submit(
-                self.generate_and_instrument_tests,
-                max_workers,
+            future_tests = self.generate_and_instrument_tests(
+                executor,
                 code_to_optimize_with_helpers,
                 function_to_optimize,
                 [definition.fully_qualified_name for definition in helper_functions],
@@ -1148,52 +1147,50 @@ class Optimizer:
 
     def generate_and_instrument_tests(
         self,
-        max_workers,
+        executor: concurrent.futures.ThreadPoolExecutor,
         source_code_being_tested: str,
         function_to_optimize: FunctionToOptimize,
         helper_function_names: list[str],
         module_path: Path,
         function_trace_id: str,
     ) -> GeneratedTestsList | None:
-        # To avoid deadlocks with parent function, using seperate executor for test generation
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [
-                executor.submit(
-                    generate_tests,
-                    self.aiservice_client,
-                    source_code_being_tested,
-                    function_to_optimize,
-                    helper_function_names,
-                    module_path,
-                    self.test_cfg,
-                    INDIVIDUAL_TESTCASE_TIMEOUT,
-                    self.args.use_cached_tests,
-                    function_trace_id,
-                    test_index,
-                )
-                for test_index in range(N_TESTS_TO_GENERATE)
-            ]
-            try:
-                tests: list[GeneratedTests] = []
-                test_count = 0
-                for future in concurrent.futures.as_completed(futures):
-                    res = future.result()
-                    if res:
-                        test_count += 1
-                        generated_test_source, instrumented_test_source = res
-                        tests.append(
-                            GeneratedTests(
-                                generated_original_test_source=generated_test_source,
-                                instrumented_test_source=instrumented_test_source,
-                            ),
-                        )
+        futures = [
+            executor.submit(
+                generate_tests,
+                self.aiservice_client,
+                source_code_being_tested,
+                function_to_optimize,
+                helper_function_names,
+                module_path,
+                self.test_cfg,
+                INDIVIDUAL_TESTCASE_TIMEOUT,
+                self.args.use_cached_tests,
+                function_trace_id,
+                test_index,
+            )
+            for test_index in range(N_TESTS_TO_GENERATE)
+        ]
+        try:
+            tests: list[GeneratedTests] = []
+            test_count = 0
+            for future in concurrent.futures.as_completed(futures):
+                res = future.result()
+                if res:
+                    test_count += 1
+                    generated_test_source, instrumented_test_source = res
+                    tests.append(
+                        GeneratedTests(
+                            generated_original_test_source=generated_test_source,
+                            instrumented_test_source=instrumented_test_source,
+                        ),
+                    )
 
-                logger.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
-            except Exception as e:
-                logger.warning(
-                    f"Failed to generate and instrument tests for {function_to_optimize.function_name}: {e}",
-                )
-                return None
+            logger.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
+        except Exception as e:
+            logger.warning(
+                f"Failed to generate and instrument tests for {function_to_optimize.function_name}: {e}",
+            )
+            return None
 
         if not tests:
             logger.warning(
