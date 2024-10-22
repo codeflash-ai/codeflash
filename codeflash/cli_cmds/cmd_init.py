@@ -16,7 +16,6 @@ import tomlkit
 from git import Repo
 from pydantic.dataclasses import dataclass
 from returns.pipeline import is_successful
-from tomlkit.container import Container
 
 from codeflash.api.cfapi import is_github_app_installed_on_repo
 from codeflash.cli_cmds.cli_common import apologize_and_exit, inquirer_wrapper, inquirer_wrapper_path
@@ -276,9 +275,8 @@ def check_for_toml_or_setup_file() -> str | None:
     project_name = None
     if pyproject_toml_path.exists():
         try:
-            with Path.open(pyproject_toml_path) as f:
-                tool = tomlkit.parse(f.read())["tool"]
-            project_name = cast(Container, tool).get("poetry", {}).get("name")
+            pyproject_toml_content = pyproject_toml_path.read_text(encoding="utf8")
+            project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]
             click.echo(f"✅ I found a pyproject.toml for your project {project_name}.")
             ph("cli-pyproject-toml-found-name")
         except Exception:
