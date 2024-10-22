@@ -77,7 +77,6 @@ def init_codeflash() -> None:
             f"    codeflash --file <path-to-file> --function <function-name> to optimize a function within a file{LF}"
             f"    codeflash --file <path-to-file> to optimize all functions in a file{LF}"
             f"    codeflash --all to optimize all functions in all files in the module you selected ({setup_info.module_root}){LF}"
-            # f"    codeflash --pr <pr-number> to optimize a PR{LF}"
             f"-or-{LF}"
             f"    codeflash --help to see all options{LF}",
         )
@@ -213,10 +212,6 @@ def collect_setup_info() -> SetupInfo:
         carousel=True,
     )
 
-    # Ask for paths to ignore and update the setup_info dictionary
-    # ignore_paths_input = click.prompt("Are there any paths Codeflash should ignore? (comma-separated, no spaces)",
-    #                                   default='', show_default=False)
-    # ignore_paths = ignore_paths_input.split(',') if ignore_paths_input else [f'tests{os.pathsep}']
     ignore_paths: list[str] = []
     return SetupInfo(
         module_root=cast(str, module_root),
@@ -530,14 +525,13 @@ class CFAPIKeyType(click.ParamType):
 
     def convert(self, value: str, param: click.Parameter | None, ctx: click.Context | None) -> str | None:
         value = value.strip()
-        if value.startswith("cf-") or value == "":
-            return value
-        self.fail(
-            f"That key [{value}] seems to be invalid. It should start with a 'cf-' prefix. Please try again.",
-            param,
-            ctx,
-        )
-        return None
+        if not value.startswith("cf-") and value != "":
+            self.fail(
+                f"That key [{value}] seems to be invalid. It should start with a 'cf-' prefix. Please try again.",
+                param,
+                ctx,
+            )
+        return value
 
 
 # Returns True if the user entered a new API key, False if they used an existing one
@@ -670,8 +664,6 @@ def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test
         "--function",
         "sorter",
     ]
-    animation = "|/-\\"
-    idx = 0
     sys.stdout.write("Running sample optimization... ")
     sys.stdout.flush()
     try:
