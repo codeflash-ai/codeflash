@@ -67,7 +67,7 @@ def run_pytest_discovery_new_process(queue: Queue, cwd: str, tests_root: str) ->
     os.chdir(cwd)
     collected_tests = []
     tests: list[TestsInFile] = []
-    sys.path.insert(0, str(cwd))
+    sys.path.insert(1, str(cwd))
 
     class PytestCollectionPlugin:
         def pytest_collection_finish(self, session) -> None:

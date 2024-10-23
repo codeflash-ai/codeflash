@@ -799,7 +799,8 @@ class Optimizer:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             logger.info(f"Generating new tests for function {function_to_optimize.function_name} ...")
 
-            tests = self.generate_and_instrument_tests(
+            # Submit the test generation task as future
+            future_tests = self.generate_and_instrument_tests(
                 executor,
                 code_to_optimize_with_helpers,
                 function_to_optimize,
@@ -815,6 +816,8 @@ class Optimizer:
                 N_CANDIDATES,
                 ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             )
+            future_candidates_exp = None
+            futures: list = future_tests + [future_optimization_candidates]
             if run_experiment:
                 future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
@@ -823,19 +826,42 @@ class Optimizer:
                     N_CANDIDATES,
                     ExperimentMetadata(id=self.experiment_id, group="experiment"),
                 )
+                futures.append(future_candidates_exp)
 
+            # Wait for all futures to complete
+            concurrent.futures.wait(futures)
+
+            # Retrieve results
             candidates: list[OptimizedCandidate] = future_optimization_candidates.result()
+            if not candidates:
+                return Failure(f"/!\\ NO OPTIMIZATIONS GENERATED for {function_to_optimize.function_name}")
 
-            candidates_experiment = future_candidates_exp.result() if run_experiment else None
+            candidates_experiment = future_candidates_exp.result() if future_candidates_exp else None
 
-        if not tests:
-            return Failure(f"/!\\ NO TESTS GENERATED for {function_to_optimize.function_name}")
-        if not candidates:
-            return Failure(f"/!\\ NO OPTIMIZATIONS GENERATED for {function_to_optimize.function_name}")
+            # Process test generation results
+
+            tests: list[GeneratedTests] = []
+            for future in future_tests:
+                res = future.result()
+                if res:
+                    generated_test_source, instrumented_test_source = res
+                    tests.append(
+                        GeneratedTests(
+                            generated_original_test_source=generated_test_source,
+                            instrumented_test_source=instrumented_test_source,
+                        ),
+                    )
+            if not tests:
+                logger.warning(
+                    f"Failed to generate and instrument tests for {function_to_optimize.function_name}",
+                )
+                return Failure(f"/!\\ NO TESTS GENERATED for {function_to_optimize.function_name}")
+            logger.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
+            generated_tests = GeneratedTestsList(generated_tests=tests)
 
         return Success(
             (
-                tests,
+                generated_tests,
                 OptimizationSet(
                     control=candidates,
                     experiment=candidates_experiment,
@@ -1145,7 +1171,7 @@ class Optimizer:
         helper_function_names: list[str],
         module_path: Path,
         function_trace_id: str,
-    ) -> GeneratedTestsList | None:
+    ) -> list[concurrent.futures.Future]:
         futures = [
             executor.submit(
                 generate_tests,
@@ -1162,35 +1188,7 @@ class Optimizer:
             )
             for test_index in range(N_TESTS_TO_GENERATE)
         ]
-        try:
-            tests: list[GeneratedTests] = []
-            test_count = 0
-            for future in concurrent.futures.as_completed(futures):
-                res = future.result()
-                if res:
-                    test_count += 1
-                    generated_test_source, instrumented_test_source = res
-                    tests.append(
-                        GeneratedTests(
-                            generated_original_test_source=generated_test_source,
-                            instrumented_test_source=instrumented_test_source,
-                        ),
-                    )
-
-            logger.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
-        except Exception as e:
-            logger.warning(
-                f"Failed to generate and instrument tests for {function_to_optimize.function_name}: {e}",
-            )
-            return None
-
-        if not tests:
-            logger.warning(
-                f"Failed to generate and instrument tests for {function_to_optimize.function_name}",
-            )
-            return None
-
-        return GeneratedTestsList(generated_tests=tests)
+        return futures
 
 
 def run_with_args(args: Namespace) -> None:
