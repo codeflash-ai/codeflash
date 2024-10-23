@@ -66,24 +66,27 @@ def run_pytest_discovery_new_process(queue: Queue, cwd: str, tests_root: str) ->
 
     os.chdir(cwd)
     collected_tests = []
+    pytest_rootdir: Path | None = None
     tests: list[TestsInFile] = []
     sys.path.insert(1, str(cwd))
 
     class PytestCollectionPlugin:
         def pytest_collection_finish(self, session) -> None:
+            nonlocal pytest_rootdir
             collected_tests.extend(session.items)
+            pytest_rootdir = Path(session.config.rootdir)
 
     try:
         exitcode = pytest.main(
-            [tests_root, "--collect-only", "-pno:terminal", "-m", "not skip"],
+            [tests_root, "--collect-only", "-m", "not skip"],
             plugins=[PytestCollectionPlugin()],
         )
     except Exception as e:
         logger.exception(f"Failed to collect tests: {e!s}")
         exitcode = -1
-        queue.put((exitcode, tests))
+        queue.put((exitcode, tests, pytest_rootdir))
     tests = parse_pytest_collection_results(collected_tests)
-    queue.put((exitcode, tests))
+    queue.put((exitcode, tests, pytest_rootdir))
 
 
 def parse_pytest_collection_results(
@@ -118,7 +121,7 @@ def discover_tests_pytest(
     q: Queue = Queue()
     p: Process = Process(target=run_pytest_discovery_new_process, args=(q, project_root, tests_root))
     p.start()
-    exitcode, tests = q.get()
+    exitcode, tests, pytest_rootdir = q.get()
     p.join()
 
     if exitcode != 0:
@@ -126,6 +129,7 @@ def discover_tests_pytest(
     else:
         logger.debug(f"Pytest collection exit code: {exitcode}")
 
+    cfg.pytest_rootdir = pytest_rootdir
     file_to_test_map = defaultdict(list)
     for test in tests:
         if discover_only_these_tests and test.test_file not in discover_only_these_tests:

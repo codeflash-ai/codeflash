@@ -159,7 +159,11 @@ def parse_test_xml(
             f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}",
         )
         return test_results
-
+    base_dir = (
+        test_config.pytest_rootdir
+        if test_config.test_framework == "pytest"
+        else test_config.project_root_path
+    )
     for suite in xml:
         for testcase in suite:
             class_name = testcase.classname
@@ -185,16 +189,16 @@ def parse_test_xml(
                     # TODO : This might not be true if the test is organized under a class
                     test_file_path = file_path_from_module_name(
                         test_class_path,
-                        test_config.project_root_path,
+                        base_dir,
                     )
                 else:
                     test_file_path = file_path_from_module_name(
                         test_function,
-                        test_config.project_root_path,
+                        base_dir,
                     )
             else:
                 # TODO: not sure which root path fits better here
-                test_file_path = test_config.test_project_root_path / test_file_name
+                test_file_path = base_dir / test_file_name
             if not test_file_path.exists():
                 logger.warning(f"Could not find the test for file name - {test_file_path} ")
                 continue
