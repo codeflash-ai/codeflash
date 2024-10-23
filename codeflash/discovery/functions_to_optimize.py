@@ -7,15 +7,13 @@ from _ast import AsyncFunctionDef, ClassDef, FunctionDef
 from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional
 
 import git
 import libcst as cst
-from libcst import CSTNode
-from libcst.metadata import CodeRange
 from pydantic.dataclasses import dataclass
 
-from codeflash.api.cfapi import get_blacklisted_functions
+from codeflash.api.cfapi import get_blocklisted_functions
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
@@ -25,7 +23,12 @@ from codeflash.code_utils.code_utils import (
 from codeflash.code_utils.git_utils import get_git_diff
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.telemetry.posthog_cf import ph
-from codeflash.verification.verification_utils import TestConfig
+
+if TYPE_CHECKING:
+    from libcst import CSTNode
+    from libcst.metadata import CodeRange
+
+    from codeflash.verification.verification_utils import TestConfig
 
 
 @dataclass(frozen=True)
@@ -109,7 +112,7 @@ class FunctionParent:
     type: str
 
 
-@dataclass(frozen=True, config=dict(arbitrary_types_allowed=True))
+@dataclass(frozen=True, config={"arbitrary_types_allowed": True})
 class FunctionToOptimize:
     """Represents a function that is a candidate for optimization.
 
@@ -133,9 +136,6 @@ class FunctionToOptimize:
     starting_line: Optional[int] = None
     ending_line: Optional[int] = None
 
-    # # For "BubbleSort.sorter", returns "BubbleSort"
-    # # For "sorter", returns "sorter"
-    # # TODO: does not support nested classes or functions
     @property
     def top_level_parent_name(self) -> str:
         return self.function_name if not self.parents else self.parents[0].name
@@ -446,7 +446,7 @@ def filter_functions(
     module_root: Path,
     disable_logs: bool = False,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
-    blocklist_funcs = get_blacklisted_functions()
+    blocklist_funcs = get_blocklisted_functions()
     # Remove any function that we don't want to optimize
 
     # Ignore files with submodule path, cache the submodule paths
@@ -469,7 +469,8 @@ def filter_functions(
             continue
         if file_path in ignore_paths or any(
             # file_path.startswith(ignore_path + os.sep) for ignore_path in ignore_paths if ignore_path
-            file_path.startswith(str(ignore_path) + os.sep) for ignore_path in ignore_paths
+            file_path.startswith(str(ignore_path) + os.sep)
+            for ignore_path in ignore_paths
         ):
             ignore_paths_removed_count += 1
             continue

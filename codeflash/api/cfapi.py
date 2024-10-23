@@ -147,7 +147,7 @@ def is_github_app_installed_on_repo(owner: str, repo: str) -> bool:
     return True
 
 
-def get_blacklisted_functions() -> dict[str, str]:
+def get_blocklisted_functions() -> dict[str, str]:
     pr_number = get_pr_number()
     if pr_number is None:
         return {}
@@ -166,6 +166,6 @@ def get_blacklisted_functions() -> dict[str, str]:
         )
         content: dict[str, list[str]] = req.json()
     except Exception as e:
-        logger.error(f"Error getting blacklisted functions: {e}")
+        logger.error(f"Error getting blocklisted functions: {e}")
         return {}
     return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}

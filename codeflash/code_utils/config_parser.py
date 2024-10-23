@@ -18,18 +18,17 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
             msg = f"Config file {config_file} does not exist. Please recheck the path to pyproject.toml"
             raise ValueError(msg)
         return config_file
-    else:
-        dir_path = Path.cwd()
+    dir_path = Path.cwd()
 
-        while dir_path != dir_path.parent:
-            config_file = dir_path / "pyproject.toml"
-            if config_file.exists():
-                return config_file
-            # Search for pyproject.toml in the parent directories
-            dir_path = dir_path.parent
-        msg = f"Could not find pyproject.toml in the current directory {Path.cwd()} or any of the parent directories. Please create it by running `poetry init`, or pass the path to pyproject.toml with the --config-file argument."
+    while dir_path != dir_path.parent:
+        config_file = dir_path / "pyproject.toml"
+        if config_file.exists():
+            return config_file
+        # Search for pyproject.toml in the parent directories
+        dir_path = dir_path.parent
+    msg = f"Could not find pyproject.toml in the current directory {Path.cwd()} or any of the parent directories. Please create it by running `poetry init`, or pass the path to pyproject.toml with the --config-file argument."
 
-        raise ValueError(msg)
+    raise ValueError(msg)
 
 
 def parse_config_file(config_file_path: Path | None = None) -> tuple[dict[str, Any], Path]:
@@ -85,7 +84,7 @@ def parse_config_file(config_file_path: Path | None = None) -> tuple[dict[str, A
 
     for key in path_list_keys:
         if key in config:
-            config[key] = [(Path(config_file_path).parent / path).resolve() for path in config[key]]
+            config[key] = [str((Path(config_file_path).parent / path).resolve()) for path in config[key]]
         else:  # Default to empty list
             config[key] = []
 

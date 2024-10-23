@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
 import git
 
@@ -15,21 +15,23 @@ from codeflash.code_utils.git_utils import (
     get_repo_owner_and_name,
     git_root_dir,
 )
-from codeflash.discovery.discover_unit_tests import TestsInFile
+from codeflash.discovery.discover_unit_tests import FunctionCalledInTest
 from codeflash.github.PrComment import FileDiffContent, PrComment
 from codeflash.result.explanation import Explanation
 
 
 def existing_tests_source_for(
     function_qualified_name_with_modules_from_root: str,
-    function_to_tests: Dict[str, list[TestsInFile]],
+    function_to_tests: dict[str, list[FunctionCalledInTest]],
     tests_root: Path,
 ) -> str:
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
     existing_tests_unique = set()
     if test_files:
         for test_file in test_files:
-            existing_tests_unique.add("- " + str(Path(test_file.test_file).relative_to(tests_root)))
+            existing_tests_unique.add(
+                "- " + str(Path(test_file.tests_in_file.test_file).relative_to(tests_root)),
+            )
     return "\n".join(sorted(existing_tests_unique))
 
 

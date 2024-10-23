@@ -65,7 +65,7 @@ class TestFile(BaseModel):
 class TestFiles(BaseModel):
     test_files: list[TestFile]
 
-    def get_by_type(self, test_type: TestType) -> TestFiles | None:
+    def get_by_type(self, test_type: TestType) -> TestFiles:
         return TestFiles(
             test_files=[test_file for test_file in self.test_files if test_file.test_type == test_type],
         )
