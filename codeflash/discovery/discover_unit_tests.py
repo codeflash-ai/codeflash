@@ -67,7 +67,7 @@ def run_pytest_discovery_new_process(queue: Queue, cwd: str, tests_root: str) ->
     os.chdir(cwd)
     collected_tests = []
     tests: list[TestsInFile] = []
-    sys.path.insert(0, cwd)
+    sys.path.insert(0, str(cwd))
 
     class PytestCollectionPlugin:
         def pytest_collection_finish(self, session) -> None:
@@ -115,10 +115,6 @@ def discover_tests_pytest(
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
 
-    if "PYTHONPATH" not in os.environ:
-        os.environ["PYTHONPATH"] = str(project_root)
-    else:
-        os.environ["PYTHONPATH"] += os.pathsep + str(project_root)
     q: Queue = Queue()
     p: Process = Process(target=run_pytest_discovery_new_process, args=(q, project_root, tests_root))
     p.start()
