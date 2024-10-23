@@ -177,9 +177,14 @@ def parse_test_xml(
                 # This means that the test failed to load, so we don't want to crash on it
                 logger.info("Test failed to load, skipping it.")
                 if run_result is not None:
-                    logger.info(
-                        f"Test log - STDOUT : {run_result.stdout.decode()} \n STDERR : {run_result.stderr.decode()}",
-                    )
+                    if isinstance(run_result.stdout, str) and isinstance(run_result.stderr, str):
+                        logger.info(
+                            f"Test log - STDOUT : {run_result.stdout} \n STDERR : {run_result.stderr}",
+                        )
+                    else:
+                        logger.info(
+                            f"Test log - STDOUT : {run_result.stdout.decode()} \n STDERR : {run_result.stderr.decode()}",
+                        )
                 return test_results
 
             test_class_path = testcase.classname
