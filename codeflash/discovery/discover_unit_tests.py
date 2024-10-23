@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import unittest
 from collections import defaultdict
 from multiprocessing import Process, Queue
@@ -66,6 +67,7 @@ def run_pytest_discovery_new_process(queue: Queue, cwd: str, tests_root: str) ->
     os.chdir(cwd)
     collected_tests = []
     tests: list[TestsInFile] = []
+    sys.path.insert(0, cwd)
 
     class PytestCollectionPlugin:
         def pytest_collection_finish(self, session) -> None:
@@ -73,7 +75,7 @@ def run_pytest_discovery_new_process(queue: Queue, cwd: str, tests_root: str) ->
 
     try:
         exitcode = pytest.main(
-            [tests_root, "--collect-only", "-pno:terminal", "-m", "not skip"],
+            [str(tests_root), "--collect-only", "-m", "not skip"],
             plugins=[PytestCollectionPlugin()],
         )
     except Exception as e:
@@ -113,12 +115,19 @@ def discover_tests_pytest(
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
 
+    if "PYTHONPATH" not in os.environ:
+        os.environ["PYTHONPATH"] = str(project_root)
+    else:
+        os.environ["PYTHONPATH"] += os.pathsep + str(project_root)
     q: Queue = Queue()
     p: Process = Process(target=run_pytest_discovery_new_process, args=(q, project_root, tests_root))
     p.start()
     exitcode, tests = q.get()
     p.join()
-    logger.debug(f"Pytest collection exit code: {exitcode}")
+    if exitcode != 0:
+        logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
+    else:
+        logger.debug(f"Pytest collection exit code: {exitcode}")
 
     file_to_test_map = defaultdict(list)
     for test in tests:
