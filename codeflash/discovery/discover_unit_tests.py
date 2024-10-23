@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import unittest
 from collections import defaultdict
 from multiprocessing import Process, Queue
@@ -66,6 +67,7 @@ def run_pytest_discovery_new_process(queue: Queue, cwd: str, tests_root: str) ->
     os.chdir(cwd)
     collected_tests = []
     tests: list[TestsInFile] = []
+    sys.path.insert(1, str(cwd))
 
     class PytestCollectionPlugin:
         def pytest_collection_finish(self, session) -> None:
@@ -118,7 +120,11 @@ def discover_tests_pytest(
     p.start()
     exitcode, tests = q.get()
     p.join()
-    logger.debug(f"Pytest collection exit code: {exitcode}")
+
+    if exitcode != 0:
+        logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
+    else:
+        logger.debug(f"Pytest collection exit code: {exitcode}")
 
     file_to_test_map = defaultdict(list)
     for test in tests:

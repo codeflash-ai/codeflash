@@ -346,6 +346,7 @@ def test_discover_tests_with_code_in_dir_and_test_in_subdir():
         test_file_content = (
             "import sys\n"
             "import os\n"
+            # I am suspicious of this line, we should not need to insert the code directory into the path
             "sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))\n"
             "from some_code import some_function\n\n"
             "def test_some_function():\n"
@@ -408,4 +409,42 @@ def test_discover_tests_pytest_with_nested_class():
                 0
             ].tests_in_file.test_file
             == test_file_path
+        )
+
+
+def test_discover_tests_pytest_separate_moduledir():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        rootdir = Path(tmpdirname)
+        # Create a code file with a nested class
+        codedir = rootdir / "src" / "mypackage"
+        codedir.mkdir(parents=True)
+        code_file_path = codedir / "code.py"
+        code_file_content = "def find_common_tags(articles):\n    if not articles:\n        return set()\n"
+        code_file_path.write_text(code_file_content)
+
+        # Create a test file with a test for the nested class method
+        testdir = rootdir / "tests"
+        testdir.mkdir()
+        test_file_path = testdir / "test_code.py"
+        test_file_content = (
+            "from mypackage.code import find_common_tags\n\n"
+            "def test_common_tags():\n"
+            "    assert find_common_tags(None) == set()\n"
+        )
+        test_file_path.write_text(test_file_content)
+
+        # Create a TestConfig with the temporary directory as the root
+        test_config = TestConfig(
+            tests_root=testdir,
+            project_root_path=codedir.parent.resolve(),
+            test_framework="pytest",
+        )
+
+        # Discover tests
+        discovered_tests = discover_unit_tests(test_config)
+
+        # Check if the test for the nested class method is discovered
+        assert len(discovered_tests) == 1
+        assert (
+            discovered_tests["mypackage.code.find_common_tags"][0].tests_in_file.test_file == test_file_path
         )
