@@ -100,6 +100,7 @@ class Optimizer:
 
         self.test_cfg = TestConfig(
             tests_root=args.tests_root,
+            test_project_root_path=args.test_project_root,
             project_root_path=args.project_root,
             test_framework=args.test_framework,
             pytest_cmd=args.pytest_cmd,
@@ -754,7 +755,7 @@ class Optimizer:
                     path_obj_test_file,
                     positions,
                     function_to_optimize,
-                    self.args.project_root,
+                    self.args.test_project_root,
                     self.args.test_framework,
                 )
                 if not success:

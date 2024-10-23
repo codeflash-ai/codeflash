@@ -38,7 +38,7 @@ def generate_tests(
         module = importlib.import_module(str(module_path))
         generated_test_source = module.CACHED_TESTS
         instrumented_test_source = module.CACHED_INSTRUMENTED_TESTS
-        temp_run_dir = get_run_tmp_file(Path(""))
+        temp_run_dir = get_run_tmp_file(Path())
         path = str(temp_run_dir).replace("\\", "\\\\")  # Escape backslash for windows paths
         instrumented_test_source = instrumented_test_source.replace(
             "{codeflash_run_tmp_dir_client_side}",
@@ -46,12 +46,8 @@ def generate_tests(
         )
         logger.info(f"Using cached tests from {module_path}.CACHED_TESTS")
     else:
-        test_module_path = Path(
-            module_name_from_file_path(
-                get_test_file_path(test_cfg.tests_root, function_to_optimize.function_name, 0),
-                test_cfg.project_root_path,
-            ),
-        )
+        test_file_path = get_test_file_path(test_cfg.tests_root, function_to_optimize.function_name, 0)
+        test_module_path = Path(module_name_from_file_path(test_file_path, test_cfg.test_project_root_path))
         response = aiservice_client.generate_regression_tests(
             source_code_being_tested=source_code_being_tested,
             function_to_optimize=function_to_optimize,
@@ -65,7 +61,7 @@ def generate_tests(
         )
         if response and isinstance(response, tuple) and len(response) == 2:
             generated_test_source, instrumented_test_source = response
-            temp_run_dir = get_run_tmp_file(Path(""))
+            temp_run_dir = get_run_tmp_file(Path())
             path = str(temp_run_dir).replace("\\", "\\\\")
             instrumented_test_source = instrumented_test_source.replace(
                 "{codeflash_run_tmp_dir_client_side}",
@@ -76,13 +72,6 @@ def generate_tests(
                 f"Failed to generate and instrument tests for {function_to_optimize.function_name}",
             )
             return None
-
-    # TODO: Add support for inspired tests
-    # inspired_unit_tests = ""
-
-    # merged_test_source = merge_unit_tests(
-    #     instrumented_test_source, inspired_unit_tests, test_cfg.test_framework
-    # )
 
     return generated_test_source, instrumented_test_source
 

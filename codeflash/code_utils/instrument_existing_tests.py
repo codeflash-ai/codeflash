@@ -323,7 +323,7 @@ def inject_profiling_into_existing_test(
     test_path: Path,
     call_positions: list[CodePosition],
     function_to_optimize: FunctionToOptimize,
-    root_path: Path,
+    test_project_root: Path,
     test_framework: str,
 ) -> tuple[bool, str | None]:
     with test_path.open(encoding="utf8") as f:
@@ -334,12 +334,12 @@ def inject_profiling_into_existing_test(
         logger.exception(f"Syntax error in code in file - {test_path}")
         return False, None
     # TODO: Pass the full name of function here, otherwise we can run into namespace clashes
-    module_path = module_name_from_file_path(test_path, root_path)
+    test_module_path = module_name_from_file_path(test_path, test_project_root)
     import_visitor = FunctionImportedAsVisitor(function_to_optimize)
     import_visitor.visit(tree)
     func = import_visitor.imported_as
 
-    tree = InjectPerfOnly(func, module_path, test_framework, call_positions).visit(tree)
+    tree = InjectPerfOnly(func, test_module_path, test_framework, call_positions).visit(tree)
     new_imports = [
         ast.Import(names=[ast.alias(name="time")]),
         ast.Import(names=[ast.alias(name="gc")]),

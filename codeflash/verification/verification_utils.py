@@ -1,5 +1,4 @@
 import ast
-import os
 from pathlib import Path
 
 from pydantic.dataclasses import dataclass
@@ -70,6 +69,7 @@ class ModifyInspiredTests(ast.NodeTransformer):
 @dataclass(frozen=True)
 class TestConfig:
     tests_root: Path
+    test_project_root_path: Path
     project_root_path: Path
     test_framework: str
     pytest_cmd: str = "pytest"
