@@ -75,7 +75,7 @@ def run_pytest_discovery_new_process(queue: Queue, cwd: str, tests_root: str) ->
 
     try:
         exitcode = pytest.main(
-            [str(tests_root), "--collect-only", "-m", "not skip"],
+            [tests_root, "--collect-only", "-pno:terminal", "-m", "not skip"],
             plugins=[PytestCollectionPlugin()],
         )
     except Exception as e:
@@ -120,6 +120,7 @@ def discover_tests_pytest(
     p.start()
     exitcode, tests = q.get()
     p.join()
+
     if exitcode != 0:
         logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
     else:
