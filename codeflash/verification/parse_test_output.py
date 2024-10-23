@@ -185,14 +185,15 @@ def parse_test_xml(
                     # TODO : This might not be true if the test is organized under a class
                     test_file_path = file_path_from_module_name(
                         test_class_path,
-                        test_config.test_project_root_path,
+                        test_config.project_root_path,
                     )
                 else:
                     test_file_path = file_path_from_module_name(
                         test_function,
-                        test_config.test_project_root_path,
+                        test_config.project_root_path,
                     )
             else:
+                # TODO: not sure which root path fits better here
                 test_file_path = test_config.test_project_root_path / test_file_name
             if not test_file_path.exists():
                 logger.warning(f"Could not find the test for file name - {test_file_path} ")
