@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import shutil
 import sys
-from typing import Callable, NoReturn
+from typing import Callable, cast
 
 import click
 import inquirer
 
 
-def apologize_and_exit() -> NoReturn:
+def apologize_and_exit() -> None:
     click.echo(
         "💡 If you're having trouble, see https://docs.codeflash.ai/getting-started/local-installation for further help getting started with Codeflash!",
     )
@@ -16,9 +16,11 @@ def apologize_and_exit() -> NoReturn:
     sys.exit(1)
 
 
-def inquirer_wrapper(func: Callable, *args, **kwargs) -> str | bool:
-    message = None
-    response = None
+def inquirer_wrapper(
+    func: Callable[..., str | bool],
+    *args: str | bool,
+    **kwargs: str | bool,
+) -> str | bool:
     new_args = []
     new_kwargs = {}
 
@@ -41,9 +43,7 @@ def inquirer_wrapper(func: Callable, *args, **kwargs) -> str | bool:
     else:
         new_kwargs["message"] = last_message
 
-    response = func(*new_args, **new_kwargs)
-
-    return response
+    return func(*new_args, **new_kwargs)
 
 
 def split_string_to_cli_width(string: str, is_confirm: bool = False) -> list[str]:
@@ -65,12 +65,8 @@ def split_string_to_cli_width(string: str, is_confirm: bool = False) -> list[str
     return lines
 
 
-def inquirer_wrapper_path(*args, **kwargs) -> dict[str]:
-    message = None
-    response = None
+def inquirer_wrapper_path(*args: str, **kwargs: str) -> dict[str, str]:
     new_args = []
-    new_kwargs = {}
-
     message = kwargs["message"]
     new_kwargs = kwargs.copy()
     split_messages = split_string_to_cli_width(message)
@@ -81,12 +77,14 @@ def inquirer_wrapper_path(*args, **kwargs) -> dict[str]:
     new_kwargs["message"] = last_message
     new_args.append(args[0])
 
-    response = inquirer.prompt(
-        [
-            inquirer.Path(*new_args, **new_kwargs),
-        ],
+    return cast(
+        dict[str, str],
+        inquirer.prompt(
+            [
+                inquirer.Path(*new_args, **new_kwargs),
+            ],
+        ),
     )
-    return response
 
 
 def split_string_to_fit_width(string: str, width: int) -> list[str]:

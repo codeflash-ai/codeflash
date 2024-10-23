@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import patch
 
 import git
-
 from codeflash.code_utils.git_utils import (
     check_and_push_branch,
     check_running_in_git_repo,
@@ -51,14 +50,14 @@ class TestGitUtils(unittest.TestCase):
         mock_isatty,
         mock_repo,
     ):
-        mock_repo.side_effect = git.exc.InvalidGitRepositoryError  # type: ignore
-        assert check_running_in_git_repo("/path/to/non-repo")
+        mock_repo.side_effect = git.InvalidGitRepositoryError  # type: ignore
+        assert check_running_in_git_repo("/path/to/non-repo") == False
 
     @patch("codeflash.code_utils.git_utils.git.Repo")
     @patch("codeflash.code_utils.git_utils.sys.__stdin__.isatty", return_value=False)
     def test_check_running_in_git_repo_not_in_git_repo_non_interactive(self, mock_isatty, mock_repo):
         mock_repo.side_effect = git.exc.InvalidGitRepositoryError  # type: ignore
-        assert check_running_in_git_repo("/path/to/non-repo")
+        assert check_running_in_git_repo("/path/to/non-repo") is False
 
     @patch("codeflash.code_utils.git_utils.git.Repo")
     @patch("codeflash.code_utils.git_utils.sys.__stdin__.isatty", return_value=True)

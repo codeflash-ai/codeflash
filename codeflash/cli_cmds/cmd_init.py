@@ -5,9 +5,8 @@ import os
 import re
 import subprocess
 import sys
-from argparse import Namespace
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, cast
 
 import click
 import git
@@ -36,6 +35,9 @@ from codeflash.code_utils.shell_utils import (
 )
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as version
+
+if TYPE_CHECKING:
+    from argparse import Namespace
 
 CODEFLASH_LOGO: str = (
     f"{LF}"
@@ -75,7 +77,6 @@ def init_codeflash() -> None:
             f"    codeflash --file <path-to-file> --function <function-name> to optimize a function within a file{LF}"
             f"    codeflash --file <path-to-file> to optimize all functions in a file{LF}"
             f"    codeflash --all to optimize all functions in all files in the module you selected ({setup_info.module_root}){LF}"
-            # f"    codeflash --pr <pr-number> to optimize a PR{LF}"
             f"-or-{LF}"
             f"    codeflash --help to see all options{LF}",
         )
@@ -138,8 +139,8 @@ def collect_setup_info() -> SetupInfo:
 
     valid_module_subdirs = [d for d in valid_subdirs if d != "tests"]
 
-    curdir_option = "current directory (" + curdir + ")"
-    module_subdir_options = valid_module_subdirs + [curdir_option]
+    curdir_option = f"current directory ({curdir})"
+    module_subdir_options = [*valid_module_subdirs, curdir_option]
 
     module_root_answer = inquirer_wrapper(
         inquirer.list_input,
@@ -178,13 +179,13 @@ def collect_setup_info() -> SetupInfo:
             "path",
             message=f"Enter the path to your tests directory inside {Path(curdir).resolve()}{os.path.sep} ",
             path_type=inquirer.Path.DIRECTORY,
-            exists=True,
         )
-        tests_root = (
-            Path(custom_tests_root_answer["path"]) if custom_tests_root_answer else apologize_and_exit()
-        )
+        if custom_tests_root_answer:
+            tests_root = Path(curdir) / Path(custom_tests_root_answer["path"])
+        else:
+            apologize_and_exit()
     else:
-        tests_root = Path(tests_root_answer)
+        tests_root = Path(curdir) / Path(cast(str, tests_root_answer))
     tests_root = tests_root.relative_to(curdir)
     ph("cli-tests-root-provided")
 
@@ -211,22 +212,17 @@ def collect_setup_info() -> SetupInfo:
         carousel=True,
     )
 
-    # Ask for paths to ignore and update the setup_info dictionary
-    # ignore_paths_input = click.prompt("Are there any paths Codeflash should ignore? (comma-separated, no spaces)",
-    #                                   default='', show_default=False)
-    # ignore_paths = ignore_paths_input.split(',') if ignore_paths_input else [f'tests{os.pathsep}']
     ignore_paths: list[str] = []
-
     return SetupInfo(
-        module_root=module_root,
-        tests_root=tests_root,
-        test_framework=test_framework,
+        module_root=str(module_root),
+        tests_root=str(tests_root),
+        test_framework=cast(str, test_framework),
         ignore_paths=ignore_paths,
-        formatter=formatter,
+        formatter=cast(str, formatter),
     )
 
 
-def detect_test_framework(curdir: Path, tests_root: Path) -> Optional[str]:
+def detect_test_framework(curdir: Path, tests_root: Path) -> str | None:
     test_framework = None
     pytest_files = ["pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg"]
     pytest_config_patterns = {
@@ -270,7 +266,7 @@ def detect_test_framework(curdir: Path, tests_root: Path) -> Optional[str]:
     return test_framework
 
 
-def check_for_toml_or_setup_file() -> Optional[str]:
+def check_for_toml_or_setup_file() -> str | None:
     click.echo()
     click.echo("Checking for pyproject.toml or setup.py ...\r", nl=False)
     curdir = Path.cwd()
@@ -339,7 +335,7 @@ def check_for_toml_or_setup_file() -> Optional[str]:
             click.echo("⏩️ Skipping pyproject.toml creation.")
             apologize_and_exit()
     click.echo()
-    return project_name
+    return cast(str, project_name)
 
 
 def install_github_actions() -> None:
@@ -415,7 +411,7 @@ def install_github_actions() -> None:
             prompt_suffix="",
             show_default=False,
         )
-        click.launch(optimize_yaml_path)
+        click.launch(optimize_yaml_path.as_posix())
         click.echo(
             "📝 I opened the workflow file in your editor! You'll need to edit the steps that install the right Python "
             f"version and any project dependencies. See the comments in the file for more details.{LF}",
@@ -460,6 +456,9 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         formatter_cmds.extend(["ruff check --exit-zero --fix $file", "ruff format $file"])
     elif formatter == "other":
         formatter_cmds.append("your-formatter $file")
+        click.echo(
+            "🔧 In pyproject.toml, please replace 'your-formatter' with the command you use to format your code.",
+        )
     elif formatter == "don't use a formatter":
         formatter_cmds.append("disabled")
     codeflash_section["formatter-cmds"] = formatter_cmds
@@ -476,7 +475,11 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
 
 
 def install_github_app() -> None:
-    git_repo = git.Repo(search_parent_directories=True)
+    try:
+        git_repo = git.Repo(search_parent_directories=True)
+    except git.InvalidGitRepositoryError:
+        click.echo("Skipping GitHub app installation because you're not in a git repository.")
+        return
     owner, repo = get_repo_owner_and_name(git_repo)
 
     if is_github_app_installed_on_repo(owner, repo):
@@ -527,15 +530,15 @@ def install_github_app() -> None:
 class CFAPIKeyType(click.ParamType):
     name = "cfapi-key"
 
-    def convert(self, value, param, ctx):
+    def convert(self, value: str, param: click.Parameter | None, ctx: click.Context | None) -> str | None:
         value = value.strip()
-        if value.startswith("cf-") or value == "":
-            return value
-        self.fail(
-            f"That key [{value}] seems to be invalid. It should start with a 'cf-' prefix. Please try again.",
-            param,
-            ctx,
-        )
+        if not value.startswith("cf-") and value != "":
+            self.fail(
+                f"That key [{value}] seems to be invalid. It should start with a 'cf-' prefix. Please try again.",
+                param,
+                ctx,
+            )
+        return value
 
 
 # Returns True if the user entered a new API key, False if they used an existing one
@@ -668,8 +671,6 @@ def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test
         "--function",
         "sorter",
     ]
-    animation = "|/-\\"
-    idx = 0
     sys.stdout.write("Running sample optimization... ")
     sys.stdout.flush()
     try:
