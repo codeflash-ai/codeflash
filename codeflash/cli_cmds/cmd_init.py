@@ -456,6 +456,9 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         formatter_cmds.extend(["ruff check --exit-zero --fix $file", "ruff format $file"])
     elif formatter == "other":
         formatter_cmds.append("your-formatter $file")
+        click.echo(
+            "🔧 In pyproject.toml, please replace 'your-formatter' with the command you use to format your code.",
+        )
     elif formatter == "don't use a formatter":
         formatter_cmds.append("disabled")
     codeflash_section["formatter-cmds"] = formatter_cmds
