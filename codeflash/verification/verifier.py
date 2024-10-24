@@ -47,7 +47,7 @@ def generate_tests(
         logger.info(f"Using cached tests from {module_path}.CACHED_TESTS")
     else:
         test_file_path = get_test_file_path(test_cfg.tests_root, function_to_optimize.function_name, 0)
-        test_module_path = Path(module_name_from_file_path(test_file_path, test_cfg.test_project_root_path))
+        test_module_path = Path(module_name_from_file_path(test_file_path, test_cfg.tests_project_rootdir))
         response = aiservice_client.generate_regression_tests(
             source_code_being_tested=source_code_being_tested,
             function_to_optimize=function_to_optimize,

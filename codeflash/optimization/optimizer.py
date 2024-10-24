@@ -100,7 +100,7 @@ class Optimizer:
 
         self.test_cfg = TestConfig(
             tests_root=args.tests_root,
-            test_project_root_path=args.test_project_root,
+            tests_project_rootdir=args.test_project_root,
             project_root_path=args.project_root,
             test_framework=args.test_framework,
             pytest_cmd=args.pytest_cmd,
@@ -752,11 +752,11 @@ class Optimizer:
                 path_obj_test_file = Path(test_file)
                 relevant_test_files_count += 1
                 success, injected_test = inject_profiling_into_existing_test(
-                    path_obj_test_file,
-                    positions,
-                    function_to_optimize,
-                    self.args.test_project_root,
-                    self.args.test_framework,
+                    test_path=path_obj_test_file,
+                    call_positions=positions,
+                    function_to_optimize=function_to_optimize,
+                    tests_project_root=self.test_cfg.tests_project_rootdir,
+                    test_framework=self.args.test_framework,
                 )
                 if not success:
                     continue

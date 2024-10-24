@@ -67,7 +67,7 @@ def parse_test_return_values_bin(
             invocation_id_object = InvocationId.from_str_id(encoded_test_name, invocation_id)
             test_file_path = file_path_from_module_name(
                 invocation_id_object.test_module_path,
-                test_config.test_project_root_path,
+                test_config.tests_project_rootdir,
             )
 
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
@@ -111,7 +111,7 @@ def parse_sqlite_test_results(
     for val in data:
         try:
             test_module_path = val[0]
-            test_file_path = file_path_from_module_name(test_module_path, test_config.test_project_root_path)
+            test_file_path = file_path_from_module_name(test_module_path, test_config.tests_project_rootdir)
             # TODO : this is because sqlite writes original file module path. Should make it consistent
             test_type = test_files.get_test_type_by_original_file_path(test_file_path)
             loop_index = val[4]
@@ -160,7 +160,7 @@ def parse_test_xml(
         )
         return test_results
     base_dir = (
-        test_config.pytest_rootdir
+        test_config.tests_project_rootdir
         if test_config.test_framework == "pytest"
         else test_config.project_root_path
     )
@@ -209,7 +209,7 @@ def parse_test_xml(
                 continue
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
             assert test_type is not None, f"Test type not found for {test_file_path}"
-            test_module_path = module_name_from_file_path(test_file_path, test_config.test_project_root_path)
+            test_module_path = module_name_from_file_path(test_file_path, test_config.tests_project_rootdir)
             result = testcase.is_passed  # TODO: See for the cases of ERROR and SKIPPED
             test_class = None
             if class_name is not None and class_name.startswith(test_module_path):

@@ -1,6 +1,5 @@
 import ast
 from pathlib import Path
-from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
@@ -70,8 +69,9 @@ class ModifyInspiredTests(ast.NodeTransformer):
 @dataclass
 class TestConfig:
     tests_root: Path
-    test_project_root_path: Path
     project_root_path: Path
     test_framework: str
+    tests_project_rootdir: Path
+    # tests_project_rootdir corresponds to pytest rootdir,
+    # or for unittest - project_root_from_module_root(args.tests_root, pyproject_file_path)
     pytest_cmd: str = "pytest"
-    pytest_rootdir: Optional[Path] = None

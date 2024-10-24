@@ -78,7 +78,7 @@ def run_pytest_discovery_new_process(queue: Queue, cwd: str, tests_root: str) ->
 
     try:
         exitcode = pytest.main(
-            [tests_root, "--collect-only", "-m", "not skip"],
+            [tests_root, "--collect-only", "-pno:terminal", "-m", "not skip"],
             plugins=[PytestCollectionPlugin()],
         )
     except Exception as e:
@@ -128,8 +128,8 @@ def discover_tests_pytest(
         logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
     else:
         logger.debug(f"Pytest collection exit code: {exitcode}")
-
-    cfg.pytest_rootdir = pytest_rootdir
+    if pytest_rootdir is not None:
+        cfg.tests_project_rootdir = pytest_rootdir
     file_to_test_map = defaultdict(list)
     for test in tests:
         if discover_only_these_tests and test.test_file not in discover_only_these_tests:
