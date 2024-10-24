@@ -20,7 +20,7 @@ python = "^3.9"
 unidiff = ">=0.7.4"
 pytest = ">=7.0.0"
 gitpython = ">=3.1.31"
-libcst = ">=1.0.1"
+libcst = ">=1.5.0"
 jedi = ">=0.19.1"
 tiktoken = ">=0.3.2"
 timeout-decorator = ">=0.5.0"
@@ -46,10 +46,8 @@ optional = true
 
 [tool.poetry.group.dev.dependencies]
 ipython = "^8.12.0"
-mypy = "^1.11.2"
-ruff = ">=0.5.0,<0.6.0"
-ruff-lsp = ">=0.0.53,<0.0.55"
-
+mypy = ">=1.13"
+ruff = ">=0.7.0"
 
 [tool.poetry.build]
 script = "codeflash/update_license_version.py"
@@ -58,12 +56,14 @@ script = "codeflash/update_license_version.py"
 codeflash = "codeflash.main:main"
 
 [tool.mypy]
+show_error_code_links = true
 pretty = true
 show_absolute_path = true
-show_column_numbers = true
 show_error_context = true
+show_error_end = true
 strict = true
 warn_unreachable = true
+install_types = true
 plugins = [
     "returns.contrib.mypy.returns_plugin",
     "pydantic.mypy"
@@ -83,9 +83,13 @@ init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
 
+[tool.ruff]
+line-length = 120
+fix = true
+show-fixes = true
+
 [tool.ruff.lint]
 select = ["ALL"]
-unfixable = ["F401"]
 ignore = ["S101", "FIX002", "ANN101"]
 
 [tool.ruff.lint.flake8-type-checking]
@@ -99,14 +103,9 @@ classmethod-decorators = [
     "pydantic.validator",
 ]
 
-[tool.ruff.lint.per-file-ignores]
-"**/*" = ["D102"]
-
-[tool.ruff]
-line-length = 110
-
 [tool.ruff.format]
 docstring-code-format = true
+skip-magic-trailing-comma = true
 
 [tool.poetry-dynamic-versioning]
 enable = true
