@@ -170,6 +170,7 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     # in this case, the ".." becomes outside project scope, causing issues with un-importable paths
     args.project_root = project_root_from_module_root(args.module_root, pyproject_file_path)
     args.tests_root = Path(args.tests_root).resolve()
+    args.test_project_root = project_root_from_module_root(args.tests_root, pyproject_file_path)
     return handle_optimize_all_arg_parsing(args)
 
 

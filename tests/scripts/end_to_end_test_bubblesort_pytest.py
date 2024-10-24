@@ -12,9 +12,9 @@ def main():
         "python",
         "../codeflash/main.py",
         "--file",
-        "topological_sort.py",
+        "bubble_sort.py",
         "--function",
-        "Graph.topologicalSort",
+        "sorter",
         "--test-framework",
         "pytest",
         "--tests-root",
@@ -35,7 +35,7 @@ def main():
 
     for line in process.stdout:
         print(line, end="")  # Print each line in real-time
-        output.append(line)  # Store each line in the output variable
+        output.append(line.strip())  # Store each line in the output variable
     return_code = process.wait()
     stdout = "".join(output)
     assert return_code == 0, f"The codeflash command returned exit code {return_code} instead of 0"
@@ -46,11 +46,9 @@ def main():
     improvement_x = float(improvement_pct) / 100
 
     assert (
-        improvement_pct > 5
-    ), f"Performance improvement percentage was {improvement_pct}, which was not above 5%"
-    assert (
-        improvement_x > 0.05
-    ), f"Performance improvement rate was {improvement_x}x, which was not above 0.05x"
+        improvement_pct > 300
+    ), f"Performance improvement percentage was {improvement_pct}, which was not above 300%"
+    assert improvement_x > 3, f"Performance improvement rate was {improvement_x}x, which was not above 3x"
 
     # Check for the line indicating the number of discovered existing unit tests
     unit_test_search = re.search(

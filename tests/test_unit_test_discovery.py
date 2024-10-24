@@ -13,6 +13,7 @@ def test_unit_test_discovery_pytest():
         tests_root=tests_path,
         project_root_path=project_path,
         test_framework="pytest",
+        tests_project_rootdir=tests_path.parent,
     )
     tests = discover_unit_tests(test_config)
     assert len(tests) > 0
@@ -26,6 +27,7 @@ def test_unit_test_discovery_unittest():
         tests_root=project_path,
         project_root_path=project_path,
         test_framework="unittest",
+        tests_project_rootdir=project_path.parent,
     )
     os.chdir(project_path)
     tests = discover_unit_tests(test_config)
@@ -59,6 +61,7 @@ def test_discover_tests_pytest_with_temp_dir_root():
             tests_root=path_obj_tempdirname,
             project_root_path=path_obj_tempdirname,
             test_framework="pytest",
+            tests_project_rootdir=path_obj_tempdirname.parent,
         )
 
         # Discover tests
@@ -134,6 +137,7 @@ def test_discover_tests_pytest_with_multi_level_dirs():
             tests_root=path_obj_tmpdirname,
             project_root_path=path_obj_tmpdirname,
             test_framework="pytest",
+            tests_project_rootdir=path_obj_tmpdirname.parent,
         )
 
         # Discover tests
@@ -224,6 +228,7 @@ def test_discover_tests_pytest_dirs():
             tests_root=path_obj_tmpdirname,
             project_root_path=path_obj_tmpdirname,
             test_framework="pytest",
+            tests_project_rootdir=path_obj_tmpdirname.parent,
         )
 
         # Discover tests
@@ -270,6 +275,7 @@ def test_discover_tests_pytest_with_class():
             tests_root=path_obj_tmpdirname,
             project_root_path=path_obj_tmpdirname,
             test_framework="pytest",
+            tests_project_rootdir=path_obj_tmpdirname.parent,
         )
 
         # Discover tests
@@ -310,6 +316,7 @@ def test_discover_tests_pytest_with_double_nested_directories():
             tests_root=path_obj_tmpdirname,
             project_root_path=path_obj_tmpdirname,
             test_framework="pytest",
+            tests_project_rootdir=path_obj_tmpdirname.parent,
         )
 
         # Discover tests
@@ -359,6 +366,7 @@ def test_discover_tests_with_code_in_dir_and_test_in_subdir():
             tests_root=test_subdir,
             project_root_path=path_obj_tmpdirname,
             test_framework="pytest",
+            tests_project_rootdir=test_subdir.parent,
         )
 
         # Discover tests
@@ -397,6 +405,7 @@ def test_discover_tests_pytest_with_nested_class():
             tests_root=path_obj_tmpdirname,
             project_root_path=path_obj_tmpdirname,
             test_framework="pytest",
+            tests_project_rootdir=path_obj_tmpdirname.parent,
         )
 
         # Discover tests
@@ -438,6 +447,7 @@ def test_discover_tests_pytest_separate_moduledir():
             tests_root=testdir,
             project_root_path=codedir.parent.resolve(),
             test_framework="pytest",
+            tests_project_rootdir=testdir.parent,
         )
 
         # Discover tests
