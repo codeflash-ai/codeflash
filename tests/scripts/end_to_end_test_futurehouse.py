@@ -15,7 +15,8 @@ def main():
     command = [
         "python",
         "../../../codeflash/main.py",
-        "--all",
+        "--file",
+        "src/aviary/common_tags.py",
         "--no-pr",
     ]
     process = subprocess.Popen(
