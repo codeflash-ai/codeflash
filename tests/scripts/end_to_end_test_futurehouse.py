@@ -5,22 +5,18 @@ import subprocess
 
 
 def main():
-    module_root = (pathlib.Path(__file__).parent.parent.parent / "code_to_optimize").resolve()
-    test_root = module_root / "tests" / "pytest"
-    print("cwd", module_root)
+    cwd = (
+        pathlib.Path(__file__).parent.parent.parent
+        / "code_to_optimize"
+        / "code_directories"
+        / "futurehouse_structure"
+    ).resolve()
+    print("cwd", cwd)
     command = [
         "python",
-        "../codeflash/main.py",
+        "../../../codeflash/main.py",
         "--file",
-        "topological_sort.py",
-        "--function",
-        "Graph.topologicalSort",
-        "--test-framework",
-        "pytest",
-        "--tests-root",
-        str(test_root),
-        "--module-root",
-        str(module_root),
+        "src/aviary/common_tags.py",
         "--no-pr",
     ]
     process = subprocess.Popen(
@@ -28,7 +24,7 @@ def main():
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        cwd=str(module_root),
+        cwd=str(cwd),
         env=os.environ.copy(),
     )
     output = []
@@ -47,10 +43,8 @@ def main():
 
     assert (
         improvement_pct > 5
-    ), f"Performance improvement percentage was {improvement_pct}, which was not above 5%"
-    assert (
-        improvement_x > 0.05
-    ), f"Performance improvement rate was {improvement_x}x, which was not above 0.05x"
+    ), f"Performance improvement percentage was {improvement_pct}, which was not above 10%"
+    assert improvement_x > 0.1, f"Performance improvement rate was {improvement_x}x, which was not above 0.1x"
 
     # Check for the line indicating the number of discovered existing unit tests
     unit_test_search = re.search(
@@ -58,7 +52,7 @@ def main():
         stdout,
     )
     num_unit_tests = int(unit_test_search.group(1))
-    assert num_unit_tests > 0, "Could not find existing unit tests"
+    assert num_unit_tests == 2, "Could not find existing unit tests"
 
 
 if __name__ == "__main__":

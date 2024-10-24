@@ -3,11 +3,10 @@ from argparse import Namespace
 from dataclasses import dataclass
 
 import pytest
-from returns.pipeline import is_successful
-
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 from codeflash.optimization.function_context import get_function_variables_definitions
 from codeflash.optimization.optimizer import Optimizer
+from returns.pipeline import is_successful
 
 
 def calculate_something(data):
@@ -174,12 +173,13 @@ def test_class_method_dependencies() -> None:
     file_path = pathlib.Path(__file__).resolve()
     opt = Optimizer(
         Namespace(
-            project_root=str(file_path.parent.resolve()),
+            project_root=file_path.parent.resolve(),
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
             pytest_cmd="pytest",
             experiment_id=None,
+            test_project_root=file_path.parent.resolve(),
         ),
     )
     function_to_optimize = FunctionToOptimize(
@@ -276,12 +276,13 @@ def test_recursive_function_context() -> None:
     file_path = pathlib.Path(__file__).resolve()
     opt = Optimizer(
         Namespace(
-            project_root=str(file_path.parent.resolve()),
+            project_root=file_path.parent.resolve(),
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
             pytest_cmd="pytest",
             experiment_id=None,
+            test_project_root=file_path.parent.resolve(),
         ),
     )
     function_to_optimize = FunctionToOptimize(

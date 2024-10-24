@@ -67,7 +67,7 @@ def parse_test_return_values_bin(
             invocation_id_object = InvocationId.from_str_id(encoded_test_name, invocation_id)
             test_file_path = file_path_from_module_name(
                 invocation_id_object.test_module_path,
-                test_config.project_root_path,
+                test_config.tests_project_rootdir,
             )
 
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
@@ -111,7 +111,7 @@ def parse_sqlite_test_results(
     for val in data:
         try:
             test_module_path = val[0]
-            test_file_path = file_path_from_module_name(test_module_path, test_config.project_root_path)
+            test_file_path = file_path_from_module_name(test_module_path, test_config.tests_project_rootdir)
             # TODO : this is because sqlite writes original file module path. Should make it consistent
             test_type = test_files.get_test_type_by_original_file_path(test_file_path)
             loop_index = val[4]
@@ -159,7 +159,11 @@ def parse_test_xml(
             f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}",
         )
         return test_results
-
+    base_dir = (
+        test_config.tests_project_rootdir
+        if test_config.test_framework == "pytest"
+        else test_config.project_root_path
+    )
     for suite in xml:
         for testcase in suite:
             class_name = testcase.classname
@@ -173,9 +177,14 @@ def parse_test_xml(
                 # This means that the test failed to load, so we don't want to crash on it
                 logger.info("Test failed to load, skipping it.")
                 if run_result is not None:
-                    logger.info(
-                        f"Test log - STDOUT : {run_result.stdout.decode()} \n STDERR : {run_result.stderr.decode()}",
-                    )
+                    if isinstance(run_result.stdout, str) and isinstance(run_result.stderr, str):
+                        logger.info(
+                            f"Test log - STDOUT : {run_result.stdout} \n STDERR : {run_result.stderr}",
+                        )
+                    else:
+                        logger.info(
+                            f"Test log - STDOUT : {run_result.stdout.decode()} \n STDERR : {run_result.stderr.decode()}",
+                        )
                 return test_results
 
             test_class_path = testcase.classname
@@ -185,18 +194,22 @@ def parse_test_xml(
                     # TODO : This might not be true if the test is organized under a class
                     test_file_path = file_path_from_module_name(
                         test_class_path,
-                        test_config.project_root_path,
+                        base_dir,
                     )
                 else:
-                    test_file_path = file_path_from_module_name(test_function, test_config.project_root_path)
+                    test_file_path = file_path_from_module_name(
+                        test_function,
+                        base_dir,
+                    )
             else:
-                test_file_path = test_config.project_root_path / test_file_name
+                # TODO: not sure which root path fits better here
+                test_file_path = base_dir / test_file_name
             if not test_file_path.exists():
                 logger.warning(f"Could not find the test for file name - {test_file_path} ")
                 continue
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
             assert test_type is not None, f"Test type not found for {test_file_path}"
-            test_module_path = module_name_from_file_path(test_file_path, test_config.project_root_path)
+            test_module_path = module_name_from_file_path(test_file_path, test_config.tests_project_rootdir)
             result = testcase.is_passed  # TODO: See for the cases of ERROR and SKIPPED
             test_class = None
             if class_name is not None and class_name.startswith(test_module_path):

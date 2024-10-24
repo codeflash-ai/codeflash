@@ -72,7 +72,9 @@ plugins = [
 [[tool.mypy.overrides]]
 module = [
     "jedi",
-    "jedi.api.classes"
+    "jedi.api.classes",
+    "inquirer",
+    "inquirer.themes"
 ]
 ignore_missing_imports = true
 

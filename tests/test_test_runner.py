@@ -2,8 +2,6 @@ import os
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from codeflash.models.models import TestFile, TestFiles
 from codeflash.verification.parse_test_output import parse_test_xml
 from codeflash.verification.test_results import TestType
@@ -33,12 +31,13 @@ class TestUnittestRunnerSorter(unittest.TestCase):
         tests_root=cur_dir_path,
         project_root_path=cur_dir_path,
         test_framework="unittest",
+        tests_project_rootdir=cur_dir_path.parent,
     )
 
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         test_files = TestFiles(
             test_files=[
-                TestFile(instrumented_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)
+                TestFile(instrumented_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST),
             ],
         )
         fp.write(code.encode("utf-8"))
@@ -53,7 +52,6 @@ class TestUnittestRunnerSorter(unittest.TestCase):
     result_file.unlink(missing_ok=True)
 
 
-@pytest.mark.skip(reason="not testing the actual code path")
 def test_pytest_runner():
     code = """
 def sorter(arr):
@@ -70,11 +68,12 @@ def test_sort():
         tests_root=cur_dir_path,
         project_root_path=cur_dir_path,
         test_framework="pytest",
+        tests_project_rootdir=cur_dir_path.parent,
     )
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         test_files = TestFiles(
             test_files=[
-                TestFile(instrumented_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)
+                TestFile(instrumented_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST),
             ],
         )
         fp.write(code.encode("utf-8"))

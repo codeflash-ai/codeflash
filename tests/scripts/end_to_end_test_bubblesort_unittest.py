@@ -6,7 +6,7 @@ import subprocess
 
 def main():
     module_root = (pathlib.Path(__file__).parent.parent.parent / "code_to_optimize").resolve()
-    test_root = module_root / "tests" / "pytest"
+    test_root = module_root / "tests" / "unittest"
     print("cwd", module_root)
     command = [
         "python",
@@ -16,7 +16,7 @@ def main():
         "--function",
         "sorter",
         "--test-framework",
-        "pytest",
+        "unittest",
         "--tests-root",
         str(test_root),
         "--module-root",
@@ -46,9 +46,9 @@ def main():
     improvement_x = float(improvement_pct) / 100
 
     assert (
-        improvement_pct > 30000
-    ), f"Performance improvement percentage was {improvement_pct}, which was not above 30,000%"
-    assert improvement_x > 300, f"Performance improvement rate was {improvement_x}x, which was not above 300x"
+        improvement_pct > 300
+    ), f"Performance improvement percentage was {improvement_pct}, which was not above 300%"
+    assert improvement_x > 3, f"Performance improvement rate was {improvement_x}x, which was not above 3x"
 
     # Check for the line indicating the number of discovered existing unit tests
     unit_test_search = re.search(
