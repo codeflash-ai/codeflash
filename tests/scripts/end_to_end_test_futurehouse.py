@@ -37,7 +37,7 @@ def main():
 
     assert "⚡️ Optimization successful! 📄 " in stdout, "Failed to find performance improvement at all"
 
-    improvement_pct = int(re.search(r"📈 ([\d,]+)% improvement", stdout).group(1))
+    improvement_pct = int(re.search(r"📈 ([\d,]+)% improvement", stdout).group(1).replace(",", ""))
     improvement_x = float(improvement_pct) / 100
 
     assert (
