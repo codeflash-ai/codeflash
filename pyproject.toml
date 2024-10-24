@@ -12,9 +12,6 @@ packages = [
 ]
 keywords = ["codeflash", "performance", "optimization", "ai", "code", "machine learning", "LLM"]
 
-# Don't forget to install the poetry plugins we use too:
-# poetry self add poetry-dynamic-versioning
-
 [tool.poetry.dependencies]
 python = "^3.9"
 unidiff = ">=0.7.4"
@@ -40,6 +37,15 @@ returns = ">=0.23"
 isort = ">=5.11.0"
 dill = "^0.3.8"
 rich = "^13.8.1"
+pandas-stubs = "^2.2.3.241009"
+types-Pygments = "^2.18.0.20240506"
+types-colorama = "^0.4.15.20240311"
+types-decorator = "^5.1.8.20240310"
+types-jsonschema = "^4.23.0.20240813"
+types-requests = "^2.32.0.20241016"
+types-six = "^1.16.21.20241009"
+types-cffi = "^1.16.0.20240331"
+types-openpyxl = "^3.1.5.20241020"
 
 [tool.poetry.group.dev]
 optional = true
