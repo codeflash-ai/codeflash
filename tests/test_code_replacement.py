@@ -813,6 +813,7 @@ class MainClass:
             test_framework="pytest",
             pytest_cmd="pytest",
             experiment_id=None,
+            test_project_root=file_path.parent.resolve(),
         ),
     )
     func_top_optimize = FunctionToOptimize(

@@ -114,7 +114,9 @@ def functionA():
     return True""",
         )
         f.flush()
-        test_config = TestConfig(tests_root="tests", project_root_path=".", test_framework="pytest")
+        test_config = TestConfig(
+            tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
+        )
         path_obj_name = Path(f.name)
         functions, functions_count = get_functions_to_optimize(
             optimize_all=None,

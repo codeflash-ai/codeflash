@@ -1,12 +1,11 @@
-import pathlib
 import tempfile
 from argparse import Namespace
+from pathlib import Path
 
 import pytest
-from returns.pipeline import is_successful
-
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 from codeflash.optimization.optimizer import Optimizer
+from returns.pipeline import is_successful
 
 
 class HelperClass:
@@ -220,15 +219,16 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
     with tempfile.NamedTemporaryFile(mode="w") as f:
         f.write(code)
         f.flush()
-        file_path = pathlib.Path(f.name).resolve()
+        file_path = Path(f.name).resolve()
         opt = Optimizer(
             Namespace(
-                project_root=str(file_path.parent.resolve()),
+                project_root=file_path.parent.resolve(),
                 disable_telemetry=True,
                 tests_root="tests",
                 test_framework="pytest",
                 pytest_cmd="pytest",
                 experiment_id=None,
+                test_project_root=Path().resolve(),
             ),
         )
         function_to_optimize = FunctionToOptimize(
@@ -350,15 +350,16 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
 
 
 def test_bubble_sort_deps() -> None:
-    file_path = (pathlib.Path(__file__) / ".." / ".." / "code_to_optimize" / "bubble_sort_deps.py").resolve()
+    file_path = (Path(__file__) / ".." / ".." / "code_to_optimize" / "bubble_sort_deps.py").resolve()
     opt = Optimizer(
         Namespace(
-            project_root=str(file_path.parent.parent.resolve()),
+            project_root=file_path.parent.parent.resolve(),
             disable_telemetry=True,
             tests_root=str(file_path.parent / "tests"),
             test_framework="pytest",
             pytest_cmd="pytest",
             experiment_id=None,
+            test_project_root=file_path.parent.resolve(),
         ),
     )
     function_to_optimize = FunctionToOptimize(

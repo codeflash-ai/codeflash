@@ -14,7 +14,7 @@ def main():
     print("cwd", cwd)
     command = [
         "python",
-        "../codeflash/main.py",
+        "../../../codeflash/main.py",
         "--all",
         "--no-pr",
     ]

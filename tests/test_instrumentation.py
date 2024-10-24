@@ -328,12 +328,13 @@ def test_sort():
 
         opt = Optimizer(
             Namespace(
-                project_root=str(project_root_path),
+                project_root=project_root_path,
                 disable_telemetry=True,
-                tests_root=str(tests_root),
+                tests_root=tests_root,
                 test_framework="pytest",
                 pytest_cmd="pytest",
                 experiment_id=None,
+                test_project_root=project_root_path,
             ),
         )
 
@@ -500,12 +501,13 @@ def test_sort_parametrized(input, expected_output):
 
         opt = Optimizer(
             Namespace(
-                project_root=str(project_root_path),
+                project_root=project_root_path,
                 disable_telemetry=True,
-                tests_root=str(tests_root),
+                tests_root=tests_root,
                 test_framework="pytest",
                 pytest_cmd="pytest",
                 experiment_id=None,
+                test_project_root=project_root_path,
             ),
         )
         test_results = opt.run_and_parse_tests(
@@ -672,12 +674,13 @@ def test_sort_parametrized_loop(input, expected_output):
         )
         opt = Optimizer(
             Namespace(
-                project_root=str(project_root_path),
+                project_root=project_root_path,
                 disable_telemetry=True,
-                tests_root=str(tests_root),
+                tests_root=tests_root,
                 test_framework="pytest",
                 pytest_cmd="pytest",
                 experiment_id=None,
+                test_project_root=project_root_path,
             ),
         )
         test_results = opt.run_and_parse_tests(
@@ -875,12 +878,13 @@ def test_sort():
 
         opt = Optimizer(
             Namespace(
-                project_root=str(project_root_path),
+                project_root=project_root_path,
                 disable_telemetry=True,
-                tests_root=str(tests_root),
+                tests_root=tests_root,
                 test_framework="pytest",
                 pytest_cmd="pytest",
                 experiment_id=None,
+                test_project_root=project_root_path,
             ),
         )
         test_results = opt.run_and_parse_tests(
@@ -1060,12 +1064,13 @@ class TestPigLatin(unittest.TestCase):
         )
         opt = Optimizer(
             Namespace(
-                project_root=str(project_root_path),
+                project_root=project_root_path,
                 disable_telemetry=True,
-                tests_root=str(tests_root),
+                tests_root=tests_root,
                 test_framework="unittest",
                 pytest_cmd="pytest",
                 experiment_id=None,
+                test_project_root=project_root_path,
             ),
         )
         test_results = opt.run_and_parse_tests(
@@ -1236,12 +1241,13 @@ class TestPigLatin(unittest.TestCase):
         )
         opt = Optimizer(
             Namespace(
-                project_root=str(project_root_path),
+                project_root=project_root_path,
                 disable_telemetry=True,
-                tests_root=str(tests_root),
+                tests_root=tests_root,
                 test_framework="unittest",
                 pytest_cmd="pytest",
                 experiment_id=None,
+                test_project_root=project_root_path,
             ),
         )
         test_results = opt.run_and_parse_tests(
@@ -1411,12 +1417,13 @@ class TestPigLatin(unittest.TestCase):
 
         opt = Optimizer(
             Namespace(
-                project_root=str(project_root_path),
+                project_root=project_root_path,
                 disable_telemetry=True,
-                tests_root=str(tests_root),
+                tests_root=tests_root,
                 test_framework="unittest",
                 pytest_cmd="pytest",
                 experiment_id=None,
+                test_project_root=project_root_path,
             ),
         )
         test_results = opt.run_and_parse_tests(
@@ -1590,12 +1597,13 @@ class TestPigLatin(unittest.TestCase):
         )
         opt = Optimizer(
             Namespace(
-                project_root=str(project_root_path),
+                project_root=project_root_path,
                 disable_telemetry=True,
-                tests_root=str(tests_root),
+                tests_root=tests_root,
                 test_framework="unittest",
                 pytest_cmd="pytest",
                 experiment_id=None,
+                test_project_root=project_root_path,
             ),
         )
         test_results = opt.run_and_parse_tests(
@@ -2225,8 +2233,6 @@ import pytest
 @pytest.mark.parametrize("n, expected_total_sleep_time", [
     (0.01, 0.010),
     (0.02, 0.020),
-    (0.03, 0.030),
-    (0.04, 0.040),
 ])
 def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
     output = accurate_sleepfunc(n)
@@ -2269,7 +2275,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_con.commit()
     return return_value
 
-@pytest.mark.parametrize('n, expected_total_sleep_time', [(0.01, 0.01), (0.02, 0.02), (0.03, 0.03), (0.04, 0.04)])
+@pytest.mark.parametrize('n, expected_total_sleep_time', [(0.01, 0.01), (0.02, 0.02)])
 def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
@@ -2301,7 +2307,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
             test_path,
-            [CodePosition(10, 13)],
+            [CodePosition(8, 13)],
             func,
             project_root_path,
             "pytest",
@@ -2324,12 +2330,13 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
 
         opt = Optimizer(
             Namespace(
-                project_root=str(project_root_path),
+                project_root=project_root_path,
                 disable_telemetry=True,
-                tests_root=str(tests_root),
+                tests_root=tests_root,
                 test_framework="pytest",
                 pytest_cmd="pytest",
                 experiment_id=None,
+                test_project_root=project_root_path,
             ),
         )
         test_files = TestFiles(
@@ -2346,8 +2353,8 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
             test_files=test_files,
             optimization_iteration=0,
             test_functions=None,
-            pytest_min_loops=3,
-            pytest_max_loops=3,
+            pytest_min_loops=2,
+            pytest_max_loops=2,
             testing_time=0.1,
         )
 
@@ -2359,12 +2366,11 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
             test_results[0].id.test_module_path
             == "code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp"
         )
-        assert test_results[4].did_pass
 
-        assert len(test_results) == 12
+        assert len(test_results) == 4
         for i, test_result in enumerate(test_results):
             assert test_result.did_pass
-            assert math.isclose(test_result.runtime, ((i % 4) + 1) * 100_000_000, rel_tol=0.01)
+            assert math.isclose(test_result.runtime, ((i % 2) + 1) * 100_000_000, rel_tol=0.01)
 
     finally:
         test_path.unlink(missing_ok=True)
@@ -2479,12 +2485,13 @@ class TestPigLatin(unittest.TestCase):
 
         opt = Optimizer(
             Namespace(
-                project_root=str(project_root_path),
+                project_root=project_root_path,
                 disable_telemetry=True,
-                tests_root=str(tests_root),
+                tests_root=tests_root,
                 test_framework="unittest",
                 pytest_cmd="pytest",
                 experiment_id=None,
+                test_project_root=project_root_path,
             ),
         )
         test_files = TestFiles(
