@@ -13,9 +13,7 @@ def performance_gain(*, original_runtime_ns: int, optimized_runtime_ns: int) -> 
 
 
 def speedup_critic(
-    candidate_result: OptimizedCandidateResult,
-    original_code_runtime: int,
-    best_runtime_until_now: int,
+    candidate_result: OptimizedCandidateResult, original_code_runtime: int, best_runtime_until_now: int
 ) -> bool:
     """Takes in a correct optimized Test Result and decides if the optimization should actually
     be surfaced to the user.
@@ -33,8 +31,7 @@ def speedup_critic(
         noise_floor = noise_floor * 2  # Increase the noise floor in GitHub Actions mode
 
     perf_gain = performance_gain(
-        original_runtime_ns=original_code_runtime,
-        optimized_runtime_ns=candidate_result.best_test_runtime,
+        original_runtime_ns=original_code_runtime, optimized_runtime_ns=candidate_result.best_test_runtime
     )
     if (perf_gain > noise_floor) and candidate_result.best_test_runtime < best_runtime_until_now:
         return True

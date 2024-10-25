@@ -36,16 +36,12 @@ class TestUnittestRunnerSorter(unittest.TestCase):
 
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         test_files = TestFiles(
-            test_files=[
-                TestFile(instrumented_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST),
-            ],
+            test_files=[TestFile(instrumented_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
         )
         fp.write(code.encode("utf-8"))
         fp.flush()
         result_file, process = run_tests(
-            test_files,
-            test_framework=config.test_framework,
-            cwd=Path(config.project_root_path),
+            test_files, test_framework=config.test_framework, cwd=Path(config.project_root_path)
         )
         results = parse_test_xml(result_file, test_files, config, process)
     assert results[0].did_pass, "Test did not pass as expected"
@@ -72,9 +68,7 @@ def test_sort():
     )
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         test_files = TestFiles(
-            test_files=[
-                TestFile(instrumented_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST),
-            ],
+            test_files=[TestFile(instrumented_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
         )
         fp.write(code.encode("utf-8"))
         fp.flush()
@@ -90,10 +84,7 @@ def test_sort():
             pytest_target_runtime_seconds=1,
         )
         results = parse_test_xml(
-            test_xml_file_path=result_file,
-            test_files=test_files,
-            test_config=config,
-            run_result=process,
+            test_xml_file_path=result_file, test_files=test_files, test_config=config, run_result=process
         )
     assert results[0].did_pass, "Test did not pass as expected"
     result_file.unlink(missing_ok=True)

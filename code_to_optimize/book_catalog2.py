@@ -5,19 +5,7 @@ from typing import Any, cast
 from _typeshed import SupportsDunderGT, SupportsDunderLT
 from sqlalchemy.orm import Session
 
-from code_to_optimize.book_catalog import (
-    POSTGRES_CONNECTION_STRING,
-    Author,
-    Base,
-    Book,
-    _session,
-    _t,
-    authors,
-    authors_name,
-    engine,
-    init_table,
-    session_factory,
-)
+from code_to_optimize.book_catalog import Author, Book
 
 
 def get_authors(session: Session) -> list[Author]:
@@ -26,7 +14,4 @@ def get_authors(session: Session) -> list[Author]:
     book: Book
     for book in books:
         _authors.append(book.author)
-    return sorted(
-        list(set(_authors)),
-        key=lambda x: cast(SupportsDunderLT[Any] | SupportsDunderGT[Any], x.id),
-    )
+    return sorted(list(set(_authors)), key=lambda x: cast(SupportsDunderLT[Any] | SupportsDunderGT[Any], x.id))

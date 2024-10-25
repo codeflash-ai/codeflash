@@ -85,10 +85,7 @@ class TestResults(BaseModel):
     def merge(self, other: TestResults) -> None:
         self.test_results.extend(other.test_results)
 
-    def get_by_id(
-        self,
-        invocation_id: InvocationId,
-    ) -> FunctionTestInvocation | None:
+    def get_by_id(self, invocation_id: InvocationId) -> FunctionTestInvocation | None:
         return next((r for r in self.test_results if r.id == invocation_id), None)
 
     def get_all_ids(self) -> set[InvocationId]:
@@ -129,7 +126,7 @@ class TestResults(BaseModel):
             [
                 f"{test_type.to_name()}- (Passed: {report[test_type]['passed']}, Failed: {report[test_type]['failed']})"
                 for test_type in TestType
-            ],
+            ]
         )
 
     def total_passed_runtime(self) -> int:
@@ -141,14 +138,14 @@ class TestResults(BaseModel):
         for result in self.test_results:
             if result.did_pass and not result.runtime:
                 logger.debug(
-                    f"Ignoring test case that passed but had no runtime -> {result.id}, Loop # {result.loop_index}",
+                    f"Ignoring test case that passed but had no runtime -> {result.id}, Loop # {result.loop_index}"
                 )
         usable_results = [result for result in self.test_results if result.did_pass and result.runtime]
         return sum(
             [
                 min([result.runtime for result in usable_results if result.id == invocation_id])
                 for invocation_id in {result.id for result in usable_results}
-            ],
+            ]
         )
 
     def __iter__(self) -> Iterator[FunctionTestInvocation]:
@@ -192,10 +189,7 @@ class TestResults(BaseModel):
                 or test_result.runtime != other_test_result.runtime
                 or test_result.test_framework != other_test_result.test_framework
                 or test_result.test_type != other_test_result.test_type
-                or not comparator(
-                    test_result.return_value,
-                    other_test_result.return_value,
-                )
+                or not comparator(test_result.return_value, other_test_result.return_value)
             ):
                 sys.setrecursionlimit(original_recursion_limit)
                 return False

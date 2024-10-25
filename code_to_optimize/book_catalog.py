@@ -6,8 +6,10 @@ from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
 from sqlalchemy.orm.relationships import Relationship
 
-POSTGRES_CONNECTION_STRING: str = ("postgresql://cf_developer:XJcbU37MBYeh4dDK6PTV5n@sqlalchemy-experiments.postgres"
-                                   ".database.azure.com:5432/postgres")
+POSTGRES_CONNECTION_STRING: str = (
+    "postgresql://cf_developer:XJcbU37MBYeh4dDK6PTV5n@sqlalchemy-experiments.postgres"
+    ".database.azure.com:5432/postgres"
+)
 
 
 class Base(DeclarativeBase):
@@ -52,10 +54,8 @@ def get_authors(books: list[Book]) -> list[Author]:
     book: Book
     for book in books:
         _authors.append(book.author)
-    return sorted(
-        list(set(_authors)),
-        key=lambda x: x.id,
-    )
+    return sorted(list(set(_authors)), key=lambda x: x.id)
+
 
 def get_authors2(num_authors) -> list[Author]:
     engine: Engine = create_engine(POSTGRES_CONNECTION_STRING, echo=True)
@@ -66,10 +66,7 @@ def get_authors2(num_authors) -> list[Author]:
     book: Book
     for book in books:
         _authors.append(book.author)
-    return sorted(
-        list(set(_authors)),
-        key=lambda x: x.id,
-    )[:num_authors]
+    return sorted(list(set(_authors)), key=lambda x: x.id)[:num_authors]
 
 
 def get_top_author(authors: List[Author]) -> Author:
@@ -84,9 +81,7 @@ def get_top_author(authors: List[Author]) -> Author:
     # Step 2: Iterate over each author to count their bestsellers
     for author in authors:
         bestseller_count = (
-            session.query(func.count(Book.id))
-            .filter(Book.author_id == author.id, Book.is_bestseller == True)
-            .scalar()
+            session.query(func.count(Book.id)).filter(Book.author_id == author.id, Book.is_bestseller == True).scalar()
         )
 
         # Step 3: Update the author with the maximum bestsellers

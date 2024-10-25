@@ -12,13 +12,13 @@ def get_codeflash_api_key() -> Optional[str]:
     if not api_key:
         raise OSError(
             "I didn't find a Codeflash API key in your environment.\nYou can generate one at "
-            "https://app.codeflash.ai/app/apikeys,\nthen set it as a CODEFLASH_API_KEY environment variable.",
+            "https://app.codeflash.ai/app/apikeys,\nthen set it as a CODEFLASH_API_KEY environment variable."
         )
     if not api_key.startswith("cf-"):
         raise OSError(
             f"Your Codeflash API key seems to be invalid. It should start with a 'cf-' prefix; I found '{api_key}' "
             f"instead.\nYou can generate one at https://app.codeflash.ai/app/apikeys,\nthen set it as a "
-            f"CODEFLASH_API_KEY environment variable.",
+            f"CODEFLASH_API_KEY environment variable."
         )
     return api_key
 
@@ -27,9 +27,9 @@ def ensure_codeflash_api_key() -> bool:
     try:
         get_codeflash_api_key()
     except OSError:
-        logger.error(  # noqa: TRY400
+        logger.error(
             "Codeflash API key not found in your environment.\nYou can generate one at "
-            "https://app.codeflash.ai/app/apikeys,\nthen set it as a CODEFLASH_API_KEY environment variable.",
+            "https://app.codeflash.ai/app/apikeys,\nthen set it as a CODEFLASH_API_KEY environment variable."
         )
         return False
     return True
@@ -53,6 +53,6 @@ def ensure_pr_number() -> bool:
     if not get_pr_number():
         raise OSError(
             "CODEFLASH_PR_NUMBER not found in environment variables; make sure the Github Action is setting this so "
-            "Codeflash can comment on the right PR",
+            "Codeflash can comment on the right PR"
         )
     return True

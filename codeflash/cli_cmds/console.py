@@ -11,9 +11,7 @@ console = Console(record=True)
 
 logging.basicConfig(
     level=logging.INFO,
-    handlers=[
-        RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False),
-    ],
+    handlers=[RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)],
     format=BARE_LOGGING_FORMAT,
 )
 
@@ -21,9 +19,7 @@ logger = logging.getLogger("rich")
 
 
 def paneled_text(
-    text: str,
-    panel_args: dict[str, str | bool] | None = None,
-    text_args: dict[str, str] | None = None,
+    text: str, panel_args: dict[str, str | bool] | None = None, text_args: dict[str, str] | None = None
 ) -> None:
     from rich.panel import Panel
     from rich.text import Text

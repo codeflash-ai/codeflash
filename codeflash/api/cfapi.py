@@ -22,11 +22,7 @@ else:
     CFAPI_BASE_URL = "https://app.codeflash.ai"
 
 
-def make_cfapi_request(
-    endpoint: str,
-    method: str,
-    payload: Optional[Dict[str, Any]] = None,
-) -> requests.Response:
+def make_cfapi_request(endpoint: str, method: str, payload: Optional[Dict[str, Any]] = None) -> requests.Response:
     """Make an HTTP request using the specified method, URL, headers, and JSON payload.
     :param endpoint: The endpoint URL to send the request to.
     :param method: The HTTP method to use ('GET', 'POST', etc.).
@@ -55,11 +51,8 @@ def get_user_id() -> Optional[str]:
     response = make_cfapi_request(endpoint="/cli-get-user", method="GET")
     if response.status_code == 200:
         return response.text
-    else:
-        logger.error(
-            f"Failed to look up your userid; is your CF API key valid? ({response.reason})",
-        )
-        return None
+    logger.error(f"Failed to look up your userid; is your CF API key valid? ({response.reason})")
+    return None
 
 
 def suggest_changes(
@@ -137,10 +130,7 @@ def is_github_app_installed_on_repo(owner: str, repo: str) -> bool:
     :param repo: The name of the repository.
     :return: The response object.
     """
-    response = make_cfapi_request(
-        endpoint=f"/is-github-app-installed?repo={repo}&owner={owner}",
-        method="GET",
-    )
+    response = make_cfapi_request(endpoint=f"/is-github-app-installed?repo={repo}&owner={owner}", method="GET")
     if not response.ok or response.text != "true":
         logger.error(f"Error: {response.text}")
         return False
@@ -153,17 +143,9 @@ def get_blocklisted_functions() -> dict[str, str]:
         return {}
 
     owner, repo = get_repo_owner_and_name()
-    information = {
-        "pr_number": pr_number,
-        "repo_owner": owner,
-        "repo_name": repo,
-    }
+    information = {"pr_number": pr_number, "repo_owner": owner, "repo_name": repo}
     try:
-        req = make_cfapi_request(
-            endpoint="/verify-existing-optimizations",
-            method="POST",
-            payload=information,
-        )
+        req = make_cfapi_request(endpoint="/verify-existing-optimizations", method="POST", payload=information)
         content: dict[str, list[str]] = req.json()
     except Exception as e:
         logger.error(f"Error getting blocklisted functions: {e}")

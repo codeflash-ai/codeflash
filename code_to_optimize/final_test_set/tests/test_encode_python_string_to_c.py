@@ -1,6 +1,4 @@
-from code_to_optimize.final_test_set.encode_python_string_to_c import (
-    _encodePythonStringToC,
-)
+from code_to_optimize.final_test_set.encode_python_string_to_c import _encodePythonStringToC
 
 
 def test_empty_string():

@@ -45,10 +45,7 @@ def main(trace_id: str) -> None:
     write_to_file("original_code.py", original_code)
 
     # Write each optimization candidate to its own file
-    for idx, (opt_id, optimization) in enumerate(
-        extract_json_values(optimizations_post).items(),
-        start=1,
-    ):
+    for idx, (opt_id, optimization) in enumerate(extract_json_values(optimizations_post).items(), start=1):
         filename = f"optimization_candidate_{idx}.py"
         explanation = explanations_post.get(opt_id, "")
         speedup = speedup_ratio.get(opt_id)
@@ -61,21 +58,13 @@ def main(trace_id: str) -> None:
         valid_speedup_values = [v for v in speedup_ratio.values() if v is not None]
         best_speedup = max(valid_speedup_values, default=None) if valid_speedup_values else None
         if best_speedup is not None:
-            best_optimization_id = next(
-                (id for id, speedup in speedup_ratio.items() if speedup == best_speedup),
-                None,
-            )
+            best_optimization_id = next((id for id, speedup in speedup_ratio.items() if speedup == best_speedup), None)
             best_optimization = optimizations_post.get(best_optimization_id)
             best_explanation = explanations_post.get(best_optimization_id, "")
             best_speedup_comment = f"Speedup: {best_speedup}"
-            best_content_with_comment = (
-                f'"""{best_explanation}\n\n{best_speedup_comment}"""\n\n{best_optimization}'
-            )
+            best_content_with_comment = f'"""{best_explanation}\n\n{best_speedup_comment}"""\n\n{best_optimization}'
             if best_optimization and best_explanation is not None:
-                write_to_file(
-                    "best_optimization_candidate.py",
-                    best_content_with_comment,
-                )
+                write_to_file("best_optimization_candidate.py", best_content_with_comment)
     else:
         print("No speedup ratio found")
 

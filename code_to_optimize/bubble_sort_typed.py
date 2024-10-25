@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from typing import Any, Callable, Iterable, NewType, Optional, Protocol, TypeVar
 
@@ -84,16 +84,11 @@ def is_new_type2(type_: type[Any]) -> bool:
 
 
 def _to_str(
-    size: int,
-    suffixes: Iterable[str],
-    base: int,
-    *,
-    precision: Optional[int] = 1,
-    separator: Optional[str] = " ",
+    size: int, suffixes: Iterable[str], base: int, *, precision: Optional[int] = 1, separator: Optional[str] = " "
 ) -> str:
     if size == 1:
         return "1 byte"
-    elif size < base:
+    if size < base:
         return f"{size:,} bytes"
 
     for i, suffix in enumerate(suffixes, 2):  # noqa: B007
@@ -101,10 +96,7 @@ def _to_str(
         if size < unit:
             break
     return "{:,.{precision}f}{separator}{}".format(
-        (base * size / unit),
-        suffix,
-        precision=precision,
-        separator=separator,
+        (base * size / unit), suffix, precision=precision, separator=separator
     )
 
 
@@ -114,16 +106,11 @@ def _to_str(
 
 
 def _to_str2(
-    size: int,
-    suffixes: Iterable[str],
-    base: int,
-    *,
-    precision: Optional[int] = 1,
-    separator: Optional[str] = " ",
+    size: int, suffixes: Iterable[str], base: int, *, precision: Optional[int] = 1, separator: Optional[str] = " "
 ) -> str:
     if size == 1:
         return "1 byte"
-    elif size < base:
+    if size < base:
         return f"{size:,} bytes"
 
     unit = base
@@ -376,9 +363,7 @@ def with_pattern(pattern: str, regex_group_count: int | None = None) -> Callable
 
 def with_pattern2(pattern: str, regex_group_count: int | None = None) -> Callable:
     return (
-        lambda func: setattr(func, "pattern", pattern)
-        or setattr(func, "regex_group_count", regex_group_count)
-        or func
+        lambda func: setattr(func, "pattern", pattern) or setattr(func, "regex_group_count", regex_group_count) or func
     )
 
 

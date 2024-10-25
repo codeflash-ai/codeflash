@@ -2,15 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import ForeignKey, Integer, String, create_engine
 from sqlalchemy.engine.base import Engine
-from sqlalchemy.orm import (
-    DeclarativeBase,
-    Mapped,
-    Relationship,
-    Session,
-    mapped_column,
-    relationship,
-    sessionmaker,
-)
+from sqlalchemy.orm import DeclarativeBase, Mapped, Relationship, Session, mapped_column, relationship, sessionmaker
 
 
 # Custom base class
@@ -18,24 +10,24 @@ class Base(DeclarativeBase):
     pass
 
 
-engine: Engine = create_engine('sqlite:///example.db')
+engine: Engine = create_engine("sqlite:///example.db")
 
 session_factory = sessionmaker(bind=engine)
 session: Session = session_factory()
 
 
 class User(Base):
-    __tablename__: str = 'users'
+    __tablename__: str = "users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String)
     posts: Relationship[list[Post]] = relationship("Post", order_by="Post.id", back_populates="user")
 
 
 class Post(Base):
-    __tablename__: str = 'posts'
+    __tablename__: str = "posts"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'))
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"))
     user: Relationship[User] = relationship("User", back_populates="posts")
 
 

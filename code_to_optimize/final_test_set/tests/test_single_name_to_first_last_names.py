@@ -1,6 +1,4 @@
-from code_to_optimize.final_test_set.single_name_to_first_last_names import (
-    single_name_to_first_last_names,
-)
+from code_to_optimize.final_test_set.single_name_to_first_last_names import single_name_to_first_last_names
 
 
 def test_two_part_name():

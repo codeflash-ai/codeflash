@@ -44,11 +44,7 @@ def pytest_addoption(parser: Parser) -> None:
         help="The amount of time to wait between each test loop.",
     )
     pytest_loops.addoption(
-        "--codeflash_hours",
-        action="store",
-        default=0,
-        type=float,
-        help="The number of hours to loop the tests for.",
+        "--codeflash_hours", action="store", default=0, type=float, help="The number of hours to loop the tests for."
     )
     pytest_loops.addoption(
         "--codeflash_minutes",
@@ -66,11 +62,7 @@ def pytest_addoption(parser: Parser) -> None:
     )
 
     pytest_loops.addoption(
-        "--codeflash_loops",
-        action="store",
-        default=1,
-        type=int,
-        help="The number of times to loop each test",
+        "--codeflash_loops", action="store", default=1, type=int, help="The number of times to loop each test"
     )
 
     pytest_loops.addoption(
@@ -101,10 +93,7 @@ def pytest_addoption(parser: Parser) -> None:
 
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config: Config) -> None:
-    config.addinivalue_line(
-        "markers",
-        "loops(n): run the given test function `n` times.",
-    )
+    config.addinivalue_line("markers", "loops(n): run the given test function `n` times.")
     config.pluginmanager.register(PyTest_Loops(config), PyTest_Loops.name)
 
 
@@ -122,8 +111,7 @@ class PyTest_Loops:
         """Reimplement the test loop but loop for the user defined amount of time."""
         if session.testsfailed and not session.config.option.continue_on_collection_errors:
             raise session.Interrupted(
-                "%d error%s during collection"
-                % (session.testsfailed, "s" if session.testsfailed != 1 else ""),
+                "%d error%s during collection" % (session.testsfailed, "s" if session.testsfailed != 1 else "")
             )
 
         if session.config.option.collectonly:
@@ -188,9 +176,7 @@ class PyTest_Loops:
         seconds = session.config.option.codeflash_seconds
         total_time = hours_in_seconds + minutes_in_seconds + seconds
         if total_time < SHORTEST_AMOUNT_OF_TIME:
-            raise InvalidTimeParameterError(
-                f"Total time cannot be less than: {SHORTEST_AMOUNT_OF_TIME}!",
-            )
+            raise InvalidTimeParameterError(f"Total time cannot be less than: {SHORTEST_AMOUNT_OF_TIME}!")
         return total_time
 
     def _timed_out(self, session: Session, start_time: float, count: int) -> bool:
@@ -233,7 +219,7 @@ class PyTest_Loops:
                 else:
                     raise UnexpectedError(
                         "This call couldn't work with pytest-loops. "
-                        "Please consider raising an issue with your usage.",
+                        "Please consider raising an issue with your usage."
                     )
         return count
 
@@ -257,9 +243,5 @@ class PyTest_Loops:
 
             scope = metafunc.config.option.codeflash_loops_scope
             metafunc.parametrize(
-                "__pytest_loop_step_number",
-                range(count),
-                indirect=True,
-                ids=make_progress_id,
-                scope=scope,
+                "__pytest_loop_step_number", range(count), indirect=True, ids=make_progress_id, scope=scope
             )

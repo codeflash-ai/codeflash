@@ -31,10 +31,7 @@ def parse_args() -> Namespace:
     init_actions_parser = subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
     init_actions_parser.set_defaults(func=install_github_actions)
     parser.add_argument("--file", help="Try to optimize only this file")
-    parser.add_argument(
-        "--function",
-        help="Try to optimize only this function within the given file path",
-    )
+    parser.add_argument("--function", help="Try to optimize only this function within the given file path")
     parser.add_argument(
         "--all",
         help="Try to optimize all functions. Can take a really long time. Can pass an optional starting directory to"
@@ -50,30 +47,16 @@ def parse_args() -> Namespace:
         " This is the top-level root directory where all the Python source code is located.",
     )
     parser.add_argument(
-        "--tests-root",
-        type=str,
-        help="Path to the test directory of the project, where all the tests are located.",
+        "--tests-root", type=str, help="Path to the test directory of the project, where all the tests are located."
     )
     parser.add_argument("--test-framework", choices=["pytest", "unittest"], default="pytest")
+    parser.add_argument("--config-file", type=str, help="Path to the pyproject.toml with codeflash configs.")
     parser.add_argument(
-        "--config-file",
-        type=str,
-        help="Path to the pyproject.toml with codeflash configs.",
+        "--use-cached-tests", action="store_true", help="Use cached tests from a specified file for debugging."
     )
+    parser.add_argument("--replay-test", type=str, help="Path to replay test to optimize functions from")
     parser.add_argument(
-        "--use-cached-tests",
-        action="store_true",
-        help="Use cached tests from a specified file for debugging.",
-    )
-    parser.add_argument(
-        "--replay-test",
-        type=str,
-        help="Path to replay test to optimize functions from",
-    )
-    parser.add_argument(
-        "--no-pr",
-        action="store_true",
-        help="Do not create a PR for the optimization, only update the code locally.",
+        "--no-pr", action="store_true", help="Do not create a PR for the optimization, only update the code locally."
     )
     parser.add_argument(
         "--verify-setup",
@@ -188,7 +171,7 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
         except git.exc.InvalidGitRepositoryError:
             logger.exception(
                 "I couldn't find a git repository in the current directory. "
-                "I need a git repository to run --all and open PRs for optimizations. Exiting...",
+                "I need a git repository to run --all and open PRs for optimizations. Exiting..."
             )
             apologize_and_exit()
         if not args.no_pr and not check_and_push_branch(git_repo):

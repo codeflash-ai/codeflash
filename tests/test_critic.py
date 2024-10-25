@@ -3,45 +3,24 @@ import os
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.models.models import OptimizedCandidateResult
 from codeflash.result.critic import quantity_of_tests_critic, speedup_critic
-from codeflash.verification.test_results import (
-    FunctionTestInvocation,
-    InvocationId,
-    TestResults,
-    TestType,
-)
+from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults, TestType
 
 
 def test_speedup_critic():
     original_code_runtime = 1000
     best_runtime_until_now = 1000
-    candidate_result = OptimizedCandidateResult(
-        times_run=5,
-        best_test_runtime=800,
-        best_test_results=TestResults(),
-    )
+    candidate_result = OptimizedCandidateResult(times_run=5, best_test_runtime=800, best_test_results=TestResults())
 
     assert speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now)  # 20% improvement
 
-    candidate_result = OptimizedCandidateResult(
-        times_run=5,
-        best_test_runtime=940,
-        best_test_results=TestResults(),
-    )
+    candidate_result = OptimizedCandidateResult(times_run=5, best_test_runtime=940, best_test_results=TestResults())
 
-    assert not speedup_critic(
-        candidate_result,
-        original_code_runtime,
-        best_runtime_until_now,
-    )  # 6% improvement
+    assert not speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now)  # 6% improvement
 
     original_code_runtime = 100000
     best_runtime_until_now = 100000
 
-    candidate_result = OptimizedCandidateResult(
-        times_run=5,
-        best_test_runtime=94000,
-        best_test_results=TestResults(),
-    )
+    candidate_result = OptimizedCandidateResult(times_run=5, best_test_runtime=94000, best_test_results=TestResults())
 
     assert speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now)  # 6% improvement
 
@@ -140,9 +119,7 @@ def test_generated_test_critic():
     test_results = [test_1, test_2, test_3]
 
     candidate_result = OptimizedCandidateResult(
-        times_run=5,
-        best_test_runtime=100,
-        best_test_results=TestResults(test_results=test_results),
+        times_run=5, best_test_runtime=100, best_test_results=TestResults(test_results=test_results)
     )
 
     assert quantity_of_tests_critic(candidate_result)
@@ -150,9 +127,7 @@ def test_generated_test_critic():
     test_results = [test_1, test_3]
 
     candidate_result = OptimizedCandidateResult(
-        times_run=5,
-        best_test_runtime=100,
-        best_test_results=TestResults(test_results=test_results),
+        times_run=5, best_test_runtime=100, best_test_results=TestResults(test_results=test_results)
     )
 
     assert quantity_of_tests_critic(candidate_result)
@@ -160,9 +135,7 @@ def test_generated_test_critic():
     test_results = [test_1, test_3, test_4]
 
     candidate_result = OptimizedCandidateResult(
-        times_run=5,
-        best_test_runtime=100,
-        best_test_results=TestResults(test_results=test_results),
+        times_run=5, best_test_runtime=100, best_test_results=TestResults(test_results=test_results)
     )
 
     assert quantity_of_tests_critic(candidate_result)
@@ -170,9 +143,7 @@ def test_generated_test_critic():
     test_results = [test_1]
 
     candidate_result = OptimizedCandidateResult(
-        times_run=5,
-        best_test_runtime=100,
-        best_test_results=TestResults(test_results=test_results),
+        times_run=5, best_test_runtime=100, best_test_results=TestResults(test_results=test_results)
     )
 
     assert not quantity_of_tests_critic(candidate_result)
@@ -180,9 +151,7 @@ def test_generated_test_critic():
     test_results = [test_1, test_2]
 
     candidate_result = OptimizedCandidateResult(
-        times_run=5,
-        best_test_runtime=100,
-        best_test_results=TestResults(test_results=test_results),
+        times_run=5, best_test_runtime=100, best_test_results=TestResults(test_results=test_results)
     )
 
     assert quantity_of_tests_critic(candidate_result)
@@ -190,9 +159,7 @@ def test_generated_test_critic():
     test_results = [test_1, test_4]
 
     candidate_result = OptimizedCandidateResult(
-        times_run=5,
-        best_test_runtime=100,
-        best_test_results=TestResults(test_results=test_results),
+        times_run=5, best_test_runtime=100, best_test_results=TestResults(test_results=test_results)
     )
 
     assert not quantity_of_tests_critic(candidate_result)
@@ -200,9 +167,7 @@ def test_generated_test_critic():
     test_results = [test_4, test_5]
 
     candidate_result = OptimizedCandidateResult(
-        times_run=5,
-        best_test_runtime=100,
-        best_test_results=TestResults(test_results=test_results),
+        times_run=5, best_test_runtime=100, best_test_results=TestResults(test_results=test_results)
     )
 
     assert quantity_of_tests_critic(candidate_result)
@@ -210,9 +175,7 @@ def test_generated_test_critic():
     test_results = [test_1, test_2, test_3, test_4, test_5]
 
     candidate_result = OptimizedCandidateResult(
-        times_run=5,
-        best_test_runtime=100,
-        best_test_results=TestResults(test_results=test_results),
+        times_run=5, best_test_runtime=100, best_test_results=TestResults(test_results=test_results)
     )
 
     assert quantity_of_tests_critic(candidate_result)
@@ -222,9 +185,7 @@ def test_generated_test_critic():
     test_results = [test_1, test_2, test_3]
 
     candidate_result = OptimizedCandidateResult(
-        times_run=5,
-        best_test_runtime=100,
-        best_test_results=TestResults(test_results=test_results),
+        times_run=5, best_test_runtime=100, best_test_results=TestResults(test_results=test_results)
     )
 
     assert not quantity_of_tests_critic(candidate_result)
@@ -232,9 +193,7 @@ def test_generated_test_critic():
     test_results = [test_1, test_2, test_3, test_4]
 
     candidate_result = OptimizedCandidateResult(
-        times_run=5,
-        best_test_runtime=100,
-        best_test_results=TestResults(test_results=test_results),
+        times_run=5, best_test_runtime=100, best_test_results=TestResults(test_results=test_results)
     )
 
     assert not quantity_of_tests_critic(candidate_result)
@@ -242,9 +201,7 @@ def test_generated_test_critic():
     test_results = [test_1, test_2, test_3, test_5]
 
     candidate_result = OptimizedCandidateResult(
-        times_run=5,
-        best_test_runtime=100,
-        best_test_results=TestResults(test_results=test_results),
+        times_run=5, best_test_runtime=100, best_test_results=TestResults(test_results=test_results)
     )
 
     assert quantity_of_tests_critic(candidate_result)
