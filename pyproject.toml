@@ -43,6 +43,9 @@ rich = "^13.8.1"
 [tool.poetry.group.dev]
 optional = true
 
+# Don't forget to install the poetry plugins we use too:
+# poetry self add poetry-dynamic-versioning
+
 [tool.poetry.group.dev.dependencies]
 ipython = "^8.12.0"
 mypy = ">=1.13"
