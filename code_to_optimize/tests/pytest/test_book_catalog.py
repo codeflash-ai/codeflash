@@ -1,10 +1,10 @@
 from typing import Generator
 
 import pytest
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, delete, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from code_to_optimize.book_catalog import Book, get_authors
+from code_to_optimize.book_catalog import Author, Book, get_authors
 
 POSTGRES_CONNECTION_STRING = (
     "postgresql://cf_developer:XJcbU37MBYeh4dDK6PTV5n@sqlalchemy-experiments.postgres"

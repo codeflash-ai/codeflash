@@ -15,7 +15,8 @@ def cosine_similarity(X: Matrix, Y: Matrix) -> np.ndarray:
     Y = np.array(Y)
     if X.shape[1] != Y.shape[1]:
         raise ValueError(
-            f"Number of columns in X and Y must be the same. X has shape {X.shape} " f"and Y has shape {Y.shape}."
+            f"Number of columns in X and Y must be the same. X has shape {X.shape} "
+            f"and Y has shape {Y.shape}.",
         )
 
     X_norm = np.linalg.norm(X, axis=1)
@@ -26,7 +27,10 @@ def cosine_similarity(X: Matrix, Y: Matrix) -> np.ndarray:
 
 
 def cosine_similarity_top_k(
-    X: Matrix, Y: Matrix, top_k: Optional[int] = 5, score_threshold: Optional[float] = None
+    X: Matrix,
+    Y: Matrix,
+    top_k: Optional[int] = 5,
+    score_threshold: Optional[float] = None,
 ) -> Tuple[List[Tuple[int, int]], List[float]]:
     """Row-wise cosine similarity with optional top-k and score threshold filtering.
 

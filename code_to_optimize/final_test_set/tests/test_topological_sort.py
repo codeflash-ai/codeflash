@@ -33,7 +33,10 @@ def test_complex_dag():
     g.addEdge(2, 3)
     g.addEdge(3, 1)
     result = g.topologicalSort()
-    assert all(result.index(u) < result.index(v) for u, v in [(5, 2), (5, 0), (4, 0), (4, 1), (2, 3), (3, 1)])
+    assert all(
+        result.index(u) < result.index(v)
+        for u, v in [(5, 2), (5, 0), (4, 0), (4, 1), (2, 3), (3, 1)]
+    )
 
 
 def test_single_node_graph():

@@ -4,7 +4,10 @@ from typing import List, Set, Tuple
 
 
 def compare_lists(
-    li1: List[int], li2: List[int], value_func1=None, value_func2=None
+    li1: List[int],
+    li2: List[int],
+    value_func1=None,
+    value_func2=None,
 ) -> Tuple[Set[int], Set[int], Set[int]]:
     """Compare *li1* and *li2*, return the results as a list in the following form:
 
