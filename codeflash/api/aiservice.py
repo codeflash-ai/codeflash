@@ -34,34 +34,44 @@ class OptimizedCandidate:
 
 
 ph_events = {
-    "cli-optimize-error-caught": ("/optimize", "Error generating optimized candidates"),
-    "cli-optimize-error-response": ("/optimize", "Error generating optimized candidates"),
-    "cli-testgen-error-caught": ("/testgen", "Error generating tests"),
-    "cli-testgen-error-response": ("/testgen", "Error generating tests"),
-    None: ("/log_features", "Error logging features"),
+    "/optimize": ("cli-optimize-error-caught", "Error generating optimized candidates"),
+    "/testgen": ("cli-testgen-error-caught", "Error generating tests"),
+    "/log_features": ("cli-log_features-error-caught", "Error logging features"),
 }
 
 
-def stamina_on_error_ph_event(exc: Exception) -> bool:
-    """Handle errors by sending events to PostHog before retrying."""
-    if isinstance(exc, requests.HTTPError):
-        try:
-            if exc.request and exc.request.url:
-                endpoint = exc.request.url.split("/ai")[-1]
-                for event_key, (event_endpoint, event_message) in ph_events.items():
-                    if endpoint.startswith(event_endpoint):
-                        if event_key:
-                            ph(
-                                event_key,
-                                {"response_status_code": exc.response.status_code, "error": exc.response.text},
-                            )
-                        # logger.exception(f"{event_message}: {exc.response.status_code} - {exc.response.text}")
-                        logger.info(f"{event_message}: {exc.response.status_code} - {exc.response.text}")
-                        break
-        except (AttributeError, KeyError) as e:
-            logger.error(f"Error reporting to ph: {e}")
-        return True
-    return False
+def stamina_on_error_ph_event_hook(details: stamina.instrumentation.RetryDetails) -> None:
+    """Log an event to PostHog when an error occurs during a retry attempt."""
+    if isinstance(details.caused_by, requests.exceptions.HTTPError):
+        if details.caused_by.response.status_code != 200 and details.caused_by.response.url:
+            endpoint = details.caused_by.response.url.split("/ai")[-1]
+
+            event_name, event_description = ph_events.get(
+                endpoint,
+                (
+                    "ai-service-error-caught",
+                    f"{endpoint}, {details.caused_by.response.status_code=}, {details.caused_by.response.text=}",
+                ),
+            )
+
+            ph(
+                event_name,
+                {
+                    "response_status_code": details.caused_by.response.status_code,
+                    "error": details.caused_by.response.text,
+                },
+            )
+
+            logger.debug(
+                f"{event_description}: {details.caused_by.response.status_code} | {details.caused_by.response.text}"
+            )
+        else:
+            logger.debug(f"{details.caused_by.response=}, {details.caused_by.response.url=}")
+    else:
+        logger.debug(f"We sholdn't be here: {details.caused_by=}")
+
+
+stamina.instrumentation.set_on_retry_hooks([stamina_on_error_ph_event_hook])
 
 
 class AiServiceClient:
@@ -79,7 +89,7 @@ class AiServiceClient:
             return "http://localhost:8000"
         return "https://app.codeflash.ai"
 
-    @stamina.retry(on=stamina_on_error_ph_event, wait_initial=0.5, attempts=5)
+    @stamina.retry(on=requests.exceptions.HTTPError, timeout=1200, wait_initial=1)
     def make_ai_service_request(
         self, endpoint: str, method: str = "POST", payload: dict[str, Any] | None = None, timeout: float | None = None
     ) -> requests.Response:
@@ -128,12 +138,16 @@ class AiServiceClient:
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
         }
+
         logger.info("Generating optimized candidates ...")
         console.rule()
-
-        response = self.make_ai_service_request("/optimize", payload=payload, timeout=600)
+        try:
+            response = self.make_ai_service_request("/optimize", payload=payload, timeout=600)
+        except requests.exceptions.HTTPError:
+            return []
 
         optimizations_json = response.json()["optimizations"]
+
         logger.info(f"Generated {len(optimizations_json)} candidates.")
         console.rule()
         return [
@@ -230,5 +244,8 @@ class AiServiceClient:
 
 
 class LocalAiServiceClient(AiServiceClient):
+    """Client for interacting with the local AI service."""
+
     def get_aiservice_base_url(self) -> str:
+        """Get the base URL for the local AI service."""
         return "http://localhost:8000"

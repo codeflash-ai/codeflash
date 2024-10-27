@@ -484,7 +484,7 @@ def filter_functions(
         }
         log_string: str
         if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
-            logger.info(f"Ignoring:\n{log_string}")
+            logger.info(f"Ignoring: {log_string}")
     return {Path(k): v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 
