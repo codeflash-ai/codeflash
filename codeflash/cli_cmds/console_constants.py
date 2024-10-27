@@ -61,7 +61,6 @@ SPINNER_TYPES = {
     "hamburger",
     "dots",
     "squish",
-    "christmas",
     "toggle13",
     "star",
     "boxBounce",
