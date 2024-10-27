@@ -44,6 +44,8 @@ class OptimizedCandidateResult(BaseModel):
     times_run: int
     best_test_runtime: int
     best_test_results: TestResults
+    optimization_candidate_index: int
+    total_candidate_timing: int
 
 
 class GeneratedTests(BaseModel):
@@ -66,9 +68,7 @@ class TestFiles(BaseModel):
     test_files: list[TestFile]
 
     def get_by_type(self, test_type: TestType) -> TestFiles:
-        return TestFiles(
-            test_files=[test_file for test_file in self.test_files if test_file.test_type == test_type],
-        )
+        return TestFiles(test_files=[test_file for test_file in self.test_files if test_file.test_type == test_type])
 
     def add(self, test_file: TestFile) -> None:
         if test_file not in self.test_files:
@@ -77,29 +77,17 @@ class TestFiles(BaseModel):
             raise ValueError("Test file already exists in the list")
 
     def get_by_original_file_path(self, file_path: Path) -> TestFile | None:
-        return next(
-            (test_file for test_file in self.test_files if test_file.original_file_path == file_path),
-            None,
-        )
+        return next((test_file for test_file in self.test_files if test_file.original_file_path == file_path), None)
 
     def get_test_type_by_instrumented_file_path(self, file_path: Path) -> TestType | None:
         return next(
-            (
-                test_file.test_type
-                for test_file in self.test_files
-                if test_file.instrumented_file_path == file_path
-            ),
+            (test_file.test_type for test_file in self.test_files if test_file.instrumented_file_path == file_path),
             None,
         )
 
     def get_test_type_by_original_file_path(self, file_path: Path) -> TestType | None:
         return next(
-            (
-                test_file.test_type
-                for test_file in self.test_files
-                if test_file.original_file_path == file_path
-            ),
-            None,
+            (test_file.test_type for test_file in self.test_files if test_file.original_file_path == file_path), None
         )
 
     def __iter__(self) -> Iterator[TestFile]:

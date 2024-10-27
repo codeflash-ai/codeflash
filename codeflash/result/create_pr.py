@@ -6,7 +6,7 @@ from typing import Optional
 import git
 
 from codeflash.api import cfapi
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_replacer import is_zero_diff
 from codeflash.code_utils.git_utils import (
@@ -29,9 +29,7 @@ def existing_tests_source_for(
     existing_tests_unique = set()
     if test_files:
         for test_file in test_files:
-            existing_tests_unique.add(
-                "- " + str(Path(test_file.tests_in_file.test_file).relative_to(tests_root)),
-            )
+            existing_tests_unique.add("- " + str(Path(test_file.tests_in_file.test_file).relative_to(tests_root)))
     return "\n".join(sorted(existing_tests_unique))
 
 
@@ -52,8 +50,7 @@ def check_create_pr(
         relative_path = explanation.file_path.relative_to(git_root_dir()).as_posix()
         build_file_changes = {
             Path(p).relative_to(git_root_dir()).as_posix(): FileDiffContent(
-                oldContent=original_code[p],
-                newContent=new_code[p],
+                oldContent=original_code[p], newContent=new_code[p]
             )
             for p in original_code
             if not is_zero_diff(original_code[p], new_code[p])
@@ -85,7 +82,7 @@ def check_create_pr(
         else:
             logger.error(
                 f"Optimization was successful, but I failed to suggest changes to PR #{pr_number}."
-                f" Response from server was: {response.text}",
+                f" Response from server was: {response.text}"
             )
     else:
         logger.info("Creating a new PR with the optimized code...")
@@ -98,8 +95,7 @@ def check_create_pr(
         base_branch = get_current_branch()
         build_file_changes = {
             Path(p).relative_to(git_root_dir()).as_posix(): FileDiffContent(
-                oldContent=original_code[p],
-                newContent=new_code[p],
+                oldContent=original_code[p], newContent=new_code[p]
             )
             for p in original_code
         }
@@ -128,5 +124,6 @@ def check_create_pr(
         else:
             logger.error(
                 f"Optimization was successful, but I failed to create a PR with the optimized code."
-                f" Response from server was: {response.text}",
+                f" Response from server was: {response.text}"
             )
+        console.rule()
