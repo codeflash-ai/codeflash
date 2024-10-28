@@ -18,9 +18,9 @@ def performance_gain(*, original_runtime_ns: int, optimized_runtime_ns: int) -> 
 def speedup_critic(
     candidate_result: OptimizedCandidateResult, original_code_runtime: int, best_runtime_until_now: int
 ) -> bool:
-    """Takes in a correct optimized Test Result and decides if the optimization should actually
-    be surfaced to the user.
-    Ensures that the optimization is actually faster than the original code, above the noise floor.
+    """Take in a correct optimized Test Result and decide if the optimization should actually be surfaced to the user.
+
+    Ensure that the optimization is actually faster than the original code, above the noise floor.
     The noise floor is a function of the original code runtime. Currently, the noise floor is 2xMIN_IMPROVEMENT_THRESHOLD
     when the original runtime is less than 10 microseconds, and becomes MIN_IMPROVEMENT_THRESHOLD for any higher runtime.
     The noise floor is doubled when benchmarking on a (noisy) GitHub Action virtual instance, also we want to be more confident there.
@@ -37,9 +37,15 @@ def speedup_critic(
 
 
 def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool:
-    """Take in a correct optimized Test Result and decide if the optimization should actually be surfaced to the user."""
+    """Evaluate if the quantity of passed tests is sufficient to consider the optimization valid.
+
+    The criteria differ based on whether the code is running in GitHub Actions mode or not.
+    """
     test_results = candidate_result.best_test_results.test_results
     in_github_actions_mode = bool(env_utils.get_pr_number())
+
+    min_tests_github_actions = 4
+    min_tests_normal = 2
 
     passed_test = None
     count = 0
@@ -50,9 +56,9 @@ def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool
             if count == 1:
                 passed_test = test_result
             if in_github_actions_mode:
-                if count >= 4:
+                if count >= min_tests_github_actions:
                     return True
-            elif count >= 2:
+            elif count >= min_tests_normal:
                 return True
 
     # If only one test passed, check if it's a REPLAY_TEST

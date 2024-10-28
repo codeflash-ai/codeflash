@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 import dill as pickle
 from junitparser.xunit2 import JUnitXml
+from lxml.etree import XMLParser, parse
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import (
@@ -25,6 +26,12 @@ if TYPE_CHECKING:
 
     from codeflash.models.models import TestFiles
     from codeflash.verification.verification_utils import TestConfig
+
+
+def parse_func(file_path: Path) -> XMLParser:
+    """Parse the XML file with lxml.etree.XMLParser as the backend."""  #
+    xml_parser = XMLParser(huge_tree=True)
+    return parse(file_path, xml_parser)
 
 
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
@@ -144,7 +151,7 @@ def parse_test_xml(
         logger.warning(f"No test results for {test_xml_file_path} found.")
         return test_results
     try:
-        xml = JUnitXml.fromfile(str(test_xml_file_path))
+        xml = JUnitXml.fromfile(str(test_xml_file_path), parse_func=parse_func)
     except Exception as e:
         logger.warning(f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}")
         return test_results
