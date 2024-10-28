@@ -6,7 +6,6 @@ import platform
 from typing import TYPE_CHECKING, Any
 
 import requests
-import stamina
 from pydantic.dataclasses import dataclass
 from pydantic.json import pydantic_encoder
 
@@ -26,70 +25,22 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class OptimizedCandidate:
-    """Optimized candidate, containing the optimized source code, explanation, and optimization ID."""
-
     source_code: str
     explanation: str
     optimization_id: str
 
 
-ph_events = {
-    "/optimize": ("cli-optimize-error-caught", "Error generating optimized candidates"),
-    "/testgen": ("cli-testgen-error-caught", "Error generating tests"),
-    "/log_features": ("cli-log_features-error-caught", "Error logging features"),
-}
-
-
-def stamina_on_error_ph_event_hook(details: stamina.instrumentation.RetryDetails) -> None:
-    """Log an event to PostHog when an error occurs during a retry attempt."""
-    if isinstance(details.caused_by, requests.exceptions.HTTPError):
-        if details.caused_by.response.status_code != 200 and details.caused_by.response.url:
-            endpoint = details.caused_by.response.url.split("/ai")[-1]
-
-            event_name, event_description = ph_events.get(
-                endpoint,
-                (
-                    "ai-service-error-caught",
-                    f"{endpoint}, {details.caused_by.response.status_code=}, {details.caused_by.response.text=}",
-                ),
-            )
-
-            ph(
-                event_name,
-                {
-                    "response_status_code": details.caused_by.response.status_code,
-                    "error": details.caused_by.response.text,
-                },
-            )
-
-            logger.debug(
-                f"{event_description}: {details.caused_by.response.status_code} | {details.caused_by.response.text}"
-            )
-        else:
-            logger.debug(f"{details.caused_by.response=}, {details.caused_by.response.url=}")
-    else:
-        logger.debug(f"We sholdn't be here: {details.caused_by=}")
-
-
-stamina.instrumentation.set_on_retry_hooks([stamina_on_error_ph_event_hook])
-
-
 class AiServiceClient:
-    """Client for interacting with the AI service."""
-
     def __init__(self) -> None:
-        """Initialize the AI service client with base URL and headers."""
         self.base_url = self.get_aiservice_base_url()
         self.headers = {"Authorization": f"Bearer {get_codeflash_api_key()}", "Connection": "close"}
 
     def get_aiservice_base_url(self) -> str:
-        """Get the base URL for the AI service based on the environment."""
         if os.environ.get("CODEFLASH_AIS_SERVER", default="prod").lower() == "local":
             logger.info("Using local AI Service at http://localhost:8000")
             return "http://localhost:8000"
         return "https://app.codeflash.ai"
 
-    @stamina.retry(on=requests.exceptions.HTTPError, timeout=1200, wait_initial=1)
     def make_ai_service_request(
         self, endpoint: str, method: str = "POST", payload: dict[str, Any] | None = None, timeout: float | None = None
     ) -> requests.Response:
@@ -108,7 +59,7 @@ class AiServiceClient:
             response = requests.post(url, data=json_payload, headers=headers, timeout=timeout)
         else:
             response = requests.get(url, headers=self.headers, timeout=timeout)
-        response.raise_for_status()  # Will raise an HTTPError if the HTTP request returned an unsuccessful status code
+        # response.raise_for_status()  # Will raise an HTTPError if the HTTP request returned an unsuccessful status code
         return response
 
     def optimize_python_code(
@@ -143,19 +94,31 @@ class AiServiceClient:
         console.rule()
         try:
             response = self.make_ai_service_request("/optimize", payload=payload, timeout=600)
-        except requests.exceptions.HTTPError:
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating optimized candidates: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
             return []
 
-        optimizations_json = response.json()["optimizations"]
-
-        logger.info(f"Generated {len(optimizations_json)} candidates.")
+        if response.status_code == 200:
+            optimizations_json = response.json()["optimizations"]
+            logger.info(f"Generated {len(optimizations_json)} candidates.")
+            console.rule()
+            return [
+                OptimizedCandidate(
+                    source_code=opt["source_code"],
+                    explanation=opt["explanation"],
+                    optimization_id=opt["optimization_id"],
+                )
+                for opt in optimizations_json
+            ]
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
-        return [
-            OptimizedCandidate(
-                source_code=opt["source_code"], explanation=opt["explanation"], optimization_id=opt["optimization_id"]
-            )
-            for opt in optimizations_json
-        ]
+        return []
 
     def log_results(
         self,
@@ -184,8 +147,10 @@ class AiServiceClient:
             "is_correct": is_correct,
             "codeflash_version": codeflash_version,
         }
-
-        self.make_ai_service_request("/log_features", payload=payload, timeout=5)
+        try:
+            self.make_ai_service_request("/log_features", payload=payload, timeout=5)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error logging features: {e}")
 
     def generate_regression_tests(
         self,
@@ -221,7 +186,6 @@ class AiServiceClient:
             "pytest",
             "unittest",
         ], f"Invalid test framework, got {test_framework} but expected 'pytest' or 'unittest'"
-
         payload = {
             "source_code_being_tested": source_code_being_tested,
             "function_to_optimize": function_to_optimize,
@@ -235,12 +199,28 @@ class AiServiceClient:
             "python_version": platform.python_version(),
             "codeflash_version": codeflash_version,
         }
+        try:
+            response = self.make_ai_service_request("/testgen", payload=payload, timeout=600)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating tests: {e}")
+            ph("cli-testgen-error-caught", {"error": str(e)})
+            return None
 
-        response = self.make_ai_service_request("/testgen", payload=payload, timeout=600)
-        response_json = response.json()
-        logger.debug(f"Generated tests for function {function_to_optimize.function_name}")
+        # the timeout should be the same as the timeout for the AI service backend
 
-        return response_json["generated_tests"], response_json["instrumented_tests"]
+        if response.status_code == 200:
+            response_json = response.json()
+            logger.debug(f"Generated tests for function {function_to_optimize.function_name}")
+            return response_json["generated_tests"], response_json["instrumented_tests"]
+        try:
+            error = response.json()["error"]
+            logger.error(f"Error generating tests: {response.status_code} - {error}")
+            ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": error})
+            return None
+        except Exception:
+            logger.error(f"Error generating tests: {response.status_code} - {response.text}")
+            ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": response.text})
+            return None
 
 
 class LocalAiServiceClient(AiServiceClient):
