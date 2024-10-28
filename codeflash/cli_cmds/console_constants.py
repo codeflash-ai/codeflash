@@ -1,7 +1,6 @@
 SPINNER_TYPES = {
     "point",
     "simpleDots",
-    "earth",
     "pong",
     "boxBounce2",
     "bouncingBar",
@@ -9,7 +8,6 @@ SPINNER_TYPES = {
     "dots7",
     "aesthetic",
     "toggle5",
-    "weather",
     "dots6",
     "dots8",
     "star2",
@@ -21,7 +19,6 @@ SPINNER_TYPES = {
     "toggle12",
     "circle",
     "bouncingBall",
-    "clock",
     "toggle9",
     "shark",
     "circleHalves",
@@ -64,6 +61,5 @@ SPINNER_TYPES = {
     "toggle13",
     "star",
     "boxBounce",
-    "runner",
     "toggle7",
 }
