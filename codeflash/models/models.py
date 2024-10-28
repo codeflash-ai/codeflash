@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Generator, Iterator, Optional
+from typing import Iterator, Optional
 
 from jedi.api.classes import Name
 from pydantic import BaseModel

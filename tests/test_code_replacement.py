@@ -74,7 +74,7 @@ print("Hello world")
 
     function_name: str = "NewClass.new_function"
     preexisting_objects: list[tuple[str, list[FunctionParent]]] = [
-        ("new_function", [FunctionParent(name="NewClass", type="ClassDef")]),
+        ("new_function", [FunctionParent(name="NewClass", type="ClassDef")])
     ]
     contextual_functions: set[tuple[str, str]] = {("NewClass", "__init__")}
     new_code: str = replace_functions_and_add_imports(
@@ -136,10 +136,7 @@ print("Hello world")
 """
 
     function_name: str = "NewClass.new_function"
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = [
-        ("new_function", []),
-        ("other_function", []),
-    ]
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = [("new_function", []), ("other_function", [])]
     contextual_functions: set[tuple[str, str]] = {("NewClass", "__init__")}
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -605,10 +602,7 @@ class CacheConfig(BaseConfig):
 """
     function_names: list[str] = ["CacheSimilarityEvalConfig.from_config"]
     parents = [FunctionParent(name="CacheConfig", type="ClassDef")]
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = [
-        ("__init__", parents),
-        ("from_config", parents),
-    ]
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = [("__init__", parents), ("from_config", parents)]
 
     contextual_functions: set[tuple[str, str]] = {
         ("CacheSimilarityEvalConfig", "__init__"),
@@ -687,7 +681,7 @@ def test_test_libcst_code_replacement8() -> None:
 '''
     function_names: list[str] = ["_EmbeddingDistanceChainMixin._hamming_distance"]
     preexisting_objects: list[tuple[str, list[FunctionParent]]] = [
-        ("_hamming_distance", [FunctionParent("_EmbeddingDistanceChainMixin", "ClassDef")]),
+        ("_hamming_distance", [FunctionParent("_EmbeddingDistanceChainMixin", "ClassDef")])
     ]
     contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_and_add_imports(
@@ -745,14 +739,8 @@ print("Hello world")
 """
     parents = [FunctionParent(name="NewClass", type="ClassDef")]
     function_name: str = "NewClass.__init__"
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = [
-        ("__init__", parents),
-        ("__call__", parents),
-    ]
-    contextual_functions: set[tuple[str, str]] = {
-        ("NewClass", "__init__"),
-        ("NewClass", "__call__"),
-    }
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = [("__init__", parents), ("__call__", parents)]
+    contextual_functions: set[tuple[str, str]] = {("NewClass", "__init__"), ("NewClass", "__call__")}
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=[function_name],
@@ -814,18 +802,14 @@ class MainClass:
             pytest_cmd="pytest",
             experiment_id=None,
             test_project_root=file_path.parent.resolve(),
-        ),
+        )
     )
     func_top_optimize = FunctionToOptimize(
-        function_name="main_method",
-        file_path=file_path,
-        parents=[FunctionParent("MainClass", "ClassDef")],
+        function_name="main_method", file_path=file_path, parents=[FunctionParent("MainClass", "ClassDef")]
     )
     original_code = file_path.read_text()
     code_context = opt.get_code_optimization_context(
-        function_to_optimize=func_top_optimize,
-        project_root=file_path.parent,
-        original_source_code=original_code,
+        function_to_optimize=func_top_optimize, project_root=file_path.parent, original_source_code=original_code
     ).unwrap()
     assert code_context.code_to_optimize_with_helpers == get_code_output
 
@@ -1144,14 +1128,14 @@ class TestResults(BaseModel):
     helper_functions = [
         FakeFunctionSource(
             file_path=Path(
-                "/Users/saurabh/Library/CloudStorage/Dropbox/codeflash/cli/codeflash/verification/test_results.py",
+                "/Users/saurabh/Library/CloudStorage/Dropbox/codeflash/cli/codeflash/verification/test_results.py"
             ),
             qualified_name="TestType",
             fully_qualified_name="codeflash.verification.test_results.TestType",
             only_function_name="TestType",
             source_code="",
             jedi_definition=JediDefinition(type="class"),
-        ),
+        )
     ]
 
     new_code: str = replace_functions_and_add_imports(
@@ -1168,13 +1152,8 @@ class TestResults(BaseModel):
     helper_functions_by_module_abspath = defaultdict(set)
     for helper_function in helper_functions:
         if helper_function.jedi_definition.type != "class":
-            helper_functions_by_module_abspath[helper_function.file_path].add(
-                helper_function.qualified_name,
-            )
-    for (
-        module_abspath,
-        qualified_names,
-    ) in helper_functions_by_module_abspath.items():
+            helper_functions_by_module_abspath[helper_function.file_path].add(helper_function.qualified_name)
+    for module_abspath, qualified_names in helper_functions_by_module_abspath.items():
         new_code: str = replace_functions_and_add_imports(
             source_code=new_code,
             function_names=list(qualified_names),
@@ -1447,13 +1426,8 @@ def cosine_similarity_top_k(
     helper_functions_by_module_abspath = defaultdict(set)
     for helper_function in helper_functions:
         if helper_function.jedi_definition.type != "class":
-            helper_functions_by_module_abspath[helper_function.file_path].add(
-                helper_function.qualified_name,
-            )
-    for (
-        module_abspath,
-        qualified_names,
-    ) in helper_functions_by_module_abspath.items():
+            helper_functions_by_module_abspath[helper_function.file_path].add(helper_function.qualified_name)
+    for module_abspath, qualified_names in helper_functions_by_module_abspath.items():
         new_helper_code: str = replace_functions_and_add_imports(
             source_code=new_code,
             function_names=list(qualified_names),

@@ -96,10 +96,7 @@ def test_get_imports_from_file_with_syntax_error(caplog) -> None:
 
 
 def test_get_imports_from_file_with_no_input() -> None:
-    with pytest.raises(
-        AssertionError,
-        match="Must provide exactly one of file_path, file_string, or file_ast",
-    ):
+    with pytest.raises(AssertionError, match="Must provide exactly one of file_path, file_string, or file_ast"):
         get_imports_from_file()
 
 

@@ -340,6 +340,7 @@ class Optimizer:
             test_paths.unlink(missing_ok=True)
         if not best_optimization:
             return Failure(f"No best optimizations found for function {function_to_optimize.qualified_name}")
+        logger.info("----------------")
         return Success(best_optimization)
 
     def determine_best_candidate(

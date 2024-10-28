@@ -129,21 +129,11 @@ def comparator(orig: Any, new: Any) -> bool:
             return (orig != new).nnz == 0
 
         if HAS_PANDAS and isinstance(
-            orig,
-            (
-                pandas.DataFrame,
-                pandas.Series,
-                pandas.Index,
-                pandas.Categorical,
-                pandas.arrays.SparseArray,
-            ),
+            orig, (pandas.DataFrame, pandas.Series, pandas.Index, pandas.Categorical, pandas.arrays.SparseArray)
         ):
             return orig.equals(new)
 
-        if HAS_PANDAS and isinstance(
-            orig,
-            (pandas.CategoricalDtype, pandas.Interval, pandas.Period),
-        ):
+        if HAS_PANDAS and isinstance(orig, (pandas.CategoricalDtype, pandas.Interval, pandas.Period)):
             return orig == new
 
         # This should be at the end of all numpy checking
@@ -173,10 +163,7 @@ def comparator(orig: Any, new: Any) -> bool:
         ):
             return orig == new
 
-        if isinstance(
-            orig,
-            (datetime.datetime, datetime.date, datetime.timedelta, datetime.time, datetime.timezone),
-        ):
+        if isinstance(orig, (datetime.datetime, datetime.date, datetime.timedelta, datetime.time, datetime.timezone)):
             return orig == new
 
         # If the object passed has a user defined __eq__ method, use that

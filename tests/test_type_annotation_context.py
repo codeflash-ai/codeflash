@@ -6,9 +6,7 @@ from typing import List
 
 from codeflash.code_utils.code_extractor import get_code
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.optimization.function_context import (
-    get_constrained_function_context_and_helper_functions,
-)
+from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
 
 
 class CustomType:
@@ -94,16 +92,11 @@ def test_function_context_works_for_composite_types() -> None:
 def test_function_context_custom_datatype() -> None:
     project_path = pathlib.Path(__file__).parent.parent.resolve() / "code_to_optimize"
     file_path = project_path / "math_utils.py"
-    code, contextual_dunder_methods = get_code(
-        [FunctionToOptimize("cosine_similarity", str(file_path), [])],
-    )
+    code, contextual_dunder_methods = get_code([FunctionToOptimize("cosine_similarity", str(file_path), [])])
     assert code is not None
     assert contextual_dunder_methods == set()
     a, helper_functions, dunder_methods = get_constrained_function_context_and_helper_functions(
-        FunctionToOptimize("cosine_similarity", str(file_path), []),
-        str(project_path),
-        code,
-        1000,
+        FunctionToOptimize("cosine_similarity", str(file_path), []), str(project_path), code, 1000
     )
 
     assert len(helper_functions) == 1

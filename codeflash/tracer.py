@@ -75,7 +75,7 @@ class Tracer:
         if sys.getprofile() is not None or sys.gettrace() is not None:
             console.print(
                 "WARNING - Codeflash: Another profiler, debugger or coverage tool is already running. "
-                "Please disable it before starting the Codeflash Tracer, both can't run. Codeflash Tracer is DISABLED.",
+                "Please disable it before starting the Codeflash Tracer, both can't run. Codeflash Tracer is DISABLED."
             )
             self.disable = True
             return
@@ -91,22 +91,10 @@ class Tracer:
         }
         self.max_function_count = max_function_count
         self.config, found_config_path = parse_config_file(config_file_path)
-        self.project_root = project_root_from_module_root(
-            self.config["module_root"],
-            found_config_path,
-        )
-        self.ignored_functions = {
-            "<listcomp>",
-            "<genexpr>",
-            "<dictcomp>",
-            "<setcomp>",
-            "<lambda>",
-            "<module>",
-        }
+        self.project_root = project_root_from_module_root(self.config["module_root"], found_config_path)
+        self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>", "<module>"}
 
-        self.file_being_called_from: str = str(Path(sys._getframe().f_back.f_code.co_filename).name).replace(
-            ".", "_"
-        )
+        self.file_being_called_from: str = str(Path(sys._getframe().f_back.f_code.co_filename).name).replace(".", "_")
 
         assert timeout is None or timeout > 0, "Timeout should be greater than 0"
         self.timeout = timeout
@@ -121,9 +109,7 @@ class Tracer:
         self.timer = time.process_time_ns
         self.total_tt = 0
         self.simulate_call("profiler")
-        assert (
-            "test_framework" in self.config
-        ), "Please specify 'test-framework' in pyproject.toml config file"
+        assert "test_framework" in self.config, "Please specify 'test-framework' in pyproject.toml config file"
         self.t = self.timer()
 
     def __enter__(self) -> None:
@@ -132,7 +118,7 @@ class Tracer:
         if getattr(Tracer, "used_once", False):
             console.print(
                 "Codeflash: Tracer can only be used once per program run. "
-                "Please only enable the Tracer once. Skipping tracing this section.",
+                "Please only enable the Tracer once. Skipping tracing this section."
             )
             self.disable = True
             return
@@ -148,7 +134,7 @@ class Tracer:
         # TODO: Check out if we need to export the function test name as well
         cur.execute(
             "CREATE TABLE function_calls(type TEXT, function TEXT, classname TEXT, filename TEXT, "
-            "line_number INTEGER, last_frame_address INTEGER, time_ns INTEGER, args BLOB)",
+            "line_number INTEGER, last_frame_address INTEGER, time_ns INTEGER, args BLOB)"
         )
         console.print("Codeflash: Tracing started!")
         frame = sys._getframe(0)  # Get this frame and simulate a call to it
@@ -168,23 +154,13 @@ class Tracer:
         cur.execute(
             "CREATE TABLE pstats (filename TEXT, line_number INTEGER, function TEXT, class_name TEXT, "
             "call_count_nonrecursive INTEGER, num_callers INTEGER, total_time_ns INTEGER, "
-            "cumulative_time_ns INTEGER, callers BLOB)",
+            "cumulative_time_ns INTEGER, callers BLOB)"
         )
         for func, (cc, nc, tt, ct, callers) in self.stats.items():
             remapped_callers = [{"key": k, "value": v} for k, v in callers.items()]
             cur.execute(
                 "INSERT INTO pstats VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    Path(func[0]).resolve(),
-                    func[1],
-                    func[2],
-                    func[3],
-                    cc,
-                    nc,
-                    tt,
-                    ct,
-                    json.dumps(remapped_callers),
-                ),
+                (Path(func[0]).resolve(), func[1], func[2], func[3], cc, nc, tt, ct, json.dumps(remapped_callers)),
             )
         self.con.commit()
 
@@ -217,16 +193,14 @@ class Tracer:
         )
         function_path = "_".join(self.functions) if self.functions else self.file_being_called_from
         test_file_path = get_test_file_path(
-            test_dir=self.config["tests_root"],
-            function_name=function_path,
-            test_type="replay",
+            test_dir=self.config["tests_root"], function_name=function_path, test_type="replay"
         )
         replay_test = isort.code(replay_test)
         with open(test_file_path, "w", encoding="utf8") as file:
             file.write(replay_test)
 
         console.print(
-            f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}",
+            f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}"
         )
 
     def tracer_logic(self, frame: FrameType, event: str):
@@ -235,9 +209,7 @@ class Tracer:
         if self.timeout is not None:
             if (time.time() - self.start_time) > self.timeout:
                 sys.setprofile(None)
-                console.print(
-                    f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds.",
-                )
+                console.print(f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds.")
                 return
         code = frame.f_code
         file_name = code.co_filename
@@ -290,13 +262,10 @@ class Tracer:
                 FunctionModules(
                     function_name=code.co_name,
                     file_name=file_name,
-                    module_name=module_name_from_file_path(
-                        file_name,
-                        project_root_path=self.project_root,
-                    ),
+                    module_name=module_name_from_file_path(file_name, project_root_path=self.project_root),
                     class_name=class_name,
                     line_no=code.co_firstlineno,
-                ),
+                )
             )
 
         # TODO: Also check if this function arguments are unique from the values logged earlier
@@ -314,18 +283,12 @@ class Tracer:
             arguments = dict(arguments.items())
             if class_name and code.co_name == "__init__":
                 del arguments["self"]
-            local_vars = pickle.dumps(
-                arguments,
-                protocol=pickle.HIGHEST_PROTOCOL,
-            )
+            local_vars = pickle.dumps(arguments, protocol=pickle.HIGHEST_PROTOCOL)
             sys.setrecursionlimit(original_recursion_limit)
         except (TypeError, pickle.PicklingError, AttributeError, RecursionError, OSError):
             # we retry with dill if pickle fails. It's slower but more comprehensive
             try:
-                local_vars = dill.dumps(
-                    arguments,
-                    protocol=dill.HIGHEST_PROTOCOL,
-                )
+                local_vars = dill.dumps(arguments, protocol=dill.HIGHEST_PROTOCOL)
                 sys.setrecursionlimit(original_recursion_limit)
 
             except (TypeError, dill.PicklingError, AttributeError, RecursionError, OSError):
@@ -334,16 +297,7 @@ class Tracer:
                 return
         cur.execute(
             "INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                event,
-                code.co_name,
-                class_name,
-                file_name,
-                frame.f_lineno,
-                frame.f_back.__hash__(),
-                t_ns,
-                local_vars,
-            ),
+            (event, code.co_name, class_name, file_name, frame.f_lineno, frame.f_back.__hash__(), t_ns, local_vars),
         )
         self.trace_count += 1
         self.next_insert -= 1
@@ -374,14 +328,7 @@ class Tracer:
         if self.cur and frame.f_back is not self.cur[-2]:
             rpt, rit, ret, rfn, rframe, rcur = self.cur
             if not isinstance(rframe, Tracer.fake_frame):
-                assert rframe.f_back is frame.f_back, (
-                    "Bad call",
-                    rfn,
-                    rframe,
-                    rframe.f_back,
-                    frame,
-                    frame.f_back,
-                )
+                assert rframe.f_back is frame.f_back, ("Bad call", rfn, rframe, rframe.f_back, frame, frame.f_back)
                 self.trace_dispatch_return(rframe, 0)
                 assert self.cur is None or frame.f_back is self.cur[-2], ("Bad call", self.cur[-3])
         fcode = frame.f_code
@@ -528,9 +475,7 @@ class Tracer:
             console.print("Failed to get total time from stats")
         total_time_ms = total_time / 1e6
         raw_stats = re.sub(
-            r"(function calls?.*)in (\d+)\.\d+ (seconds?)",
-            rf"\1 in {total_time_ms:.3f} milliseconds",
-            raw_stats,
+            r"(function calls?.*)in (\d+)\.\d+ (seconds?)", rf"\1 in {total_time_ms:.3f} milliseconds", raw_stats
         )
         match_pattern = r"^ *[\d\/]+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +"
         m = re.findall(match_pattern, raw_stats, re.MULTILINE)
@@ -605,7 +550,6 @@ class Tracer:
 
 
 def main():
-    import os
     from argparse import ArgumentParser
 
     parser = ArgumentParser(allow_abbrev=False)
@@ -624,13 +568,7 @@ def main():
         type=float,
         default=None,
     )
-    parser.add_argument(
-        "-m",
-        action="store_true",
-        dest="module",
-        help="Trace a library module",
-        default=False,
-    )
+    parser.add_argument("-m", action="store_true", dest="module", help="Trace a library module", default=False)
     parser.add_argument(
         "--codeflash-config",
         help="Optional path to the project's pyproject.toml file "
@@ -655,10 +593,7 @@ def main():
             import runpy
 
             code = "run_module(modname, run_name='__main__')"
-            globs = {
-                "run_module": runpy.run_module,
-                "modname": unknown_args[0],
-            }
+            globs = {"run_module": runpy.run_module, "modname": unknown_args[0]}
         else:
             progname = unknown_args[0]
             sys.path.insert(0, str(Path(progname).parent))

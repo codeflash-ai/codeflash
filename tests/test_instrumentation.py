@@ -102,11 +102,7 @@ class TestPigLatin(unittest.TestCase):
     with tempfile.NamedTemporaryFile(mode="w") as f:
         f.write(code)
         f.flush()
-        func = FunctionToOptimize(
-            function_name="sorter",
-            parents=[],
-            file_path=Path("module.py"),
-        )
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
         os.chdir(run_cwd)
@@ -120,8 +116,7 @@ class TestPigLatin(unittest.TestCase):
         os.chdir(original_cwd)
     assert success
     assert new_test == expected.format(
-        module_path=Path(f.name).name,
-        tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+        module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
     )
 
 
@@ -204,26 +199,17 @@ def test_prepare_image_for_yolo():
     with tempfile.NamedTemporaryFile(mode="w") as f:
         f.write(code)
         f.flush()
-        func = FunctionToOptimize(
-            function_name="prepare_image_for_yolo",
-            parents=[],
-            file_path=Path("module.py"),
-        )
+        func = FunctionToOptimize(function_name="prepare_image_for_yolo", parents=[], file_path=Path("module.py"))
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            Path(f.name),
-            [CodePosition(10, 14)],
-            func,
-            Path(f.name).parent,
-            "pytest",
+            Path(f.name), [CodePosition(10, 14)], func, Path(f.name).parent, "pytest"
         )
         os.chdir(original_cwd)
     assert success
     assert new_test == expected.format(
-        module_path=Path(f.name).name,
-        tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+        module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
     )
 
 
@@ -301,18 +287,10 @@ def test_sort():
         project_root_path = (Path(__file__).parent / "..").resolve()
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
-        func = FunctionToOptimize(
-            function_name="sorter",
-            parents=[],
-            file_path=Path("module.py"),
-        )
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            [CodePosition(6, 13), CodePosition(10, 13)],
-            func,
-            project_root_path,
-            "pytest",
+            test_path, [CodePosition(6, 13), CodePosition(10, 13)], func, project_root_path, "pytest"
         )
         os.chdir(original_cwd)
         assert success
@@ -335,7 +313,7 @@ def test_sort():
                 pytest_cmd="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
-            ),
+            )
         )
 
         test_env = os.environ.copy()
@@ -343,13 +321,7 @@ def test_sort():
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
-            test_files=[
-                TestFile(
-                    instrumented_file_path=test_path,
-                    test_type=test_type,
-                    original_file_path=test_path,
-                ),
-            ],
+            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
         )
         test_results = opt.run_and_parse_tests(
             test_env=test_env,
@@ -461,18 +433,10 @@ def test_sort_parametrized(input, expected_output):
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
 
-        func = FunctionToOptimize(
-            function_name="sorter",
-            parents=[],
-            file_path=Path("module.py"),
-        )
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            [CodePosition(14, 13)],
-            func,
-            project_root_path,
-            "pytest",
+            test_path, [CodePosition(14, 13)], func, project_root_path, "pytest"
         )
         os.chdir(original_cwd)
         assert success
@@ -490,13 +454,7 @@ def test_sort_parametrized(input, expected_output):
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
-            test_files=[
-                TestFile(
-                    instrumented_file_path=test_path,
-                    test_type=test_type,
-                    original_file_path=test_path,
-                ),
-            ],
+            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
         )
 
         opt = Optimizer(
@@ -508,7 +466,7 @@ def test_sort_parametrized(input, expected_output):
                 pytest_cmd="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
-            ),
+            )
         )
         test_results = opt.run_and_parse_tests(
             test_env=test_env,
@@ -635,18 +593,10 @@ def test_sort_parametrized_loop(input, expected_output):
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
 
-        func = FunctionToOptimize(
-            function_name="sorter",
-            parents=[],
-            file_path=Path("module.py"),
-        )
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            [CodePosition(15, 17)],
-            func,
-            project_root_path,
-            "pytest",
+            test_path, [CodePosition(15, 17)], func, project_root_path, "pytest"
         )
         os.chdir(original_cwd)
         assert success
@@ -664,13 +614,7 @@ def test_sort_parametrized_loop(input, expected_output):
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
-            test_files=[
-                TestFile(
-                    instrumented_file_path=test_path,
-                    test_type=test_type,
-                    original_file_path=test_path,
-                ),
-            ],
+            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
         )
         opt = Optimizer(
             Namespace(
@@ -681,7 +625,7 @@ def test_sort_parametrized_loop(input, expected_output):
                 pytest_cmd="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
-            ),
+            )
         )
         test_results = opt.run_and_parse_tests(
             test_env=test_env,
@@ -838,18 +782,10 @@ def test_sort():
         run_cwd = Path(__file__).parent.parent.resolve()
         original_cwd = Path.cwd()
 
-        func = FunctionToOptimize(
-            function_name="sorter",
-            parents=[],
-            file_path=Path("module.py"),
-        )
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
         os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            [CodePosition(11, 17)],
-            func,
-            project_root_path,
-            "pytest",
+            test_path, [CodePosition(11, 17)], func, project_root_path, "pytest"
         )
         os.chdir(original_cwd)
         assert success
@@ -867,13 +803,7 @@ def test_sort():
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
-            test_files=[
-                TestFile(
-                    instrumented_file_path=test_path,
-                    test_type=test_type,
-                    original_file_path=test_path,
-                ),
-            ],
+            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
         )
 
         opt = Optimizer(
@@ -885,7 +815,7 @@ def test_sort():
                 pytest_cmd="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
-            ),
+            )
         )
         test_results = opt.run_and_parse_tests(
             test_env=test_env,
@@ -1023,11 +953,7 @@ class TestPigLatin(unittest.TestCase):
         run_cwd = Path(__file__).parent.parent.resolve()
         original_cwd = Path.cwd()
 
-        func = FunctionToOptimize(
-            function_name="sorter",
-            parents=[],
-            file_path=Path("module.py"),
-        )
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
             test_path,
@@ -1054,13 +980,7 @@ class TestPigLatin(unittest.TestCase):
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
-            test_files=[
-                TestFile(
-                    instrumented_file_path=test_path,
-                    test_type=test_type,
-                    original_file_path=test_path,
-                ),
-            ],
+            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
         )
         opt = Optimizer(
             Namespace(
@@ -1071,7 +991,7 @@ class TestPigLatin(unittest.TestCase):
                 pytest_cmd="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
-            ),
+            )
         )
         test_results = opt.run_and_parse_tests(
             test_env=test_env,
@@ -1202,18 +1122,10 @@ class TestPigLatin(unittest.TestCase):
         run_cwd = Path(__file__).parent.parent.resolve()
         original_cwd = Path.cwd()
 
-        func = FunctionToOptimize(
-            function_name="sorter",
-            parents=[],
-            file_path=Path("module.py"),
-        )
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            [CodePosition(16, 17)],
-            func,
-            project_root_path,
-            "unittest",
+            test_path, [CodePosition(16, 17)], func, project_root_path, "unittest"
         )
         os.chdir(original_cwd)
         assert success
@@ -1231,13 +1143,7 @@ class TestPigLatin(unittest.TestCase):
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
-            test_files=[
-                TestFile(
-                    instrumented_file_path=test_path,
-                    test_type=test_type,
-                    original_file_path=test_path,
-                ),
-            ],
+            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
         )
         opt = Optimizer(
             Namespace(
@@ -1248,7 +1154,7 @@ class TestPigLatin(unittest.TestCase):
                 pytest_cmd="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
-            ),
+            )
         )
         test_results = opt.run_and_parse_tests(
             test_env=test_env,
@@ -1384,11 +1290,7 @@ class TestPigLatin(unittest.TestCase):
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            [CodePosition(14, 21)],
-            func,
-            project_root_path,
-            "unittest",
+            test_path, [CodePosition(14, 21)], func, project_root_path, "unittest"
         )
         os.chdir(original_cwd)
         assert success
@@ -1406,13 +1308,7 @@ class TestPigLatin(unittest.TestCase):
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
-            test_files=[
-                TestFile(
-                    instrumented_file_path=test_path,
-                    test_type=test_type,
-                    original_file_path=test_path,
-                ),
-            ],
+            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
         )
 
         opt = Optimizer(
@@ -1424,7 +1320,7 @@ class TestPigLatin(unittest.TestCase):
                 pytest_cmd="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
-            ),
+            )
         )
         test_results = opt.run_and_parse_tests(
             test_env=test_env,
@@ -1557,18 +1453,10 @@ class TestPigLatin(unittest.TestCase):
         run_cwd = Path(__file__).parent.parent.resolve()
         original_cwd = Path.cwd()
 
-        f = FunctionToOptimize(
-            function_name="sorter",
-            file_path=Path("module.py"),
-            parents=[],
-        )
+        f = FunctionToOptimize(function_name="sorter", file_path=Path("module.py"), parents=[])
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            [CodePosition(17, 21)],
-            f,
-            project_root_path,
-            "unittest",
+            test_path, [CodePosition(17, 21)], f, project_root_path, "unittest"
         )
         os.chdir(original_cwd)
         assert success
@@ -1587,13 +1475,7 @@ class TestPigLatin(unittest.TestCase):
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
-            test_files=[
-                TestFile(
-                    instrumented_file_path=test_path,
-                    test_type=test_type,
-                    original_file_path=test_path,
-                ),
-            ],
+            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
         )
         opt = Optimizer(
             Namespace(
@@ -1604,7 +1486,7 @@ class TestPigLatin(unittest.TestCase):
                 pytest_cmd="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
-            ),
+            )
         )
         test_results = opt.run_and_parse_tests(
             test_env=test_env,
@@ -1691,21 +1573,13 @@ from module import functionB as function_B
 import class_name_B
 from nuitka.nodes.ImportNodes import ExpressionBuiltinImport as nuitka_nodes_ImportNodes_ExpressionBuiltinImport
 """
-    f = FunctionToOptimize(
-        function_name="functionA",
-        file_path=Path("module.py"),
-        parents=[],
-    )
+    f = FunctionToOptimize(function_name="functionA", file_path=Path("module.py"), parents=[])
     tree = ast.parse(code)
     visitor = FunctionImportedAsVisitor(f)
     visitor.visit(tree)
     assert visitor.imported_as.function_name == "functionA"
 
-    f = FunctionToOptimize(
-        function_name="functionB",
-        file_path=Path("module.py"),
-        parents=[],
-    )
+    f = FunctionToOptimize(function_name="functionB", file_path=Path("module.py"), parents=[])
     visitor = FunctionImportedAsVisitor(f)
     visitor.visit(tree)
     assert visitor.imported_as.function_name == "function_B"
@@ -1717,15 +1591,9 @@ from nuitka.nodes.ImportNodes import ExpressionBuiltinImport as nuitka_nodes_Imp
     )
     visitor = FunctionImportedAsVisitor(f)
     visitor.visit(tree)
-    assert (
-        visitor.imported_as.qualified_name == "nuitka_nodes_ImportNodes_ExpressionBuiltinImport.method_name"
-    )
+    assert visitor.imported_as.qualified_name == "nuitka_nodes_ImportNodes_ExpressionBuiltinImport.method_name"
 
-    f = FunctionToOptimize(
-        function_name="class_name_B",
-        file_path=Path("module.py"),
-        parents=[],
-    )
+    f = FunctionToOptimize(function_name="class_name_B", file_path=Path("module.py"), parents=[])
     visitor = FunctionImportedAsVisitor(f)
     visitor.visit(tree)
     assert visitor.imported_as.qualified_name == "class_name_B"
@@ -1782,8 +1650,7 @@ def test_class_name_A_function_name():
 """
 
     test_path = (
-        Path(__file__).parent.resolve()
-        / "../code_to_optimize/tests/pytest/test_class_function_instrumentation_temp.py"
+        Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_class_function_instrumentation_temp.py"
     )
     try:
         with open(test_path, "w") as f:
@@ -1799,11 +1666,7 @@ def test_class_name_A_function_name():
         )
         os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            [CodePosition(4, 23)],
-            func,
-            project_root_path,
-            "pytest",
+            test_path, [CodePosition(4, 23)], func, project_root_path, "pytest"
         )
         os.chdir(original_cwd)
     finally:
@@ -1878,8 +1741,7 @@ def test_common_tags_1():
 """
 
     test_path = (
-        Path(__file__).parent.resolve()
-        / "../code_to_optimize/tests/pytest/test_wrong_function_instrumentation_temp.py"
+        Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_wrong_function_instrumentation_temp.py"
     )
     try:
         with test_path.open("w") as f:
@@ -1890,18 +1752,12 @@ def test_common_tags_1():
         run_cwd = Path(__file__).parent.parent.resolve()
         original_cwd = Path.cwd()
         func = FunctionToOptimize(
-            function_name="find_common_tags",
-            file_path=project_root_path / "module.py",
-            parents=[],
+            function_name="find_common_tags", file_path=project_root_path / "module.py", parents=[]
         )
 
         os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            [CodePosition(7, 11), CodePosition(11, 11)],
-            func,
-            project_root_path,
-            "pytest",
+            test_path, [CodePosition(7, 11), CodePosition(11, 11)], func, project_root_path, "pytest"
         )
         os.chdir(original_cwd)
         assert success
@@ -1969,8 +1825,7 @@ def test_sort():
     codeflash_con.close()
 """
     test_path = (
-        Path(__file__).parent.resolve()
-        / "../code_to_optimize/tests/pytest/test_conditional_instrumentation_temp.py"
+        Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_conditional_instrumentation_temp.py"
     )
     try:
         with open(test_path, "w") as f:
@@ -1980,19 +1835,11 @@ def test_sort():
         project_root_path = Path(__file__).parent.resolve() / "../code_to_optimize/"
         run_cwd = Path(__file__).parent.parent.resolve()
         original_cwd = Path.cwd()
-        func = FunctionToOptimize(
-            function_name="sorter",
-            file_path=project_root_path / "module.py",
-            parents=[],
-        )
+        func = FunctionToOptimize(function_name="sorter", file_path=project_root_path / "module.py", parents=[])
 
         os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            [CodePosition(7, 15)],
-            func,
-            project_root_path,
-            "pytest",
+            test_path, [CodePosition(7, 15)], func, project_root_path, "pytest"
         )
         os.chdir(original_cwd)
         assert success
@@ -2089,11 +1936,7 @@ def test_sort():
 
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            [CodePosition(6, 26), CodePosition(10, 26)],
-            function_to_optimize,
-            project_root_path,
-            "pytest",
+            test_path, [CodePosition(6, 26), CodePosition(10, 26)], function_to_optimize, project_root_path, "pytest"
         )
         os.chdir(original_cwd)
         assert success
@@ -2213,17 +2056,12 @@ def test_code_replacement10() -> None:
         run_cwd = Path(__file__).parent.parent.resolve()
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            Path(f.name),
-            [CodePosition(22, 28), CodePosition(28, 28)],
-            func,
-            Path(f.name).parent,
-            "pytest",
+            Path(f.name), [CodePosition(22, 28), CodePosition(28, 28)], func, Path(f.name).parent, "pytest"
         )
         os.chdir(original_cwd)
     assert success
     assert new_test == expected.format(
-        module_path=Path(f.name).name,
-        tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+        module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
     )
 
 
@@ -2299,18 +2137,10 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
         project_root_path = (Path(__file__).parent.resolve() / "../").resolve()
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
-        func = FunctionToOptimize(
-            function_name="accurate_sleepfunc",
-            parents=[],
-            file_path=Path("module.py"),
-        )
+        func = FunctionToOptimize(function_name="accurate_sleepfunc", parents=[], file_path=Path("module.py"))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            [CodePosition(8, 13)],
-            func,
-            project_root_path,
-            "pytest",
+            test_path, [CodePosition(8, 13)], func, project_root_path, "pytest"
         )
         os.chdir(original_cwd)
 
@@ -2337,16 +2167,10 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
                 pytest_cmd="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
-            ),
+            )
         )
         test_files = TestFiles(
-            test_files=[
-                TestFile(
-                    instrumented_file_path=test_path,
-                    test_type=test_type,
-                    original_file_path=test_path,
-                ),
-            ],
+            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
         )
         test_results = opt.run_and_parse_tests(
             test_env=test_env,
@@ -2454,18 +2278,10 @@ class TestPigLatin(unittest.TestCase):
         project_root_path = (Path(__file__).parent.resolve() / "../").resolve()
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
-        func = FunctionToOptimize(
-            function_name="accurate_sleepfunc",
-            parents=[],
-            file_path=Path("module.py"),
-        )
+        func = FunctionToOptimize(function_name="accurate_sleepfunc", parents=[], file_path=Path("module.py"))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            [CodePosition(12, 17)],
-            func,
-            project_root_path,
-            "unittest",
+            test_path, [CodePosition(12, 17)], func, project_root_path, "unittest"
         )
         os.chdir(original_cwd)
 
@@ -2492,23 +2308,13 @@ class TestPigLatin(unittest.TestCase):
                 pytest_cmd="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
-            ),
+            )
         )
         test_files = TestFiles(
-            test_files=[
-                TestFile(
-                    instrumented_file_path=test_path,
-                    test_type=test_type,
-                    original_file_path=test_path,
-                ),
-            ],
+            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
         )
         test_results = opt.run_and_parse_tests(
-            test_env=test_env,
-            test_files=test_files,
-            optimization_iteration=0,
-            test_functions=None,
-            testing_time=0.1,
+            test_env=test_env, test_files=test_files, optimization_iteration=0, test_functions=None, testing_time=0.1
         )
 
         assert test_results[0].id.function_getting_tested == "accurate_sleepfunc"

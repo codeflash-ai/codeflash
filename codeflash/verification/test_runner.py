@@ -77,7 +77,5 @@ def run_tests(
             check=False,
         )
     else:
-        raise ValueError(
-            "Invalid test framework -- I only support Pytest and Unittest currently.",
-        )
+        raise ValueError("Invalid test framework -- I only support Pytest and Unittest currently.")
     return result_file_path, results

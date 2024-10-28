@@ -15,11 +15,7 @@ def load_data(experiment_id: str, database_uri: str = os.environ.get("DATABASE_U
             WHERE (trace_id LIKE %s OR trace_id LIKE %s)
             AND experiment_metadata->>'id' = %s
         """
-        return pd.read_sql_query(
-            query,
-            connection,
-            params=("%EXP0", "%EXP1", experiment_id),
-        )
+        return pd.read_sql_query(query, connection, params=("%EXP0", "%EXP1", experiment_id))
 
 
 def process_column_pairs(df: DataFrame, column_name: str) -> DataFrame:
@@ -44,22 +40,15 @@ def process_column_pairs(df: DataFrame, column_name: str) -> DataFrame:
 def calculate_validity(df: DataFrame, perf_threshold: float = 0.05) -> Dict[str, Any]:
     # Calculate the percentage of valid PRs given that the original function run succeeded
     successful_runs = df[(~df["original_runtime"].isna())]
-    successful_runs_above_thres = successful_runs[
-        successful_runs["best_correct_speedup_ratio"] >= perf_threshold
-    ]
+    successful_runs_above_thres = successful_runs[successful_runs["best_correct_speedup_ratio"] >= perf_threshold]
     valid_prs = len(successful_runs_above_thres)
     percent_valid_pr = (valid_prs / len(df)) * 100
 
     # Calculate the percentage of valid candidates generated given that original function run succeeded
     valid_candidates = successful_runs[successful_runs["is_correct"].apply(lambda x: any(x.values()))]
-    percent_valid_candidates = (
-        len(valid_candidates) / len(successful_runs) * 100 if len(successful_runs) > 0 else 0
-    )
+    percent_valid_candidates = len(valid_candidates) / len(successful_runs) * 100 if len(successful_runs) > 0 else 0
 
-    return {
-        "percent_valid_pr": percent_valid_pr,
-        "percent_valid_candidates": percent_valid_candidates,
-    }
+    return {"percent_valid_pr": percent_valid_pr, "percent_valid_candidates": percent_valid_candidates}
 
 
 def calculate_performance(df: DataFrame, perf_threshold: float = 0.05) -> Dict[str, Any]:
@@ -81,9 +70,7 @@ def calculate_performance(df: DataFrame, perf_threshold: float = 0.05) -> Dict[s
     def calculate_time_saved_for_row(row: pd.Series):
         if row["optimized_runtime"] is not None and row["is_correct"] is not None:
             correct_runtimes = [
-                runtime
-                for opt_id, runtime in row["optimized_runtime"].items()
-                if row["is_correct"].get(opt_id)
+                runtime for opt_id, runtime in row["optimized_runtime"].items() if row["is_correct"].get(opt_id)
             ]
         else:
             correct_runtimes = []
@@ -93,23 +80,11 @@ def calculate_performance(df: DataFrame, perf_threshold: float = 0.05) -> Dict[s
 
     # (3) The average time saved in a PR given that a valid candidate was found above the perf threshold.
     pr_time_saved = (
-        valid_candidates_above_thres.apply(
-            lambda row: calculate_time_saved_for_row(row),
-            axis=1,
-        )
-        .dropna()
-        .mean()
+        valid_candidates_above_thres.apply(lambda row: calculate_time_saved_for_row(row), axis=1).dropna().mean()
     )
 
     # (4) Calculate the mean average time saved for all the valid candidates
-    all_candidates_time_saved = (
-        df.apply(
-            lambda row: calculate_time_saved_for_row(row),
-            axis=1,
-        )
-        .dropna()
-        .mean()
-    )
+    all_candidates_time_saved = df.apply(lambda row: calculate_time_saved_for_row(row), axis=1).dropna().mean()
 
     return {
         "average_percentage_gain_pr": average_percentage_gain_pr,
@@ -132,7 +107,7 @@ def calculate_coverage(df: DataFrame) -> Dict[str, Any]:
         return successful_optimization_runs / total_runs * 100 if total_runs > 0 else 0.0
 
     df["percent_successful_optimization_runs"] = df["optimized_runtime"].apply(
-        calculate_percent_optimization_successful_runs,
+        calculate_percent_optimization_successful_runs
     )
 
     total_optimizations = sum(len(runs) for runs in successful_runs["optimized_runtime"] if runs is not None)
@@ -158,15 +133,9 @@ def calculate_coverage(df: DataFrame) -> Dict[str, Any]:
 
 
 def paired_comparison_coverage(
-    df: DataFrame,
-    model_a_suffix: str = "EXP0",
-    model_b_suffix: str = "EXP1",
+    df: DataFrame, model_a_suffix: str = "EXP0", model_b_suffix: str = "EXP1"
 ) -> Dict[str, Any]:
-    paired_coverage_results = {
-        "model_a_more_successful": 0,
-        "equal_successful": 0,
-        "model_b_more_successful": 0,
-    }
+    paired_coverage_results = {"model_a_more_successful": 0, "equal_successful": 0, "model_b_more_successful": 0}
     grouped = df.groupby(df["trace_id"].str[:-4])
     for _, group in grouped:
         if len(group) == 2:
@@ -176,17 +145,13 @@ def paired_comparison_coverage(
                 model_a_success_count = 0
             else:
                 model_a_success_count = sum(
-                    1
-                    for runtime in model_a_row["optimized_runtime"].values[0].values()
-                    if runtime is not None
+                    1 for runtime in model_a_row["optimized_runtime"].values[0].values() if runtime is not None
                 )
             if model_b_row["optimized_runtime"].values[0] is None:
                 model_b_success_count = 0
             else:
                 model_b_success_count = sum(
-                    1
-                    for runtime in model_b_row["optimized_runtime"].values[0].values()
-                    if runtime is not None
+                    1 for runtime in model_b_row["optimized_runtime"].values[0].values() if runtime is not None
                 )
 
             if model_a_success_count > model_b_success_count:
@@ -201,16 +166,10 @@ def paired_comparison_coverage(
 
 
 def paired_comparison_validity(
-    df: DataFrame,
-    model_a_suffix: str = "EXP0",
-    model_b_suffix: str = "EXP1",
+    df: DataFrame, model_a_suffix: str = "EXP0", model_b_suffix: str = "EXP1"
 ) -> Dict[str, Any]:
     # Paired - Calculate the percentage of runs where model A generated more, equal, or less valid candidates than model B
-    paired_validity_results = {
-        "model_a_more_valid": 0,
-        "equal_valid": 0,
-        "model_b_more_valid": 0,
-    }
+    paired_validity_results = {"model_a_more_valid": 0, "equal_valid": 0, "model_b_more_valid": 0}
     grouped = df.groupby(df["trace_id"].str[:-4])
     for _, group in grouped:
         if len(group) == 2:
@@ -235,15 +194,9 @@ def paired_comparison_validity(
 
 
 def paired_comparison_performance(
-    df: DataFrame,
-    model_a_suffix: str = "EXP0",
-    model_b_suffix: str = "EXP1",
+    df: DataFrame, model_a_suffix: str = "EXP0", model_b_suffix: str = "EXP1"
 ) -> Dict[str, Any]:
-    paired_results = {
-        "model_a_better": 0,
-        "equal": 0,
-        "model_b_better": 0,
-    }
+    paired_results = {"model_a_better": 0, "equal": 0, "model_b_better": 0}
 
     # Group by the trace_id without the suffix
     grouped = df.groupby(df["trace_id"].str[:-4])
@@ -274,8 +227,7 @@ def paired_comparison_performance(
 def augment_with_best_correct_speedup_ratio(df: DataFrame) -> DataFrame:
     # Extract the best speedup ratio from the speedup_ratio dictionary, accounting for empty dictionaries
     def get_best_correct_speedup_ratio(
-        speedup_ratios: Dict[str, float],
-        is_correct: Dict[str, bool],
+        speedup_ratios: Dict[str, float], is_correct: Dict[str, bool]
     ) -> Optional[float]:
         correct_speedup_ratios = (
             {uuid: ratio for uuid, ratio in speedup_ratios.items() if is_correct.get(uuid)}
@@ -288,10 +240,7 @@ def augment_with_best_correct_speedup_ratio(df: DataFrame) -> DataFrame:
         return None
 
     df["best_correct_speedup_ratio"] = df.apply(
-        lambda row: get_best_correct_speedup_ratio(
-            row["speedup_ratio"],
-            row["is_correct"],
-        )
+        lambda row: get_best_correct_speedup_ratio(row["speedup_ratio"], row["is_correct"])
         if row["speedup_ratio"] is not None
         else None,
         axis=1,
@@ -324,17 +273,9 @@ def main() -> None:
     # Combine metrics into a DataFrame
     metrics_df = pd.DataFrame(
         {
-            "EXP0": {
-                **exp0_performance_metrics,
-                **exp0_validity_metrics,
-                **exp0_coverage_metrics,
-            },
-            "EXP1": {
-                **exp1_performance_metrics,
-                **exp1_validity_metrics,
-                **exp1_coverage_metrics,
-            },
-        },
+            "EXP0": {**exp0_performance_metrics, **exp0_validity_metrics, **exp0_coverage_metrics},
+            "EXP1": {**exp1_performance_metrics, **exp1_validity_metrics, **exp1_coverage_metrics},
+        }
     )  # Transpose to have experiments as rows and metrics as columns
 
     # Output the combined metrics DataFrame

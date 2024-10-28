@@ -14,12 +14,12 @@ def pickled_dataframe():
     return df
 
 
-@pytest.fixture()
+@pytest.fixture
 def pie4perf_sample_dataframe():
     return DataFrame.from_dict(pie4perf_sample_dataframe_dict)
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_dataframe():
     return DataFrame(mock_dataframe)
 
@@ -43,14 +43,7 @@ def test_calculate_validity_some_successful_runs(pie4perf_sample_dataframe):
 def test_calculate_validity_all_successful_runs(pie4perf_sample_dataframe):
     df = pie4perf_sample_dataframe
     df["original_runtime"] = [1.0, 2.0, 2.0, 2.0, 3.0, 18.0]  # All successful runs
-    df["best_correct_speedup_ratio"] = [
-        0.05,
-        0.06,
-        0.08,
-        0.09,
-        0.56,
-        0.17,
-    ]  # All above threshold
+    df["best_correct_speedup_ratio"] = [0.05, 0.06, 0.08, 0.09, 0.56, 0.17]  # All above threshold
     df["is_correct"] = [
         {"1f39ef86-5eff-4760-a262-43011492906e": True},
         {"aeeeca3b-4ccf-46eb-8dbf-c526c05fca27": True},
@@ -68,14 +61,7 @@ def test_calculate_validity_with_valid_candidates(pie4perf_sample_dataframe):
     df = pie4perf_sample_dataframe
     # Assuming some runs are successful and some candidates are valid
     df["original_runtime"] = [1.0, None, 2.0, None, 3.0, None]  # Some successful runs
-    df["best_correct_speedup_ratio"] = [
-        0.04,
-        None,
-        0.06,
-        None,
-        0.07,
-        None,
-    ]  # One below and two above the threshold
+    df["best_correct_speedup_ratio"] = [0.04, None, 0.06, None, 0.07, None]  # One below and two above the threshold
     df["is_correct"] = [
         {"1f39ef86-5eff-4760-a262-43011492906e": True},
         {},

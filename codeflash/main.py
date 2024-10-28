@@ -16,9 +16,7 @@ from codeflash.telemetry.sentry import init_sentry
 def main() -> None:
     """Entry point for the codeflash command-line interface."""
     paneled_text(
-        CODEFLASH_LOGO,
-        panel_args={"title": "https://codeflash.ai", "expand": False},
-        text_args={"style": "bold gold3"},
+        CODEFLASH_LOGO, panel_args={"title": "https://codeflash.ai", "expand": False}, text_args={"style": "bold gold3"}
     )
     args = parse_args()
     if args.command:

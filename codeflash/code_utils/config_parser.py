@@ -52,16 +52,9 @@ def parse_config_file(config_file_path: Path | None = None) -> tuple[dict[str, A
     # default values:
     path_keys = ["module-root", "tests-root"]
     path_list_keys = ["ignore-paths"]
-    str_keys = {
-        "pytest-cmd": "pytest",
-    }
-    bool_keys = {
-        "disable-telemetry": False,
-        "disable-imports-sorting": False,
-    }
-    list_str_keys = {
-        "formatter-cmds": ["black $file"],
-    }
+    str_keys = {"pytest-cmd": "pytest"}
+    bool_keys = {"disable-telemetry": False, "disable-imports-sorting": False}
+    list_str_keys = {"formatter-cmds": ["black $file"]}
 
     for key in str_keys:
         if key in config:
