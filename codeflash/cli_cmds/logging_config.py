@@ -30,3 +30,4 @@ def set_level(level: int, *, echo_setting: bool = True) -> None:
             logging.info("Verbose DEBUG logging enabled")
         else:
             logging.info("Logging level set to INFO")
+    console.rule()

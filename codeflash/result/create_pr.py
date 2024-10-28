@@ -6,7 +6,7 @@ from typing import Optional
 import git
 
 from codeflash.api import cfapi
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_replacer import is_zero_diff
 from codeflash.code_utils.git_utils import (
@@ -126,3 +126,4 @@ def check_create_pr(
                 f"Optimization was successful, but I failed to create a PR with the optimized code."
                 f" Response from server was: {response.text}"
             )
+        console.rule()

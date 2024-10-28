@@ -7,6 +7,7 @@ from typing import Iterator, Optional
 
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
+from rich.tree import Tree
 
 from codeflash.cli_cmds.console import logger
 from codeflash.verification.comparator import comparator
@@ -128,6 +129,15 @@ class TestResults(BaseModel):
                 for test_type in TestType
             ]
         )
+
+    @staticmethod
+    def report_to_tree(report: dict[TestType, dict[str, int]], title: str) -> Tree:
+        tree = Tree(title)
+        for test_type in TestType:
+            tree.add(
+                f"{test_type.to_name()} - Passed: {report[test_type]['passed']}, Failed: {report[test_type]['failed']}"
+            )
+        return tree
 
     def total_passed_runtime(self) -> int:
         """Calculate the sum of runtimes of all test cases that passed, where a testcase runtime

@@ -14,7 +14,7 @@ import libcst as cst
 from pydantic.dataclasses import dataclass
 
 from codeflash.api.cfapi import get_blocklisted_functions
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import logger, progress_bar
 from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
@@ -484,7 +484,7 @@ def filter_functions(
         }
         log_string: str
         if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
-            logger.info(f"Ignoring:\n{log_string}")
+            logger.info(f"Ignoring: {log_string}")
     return {Path(k): v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 

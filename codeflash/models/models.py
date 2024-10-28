@@ -44,6 +44,8 @@ class OptimizedCandidateResult(BaseModel):
     times_run: int
     best_test_runtime: int
     best_test_results: TestResults
+    optimization_candidate_index: int
+    total_candidate_timing: int
 
 
 class GeneratedTests(BaseModel):

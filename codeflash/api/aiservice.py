@@ -9,7 +9,7 @@ import requests
 from pydantic.dataclasses import dataclass
 from pydantic.json import pydantic_encoder
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
@@ -89,7 +89,9 @@ class AiServiceClient:
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
         }
+
         logger.info("Generating optimized candidates ...")
+        console.rule()
         try:
             response = self.make_ai_service_request("/optimize", payload=payload, timeout=600)
         except requests.exceptions.RequestException as e:
@@ -100,6 +102,7 @@ class AiServiceClient:
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
             logger.info(f"Generated {len(optimizations_json)} candidates.")
+            console.rule()
             return [
                 OptimizedCandidate(
                     source_code=opt["source_code"],
@@ -114,6 +117,7 @@ class AiServiceClient:
             error = response.text
         logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
         return []
 
     def log_results(
@@ -220,5 +224,8 @@ class AiServiceClient:
 
 
 class LocalAiServiceClient(AiServiceClient):
+    """Client for interacting with the local AI service."""
+
     def get_aiservice_base_url(self) -> str:
+        """Get the base URL for the local AI service."""
         return "http://localhost:8000"
