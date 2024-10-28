@@ -11,7 +11,7 @@ from codeflash.code_utils.code_utils import (
     get_run_tmp_file,
     is_class_defined_in_file,
     module_name_from_file_path,
-    path_belongs_to_site_packages,
+    path_belongs_to_site_packages, file_name_from_test_module_name,
 )
 
 
@@ -269,3 +269,33 @@ def test_is_class_defined_in_file_with_non_existing_file() -> None:
     non_existing_file = Path("/non/existing/file.py")
 
     assert is_class_defined_in_file("MyClass", non_existing_file) is False
+
+
+@pytest.fixture
+def base_dir(tmp_path):
+    base_dir = tmp_path / "project"
+    base_dir.mkdir(parents=True, exist_ok=True)
+    (base_dir / "test_module.py").touch()
+    (base_dir / "subdir").mkdir(exist_ok=True)
+    (base_dir / "subdir" / "test_submodule.py").touch()
+    return base_dir
+
+def test_existing_module(base_dir):
+    result = file_name_from_test_module_name("test_module", base_dir)
+    assert result == base_dir / "test_module.py"
+
+def test_existing_submodule(base_dir):
+    result = file_name_from_test_module_name("subdir.test_submodule", base_dir)
+    assert result == base_dir / "subdir" / "test_submodule.py"
+
+def test_non_existing_module(base_dir):
+    result = file_name_from_test_module_name("non_existing_module", base_dir)
+    assert result is None
+
+def test_partial_module_name(base_dir):
+    result = file_name_from_test_module_name("subdir.test_submodule.TestClass", base_dir)
+    assert result == base_dir / "subdir" / "test_submodule.py"
+
+def test_partial_module_name2(base_dir):
+    result = file_name_from_test_module_name("subdir.test_submodule.TestClass.TestClass2", base_dir)
+    assert result == base_dir / "subdir" / "test_submodule.py"
