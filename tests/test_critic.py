@@ -2,8 +2,20 @@ import os
 
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.models.models import OptimizedCandidateResult
-from codeflash.result.critic import quantity_of_tests_critic, speedup_critic
+from codeflash.result.critic import performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults, TestType
+
+
+def test_performance_gain():
+    assert performance_gain(original_runtime_ns=1000, optimized_runtime_ns=0) == 0.0
+
+    assert performance_gain(original_runtime_ns=1000, optimized_runtime_ns=500) == 1.0
+
+    assert performance_gain(original_runtime_ns=1000, optimized_runtime_ns=900) == 0.1111111111111111
+
+    assert performance_gain(original_runtime_ns=1000, optimized_runtime_ns=1000) == 0.0
+
+    assert performance_gain(original_runtime_ns=1000, optimized_runtime_ns=1100) == -0.09090909090909091
 
 
 def test_speedup_critic():

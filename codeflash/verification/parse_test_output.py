@@ -11,8 +11,12 @@ import dill as pickle
 from junitparser.xunit2 import JUnitXml
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_utils import file_path_from_module_name, get_run_tmp_file, module_name_from_file_path, \
-    file_name_from_test_module_name
+from codeflash.code_utils.code_utils import (
+    file_name_from_test_module_name,
+    file_path_from_module_name,
+    get_run_tmp_file,
+    module_name_from_file_path,
+)
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults
 
@@ -59,8 +63,11 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
             )
 
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
-
-            test_pickle = pickle.loads(test_pickle_bin) if loop_index == 1 else None
+            try:
+                test_pickle = pickle.loads(test_pickle_bin) if loop_index == 1 else None
+            except (AttributeError, ModuleNotFoundError, IndexError) as e:
+                logger.exception(f"Failed to load pickle file. Exception: {e}")
+                return test_results
             assert test_type is not None, f"Test type not found for {test_file_path}"
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
