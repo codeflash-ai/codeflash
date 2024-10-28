@@ -11,7 +11,8 @@ import dill as pickle
 from junitparser.xunit2 import JUnitXml
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_utils import file_path_from_module_name, get_run_tmp_file, module_name_from_file_path
+from codeflash.code_utils.code_utils import file_path_from_module_name, get_run_tmp_file, module_name_from_file_path, \
+    file_name_from_test_module_name
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults
 
@@ -169,7 +170,10 @@ def parse_test_xml(
             if test_file_name is None:
                 if test_class_path:
                     # TODO : This might not be true if the test is organized under a class
-                    test_file_path = file_path_from_module_name(test_class_path, base_dir)
+                    test_file_path = file_name_from_test_module_name(test_class_path, base_dir)
+                    if test_file_path is None:
+                        logger.warning(f"Could not find the test for file name - {test_class_path} ")
+                        continue
                 else:
                     test_file_path = file_path_from_module_name(test_function, base_dir)
             else:
