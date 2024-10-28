@@ -4,19 +4,12 @@ import sqlite3
 import textwrap
 from typing import Any, Generator, List, Optional
 
-from codeflash.discovery.functions_to_optimize import (
-    FunctionProperties,
-    inspect_top_level_functions_or_methods,
-)
+from codeflash.discovery.functions_to_optimize import FunctionProperties, inspect_top_level_functions_or_methods
 from codeflash.tracing.tracing_utils import FunctionModules
 
 
 def get_next_arg_and_return(
-    trace_file: str,
-    function_name: str,
-    file_name: str,
-    class_name: Optional[str] = None,
-    num_to_get: int = 25,
+    trace_file: str, function_name: str, file_name: str, class_name: Optional[str] = None, num_to_get: int = 25
 ) -> Generator[Any]:
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
@@ -45,10 +38,7 @@ def get_function_alias(module: str, function_name: str) -> str:
 
 
 def create_trace_replay_test(
-    trace_file: str,
-    functions: List[FunctionModules],
-    test_framework: str = "pytest",
-    max_run_count=100,
+    trace_file: str, functions: List[FunctionModules], test_framework: str = "pytest", max_run_count=100
 ) -> str:
     assert test_framework in ["pytest", "unittest"]
 
@@ -74,21 +64,19 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
             continue
         if function_property.is_staticmethod:
             function_imports.append(
-                f"from {function.module_name} import {function_property.staticmethod_class_name} as {get_function_alias(function.module_name, function_property.staticmethod_class_name)}",
+                f"from {function.module_name} import {function_property.staticmethod_class_name} as {get_function_alias(function.module_name, function_property.staticmethod_class_name)}"
             )
         elif function.class_name:
             function_imports.append(
-                f"from {function.module_name} import {function.class_name} as {get_function_alias(function.module_name, function.class_name)}",
+                f"from {function.module_name} import {function.class_name} as {get_function_alias(function.module_name, function.class_name)}"
             )
         else:
             function_imports.append(
-                f"from {function.module_name} import {function.function_name} as {get_function_alias(function.module_name, function.function_name)}",
+                f"from {function.module_name} import {function.function_name} as {get_function_alias(function.module_name, function.function_name)}"
             )
 
     imports += "\n".join(function_imports)
-    functions_to_optimize = [
-        function.function_name for function in functions if function.function_name != "__init__"
-    ]
+    functions_to_optimize = [function.function_name for function in functions if function.function_name != "__init__"]
     metadata = f"""functions = {functions_to_optimize}
 trace_file_path = r"{trace_file}"
 """  # trace_file_path path is parsed with regex later, format is important
@@ -97,21 +85,21 @@ trace_file_path = r"{trace_file}"
         for arg_val_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_name=r"{file_name}", num_to_get={max_run_count}):
             args = pickle.loads(arg_val_pkl)
             ret = {function_name}({args})
-            """,
+            """
     )
     test_class_method_body = textwrap.dedent(
         """\
         for arg_val_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_name=r"{file_name}", class_name="{class_name}", num_to_get={max_run_count}):
             args = pickle.loads(arg_val_pkl){filter_variables}
             ret = {class_name_alias}{method_name}(**args)
-            """,
+            """
     )
     test_class_staticmethod_body = textwrap.dedent(
         """\
         for arg_val_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_name=r"{file_name}", num_to_get={max_run_count}):
             args = pickle.loads(arg_val_pkl){filter_variables}
             ret = {class_name_alias}{method_name}(**args)
-            """,
+            """
     )
     if test_framework == "unittest":
         self = "self"
@@ -135,8 +123,7 @@ trace_file_path = r"{trace_file}"
         elif func_property.is_staticmethod:
             class_name_alias = get_function_alias(func.module_name, func_property.staticmethod_class_name)
             alias = get_function_alias(
-                func.module_name,
-                func_property.staticmethod_class_name + "_" + func.function_name,
+                func.module_name, func_property.staticmethod_class_name + "_" + func.function_name
             )
             method_name = "." + func.function_name if func.function_name != "__init__" else ""
             test_body = test_class_staticmethod_body.format(
@@ -149,10 +136,7 @@ trace_file_path = r"{trace_file}"
             )
         else:
             class_name_alias = get_function_alias(func.module_name, func.class_name)
-            alias = get_function_alias(
-                func.module_name,
-                func.class_name + "_" + func.function_name,
-            )
+            alias = get_function_alias(func.module_name, func.class_name + "_" + func.function_name)
 
             if func_property.is_classmethod:
                 filter_variables = '\n    args.pop("cls", None)'
@@ -170,10 +154,7 @@ trace_file_path = r"{trace_file}"
                 max_run_count=max_run_count,
                 filter_variables=filter_variables,
             )
-        formatted_test_body = textwrap.indent(
-            test_body,
-            "        " if test_framework == "unittest" else "    ",
-        )
+        formatted_test_body = textwrap.indent(test_body, "        " if test_framework == "unittest" else "    ")
 
         test_template += "    " if test_framework == "unittest" else ""
         test_template += f"def test_{alias}({self}):\n{formatted_test_body}\n"

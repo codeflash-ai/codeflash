@@ -51,13 +51,7 @@ class Source:
     src_path = Path("/home/roger/repos/codeflash/cli/codeflash/optimization/function_context.py")
     dst_path = Path("/home/roger/repos/codeflash/cli/codeflash/optimization/function_context.py")
     project_root = Path("/home/roger/repos/codeflash")
-    new_module = add_needed_imports_from_module(
-        src_module,
-        dst_module,
-        src_path,
-        dst_path,
-        project_root,
-    )
+    new_module = add_needed_imports_from_module(src_module, dst_module, src_path, dst_path, project_root)
     assert new_module == expected
 
 
@@ -125,11 +119,5 @@ def belongs_to_function(name: Name, function_name: str) -> bool:
     src_path = Path("/home/roger/repos/codeflash/cli/codeflash/optimization/function_context.py")
     dst_path = Path("/home/roger/repos/codeflash/cli/codeflash/optimization/function_context.py")
     project_root = Path("/home/roger/repos/codeflash")
-    new_module = add_needed_imports_from_module(
-        src_module,
-        dst_module,
-        src_path,
-        dst_path,
-        project_root,
-    )
+    new_module = add_needed_imports_from_module(src_module, dst_module, src_path, dst_path, project_root)
     assert new_module == expected

@@ -10,17 +10,13 @@ import inquirer
 
 def apologize_and_exit() -> None:
     click.echo(
-        "💡 If you're having trouble, see https://docs.codeflash.ai/getting-started/local-installation for further help getting started with Codeflash!",
+        "💡 If you're having trouble, see https://docs.codeflash.ai/getting-started/local-installation for further help getting started with Codeflash!"
     )
     click.echo("👋 Exiting...")
     sys.exit(1)
 
 
-def inquirer_wrapper(
-    func: Callable[..., str | bool],
-    *args: str | bool,
-    **kwargs: str | bool,
-) -> str | bool:
+def inquirer_wrapper(func: Callable[..., str | bool], *args: str | bool, **kwargs: str | bool) -> str | bool:
     new_args = []
     new_kwargs = {}
 
@@ -29,10 +25,7 @@ def inquirer_wrapper(
     else:
         message = kwargs["message"]
         new_kwargs = kwargs.copy()
-    split_messages = split_string_to_cli_width(
-        message,
-        is_confirm=func == inquirer.confirm,
-    )
+    split_messages = split_string_to_cli_width(message, is_confirm=func == inquirer.confirm)
     for split_message in split_messages[:-1]:
         click.echo(split_message)
 
@@ -77,14 +70,7 @@ def inquirer_wrapper_path(*args: str, **kwargs: str) -> dict[str, str]:
     new_kwargs["message"] = last_message
     new_args.append(args[0])
 
-    return cast(
-        dict[str, str],
-        inquirer.prompt(
-            [
-                inquirer.Path(*new_args, **new_kwargs),
-            ],
-        ),
-    )
+    return cast(dict[str, str], inquirer.prompt([inquirer.Path(*new_args, **new_kwargs)]))
 
 
 def split_string_to_fit_width(string: str, width: int) -> list[str]:

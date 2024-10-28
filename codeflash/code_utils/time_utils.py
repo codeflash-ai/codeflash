@@ -12,10 +12,7 @@ def humanize_runtime(time_in_ns: int) -> str:
 
     if time_in_ns / 1000 >= 1:
         time_micro = float(time_in_ns) / 1000
-        runtime_human = humanize.precisedelta(
-            dt.timedelta(microseconds=time_micro),
-            minimum_unit="microseconds",
-        )
+        runtime_human = humanize.precisedelta(dt.timedelta(microseconds=time_micro), minimum_unit="microseconds")
 
         units = re.split(r",|\s", runtime_human)[1]
 

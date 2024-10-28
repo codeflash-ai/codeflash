@@ -20,9 +20,7 @@ def file_path_from_module_name(module_name: str, project_root_path: Path) -> Pat
 
 
 def get_imports_from_file(
-    file_path: Path | None = None,
-    file_string: str | None = None,
-    file_ast: ast.AST | None = None,
+    file_path: Path | None = None, file_string: str | None = None, file_ast: ast.AST | None = None
 ) -> list[ast.Import | ast.ImportFrom]:
     assert (
         sum([file_path is not None, file_string is not None, file_ast is not None]) == 1

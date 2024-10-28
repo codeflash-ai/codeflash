@@ -1,11 +1,5 @@
 mock_dataframe = {
-    "original_runtime": [
-        1.0,
-        2.0,
-        3.0,
-        4.0,
-        8333.00000,
-    ],
+    "original_runtime": [1.0, 2.0, 3.0, 4.0, 8333.00000],
     "optimized_runtime": [
         {
             "0a631960-6c33-4de4-8d38-b31e888918c7": 59209,
@@ -51,7 +45,7 @@ mock_dataframe = {
             "573c9f22-ae68-4e62-929d-b70d22da0ec0": -0.10714668381013608,
             "6fa4faaf-5d67-4ec6-bf55-5a84dfa23a11": 0.1695438596491228,
             "a06d1ad8-cc41-4b3b-a1a6-4566697d7b10": 0.16285235835891712,
-        },
+        }
     ],
     "best_correct_speedup_ratio": [0.02112, None, 1.81043, None],
     "is_correct": [

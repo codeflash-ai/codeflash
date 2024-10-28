@@ -10,10 +10,7 @@ import isort
 from codeflash.cli_cmds.console import logger
 
 
-def format_code(
-    formatter_cmds: list[str],
-    path: Path,
-) -> str | None:
+def format_code(formatter_cmds: list[str], path: Path) -> str | None:
     # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
     if not path.exists():
         logger.error(f"File {path} does not exist. Cannot format the file.")
@@ -29,12 +26,7 @@ def format_code(
         logger.info(f"Formatting code with {' '.join(formatter_cmd_list)} ...")
 
         try:
-            result = subprocess.run(
-                formatter_cmd_list,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=False,
-            )
+            result = subprocess.run(formatter_cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
         except Exception as e:
             logger.exception(f"Failed to format code with {' '.join(formatter_cmd_list)}: {e}")
             return None

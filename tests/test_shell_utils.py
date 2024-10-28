@@ -9,11 +9,7 @@ from codeflash.code_utils.shell_utils import read_api_key_from_shell_config, sav
 
 
 class TestShellUtils(unittest.TestCase):
-    @patch(
-        "codeflash.code_utils.shell_utils.open",
-        new_callable=mock_open,
-        read_data="existing content",
-    )
+    @patch("codeflash.code_utils.shell_utils.open", new_callable=mock_open, read_data="existing content")
     @patch("codeflash.code_utils.shell_utils.get_shell_rc_path")
     def test_save_api_key_to_rc_success(self, mock_get_shell_rc_path, mock_file):
         mock_get_shell_rc_path.return_value = "/fake/path/.bashrc"
@@ -25,11 +21,7 @@ class TestShellUtils(unittest.TestCase):
         handle.write.assert_called_once()
         handle.truncate.assert_called_once()
 
-    @patch(
-        "codeflash.code_utils.shell_utils.open",
-        new_callable=mock_open,
-        read_data="existing content",
-    )
+    @patch("codeflash.code_utils.shell_utils.open", new_callable=mock_open, read_data="existing content")
     @patch("codeflash.code_utils.shell_utils.get_shell_rc_path")
     def test_save_api_key_to_rc_failure(self, mock_get_shell_rc_path, mock_file):
         mock_get_shell_rc_path.return_value = "/fake/path/.bashrc"
@@ -59,8 +51,7 @@ class TestReadApiKeyFromShellConfig(unittest.TestCase):
         with patch("codeflash.code_utils.shell_utils.get_shell_rc_path") as mock_get_shell_rc_path:
             mock_get_shell_rc_path.return_value = self.test_rc_path
             with patch(
-                "builtins.open",
-                mock_open(read_data=f'export CODEFLASH_API_KEY="{self.api_key}"\n'),
+                "builtins.open", mock_open(read_data=f'export CODEFLASH_API_KEY="{self.api_key}"\n')
             ) as mock_file:
                 self.assertEqual(read_api_key_from_shell_config(), self.api_key)
                 mock_file.assert_called_once_with(self.test_rc_path, encoding="utf8")
@@ -83,10 +74,7 @@ class TestReadApiKeyFromShellConfig(unittest.TestCase):
         with patch("builtins.open", mock_open(read_data=f"CODEFLASH_API_KEY={self.api_key}\n")):
             result = read_api_key_from_shell_config()
             self.assertIsNone(result)
-        with patch(
-            "builtins.open",
-            mock_open(read_data=f"export CODEFLASH_API_KEY=sk-{self.api_key}\n"),
-        ):
+        with patch("builtins.open", mock_open(read_data=f"export CODEFLASH_API_KEY=sk-{self.api_key}\n")):
             result = read_api_key_from_shell_config()
             self.assertIsNone(result)
 
@@ -96,9 +84,7 @@ class TestReadApiKeyFromShellConfig(unittest.TestCase):
         mock_get_shell_rc_path.return_value = self.test_rc_path
         with patch(
             "builtins.open",
-            mock_open(
-                read_data=f'export CODEFLASH_API_KEY="cf-firstkey"\nexport CODEFLASH_API_KEY="{self.api_key}"\n',
-            ),
+            mock_open(read_data=f'export CODEFLASH_API_KEY="cf-firstkey"\nexport CODEFLASH_API_KEY="{self.api_key}"\n'),
         ):
             self.assertEqual(read_api_key_from_shell_config(), self.api_key)
 
@@ -108,9 +94,7 @@ class TestReadApiKeyFromShellConfig(unittest.TestCase):
         mock_get_shell_rc_path.return_value = self.test_rc_path
         with patch(
             "builtins.open",
-            mock_open(
-                read_data=f'# Setting API Key\nexport CODEFLASH_API_KEY="{self.api_key}"\n# Done\n',
-            ),
+            mock_open(read_data=f'# Setting API Key\nexport CODEFLASH_API_KEY="{self.api_key}"\n# Done\n'),
         ):
             self.assertEqual(read_api_key_from_shell_config(), self.api_key)
 
@@ -118,10 +102,7 @@ class TestReadApiKeyFromShellConfig(unittest.TestCase):
     def test_api_key_in_comment(self, mock_get_shell_rc_path):
         """Test with API key export in a comment."""
         mock_get_shell_rc_path.return_value = self.test_rc_path
-        with patch(
-            "builtins.open",
-            mock_open(read_data=f'# export CODEFLASH_API_KEY="{self.api_key}"\n'),
-        ):
+        with patch("builtins.open", mock_open(read_data=f'# export CODEFLASH_API_KEY="{self.api_key}"\n')):
             self.assertIsNone(read_api_key_from_shell_config())
 
     @patch("codeflash.code_utils.shell_utils.get_shell_rc_path")

@@ -58,41 +58,26 @@ class AirbyteEntrypoint(object):
         return AirbyteEntrypoint.handle_record_counts(num)
 def non_classmethod_function(cls, name):
     return cls.name
-    """,
+    """
         )
         f.flush()
         path_obj_name = Path(f.name)
         assert inspect_top_level_functions_or_methods(path_obj_name, "functionA").is_top_level
         assert not inspect_top_level_functions_or_methods(path_obj_name, "functionB").is_top_level
         assert inspect_top_level_functions_or_methods(path_obj_name, "functionC", class_name="A").is_top_level
-        assert not inspect_top_level_functions_or_methods(
-            path_obj_name,
-            "functionD",
-            class_name="A",
-        ).is_top_level
-        assert not inspect_top_level_functions_or_methods(
-            path_obj_name,
-            "functionF",
-            class_name="E",
-        ).is_top_level
+        assert not inspect_top_level_functions_or_methods(path_obj_name, "functionD", class_name="A").is_top_level
+        assert not inspect_top_level_functions_or_methods(path_obj_name, "functionF", class_name="E").is_top_level
         assert not inspect_top_level_functions_or_methods(path_obj_name, "functionA").has_args
         staticmethod_func = inspect_top_level_functions_or_methods(
-            path_obj_name,
-            "handle_record_counts",
-            class_name=None,
-            line_no=15,
+            path_obj_name, "handle_record_counts", class_name=None, line_no=15
         )
         assert staticmethod_func.is_staticmethod
         assert staticmethod_func.staticmethod_class_name == "AirbyteEntrypoint"
         assert inspect_top_level_functions_or_methods(
-            path_obj_name,
-            "functionE",
-            class_name="AirbyteEntrypoint",
+            path_obj_name, "functionE", class_name="AirbyteEntrypoint"
         ).is_classmethod
         assert not inspect_top_level_functions_or_methods(
-            path_obj_name,
-            "non_classmethod_function",
-            class_name="AirbyteEntrypoint",
+            path_obj_name, "non_classmethod_function", class_name="AirbyteEntrypoint"
         ).is_top_level
         # needed because this will be traced with a class_name being passed
 
@@ -111,7 +96,7 @@ class X:
     def functionB():
         return False
 def functionA():
-    return True""",
+    return True"""
         )
         f.flush()
         test_config = TestConfig(

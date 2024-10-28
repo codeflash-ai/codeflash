@@ -1,10 +1,5 @@
 from codeflash.verification.parse_test_output import merge_test_results
-from codeflash.verification.test_results import (
-    FunctionTestInvocation,
-    InvocationId,
-    TestResults,
-    TestType,
-)
+from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults, TestType
 
 
 def test_merge_test_results_1():
@@ -61,7 +56,7 @@ def test_merge_test_results_1():
                 timed_out=False,
                 loop_index=1,
             ),
-        ],
+        ]
     )
 
     test_results_bin = TestResults(
@@ -117,7 +112,7 @@ def test_merge_test_results_1():
                 timed_out=False,
                 loop_index=1,
             ),
-        ],
+        ]
     )
 
     expected_merged_results = TestResults(
@@ -173,12 +168,10 @@ def test_merge_test_results_1():
                 timed_out=False,
                 loop_index=1,
             ),
-        ],
+        ]
     )
     merged_results = merge_test_results(
-        xml_test_results=test_results_xml,
-        bin_test_results=test_results_bin,
-        test_framework="unittest",
+        xml_test_results=test_results_xml, bin_test_results=test_results_bin, test_framework="unittest"
     )
     assert merged_results == expected_merged_results
 
@@ -200,30 +193,24 @@ def test_merge_test_results_1():
                 return_value=None,
                 timed_out=False,
                 loop_index=1,
-            ),
-        ],
+            )
+        ]
     )
 
     merged_results = merge_test_results(
-        xml_test_results=test_results_xml_single,
-        bin_test_results=test_results_bin,
-        test_framework="unittest",
+        xml_test_results=test_results_xml_single, bin_test_results=test_results_bin, test_framework="unittest"
     )
 
     assert merged_results == expected_merged_results
 
     merged_results = merge_test_results(
-        xml_test_results=test_results_xml_single,
-        bin_test_results=TestResults(),
-        test_framework="unittest",
+        xml_test_results=test_results_xml_single, bin_test_results=TestResults(), test_framework="unittest"
     )
 
     assert merged_results == test_results_xml_single
 
     merged_results = merge_test_results(
-        xml_test_results=TestResults(),
-        bin_test_results=test_results_bin,
-        test_framework="unittest",
+        xml_test_results=TestResults(), bin_test_results=test_results_bin, test_framework="unittest"
     )
 
     assert merged_results == TestResults()  # XML Results should always have better coverage than bin results
@@ -246,8 +233,8 @@ def test_merge_test_results_1():
                 return_value=None,
                 timed_out=False,
                 loop_index=1,
-            ),
-        ],
+            )
+        ]
     )
 
     test_results_bin_pytest = TestResults(
@@ -286,13 +273,11 @@ def test_merge_test_results_1():
                 timed_out=False,
                 loop_index=1,
             ),
-        ],
+        ]
     )
 
     merged_results = merge_test_results(
-        xml_test_results=test_results_xml_pytest,
-        bin_test_results=test_results_bin_pytest,
-        test_framework="unittest",
+        xml_test_results=test_results_xml_pytest, bin_test_results=test_results_bin_pytest, test_framework="unittest"
     )
 
     assert merged_results == test_results_bin_pytest

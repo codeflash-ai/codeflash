@@ -17,25 +17,14 @@ if TYPE_CHECKING:
     from git import Repo
 
 
-def get_git_diff(
-    repo_directory: Path = Path.cwd(),
-    uncommitted_changes: bool = False,
-) -> dict[str, list[int]]:
+def get_git_diff(repo_directory: Path = Path.cwd(), uncommitted_changes: bool = False) -> dict[str, list[int]]:
     repository = git.Repo(repo_directory, search_parent_directories=True)
     commit = repository.head.commit
     if uncommitted_changes:
-        uni_diff_text = repository.git.diff(
-            None,
-            "HEAD",
-            ignore_blank_lines=True,
-            ignore_space_at_eol=True,
-        )
+        uni_diff_text = repository.git.diff(None, "HEAD", ignore_blank_lines=True, ignore_space_at_eol=True)
     else:
         uni_diff_text = repository.git.diff(
-            commit.hexsha + "^1",
-            commit.hexsha,
-            ignore_blank_lines=True,
-            ignore_space_at_eol=True,
+            commit.hexsha + "^1", commit.hexsha, ignore_blank_lines=True, ignore_space_at_eol=True
         )
     patch_set = PatchSet(StringIO(uni_diff_text))
     change_list: dict[str, list[int]] = {}  # list of changes
@@ -47,10 +36,7 @@ def get_git_diff(
         logger.debug(f"file name: {file_path}")
 
         add_line_no: list[int] = [
-            line.target_line_no
-            for hunk in patched_file
-            for line in hunk
-            if line.is_added and line.value.strip() != ""
+            line.target_line_no for hunk in patched_file for line in hunk if line.is_added and line.value.strip() != ""
         ]  # the row number of deleted lines
 
         logger.debug(f"added lines: {add_line_no}")
@@ -89,9 +75,7 @@ def get_repo_owner_and_name(repo: Repo | None = None) -> tuple[str, str]:
     remote_url = get_remote_url(repo).removesuffix(".git") if remote_url.endswith(".git") else remote_url
     split_url = remote_url.split("/")
     repo_owner_with_github, repo_name = split_url[-2], split_url[-1]
-    repo_owner = (
-        repo_owner_with_github.split(":")[1] if ":" in repo_owner_with_github else repo_owner_with_github
-    )
+    repo_owner = repo_owner_with_github.split(":")[1] if ":" in repo_owner_with_github else repo_owner_with_github
     return repo_owner, repo_name
 
 

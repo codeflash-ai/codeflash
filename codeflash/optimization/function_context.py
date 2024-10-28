@@ -36,9 +36,7 @@ def belongs_to_function(name: Name, function_name: str) -> bool:
 
 
 def get_type_annotation_context(
-    function: FunctionToOptimize,
-    jedi_script: jedi.Script,
-    project_root_path: Path,
+    function: FunctionToOptimize, jedi_script: jedi.Script, project_root_path: Path
 ) -> tuple[list[FunctionSource], set[tuple[str, str]]]:
     function_name: str = function.function_name
     file_path: Path = function.file_path
@@ -53,18 +51,11 @@ def get_type_annotation_context(
     contextual_dunder_methods = set()
 
     def get_annotation_source(
-        j_script: jedi.Script,
-        name: str,
-        node_parents: list[FunctionParent],
-        line_no: int,
-        col_no: str,
+        j_script: jedi.Script, name: str, node_parents: list[FunctionParent], line_no: int, col_no: str
     ) -> None:
         try:
             definition: list[Name] = j_script.goto(
-                line=line_no,
-                column=col_no,
-                follow_imports=True,
-                follow_builtin_imports=False,
+                line=line_no, column=col_no, follow_imports=True, follow_builtin_imports=False
             )
         except Exception as ex:
             if hasattr(name, "full_name"):
@@ -82,15 +73,7 @@ def get_type_annotation_context(
                 and not path_belongs_to_site_packages(definition_path)
                 and not belongs_to_function(definition[0], function_name)
             ):
-                source_code = get_code(
-                    [
-                        FunctionToOptimize(
-                            definition[0].name,
-                            definition_path,
-                            node_parents[:-1],
-                        ),
-                    ],
-                )
+                source_code = get_code([FunctionToOptimize(definition[0].name, definition_path, node_parents[:-1])])
                 if source_code[0]:
                     sources.append(
                         FunctionSource(
@@ -98,25 +81,21 @@ def get_type_annotation_context(
                             jedi_definition=definition[0],
                             source_code=source_code[0],
                             file_path=definition_path,
-                            qualified_name=definition[0].full_name.removeprefix(
-                                definition[0].module_name + ".",
-                            ),
+                            qualified_name=definition[0].full_name.removeprefix(definition[0].module_name + "."),
                             only_function_name=definition[0].name,
-                        ),
+                        )
                     )
                     contextual_dunder_methods.update(source_code[1])
 
     def visit_children(
-        node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Module,
-        node_parents: list[FunctionParent],
+        node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Module, node_parents: list[FunctionParent]
     ) -> None:
         child: ast.AST | ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Module
         for child in ast.iter_child_nodes(node):
             visit(child, node_parents)
 
     def visit_all_annotation_children(
-        node: ast.Subscript | ast.Name | ast.BinOp,
-        node_parents: list[FunctionParent],
+        node: ast.Subscript | ast.Name | ast.BinOp, node_parents: list[FunctionParent]
     ) -> None:
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
             visit_all_annotation_children(node.left, node_parents)
@@ -165,8 +144,7 @@ def get_type_annotation_context(
 
 
 def get_function_variables_definitions(
-    function_to_optimize: FunctionToOptimize,
-    project_root_path: Path,
+    function_to_optimize: FunctionToOptimize, project_root_path: Path
 ) -> tuple[list[FunctionSource], set[tuple[str, str]]]:
     function_name = function_to_optimize.function_name
     file_path = function_to_optimize.file_path
@@ -181,20 +159,16 @@ def get_function_variables_definitions(
         if ref.full_name:
             if function_to_optimize.parents:
                 # Check if the reference belongs to the specified class when FunctionParent is provided
-                if belongs_to_class(
-                    ref,
-                    function_to_optimize.parents[-1].name,
-                ) and belongs_to_function(ref, function_name):
+                if belongs_to_class(ref, function_to_optimize.parents[-1].name) and belongs_to_function(
+                    ref, function_name
+                ):
                     names.append(ref)
             elif belongs_to_function(ref, function_name):
                 names.append(ref)
 
     for name in names:
         try:
-            definitions: list[Name] = name.goto(
-                follow_imports=True,
-                follow_builtin_imports=False,
-            )
+            definitions: list[Name] = name.goto(follow_imports=True, follow_builtin_imports=False)
         except Exception as e:
             try:
                 logger.exception(f"Error while getting definition for {name.full_name}: {e}")
@@ -221,13 +195,7 @@ def get_function_variables_definitions(
                     parents = [FunctionParent(m.group(1), "ClassDef")]
 
                 source_code = get_code(
-                    [
-                        FunctionToOptimize(
-                            function_name=definitions[0].name,
-                            file_path=definition_path,
-                            parents=parents,
-                        ),
-                    ],
+                    [FunctionToOptimize(function_name=definitions[0].name, file_path=definition_path, parents=parents)]
                 )
                 if source_code[0]:
                     sources.append(
@@ -236,24 +204,18 @@ def get_function_variables_definitions(
                             jedi_definition=definition,
                             source_code=source_code[0],
                             file_path=definition_path,
-                            qualified_name=definition.full_name.removeprefix(
-                                definition.module_name + ".",
-                            ),
+                            qualified_name=definition.full_name.removeprefix(definition.module_name + "."),
                             only_function_name=definition.name,
-                        ),
+                        )
                     )
                     contextual_dunder_methods.update(source_code[1])
     annotation_sources, annotation_dunder_methods = get_type_annotation_context(
-        function_to_optimize,
-        script,
-        project_root_path,
+        function_to_optimize, script, project_root_path
     )
     sources[:0] = annotation_sources  # prepend the annotation sources
     contextual_dunder_methods.update(annotation_dunder_methods)
     existing_fully_qualified_names = set()
-    no_parent_sources: dict[Path, dict[str, set[FunctionSource]]] = defaultdict(
-        lambda: defaultdict(set),
-    )
+    no_parent_sources: dict[Path, dict[str, set[FunctionSource]]] = defaultdict(lambda: defaultdict(set))
     parent_sources = set()
     for source in sources:
         if (fully_qualified_name := source.fully_qualified_name) not in existing_fully_qualified_names:
@@ -269,10 +231,7 @@ def get_function_variables_definitions(
         or source.qualified_name.rpartition(".")[0] not in no_parent_sources[source.file_path]
     ]
     deduped_no_parent_sources = [
-        source
-        for k1 in no_parent_sources
-        for k2 in no_parent_sources[k1]
-        for source in no_parent_sources[k1][k2]
+        source for k1 in no_parent_sources for k2 in no_parent_sources[k1] for source in no_parent_sources[k1][k2]
     ]
     return deduped_no_parent_sources + deduped_parent_sources, contextual_dunder_methods
 
@@ -288,10 +247,7 @@ def get_constrained_function_context_and_helper_functions(
 ) -> tuple[str, list[FunctionSource], set[tuple[str, str]]]:
     # TODO: Not just do static analysis, but also find the datatypes of function arguments by running the existing
     #  unittests and inspecting the arguments to resolve the real definitions and dependencies.
-    helper_functions, dunder_methods = get_function_variables_definitions(
-        function_to_optimize,
-        project_root_path,
-    )
+    helper_functions, dunder_methods = get_function_variables_definitions(function_to_optimize, project_root_path)
     tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")
     code_to_optimize_tokens = tokenizer.encode(code_to_optimize)
 
