@@ -19,6 +19,31 @@ from codeflash.models.models import TestFile, TestFiles
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.test_results import TestType
 
+codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
+    if not hasattr(codeflash_wrap, 'index'):
+        codeflash_wrap.index = {{}}
+    if test_id in codeflash_wrap.index:
+        codeflash_wrap.index[test_id] += 1
+    else:
+        codeflash_wrap.index[test_id] = 0
+    codeflash_test_index = codeflash_wrap.index[test_id]
+    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
+    gc.disable()
+    counter = time.perf_counter_ns()
+    return_value = wrapped(*args, **kwargs)
+    codeflash_duration = time.perf_counter_ns() - counter
+    gc.enable()
+    if loop_index == 1:
+        pickled_return_value = pickle.dumps(return_value)
+    else:
+        pickled_return_value = None
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
+    codeflash_con.commit()
+    return return_value
+"""
+
 
 def test_perfinjector_bubble_sort() -> None:
     code = """import unittest
@@ -236,30 +261,8 @@ import dill as pickle
 from code_to_optimize.bubble_sort import sorter
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
-    if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
-    else:
-        pickled_return_value = None
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
-    codeflash_con.commit()
-    return return_value
-
+""" + codeflash_wrap_string + \
+"""
 def test_sort():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
@@ -385,30 +388,8 @@ import pytest
 from code_to_optimize.bubble_sort import sorter
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
-    if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
-    else:
-        pickled_return_value = None
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
-    codeflash_con.commit()
-    return return_value
-
+""" + codeflash_wrap_string + \
+"""
 @pytest.mark.parametrize('input, expected_output', [([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
 def test_sort_parametrized(input, expected_output):
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
@@ -543,30 +524,8 @@ import pytest
 from code_to_optimize.bubble_sort import sorter
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
-    if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
-    else:
-        pickled_return_value = None
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
-    codeflash_con.commit()
-    return return_value
-
+""" + codeflash_wrap_string + \
+"""
 @pytest.mark.parametrize('input, expected_output', [([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
 def test_sort_parametrized_loop(input, expected_output):
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
@@ -729,30 +688,8 @@ import dill as pickle
 from code_to_optimize.bubble_sort import sorter
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
-    if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
-    else:
-        pickled_return_value = None
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
-    codeflash_con.commit()
-    return return_value
-
+""" + codeflash_wrap_string + \
+"""
 def test_sort():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
@@ -895,30 +832,8 @@ import timeout_decorator
 from code_to_optimize.bubble_sort import sorter
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
-    if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
-    else:
-        pickled_return_value = None
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
-    codeflash_con.commit()
-    return return_value
-
+""" + codeflash_wrap_string + \
+"""
 class TestPigLatin(unittest.TestCase):
 
     @timeout_decorator.timeout(15)
@@ -1071,30 +986,8 @@ from parameterized import parameterized
 from code_to_optimize.bubble_sort import sorter
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
-    if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
-    else:
-        pickled_return_value = None
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
-    codeflash_con.commit()
-    return return_value
-
+""" + codeflash_wrap_string + \
+"""
 class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
@@ -1231,30 +1124,8 @@ import timeout_decorator
 from code_to_optimize.bubble_sort import sorter
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
-    if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
-    else:
-        pickled_return_value = None
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
-    codeflash_con.commit()
-    return return_value
-
+""" + codeflash_wrap_string + \
+"""
 class TestPigLatin(unittest.TestCase):
 
     @timeout_decorator.timeout(15)
@@ -1401,30 +1272,8 @@ from parameterized import parameterized
 from code_to_optimize.bubble_sort import sorter
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
-    if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
-    else:
-        pickled_return_value = None
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
-    codeflash_con.commit()
-    return return_value
-
+""" + codeflash_wrap_string + \
+"""
 class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
@@ -1615,30 +1464,8 @@ import dill as pickle
 from module import class_name as class_name_A
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
-    if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
-    else:
-        pickled_return_value = None
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
-    codeflash_con.commit()
-    return return_value
-
+""" + codeflash_wrap_string + \
+"""
 def test_class_name_A_function_name():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
@@ -1703,30 +1530,8 @@ import dill as pickle
 from codeflash.result.common_tags import find_common_tags
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
-    if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
-    else:
-        pickled_return_value = None
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
-    codeflash_con.commit()
-    return return_value
-
+""" + codeflash_wrap_string + \
+"""
 def test_common_tags_1():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
@@ -1789,30 +1594,8 @@ import dill as pickle
 from code_to_optimize.bubble_sort import sorter
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!')
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
-    if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
-    else:
-        pickled_return_value = None
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
-    codeflash_con.commit()
-    return return_value
-
+""" + codeflash_wrap_string + \
+"""
 def test_sort():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
@@ -1875,30 +1658,8 @@ import dill as pickle
 from code_to_optimize.bubble_sort import BubbleSorter
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!')
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
-    if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
-    else:
-        pickled_return_value = None
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
-    codeflash_con.commit()
-    return return_value
-
+""" + codeflash_wrap_string + \
+"""
 def test_sort():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
@@ -2089,30 +1850,8 @@ import pytest
 from code_to_optimize.sleeptime import accurate_sleepfunc
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
-    if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
-    else:
-        pickled_return_value = None
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
-    codeflash_con.commit()
-    return return_value
-
+""" + codeflash_wrap_string + \
+"""
 @pytest.mark.parametrize('n, expected_total_sleep_time', [(0.01, 0.01), (0.02, 0.02)])
 def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
@@ -2228,30 +1967,8 @@ from parameterized import parameterized
 from code_to_optimize.sleeptime import accurate_sleepfunc
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
-    gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
-    if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
-    else:
-        pickled_return_value = None
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
-    codeflash_con.commit()
-    return return_value
-
+""" + codeflash_wrap_string + \
+"""
 class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([(0.01, 0.01), (0.02, 0.02)])
