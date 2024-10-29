@@ -134,6 +134,24 @@ def test_generated_test_critic():
         loop_index=1,
     )
 
+    test_6 = FunctionTestInvocation(
+        id=InvocationId(
+            test_module_path="",
+            test_class_name="",
+            test_function_name="test_6",
+            function_getting_tested="sorter",
+            iteration_id="",
+        ),
+        file_name="test_6",
+        did_pass=True,
+        runtime=0,
+        test_framework="pytest",
+        test_type=TestType.GENERATED_REGRESSION,
+        return_value=None,
+        timed_out=False,
+        loop_index=2,
+    )
+
     test_results = [test_1, test_2, test_3]
 
     candidate_result = OptimizedCandidateResult(
@@ -146,7 +164,7 @@ def test_generated_test_critic():
 
     assert quantity_of_tests_critic(candidate_result)
 
-    test_results = [test_1, test_3]
+    test_results = [test_1, test_3, test_6]
 
     candidate_result = OptimizedCandidateResult(
         times_run=5,
@@ -194,7 +212,7 @@ def test_generated_test_critic():
 
     assert quantity_of_tests_critic(candidate_result)
 
-    test_results = [test_1, test_4]
+    test_results = [test_1, test_4, test_6]
 
     candidate_result = OptimizedCandidateResult(
         times_run=5,
@@ -232,7 +250,7 @@ def test_generated_test_critic():
 
     get_pr_number.cache_clear()
     os.environ["CODEFLASH_PR_NUMBER"] = "1234"
-    test_results = [test_1, test_2, test_3]
+    test_results = [test_1, test_2, test_3, test_6]
 
     candidate_result = OptimizedCandidateResult(
         times_run=5,
