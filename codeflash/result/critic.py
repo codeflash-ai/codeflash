@@ -3,6 +3,7 @@ from __future__ import annotations
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.config_consts import MIN_IMPROVEMENT_THRESHOLD
 from codeflash.models.models import OptimizedCandidateResult
+from codeflash.verification.test_results import TestType
 
 
 def performance_gain(*, original_runtime_ns: int, optimized_runtime_ns: int) -> float:
@@ -37,29 +38,22 @@ def speedup_critic(
 
 
 def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool:
-    """Evaluate if the quantity of passed tests is sufficient to consider the optimization valid.
-
-    The criteria differ based on whether the code is running in GitHub Actions mode or not.
-    """
-    test_results = candidate_result.best_test_results.test_results
+    test_results = candidate_result.best_test_results
     in_github_actions_mode = bool(env_utils.get_pr_number())
 
-    min_tests_github_actions = 4
-    min_tests_normal = 2
+    report = test_results.get_test_pass_fail_report_by_type()
 
-    passed_test = None
-    count = 0
+    pass_count = 0
+    for test_type in report:
+        pass_count += report[test_type]["passed"]
 
-    for test_result in test_results:
-        if test_result.did_pass:
-            count += 1
-            if count == 1:
-                passed_test = test_result
-            if in_github_actions_mode:
-                if count >= min_tests_github_actions:
-                    return True
-            elif count >= min_tests_normal:
-                return True
-
+    if in_github_actions_mode:
+        if pass_count >= 4:
+            return True
+    elif pass_count >= 2:
+        return True
     # If only one test passed, check if it's a REPLAY_TEST
-    return count == 1 and passed_test is not None and passed_test.test_type.name == "REPLAY_TEST"
+    if pass_count == 1 and report[TestType.REPLAY_TEST]["passed"] == 1:
+        return True
+
+    return False

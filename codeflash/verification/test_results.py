@@ -73,8 +73,6 @@ class FunctionTestInvocation:
     return_value: Optional[object]  # The return value of the function invocation
     timed_out: Optional[bool]
 
-    def test_executed(self) -> bool:
-        return self.test_type != TestType.EXISTING_UNIT_TEST or self.id.function_getting_tested
 
 
 class TestResults(BaseModel):
@@ -92,18 +90,6 @@ class TestResults(BaseModel):
     def get_all_ids(self) -> set[InvocationId]:
         return {test_result.id for test_result in self.test_results}
 
-    def get_test_pass_fail_report(self) -> str:
-        passed = 0
-        failed = 0
-        for test_result in self.test_results:
-            if test_result.loop_index == 1 and test_result.test_executed():
-                if test_result.did_pass:
-                    passed += 1
-                else:
-                    logger.info(f"Failed test: {test_result.id}")
-                    failed += 1
-        return f"Passed: {passed}, Failed: {failed}"
-
     def number_of_loops(self) -> int:
         if not self.test_results:
             return 0
@@ -114,7 +100,7 @@ class TestResults(BaseModel):
         for test_type in TestType:
             report[test_type] = {"passed": 0, "failed": 0}
         for test_result in self.test_results:
-            if test_result.loop_index == 1 and test_result.test_executed():
+            if test_result.loop_index == 1:
                 if test_result.did_pass:
                     report[test_result.test_type]["passed"] += 1
                 else:
@@ -129,6 +115,7 @@ class TestResults(BaseModel):
                 for test_type in TestType
             ]
         )
+
 
     @staticmethod
     def report_to_tree(report: dict[TestType, dict[str, int]], title: str) -> Tree:
