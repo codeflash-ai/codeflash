@@ -202,7 +202,7 @@ class Optimizer:
             function_to_optimize=function_to_optimize, function_to_tests=function_to_tests
         )
 
-        with progress_bar(f"Generating new tests for function {function_to_optimize.function_name}", transient=True):
+        with progress_bar(f"Generating new tests and optimizations for function {function_to_optimize.function_name}", transient=True):
             generated_results = self.generate_tests_and_optimizations(
                 code_context.code_to_optimize_with_helpers,
                 function_to_optimize,
