@@ -113,6 +113,10 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             # TODO : this is because sqlite writes original file module path. Should make it consistent
             test_type = test_files.get_test_type_by_original_file_path(test_file_path)
             loop_index = val[4]
+            try:
+                ret_val = (pickle.loads(val[7]) if loop_index == 1 else None,)
+            except (AttributeError, ModuleNotFoundError, IndexError) as e:
+                continue
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
                     loop_index=loop_index,
@@ -128,12 +132,12 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                     runtime=val[6],
                     test_framework=test_config.test_framework,
                     test_type=test_type,
-                    return_value=pickle.loads(val[7]) if loop_index == 1 else None,
+                    return_value=ret_val,
                     timed_out=False,
                 )
             )
         except Exception:
-            logger.exception("Failed to load pickle file.")
+            logger.exception(f"Failed to parse sqlite test results for {sqlite_file_path}")
         # Hardcoding the test result to True because the test did execute and we are only interested in the return values,
         # the did_pass comes from the xml results file
     return test_results
