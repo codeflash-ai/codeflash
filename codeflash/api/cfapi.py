@@ -167,7 +167,7 @@ def get_blocklisted_functions() -> dict[str, set[str]]:
             return {}
         req.raise_for_status()
         content: dict[str, list[str]] = req.json()
-    except requests.RequestException as e:
+    except Exception as e:
         logger.error(f"Error getting blocklisted functions: {e}")
         return {}
     return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
