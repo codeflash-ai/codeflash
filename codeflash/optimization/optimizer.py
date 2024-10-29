@@ -927,7 +927,7 @@ class Optimizer:
             loop_count = (
                 max(all_loop_indices)
                 if (all_loop_indices := {result.loop_index for result in candidate_results.test_results})
-                else 1
+                else 0
             )
         else:
             candidate_results = TestResults()
