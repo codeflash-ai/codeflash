@@ -405,7 +405,6 @@ class Optimizer:
                 run_results = self.run_optimized_candidate(
                     optimization_candidate_index=candidate_index,
                     original_test_results=original_code_baseline.overall_test_results,
-                    best_runtime_until_now=best_runtime_until_now,
                     tests_in_file=only_run_this_test_function,
                 )
                 if not is_successful(run_results):
@@ -421,32 +420,26 @@ class Optimizer:
                         original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_test_runtime
                     )
                     speedup_ratios[candidate.optimization_id] = perf_gain
-                    loop_count = (
-                        max(all_loop_indices)
-                        if (all_loop_indices := {result.loop_index for result in candidate_result.best_test_results})
-                        else 1
-                    )
+
                     tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
                     if speedup_critic(
                         candidate_result, original_code_baseline.runtime, best_runtime_until_now
                     ) and quantity_of_tests_critic(candidate_result):
                         tree.add("This candidate is faster than the previous best candidate. 🚀")
-                        tree.add("Original runtime:").add(f"{humanize_runtime(original_code_baseline.runtime)}")
-                        tree.add("Best test runtime:").add(f"{humanize_runtime(candidate_result.best_test_runtime)}")
-                        tree.add("Speedup ratio:").add(f"{perf_gain:.3f}")
+                        tree.add(f"Original runtime: {humanize_runtime(original_code_baseline.runtime)}")
+                        tree.add(f"Best test runtime: {humanize_runtime(candidate_result.best_test_runtime)} (measured over {candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})")
+                        tree.add(f"Speedup ratio: {perf_gain:.3f}")
 
                         best_optimization = BestOptimization(
                             candidate=candidate,
                             helper_functions=code_context.helper_functions,
                             runtime=best_test_runtime,
-                            winning_test_results=candidate_result.best_test_results,
+                            winning_test_results=candidate_result.test_results,
                         )
                         best_runtime_until_now = best_test_runtime
-                    tree.add("runtime").add(f"{candidate_result.total_candidate_timing} (ns)")
-                    tree.add(f"Runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}").add(
-                        f"Total runtime: {humanize_runtime(best_test_runtime)}"
-                    )
-                    tree.add("Speedup ratio:").add(f"{perf_gain:.3f}")
+                    else:
+                        tree.add(f"Runtime: {humanize_runtime(best_test_runtime)} (measured over {candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})")
+                        tree.add(f"Speedup ratio: {perf_gain:.3f}")
                     console.print(tree)
                     console.rule()
 
@@ -883,7 +876,6 @@ class Optimizer:
         *,
         optimization_candidate_index: int,
         original_test_results: TestResults | None,
-        best_runtime_until_now: int,
         tests_in_file: list[FunctionCalledInTest] | None,
     ) -> Result[OptimizedCandidateResult, str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
@@ -892,9 +884,7 @@ class Optimizer:
         generated_tests_paths = self.test_files.get_by_type(TestType.GENERATED_REGRESSION)
 
         success = True
-        best_test_results = TestResults()
 
-        times_run = 0
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_candidate_index)
         test_env["CODEFLASH_TRACER_DISABLE"] = "1"
@@ -934,9 +924,15 @@ class Optimizer:
                 test_functions=first_test_functions,
                 testing_time=TOTAL_LOOPING_TIME,
             )
+            loop_count = (
+                max(all_loop_indices)
+                if (all_loop_indices := {result.loop_index for result in candidate_results.test_results})
+                else 1
+            )
         else:
             candidate_results = TestResults()
             start_time: float = time.time()
+            loop_count = 0
             for i in range(100):
                 if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME:
                     break
@@ -948,6 +944,7 @@ class Optimizer:
                     test_functions=first_test_functions,
                     testing_time=TOTAL_LOOPING_TIME,
                 )
+                loop_count = i + 1
                 candidate_results.merge(candidate_loop_results)
 
         initial_loop_candidate_results = TestResults(
@@ -979,8 +976,6 @@ class Optimizer:
         if (total_candidate_timing := candidate_results.total_passed_runtime()) == 0:
             logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
             console.rule()
-        if best_runtime_until_now is None or total_candidate_timing < best_runtime_until_now:
-            best_test_results = candidate_results
         get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.bin")).unlink(missing_ok=True)
 
         get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
@@ -992,9 +987,9 @@ class Optimizer:
 
         return Success(
             OptimizedCandidateResult(
-                times_run=times_run,
+                max_loop_count=loop_count,
                 best_test_runtime=total_candidate_timing,
-                best_test_results=best_test_results,
+                test_results=candidate_results,
                 optimization_candidate_index=optimization_candidate_index,
                 total_candidate_timing=total_candidate_timing,
             )
