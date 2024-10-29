@@ -12,7 +12,8 @@ from codeflash.code_utils.code_replacer import (
     replace_functions_and_add_imports,
     replace_functions_in_file,
 )
-from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.models import FunctionParent
 from codeflash.optimization.optimizer import Optimizer
 
 os.environ["CODEFLASH_API_KEY"] = "cf-test-key"

@@ -39,7 +39,7 @@ from codeflash.code_utils.instrument_existing_tests import inject_profiling_into
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
-from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize, get_functions_to_optimize
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize, get_functions_to_optimize
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
@@ -50,7 +50,7 @@ from codeflash.models.models import (
     OptimizedCandidateResult,
     OriginalCodeBaseline,
     TestFile,
-    TestFiles,
+    TestFiles, OptimizedCandidate, FunctionCalledInTest, FunctionParent,
 )
 from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
@@ -69,8 +69,6 @@ if TYPE_CHECKING:
 
     from returns.result import Result
 
-    from codeflash.api.aiservice import OptimizedCandidate
-    from codeflash.discovery.discover_unit_tests import FunctionCalledInTest
     from codeflash.models.models import FunctionSource
 
 

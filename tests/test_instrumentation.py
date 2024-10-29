@@ -13,9 +13,8 @@ from codeflash.code_utils.instrument_existing_tests import (
     FunctionImportedAsVisitor,
     inject_profiling_into_existing_test,
 )
-from codeflash.discovery.discover_unit_tests import CodePosition
-from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
-from codeflash.models.models import TestFile, TestFiles
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.models import TestFile, TestFiles, CodePosition, FunctionParent
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.test_results import TestType
 

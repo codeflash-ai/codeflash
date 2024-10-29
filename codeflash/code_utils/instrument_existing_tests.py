@@ -8,8 +8,8 @@ import isort
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
-from codeflash.discovery.discover_unit_tests import CodePosition
-from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.models import CodePosition, FunctionParent
 
 
 def node_in_call_position(node: ast.stmt, call_positions: list[CodePosition]) -> bool:

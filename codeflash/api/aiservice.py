@@ -6,13 +6,13 @@ import platform
 from typing import TYPE_CHECKING, Any
 
 import requests
-from pydantic.dataclasses import dataclass
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.ExperimentMetadata import ExperimentMetadata
+from codeflash.models.models import OptimizedCandidate
+# from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+# from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
 
@@ -21,13 +21,6 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.ExperimentMetadata import ExperimentMetadata
-
-
-@dataclass(frozen=True)
-class OptimizedCandidate:
-    source_code: str
-    explanation: str
-    optimization_id: str
 
 
 class AiServiceClient:

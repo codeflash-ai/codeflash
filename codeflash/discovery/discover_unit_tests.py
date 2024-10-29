@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import multiprocessing as mp
 import os
 import re
-import sys
 import unittest
 from collections import defaultdict
 from multiprocessing import Process, Queue
@@ -14,31 +14,12 @@ from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import module_name_from_file_path
+from codeflash.discovery.new_process import run_pytest_discovery_new_process
+from codeflash.models.models import TestsInFile, FunctionCalledInTest, CodePosition
 from codeflash.verification.test_results import TestType
 
 if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
-
-
-@dataclass(frozen=True)
-class TestsInFile:
-    test_file: Path
-    test_class: Optional[str]  # This might be unused...
-    test_function: str
-    test_suite: Optional[str]
-    test_type: TestType
-
-
-@dataclass(frozen=True)
-class CodePosition:
-    line_no: int
-    col_no: int
-
-
-@dataclass(frozen=True)
-class FunctionCalledInTest:
-    tests_in_file: TestsInFile
-    position: CodePosition
 
 
 @dataclass(frozen=True)
@@ -60,51 +41,7 @@ def discover_unit_tests(
     raise ValueError(msg)
 
 
-def run_pytest_discovery_new_process(queue: Queue, cwd: str, tests_root: str) -> tuple[int, list] | None:
-    import pytest
 
-    os.chdir(cwd)
-    collected_tests = []
-    pytest_rootdir: Path | None = None
-    tests: list[TestsInFile] = []
-    sys.path.insert(1, str(cwd))
-
-    class PytestCollectionPlugin:
-        def pytest_collection_finish(self, session) -> None:
-            nonlocal pytest_rootdir
-            collected_tests.extend(session.items)
-            pytest_rootdir = Path(session.config.rootdir)
-
-    try:
-        exitcode = pytest.main(
-            [tests_root, "--collect-only", "-pno:terminal", "-m", "not skip"], plugins=[PytestCollectionPlugin()]
-        )
-    except Exception as e:
-        logger.exception(f"Failed to collect tests: {e!s}")
-        exitcode = -1
-        queue.put((exitcode, tests, pytest_rootdir))
-    tests = parse_pytest_collection_results(collected_tests)
-    queue.put((exitcode, tests, pytest_rootdir))
-
-
-def parse_pytest_collection_results(pytest_tests: str) -> list[TestsInFile]:
-    test_results: list[TestsInFile] = []
-    for test in pytest_tests:
-        test_class = None
-        test_file_path = str(test.path)
-        if test.cls:
-            test_class = test.parent.name
-        test_type = TestType.REPLAY_TEST if "__replay_test" in test_file_path else TestType.EXISTING_UNIT_TEST
-        test_results.append(
-            TestsInFile(
-                test_file=str(test.path),
-                test_class=test_class,
-                test_function=test.name,
-                test_suite=None,  # not used in pytest until now
-                test_type=test_type,
-            )
-        )
-    return test_results
 
 
 def discover_tests_pytest(
@@ -112,6 +49,7 @@ def discover_tests_pytest(
 ) -> dict[str, list[FunctionCalledInTest]]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
+    mp.set_start_method('spawn')
 
     q: Queue = Queue()
     p: Process = Process(target=run_pytest_discovery_new_process, args=(q, project_root, tests_root))
@@ -124,7 +62,7 @@ def discover_tests_pytest(
     else:
         logger.debug(f"Pytest collection exit code: {exitcode}")
     if pytest_rootdir is not None:
-        cfg.tests_project_rootdir = pytest_rootdir
+        cfg.tests_project_rootdir = Path(pytest_rootdir)
     file_to_test_map = defaultdict(list)
     for test in tests:
         if discover_only_these_tests and test.test_file not in discover_only_these_tests:

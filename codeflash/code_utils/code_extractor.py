@@ -11,13 +11,13 @@ from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, Rem
 from libcst.helpers import calculate_module_and_package
 
 from codeflash.cli_cmds.console import logger
-from codeflash.discovery.functions_to_optimize import FunctionParent
+from codeflash.models.models import FunctionSource, FunctionParent
 
 if TYPE_CHECKING:
     from libcst.helpers import ModuleNameAndPackage
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.models.models import FunctionSource
+
 
 
 class FutureAliasedImportTransformer(cst.CSTTransformer):
