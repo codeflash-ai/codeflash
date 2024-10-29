@@ -45,21 +45,6 @@ except ImportError:
 
 def comparator(orig: Any, new: Any) -> bool:
     try:
-        if HAS_SQLALCHEMY:
-            try:
-                insp = sqlalchemy.inspection.inspect(orig)
-                insp = sqlalchemy.inspection.inspect(new)
-                orig_keys = orig.__dict__
-                new_keys = new.__dict__
-                for key in list(orig_keys.keys()):
-                    if key.startswith("_"):
-                        continue
-                    if key not in new_keys or not comparator(orig_keys[key], new_keys[key]):
-                        return False
-                return True
-
-            except sqlalchemy.exc.NoInspectionAvailable:
-                pass
         if type(orig) != type(new):
             return False
         if isinstance(orig, (list, tuple)):
@@ -93,6 +78,21 @@ def comparator(orig: Any, new: Any) -> bool:
             if math.isnan(orig) and math.isnan(new):
                 return True
             return math.isclose(orig, new)
+        if HAS_SQLALCHEMY:
+            try:
+                insp = sqlalchemy.inspection.inspect(orig)
+                insp = sqlalchemy.inspection.inspect(new)
+                orig_keys = orig.__dict__
+                new_keys = new.__dict__
+                for key in list(orig_keys.keys()):
+                    if key.startswith("_"):
+                        continue
+                    if key not in new_keys or not comparator(orig_keys[key], new_keys[key]):
+                        return False
+                return True
+
+            except sqlalchemy.exc.NoInspectionAvailable:
+                pass
         # scipy condition because dok_matrix type is also a instance of dict, but dict comparison doesn't work for it
         if isinstance(orig, dict) and not (HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix)):
             if len(orig) != len(new):

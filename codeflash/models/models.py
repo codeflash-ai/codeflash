@@ -11,6 +11,7 @@ from codeflash.api.aiservice import OptimizedCandidate
 from codeflash.discovery.functions_to_optimize import FunctionParent
 from codeflash.verification.test_results import TestResults, TestType
 
+
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
 # qualified name of the method is foo.eggs.Ham.spam, its qualified name is Ham.spam, and its name is spam. The full name
 # of the module is foo.eggs.
@@ -41,9 +42,9 @@ class CodeOptimizationContext(BaseModel):
 
 
 class OptimizedCandidateResult(BaseModel):
-    times_run: int
+    max_loop_count: int
     best_test_runtime: int
-    best_test_results: TestResults
+    test_results: TestResults
     optimization_candidate_index: int
     total_candidate_timing: int
 
