@@ -4,16 +4,18 @@ import json
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import requests
 from pydantic.json import pydantic_encoder
-from requests import Response
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
 from codeflash.code_utils.git_utils import get_repo_owner_and_name
 from codeflash.github.PrComment import FileDiffContent, PrComment
+
+if TYPE_CHECKING:
+    from requests import Response
 
 if os.environ.get("CODEFLASH_CFAPI_SERVER", default="prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
@@ -22,8 +24,9 @@ else:
     CFAPI_BASE_URL = "https://app.codeflash.ai"
 
 
-def make_cfapi_request(endpoint: str, method: str, payload: Optional[Dict[str, Any]] = None) -> requests.Response:
+def make_cfapi_request(endpoint: str, method: str, payload: dict[str, Any] | None = None) -> Response:
     """Make an HTTP request using the specified method, URL, headers, and JSON payload.
+
     :param endpoint: The endpoint URL to send the request to.
     :param method: The HTTP method to use ('GET', 'POST', etc.).
     :param payload: Optional JSON payload to include in the POST request body.
@@ -34,15 +37,16 @@ def make_cfapi_request(endpoint: str, method: str, payload: Optional[Dict[str, A
     if method.upper() == "POST":
         json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
         cfapi_headers["Content-Type"] = "application/json"
-        response = requests.post(url, data=json_payload, headers=cfapi_headers)
+        response = requests.post(url, data=json_payload, headers=cfapi_headers, timeout=60)
     else:
-        response = requests.get(url, headers=cfapi_headers)
+        response = requests.get(url, headers=cfapi_headers, timeout=60)
     return response
 
 
 @lru_cache(maxsize=1)
 def get_user_id() -> Optional[str]:
     """Retrieve the user's userid by making a request to the /cfapi/cli-get-user endpoint.
+
     :return: The userid or None if the request fails.
     """
     if not ensure_codeflash_api_key():
@@ -66,6 +70,7 @@ def suggest_changes(
     trace_id: str,
 ) -> Response:
     """Suggest changes to a pull request.
+
     Will make a review suggestion when possible;
     or create a new dependent pull request with the suggested changes.
     :param owner: The owner of the repository.
@@ -86,8 +91,7 @@ def suggest_changes(
         "generatedTests": generated_tests,
         "traceId": trace_id,
     }
-    response = make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
-    return response
+    return make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
 
 
 def create_pr(
@@ -100,7 +104,8 @@ def create_pr(
     generated_tests: str,
     trace_id: str,
 ) -> Response:
-    """Create a pull request, targeting the specified branch. (usually 'main')
+    """Create a pull request, targeting the specified branch. (usually 'main').
+
     :param owner: The owner of the repository.
     :param repo: The name of the repository.
     :param base_branch: The base branch to target.
@@ -126,6 +131,7 @@ def create_pr(
 
 def is_github_app_installed_on_repo(owner: str, repo: str) -> bool:
     """Check if the Codeflash GitHub App is installed on the specified repository.
+
     :param owner: The owner of the repository.
     :param repo: The name of the repository.
     :return: The response object.
@@ -137,15 +143,29 @@ def is_github_app_installed_on_repo(owner: str, repo: str) -> bool:
     return True
 
 
-def get_blocklisted_functions() -> dict[str, str]:
+def get_blocklisted_functions() -> dict[str, set[str]]:
+    """Retrieve blocklisted functions for the current pull request.
+
+    Returns A dictionary mapping filenames to sets of blocklisted function names.
+    """
     pr_number = get_pr_number()
     if pr_number is None:
         return {}
+
+    not_found = 404
+    internal_server_error = 500
 
     owner, repo = get_repo_owner_and_name()
     information = {"pr_number": pr_number, "repo_owner": owner, "repo_name": repo}
     try:
         req = make_cfapi_request(endpoint="/verify-existing-optimizations", method="POST", payload=information)
+        if req.status_code == not_found:
+            logger.debug(req.json()["message"])
+            return {}
+        if req.status_code == internal_server_error:
+            logger.error(req.json()["message"])
+            return {}
+        req.raise_for_status()
         content: dict[str, list[str]] = req.json()
     except Exception as e:
         logger.error(f"Error getting blocklisted functions: {e}")

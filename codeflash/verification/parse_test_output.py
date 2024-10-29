@@ -9,10 +9,15 @@ from typing import TYPE_CHECKING
 
 import dill as pickle
 from junitparser.xunit2 import JUnitXml
+from lxml.etree import XMLParser, parse
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_utils import file_path_from_module_name, get_run_tmp_file, module_name_from_file_path, \
-    file_name_from_test_module_name
+from codeflash.code_utils.code_utils import (
+    file_name_from_test_module_name,
+    file_path_from_module_name,
+    get_run_tmp_file,
+    module_name_from_file_path,
+)
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults
 
@@ -21,6 +26,12 @@ if TYPE_CHECKING:
 
     from codeflash.models.models import TestFiles
     from codeflash.verification.verification_utils import TestConfig
+
+
+def parse_func(file_path: Path) -> XMLParser:
+    """Parse the XML file with lxml.etree.XMLParser as the backend."""  #
+    xml_parser = XMLParser(huge_tree=True)
+    return parse(file_path, xml_parser)
 
 
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
@@ -59,8 +70,11 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
             )
 
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
-
-            test_pickle = pickle.loads(test_pickle_bin) if loop_index == 1 else None
+            try:
+                test_pickle = pickle.loads(test_pickle_bin) if loop_index == 1 else None
+            except (AttributeError, ModuleNotFoundError, IndexError) as e:
+                logger.exception(f"Failed to load pickle file. Exception: {e}")
+                return test_results
             assert test_type is not None, f"Test type not found for {test_file_path}"
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
@@ -99,6 +113,10 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             # TODO : this is because sqlite writes original file module path. Should make it consistent
             test_type = test_files.get_test_type_by_original_file_path(test_file_path)
             loop_index = val[4]
+            try:
+                ret_val = (pickle.loads(val[7]) if loop_index == 1 else None,)
+            except (AttributeError, ModuleNotFoundError, IndexError) as e:
+                continue
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
                     loop_index=loop_index,
@@ -114,12 +132,12 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                     runtime=val[6],
                     test_framework=test_config.test_framework,
                     test_type=test_type,
-                    return_value=pickle.loads(val[7]) if loop_index == 1 else None,
+                    return_value=ret_val,
                     timed_out=False,
                 )
             )
         except Exception:
-            logger.exception("Failed to load pickle file.")
+            logger.exception(f"Failed to parse sqlite test results for {sqlite_file_path}")
         # Hardcoding the test result to True because the test did execute and we are only interested in the return values,
         # the did_pass comes from the xml results file
     return test_results
@@ -137,7 +155,7 @@ def parse_test_xml(
         logger.warning(f"No test results for {test_xml_file_path} found.")
         return test_results
     try:
-        xml = JUnitXml.fromfile(str(test_xml_file_path))
+        xml = JUnitXml.fromfile(str(test_xml_file_path), parse_func=parse_func)
     except Exception as e:
         logger.warning(f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}")
         return test_results

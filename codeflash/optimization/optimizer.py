@@ -23,8 +23,11 @@ from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code, find_preexisting_objects
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
-from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path, \
-    file_name_from_test_module_name
+from codeflash.code_utils.code_utils import (
+    file_name_from_test_module_name,
+    get_run_tmp_file,
+    module_name_from_file_path,
+)
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
     N_CANDIDATES,
@@ -424,11 +427,6 @@ class Optimizer:
                         else 1
                     )
                     tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
-                    tree.add("runtime").add(f"{candidate_result.total_candidate_timing} (ns)")
-                    tree.add(f"Runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}").add(
-                        f"Total runtime: {humanize_runtime(best_test_runtime)}"
-                    )
-                    tree.add("Speedup ratio:").add(f"{perf_gain:.3f}")
                     if speedup_critic(
                         candidate_result, original_code_baseline.runtime, best_runtime_until_now
                     ) and quantity_of_tests_critic(candidate_result):
@@ -444,6 +442,11 @@ class Optimizer:
                             winning_test_results=candidate_result.best_test_results,
                         )
                         best_runtime_until_now = best_test_runtime
+                    tree.add("runtime").add(f"{candidate_result.total_candidate_timing} (ns)")
+                    tree.add(f"Runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}").add(
+                        f"Total runtime: {humanize_runtime(best_test_runtime)}"
+                    )
+                    tree.add("Speedup ratio:").add(f"{perf_gain:.3f}")
                     console.print(tree)
                     console.rule()
 

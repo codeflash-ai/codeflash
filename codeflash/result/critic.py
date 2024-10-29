@@ -7,36 +7,34 @@ from codeflash.verification.test_results import TestType
 
 
 def performance_gain(*, original_runtime_ns: int, optimized_runtime_ns: int) -> float:
-    """Calculate the performance gain of an optimized code over the original code. This value multiplied by 100
-    gives the percentage improvement in runtime.
+    """Calculate the performance gain of an optimized code over the original code.
+
+    This value multiplied by 100 gives the percentage improvement in runtime.
     """
+    if optimized_runtime_ns == 0:
+        return 0.0
     return (original_runtime_ns - optimized_runtime_ns) / optimized_runtime_ns
 
 
 def speedup_critic(
     candidate_result: OptimizedCandidateResult, original_code_runtime: int, best_runtime_until_now: int
 ) -> bool:
-    """Takes in a correct optimized Test Result and decides if the optimization should actually
-    be surfaced to the user.
-    Ensures that the optimization is actually faster than the original code, above the noise floor.
+    """Take in a correct optimized Test Result and decide if the optimization should actually be surfaced to the user.
+
+    Ensure that the optimization is actually faster than the original code, above the noise floor.
     The noise floor is a function of the original code runtime. Currently, the noise floor is 2xMIN_IMPROVEMENT_THRESHOLD
     when the original runtime is less than 10 microseconds, and becomes MIN_IMPROVEMENT_THRESHOLD for any higher runtime.
     The noise floor is doubled when benchmarking on a (noisy) GitHub Action virtual instance, also we want to be more confident there.
     """
     in_github_actions_mode = bool(env_utils.get_pr_number())
-    if original_code_runtime < 10_000:
-        noise_floor = 2 * MIN_IMPROVEMENT_THRESHOLD
-    else:
-        noise_floor = MIN_IMPROVEMENT_THRESHOLD
+    noise_floor = 2 * MIN_IMPROVEMENT_THRESHOLD if original_code_runtime < 10000 else MIN_IMPROVEMENT_THRESHOLD
     if in_github_actions_mode:
         noise_floor = noise_floor * 2  # Increase the noise floor in GitHub Actions mode
 
     perf_gain = performance_gain(
         original_runtime_ns=original_code_runtime, optimized_runtime_ns=candidate_result.best_test_runtime
     )
-    if (perf_gain > noise_floor) and candidate_result.best_test_runtime < best_runtime_until_now:
-        return True
-    return False
+    return bool(perf_gain > noise_floor and candidate_result.best_test_runtime < best_runtime_until_now)
 
 
 def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool:
