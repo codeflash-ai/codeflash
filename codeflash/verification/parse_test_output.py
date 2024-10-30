@@ -72,7 +72,7 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
             try:
                 test_pickle = pickle.loads(test_pickle_bin) if loop_index == 1 else None
-            except (AttributeError, ModuleNotFoundError, IndexError) as e:
+            except (AttributeError, ModuleNotFoundError, IndexError, TypeError) as e:
                 logger.exception(f"Failed to load pickle file. Exception: {e}")
                 return test_results
             assert test_type is not None, f"Test type not found for {test_file_path}"
