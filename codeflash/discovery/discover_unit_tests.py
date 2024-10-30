@@ -67,7 +67,6 @@ def discover_tests_pytest(
     except Exception as e:
         logger.exception(f"Failed to discover tests: {e}")
         exitcode = -1
-    exitcode = process.returncode
     if exitcode != 0:
         logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
     else:
