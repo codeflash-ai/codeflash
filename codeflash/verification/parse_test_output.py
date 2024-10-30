@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 
 def parse_func(file_path: Path) -> XMLParser:
-    """Parse the XML file with lxml.etree.XMLParser as the backend."""  #
+    """Parse the XML file with lxml.etree.XMLParser as the backend."""
     xml_parser = XMLParser(huge_tree=True)
     return parse(file_path, xml_parser)
 
@@ -115,7 +115,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             loop_index = val[4]
             try:
                 ret_val = (pickle.loads(val[7]) if loop_index == 1 else None,)
-            except (AttributeError, ModuleNotFoundError, IndexError) as e:
+            except (AttributeError, ModuleNotFoundError, IndexError):
                 continue
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
@@ -184,7 +184,14 @@ def parse_test_xml(
                 return test_results
 
             test_class_path = testcase.classname
-            test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
+            try:
+                test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
+            except ValueError as e:
+                xml_content = test_xml_file_path.read_text(encoding="utf-8")
+                logger.exception(
+                    f"Failed to parse test function name from {testcase.name} in {xml_content} Exception:{e}"
+                )
+                raise
             if test_file_name is None:
                 if test_class_path:
                     # TODO : This might not be true if the test is organized under a class
