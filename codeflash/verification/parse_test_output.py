@@ -72,7 +72,7 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
             try:
                 test_pickle = pickle.loads(test_pickle_bin) if loop_index == 1 else None
-            except (AttributeError, ModuleNotFoundError, IndexError, TypeError) as e:
+            except Exception as e:
                 logger.exception(f"Failed to load pickle file. Exception: {e}")
                 return test_results
             assert test_type is not None, f"Test type not found for {test_file_path}"
@@ -115,7 +115,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             loop_index = val[4]
             try:
                 ret_val = (pickle.loads(val[7]) if loop_index == 1 else None,)
-            except (AttributeError, ModuleNotFoundError, IndexError):
+            except Exception:
                 continue
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
@@ -222,7 +222,14 @@ def parse_test_xml(
                 continue
             timed_out = False
             if test_config.test_framework == "pytest":
-                loop_index = int(testcase.name.split("[ ", 1)[1][:-2]) if "[" in testcase.name else 1
+                try:
+                    loop_index = int(testcase.name.split("[ ", 1)[1][:-2]) if "[" in testcase.name else 1
+                except ValueError as e:
+                    xml_content = test_xml_file_path.read_text(encoding="utf-8")
+                    logger.exception(
+                        f"Failed to parse test function name from {testcase.name} in {xml_content} Exception:{e}"
+                    )
+                    raise
                 if len(testcase.result) > 1:
                     logger.warning(f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!")
                 if len(testcase.result) == 1:
