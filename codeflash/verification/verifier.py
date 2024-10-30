@@ -40,10 +40,7 @@ def generate_tests(
         instrumented_test_source = module.CACHED_INSTRUMENTED_TESTS
         temp_run_dir = get_run_tmp_file(Path())
         path = str(temp_run_dir).replace("\\", "\\\\")  # Escape backslash for windows paths
-        instrumented_test_source = instrumented_test_source.replace(
-            "{codeflash_run_tmp_dir_client_side}",
-            path,
-        )
+        instrumented_test_source = instrumented_test_source.replace("{codeflash_run_tmp_dir_client_side}", path)
         logger.info(f"Using cached tests from {module_path}.CACHED_TESTS")
     else:
         test_file_path = get_test_file_path(test_cfg.tests_root, function_to_optimize.function_name, 0)
@@ -63,14 +60,9 @@ def generate_tests(
             generated_test_source, instrumented_test_source = response
             temp_run_dir = get_run_tmp_file(Path())
             path = str(temp_run_dir).replace("\\", "\\\\")
-            instrumented_test_source = instrumented_test_source.replace(
-                "{codeflash_run_tmp_dir_client_side}",
-                path,
-            )
+            instrumented_test_source = instrumented_test_source.replace("{codeflash_run_tmp_dir_client_side}", path)
         else:
-            logger.warning(
-                f"Failed to generate and instrument tests for {function_to_optimize.function_name}",
-            )
+            logger.warning(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")
             return None
 
     return generated_test_source, instrumented_test_source

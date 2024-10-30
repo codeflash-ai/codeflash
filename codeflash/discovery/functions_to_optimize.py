@@ -22,6 +22,7 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.code_utils.git_utils import get_git_diff
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
+from codeflash.models.models import FunctionParent
 from codeflash.telemetry.posthog_cf import ph
 
 if TYPE_CHECKING:
@@ -75,7 +76,7 @@ class FunctionVisitor(cst.CSTVisitor):
                     parents=list(reversed(ast_parents)),
                     starting_line=pos.start.line,
                     ending_line=pos.end.line,
-                ),
+                )
             )
 
 
@@ -89,11 +90,7 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
         # Check if the function has a return statement and add it to the list
         if function_has_return_statement(node):
             self.functions.append(
-                FunctionToOptimize(
-                    function_name=node.name,
-                    file_path=self.file_path,
-                    parents=self.ast_path[:],
-                ),
+                FunctionToOptimize(function_name=node.name, file_path=self.file_path, parents=self.ast_path[:])
             )
         # Continue visiting the body of the function to find nested functions
         self.generic_visit(node)
@@ -104,12 +101,6 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
         super().generic_visit(node)
         if isinstance(node, (FunctionDef, AsyncFunctionDef, ClassDef)):
             self.ast_path.pop()
-
-
-@dataclass(frozen=True)
-class FunctionParent:
-    name: str
-    type: str
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
@@ -170,7 +161,7 @@ def get_functions_to_optimize(
                 bool(optimize_all),
                 bool(replay_test),
                 bool(file),
-            ],
+            ]
         )
         <= 1
     ), "Only one of optimize_all, replay_test, or file should be provided"
@@ -180,9 +171,7 @@ def get_functions_to_optimize(
         functions = get_all_files_and_functions(Path(optimize_all))
     elif replay_test is not None:
         functions = get_all_replay_test_functions(
-            replay_test=replay_test,
-            test_cfg=test_cfg,
-            project_root_path=project_root,
+            replay_test=replay_test, test_cfg=test_cfg, project_root_path=project_root
         )
 
     elif file is not None:
@@ -213,11 +202,7 @@ def get_functions_to_optimize(
         ph("cli-optimizing-git-diff")
         functions = get_functions_within_git_diff()
     filtered_modified_functions, functions_count = filter_functions(
-        functions,
-        test_cfg.tests_root,
-        ignore_paths,
-        project_root,
-        module_root,
+        functions, test_cfg.tests_root, ignore_paths, project_root, module_root
     )
     logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
     return filtered_modified_functions, functions_count
@@ -277,9 +262,7 @@ def find_all_functions_in_file(file_path: Path) -> dict[str, list[FunctionToOpti
 
 
 def get_all_replay_test_functions(
-    replay_test: str,
-    test_cfg: TestConfig,
-    project_root_path: Path,
+    replay_test: str, test_cfg: TestConfig, project_root_path: Path
 ) -> dict[str, list[FunctionToOptimize]]:
     function_tests = discover_unit_tests(test_cfg, discover_only_these_tests=[replay_test])
     # Get the absolute file paths for each function, excluding class name if present
@@ -295,8 +278,7 @@ def get_all_replay_test_functions(
             module_path_parts[-1]
             if module_path_parts
             and is_class_defined_in_file(
-                module_path_parts[-1],
-                Path(project_root_path, *module_path_parts[:-1]).with_suffix(".py"),
+                module_path_parts[-1], Path(project_root_path, *module_path_parts[:-1]).with_suffix(".py")
             )
             else None
         )
@@ -310,9 +292,7 @@ def get_all_replay_test_functions(
         file_path = Path(project_root_path, *file_path_parts).with_suffix(".py")
         file_to_functions_map[file_path].append((function, function_name, class_name))
     for file_path, functions in file_to_functions_map.items():
-        all_valid_functions: dict[str, list[FunctionToOptimize]] = find_all_functions_in_file(
-            file_path=file_path,
-        )
+        all_valid_functions: dict[str, list[FunctionToOptimize]] = find_all_functions_in_file(file_path=file_path)
         filtered_list = []
         for function in functions:
             function_name, function_name_only, class_name = function
@@ -321,7 +301,7 @@ def get_all_replay_test_functions(
                     valid_function
                     for valid_function in all_valid_functions[file_path]
                     if valid_function.qualified_name == function_name
-                ],
+                ]
             )
         if len(filtered_list):
             filtered_valid_functions[file_path] = filtered_list
@@ -341,19 +321,13 @@ def is_git_repo(file_path: str) -> bool:
 def ignored_submodule_paths(module_root: str) -> list[str]:
     if is_git_repo(module_root):
         git_repo = git.Repo(module_root, search_parent_directories=True)
-        return [
-            Path(git_repo.working_tree_dir, submodule.path).resolve() for submodule in git_repo.submodules
-        ]
+        return [Path(git_repo.working_tree_dir, submodule.path).resolve() for submodule in git_repo.submodules]
     return []
 
 
 class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
     def __init__(
-        self,
-        file_name: Path,
-        function_or_method_name: str,
-        class_name: str | None = None,
-        line_no: int | None = None,
+        self, file_name: Path, function_or_method_name: str, class_name: str | None = None, line_no: int | None = None
     ) -> None:
         self.file_name = file_name
         self.class_name = class_name
@@ -374,7 +348,7 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
                     bool(node.args.kwarg),
                     bool(node.args.posonlyargs),
                     bool(node.args.vararg),
-                ),
+                )
             )
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
@@ -410,10 +384,7 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
 
 
 def inspect_top_level_functions_or_methods(
-    file_name: Path,
-    function_or_method_name: str,
-    class_name: str | None = None,
-    line_no: int | None = None,
+    file_name: Path, function_or_method_name: str, class_name: str | None = None, line_no: int | None = None
 ) -> FunctionProperties:
     with open(file_name, encoding="utf8") as file:
         try:
@@ -422,10 +393,7 @@ def inspect_top_level_functions_or_methods(
             logger.exception(e)
             return False
     visitor = TopLevelFunctionOrMethodVisitor(
-        file_name=file_name,
-        function_or_method_name=function_or_method_name,
-        class_name=class_name,
-        line_no=line_no,
+        file_name=file_name, function_or_method_name=function_or_method_name, class_name=class_name, line_no=line_no
     )
     visitor.visit(ast_module)
     staticmethod_class_name = visitor.class_name if visitor.is_staticmethod else None
@@ -495,9 +463,7 @@ def filter_functions(
                 path = Path(function.file_path).name
                 if path in blocklist_funcs and function.function_name in blocklist_funcs[path]:
                     functions.remove(function)
-                    logger.debug(
-                        f"Skipping {function.function_name} in {path} as it has already been optimized",
-                    )
+                    logger.debug(f"Skipping {function.function_name} in {path} as it has already been optimized")
                     continue
 
         filtered_modified_functions[file_path] = functions
@@ -513,16 +479,11 @@ def filter_functions(
         }
         log_string: str
         if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
-            logger.info(f"Ignoring:\n{log_string}")
+            logger.info(f"Ignoring: {log_string}")
     return {Path(k): v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 
-def filter_files_optimized(
-    file_path: Path,
-    tests_root: Path,
-    ignore_paths: list[Path],
-    module_root: Path,
-) -> bool:
+def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list[Path], module_root: Path) -> bool:
     """Optimized version of the filter_functions function above.
 
     Takes in file paths and returns the count of files that are to be optimized.
@@ -530,9 +491,7 @@ def filter_files_optimized(
     submodule_paths = None
     if file_path.is_relative_to(tests_root):
         return False
-    if file_path in ignore_paths or any(
-        file_path.is_relative_to(ignore_path) for ignore_path in ignore_paths
-    ):
+    if file_path in ignore_paths or any(file_path.is_relative_to(ignore_path) for ignore_path in ignore_paths):
         return False
     if path_belongs_to_site_packages(file_path):
         return False

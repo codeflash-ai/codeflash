@@ -3,9 +3,11 @@ from argparse import Namespace
 from pathlib import Path
 
 import pytest
-from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
-from codeflash.optimization.optimizer import Optimizer
 from returns.pipeline import is_successful
+
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.models import FunctionParent
+from codeflash.optimization.optimizer import Optimizer
 
 
 class HelperClass:
@@ -28,22 +30,14 @@ def test_get_outside_method_helper() -> None:
             test_framework="pytest",
             pytest_cmd="pytest",
             experiment_id=None,
-        ),
+        )
     )
     function_to_optimize = FunctionToOptimize(
-        function_name="OptimizeMe",
-        file_path=file_path,
-        parents=[],
-        starting_line=None,
-        ending_line=None,
+        function_name="OptimizeMe", file_path=file_path, parents=[], starting_line=None, ending_line=None
     )
     with open(file_path) as f:
         original_code = f.read()
-    ctx_result = opt.get_code_optimization_context(
-        function_to_optimize,
-        opt.args.project_root,
-        original_code,
-    )
+    ctx_result = opt.get_code_optimization_context(function_to_optimize, opt.args.project_root, original_code)
     if not is_successful(ctx_result):
         pytest.fail()
     code_context = ctx_result.unwrap()
@@ -229,7 +223,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
                 pytest_cmd="pytest",
                 experiment_id=None,
                 test_project_root=Path().resolve(),
-            ),
+            )
         )
         function_to_optimize = FunctionToOptimize(
             function_name="__call__",
@@ -240,11 +234,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         )
         with open(file_path) as f:
             original_code = f.read()
-        ctx_result = opt.get_code_optimization_context(
-            function_to_optimize,
-            opt.args.project_root,
-            original_code,
-        )
+        ctx_result = opt.get_code_optimization_context(function_to_optimize, opt.args.project_root, original_code)
         if not is_successful(ctx_result):
             pytest.fail()
         code_context = ctx_result.unwrap()
@@ -360,22 +350,14 @@ def test_bubble_sort_deps() -> None:
             pytest_cmd="pytest",
             experiment_id=None,
             test_project_root=file_path.parent.resolve(),
-        ),
+        )
     )
     function_to_optimize = FunctionToOptimize(
-        function_name="sorter_deps",
-        file_path=file_path,
-        parents=[],
-        starting_line=None,
-        ending_line=None,
+        function_name="sorter_deps", file_path=file_path, parents=[], starting_line=None, ending_line=None
     )
     with open(file_path) as f:
         original_code = f.read()
-    ctx_result = opt.get_code_optimization_context(
-        function_to_optimize,
-        opt.args.project_root,
-        original_code,
-    )
+    ctx_result = opt.get_code_optimization_context(function_to_optimize, opt.args.project_root, original_code)
     if not is_successful(ctx_result):
         pytest.fail()
     code_context = ctx_result.unwrap()
@@ -402,7 +384,4 @@ def sorter_deps(arr):
         code_context.helper_functions[0].fully_qualified_name
         == "code_to_optimize.bubble_sort_dep1_helper.dep1_comparer"
     )
-    assert (
-        code_context.helper_functions[1].fully_qualified_name
-        == "code_to_optimize.bubble_sort_dep2_swap.dep2_swap"
-    )
+    assert code_context.helper_functions[1].fully_qualified_name == "code_to_optimize.bubble_sort_dep2_swap.dep2_swap"

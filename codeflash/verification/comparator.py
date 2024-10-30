@@ -45,21 +45,6 @@ except ImportError:
 
 def comparator(orig: Any, new: Any) -> bool:
     try:
-        if HAS_SQLALCHEMY:
-            try:
-                insp = sqlalchemy.inspection.inspect(orig)
-                insp = sqlalchemy.inspection.inspect(new)
-                orig_keys = orig.__dict__
-                new_keys = new.__dict__
-                for key in list(orig_keys.keys()):
-                    if key.startswith("_"):
-                        continue
-                    if key not in new_keys or not comparator(orig_keys[key], new_keys[key]):
-                        return False
-                return True
-
-            except sqlalchemy.exc.NoInspectionAvailable:
-                pass
         if type(orig) != type(new):
             return False
         if isinstance(orig, (list, tuple)):
@@ -93,6 +78,21 @@ def comparator(orig: Any, new: Any) -> bool:
             if math.isnan(orig) and math.isnan(new):
                 return True
             return math.isclose(orig, new)
+        if HAS_SQLALCHEMY:
+            try:
+                insp = sqlalchemy.inspection.inspect(orig)
+                insp = sqlalchemy.inspection.inspect(new)
+                orig_keys = orig.__dict__
+                new_keys = new.__dict__
+                for key in list(orig_keys.keys()):
+                    if key.startswith("_"):
+                        continue
+                    if key not in new_keys or not comparator(orig_keys[key], new_keys[key]):
+                        return False
+                return True
+
+            except sqlalchemy.exc.NoInspectionAvailable:
+                pass
         # scipy condition because dok_matrix type is also a instance of dict, but dict comparison doesn't work for it
         if isinstance(orig, dict) and not (HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix)):
             if len(orig) != len(new):
@@ -129,21 +129,11 @@ def comparator(orig: Any, new: Any) -> bool:
             return (orig != new).nnz == 0
 
         if HAS_PANDAS and isinstance(
-            orig,
-            (
-                pandas.DataFrame,
-                pandas.Series,
-                pandas.Index,
-                pandas.Categorical,
-                pandas.arrays.SparseArray,
-            ),
+            orig, (pandas.DataFrame, pandas.Series, pandas.Index, pandas.Categorical, pandas.arrays.SparseArray)
         ):
             return orig.equals(new)
 
-        if HAS_PANDAS and isinstance(
-            orig,
-            (pandas.CategoricalDtype, pandas.Interval, pandas.Period),
-        ):
+        if HAS_PANDAS and isinstance(orig, (pandas.CategoricalDtype, pandas.Interval, pandas.Period)):
             return orig == new
 
         # This should be at the end of all numpy checking
@@ -173,10 +163,7 @@ def comparator(orig: Any, new: Any) -> bool:
         ):
             return orig == new
 
-        if isinstance(
-            orig,
-            (datetime.datetime, datetime.date, datetime.timedelta, datetime.time, datetime.timezone),
-        ):
+        if isinstance(orig, (datetime.datetime, datetime.date, datetime.timedelta, datetime.time, datetime.timezone)):
             return orig == new
 
         # If the object passed has a user defined __eq__ method, use that

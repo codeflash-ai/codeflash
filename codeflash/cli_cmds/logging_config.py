@@ -13,15 +13,7 @@ def set_level(level: int, *, echo_setting: bool = True) -> None:
 
     logging.basicConfig(
         level=level,
-        handlers=[
-            RichHandler(
-                rich_tracebacks=True,
-                markup=False,
-                console=console,
-                show_path=False,
-                show_time=False,
-            ),
-        ],
+        handlers=[RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)],
         format=BARE_LOGGING_FORMAT,
     )
     logging.getLogger().setLevel(level)
@@ -31,16 +23,11 @@ def set_level(level: int, *, echo_setting: bool = True) -> None:
             logging.basicConfig(
                 format=VERBOSE_LOGGING_FORMAT,
                 handlers=[
-                    RichHandler(
-                        rich_tracebacks=True,
-                        markup=False,
-                        console=console,
-                        show_path=False,
-                        show_time=False,
-                    ),
+                    RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)
                 ],
                 force=True,
             )
             logging.info("Verbose DEBUG logging enabled")
         else:
             logging.info("Logging level set to INFO")
+    console.rule()

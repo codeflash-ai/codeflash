@@ -38,10 +38,7 @@ def test_sort_imports_without_formatting():
         tmp.flush()
         tmp_path = Path(tmp.name)
 
-        new_code = format_code(
-            formatter_cmds=["disabled"],
-            path=tmp_path,
-        )
+        new_code = format_code(formatter_cmds=["disabled"], path=tmp_path)
         assert new_code is not None
         new_code = sort_imports(new_code)
         assert new_code == "import os\nimport sys\nimport unittest\n"
@@ -136,10 +133,7 @@ def foo():
         tmp.flush()
         tmp_path = tmp.name
 
-        actual = format_code(
-            formatter_cmds=["black $file"],
-            path=Path(tmp_path),
-        )
+        actual = format_code(formatter_cmds=["black $file"], path=Path(tmp_path))
         assert actual == expected
 
 
@@ -161,10 +155,7 @@ def foo():
         tmp.flush()
         tmp_path = tmp.name
 
-        actual = format_code(
-            formatter_cmds=["black $file"],
-            path=Path(tmp_path),
-        )
+        actual = format_code(formatter_cmds=["black $file"], path=Path(tmp_path))
         assert actual == expected
 
 
@@ -191,7 +182,6 @@ def foo():
         tmp_path = tmp.name
 
         actual = format_code(
-            formatter_cmds=["ruff check --exit-zero --fix $file", "ruff format $file"],
-            path=Path(tmp_path),
+            formatter_cmds=["ruff check --exit-zero --fix $file", "ruff format $file"], path=Path(tmp_path)
         )
         assert actual == expected

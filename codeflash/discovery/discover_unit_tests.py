@@ -1,44 +1,26 @@
 from __future__ import annotations
 
 import os
+import pickle
 import re
+import subprocess
 import sys
 import unittest
 from collections import defaultdict
-from multiprocessing import Process, Queue
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import jedi
 from pydantic.dataclasses import dataclass
+from pytest import ExitCode
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_utils import module_name_from_file_path
+from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
+from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile
 from codeflash.verification.test_results import TestType
 
 if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
-
-
-@dataclass(frozen=True)
-class TestsInFile:
-    test_file: Path
-    test_class: Optional[str]  # This might be unused...
-    test_function: str
-    test_suite: Optional[str]
-    test_type: TestType
-
-
-@dataclass(frozen=True)
-class CodePosition:
-    line_no: int
-    col_no: int
-
-
-@dataclass(frozen=True)
-class FunctionCalledInTest:
-    tests_in_file: TestsInFile
-    position: CodePosition
 
 
 @dataclass(frozen=True)
@@ -50,8 +32,7 @@ class TestFunction:
 
 
 def discover_unit_tests(
-    cfg: TestConfig,
-    discover_only_these_tests: list[str] | None = None,
+    cfg: TestConfig, discover_only_these_tests: list[str] | None = None
 ) -> dict[str, list[FunctionCalledInTest]]:
     if cfg.test_framework == "pytest":
         return discover_tests_pytest(cfg, discover_only_these_tests)
@@ -61,87 +42,59 @@ def discover_unit_tests(
     raise ValueError(msg)
 
 
-def run_pytest_discovery_new_process(queue: Queue, cwd: str, tests_root: str) -> tuple[int, list] | None:
-    import pytest
-
-    os.chdir(cwd)
-    collected_tests = []
-    pytest_rootdir: Path | None = None
-    tests: list[TestsInFile] = []
-    sys.path.insert(1, str(cwd))
-
-    class PytestCollectionPlugin:
-        def pytest_collection_finish(self, session) -> None:
-            nonlocal pytest_rootdir
-            collected_tests.extend(session.items)
-            pytest_rootdir = Path(session.config.rootdir)
-
-    try:
-        exitcode = pytest.main(
-            [tests_root, "--collect-only", "-pno:terminal", "-m", "not skip"],
-            plugins=[PytestCollectionPlugin()],
-        )
-    except Exception as e:
-        logger.exception(f"Failed to collect tests: {e!s}")
-        exitcode = -1
-        queue.put((exitcode, tests, pytest_rootdir))
-    tests = parse_pytest_collection_results(collected_tests)
-    queue.put((exitcode, tests, pytest_rootdir))
-
-
-def parse_pytest_collection_results(
-    pytest_tests: str,
-) -> list[TestsInFile]:
-    test_results: list[TestsInFile] = []
-    for test in pytest_tests:
-        test_class = None
-        test_file_path = str(test.path)
-        if test.cls:
-            test_class = test.parent.name
-        test_type = TestType.REPLAY_TEST if "__replay_test" in test_file_path else TestType.EXISTING_UNIT_TEST
-        test_results.append(
-            TestsInFile(
-                test_file=str(test.path),
-                test_class=test_class,
-                test_function=test.name,
-                test_suite=None,  # not used in pytest until now
-                test_type=test_type,
-            ),
-        )
-    return test_results
-
-
 def discover_tests_pytest(
-    cfg: TestConfig,
-    discover_only_these_tests: list[str] | None = None,
+    cfg: TestConfig, discover_only_these_tests: list[str] | None = None
 ) -> dict[str, list[FunctionCalledInTest]]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
 
-    q: Queue = Queue()
-    p: Process = Process(target=run_pytest_discovery_new_process, args=(q, project_root, tests_root))
-    p.start()
-    exitcode, tests, pytest_rootdir = q.get()
-    p.join()
-
+    tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
+    process = subprocess.run(
+        [
+            sys.executable,
+            Path(__file__).parent / "pytest_new_process_discovery.py",
+            str(project_root),
+            str(tests_root),
+            str(tmp_pickle_path),
+        ],
+        cwd=project_root,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        with tmp_pickle_path.open(mode="rb") as f:
+            exitcode, tests, pytest_rootdir = pickle.load(f)
+    except Exception as e:
+        logger.exception(f"Failed to discover tests: {e}")
+        exitcode = -1
     if exitcode != 0:
-        logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
+        if 0 <= exitcode <= 5:
+            logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}={ExitCode(exitcode).name}")
+        else:
+            logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
     else:
         logger.debug(f"Pytest collection exit code: {exitcode}")
     if pytest_rootdir is not None:
-        cfg.tests_project_rootdir = pytest_rootdir
+        cfg.tests_project_rootdir = Path(pytest_rootdir)
     file_to_test_map = defaultdict(list)
     for test in tests:
-        if discover_only_these_tests and test.test_file not in discover_only_these_tests:
+        test_obj = TestsInFile(
+            test_file=test["test_file"],
+            test_class=test["test_class"],
+            test_function=test["test_function"],
+            test_suite=None,
+            test_type=TestType.REPLAY_TEST if "__replay_test" in test["test_file"] else TestType.EXISTING_UNIT_TEST,
+        )
+        if discover_only_these_tests and test_obj.test_file not in discover_only_these_tests:
             continue
-        file_to_test_map[test.test_file].append(test)
+        file_to_test_map[test_obj.test_file].append(test_obj)
     # Within these test files, find the project functions they are referring to and return their names/locations
     return process_test_files(file_to_test_map, cfg)
 
 
 def discover_tests_unittest(
-    cfg: TestConfig,
-    discover_only_these_tests: list[str] | None = None,
+    cfg: TestConfig, discover_only_these_tests: list[str] | None = None
 ) -> dict[str, list[FunctionCalledInTest]]:
     tests_root: Path = cfg.tests_root
     loader: unittest.TestLoader = unittest.TestLoader()
@@ -184,9 +137,7 @@ def discover_tests_unittest(
                 if not hasattr(test, "_testMethodName") and hasattr(test, "_tests"):
                     for test_2 in test._tests:
                         if not hasattr(test_2, "_testMethodName"):
-                            logger.warning(
-                                f"Didn't find tests for {test_2}",
-                            )  # it goes deeper?
+                            logger.warning(f"Didn't find tests for {test_2}")  # it goes deeper?
                             continue
                         details = get_test_details(test_2)
                         if details is not None:
@@ -207,8 +158,7 @@ def discover_parameters_unittest(function_name: str) -> tuple[bool, str, str | N
 
 
 def process_test_files(
-    file_to_test_map: dict[str, list[TestsInFile]],
-    cfg: TestConfig,
+    file_to_test_map: dict[str, list[TestsInFile]], cfg: TestConfig
 ) -> dict[str, list[FunctionCalledInTest]]:
     project_root_path = cfg.project_root_path
     test_framework = cfg.test_framework
@@ -230,9 +180,7 @@ def process_test_files(
                         function_name = re.split(r"[\[\]]", function)[0]
                         parameters = re.split(r"[\[\]]", function)[1]
                         if name.name == function_name and name.type == "function":
-                            test_functions.add(
-                                TestFunction(name.name, None, parameters, functions[i].test_type),
-                            )
+                            test_functions.add(TestFunction(name.name, None, parameters, functions[i].test_type))
                     elif name.name == function and name.type == "function":
                         test_functions.add(TestFunction(name.name, None, None, functions[i].test_type))
                         break
@@ -248,24 +196,17 @@ def process_test_files(
                             and f".{name.name}." in def_name.full_name
                         ):
                             for function in functions_to_search:
-                                (
-                                    is_parameterized,
-                                    new_function,
-                                    parameters,
-                                ) = discover_parameters_unittest(function)
+                                (is_parameterized, new_function, parameters) = discover_parameters_unittest(function)
 
                                 if is_parameterized and new_function == def_name.name:
                                     test_functions.add(
                                         TestFunction(
-                                            def_name.name,
-                                            name.name,
-                                            parameters,
-                                            functions[0].test_type,
-                                        ),  # A test file must not have more than one test type
+                                            def_name.name, name.name, parameters, functions[0].test_type
+                                        )  # A test file must not have more than one test type
                                     )
                                 elif function == def_name.name:
                                     test_functions.add(
-                                        TestFunction(def_name.name, name.name, None, functions[0].test_type),
+                                        TestFunction(def_name.name, name.name, None, functions[0].test_type)
                                     )
 
         test_functions_list = list(test_functions)
@@ -285,10 +226,7 @@ def process_test_files(
                 scope_parameters = test_functions_list[index].parameters
                 test_type = test_functions_list[index].test_type
                 try:
-                    definition = name.goto(
-                        follow_imports=True,
-                        follow_builtin_imports=False,
-                    )
+                    definition = name.goto(follow_imports=True, follow_builtin_imports=False)
                 except Exception as e:
                     logger.exception(str(e))
                     continue
@@ -306,9 +244,7 @@ def process_test_files(
                             if test_framework == "unittest":
                                 scope_test_function += "_" + scope_parameters
                         full_name_without_module_prefix = definition[0].full_name.replace(
-                            definition[0].module_name + ".",
-                            "",
-                            1,
+                            definition[0].module_name + ".", "", 1
                         )
                         qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
                         function_to_test_map[qualified_name_with_modules_from_root].append(
@@ -320,11 +256,8 @@ def process_test_files(
                                     test_suite=scope_test_suite,
                                     test_type=test_type,
                                 ),
-                                position=CodePosition(
-                                    line_no=name.line,
-                                    col_no=name.column,
-                                ),
-                            ),
+                                position=CodePosition(line_no=name.line, col_no=name.column),
+                            )
                         )
     deduped_function_to_test_map = {}
     for function, tests in function_to_test_map.items():

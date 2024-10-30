@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Generator, Iterator, Optional
+from typing import Iterator, Optional
 
 from jedi.api.classes import Name
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 
-from codeflash.api.aiservice import OptimizedCandidate
-from codeflash.discovery.functions_to_optimize import FunctionParent
 from codeflash.verification.test_results import TestResults, TestType
+
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
 # qualified name of the method is foo.eggs.Ham.spam, its qualified name is Ham.spam, and its name is spam. The full name
@@ -41,9 +40,11 @@ class CodeOptimizationContext(BaseModel):
 
 
 class OptimizedCandidateResult(BaseModel):
-    times_run: int
+    max_loop_count: int
     best_test_runtime: int
-    best_test_results: TestResults
+    test_results: TestResults
+    optimization_candidate_index: int
+    total_candidate_timing: int
 
 
 class GeneratedTests(BaseModel):
@@ -66,9 +67,7 @@ class TestFiles(BaseModel):
     test_files: list[TestFile]
 
     def get_by_type(self, test_type: TestType) -> TestFiles:
-        return TestFiles(
-            test_files=[test_file for test_file in self.test_files if test_file.test_type == test_type],
-        )
+        return TestFiles(test_files=[test_file for test_file in self.test_files if test_file.test_type == test_type])
 
     def add(self, test_file: TestFile) -> None:
         if test_file not in self.test_files:
@@ -77,29 +76,17 @@ class TestFiles(BaseModel):
             raise ValueError("Test file already exists in the list")
 
     def get_by_original_file_path(self, file_path: Path) -> TestFile | None:
-        return next(
-            (test_file for test_file in self.test_files if test_file.original_file_path == file_path),
-            None,
-        )
+        return next((test_file for test_file in self.test_files if test_file.original_file_path == file_path), None)
 
     def get_test_type_by_instrumented_file_path(self, file_path: Path) -> TestType | None:
         return next(
-            (
-                test_file.test_type
-                for test_file in self.test_files
-                if test_file.instrumented_file_path == file_path
-            ),
+            (test_file.test_type for test_file in self.test_files if test_file.instrumented_file_path == file_path),
             None,
         )
 
     def get_test_type_by_original_file_path(self, file_path: Path) -> TestType | None:
         return next(
-            (
-                test_file.test_type
-                for test_file in self.test_files
-                if test_file.original_file_path == file_path
-            ),
-            None,
+            (test_file.test_type for test_file in self.test_files if test_file.original_file_path == file_path), None
         )
 
     def __iter__(self) -> Iterator[TestFile]:
@@ -119,3 +106,37 @@ class OriginalCodeBaseline(BaseModel):
 class OptimizationSet(BaseModel):
     control: list[OptimizedCandidate]
     experiment: Optional[list[OptimizedCandidate]]
+
+
+@dataclass(frozen=True)
+class TestsInFile:
+    test_file: Path
+    test_class: Optional[str]  # This might be unused...
+    test_function: str
+    test_suite: Optional[str]
+    test_type: TestType
+
+
+@dataclass(frozen=True)
+class OptimizedCandidate:
+    source_code: str
+    explanation: str
+    optimization_id: str
+
+
+@dataclass(frozen=True)
+class FunctionCalledInTest:
+    tests_in_file: TestsInFile
+    position: CodePosition
+
+
+@dataclass(frozen=True)
+class CodePosition:
+    line_no: int
+    col_no: int
+
+
+@dataclass(frozen=True)
+class FunctionParent:
+    name: str
+    type: str

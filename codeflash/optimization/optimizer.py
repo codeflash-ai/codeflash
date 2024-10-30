@@ -14,13 +14,21 @@ import isort
 import libcst as cst
 from returns.pipeline import is_successful
 from returns.result import Failure, Success
+from rich.console import Group
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.tree import Tree
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
-from codeflash.cli_cmds.console import code_print, logger
+from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code, find_preexisting_objects
-from codeflash.code_utils.code_replacer import replace_function_definitions_in_module, replace_functions_and_add_imports
-from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
+from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
+from codeflash.code_utils.code_utils import (
+    file_name_from_test_module_name,
+    get_run_tmp_file,
+    module_name_from_file_path,
+)
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
     N_CANDIDATES,
@@ -30,10 +38,9 @@ from codeflash.code_utils.config_consts import (
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
-from codeflash.code_utils.static_analysis import analyze_imported_modules
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
-from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize, get_functions_to_optimize
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize, get_functions_to_optimize
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
@@ -45,6 +52,9 @@ from codeflash.models.models import (
     OriginalCodeBaseline,
     TestFile,
     TestFiles,
+    OptimizedCandidate,
+    FunctionCalledInTest,
+    FunctionParent,
 )
 from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
@@ -63,8 +73,6 @@ if TYPE_CHECKING:
 
     from returns.result import Result
 
-    from codeflash.api.aiservice import OptimizedCandidate
-    from codeflash.discovery.discover_unit_tests import FunctionCalledInTest
     from codeflash.models.models import FunctionSource
 
 
@@ -89,6 +97,7 @@ class Optimizer:
     def run(self) -> None:
         ph("cli-optimize-run-start")
         logger.info("Running optimizer.")
+        console.rule()
         if not env_utils.ensure_codeflash_api_key():
             return
 
@@ -116,10 +125,12 @@ class Optimizer:
                 logger.info("No functions found to optimize. Exiting...")
                 return
 
+            console.rule()
             logger.info(f"Discovering existing unit tests in {self.test_cfg.tests_root} ...")
             function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
             num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
             logger.info(f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}")
+            console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
 
             for path in file_to_funcs_to_optimize:
@@ -160,7 +171,7 @@ class Optimizer:
 
                     function_iterator_count += 1
                     logger.info(
-                        f"Optimizing function {function_iterator_count} of {num_optimizable_functions} - "
+                        f"Optimizing function {function_iterator_count} of {num_optimizable_functions}: "
                         f"{function_to_optimize.qualified_name}"
                     )
 
@@ -182,6 +193,7 @@ class Optimizer:
                         optimizations_found += 1
                     else:
                         logger.warning(best_optimization.failure())
+                        console.rule()
                         continue
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
             if optimizations_found == 0:
@@ -208,6 +220,7 @@ class Optimizer:
         logger.debug(f"Function Trace ID: {function_trace_id}")
         ph("cli-optimize-function-start", {"function_trace_id": function_trace_id})
         self.cleanup_leftover_test_return_values()
+        file_name_from_test_module_name.cache_clear()
         ctx_result = self.get_code_optimization_context(function_to_optimize, self.args.project_root, original_code)
         if not is_successful(ctx_result):
             return Failure(ctx_result.failure())
@@ -236,15 +249,17 @@ class Optimizer:
             function_to_optimize=function_to_optimize, function_to_tests=function_to_tests
         )
 
-        logger.info(f"Generating new tests for function {function_to_optimize.function_name} ...")
-        generated_results = self.generate_tests_and_optimizations(
-            code_context.code_to_optimize_with_helpers,
-            function_to_optimize,
-            code_context.helper_functions,
-            Path(module_path),
-            function_trace_id,
-            run_experiment=should_run_experiment,
-        )
+        with progress_bar(
+            f"Generating new tests and optimizations for function {function_to_optimize.function_name}", transient=True
+        ):
+            generated_results = self.generate_tests_and_optimizations(
+                code_context.code_to_optimize_with_helpers,
+                function_to_optimize,
+                code_context.helper_functions,
+                Path(module_path),
+                function_trace_id,
+                run_experiment=should_run_experiment,
+            )
 
         if not is_successful(generated_results):
             return Failure(generated_results.failure())
@@ -277,6 +292,7 @@ class Optimizer:
             generated_tests_paths,
             function_to_tests.get(module_path + "." + function_to_optimize_qualified_name, []),
         )
+        console.rule()
         if not is_successful(baseline_result):
             for generated_test_path in generated_tests_paths:
                 generated_test_path.unlink(missing_ok=True)
@@ -356,7 +372,11 @@ class Optimizer:
             if best_optimization:
                 logger.info("Best candidate:")
                 code_print(best_optimization.candidate.source_code)
-                logger.info(best_optimization.candidate.explanation)
+                console.print(
+                    Panel(
+                        best_optimization.candidate.explanation, title="Best Candidate Explanation", border_style="blue"
+                    )
+                )
                 explanation = Explanation(
                     raw_explanation_message=best_optimization.candidate.explanation,
                     winning_test_results=best_optimization.winning_test_results,
@@ -401,13 +421,18 @@ class Optimizer:
                         function_trace_id=function_trace_id,
                     )
                     if self.args.all or env_utils.get_pr_number():
+                        # Reverting to original code, because optimizing functions in a sequence can lead to
+                        #  a) Error propagation, where error in one function can cause the next optimization to fail
+                        #  b) Performance estimates become unstable, as the runtime of an optimization might be
+                        #     dependent on the runtime of the previous optimization
                         self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
         for generated_test_path in generated_tests_paths:
             generated_test_path.unlink(missing_ok=True)
         for test_paths in instrumented_unittests_created_for_function:
             test_paths.unlink(missing_ok=True)
         if not best_optimization:
-            return Failure(f"No best optimizations found for function {function_to_optimize_qualified_name}")
+            return Failure(f"No best optimizations found for function {function_to_optimize.qualified_name}")
+        logger.info("----------------")
         return Success(best_optimization)
 
     def determine_best_candidate(
@@ -432,6 +457,7 @@ class Optimizer:
         logger.info(
             f"Determining best optimized candidate (out of {len(candidates)}) for {function_to_optimize.qualified_name} ..."
         )
+        console.rule()
         try:
             for candidate_index, candidate in enumerate(candidates, start=1):
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
@@ -466,7 +492,6 @@ class Optimizer:
                 run_results = self.run_optimized_candidate(
                     optimization_candidate_index=candidate_index,
                     original_test_results=original_code_baseline.overall_test_results,
-                    best_runtime_until_now=best_runtime_until_now,
                     tests_in_file=only_run_this_test_function,
                 )
                 if not is_successful(run_results):
@@ -482,35 +507,34 @@ class Optimizer:
                         original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_test_runtime
                     )
                     speedup_ratios[candidate.optimization_id] = perf_gain
-                    loop_count = (
-                        max(all_loop_indices)
-                        if (all_loop_indices := {result.loop_index for result in candidate_result.best_test_results})
-                        else 1
-                    )
-                    logger.info(
-                        f"Candidate code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: {humanize_runtime(best_test_runtime)} per full loop.\n"
-                        f"Speedup ratio: {perf_gain:.3f}"
-                    )
 
+                    tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
                     if speedup_critic(
                         candidate_result, original_code_baseline.runtime, best_runtime_until_now
                     ) and quantity_of_tests_critic(candidate_result):
-                        logger.info("This candidate is faster than the previous best candidate.")
-                        logger.info(
-                            f"Original runtime: {humanize_runtime(original_code_baseline.runtime)}\n"
-                            f"Best test runtime: {humanize_runtime(candidate_result.best_test_runtime)}\n"
-                            f"Speedup ratio: {perf_gain:.3f}"
+                        tree.add("This candidate is faster than the previous best candidate. 🚀")
+                        tree.add(f"Original runtime: {humanize_runtime(original_code_baseline.runtime)}")
+                        tree.add(
+                            f"Best test runtime: {humanize_runtime(candidate_result.best_test_runtime)} (measured over {candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})"
                         )
+                        tree.add(f"Speedup ratio: {perf_gain:.3f}")
+
                         best_optimization = BestOptimization(
                             candidate=candidate,
                             helper_functions=code_context.helper_functions,
                             runtime=best_test_runtime,
-                            winning_test_results=candidate_result.best_test_results,
+                            winning_test_results=candidate_result.test_results,
                         )
                         best_runtime_until_now = best_test_runtime
+                    else:
+                        tree.add(
+                            f"Runtime: {humanize_runtime(best_test_runtime)} (measured over {candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                        )
+                        tree.add(f"Speedup ratio: {perf_gain:.3f}")
+                    console.print(tree)
+                    console.rule()
 
                 self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
-                logger.info("----------------")
         except KeyboardInterrupt as e:
             self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
             logger.exception(f"Optimization interrupted: {e}")
@@ -533,14 +557,25 @@ class Optimizer:
         function_trace_id: str,
         generated_tests: GeneratedTestsList,
     ) -> None:
-        logger.info(f"⚡️ Optimization successful! 📄 {function_to_optimize.qualified_name} in {explanation.file_path}")
-        logger.info(f"📈 {explanation.perf_improvement_line}")
-        logger.info(f"Explanation: \n{explanation.to_console_string()}")
-
-        logger.info(
-            "Optimization was validated for correctness by running the following tests - %s",
-            "\n".join([test.generated_original_test_source for test in generated_tests.generated_tests]),
+        explanation_panel = Panel(
+            f"⚡️ Optimization successful! 📄 {function_to_optimize.qualified_name} in {explanation.file_path}\n"
+            f"📈 {explanation.perf_improvement_line}\n"
+            f"Explanation: \n{explanation.to_console_string()}",
+            title="Optimization Summary",
+            border_style="green",
         )
+
+        tests_panel = Panel(
+            Syntax(
+                "\n".join([test.generated_original_test_source for test in generated_tests.generated_tests]),
+                "python",
+                line_numbers=True,
+            ),
+            title="Validated Tests",
+            border_style="blue",
+        )
+
+        console.print(Group(explanation_panel, tests_panel))
 
         ph(
             "cli-optimize-success",
@@ -743,9 +778,8 @@ class Optimizer:
         run_experiment: bool = False,
     ) -> Result[tuple[GeneratedTestsList, OptimizationSet], str]:
         max_workers = N_TESTS_TO_GENERATE + 1 if not run_experiment else N_TESTS_TO_GENERATE + 2
+        console.rule()
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            logger.info(f"Generating new tests for function {function_to_optimize.function_name} ...")
-
             # Submit the test generation task as future
             future_tests = self.generate_and_instrument_tests(
                 executor,
@@ -755,7 +789,6 @@ class Optimizer:
                 module_path,
                 (function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id),
             )
-
             future_optimization_candidates = executor.submit(
                 self.aiservice_client.optimize_python_code,
                 code_to_optimize_with_helpers,
@@ -802,6 +835,7 @@ class Optimizer:
                 logger.warning(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")
                 return Failure(f"/!\\ NO TESTS GENERATED for {function_to_optimize.function_name}")
             logger.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
+            console.rule()
             generated_tests = GeneratedTestsList(generated_tests=tests)
 
         return Success((generated_tests, OptimizationSet(control=candidates, experiment=candidates_experiment)))
@@ -809,119 +843,131 @@ class Optimizer:
     def establish_original_code_baseline(
         self, function_name: str, generated_tests_paths: list[Path], tests_in_file: list[FunctionCalledInTest]
     ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
-        assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
-        success = True
-
         # For the original function - run the tests and get the runtime
-        logger.info(f"Establishing original code baseline runtime for {function_name}.")
-        test_env = os.environ.copy()
-        test_env["CODEFLASH_TEST_ITERATION"] = "0"
-        test_env["CODEFLASH_TRACER_DISABLE"] = "1"
-        if "PYTHONPATH" not in test_env:
-            test_env["PYTHONPATH"] = str(self.args.project_root)
-        else:
-            test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
 
-        first_test_types = []
-        first_test_functions = []
+        with progress_bar(f"Establishing original code baseline for {function_name}"):
+            assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
+            success = True
 
-        for test_file in self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
-            relevant_tests_in_file = [
-                test_in_file
-                for test_in_file in tests_in_file
-                if test_in_file.tests_in_file.test_file == test_file.original_file_path
-            ]
-            is_replay_test = (
-                first_test_type := relevant_tests_in_file[0].tests_in_file.test_type
-            ) == TestType.REPLAY_TEST
-            first_test_types.append(first_test_type)
-            first_test_functions.append(
-                relevant_tests_in_file[0].tests_in_file.test_function if is_replay_test else None
-            )
-            if is_replay_test and len(relevant_tests_in_file) > 1:
-                logger.warning(f"Multiple tests found for the replay test {test_file}. Should not happen")
-        first_test_functions.extend([None] * len(generated_tests_paths))
+            test_env = os.environ.copy()
+            test_env["CODEFLASH_TEST_ITERATION"] = "0"
+            test_env["CODEFLASH_TRACER_DISABLE"] = "1"
+            if "PYTHONPATH" not in test_env:
+                test_env["PYTHONPATH"] = str(self.args.project_root)
+            else:
+                test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
 
-        if test_framework == "pytest":
-            unittest_results = self.run_and_parse_tests(
-                test_env=test_env,
-                test_files=self.test_files,
-                optimization_iteration=0,
-                test_functions=first_test_functions,
-                testing_time=TOTAL_LOOPING_TIME,
-            )
-        else:
-            unittest_results = TestResults()
-            start_time: float = time.time()
-            for i in range(100):
-                if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME:
-                    break
-                test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
-                unittest_loop_results = self.run_and_parse_tests(
+            first_test_types = []
+            first_test_functions = []
+
+            for test_file in self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
+                relevant_tests_in_file = [
+                    test_in_file
+                    for test_in_file in tests_in_file
+                    if test_in_file.tests_in_file.test_file == test_file.original_file_path
+                ]
+                is_replay_test = (
+                    first_test_type := relevant_tests_in_file[0].tests_in_file.test_type
+                ) == TestType.REPLAY_TEST
+                first_test_types.append(first_test_type)
+                first_test_functions.append(
+                    relevant_tests_in_file[0].tests_in_file.test_function if is_replay_test else None
+                )
+                if is_replay_test and len(relevant_tests_in_file) > 1:
+                    logger.warning(f"Multiple tests found for the replay test {test_file}. Should not happen")
+            first_test_functions.extend([None] * len(generated_tests_paths))
+
+            if test_framework == "pytest":
+                unittest_results = self.run_and_parse_tests(
                     test_env=test_env,
                     test_files=self.test_files,
                     optimization_iteration=0,
                     test_functions=first_test_functions,
                     testing_time=TOTAL_LOOPING_TIME,
                 )
-                unittest_results.merge(unittest_loop_results)
+            else:
+                unittest_results = TestResults()
+                start_time: float = time.time()
+                for i in range(100):
+                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME:
+                        break
+                    test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
+                    unittest_loop_results = self.run_and_parse_tests(
+                        test_env=test_env,
+                        test_files=self.test_files,
+                        optimization_iteration=0,
+                        test_functions=first_test_functions,
+                        testing_time=TOTAL_LOOPING_TIME,
+                    )
+                    unittest_results.merge(unittest_loop_results)
 
-        initial_loop_unittest_results = TestResults(
-            test_results=[result for result in unittest_results.test_results if result.loop_index == 1]
-        )
-        logger.info(
-            f"Overall initial loop test results for original code: {TestResults.report_to_string(initial_loop_unittest_results.get_test_pass_fail_report_by_type())}"
-        )
-        existing_test_results = TestResults(
-            test_results=[result for result in unittest_results if result.test_type == TestType.EXISTING_UNIT_TEST]
-        )
-        generated_test_results = TestResults(
-            test_results=[result for result in unittest_results if result.test_type == TestType.GENERATED_REGRESSION]
-        )
-
-        total_timing = unittest_results.total_passed_runtime()
-
-        functions_to_remove = [
-            result.id.test_function_name for result in generated_test_results.test_results if not result.did_pass
-        ]
-
-        if not initial_loop_unittest_results:
-            logger.warning(
-                f"Couldn't run any tests for original function {function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
+            initial_loop_unittest_results = TestResults(
+                test_results=[result for result in unittest_results.test_results if result.loop_index == 1]
             )
-            success = False
-        if total_timing == 0:
-            logger.warning("The overall test runtime of the original function is 0, couldn't run tests.")
-            success = False
-        if not total_timing:
-            logger.warning("Failed to run the tests for the original function, skipping optimization")
-            success = False
-        if not success:
-            return Failure("Failed to establish a baseline for the original code.")
 
-        loop_count = max([int(result.loop_index) for result in unittest_results.test_results])
-        logger.info(
-            f"Original code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: {humanize_runtime(total_timing)} per full loop"
-        )
-        logger.debug(f"Total original code runtime (ns): {total_timing}")
-        return Success(
-            (
-                OriginalCodeBaseline(
-                    generated_test_results=generated_test_results,
-                    existing_test_results=existing_test_results,
-                    overall_test_results=unittest_results,
-                    runtime=total_timing,
-                ),
-                functions_to_remove,
+            console.print(
+                TestResults.report_to_tree(
+                    initial_loop_unittest_results.get_test_pass_fail_report_by_type(),
+                    title="Overall initial loop test results for original code",
+                )
             )
-        )
+            console.rule()
+
+            existing_test_results = TestResults(
+                test_results=[result for result in unittest_results if result.test_type == TestType.EXISTING_UNIT_TEST]
+            )
+            generated_test_results = TestResults(
+                test_results=[
+                    result for result in unittest_results if result.test_type == TestType.GENERATED_REGRESSION
+                ]
+            )
+
+            total_timing = unittest_results.total_passed_runtime()
+
+            functions_to_remove = [
+                result.id.test_function_name for result in generated_test_results.test_results if not result.did_pass
+            ]
+
+            if not initial_loop_unittest_results:
+                logger.warning(
+                    f"Couldn't run any tests for original function {function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
+                )
+                console.rule()
+                success = False
+            if total_timing == 0:
+                logger.warning("The overall test runtime of the original function is 0, couldn't run tests.")
+                console.rule()
+                success = False
+            if not total_timing:
+                logger.warning("Failed to run the tests for the original function, skipping optimization")
+                console.rule()
+                success = False
+            if not success:
+                return Failure("Failed to establish a baseline for the original code.")
+
+            loop_count = max([int(result.loop_index) for result in unittest_results.test_results])
+            logger.info(
+                f"Original code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: {humanize_runtime(total_timing)} per full loop"
+            )
+            console.rule()
+            logger.debug(f"Total original code runtime (ns): {total_timing}")
+            return Success(
+                (
+                    OriginalCodeBaseline(
+                        generated_test_results=generated_test_results,
+                        existing_test_results=existing_test_results,
+                        overall_test_results=unittest_results,
+                        runtime=total_timing,
+                    ),
+                    functions_to_remove,
+                )
+            )
 
     def run_optimized_candidate(
         self,
         *,
         optimization_candidate_index: int,
         original_test_results: TestResults | None,
-        best_runtime_until_now: int,
         tests_in_file: list[FunctionCalledInTest] | None,
     ) -> Result[OptimizedCandidateResult, str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
@@ -930,9 +976,7 @@ class Optimizer:
         generated_tests_paths = self.test_files.get_by_type(TestType.GENERATED_REGRESSION)
 
         success = True
-        best_test_results = TestResults()
 
-        times_run = 0
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_candidate_index)
         test_env["CODEFLASH_TRACER_DISABLE"] = "1"
@@ -972,9 +1016,15 @@ class Optimizer:
                 test_functions=first_test_functions,
                 testing_time=TOTAL_LOOPING_TIME,
             )
+            loop_count = (
+                max(all_loop_indices)
+                if (all_loop_indices := {result.loop_index for result in candidate_results.test_results})
+                else 0
+            )
         else:
             candidate_results = TestResults()
             start_time: float = time.time()
+            loop_count = 0
             for i in range(100):
                 if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME:
                     break
@@ -986,14 +1036,21 @@ class Optimizer:
                     test_functions=first_test_functions,
                     testing_time=TOTAL_LOOPING_TIME,
                 )
+                loop_count = i + 1
                 candidate_results.merge(candidate_loop_results)
 
         initial_loop_candidate_results = TestResults(
             test_results=[result for result in candidate_results.test_results if result.loop_index == 1]
         )
-        logger.info(
-            f"Overall initial loop test results for candidate code: {TestResults.report_to_string(initial_loop_candidate_results.get_test_pass_fail_report_by_type())}"
+
+        console.print(
+            TestResults.report_to_tree(
+                initial_loop_candidate_results.get_test_pass_fail_report_by_type(),
+                title="Overall initial loop test results for candidate",
+            )
         )
+        console.rule()
+
         initial_loop_original_test_results = TestResults(
             test_results=[result for result in original_test_results.test_results if result.loop_index == 1]
         )
@@ -1002,16 +1059,17 @@ class Optimizer:
         # TODO Crosshair: Report failure if regression OR concolic failure.
         if compare_test_results(initial_loop_original_test_results, initial_loop_candidate_results):
             logger.info("Test results matched!")
+            console.rule()
             equal_results = True
         else:
             logger.info("Test results did not match the test results of the original code.")
+            console.rule()
             success = False
             equal_results = False
 
         if (total_candidate_timing := candidate_results.total_passed_runtime()) == 0:
             logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
-        if best_runtime_until_now is None or total_candidate_timing < best_runtime_until_now:
-            best_test_results = candidate_results
+            console.rule()
         get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.bin")).unlink(missing_ok=True)
 
         get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
@@ -1020,10 +1078,16 @@ class Optimizer:
 
         if not success:
             return Failure("Failed to run the optimized candidate.")
-        logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
+        logger.debug(
+            f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}",
+        )
         return Success(
             OptimizedCandidateResult(
-                times_run=times_run, best_test_runtime=total_candidate_timing, best_test_results=best_test_results
+                max_loop_count=loop_count,
+                best_test_runtime=total_candidate_timing,
+                test_results=candidate_results,
+                optimization_candidate_index=optimization_candidate_index,
+                total_candidate_timing=total_candidate_timing,
             )
         )
 

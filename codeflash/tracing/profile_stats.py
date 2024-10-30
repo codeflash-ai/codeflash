@@ -39,9 +39,7 @@ class ProfileStats(pstats.Stats):
                 call_count_nonrecursive,
                 num_callers,
                 total_time_ns / time_conversion_factor if time_conversion_factor != 1 else total_time_ns,
-                cumulative_time_ns / time_conversion_factor
-                if time_conversion_factor != 1
-                else cumulative_time_ns,
+                cumulative_time_ns / time_conversion_factor if time_conversion_factor != 1 else cumulative_time_ns,
                 unmapped_callers,
             )
 
@@ -58,9 +56,7 @@ class ProfileStats(pstats.Stats):
         print(indent, self.total_calls, "function calls", end=" ", file=self.stream)
         if self.total_calls != self.prim_calls:
             print("(%d primitive calls)" % self.prim_calls, end=" ", file=self.stream)
-        time_unit = {"ns": "nanoseconds", "us": "microseconds", "ms": "milliseconds", "s": "seconds"}[
-            self.time_unit
-        ]
+        time_unit = {"ns": "nanoseconds", "us": "microseconds", "ms": "milliseconds", "s": "seconds"}[self.time_unit]
         print("in %.3f %s" % (self.total_tt, time_unit), file=self.stream)
         print(file=self.stream)
         width, list = self.get_print_list(amount)

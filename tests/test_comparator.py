@@ -9,12 +9,7 @@ from returns.result import Failure, Success
 
 from codeflash.verification.comparator import comparator
 from codeflash.verification.equivalence import compare_test_results
-from codeflash.verification.test_results import (
-    FunctionTestInvocation,
-    InvocationId,
-    TestResults,
-    TestType,
-)
+from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults, TestType
 
 
 def test_basic_python_objects():
@@ -377,22 +372,13 @@ def test_pandas():
     assert not comparator(c, ca)
 
     ak = pd.DataFrame(
-        {
-            "a": [datetime.datetime(2020, 2, 2, 2, 2, 2), datetime.datetime(2020, 2, 2, 2, 2, 2)],
-            "b": [4, 5],
-        },
+        {"a": [datetime.datetime(2020, 2, 2, 2, 2, 2), datetime.datetime(2020, 2, 2, 2, 2, 2)], "b": [4, 5]}
     )
     al = pd.DataFrame(
-        {
-            "a": [datetime.datetime(2020, 2, 2, 2, 2, 2), datetime.datetime(2020, 2, 2, 2, 2, 2)],
-            "b": [4, 5],
-        },
+        {"a": [datetime.datetime(2020, 2, 2, 2, 2, 2), datetime.datetime(2020, 2, 2, 2, 2, 2)], "b": [4, 5]}
     )
     am = pd.DataFrame(
-        {
-            "a": [datetime.datetime(2020, 2, 2, 2, 2, 2), datetime.datetime(2020, 2, 2, 2, 2, 3)],
-            "b": [4, 5],
-        },
+        {"a": [datetime.datetime(2020, 2, 2, 2, 2, 2), datetime.datetime(2020, 2, 2, 2, 2, 3)], "b": [4, 5]}
     )
     assert comparator(ak, al)
     assert not comparator(ak, am)
@@ -693,8 +679,8 @@ def test_compare_results_fn():
                 return_value=5,
                 timed_out=False,
                 loop_index=1,
-            ),
-        ],
+            )
+        ]
     )
 
     new_results_1 = TestResults(
@@ -715,8 +701,8 @@ def test_compare_results_fn():
                 return_value=5,
                 timed_out=False,
                 loop_index=1,
-            ),
-        ],
+            )
+        ]
     )
 
     assert compare_test_results(original_results, new_results_1)
@@ -739,8 +725,8 @@ def test_compare_results_fn():
                 return_value=[5],
                 timed_out=False,
                 loop_index=1,
-            ),
-        ],
+            )
+        ]
     )
 
     assert not compare_test_results(original_results, new_results_2)
@@ -781,7 +767,7 @@ def test_compare_results_fn():
                 timed_out=False,
                 loop_index=1,
             ),
-        ],
+        ]
     )
 
     assert compare_test_results(original_results, new_results_3)

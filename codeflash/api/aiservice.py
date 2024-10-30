@@ -6,13 +6,11 @@ import platform
 from typing import TYPE_CHECKING, Any
 
 import requests
-from pydantic.dataclasses import dataclass
 from pydantic.json import pydantic_encoder
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.ExperimentMetadata import ExperimentMetadata
+from codeflash.models.models import OptimizedCandidate
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
 
@@ -23,20 +21,10 @@ if TYPE_CHECKING:
     from codeflash.models.ExperimentMetadata import ExperimentMetadata
 
 
-@dataclass(frozen=True)
-class OptimizedCandidate:
-    source_code: str
-    explanation: str
-    optimization_id: str
-
-
 class AiServiceClient:
     def __init__(self) -> None:
         self.base_url = self.get_aiservice_base_url()
-        self.headers = {
-            "Authorization": f"Bearer {get_codeflash_api_key()}",
-            "Connection": "close",
-        }
+        self.headers = {"Authorization": f"Bearer {get_codeflash_api_key()}", "Connection": "close"}
 
     def get_aiservice_base_url(self) -> str:
         if os.environ.get("CODEFLASH_AIS_SERVER", default="prod").lower() == "local":
@@ -45,11 +33,7 @@ class AiServiceClient:
         return "https://app.codeflash.ai"
 
     def make_ai_service_request(
-        self,
-        endpoint: str,
-        method: str = "POST",
-        payload: dict[str, Any] | None = None,
-        timeout: float | None = None,
+        self, endpoint: str, method: str = "POST", payload: dict[str, Any] | None = None, timeout: float | None = None
     ) -> requests.Response:
         """Make an API request to the given endpoint on the AI service.
 
@@ -96,13 +80,11 @@ class AiServiceClient:
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
         }
+
         logger.info("Generating optimized candidates ...")
+        console.rule()
         try:
-            response = self.make_ai_service_request(
-                "/optimize",
-                payload=payload,
-                timeout=600,
-            )
+            response = self.make_ai_service_request("/optimize", payload=payload, timeout=600)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -111,6 +93,7 @@ class AiServiceClient:
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
             logger.info(f"Generated {len(optimizations_json)} candidates.")
+            console.rule()
             return [
                 OptimizedCandidate(
                     source_code=opt["source_code"],
@@ -124,10 +107,8 @@ class AiServiceClient:
         except Exception:
             error = response.text
         logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
-        ph(
-            "cli-optimize-error-response",
-            {"response_status_code": response.status_code, "error": error},
-        )
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
         return []
 
     def log_results(
@@ -225,20 +206,17 @@ class AiServiceClient:
         try:
             error = response.json()["error"]
             logger.error(f"Error generating tests: {response.status_code} - {error}")
-            ph(
-                "cli-testgen-error-response",
-                {"response_status_code": response.status_code, "error": error},
-            )
+            ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": error})
             return None
         except Exception:
             logger.error(f"Error generating tests: {response.status_code} - {response.text}")
-            ph(
-                "cli-testgen-error-response",
-                {"response_status_code": response.status_code, "error": response.text},
-            )
+            ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": response.text})
             return None
 
 
 class LocalAiServiceClient(AiServiceClient):
+    """Client for interacting with the local AI service."""
+
     def get_aiservice_base_url(self) -> str:
+        """Get the base URL for the local AI service."""
         return "http://localhost:8000"

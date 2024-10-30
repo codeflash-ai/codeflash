@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import os
 import site
+from functools import lru_cache
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -19,10 +20,19 @@ def file_path_from_module_name(module_name: str, project_root_path: Path) -> Pat
     return project_root_path / (module_name.replace(".", os.sep) + ".py")
 
 
+@lru_cache(maxsize=100)
+def file_name_from_test_module_name(test_module_name: str, base_dir: Path) -> Path | None:
+    partial_test_class = test_module_name
+    while partial_test_class:
+        test_path = file_path_from_module_name(partial_test_class, base_dir)
+        if (base_dir / test_path).exists():
+            return base_dir / test_path
+        partial_test_class = ".".join(partial_test_class.split(".")[:-1])
+    return None
+
+
 def get_imports_from_file(
-    file_path: Path | None = None,
-    file_string: str | None = None,
-    file_ast: ast.AST | None = None,
+    file_path: Path | None = None, file_string: str | None = None, file_ast: ast.AST | None = None
 ) -> list[ast.Import | ast.ImportFrom]:
     assert (
         sum([file_path is not None, file_string is not None, file_ast is not None]) == 1

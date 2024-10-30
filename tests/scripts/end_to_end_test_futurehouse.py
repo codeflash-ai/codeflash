@@ -6,26 +6,12 @@ import subprocess
 
 def main():
     cwd = (
-        pathlib.Path(__file__).parent.parent.parent
-        / "code_to_optimize"
-        / "code_directories"
-        / "futurehouse_structure"
+        pathlib.Path(__file__).parent.parent.parent / "code_to_optimize" / "code_directories" / "futurehouse_structure"
     ).resolve()
     print("cwd", cwd)
-    command = [
-        "python",
-        "../../../codeflash/main.py",
-        "--file",
-        "src/aviary/common_tags.py",
-        "--no-pr",
-    ]
+    command = ["python", "../../../codeflash/main.py", "--file", "src/aviary/common_tags.py", "--no-pr"]
     process = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        cwd=str(cwd),
-        env=os.environ.copy(),
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
     )
     output = []
 
@@ -41,16 +27,11 @@ def main():
     improvement_pct = int(re.search(r"📈 ([\d,]+)% improvement", stdout).group(1).replace(",", ""))
     improvement_x = float(improvement_pct) / 100
 
-    assert (
-        improvement_pct > 5
-    ), f"Performance improvement percentage was {improvement_pct}, which was not above 10%"
+    assert improvement_pct > 5, f"Performance improvement percentage was {improvement_pct}, which was not above 10%"
     assert improvement_x > 0.1, f"Performance improvement rate was {improvement_x}x, which was not above 0.1x"
 
     # Check for the line indicating the number of discovered existing unit tests
-    unit_test_search = re.search(
-        r"Discovered (\d+) existing unit tests",
-        stdout,
-    )
+    unit_test_search = re.search(r"Discovered (\d+) existing unit tests", stdout)
     num_unit_tests = int(unit_test_search.group(1))
     assert num_unit_tests == 2, "Could not find existing unit tests"
 

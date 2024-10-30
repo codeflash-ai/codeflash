@@ -3,10 +3,12 @@ from argparse import Namespace
 from dataclasses import dataclass
 
 import pytest
-from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+from returns.pipeline import is_successful
+
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.models import FunctionParent
 from codeflash.optimization.function_context import get_function_variables_definitions
 from codeflash.optimization.optimizer import Optimizer
-from returns.pipeline import is_successful
 
 
 def calculate_something(data):
@@ -20,8 +22,7 @@ def simple_function_with_one_dep(data):
 def test_simple_dependencies() -> None:
     file_path = pathlib.Path(__file__).resolve()
     helper_functions = get_function_variables_definitions(
-        FunctionToOptimize("simple_function_with_one_dep", str(file_path), []),
-        str(file_path.parent.resolve()),
+        FunctionToOptimize("simple_function_with_one_dep", str(file_path), []), str(file_path.parent.resolve())
     )[0]
     assert len(helper_functions) == 1
     assert helper_functions[0].jedi_definition.full_name == "test_function_dependencies.calculate_something"
@@ -82,8 +83,7 @@ def test_multiple_classes_dependencies() -> None:
     # TODO: Check if C.run only gets calculate_something_3 as dependency and likewise for other classes
     file_path = pathlib.Path(__file__).resolve()
     helper_functions = get_function_variables_definitions(
-        FunctionToOptimize("run", str(file_path), [FunctionParent("C", "ClassDef")]),
-        str(file_path.parent.resolve()),
+        FunctionToOptimize("run", str(file_path), [FunctionParent("C", "ClassDef")]), str(file_path.parent.resolve())
     )
 
     # assert len(helper_functions) == 2
@@ -103,8 +103,7 @@ def recursive_dependency_1(num):
 def test_recursive_dependency() -> None:
     file_path = pathlib.Path(__file__).resolve()
     helper_functions = get_function_variables_definitions(
-        FunctionToOptimize("recursive_dependency_1", str(file_path), []),
-        str(file_path.parent.resolve()),
+        FunctionToOptimize("recursive_dependency_1", str(file_path), []), str(file_path.parent.resolve())
     )[0]
     assert len(helper_functions) == 1
     assert helper_functions[0].jedi_definition.full_name == "test_function_dependencies.calculate_something"
@@ -127,14 +126,11 @@ def simple_function_with_one_dep_ann(data: MyData):
 def test_simple_dependencies_ann() -> None:
     file_path = pathlib.Path(__file__).resolve()
     helper_functions = get_function_variables_definitions(
-        FunctionToOptimize("simple_function_with_one_dep_ann", str(file_path), []),
-        str(file_path.parent.resolve()),
+        FunctionToOptimize("simple_function_with_one_dep_ann", str(file_path), []), str(file_path.parent.resolve())
     )[0]
     assert len(helper_functions) == 2
     assert helper_functions[0].jedi_definition.full_name == "test_function_dependencies.MyData"
-    assert (
-        helper_functions[1].jedi_definition.full_name == "test_function_dependencies.calculate_something_ann"
-    )
+    assert helper_functions[1].jedi_definition.full_name == "test_function_dependencies.calculate_something_ann"
 
 
 from collections import defaultdict
@@ -180,7 +176,7 @@ def test_class_method_dependencies() -> None:
             pytest_cmd="pytest",
             experiment_id=None,
             test_project_root=file_path.parent.resolve(),
-        ),
+        )
     )
     function_to_optimize = FunctionToOptimize(
         function_name="topologicalSort",
@@ -191,11 +187,7 @@ def test_class_method_dependencies() -> None:
     )
     with open(file_path) as f:
         original_code = f.read()
-    ctx_result = opt.get_code_optimization_context(
-        function_to_optimize,
-        opt.args.project_root,
-        original_code,
-    )
+    ctx_result = opt.get_code_optimization_context(function_to_optimize, opt.args.project_root, original_code)
     if not is_successful(ctx_result):
         pytest.fail()
     code_context = ctx_result.unwrap()
@@ -207,8 +199,7 @@ def test_class_method_dependencies() -> None:
     )
     assert code_context.helper_functions[0].jedi_definition.name == "topologicalSortUtil"
     assert (
-        code_context.helper_functions[0].fully_qualified_name
-        == "test_function_dependencies.Graph.topologicalSortUtil"
+        code_context.helper_functions[0].fully_qualified_name == "test_function_dependencies.Graph.topologicalSortUtil"
     )
     assert code_context.helper_functions[0].qualified_name == "Graph.topologicalSortUtil"
     assert code_context.contextual_dunder_methods == {("Graph", "__init__")}
@@ -262,8 +253,7 @@ def simple_function_with_decorator_dep(data):
 def test_decorator_dependencies() -> None:
     file_path = pathlib.Path(__file__).resolve()
     helper_functions = get_function_variables_definitions(
-        FunctionToOptimize("simple_function_with_decorator_dep", str(file_path), []),
-        str(file_path.parent.resolve()),
+        FunctionToOptimize("simple_function_with_decorator_dep", str(file_path), []), str(file_path.parent.resolve())
     )[0]
     assert len(helper_functions) == 2
     assert {helper_functions[0][0].definition.full_name, helper_functions[1][0].definition.full_name} == {
@@ -283,7 +273,7 @@ def test_recursive_function_context() -> None:
             pytest_cmd="pytest",
             experiment_id=None,
             test_project_root=file_path.parent.resolve(),
-        ),
+        )
     )
     function_to_optimize = FunctionToOptimize(
         function_name="recursive",
@@ -294,21 +284,14 @@ def test_recursive_function_context() -> None:
     )
     with open(file_path) as f:
         original_code = f.read()
-    ctx_result = opt.get_code_optimization_context(
-        function_to_optimize,
-        opt.args.project_root,
-        original_code,
-    )
+    ctx_result = opt.get_code_optimization_context(function_to_optimize, opt.args.project_root, original_code)
     if not is_successful(ctx_result):
         pytest.fail()
     code_context = ctx_result.unwrap()
     # The code_context above should have the topologicalSortUtil function in it
     assert len(code_context.helper_functions) == 2
     assert set(
-        [
-            code_context.helper_functions[1].fully_qualified_name,
-            code_context.helper_functions[0].fully_qualified_name,
-        ],
+        [code_context.helper_functions[1].fully_qualified_name, code_context.helper_functions[0].fully_qualified_name]
     ) == set(["test_function_dependencies.C.calculate_something_3", "test_function_dependencies.C.recursive"])
     assert (
         code_context.code_to_optimize_with_helpers
