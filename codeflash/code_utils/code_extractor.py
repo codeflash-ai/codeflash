@@ -22,9 +22,7 @@ if TYPE_CHECKING:
 
 class FutureAliasedImportTransformer(cst.CSTTransformer):
     def leave_ImportFrom(
-        self,
-        original_node: cst.ImportFrom,
-        updated_node: cst.ImportFrom,
+        self, original_node: cst.ImportFrom, updated_node: cst.ImportFrom
     ) -> cst.BaseSmallStatement | cst.FlattenSentinel[cst.BaseSmallStatement] | cst.RemovalSentinel:
         if (
             (updated_node_module := updated_node.module)
@@ -67,7 +65,7 @@ def add_needed_imports_from_module(
             filename=src_path.name,
             full_module_name=src_module_and_package.name,
             full_package_name=src_module_and_package.package,
-        ),
+        )
     )
     cst.parse_module(src_module_code).visit(gatherer)
     try:
@@ -91,12 +89,7 @@ def add_needed_imports_from_module(
             if f"{mod}.{alias_pair[0]}" in helper_functions_fqn:
                 continue
             AddImportsVisitor.add_needed_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
-            RemoveImportsVisitor.remove_unused_import(
-                dst_context,
-                mod,
-                alias_pair[0],
-                asname=alias_pair[1],
-            )
+            RemoveImportsVisitor.remove_unused_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
 
     try:
         parsed_module = cst.parse_module(dst_module_code)
@@ -112,9 +105,7 @@ def add_needed_imports_from_module(
         return dst_module_code
 
 
-def get_code(
-    functions_to_optimize: list[FunctionToOptimize],
-) -> tuple[str | None, set[tuple[str, str]]]:
+def get_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str | None, set[tuple[str, str]]]:
     """Return the code for a function or methods in a Python module. functions_to_optimize is either a singleton
     FunctionToOptimize instance, which represents either a function at the module level or a method of a class at the
     module level, or it represents a list of methods of the same class.
@@ -135,21 +126,15 @@ def get_code(
     contextual_dunder_methods: set[tuple[str, str]] = set()
     target_code: str = ""
 
-    def find_target(
-        node_list: list[ast.stmt],
-        name_parts: tuple[str, str] | tuple[str],
-    ) -> ast.AST | None:
-        target: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Assign | ast.AnnAssign | None = (
-            None
-        )
+    def find_target(node_list: list[ast.stmt], name_parts: tuple[str, str] | tuple[str]) -> ast.AST | None:
+        target: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Assign | ast.AnnAssign | None = None
         node: ast.stmt
         for node in node_list:
             if (
                 # The many mypy issues will be fixed once this code moves to the backend,
                 # using Type Guards as we move to 3.10+.
                 # We will cover the Type Alias case on the backend since it's a 3.12 feature.
-                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-                and node.name == name_parts[0]
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == name_parts[0]
             ):
                 target = node
                 break
@@ -159,11 +144,7 @@ def get_code(
                 and len(node.targets) == 1
                 and isinstance(node.targets[0], ast.Name)
                 and node.targets[0].id == name_parts[0]
-            ) or (
-                isinstance(node, ast.AnnAssign)
-                and hasattr(node.target, "id")
-                and node.target.id == name_parts[0]
-            ):
+            ) or (isinstance(node, ast.AnnAssign) and hasattr(node.target, "id") and node.target.id == name_parts[0]):
                 if class_skeleton:
                     break
                 target = node
@@ -196,6 +177,7 @@ def get_code(
 
         return find_target(target.body, name_parts[1:])
 
+    # TODO Crosshair: Already extracted and parsed.
     with open(file_path, encoding="utf8") as file:
         source_code: str = file.read()
     try:
@@ -214,16 +196,14 @@ def get_code(
             ]
 
         else:
-            logger.error(
-                f"Error: get_code does not support inner functions: {functions_to_optimize[0].parents}",
-            )
+            logger.error(f"Error: get_code does not support inner functions: {functions_to_optimize[0].parents}")
             return None, set()
     elif len(functions_to_optimize[0].parents) == 0:
         qualified_name_parts_list = [(functions_to_optimize[0].function_name,)]
     else:
         logger.error(
             "Error: get_code does not support more than one level of nesting for now. "
-            f"Parents: {functions_to_optimize[0].parents}",
+            f"Parents: {functions_to_optimize[0].parents}"
         )
         return None, set()
     for qualified_name_parts in qualified_name_parts_list:
@@ -235,32 +215,24 @@ def get_code(
             isinstance(target_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
             and target_node.decorator_list
         ):
-            target_code += "".join(
-                lines[target_node.decorator_list[0].lineno - 1 : target_node.end_lineno],
-            )
+            target_code += "".join(lines[target_node.decorator_list[0].lineno - 1 : target_node.end_lineno])
         else:
             target_code += "".join(lines[target_node.lineno - 1 : target_node.end_lineno])
     if not target_code:
         return None, set()
     class_list: list[tuple[int, int | None]] = sorted(class_skeleton)
-    class_code = "".join(
-        ["".join(lines[s_lineno - 1 : e_lineno]) for (s_lineno, e_lineno) in class_list],
-    )
+    class_code = "".join(["".join(lines[s_lineno - 1 : e_lineno]) for (s_lineno, e_lineno) in class_list])
     return class_code + target_code, contextual_dunder_methods
 
 
-def extract_code(
-    functions_to_optimize: list[FunctionToOptimize],
-) -> tuple[str | None, set[tuple[str, str]]]:
+def extract_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str | None, set[tuple[str, str]]]:
     edited_code, contextual_dunder_methods = get_code(functions_to_optimize)
     if edited_code is None:
         return None, set()
     try:
         compile(edited_code, "edited_code", "exec")
     except SyntaxError as e:
-        logger.exception(
-            f"extract_code - Syntax error in extracted optimization candidate code: {e}",
-        )
+        logger.exception(f"extract_code - Syntax error in extracted optimization candidate code: {e}")
         return None, set()
     return edited_code, contextual_dunder_methods
 

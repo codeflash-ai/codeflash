@@ -96,7 +96,7 @@ show-fixes = true
 
 [tool.ruff.lint]
 select = ["ALL"]
-ignore = ["S101", "FIX002", "ANN101"]
+ignore = ["S101", "FIX002", "ANN101", "COM812"]
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true
