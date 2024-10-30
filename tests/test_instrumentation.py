@@ -250,7 +250,8 @@ def test_sort():
     output = sorter(input)
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
 
-    expected = """import gc
+    expected = (
+        """import gc
 import os
 import sqlite3
 import time
@@ -260,8 +261,9 @@ import dill as pickle
 from code_to_optimize.bubble_sort import sorter
 
 
-""" + codeflash_wrap_string + \
 """
+        + codeflash_wrap_string
+        + """
 def test_sort():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
@@ -276,6 +278,7 @@ def test_sort():
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()
 """
+    )
 
     test_path = (
         Path(__file__).parent.resolve()
@@ -376,7 +379,8 @@ def test_sort_parametrized(input, expected_output):
     output = sorter(input)
     assert output == expected_output
 """
-    expected = """import gc
+    expected = (
+        """import gc
 import os
 import sqlite3
 import time
@@ -387,8 +391,9 @@ import pytest
 from code_to_optimize.bubble_sort import sorter
 
 
-""" + codeflash_wrap_string + \
 """
+        + codeflash_wrap_string
+        + """
 @pytest.mark.parametrize('input, expected_output', [([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
 def test_sort_parametrized(input, expected_output):
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
@@ -400,6 +405,7 @@ def test_sort_parametrized(input, expected_output):
     assert output == expected_output
     codeflash_con.close()
 """
+    )
     test_path = (
         Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_parametrized_results_temp.py"
@@ -512,7 +518,8 @@ def test_sort_parametrized_loop(input, expected_output):
         output = sorter(input)
         assert output == expected_output
 """
-    expected = """import gc
+    expected = (
+        """import gc
 import os
 import sqlite3
 import time
@@ -523,8 +530,9 @@ import pytest
 from code_to_optimize.bubble_sort import sorter
 
 
-""" + codeflash_wrap_string + \
 """
+        + codeflash_wrap_string
+        + """
 @pytest.mark.parametrize('input, expected_output', [([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
 def test_sort_parametrized_loop(input, expected_output):
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
@@ -537,6 +545,7 @@ def test_sort_parametrized_loop(input, expected_output):
         assert output == expected_output
     codeflash_con.close()
 """
+    )
 
     test_path = (
         Path(__file__).parent.resolve()
@@ -677,7 +686,8 @@ def test_sort():
         output = sorter(input)
         assert output == expected_output"""
 
-    expected = """import gc
+    expected = (
+        """import gc
 import os
 import sqlite3
 import time
@@ -687,8 +697,9 @@ import dill as pickle
 from code_to_optimize.bubble_sort import sorter
 
 
-""" + codeflash_wrap_string + \
 """
+        + codeflash_wrap_string
+        + """
 def test_sort():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
@@ -704,6 +715,7 @@ def test_sort():
         assert output == expected_output
     codeflash_con.close()
 """
+    )
 
     test_path = (
         Path(__file__).parent.resolve()
@@ -819,7 +831,8 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(output, list(range(50)))
 """
 
-    expected = """import gc
+    expected = (
+        """import gc
 import os
 import sqlite3
 import time
@@ -831,8 +844,9 @@ import timeout_decorator
 from code_to_optimize.bubble_sort import sorter
 
 
-""" + codeflash_wrap_string + \
 """
+        + codeflash_wrap_string
+        + """
 class TestPigLatin(unittest.TestCase):
 
     @timeout_decorator.timeout(15)
@@ -853,6 +867,7 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(output, list(range(50)))
         codeflash_con.close()
 """
+    )
 
     test_path = (
         Path(__file__).parent.resolve()
@@ -972,7 +987,8 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(output, expected_output)
 """
 
-    expected = """import gc
+    expected = (
+        """import gc
 import os
 import sqlite3
 import time
@@ -985,8 +1001,9 @@ from parameterized import parameterized
 from code_to_optimize.bubble_sort import sorter
 
 
-""" + codeflash_wrap_string + \
 """
+        + codeflash_wrap_string
+        + """
 class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
@@ -1001,6 +1018,7 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(output, expected_output)
         codeflash_con.close()
 """
+    )
 
     test_path = (
         Path(__file__).parent.resolve()
@@ -1111,7 +1129,8 @@ class TestPigLatin(unittest.TestCase):
             output = sorter(input)
             self.assertEqual(output, expected_output)"""
 
-    expected = """import gc
+    expected = (
+        """import gc
 import os
 import sqlite3
 import time
@@ -1123,8 +1142,9 @@ import timeout_decorator
 from code_to_optimize.bubble_sort import sorter
 
 
-""" + codeflash_wrap_string + \
 """
+        + codeflash_wrap_string
+        + """
 class TestPigLatin(unittest.TestCase):
 
     @timeout_decorator.timeout(15)
@@ -1143,6 +1163,7 @@ class TestPigLatin(unittest.TestCase):
             self.assertEqual(output, expected_output)
         codeflash_con.close()
 """
+    )
 
     test_path = (
         Path(__file__).parent.resolve()
@@ -1258,7 +1279,8 @@ class TestPigLatin(unittest.TestCase):
             self.assertEqual(output, expected_output)
 """
 
-    expected = """import gc
+    expected = (
+        """import gc
 import os
 import sqlite3
 import time
@@ -1271,8 +1293,9 @@ from parameterized import parameterized
 from code_to_optimize.bubble_sort import sorter
 
 
-""" + codeflash_wrap_string + \
 """
+        + codeflash_wrap_string
+        + """
 class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
@@ -1288,6 +1311,7 @@ class TestPigLatin(unittest.TestCase):
             self.assertEqual(output, expected_output)
         codeflash_con.close()
 """
+    )
 
     test_path = (
         Path(__file__).parent.resolve()
@@ -1454,7 +1478,8 @@ def test_class_name_A_function_name():
     ret = class_name_A.function_name(**args)
 """
 
-    expected = """import gc
+    expected = (
+        """import gc
 import os
 import sqlite3
 import time
@@ -1463,8 +1488,9 @@ import dill as pickle
 from module import class_name as class_name_A
 
 
-""" + codeflash_wrap_string + \
 """
+        + codeflash_wrap_string
+        + """
 def test_class_name_A_function_name():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
@@ -1474,6 +1500,7 @@ def test_class_name_A_function_name():
     ret = codeflash_wrap(class_name_A.function_name, '{module_path}', None, 'test_class_name_A_function_name', 'class_name_A.function_name', '0', codeflash_loop_index, codeflash_cur, codeflash_con, **args)
     codeflash_con.close()
 """
+    )
 
     test_path = (
         Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_class_function_instrumentation_temp.py"
@@ -1519,7 +1546,8 @@ def test_common_tags_1():
     assert find_common_tags(articles_2) == set(1)
 """
 
-    expected = """import gc
+    expected = (
+        """import gc
 import os
 import sqlite3
 import time
@@ -1529,8 +1557,9 @@ import dill as pickle
 from codeflash.result.common_tags import find_common_tags
 
 
-""" + codeflash_wrap_string + \
 """
+        + codeflash_wrap_string
+        + """
 def test_common_tags_1():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
@@ -1543,6 +1572,7 @@ def test_common_tags_1():
     assert codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '3', codeflash_loop_index, codeflash_cur, codeflash_con, articles_2) == set(1)
     codeflash_con.close()
 """
+    )
 
     test_path = (
         Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_wrong_function_instrumentation_temp.py"
@@ -1583,7 +1613,8 @@ def test_sort():
     if len(input) > 0:
         assert sorter(input) == [0, 1, 2, 3, 4, 5]"""
 
-    expected = """import gc
+    expected = (
+        """import gc
 import os
 import sqlite3
 import time
@@ -1593,8 +1624,9 @@ import dill as pickle
 from code_to_optimize.bubble_sort import sorter
 
 
-""" + codeflash_wrap_string + \
 """
+        + codeflash_wrap_string
+        + """
 def test_sort():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
@@ -1606,6 +1638,7 @@ def test_sort():
         assert codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '1_0', codeflash_loop_index, codeflash_cur, codeflash_con, input) == [0, 1, 2, 3, 4, 5]
     codeflash_con.close()
 """
+    )
     test_path = (
         Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_conditional_instrumentation_temp.py"
     )
@@ -1647,7 +1680,8 @@ def test_sort():
     output = BubbleSorter.sorter(input)
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
 
-    expected = """import gc
+    expected = (
+        """import gc
 import os
 import sqlite3
 import time
@@ -1657,8 +1691,9 @@ import dill as pickle
 from code_to_optimize.bubble_sort import BubbleSorter
 
 
-""" + codeflash_wrap_string + \
 """
+        + codeflash_wrap_string
+        + """
 def test_sort():
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
@@ -1673,6 +1708,7 @@ def test_sort():
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()
 """
+    )
 
     function_to_optimize = FunctionToOptimize(
         function_name="sorter",
@@ -1838,7 +1874,8 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
 
 """
 
-    expected = """import gc
+    expected = (
+        """import gc
 import os
 import sqlite3
 import time
@@ -1849,8 +1886,9 @@ import pytest
 from code_to_optimize.sleeptime import accurate_sleepfunc
 
 
-""" + codeflash_wrap_string + \
 """
+        + codeflash_wrap_string
+        + """
 @pytest.mark.parametrize('n, expected_total_sleep_time', [(0.01, 0.01), (0.02, 0.02)])
 def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
@@ -1862,6 +1900,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
     assert output == expected_total_sleep_time
     codeflash_con.close()
 """
+    )
 
     test_path = (
         Path(__file__).parent.resolve()
@@ -1953,7 +1992,8 @@ class TestPigLatin(unittest.TestCase):
         output = accurate_sleepfunc(n)
 """
 
-    expected = """import gc
+    expected = (
+        """import gc
 import os
 import sqlite3
 import time
@@ -1966,8 +2006,9 @@ from parameterized import parameterized
 from code_to_optimize.sleeptime import accurate_sleepfunc
 
 
-""" + codeflash_wrap_string + \
 """
+        + codeflash_wrap_string
+        + """
 class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([(0.01, 0.01), (0.02, 0.02)])
@@ -1981,6 +2022,7 @@ class TestPigLatin(unittest.TestCase):
         output = codeflash_wrap(accurate_sleepfunc, '{module_path}', 'TestPigLatin', 'test_sleepfunc_sequence_short', 'accurate_sleepfunc', '0', codeflash_loop_index, codeflash_cur, codeflash_con, n)
         codeflash_con.close()
 """
+    )
 
     test_path = (
         Path(__file__).parent.resolve()

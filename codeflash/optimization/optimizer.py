@@ -50,7 +50,10 @@ from codeflash.models.models import (
     OptimizedCandidateResult,
     OriginalCodeBaseline,
     TestFile,
-    TestFiles, OptimizedCandidate, FunctionCalledInTest, FunctionParent,
+    TestFiles,
+    OptimizedCandidate,
+    FunctionCalledInTest,
+    FunctionParent,
 )
 from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
@@ -203,7 +206,9 @@ class Optimizer:
             function_to_optimize=function_to_optimize, function_to_tests=function_to_tests
         )
 
-        with progress_bar(f"Generating new tests and optimizations for function {function_to_optimize.function_name}", transient=True):
+        with progress_bar(
+            f"Generating new tests and optimizations for function {function_to_optimize.function_name}", transient=True
+        ):
             generated_results = self.generate_tests_and_optimizations(
                 code_context.code_to_optimize_with_helpers,
                 function_to_optimize,
@@ -425,7 +430,9 @@ class Optimizer:
                     ) and quantity_of_tests_critic(candidate_result):
                         tree.add("This candidate is faster than the previous best candidate. 🚀")
                         tree.add(f"Original runtime: {humanize_runtime(original_code_baseline.runtime)}")
-                        tree.add(f"Best test runtime: {humanize_runtime(candidate_result.best_test_runtime)} (measured over {candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})")
+                        tree.add(
+                            f"Best test runtime: {humanize_runtime(candidate_result.best_test_runtime)} (measured over {candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                        )
                         tree.add(f"Speedup ratio: {perf_gain:.3f}")
 
                         best_optimization = BestOptimization(
@@ -436,7 +443,9 @@ class Optimizer:
                         )
                         best_runtime_until_now = best_test_runtime
                     else:
-                        tree.add(f"Runtime: {humanize_runtime(best_test_runtime)} (measured over {candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})")
+                        tree.add(
+                            f"Runtime: {humanize_runtime(best_test_runtime)} (measured over {candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                        )
                         tree.add(f"Speedup ratio: {perf_gain:.3f}")
                     console.print(tree)
                     console.rule()

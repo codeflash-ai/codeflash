@@ -11,8 +11,6 @@ from pydantic.json import pydantic_encoder
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.models.models import OptimizedCandidate
-# from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-# from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
 
