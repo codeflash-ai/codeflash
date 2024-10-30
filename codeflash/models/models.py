@@ -7,8 +7,6 @@ from jedi.api.classes import Name
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 
-from codeflash.api.aiservice import OptimizedCandidate
-from codeflash.discovery.functions_to_optimize import FunctionParent
 from codeflash.verification.test_results import TestResults, TestType
 
 
@@ -108,3 +106,37 @@ class OriginalCodeBaseline(BaseModel):
 class OptimizationSet(BaseModel):
     control: list[OptimizedCandidate]
     experiment: Optional[list[OptimizedCandidate]]
+
+
+@dataclass(frozen=True)
+class TestsInFile:
+    test_file: Path
+    test_class: Optional[str]  # This might be unused...
+    test_function: str
+    test_suite: Optional[str]
+    test_type: TestType
+
+
+@dataclass(frozen=True)
+class OptimizedCandidate:
+    source_code: str
+    explanation: str
+    optimization_id: str
+
+
+@dataclass(frozen=True)
+class FunctionCalledInTest:
+    tests_in_file: TestsInFile
+    position: CodePosition
+
+
+@dataclass(frozen=True)
+class CodePosition:
+    line_no: int
+    col_no: int
+
+
+@dataclass(frozen=True)
+class FunctionParent:
+    name: str
+    type: str

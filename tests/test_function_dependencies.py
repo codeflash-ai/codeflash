@@ -5,7 +5,8 @@ from dataclasses import dataclass
 import pytest
 from returns.pipeline import is_successful
 
-from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.models import FunctionParent
 from codeflash.optimization.function_context import get_function_variables_definitions
 from codeflash.optimization.optimizer import Optimizer
 

@@ -39,7 +39,7 @@ from codeflash.code_utils.instrument_existing_tests import inject_profiling_into
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
-from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize, get_functions_to_optimize
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize, get_functions_to_optimize
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
@@ -51,6 +51,9 @@ from codeflash.models.models import (
     OriginalCodeBaseline,
     TestFile,
     TestFiles,
+    OptimizedCandidate,
+    FunctionCalledInTest,
+    FunctionParent,
 )
 from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
@@ -69,8 +72,6 @@ if TYPE_CHECKING:
 
     from returns.result import Result
 
-    from codeflash.api.aiservice import OptimizedCandidate
-    from codeflash.discovery.discover_unit_tests import FunctionCalledInTest
     from codeflash.models.models import FunctionSource
 
 
@@ -205,7 +206,9 @@ class Optimizer:
             function_to_optimize=function_to_optimize, function_to_tests=function_to_tests
         )
 
-        with progress_bar(f"Generating new tests and optimizations for function {function_to_optimize.function_name}", transient=True):
+        with progress_bar(
+            f"Generating new tests and optimizations for function {function_to_optimize.function_name}", transient=True
+        ):
             generated_results = self.generate_tests_and_optimizations(
                 code_context.code_to_optimize_with_helpers,
                 function_to_optimize,
@@ -427,7 +430,9 @@ class Optimizer:
                     ) and quantity_of_tests_critic(candidate_result):
                         tree.add("This candidate is faster than the previous best candidate. 🚀")
                         tree.add(f"Original runtime: {humanize_runtime(original_code_baseline.runtime)}")
-                        tree.add(f"Best test runtime: {humanize_runtime(candidate_result.best_test_runtime)} (measured over {candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})")
+                        tree.add(
+                            f"Best test runtime: {humanize_runtime(candidate_result.best_test_runtime)} (measured over {candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                        )
                         tree.add(f"Speedup ratio: {perf_gain:.3f}")
 
                         best_optimization = BestOptimization(
@@ -438,7 +443,9 @@ class Optimizer:
                         )
                         best_runtime_until_now = best_test_runtime
                     else:
-                        tree.add(f"Runtime: {humanize_runtime(best_test_runtime)} (measured over {candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})")
+                        tree.add(
+                            f"Runtime: {humanize_runtime(best_test_runtime)} (measured over {candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                        )
                         tree.add(f"Speedup ratio: {perf_gain:.3f}")
                     console.print(tree)
                     console.rule()

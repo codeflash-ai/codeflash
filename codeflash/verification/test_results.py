@@ -74,7 +74,6 @@ class FunctionTestInvocation:
     timed_out: Optional[bool]
 
 
-
 class TestResults(BaseModel):
     test_results: list[FunctionTestInvocation] = []
 
@@ -115,7 +114,6 @@ class TestResults(BaseModel):
                 for test_type in TestType
             ]
         )
-
 
     @staticmethod
     def report_to_tree(report: dict[TestType, dict[str, int]], title: str) -> Tree:

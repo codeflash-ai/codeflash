@@ -14,7 +14,7 @@ import libcst as cst
 from pydantic.dataclasses import dataclass
 
 from codeflash.api.cfapi import get_blocklisted_functions
-from codeflash.cli_cmds.console import logger, progress_bar
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
@@ -22,6 +22,7 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.code_utils.git_utils import get_git_diff
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
+from codeflash.models.models import FunctionParent
 from codeflash.telemetry.posthog_cf import ph
 
 if TYPE_CHECKING:
@@ -100,12 +101,6 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
         super().generic_visit(node)
         if isinstance(node, (FunctionDef, AsyncFunctionDef, ClassDef)):
             self.ast_path.pop()
-
-
-@dataclass(frozen=True)
-class FunctionParent:
-    name: str
-    type: str
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})

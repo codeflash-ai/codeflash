@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, TypeVar
 import libcst as cst
 
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module
-from codeflash.discovery.functions_to_optimize import FunctionParent
+from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
     from pathlib import Path

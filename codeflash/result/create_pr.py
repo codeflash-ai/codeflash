@@ -15,8 +15,8 @@ from codeflash.code_utils.git_utils import (
     get_repo_owner_and_name,
     git_root_dir,
 )
-from codeflash.discovery.discover_unit_tests import FunctionCalledInTest
 from codeflash.github.PrComment import FileDiffContent, PrComment
+from codeflash.models.models import FunctionCalledInTest
 from codeflash.result.explanation import Explanation
 
 

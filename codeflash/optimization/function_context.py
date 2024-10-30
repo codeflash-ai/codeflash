@@ -13,8 +13,8 @@ from jedi.api.classes import Name
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import get_code
 from codeflash.code_utils.code_utils import module_name_from_file_path, path_belongs_to_site_packages
-from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
-from codeflash.models.models import FunctionSource
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.models import FunctionSource, FunctionParent
 
 if TYPE_CHECKING:
     from pathlib import Path

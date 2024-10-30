@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 from returns.pipeline import is_successful
 
-from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.models import FunctionParent
 from codeflash.optimization.optimizer import Optimizer
 
 

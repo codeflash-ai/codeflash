@@ -1,7 +1,8 @@
 import tempfile
 
 from codeflash.code_utils.code_extractor import get_code
-from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.models import FunctionParent
 
 
 def test_get_code_function() -> None:
