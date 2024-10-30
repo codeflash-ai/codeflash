@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Optional
 
 import jedi
 from pydantic.dataclasses import dataclass
+from pytest import ExitCode
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
@@ -68,7 +69,10 @@ def discover_tests_pytest(
         logger.exception(f"Failed to discover tests: {e}")
         exitcode = -1
     if exitcode != 0:
-        logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
+        if 0 <= exitcode <= 5:
+            logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}={ExitCode(exitcode).name}")
+        else:
+            logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
     else:
         logger.debug(f"Pytest collection exit code: {exitcode}")
     if pytest_rootdir is not None:

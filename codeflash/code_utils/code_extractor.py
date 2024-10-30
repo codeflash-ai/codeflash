@@ -11,7 +11,7 @@ from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, Rem
 from libcst.helpers import calculate_module_and_package
 
 from codeflash.cli_cmds.console import logger
-from codeflash.models.models import FunctionSource, FunctionParent
+from codeflash.models.models import FunctionParent, FunctionSource
 
 if TYPE_CHECKING:
     from libcst.helpers import ModuleNameAndPackage
