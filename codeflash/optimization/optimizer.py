@@ -23,7 +23,7 @@ from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code, find_preexisting_objects
-from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
+from codeflash.code_utils.code_replacer import replace_function_definitions_in_module, replace_functions_and_add_imports
 from codeflash.code_utils.code_utils import (
     file_name_from_test_module_name,
     get_run_tmp_file,
@@ -38,6 +38,7 @@ from codeflash.code_utils.config_consts import (
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
+from codeflash.code_utils.static_analysis import analyze_imported_modules
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize, get_functions_to_optimize
@@ -45,6 +46,7 @@ from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
     CodeOptimizationContext,
+    FunctionParent,
     GeneratedTests,
     GeneratedTestsList,
     OptimizationSet,
@@ -52,9 +54,6 @@ from codeflash.models.models import (
     OriginalCodeBaseline,
     TestFile,
     TestFiles,
-    OptimizedCandidate,
-    FunctionCalledInTest,
-    FunctionParent,
 )
 from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
@@ -73,7 +72,7 @@ if TYPE_CHECKING:
 
     from returns.result import Result
 
-    from codeflash.models.models import FunctionSource
+    from codeflash.models.models import FunctionCalledInTest, FunctionSource, OptimizedCandidate
 
 
 class Optimizer:
@@ -181,7 +180,7 @@ class Optimizer:
                     self.test_files = TestFiles(test_files=[])
 
                     # TODO CROSSHAIR Check for IO errors, factor out.
-                    for i, worktree in enumerate(worktrees):
+                    for worktree in worktrees:
                         try:
                             subprocess.run(["git", "worktree", "remove", "-f", worktree], check=True)
                         except subprocess.CalledProcessError as e:
@@ -1078,9 +1077,7 @@ class Optimizer:
 
         if not success:
             return Failure("Failed to run the optimized candidate.")
-        logger.debug(
-            f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}",
-        )
+        logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
         return Success(
             OptimizedCandidateResult(
                 max_loop_count=loop_count,
