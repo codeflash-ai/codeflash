@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import multiprocessing as mp
 import os
+import pickle
 import re
+import subprocess
+import sys
 import unittest
 from collections import defaultdict
-from multiprocessing import Process, Queue
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -13,9 +14,8 @@ import jedi
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_utils import module_name_from_file_path
-from codeflash.discovery.new_process import run_pytest_discovery_new_process
-from codeflash.models.models import TestsInFile, FunctionCalledInTest, CodePosition
+from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
+from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile
 from codeflash.verification.test_results import TestType
 
 if TYPE_CHECKING:
@@ -41,22 +41,33 @@ def discover_unit_tests(
     raise ValueError(msg)
 
 
-
-
-
 def discover_tests_pytest(
     cfg: TestConfig, discover_only_these_tests: list[str] | None = None
 ) -> dict[str, list[FunctionCalledInTest]]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
-    mp.set_start_method('spawn')
 
-    q: Queue = Queue()
-    p: Process = Process(target=run_pytest_discovery_new_process, args=(q, project_root, tests_root))
-    p.start()
-    exitcode, tests, pytest_rootdir = q.get()
-    p.join()
-
+    tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
+    process = subprocess.run(
+        [
+            sys.executable,
+            Path(__file__).parent / "pytest_new_process_discovery.py",
+            str(project_root),
+            str(tests_root),
+            str(tmp_pickle_path),
+        ],
+        cwd=project_root,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        with tmp_pickle_path.open(mode="rb") as f:
+            exitcode, tests, pytest_rootdir = pickle.load(f)
+    except Exception as e:
+        logger.exception(f"Failed to discover tests: {e}")
+        exitcode = -1
+    exitcode = process.returncode
     if exitcode != 0:
         logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
     else:
@@ -65,9 +76,16 @@ def discover_tests_pytest(
         cfg.tests_project_rootdir = Path(pytest_rootdir)
     file_to_test_map = defaultdict(list)
     for test in tests:
-        if discover_only_these_tests and test.test_file not in discover_only_these_tests:
+        test_obj = TestsInFile(
+            test_file=test["test_file"],
+            test_class=test["test_class"],
+            test_function=test["test_function"],
+            test_suite=None,
+            test_type=TestType.REPLAY_TEST if "__replay_test" in test["test_file"] else TestType.EXISTING_UNIT_TEST,
+        )
+        if discover_only_these_tests and test_obj.test_file not in discover_only_these_tests:
             continue
-        file_to_test_map[test.test_file].append(test)
+        file_to_test_map[test_obj.test_file].append(test_obj)
     # Within these test files, find the project functions they are referring to and return their names/locations
     return process_test_files(file_to_test_map, cfg)
 
