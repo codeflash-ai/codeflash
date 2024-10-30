@@ -1,15 +1,11 @@
-import os
-import pickle
 import sys
 
 # This script should not have any relation to the codeflash package, be careful with imports
 cwd = sys.argv[1]
 tests_root = sys.argv[2]
 pickle_path = sys.argv[3]
-os.chdir(cwd)
 collected_tests = []
 pytest_rootdir = None
-tests = []
 sys.path.insert(1, str(cwd))
 
 
@@ -41,5 +37,7 @@ if __name__ == "__main__":
         print(f"Failed to collect tests: {e!s}")
         exitcode = -1
     tests = parse_pytest_collection_results(collected_tests)
+    import pickle
+
     with open(pickle_path, "wb") as f:
         pickle.dump((exitcode, tests, pytest_rootdir), f, protocol=pickle.HIGHEST_PROTOCOL)
