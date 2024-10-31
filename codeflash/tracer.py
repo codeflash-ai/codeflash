@@ -27,7 +27,7 @@ from copy import copy
 from io import StringIO
 from pathlib import Path
 from types import FrameType
-from typing import Any, ClassVar, List, Optional
+from typing import Any, ClassVar, List
 
 import dill
 import isort
@@ -42,6 +42,7 @@ from codeflash.tracing.tracing_utils import FunctionModules
 from codeflash.verification.verification_utils import get_test_file_path
 
 
+# Debug this file by simply adding print statements. This file is not meant to be debugged by the debugger.
 class Tracer:
     """Use this class as a 'with' context manager to trace a function call,
     input arguments, and profiling info.
@@ -50,11 +51,11 @@ class Tracer:
     def __init__(
         self,
         output: str = "codeflash.trace",
-        functions: Optional[List[str]] = None,
+        functions: list[str] | None = None,
         disable: bool = False,
         config_file_path: Path | None = None,
         max_function_count: int = 256,
-        timeout: Optional[int] = None,  # seconds
+        timeout: int | None = None,  # seconds
     ) -> None:
         """:param output: The path to the output trace file
         :param functions: List of functions to trace. If None, trace all functions
@@ -92,6 +93,7 @@ class Tracer:
         self.max_function_count = max_function_count
         self.config, found_config_path = parse_config_file(config_file_path)
         self.project_root = project_root_from_module_root(Path(self.config["module_root"]), found_config_path)
+        print("project_root", self.project_root)
         self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>", "<module>"}
 
         self.file_being_called_from: str = str(Path(sys._getframe().f_back.f_code.co_filename).name).replace(".", "_")
@@ -212,7 +214,7 @@ class Tracer:
                 console.print(f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds.")
                 return
         code = frame.f_code
-        file_name = Path(code.co_filename)
+        file_name = Path(code.co_filename).resolve()
         # TODO : It currently doesn't log the last return call from the first function
 
         if code.co_name in self.ignored_functions:
@@ -604,7 +606,7 @@ def main():
             globs = {"run_module": runpy.run_module, "modname": unknown_args[0]}
         else:
             progname = unknown_args[0]
-            sys.path.insert(0, str(Path(progname).parent))
+            sys.path.insert(0, str(Path(progname).resolve().parent))
             with io.open_code(progname) as fp:
                 code = compile(fp.read(), progname, "exec")
             spec = importlib.machinery.ModuleSpec(name="__main__", loader=None, origin=progname)
