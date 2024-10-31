@@ -20,7 +20,7 @@ def test_function_eligible_for_optimization() -> None:
         f.write(function)
         f.flush()
         functions_found = find_all_functions_in_file(Path(f.name))
-    assert functions_found[f.name][0].function_name == "test_function_eligible_for_optimization"
+    assert functions_found[Path(f.name)][0].function_name == "test_function_eligible_for_optimization"
 
     # Has no return statement
     function = """def test_function_not_eligible_for_optimization():
@@ -32,7 +32,7 @@ def test_function_eligible_for_optimization() -> None:
         f.write(function)
         f.flush()
         functions_found = find_all_functions_in_file(Path(f.name))
-    assert len(functions_found[f.name]) == 0
+    assert len(functions_found[Path(f.name)]) == 0
 
 
 def test_find_top_level_function_or_method():

@@ -202,7 +202,10 @@ class Tracer:
             file.write(replay_test)
 
         console.print(
-            f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}"
+            f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}",
+            crop=False,
+            soft_wrap=False,
+            overflow="ignore",
         )
 
     def tracer_logic(self, frame: FrameType, event: str):
