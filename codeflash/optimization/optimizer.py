@@ -44,16 +44,16 @@ from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
     CodeOptimizationContext,
+    FunctionCalledInTest,
+    FunctionParent,
     GeneratedTests,
     GeneratedTestsList,
     OptimizationSet,
+    OptimizedCandidate,
     OptimizedCandidateResult,
     OriginalCodeBaseline,
     TestFile,
     TestFiles,
-    OptimizedCandidate,
-    FunctionCalledInTest,
-    FunctionParent,
 )
 from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
@@ -410,6 +410,7 @@ class Optimizer:
                     original_test_results=original_code_baseline.overall_test_results,
                     tests_in_file=only_run_this_test_function,
                 )
+                console.rule()
                 if not is_successful(run_results):
                     optimized_runtimes[candidate.optimization_id] = None
                     is_correct[candidate.optimization_id] = False
@@ -887,120 +888,121 @@ class Optimizer:
     ) -> Result[OptimizedCandidateResult, str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
-        instrumented_unittests_created_for_function = self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST)
-        generated_tests_paths = self.test_files.get_by_type(TestType.GENERATED_REGRESSION)
+        with progress_bar("Testing optimization candidate"):
+            instrumented_unittests_created_for_function = self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST)
+            generated_tests_paths = self.test_files.get_by_type(TestType.GENERATED_REGRESSION)
 
-        success = True
+            success = True
 
-        test_env = os.environ.copy()
-        test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_candidate_index)
-        test_env["CODEFLASH_TRACER_DISABLE"] = "1"
-        if "PYTHONPATH" not in test_env:
-            test_env["PYTHONPATH"] = str(self.args.project_root)
-        else:
-            test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
+            test_env = os.environ.copy()
+            test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_candidate_index)
+            test_env["CODEFLASH_TRACER_DISABLE"] = "1"
+            if "PYTHONPATH" not in test_env:
+                test_env["PYTHONPATH"] = str(self.args.project_root)
+            else:
+                test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
 
-        first_test_types = []
-        first_test_functions = []
-        get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
-        get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
+            first_test_types = []
+            first_test_functions = []
+            get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
+            get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
 
-        for test_file in instrumented_unittests_created_for_function:
-            relevant_tests_in_file = [
-                test_in_file
-                for test_in_file in tests_in_file
-                if test_in_file.tests_in_file.test_file == test_file.original_file_path
-            ]
-            is_replay_test = (
-                first_test_type := relevant_tests_in_file[0].tests_in_file.test_type
-            ) == TestType.REPLAY_TEST
-            first_test_types.append(first_test_type)
-            first_test_functions.append(
-                relevant_tests_in_file[0].tests_in_file.test_function if is_replay_test else None
-            )
-            if is_replay_test and len(relevant_tests_in_file) > 1:
-                logger.warning(
-                    f"Multiple tests found for the replay test {test_file.original_file_path}. Should not happen"
+            for test_file in instrumented_unittests_created_for_function:
+                relevant_tests_in_file = [
+                    test_in_file
+                    for test_in_file in tests_in_file
+                    if test_in_file.tests_in_file.test_file == test_file.original_file_path
+                ]
+                is_replay_test = (
+                    first_test_type := relevant_tests_in_file[0].tests_in_file.test_type
+                ) == TestType.REPLAY_TEST
+                first_test_types.append(first_test_type)
+                first_test_functions.append(
+                    relevant_tests_in_file[0].tests_in_file.test_function if is_replay_test else None
                 )
-        first_test_functions.extend([None] * len(generated_tests_paths))
-        if test_framework == "pytest":
-            candidate_results = self.run_and_parse_tests(
-                test_env=test_env,
-                test_files=self.test_files,
-                optimization_iteration=optimization_candidate_index,
-                test_functions=first_test_functions,
-                testing_time=TOTAL_LOOPING_TIME,
-            )
-            loop_count = (
-                max(all_loop_indices)
-                if (all_loop_indices := {result.loop_index for result in candidate_results.test_results})
-                else 0
-            )
-        else:
-            candidate_results = TestResults()
-            start_time: float = time.time()
-            loop_count = 0
-            for i in range(100):
-                if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME:
-                    break
-                test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
-                candidate_loop_results = self.run_and_parse_tests(
+                if is_replay_test and len(relevant_tests_in_file) > 1:
+                    logger.warning(
+                        f"Multiple tests found for the replay test {test_file.original_file_path}. Should not happen"
+                    )
+            first_test_functions.extend([None] * len(generated_tests_paths))
+            if test_framework == "pytest":
+                candidate_results = self.run_and_parse_tests(
                     test_env=test_env,
                     test_files=self.test_files,
                     optimization_iteration=optimization_candidate_index,
                     test_functions=first_test_functions,
                     testing_time=TOTAL_LOOPING_TIME,
                 )
-                loop_count = i + 1
-                candidate_results.merge(candidate_loop_results)
+                loop_count = (
+                    max(all_loop_indices)
+                    if (all_loop_indices := {result.loop_index for result in candidate_results.test_results})
+                    else 0
+                )
+            else:
+                candidate_results = TestResults()
+                start_time: float = time.time()
+                loop_count = 0
+                for i in range(100):
+                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME:
+                        break
+                    test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
+                    candidate_loop_results = self.run_and_parse_tests(
+                        test_env=test_env,
+                        test_files=self.test_files,
+                        optimization_iteration=optimization_candidate_index,
+                        test_functions=first_test_functions,
+                        testing_time=TOTAL_LOOPING_TIME,
+                    )
+                    loop_count = i + 1
+                    candidate_results.merge(candidate_loop_results)
 
-        initial_loop_candidate_results = TestResults(
-            test_results=[result for result in candidate_results.test_results if result.loop_index == 1]
-        )
-
-        console.print(
-            TestResults.report_to_tree(
-                initial_loop_candidate_results.get_test_pass_fail_report_by_type(),
-                title="Overall initial loop test results for candidate",
+            initial_loop_candidate_results = TestResults(
+                test_results=[result for result in candidate_results.test_results if result.loop_index == 1]
             )
-        )
-        console.rule()
 
-        initial_loop_original_test_results = TestResults(
-            test_results=[result for result in original_test_results.test_results if result.loop_index == 1]
-        )
-
-        if compare_test_results(initial_loop_original_test_results, initial_loop_candidate_results):
-            logger.info("Test results matched!")
-            console.rule()
-            equal_results = True
-        else:
-            logger.info("Test results did not match the test results of the original code.")
-            console.rule()
-            success = False
-            equal_results = False
-
-        if (total_candidate_timing := candidate_results.total_passed_runtime()) == 0:
-            logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
-            console.rule()
-        get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.bin")).unlink(missing_ok=True)
-
-        get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
-        if not equal_results:
-            success = False
-
-        if not success:
-            return Failure("Failed to run the optimized candidate.")
-
-        return Success(
-            OptimizedCandidateResult(
-                max_loop_count=loop_count,
-                best_test_runtime=total_candidate_timing,
-                test_results=candidate_results,
-                optimization_candidate_index=optimization_candidate_index,
-                total_candidate_timing=total_candidate_timing,
+            console.print(
+                TestResults.report_to_tree(
+                    initial_loop_candidate_results.get_test_pass_fail_report_by_type(),
+                    title="Overall initial loop test results for candidate",
+                )
             )
-        )
+            console.rule()
+
+            initial_loop_original_test_results = TestResults(
+                test_results=[result for result in original_test_results.test_results if result.loop_index == 1]
+            )
+
+            if compare_test_results(initial_loop_original_test_results, initial_loop_candidate_results):
+                logger.info("Test results matched!")
+                console.rule()
+                equal_results = True
+            else:
+                logger.info("Test results did not match the test results of the original code.")
+                console.rule()
+                success = False
+                equal_results = False
+
+            if (total_candidate_timing := candidate_results.total_passed_runtime()) == 0:
+                logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
+                console.rule()
+            get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.bin")).unlink(missing_ok=True)
+
+            get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
+            if not equal_results:
+                success = False
+
+            if not success:
+                return Failure("Failed to run the optimized candidate.")
+
+            return Success(
+                OptimizedCandidateResult(
+                    max_loop_count=loop_count,
+                    best_test_runtime=total_candidate_timing,
+                    test_results=candidate_results,
+                    optimization_candidate_index=optimization_candidate_index,
+                    total_candidate_timing=total_candidate_timing,
+                )
+            )
 
     def run_and_parse_tests(
         self,
