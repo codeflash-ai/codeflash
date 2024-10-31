@@ -91,7 +91,7 @@ class Tracer:
         }
         self.max_function_count = max_function_count
         self.config, found_config_path = parse_config_file(config_file_path)
-        self.project_root = project_root_from_module_root(self.config["module_root"], found_config_path)
+        self.project_root = project_root_from_module_root(Path(self.config["module_root"]), found_config_path)
         self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>", "<module>"}
 
         self.file_being_called_from: str = str(Path(sys._getframe().f_back.f_code.co_filename).name).replace(".", "_")
@@ -160,7 +160,7 @@ class Tracer:
             remapped_callers = [{"key": k, "value": v} for k, v in callers.items()]
             cur.execute(
                 "INSERT INTO pstats VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (Path(func[0]).resolve(), func[1], func[2], func[3], cc, nc, tt, ct, json.dumps(remapped_callers)),
+                (str(Path(func[0]).resolve()), func[1], func[2], func[3], cc, nc, tt, ct, json.dumps(remapped_callers)),
             )
         self.con.commit()
 
@@ -177,7 +177,7 @@ class Tracer:
             function
             for function in self.function_modules
             if self.function_count[
-                function.file_name
+                str(function.file_name)
                 + ":"
                 + (function.class_name + ":" if function.class_name else "")
                 + function.function_name
@@ -193,7 +193,7 @@ class Tracer:
         )
         function_path = "_".join(self.functions) if self.functions else self.file_being_called_from
         test_file_path = get_test_file_path(
-            test_dir=self.config["tests_root"], function_name=function_path, test_type="replay"
+            test_dir=Path(self.config["tests_root"]), function_name=function_path, test_type="replay"
         )
         replay_test = isort.code(replay_test)
         with open(test_file_path, "w", encoding="utf8") as file:
@@ -212,12 +212,12 @@ class Tracer:
                 console.print(f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds.")
                 return
         code = frame.f_code
-        file_name = code.co_filename
+        file_name = Path(code.co_filename)
         # TODO : It currently doesn't log the last return call from the first function
 
         if code.co_name in self.ignored_functions:
             return
-        if not Path(file_name).exists():
+        if not file_name.exists():
             return
         if self.functions:
             if code.co_name not in self.functions:
@@ -236,7 +236,6 @@ class Tracer:
         except:
             # someone can override the getattr method and raise an exception. I'm looking at you wrapt
             return
-        file_name = Path(file_name).resolve()
         function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
         if function_qualified_name in self.ignored_qualified_functions:
             return
@@ -250,9 +249,9 @@ class Tracer:
             self.function_count[function_qualified_name] = 0
             file_valid = filter_files_optimized(
                 file_path=file_name,
-                tests_root=self.config["tests_root"],
-                ignore_paths=self.config["ignore_paths"],
-                module_root=self.config["module_root"],
+                tests_root=Path(self.config["tests_root"]),
+                ignore_paths=[Path(p) for p in self.config["ignore_paths"]],
+                module_root=Path(self.config["module_root"]),
             )
             if not file_valid:
                 # we don't want to trace this function because it cannot be optimized
@@ -279,7 +278,7 @@ class Tracer:
             sys.setrecursionlimit(10000)
             # We do not pickle self for __init__ to avoid recursion errors, and instead instantiate its class
             # directly with the rest of the arguments in the replay tests. We copy the arguments to avoid memory
-            # leaks, bad references or side-effects when unpickling.
+            # leaks, bad references or side effects when unpickling.
             arguments = dict(arguments.items())
             if class_name and code.co_name == "__init__":
                 del arguments["self"]
@@ -297,7 +296,16 @@ class Tracer:
                 return
         cur.execute(
             "INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-            (event, code.co_name, class_name, file_name, frame.f_lineno, frame.f_back.__hash__(), t_ns, local_vars),
+            (
+                event,
+                code.co_name,
+                class_name,
+                str(file_name),
+                frame.f_lineno,
+                frame.f_back.__hash__(),
+                t_ns,
+                local_vars,
+            ),
         )
         self.trace_count += 1
         self.next_insert -= 1
