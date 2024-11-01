@@ -40,6 +40,7 @@ from codeflash.code_utils.config_consts import (
     TOTAL_LOOPING_TIME,
 )
 from codeflash.code_utils.formatter import format_code, sort_imports
+from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
 from codeflash.code_utils.static_analysis import analyze_imported_internal_modules
@@ -136,6 +137,8 @@ class Optimizer:
             logger.info(f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}")
             console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
+            # TODO CROSSHAIR: Handle no git case.
+            git_root = git_root_dir()
 
             for path in file_to_funcs_to_optimize:
                 original_module_path = Path(path)
@@ -160,15 +163,9 @@ class Optimizer:
                 for function_to_optimize in file_to_funcs_to_optimize[path]:
                     # TODO CROSSHAIR Factor out in git tools. Handle no git case.
                     # TODO CROSSHAIR Pydantic model for worktree info: work_tree_root, work_trees. work_tree_branches
-                    worktree_root: Path = Path(
-                        tempfile.mkdtemp()
-                    )  # TODO CROSSHAIR Check for randomness side effect issues
-                    # TODO CROSSHAIR Make more race condition collision proof. Handle 11 magic number.
+                    worktree_root: Path = Path(tempfile.mkdtemp())
                     worktrees: list[Path] = [Path(tempfile.mkdtemp(dir=worktree_root)) for _ in range(N_CANDIDATES + 1)]
                     for worktree in worktrees:
-                        # TODO CROSSHAIR Check for IO errors, collisions (race conditions).
-                        worktree.mkdir()
-                        # TODO CROSSHAIR Check for IO errors, collisions, add more chaos.
                         subprocess.run(
                             ["git", "worktree", "add", "-d", worktree], cwd=self.args.module_root, check=True
                         )
@@ -186,6 +183,7 @@ class Optimizer:
                         imported_internal_module_information,
                         worktree_root,
                         worktrees,
+                        git_root,
                     )
                     self.test_files = TestFiles(test_files=[])
 
@@ -195,8 +193,11 @@ class Optimizer:
                             subprocess.run(["git", "worktree", "remove", "-f", worktree], check=True)
                         except subprocess.CalledProcessError as e:
                             logger.warning(f"Error deleting worktree: {e}")
-                        worktree.unlink(missing_ok=True)
-                    worktree_root.unlink(missing_ok=True)
+                    for root, dirs, files in worktree_root.walk(top_down=False):
+                        for name in files:
+                            (root / name).unlink()
+                        for name in dirs:
+                            (root / name).rmdir()
 
                     if is_successful(best_optimization):
                         optimizations_found += 1
@@ -225,6 +226,7 @@ class Optimizer:
         imported_internal_module_information: dict[Path, dict[str, str]],
         worktree_root: Path,
         worktrees: list[Path],
+        git_root: Path,
     ) -> Result[BestOptimization, str]:
         should_run_experiment = self.experiment_id is not None
         function_trace_id: str = str(uuid.uuid4())
@@ -358,7 +360,7 @@ class Optimizer:
             normalized_original_code = normalize_code(original_code)
             are_optimized_module_code_strings_zero_diff = {
                 candidate.optimization_id: normalize_code(optimized_module_code_strings[candidate.optimization_id])
-                != normalized_original_code
+                == normalized_original_code
                 for candidate in candidates
             }
             normalized_callee_module_code_strings = {
@@ -370,7 +372,7 @@ class Optimizer:
                     callee_module_path: normalize_code(
                         optimized_callee_modules_code_strings[candidate.optimization_id][callee_module_path]
                     )
-                    != normalized_callee_module_code_strings[callee_module_path]
+                    == normalized_callee_module_code_strings[callee_module_path]
                     for callee_module_path in callee_module_paths
                 }
                 for candidate in candidates
@@ -390,22 +392,26 @@ class Optimizer:
             #  self.args.module_root)
             for candidate, worktree in zip(candidates_with_diffs, worktrees[1:]):
                 if are_optimized_module_code_strings_zero_diff[candidate.optimization_id]:
-                    (worktree / function_to_optimize.file_path.relative_to(self.args.module_root)).write_text(
+                    (worktree / function_to_optimize.file_path.relative_to(git_root)).write_text(
                         optimized_module_code_strings[candidate.optimization_id], encoding="utf8"
                     )
                 for callee_module_path in optimized_callee_modules_code_strings[candidate.optimization_id]:
                     if are_optimized_callee_module_code_strings_zero_diff[candidate.optimization_id][
                         callee_module_path
                     ]:
-                        (worktree / callee_module_path.relative_to(self.args.module_root)).write_text(
+                        (worktree / callee_module_path.relative_to(git_root)).write_text(
                             optimized_callee_modules_code_strings[candidate.optimization_id][callee_module_path],
                             encoding="utf8",
                         )
 
             # TODO Crosshair: Factor out relative path munging code, repeated.
-            function_to_optimize_original_worktree_fqn = str(
-                worktrees[0].name / function_to_optimize.file_path.relative_to(self.args.module_root).with_suffix("")
-            ).replace("/", ".")
+            function_to_optimize_original_worktree_fqn = (
+                str(worktrees[0].name / function_to_optimize.file_path.relative_to(git_root).with_suffix("")).replace(
+                    "/", "."
+                )
+                + "."
+                + function_to_optimize_qualified_name
+            )
 
             diffbehavior_results: dict[str, DiffbehaviorReturnCode] = {}
             for candidate_index, candidate in enumerate(candidates_with_diffs, start=1):
@@ -419,8 +425,10 @@ class Optimizer:
                         "64",
                         str(
                             worktrees[candidate_index].name
-                            / function_to_optimize.file_path.relative_to(self.args.module_root).with_suffix("")
-                        ).replace("/", "."),
+                            / function_to_optimize.file_path.relative_to(git_root).with_suffix("")
+                        ).replace("/", ".")
+                        + "."
+                        + function_to_optimize_qualified_name,
                         function_to_optimize_original_worktree_fqn,
                     ],
                     capture_output=True,
