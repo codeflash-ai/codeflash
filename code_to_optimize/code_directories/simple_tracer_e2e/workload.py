@@ -10,4 +10,5 @@ def funcA(number):
 
 
 if __name__ == "__main__":
-    funcA(10)
+    for i in range(10, 31, 10):
+        funcA(10)

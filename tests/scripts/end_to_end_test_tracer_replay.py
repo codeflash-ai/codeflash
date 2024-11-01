@@ -23,7 +23,7 @@ def main():
     assert return_code == 0, f"The codeflash command returned exit code {return_code} instead of 0"
     functions_traced = re.search(r"Traced (\d+) function calls successfully and replay test created at - (.*)$", stdout)
     assert functions_traced, "Failed to find any traced functions or replay test"
-    assert int(functions_traced.group(1)) == 1, "Failed to find the correct number of traced functions"
+    assert int(functions_traced.group(1)) == 3, "Failed to find the correct number of traced functions"
     replay_test_path = pathlib.Path(functions_traced.group(2))
     assert replay_test_path, "Failed to find the replay test file path"
     assert replay_test_path.exists(), f"Replay test file does not exist at - {replay_test_path}"
