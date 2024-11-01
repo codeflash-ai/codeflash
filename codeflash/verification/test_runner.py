@@ -25,13 +25,6 @@ def run_tests(
     pytest_max_loops: int = 100_000,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     assert test_framework in ["pytest", "unittest"]
-    # TODO: Make this work for replay tests
-    for i, test_file in enumerate(test_paths):
-        if (
-            only_run_these_test_functions and test_file.test_type == TestType.REPLAY_TEST
-        ):  # "__replay_test" in test_path:
-            # TODO: This might not work for replay tests
-            test_paths[i] = str(test_file.instrumented_file_path) + "::" + only_run_these_test_functions
 
     if test_framework == "pytest":
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
@@ -51,7 +44,14 @@ def run_tests(
             "--codeflash_loops_scope=session",
         ]
 
-        test_files = [str(file.instrumented_file_path) for file in test_paths.test_files]
+        test_files = []
+        for file in test_paths.test_files:
+            if file.test_type == TestType.REPLAY_TEST:
+                test_files.append(
+                    str(file.instrumented_file_path) + "::" + only_run_these_test_functions[file.instrumented_file_path]
+                )
+            else:
+                test_files.append(str(file.instrumented_file_path))
 
         results = subprocess.run(
             pytest_cmd_list + test_files + pytest_args,
