@@ -194,7 +194,7 @@ class Optimizer:
                             subprocess.run(["git", "worktree", "remove", "-f", worktree], check=True)
                         except subprocess.CalledProcessError as e:
                             logger.warning(f"Error deleting worktree: {e}")
-                        shutil.rmtree(worktree)
+                            shutil.rmtree(worktree, ignore_errors=True)
                     shutil.rmtree(worktree_root)
 
                     if is_successful(best_optimization):
