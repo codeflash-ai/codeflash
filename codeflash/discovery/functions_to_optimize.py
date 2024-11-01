@@ -236,7 +236,6 @@ def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
 
 def get_all_files_and_functions(module_root_path: Path) -> dict[str, list[FunctionToOptimize]]:
     functions: dict[str, list[FunctionToOptimize]] = {}
-    module_root_path = Path(module_root_path)
     for file_path in module_root_path.rglob("*.py"):
         # Find all the functions in the file
         functions.update(find_all_functions_in_file(file_path).items())
