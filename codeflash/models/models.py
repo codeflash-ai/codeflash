@@ -2,15 +2,13 @@ from __future__ import annotations
 
 from enum import IntEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterator, Optional
+from typing import Iterator, Optional
 
+from jedi.api.classes import Name
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 
 from codeflash.verification.test_results import TestResults, TestType
-
-if TYPE_CHECKING:
-    from jedi.api.classes import Name
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
 # qualified name of the method is foo.eggs.Ham.spam, its qualified name is Ham.spam, and its name is spam. The full name
