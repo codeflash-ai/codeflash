@@ -84,10 +84,7 @@ class TestResults(BaseModel):
         self.test_results.extend(other.test_results)
 
     def get_by_id(self, invocation_id: InvocationId) -> FunctionTestInvocation | None:
-        for result in self.test_results:
-            if result.id == invocation_id:
-                return result
-        return None
+        return next((r for r in self.test_results if r.id == invocation_id), None)
 
     def get_all_ids(self) -> set[InvocationId]:
         return {test_result.id for test_result in self.test_results}
