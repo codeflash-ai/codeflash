@@ -450,7 +450,7 @@ class Optimizer:
                     diffbehavior_results[candidate.optimization_id] = DiffbehaviorReturnCode.NO_DIFFERENCES
                     logger.info(
                         f"Optimization candidate passed concolic behavior correctness check"
-                        f"{': \n' + result.stdout.split('\n', 1)[0] if '\n' in result.stdout else '.'}"
+                        f"{': ' + chr(10) + result.stdout.split(chr(10), 1)[0] if chr(10) in result.stdout else '.'}"
                     )
                     if result.stdout.endswith("All paths exhausted, functions are likely the same!\n"):
                         logger.info("All paths exhausted, functions are likely the same!")
