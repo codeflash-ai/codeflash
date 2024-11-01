@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import os
+import shutil
 import subprocess
 import tempfile
 import time
@@ -193,11 +194,8 @@ class Optimizer:
                             subprocess.run(["git", "worktree", "remove", "-f", worktree], check=True)
                         except subprocess.CalledProcessError as e:
                             logger.warning(f"Error deleting worktree: {e}")
-                    for root, dirs, files in worktree_root.walk(top_down=False):
-                        for name in files:
-                            (root / name).unlink()
-                        for name in dirs:
-                            (root / name).rmdir()
+                        shutil.rmtree(worktree)
+                    shutil.rmtree(worktree_root)
 
                     if is_successful(best_optimization):
                         optimizations_found += 1
