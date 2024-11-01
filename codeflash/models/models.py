@@ -1,18 +1,26 @@
 from __future__ import annotations
 
+from enum import IntEnum
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import TYPE_CHECKING, Iterator, Optional
 
-from jedi.api.classes import Name
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 
 from codeflash.verification.test_results import TestResults, TestType
 
+if TYPE_CHECKING:
+    from jedi.api.classes import Name
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
 # qualified name of the method is foo.eggs.Ham.spam, its qualified name is Ham.spam, and its name is spam. The full name
 # of the module is foo.eggs.
+
+
+class DiffbehaviorReturnCode(IntEnum):
+    NO_DIFFERENCES = 0
+    COUNTER_EXAMPLES = 1
+    ERROR = 2
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
@@ -92,7 +100,7 @@ class TestFiles(BaseModel):
     def __iter__(self) -> Iterator[TestFile]:
         return iter(self.test_files)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.test_files)
 
 

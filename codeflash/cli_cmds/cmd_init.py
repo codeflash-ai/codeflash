@@ -134,7 +134,7 @@ def collect_setup_info() -> SetupInfo:
     test_subdir_options = valid_subdirs
     if "tests" not in valid_subdirs:
         test_subdir_options.append(create_for_me_option)
-    custom_dir_option = "enter a custom directory..."
+    custom_dir_option = "enter a custom directory…"
     test_subdir_options.append(custom_dir_option)
     tests_root_answer = inquirer_wrapper(
         inquirer.list_input,
@@ -242,7 +242,7 @@ def detect_test_framework(curdir: Path, tests_root: Path) -> str | None:
 
 def check_for_toml_or_setup_file() -> str | None:
     click.echo()
-    click.echo("Checking for pyproject.toml or setup.py ...\r", nl=False)
+    click.echo("Checking for pyproject.toml or setup.py…\r", nl=False)
     curdir = Path.cwd()
     pyproject_toml_path = curdir / "pyproject.toml"
     setup_py_path = curdir / "setup.py"
@@ -325,7 +325,7 @@ def install_github_actions() -> None:
 
         confirm_creation_yes = inquirer_wrapper(
             inquirer.confirm,
-            message=f"I'm going to create a new GitHub actions workflow file at {optimize_yaml_path} ... is this OK?",
+            message=f"I'm going to create a new GitHub actions workflow file at {optimize_yaml_path}… is this OK?",
             default=True,
         )
         ph("cli-github-optimization-confirm-workflow-creation", {"confirm_creation": confirm_creation_yes})
@@ -347,7 +347,7 @@ def install_github_actions() -> None:
         click.echo(f"✅ Created {optimize_yaml_path}{LF}")
         click.prompt(
             f"Next, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.{LF}"
-            f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} ...{LF}"
+            f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)}…{LF}"
             f"Then, click 'New repository secret' to add your api key with the variable name CODEFLASH_API_KEY.{LF}",
             default="",
             type=click.STRING,
@@ -425,7 +425,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     tool_section["codeflash"] = codeflash_section
     pyproject_data["tool"] = tool_section
 
-    click.echo("Writing Codeflash configuration ...\r", nl=False)
+    click.echo("Writing Codeflash configuration…\r", nl=False)
     with toml_path.open("w", encoding="utf8") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
     click.echo(f"✅ Added Codeflash configuration to {toml_path}")
@@ -447,7 +447,7 @@ def install_github_app() -> None:
         click.prompt(
             f"Finally, you'll need install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
             f"I will attempt to open the github app page - https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-            f"Press Enter to open the page to let you install the app ...{LF}",
+            f"Press Enter to open the page to let you install the app…{LF}",
             default="",
             type=click.STRING,
             prompt_suffix="",
@@ -455,7 +455,7 @@ def install_github_app() -> None:
         )
         click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
         click.prompt(
-            f"Press Enter once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target …{LF}",
+            f"Press Enter once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target…{LF}",
             default="",
             type=click.STRING,
             prompt_suffix="",
@@ -474,7 +474,7 @@ def install_github_app() -> None:
             click.prompt(
                 f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
                 f"Please install it from https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-                f"Press Enter to continue once you've finished installing the github app...{LF}",
+                f"Press Enter to continue once you've finished installing the github app…{LF}",
                 default="",
                 type=click.STRING,
                 prompt_suffix="",
@@ -616,7 +616,7 @@ def test_sort():
 
 def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test_path: str) -> None:
     command = ["codeflash", "--file", "bubble_sort.py", "--function", "sorter"]
-    sys.stdout.write("Running sample optimization... ")
+    sys.stdout.write("Running sample optimization…")
     sys.stdout.flush()
     try:
         process = subprocess.run(command, text=True, cwd=args.module_root, check=False)

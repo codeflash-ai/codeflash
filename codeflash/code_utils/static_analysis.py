@@ -2,7 +2,6 @@
 
 import ast
 from pathlib import Path
-from typing import Iterator
 
 from pydantic import BaseModel, field_validator
 
@@ -37,8 +36,8 @@ class ImportedInternalModuleAnalysis(BaseModel, frozen=True):
         return v
 
 
-def parse_imports(code: str) -> Iterator[ast.AST]:
-    return (node for node in ast.walk(ast.parse(code)) if isinstance(node, (ast.Import, ast.ImportFrom)))
+def parse_imports(code: str) -> list[ast.Import | ast.ImportFrom]:
+    return [node for node in ast.walk(ast.parse(code)) if isinstance(node, (ast.Import, ast.ImportFrom))]
 
 
 def resolve_relative_name(module: str | None, level: int, current_module: str) -> str | None:
@@ -53,19 +52,17 @@ def resolve_relative_name(module: str | None, level: int, current_module: str) -
     return ".".join(base_parts)
 
 
-def get_module_full_name(node: ast.Import | ast.ImportFrom, current_module: str) -> Iterator[str]:
+def get_module_full_name(node: ast.Import | ast.ImportFrom, current_module: str) -> list[str]:
     if isinstance(node, ast.Import):
-        return (alias.name for alias in node.names)
-    if isinstance(node, ast.ImportFrom):
-        base_module = resolve_relative_name(node.module, node.level, current_module)
-        if base_module is None:
-            return iter(())
-        if node.module is None and node.level > 0:
-            # Relative import with no module specified, e.g., from . import mymodule
-            return (f"{base_module}.{alias.name}" for alias in node.names)
-        # For absolute imports or relative imports with module specified
-        return iter([base_module])
-    return iter(())
+        return [alias.name for alias in node.names]
+    base_module = resolve_relative_name(node.module, node.level, current_module)
+    if base_module is None:
+        return []
+    if node.module is None and node.level > 0:
+        # Relative import with no module specified
+        return [f"{base_module}.{alias.name}" for alias in node.names]
+    # Import with module specified
+    return [base_module]
 
 
 def is_internal_module(module_name: str, project_root: Path) -> bool:
@@ -86,19 +83,19 @@ def get_module_file_path(module_name: str, project_root: Path) -> Path | None:
 def analyze_imported_internal_modules(
     code_str: str, module_file_path: Path, project_root: Path
 ) -> list[ImportedInternalModuleAnalysis]:
-    """Analyzes a Python module's code to find all imported internal modules."""
+    """Statically finds and analyzes all imported internal modules."""
     module_rel_path = module_file_path.relative_to(project_root).with_suffix("")
     current_module = ".".join(module_rel_path.parts)
 
     imports = parse_imports(code_str)
-    module_names = set()
+    module_names: set[str] = set()
     for node in imports:
         module_names.update(get_module_full_name(node, current_module))
 
-    internal_modules = filter(is_internal_module, (module_names, project_root))
+    internal_modules = {module_name for module_name in module_names if is_internal_module(module_name, project_root)}
 
     return [
-        ImportedInternalModuleAnalysis(name=mod_name.split(".")[-1], full_name=mod_name, file_path=file_path)
+        ImportedInternalModuleAnalysis(name=str(mod_name).split(".")[-1], full_name=mod_name, file_path=file_path)
         for mod_name in internal_modules
         if (file_path := get_module_file_path(mod_name, project_root)) is not None
     ]

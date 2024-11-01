@@ -18,7 +18,6 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.tree import Tree
-from sqlalchemy import false
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
@@ -43,7 +42,7 @@ from codeflash.code_utils.config_consts import (
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
-from codeflash.code_utils.static_analysis import analyze_imported_modules
+from codeflash.code_utils.static_analysis import analyze_imported_internal_modules
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize, get_functions_to_optimize
@@ -51,6 +50,7 @@ from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
     CodeOptimizationContext,
+    DiffbehaviorReturnCode,
     FunctionParent,
     GeneratedTests,
     GeneratedTestsList,
@@ -126,11 +126,11 @@ class Optimizer:
         try:
             ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
             if num_optimizable_functions == 0:
-                logger.info("No functions found to optimize. Exiting...")
+                logger.info("No functions found to optimize. Exiting…")
                 return
 
             console.rule()
-            logger.info(f"Discovering existing unit tests in {self.test_cfg.tests_root} ...")
+            logger.info(f"Discovering existing unit tests in {self.test_cfg.tests_root}…")
             function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
             num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
             logger.info(f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}")
@@ -139,17 +139,15 @@ class Optimizer:
 
             for path in file_to_funcs_to_optimize:
                 original_module_path = Path(path)
-                logger.info(f"Examining file {original_module_path!s} ...")
+                logger.info(f"Examining file {original_module_path!s}…")
                 # TODO CROSSHAIR Check for IO errors with try block, factor out code extraction and validation.
                 original_code: str = original_module_path.read_text(encoding="utf8")  # TODO CROSSHAIR Parse, Validate
 
-                original_code_imported_module_analysis = analyze_imported_modules(
+                original_code_imported_module_analysis = analyze_imported_internal_modules(
                     original_code, original_module_path, self.args.project_root
                 )
                 imported_internal_module_information: dict[Path, dict[str, str]] = {}
                 for analysis in original_code_imported_module_analysis:
-                    if analysis.origin != "internal":
-                        continue
                     # TODO CROSSHAIR Check for IO errors, factor out.
                     imported_internal_module_information[analysis.file_path] = {
                         "name": analysis.name,
@@ -387,19 +385,21 @@ class Optimizer:
                 )
             ]
 
-            # TODO CROSSHAIR: refactor filtering + write as single function. Put under try/except block.
-            # TODO Crosshair: Precalculate or factor out repeated function_to_optimize.file_path.relative_to(self.args.module_root)
+            # TODO CROSSHAIR: refactor filtering + write as single function. Put under try/except block. TODO
+            #  Crosshair: Precalculate or factor out repeated function_to_optimize.file_path.relative_to(
+            #  self.args.module_root)
             for candidate, worktree in zip(candidates_with_diffs, worktrees[1:]):
                 if are_optimized_module_code_strings_zero_diff[candidate.optimization_id]:
                     (worktree / function_to_optimize.file_path.relative_to(self.args.module_root)).write_text(
-                        optimized_module_code_strings[i], encoding="utf8"
+                        optimized_module_code_strings[candidate.optimization_id], encoding="utf8"
                     )
                 for callee_module_path in optimized_callee_modules_code_strings[candidate.optimization_id]:
                     if are_optimized_callee_module_code_strings_zero_diff[candidate.optimization_id][
                         callee_module_path
                     ]:
                         (worktree / callee_module_path.relative_to(self.args.module_root)).write_text(
-                            optimized_callee_modules_code_strings[i][callee_module_path], encoding="utf8"
+                            optimized_callee_modules_code_strings[candidate.optimization_id][callee_module_path],
+                            encoding="utf8",
                         )
 
             # TODO Crosshair: Factor out relative path munging code, repeated.
@@ -407,8 +407,7 @@ class Optimizer:
                 worktrees[0].name / function_to_optimize.file_path.relative_to(self.args.module_root).with_suffix("")
             ).replace("/", ".")
 
-            # TODO CROSSHAIR: Turn into enum.
-            diffbehavior_results: dict[str, int] = {}
+            diffbehavior_results: dict[str, DiffbehaviorReturnCode] = {}
             for candidate_index, candidate in enumerate(candidates_with_diffs, start=1):
                 logger.info(f"Optimization candidate {candidate_index}/{len(candidates_with_diffs)}:")
                 code_print(candidate.source_code)
@@ -429,16 +428,18 @@ class Optimizer:
                     cwd=worktree_root,
                     check=False,
                 )
-                diffbehavior_results[candidate.optimization_id] = result.returncode
 
-                if result.returncode == 2:
+                if result.returncode == DiffbehaviorReturnCode.ERROR:
+                    diffbehavior_results[candidate.optimization_id] = DiffbehaviorReturnCode.ERROR
                     logger.info("Inconclusive results from concolic behavior correctness check.")
                     logger.warning(
-                        f"Error running crosshair diffbehavior{': '+ result.stderr if result.stderr else '.'}"
+                        f"Error running crosshair diffbehavior{': ' + result.stderr if result.stderr else '.'}"
                     )
-                elif result.returncode == 1:
+                elif result.returncode == DiffbehaviorReturnCode.COUNTER_EXAMPLES:
+                    diffbehavior_results[candidate.optimization_id] = DiffbehaviorReturnCode.COUNTER_EXAMPLES
                     logger.info(f"Optimization candidate failed concolic behavior correctness check:\n{result.stdout}")
-                elif result.returncode == 0:
+                elif result.returncode == DiffbehaviorReturnCode.NO_DIFFERENCES:
+                    diffbehavior_results[candidate.optimization_id] = DiffbehaviorReturnCode.NO_DIFFERENCES
                     logger.info(
                         f"Optimization candidate passed concolic behavior correctness check"
                         f"{': \n' + result.stdout.split('\n', 1)[0] if '\n' in result.stdout else '.'}"
@@ -545,7 +546,7 @@ class Optimizer:
         original_helper_code: dict[Path, str],
         function_trace_id: str,
         only_run_this_test_function: list[FunctionCalledInTest] | None = None,
-        diffbehavior_results: dict[str, int],
+        diffbehavior_results: dict[str, DiffbehaviorReturnCode],
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime  # The fastest code runtime until now
@@ -555,7 +556,8 @@ class Optimizer:
         is_correct = {}
 
         logger.info(
-            f"Determining best optimization candidate (out of {len(candidates)}) for {function_to_optimize.qualified_name} ..."
+            f"Determining best optimization candidate (out of {len(candidates)}) for "
+            f"{function_to_optimize.qualified_name}…"
         )
         console.rule()
         try:
@@ -585,7 +587,7 @@ class Optimizer:
                     optimization_candidate_index=candidate_index,
                     original_test_results=original_code_baseline.overall_test_results,
                     tests_in_file=only_run_this_test_function,
-                    diffbehavior_result=diffbehavior_results[candidate_index],
+                    diffbehavior_result=diffbehavior_results[candidate.optimization_id],
                 )
                 if not is_successful(run_results):
                     optimized_runtimes[candidate.optimization_id] = None
@@ -608,7 +610,9 @@ class Optimizer:
                         tree.add("This candidate is faster than the previous best candidate. 🚀")
                         tree.add(f"Original runtime: {humanize_runtime(original_code_baseline.runtime)}")
                         tree.add(
-                            f"Best test runtime: {humanize_runtime(candidate_result.best_test_runtime)} (measured over {candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                            f"Best test runtime: {humanize_runtime(candidate_result.best_test_runtime)} "
+                            f"(measured over {candidate_result.max_loop_count} "
+                            f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
                         )
                         tree.add(f"Speedup ratio: {perf_gain:.3f}")
 
@@ -621,7 +625,9 @@ class Optimizer:
                         best_runtime_until_now = best_test_runtime
                     else:
                         tree.add(
-                            f"Runtime: {humanize_runtime(best_test_runtime)} (measured over {candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                            f"Runtime: {humanize_runtime(best_test_runtime)} "
+                            f"(measured over {candidate_result.max_loop_count} "
+                            f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
                         )
                         tree.add(f"Speedup ratio: {perf_gain:.3f}")
                     console.print(tree)
@@ -631,7 +637,7 @@ class Optimizer:
         except KeyboardInterrupt as e:
             self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
             logger.exception(f"Optimization interrupted: {e}")
-            raise e
+            raise
 
         # TODO Crosshair: Report on regression vs concolic, false negatives vs matches
         self.aiservice_client.log_results(
@@ -843,7 +849,8 @@ class Optimizer:
                     with new_test_path.open("w", encoding="utf8") as _f:
                         _f.write(injected_test)
                 else:
-                    raise ValueError("injected_test is None")
+                    msg = "injected_test is None"
+                    raise ValueError(msg)
 
                 unique_instrumented_test_files.add(new_test_path)
                 if not self.test_files.get_by_original_file_path(path_obj_test_file):
@@ -890,7 +897,7 @@ class Optimizer:
                 ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             )
             future_candidates_exp = None
-            futures: list = future_tests + [future_optimization_candidates]
+            futures: list[concurrent.futures.Future] = [*future_tests, future_optimization_candidates]
             if run_experiment:
                 future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
@@ -1040,7 +1047,8 @@ class Optimizer:
 
             loop_count = max([int(result.loop_index) for result in unittest_results.test_results])
             logger.info(
-                f"Original code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: {humanize_runtime(total_timing)} per full loop"
+                f"Original code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: "
+                f"{humanize_runtime(total_timing)} per full loop"
             )
             console.rule()
             logger.debug(f"Total original code runtime (ns): {total_timing}")
@@ -1062,7 +1070,7 @@ class Optimizer:
         optimization_candidate_index: int,
         original_test_results: TestResults | None,
         tests_in_file: list[FunctionCalledInTest] | None,
-        diffbehavior_result: int,
+        diffbehavior_result: DiffbehaviorReturnCode,
     ) -> Result[OptimizedCandidateResult, str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
@@ -1158,24 +1166,26 @@ class Optimizer:
             equal_results = False
         console.rule()
 
-        if diffbehavior_result == 0:
+        if diffbehavior_result == DiffbehaviorReturnCode.NO_DIFFERENCES:
             logger.info("Concolic behavior correctness check successful!")
             console.rule()
             if equal_results:
                 logger.info("True negative: Concolic behavior correctness check successful and test results matched.")
             else:
                 logger.warning(
-                    "False negative for concolic testing: Concolic behavior correctness check successful but test results did not match."
+                    "False negative for concolic testing: Concolic behavior correctness check successful but test "
+                    "results did not match."
                 )
             console.rule()
-        elif diffbehavior_result == 1:
+        elif diffbehavior_result == DiffbehaviorReturnCode.COUNTER_EXAMPLES:
             logger.warning("Concolic behavior correctness check failed.")
             console.rule()
             if equal_results:
                 logger.warning(
-                    "False negative for regression testing: Concolic behavior correctness check failed but test results matched."
+                    "False negative for regression testing: Concolic behavior correctness check failed but test "
+                    "results matched."
                 )
-                success = false()
+                success = False
                 equal_results = False
             else:
                 logger.info("True positive: Concolic behavior correctness check failed and test results did not match.")
@@ -1237,7 +1247,8 @@ class Optimizer:
             return TestResults()
         if run_result.returncode != 0:
             logger.debug(
-                f'Nonzero return code {run_result.returncode} when running tests in {", ".join([str(f.instrumented_file_path) for f in test_files.test_files])}.\n'
+                f'Nonzero return code {run_result.returncode} when running tests in '
+                f'{", ".join([str(f.instrumented_file_path) for f in test_files.test_files])}.\n'
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
@@ -1258,7 +1269,7 @@ class Optimizer:
         module_path: Path,
         function_trace_id: str,
     ) -> list[concurrent.futures.Future]:
-        futures = [
+        return [
             executor.submit(
                 generate_tests,
                 self.aiservice_client,
@@ -1274,7 +1285,6 @@ class Optimizer:
             )
             for test_index in range(N_TESTS_TO_GENERATE)
         ]
-        return futures
 
 
 def run_with_args(args: Namespace) -> None:

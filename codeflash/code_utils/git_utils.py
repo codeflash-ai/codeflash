@@ -55,7 +55,7 @@ def get_git_diff(repo_directory: Path = Path.cwd(), uncommitted_changes: bool = 
 
 
 def get_current_branch(repo: Repo | None = None) -> str:
-    """Returns the name of the current branch in the given repository.
+    """Return the name of the current branch in the given repository.
 
     :param repo: An optional Repo object. If not provided, the function will
                  search for a repository in the current and parent directories.
@@ -97,7 +97,8 @@ def confirm_proceeding_with_no_git_repo() -> str | bool:
     if sys.__stdin__.isatty():
         return inquirer_wrapper(
             inquirer.confirm,
-            message="WARNING: I did not find a git repository for your code. If you proceed with running codeflash, optimized code will"
+            message="WARNING: I did not find a git repository for your code. If you proceed with running codeflash, "
+            "optimized code will"
             " be written over your current code and you could irreversibly lose your current code. Proceed?",
             default=False,
         )
@@ -117,7 +118,8 @@ def check_and_push_branch(repo: git.Repo, wait_for_push: bool = False) -> bool:
             return False
         if sys.__stdin__.isatty() and inquirer_wrapper(
             inquirer.confirm,
-            message=f"⚡️ In order for me to create PRs, your current branch needs to be pushed. Do you want to push the branch "
+            message=f"⚡️ In order for me to create PRs, your current branch needs to be pushed. Do you want to push "
+            f"the branch"
             f"'{current_branch}' to the remote repository?",
             default=False,
         ):
