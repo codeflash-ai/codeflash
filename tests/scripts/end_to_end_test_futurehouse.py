@@ -27,7 +27,7 @@ def main():
     improvement_pct = int(re.search(r"📈 ([\d,]+)% improvement", stdout).group(1).replace(",", ""))
     improvement_x = float(improvement_pct) / 100
 
-    assert improvement_pct > 5, f"Performance improvement percentage was {improvement_pct}, which was not above 10%"
+    assert improvement_pct > 10, f"Performance improvement percentage was {improvement_pct}, which was not above 10%"
     assert improvement_x > 0.1, f"Performance improvement rate was {improvement_x}x, which was not above 0.1x"
 
     # Check for the line indicating the number of discovered existing unit tests
