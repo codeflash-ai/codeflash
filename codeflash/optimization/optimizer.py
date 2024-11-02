@@ -298,7 +298,6 @@ class Optimizer:
         function_to_optimize_qualified_name = function_to_optimize.qualified_name
         baseline_result = self.establish_original_code_baseline(
             function_to_optimize_qualified_name,
-            generated_tests_paths,
             function_to_tests.get(module_path + "." + function_to_optimize_qualified_name, []),
         )
         console.rule()
