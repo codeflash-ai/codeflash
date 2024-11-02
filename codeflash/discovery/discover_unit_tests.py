@@ -32,7 +32,7 @@ class TestFunction:
 
 
 def discover_unit_tests(
-    cfg: TestConfig, discover_only_these_tests: list[str] | None = None
+    cfg: TestConfig, discover_only_these_tests: list[Path] | None = None
 ) -> dict[str, list[FunctionCalledInTest]]:
     if cfg.test_framework == "pytest":
         return discover_tests_pytest(cfg, discover_only_these_tests)
@@ -43,7 +43,7 @@ def discover_unit_tests(
 
 
 def discover_tests_pytest(
-    cfg: TestConfig, discover_only_these_tests: list[str] | None = None
+    cfg: TestConfig, discover_only_these_tests: list[Path] | None = None
 ) -> dict[str, list[FunctionCalledInTest]]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path

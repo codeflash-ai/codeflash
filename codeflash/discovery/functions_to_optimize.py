@@ -81,10 +81,10 @@ class FunctionVisitor(cst.CSTVisitor):
 
 
 class FunctionWithReturnStatement(ast.NodeVisitor):
-    def __init__(self, file_path: str) -> None:
+    def __init__(self, file_path: Path) -> None:
         self.functions: list[FunctionToOptimize] = []
         self.ast_path: list[FunctionParent] = []
-        self.file_path: str = file_path
+        self.file_path: Path = file_path
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
         # Check if the function has a return statement and add it to the list
@@ -188,7 +188,7 @@ def get_functions_to_optimize(
                 class_name = None
                 only_function_name = split_function[0]
             found_function = None
-            for fn in functions.get(str(file), []):
+            for fn in functions.get(file, []):
                 if only_function_name == fn.function_name and (
                     class_name is None or class_name == fn.top_level_parent_name
                 ):
@@ -196,7 +196,7 @@ def get_functions_to_optimize(
             if found_function is None:
                 msg = f"Function {only_function_name} not found in file {file} or the function does not have a 'return' statement."
                 raise ValueError(msg)
-            functions[str(file)] = [found_function]
+            functions[file] = [found_function]
     else:
         logger.info("Finding all functions modified in the current git diff ...")
         ph("cli-optimizing-git-diff")
@@ -247,23 +247,23 @@ def get_all_files_and_functions(module_root_path: Path) -> dict[str, list[Functi
     return dict(files_list)
 
 
-def find_all_functions_in_file(file_path: Path) -> dict[str, list[FunctionToOptimize]]:
-    functions: dict[str, list[FunctionToOptimize]] = {}
+def find_all_functions_in_file(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
+    functions: dict[Path, list[FunctionToOptimize]] = {}
     with file_path.open(encoding="utf8") as f:
         try:
             ast_module = ast.parse(f.read())
         except Exception as e:
             logger.exception(e)
             return functions
-        function_name_visitor = FunctionWithReturnStatement(str(file_path))
+        function_name_visitor = FunctionWithReturnStatement(file_path)
         function_name_visitor.visit(ast_module)
-        functions[str(file_path)] = function_name_visitor.functions
+        functions[file_path] = function_name_visitor.functions
     return functions
 
 
 def get_all_replay_test_functions(
-    replay_test: str, test_cfg: TestConfig, project_root_path: Path
-) -> dict[str, list[FunctionToOptimize]]:
+    replay_test: Path, test_cfg: TestConfig, project_root_path: Path
+) -> dict[Path, list[FunctionToOptimize]]:
     function_tests = discover_unit_tests(test_cfg, discover_only_these_tests=[replay_test])
     # Get the absolute file paths for each function, excluding class name if present
     filtered_valid_functions = defaultdict(list)
@@ -292,7 +292,7 @@ def get_all_replay_test_functions(
         file_path = Path(project_root_path, *file_path_parts).with_suffix(".py")
         file_to_functions_map[file_path].append((function, function_name, class_name))
     for file_path, functions in file_to_functions_map.items():
-        all_valid_functions: dict[str, list[FunctionToOptimize]] = find_all_functions_in_file(file_path=file_path)
+        all_valid_functions: dict[Path, list[FunctionToOptimize]] = find_all_functions_in_file(file_path=file_path)
         filtered_list = []
         for function in functions:
             function_name, function_name_only, class_name = function
@@ -407,7 +407,7 @@ def inspect_top_level_functions_or_methods(
 
 
 def filter_functions(
-    modified_functions: dict[str, list[FunctionToOptimize]],
+    modified_functions: dict[Path, list[FunctionToOptimize]],
     tests_root: Path,
     ignore_paths: list[Path],
     project_root: Path,
@@ -431,7 +431,8 @@ def filter_functions(
     tests_root_str = str(tests_root)
     module_root_str = str(module_root)
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
-    for file_path, functions in modified_functions.items():
+    for file_path_path, functions in modified_functions.items():
+        file_path = str(file_path_path)
         if file_path.startswith(tests_root_str + os.sep):
             test_functions_removed_count += len(functions)
             continue
@@ -499,10 +500,11 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
         return False
     if submodule_paths is None:
         submodule_paths = ignored_submodule_paths(module_root)
-    return not (
-        file_path in submodule_paths
-        or any(file_path.is_relative_to(submodule_path) for submodule_path in submodule_paths)
-    )
+    if file_path in submodule_paths or any(
+        file_path.is_relative_to(submodule_path) for submodule_path in submodule_paths
+    ):
+        return False
+    return True
 
 
 def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
