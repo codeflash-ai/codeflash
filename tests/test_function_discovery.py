@@ -2,6 +2,7 @@ import tempfile
 from pathlib import Path
 
 from codeflash.discovery.functions_to_optimize import (
+    filter_files_optimized,
     find_all_functions_in_file,
     get_functions_to_optimize,
     inspect_top_level_functions_or_methods,
@@ -19,7 +20,7 @@ def test_function_eligible_for_optimization() -> None:
         f.write(function)
         f.flush()
         functions_found = find_all_functions_in_file(Path(f.name))
-    assert functions_found[f.name][0].function_name == "test_function_eligible_for_optimization"
+    assert functions_found[Path(f.name)][0].function_name == "test_function_eligible_for_optimization"
 
     # Has no return statement
     function = """def test_function_not_eligible_for_optimization():
@@ -31,7 +32,7 @@ def test_function_eligible_for_optimization() -> None:
         f.write(function)
         f.flush()
         functions_found = find_all_functions_in_file(Path(f.name))
-    assert len(functions_found[f.name]) == 0
+    assert len(functions_found[Path(f.name)]) == 0
 
 
 def test_find_top_level_function_or_method():
@@ -149,3 +150,19 @@ def functionA():
         for file in functions:
             assert functions[file][0].qualified_name == "functionA"
             assert functions[file][0].function_name == "functionA"
+
+
+def test_filter_files_optimized():
+    tests_root = Path("tests").resolve()
+    module_root = Path().resolve()
+    ignore_paths = []
+
+    file_path_test = Path("tests/test_function_discovery.py").resolve()
+    file_path_same_level = Path("file.py").resolve()
+    file_path_different_level = Path("src/file.py").resolve()
+    file_path_above_level = Path("../file.py").resolve()
+
+    assert not filter_files_optimized(file_path_test, tests_root, ignore_paths, module_root)
+    assert filter_files_optimized(file_path_same_level, tests_root, ignore_paths, module_root)
+    assert filter_files_optimized(file_path_different_level, tests_root, ignore_paths, module_root)
+    assert not filter_files_optimized(file_path_above_level, tests_root, ignore_paths, module_root)
