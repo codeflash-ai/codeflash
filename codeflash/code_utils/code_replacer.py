@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, TypeVar
 
 import libcst as cst
 
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module
 from codeflash.models.models import FunctionParent
 
@@ -164,8 +165,9 @@ def replace_functions_in_file(
         elif original_function_name.count(".") == 1:
             class_name, function_name = original_function_name.split(".")
         else:
-            msg = f"Don't know how to find {original_function_name} yet!"
-            raise ValueError(msg)
+            msg = f"Unable to find {original_function_name}. Returning unchanged source code."
+            logger.error(msg)
+            return source_code
         parsed_function_names.append((function_name, class_name))
 
     module = cst.metadata.MetadataWrapper(cst.parse_module(optimized_code))
@@ -177,8 +179,9 @@ def replace_functions_in_file(
         if visitor.optim_body is None and not preexisting_objects:
             continue
         if visitor.optim_body is None:
-            msg = f"Did not find the function {function_name} in the optimized code"
-            raise ValueError(msg)
+            msg = f"Unable to find function {function_name} in optimized code. Returning unchanged source code."
+            logger.error(msg)
+            return source_code
 
         transformer = OptimFunctionReplacer(
             visitor.function_name,

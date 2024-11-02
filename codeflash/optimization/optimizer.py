@@ -188,13 +188,11 @@ class Optimizer:
                     )
                     self.test_files = TestFiles(test_files=[])
 
-                    # TODO CROSSHAIR Check for IO errors, factor out.
-                    for worktree in worktrees:
-                        try:
+                    try:
+                        for worktree in worktrees:
                             subprocess.run(["git", "worktree", "remove", "-f", worktree], check=True)
-                        except subprocess.CalledProcessError as e:
-                            logger.warning(f"Error deleting worktree: {e}")
-                            shutil.rmtree(worktree, ignore_errors=True)
+                    except subprocess.CalledProcessError as e:
+                        logger.warning(f"Error removing worktrees: {e}")
                     shutil.rmtree(worktree_root)
 
                     if is_successful(best_optimization):
@@ -1159,6 +1157,9 @@ class Optimizer:
         )
         console.rule()
 
+        # TestType.CONCOLIC_TESTING: "🔍 Dynamic Symbolic Execution",
+        # 🔍 Dynamic Symbolic Execution - No differences found. (attempted 154 iterations)
+        # console.rule
         initial_loop_original_test_results = TestResults(
             test_results=[result for result in original_test_results.test_results if result.loop_index == 1]
         )
