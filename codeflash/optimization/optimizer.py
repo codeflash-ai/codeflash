@@ -85,6 +85,11 @@ class Optimizer:
             pytest_cmd=args.pytest_cmd,
         )
 
+        for file in Path(args.project_root).glob(".coverage*"):
+            if file.name != ".coveragerc":
+                logger.info(f"Removing coverage file {file}")
+                file.unlink()
+
         self.aiservice_client = AiServiceClient()
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
@@ -129,7 +134,13 @@ class Optimizer:
             logger.info(f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}")
             console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
-            for path in file_to_funcs_to_optimize:
+            # for path in file_to_funcs_to_optimize:
+            # let's randomly shuffle the files to avoid running the same file first every time
+            import random
+
+            random_paths = list(file_to_funcs_to_optimize.keys())
+            random.shuffle(random_paths)
+            for path in random_paths:
                 logger.info(f"Examining file {path} ...")
                 console.rule()
                 with Path(path).open(encoding="utf8") as f:
@@ -243,7 +254,10 @@ class Optimizer:
 
         baseline_result = self.establish_original_code_baseline(
             function_to_optimize.qualified_name,
+            generated_tests_paths,
             function_to_tests.get(module_path + "." + function_to_optimize.qualified_name, []),
+            function_file_path=function_to_optimize.file_path,
+            code_context=code_context,
         )
         console.rule()
         if not is_successful(baseline_result):
@@ -345,7 +359,6 @@ class Optimizer:
             test_paths.unlink(missing_ok=True)
         if not best_optimization:
             return Failure(f"No best optimizations found for function {function_to_optimize.qualified_name}")
-        logger.info("----------------")
         return Success(best_optimization)
 
     def determine_best_candidate(
@@ -763,10 +776,14 @@ class Optimizer:
         return Success((generated_tests, OptimizationSet(control=candidates, experiment=candidates_experiment)))
 
     def establish_original_code_baseline(
-        self, function_name: str, tests_in_file: list[FunctionCalledInTest]
+        self,
+        function_name: str,
+        generated_tests_paths: list[Path],
+        tests_in_file: list[FunctionCalledInTest],
+        function_file_path: Path,
+        code_context: CodeOptimizationContext,
     ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
-        # For the original function - run the tests and get the runtime
-
+        # For the original function - run the tests and get the runtime, plus coverage
         with progress_bar(f"Establishing original code baseline for {function_name}"):
             assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
             success = True
@@ -797,7 +814,6 @@ class Optimizer:
                     logger.warning(
                         f"Multiple tests found ub the replay test {test_file} for {function_name}. Should not happen"
                     )
-
             if test_framework == "pytest":
                 unittest_results = self.run_and_parse_tests(
                     test_env=test_env,
@@ -805,6 +821,10 @@ class Optimizer:
                     optimization_iteration=0,
                     test_functions=only_run_these_test_functions_for_test_files,
                     testing_time=TOTAL_LOOPING_TIME,
+                    enable_coverage=True,
+                    function_name=function_name,
+                    source_file=function_file_path,
+                    code_context=code_context,
                 )
             else:
                 unittest_results = TestResults()
@@ -819,6 +839,9 @@ class Optimizer:
                         optimization_iteration=0,
                         test_functions=only_run_these_test_functions_for_test_files,
                         testing_time=TOTAL_LOOPING_TIME,
+                        enable_coverage=True,
+                        function_name=function_name,
+                        source_file=function_file_path,
                     )
                     unittest_results.merge(unittest_loop_results)
 
@@ -1004,10 +1027,15 @@ class Optimizer:
         test_env: dict[str, str],
         test_files: TestFiles,
         optimization_iteration: int,
+        function_name: str | None = None,
+        source_file: Path | None = None,
         test_functions: list[str | None] | None = None,
         testing_time: float = TOTAL_LOOPING_TIME,
+        *,
+        enable_coverage: bool = False,
         pytest_min_loops: int = 5,
         pytest_max_loops: int = 100_000,
+        code_context: CodeOptimizationContext | None = None,
     ) -> TestResults:
         try:
             result_file_path, run_result = run_tests(
@@ -1022,6 +1050,11 @@ class Optimizer:
                 pytest_target_runtime_seconds=testing_time,
                 pytest_min_loops=pytest_min_loops,
                 pytest_max_loops=pytest_max_loops,
+                enable_coverage=enable_coverage,
+                code_context=code_context,
+                project_root=self.test_cfg.project_root_path,
+                function_name=function_name,
+                source_file=source_file,
             )
         except subprocess.TimeoutExpired:
             logger.exception(

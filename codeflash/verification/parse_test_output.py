@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import ast
+import json
 import os
 import re
 import sqlite3
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 import dill as pickle
 from junitparser.xunit2 import JUnitXml
 from lxml.etree import XMLParser, parse
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import DEBUG_MODE, console, logger
 from codeflash.code_utils.code_utils import (
     file_name_from_test_module_name,
     file_path_from_module_name,
@@ -24,7 +27,7 @@ from codeflash.verification.test_results import FunctionTestInvocation, Invocati
 if TYPE_CHECKING:
     import subprocess
 
-    from codeflash.models.models import TestFiles
+    from codeflash.models.models import CodeOptimizationContext, TestFiles
     from codeflash.verification.verification_utils import TestConfig
 
 
@@ -32,6 +35,240 @@ def parse_func(file_path: Path) -> XMLParser:
     """Parse the XML file with lxml.etree.XMLParser as the backend."""
     xml_parser = XMLParser(huge_tree=True)
     return parse(file_path, xml_parser)
+
+
+def extract_dependent_function(main_function: str, code_context: CodeOptimizationContext) -> str | Literal[False]:
+    """Extract the single dependent function from the code context excluding the main function."""
+    ast_tree = ast.parse(code_context.code_to_optimize_with_helpers)
+
+    dependent_functions = {node.name for node in ast_tree.body if isinstance(node, ast.FunctionDef)}
+
+    if main_function in dependent_functions:
+        dependent_functions.discard(main_function)
+
+    if not dependent_functions:
+        return False
+
+    if len(dependent_functions) != 1:
+        msg = f"Expected exactly one dependent function, found {len(dependent_functions)}"
+        raise ValueError(msg)
+
+    return dependent_functions.pop()
+
+
+def generate_candidates(source_code_path: Path) -> list[str]:
+    """Generate all the possible candidates for coverage data based on the source code path."""
+    candidates = [source_code_path.name]
+    current_path = source_code_path.parent
+
+    while current_path != current_path.parent:
+        candidate_path = str(Path(current_path.name) / candidates[-1])
+        candidates.append(candidate_path)
+        current_path = current_path.parent
+
+    return candidates
+
+
+@dataclass
+class FunctionCoverage:
+    """Represents the coverage data for a specific function in a source file."""
+
+    name: str
+    coverage: float
+    executed_lines: list[int]
+    unexecuted_lines: list[int]
+
+
+@dataclass
+class CoverageData:
+    """Represents the coverage data for a specific function in a source file, using one or more test files."""
+
+    file_path: Path
+    coverage: float
+    function_name: str
+    functions_being_tested: list[str]
+    graph: dict[str, dict[str, set[int]]]
+    code_context: CodeOptimizationContext
+    main_func_coverage: FunctionCoverage
+    dependent_func_coverage: FunctionCoverage | None
+    blank_re = re.compile(r"\s*(#|$)")
+    else_re = re.compile(r"\s*else\s*:\s*(#|$)")
+
+    @staticmethod
+    def load_from_coverage_file(
+        coverage_file_path: Path, source_code_path: Path, function_name: str, code_context: CodeOptimizationContext
+    ) -> CoverageData:
+        """Load coverage data, including main function and its dependencies."""
+        from json import load
+
+        with coverage_file_path.open() as f:
+            original_coverage_data = load(f)  # we can remove this once we're done debugging
+        coverage_data = CoverageData._parse_coverage_file(coverage_file_path, source_code_path)
+        main_func_coverage, dependent_func_coverage = CoverageData._fetch_function_coverages(
+            function_name, code_context, coverage_data, original_cov_data=original_coverage_data
+        )
+
+        total_executed_lines, total_unexecuted_lines = CoverageData._aggregate_coverage(
+            main_func_coverage, dependent_func_coverage
+        )
+
+        total_lines = total_executed_lines | total_unexecuted_lines
+        coverage = len(total_executed_lines) / len(total_lines) * 100 if total_lines else 0
+        # coverage = (lines covered of the original function + its 1 level deep helpers) / (lines spanned by original function + its 1 level deep helpers), if no helpers then just the original function coverage
+
+        functions_being_tested = [main_func_coverage.name]
+        if dependent_func_coverage:
+            functions_being_tested.append(dependent_func_coverage.name)
+
+        graph = CoverageData._build_graph(main_func_coverage, dependent_func_coverage)
+
+        return CoverageData(
+            file_path=source_code_path,
+            coverage=coverage,
+            function_name=function_name,
+            functions_being_tested=functions_being_tested,
+            graph=graph,
+            code_context=code_context,
+            main_func_coverage=main_func_coverage,
+            dependent_func_coverage=dependent_func_coverage,
+        )
+
+    @staticmethod
+    def _parse_coverage_file(coverage_file_path: Path, source_code_path: Path) -> dict[str, dict[str, Any]]:
+        with coverage_file_path.open() as f:
+            coverage_data = json.load(f)
+
+        candidates = generate_candidates(source_code_path)
+
+        logger.info(f"Looking for coverage data in {" -> ".join(candidates)}")
+        for candidate in candidates:
+            try:
+                cov: dict[str, dict[str, Any]] = coverage_data["files"][candidate]["functions"]
+                logger.info(f"Coverage data found for {source_code_path} in {candidate}")
+                break
+            except KeyError:
+                continue
+        else:
+            console.print(coverage_data)
+            msg = f"Coverage data not found for {source_code_path} in {candidates}"
+            raise ValueError(msg)
+        return cov
+
+    @staticmethod
+    def _fetch_function_coverages(
+        function_name: str,
+        code_context: CodeOptimizationContext,
+        coverage_data: dict[str, dict[str, Any]],
+        original_cov_data: dict[str, dict[str, Any]],
+    ) -> tuple[FunctionCoverage, FunctionCoverage | None]:
+        try:
+            main_function_coverage = FunctionCoverage(
+                name=function_name,
+                coverage=coverage_data[function_name]["summary"]["percent_covered"],
+                executed_lines=coverage_data[function_name]["executed_lines"],
+                unexecuted_lines=coverage_data[function_name]["excluded_lines"],
+            )
+        except KeyError:
+            msg = f"Coverage data not found for {function_name} in {original_cov_data}"
+            raise ValueError(msg) from None
+
+        dependent_function = extract_dependent_function(function_name, code_context)
+        try:
+            if dependent_function:
+                dependent_function_coverage = FunctionCoverage(
+                    name=dependent_function,
+                    coverage=coverage_data[dependent_function]["summary"]["percent_covered"],
+                    executed_lines=coverage_data[dependent_function]["executed_lines"],
+                    unexecuted_lines=coverage_data[dependent_function]["excluded_lines"],
+                )
+                return main_function_coverage, dependent_function_coverage
+        except KeyError:
+            msg = f"Coverage data not found for {dependent_function} in {original_cov_data}"
+            raise ValueError(msg) from None
+        return main_function_coverage, None
+
+    @staticmethod
+    def _aggregate_coverage(
+        main_func_coverage: FunctionCoverage, dependent_func_coverage: FunctionCoverage | None
+    ) -> tuple[set[int], set[int]]:
+        total_executed_lines = set(main_func_coverage.executed_lines)
+        total_unexecuted_lines = set(main_func_coverage.unexecuted_lines)
+
+        if dependent_func_coverage:
+            total_executed_lines.update(dependent_func_coverage.executed_lines)
+            total_unexecuted_lines.update(dependent_func_coverage.unexecuted_lines)
+
+        return total_executed_lines, total_unexecuted_lines
+
+    @staticmethod
+    def _build_graph(
+        main_func_coverage: FunctionCoverage, dependent_func_coverage: FunctionCoverage | None
+    ) -> dict[str, dict[str, set[int]]]:
+        graph = {
+            main_func_coverage.name: {
+                "executed_lines": set(main_func_coverage.executed_lines),
+                "unexecuted_lines": set(main_func_coverage.unexecuted_lines),
+            }
+        }
+        if dependent_func_coverage:
+            graph[dependent_func_coverage.name] = {
+                "executed_lines": set(dependent_func_coverage.executed_lines),
+                "unexecuted_lines": set(dependent_func_coverage.unexecuted_lines),
+            }
+        return graph
+
+    def log_coverage(self) -> None:  # noqa: C901, PLR0912
+        """Annotate the source code with the coverage data."""
+        if not self.coverage:
+            logger.info(self)
+            logger.info(f"Coverage: {self.coverage}%, skipping")
+            return
+
+        from rich.panel import Panel
+        from rich.syntax import Syntax
+
+        union_executed_lines = sorted(
+            {line for func in self.functions_being_tested for line in self.graph[func]["executed_lines"]}
+        )
+        union_unexecuted_lines = sorted(
+            {line for func in self.functions_being_tested for line in self.graph[func]["unexecuted_lines"]}
+        )
+        # adapted from nedbat/coveragepy/coverage/annotate.py:annotate_file
+        src = self.code_context.code_to_optimize_with_helpers
+        output = ""
+        i = j = 0
+        covered = True
+        for lineno, line in enumerate(src.splitlines(keepends=True), start=1):
+            while i < len(union_executed_lines) and union_executed_lines[i] < lineno:
+                i += 1
+            while j < len(union_unexecuted_lines) and union_unexecuted_lines[j] < lineno:
+                j += 1
+            if i < len(union_executed_lines) and union_executed_lines[i] == lineno:
+                covered = j >= len(union_unexecuted_lines) or union_unexecuted_lines[j] > lineno
+            if self.blank_re.match(line):
+                output += "  "
+            elif self.else_re.match(line):
+                if j >= len(union_unexecuted_lines):
+                    output += "✅ "
+                elif union_executed_lines[i] == union_unexecuted_lines[j]:
+                    output += "❌ "
+                else:
+                    output += "> "
+            elif lineno in union_unexecuted_lines:
+                output += "- "
+            elif covered:
+                output += "✅ "
+            else:
+                output += "❌ "
+
+            output += line
+
+        panel = Panel(
+            Syntax(output, "python", line_numbers=True, theme="github-dark"),
+            title=f"Coverage: {self.coverage}%",
+            subtitle=f"Functions tested: {', '.join(self.functions_being_tested)}",
+        )
+        console.print(panel)
 
 
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
@@ -56,7 +293,8 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
             try:
                 test_pickle_bin = file.read(len_next)
             except Exception as e:
-                logger.exception(f"Failed to load pickle file. Exception: {e}")
+                if DEBUG_MODE:
+                    logger.exception(f"Failed to load pickle file. Exception: {e}")
                 return test_results
             loop_index_bytes = file.read(8)
             loop_index = int.from_bytes(loop_index_bytes, byteorder="big")
@@ -73,7 +311,8 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
             try:
                 test_pickle = pickle.loads(test_pickle_bin) if loop_index == 1 else None
             except Exception as e:
-                logger.exception(f"Failed to load pickle file. Exception: {e}")
+                if DEBUG_MODE:
+                    logger.exception(f"Failed to load pickle file. Exception: {e}")
                 return test_results
             assert test_type is not None, f"Test type not found for {test_file_path}"
             test_results.add(
@@ -204,6 +443,8 @@ def parse_test_xml(
                     test_file_path = file_path_from_module_name(test_function, base_dir)
             else:
                 test_file_path = base_dir / test_file_name
+            assert test_file_path, f"Test file path not found for {test_file_name}"
+
             if not test_file_path.exists():
                 logger.warning(f"Could not find the test for file name - {test_file_path} ")
                 continue
@@ -423,7 +664,6 @@ def parse_test_results(
     test_results_xml = parse_test_xml(
         test_xml_path, test_files=test_files, test_config=test_config, run_result=run_result
     )
-
     try:
         bin_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin"))
         test_results_bin_file = (
@@ -449,5 +689,4 @@ def parse_test_results(
     get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin")).unlink(missing_ok=True)
 
     get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
-
     return merge_test_results(test_results_xml, test_results_bin_file, test_config.test_framework)

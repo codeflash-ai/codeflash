@@ -15,6 +15,8 @@ from codeflash.cli_cmds.logging_config import BARE_LOGGING_FORMAT
 if TYPE_CHECKING:
     from rich.progress import TaskID
 
+DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
+
 console = Console(record=True)
 logging.basicConfig(
     level=logging.INFO,
