@@ -69,6 +69,36 @@ def generate_candidates(source_code_path: Path) -> list[str]:
     return candidates
 
 
+def grab_dependent_function_from_coverage_data(
+    dependent_function_name: str, coverage_data: dict[str, dict[str, Any]], original_cov_data: dict[str, dict[str, Any]]
+) -> FunctionCoverage:
+    """Grab the dependent function from the coverage data."""
+    try:
+        return FunctionCoverage(
+            name=dependent_function_name,
+            coverage=coverage_data[dependent_function_name]["summary"]["percent_covered"],
+            executed_lines=coverage_data[dependent_function_name]["executed_lines"],
+            unexecuted_lines=coverage_data[dependent_function_name]["excluded_lines"],
+        )
+    except KeyError:
+        msg = f"Coverage data not found for dependent function {dependent_function_name} in the coverage data"
+        try:
+            files = original_cov_data["files"]
+            for file in files:
+                functions = files[file]["functions"]
+                for function in functions:
+                    if dependent_function_name in function:
+                        return FunctionCoverage(
+                            name=dependent_function_name,
+                            coverage=functions[function]["summary"]["percent_covered"],
+                            executed_lines=functions[function]["executed_lines"],
+                            unexecuted_lines=functions[function]["excluded_lines"],
+                        )
+            msg = f"Coverage data not found for dependent function {dependent_function_name} in the original coverage data"
+        except KeyError:
+            raise ValueError(msg) from None
+
+
 @dataclass
 class FunctionCoverage:
     """Represents the coverage data for a specific function in a source file."""
@@ -140,11 +170,11 @@ class CoverageData:
 
         candidates = generate_candidates(source_code_path)
 
-        logger.info(f"Looking for coverage data in {' -> '.join(candidates)}")
+        logger.debug(f"Looking for coverage data in {' -> '.join(candidates)}")
         for candidate in candidates:
             try:
                 cov: dict[str, dict[str, Any]] = coverage_data["files"][candidate]["functions"]
-                logger.info(f"Coverage data found for {source_code_path} in {candidate}")
+                logger.debug(f"Coverage data found for {source_code_path} in {candidate}")
                 break
             except KeyError:
                 continue
@@ -169,23 +199,17 @@ class CoverageData:
                 unexecuted_lines=coverage_data[function_name]["excluded_lines"],
             )
         except KeyError:
-            msg = f"Coverage data not found for {function_name} in {original_cov_data}"
+            msg = f"Coverage data not found for main function {function_name}"
             raise ValueError(msg) from None
 
         dependent_function = extract_dependent_function(function_name, code_context)
-        try:
-            if dependent_function:
-                dependent_function_coverage = FunctionCoverage(
-                    name=dependent_function,
-                    coverage=coverage_data[dependent_function]["summary"]["percent_covered"],
-                    executed_lines=coverage_data[dependent_function]["executed_lines"],
-                    unexecuted_lines=coverage_data[dependent_function]["excluded_lines"],
-                )
-                return main_function_coverage, dependent_function_coverage
-        except KeyError:
-            msg = f"Coverage data not found for {dependent_function} in {original_cov_data}"
-            raise ValueError(msg) from None
-        return main_function_coverage, None
+        dependent_func_coverage = (
+            grab_dependent_function_from_coverage_data(dependent_function, coverage_data, original_cov_data)
+            if dependent_function
+            else None
+        )
+
+        return main_function_coverage, dependent_func_coverage
 
     @staticmethod
     def _aggregate_coverage(
@@ -220,8 +244,7 @@ class CoverageData:
     def log_coverage(self) -> None:  # noqa: C901, PLR0912
         """Annotate the source code with the coverage data."""
         if not self.coverage:
-            logger.info(self)
-            logger.info(f"Coverage: {self.coverage}%, skipping")
+            logger.debug(self)
             return
 
         from rich.panel import Panel
