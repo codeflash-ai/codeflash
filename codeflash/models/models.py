@@ -9,7 +9,6 @@ from pydantic.dataclasses import dataclass
 
 from codeflash.verification.test_results import TestResults, TestType
 
-
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
 # qualified name of the method is foo.eggs.Ham.spam, its qualified name is Ham.spam, and its name is spam. The full name
 # of the module is foo.eggs.
@@ -140,3 +139,13 @@ class CodePosition:
 class FunctionParent:
     name: str
     type: str
+
+
+@dataclass
+class FunctionCoverage:
+    """Represents the coverage data for a specific function in a source file."""
+
+    name: str
+    coverage: float
+    executed_lines: list[int]
+    unexecuted_lines: list[int]

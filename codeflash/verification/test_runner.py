@@ -4,19 +4,18 @@ import os
 import shlex
 import subprocess
 import sys
-from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING
 
-from codeflash.cli_cmds.console import code_print, console, logger
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME
-from codeflash.models.models import TestFiles
-from codeflash.verification.parse_test_output import CoverageData
+from codeflash.code_utils.coverage_utils import CoverageData, prepare_coverage_files
+from codeflash.models.models import CodeOptimizationContext, TestFiles
 from codeflash.verification.test_results import TestType
 
 if TYPE_CHECKING:
-    from codeflash.models.models import CodeOptimizationContext, TestFiles
+    from codeflash.models.models import TestFiles
 
 is_posix = os.name != "nt"
 
@@ -50,16 +49,6 @@ def run_tests(
     assert test_framework in ["pytest", "unittest"]
 
     if test_framework == "pytest":
-        is_posix = os.name != "nt"
-
-        # Future plans , don't implement now
-        # Loop 1 - only runs coverage and gets the binary and xml files
-        # will be a slower "analysis" run. No looping
-
-        # Loop 2 - n - Runs only the performance benchmarking loops - very little overhead
-        # no coverage, no pickle files, no binary or sqlite files.
-        # performance data put on xml and stdout files.
-
         test_files = []
         for file in test_paths.test_files:
             if file.test_type == TestType.REPLAY_TEST:
@@ -72,16 +61,7 @@ def run_tests(
         if enable_coverage:
             assert project_root is not None, "project_root must be provided for coverage analysis"
 
-            coverage_out_file = get_run_tmp_file(Path("coverage.json"))
-            coveragercfile = get_run_tmp_file(Path(".coveragerc"))
-            coveragerc_content = (
-                "[run]\n"
-                f"source = {project_root.as_posix()}\n"
-                "branch = True\n"
-                "[json]\n"
-                f"output = {coverage_out_file.as_posix()}\n"
-            )
-            coveragercfile.write_text(coveragerc_content)
+            coverage_out_file, coveragercfile = prepare_coverage_files(project_root)
 
             pytest_ignore_files = [
                 "--ignore-glob=build/*",
@@ -123,10 +103,7 @@ def run_tests(
                 env=pytest_test_env,
             )
             logger.debug(cov_report)
-            assert source_file is not None, "source_file must be provided for coverage analysis"
-            assert function_name is not None, "function_name must be provided for coverage analysis"
-            assert code_context is not None, "code_context must be provided for coverage analysis"
-            assert coverage_out_file.exists(), "coverage_out_file must exist for coverage analysis [run_tests]"
+
             coveragepy_coverage = CoverageData.load_from_coverage_file(
                 coverage_out_file, source_file, function_name, code_context=code_context
             )
@@ -138,25 +115,22 @@ def run_tests(
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
         pytest_args = [
             "--capture=tee-sys",
-            f"--timeout={pytest_timeout * 2}",
+            f"--timeout={pytest_timeout}",
             "-q",
             f"--junitxml={result_file_path}",
             "-o",
             "junit_logging=all",
-            f"--codeflash_seconds={pytest_target_runtime_seconds * 2}",
+            f"--codeflash_seconds={pytest_target_runtime_seconds}",
             f"--codeflash_min_loops={pytest_min_loops}",
             f"--codeflash_max_loops={pytest_max_loops}",
             "--codeflash_loops_scope=session",
         ]
 
-        results = subprocess.run(
+        results = execute_test_subprocess(
             pytest_cmd_list + test_files + pytest_args,
-            capture_output=True,
             cwd=cwd,
             env=pytest_test_env,
-            text=True,
-            timeout=600 * 2,  # TODO: Make this dynamic
-            check=False,
+            timeout=600,  # TODO: Make this dynamic
         )
     elif test_framework == "unittest":
         result_file_path = get_run_tmp_file(Path("unittest_results.xml"))
