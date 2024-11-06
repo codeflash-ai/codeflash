@@ -5,11 +5,10 @@ from enum import Enum, Flag, IntFlag, auto
 
 import pydantic
 import pytest
-from returns.result import Failure, Success
-
 from codeflash.verification.comparator import comparator
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults, TestType
+from returns.result import Failure, Success
 
 
 def test_basic_python_objects():
@@ -661,113 +660,111 @@ def test_custom_object():
 
 
 def test_compare_results_fn():
-    original_results = TestResults(
-        test_results=[
-            FunctionTestInvocation(
-                id=InvocationId(
-                    test_module_path="test_module_path",
-                    test_class_name="test_class_name",
-                    test_function_name="test_function_name",
-                    function_getting_tested="function_getting_tested",
-                    iteration_id="0",
-                ),
-                file_name="file_name",
-                did_pass=True,
-                runtime=5,
-                test_framework="unittest",
-                test_type=TestType.EXISTING_UNIT_TEST,
-                return_value=5,
-                timed_out=False,
-                loop_index=1,
-            )
-        ]
+    original_results = TestResults()
+    original_results.add(
+        FunctionTestInvocation(
+            id=InvocationId(
+                test_module_path="test_module_path",
+                test_class_name="test_class_name",
+                test_function_name="test_function_name",
+                function_getting_tested="function_getting_tested",
+                iteration_id="0",
+            ),
+            file_name="file_name",
+            did_pass=True,
+            runtime=5,
+            test_framework="unittest",
+            test_type=TestType.EXISTING_UNIT_TEST,
+            return_value=5,
+            timed_out=False,
+            loop_index=1,
+        )
     )
 
-    new_results_1 = TestResults(
-        test_results=[
-            FunctionTestInvocation(
-                id=InvocationId(
-                    test_module_path="test_module_path",
-                    test_class_name="test_class_name",
-                    test_function_name="test_function_name",
-                    function_getting_tested="function_getting_tested",
-                    iteration_id="0",
-                ),
-                file_name="file_name",
-                did_pass=True,
-                runtime=10,
-                test_framework="unittest",
-                test_type=TestType.EXISTING_UNIT_TEST,
-                return_value=5,
-                timed_out=False,
-                loop_index=1,
-            )
-        ]
+    new_results_1 = TestResults()
+    new_results_1.add(
+        FunctionTestInvocation(
+            id=InvocationId(
+                test_module_path="test_module_path",
+                test_class_name="test_class_name",
+                test_function_name="test_function_name",
+                function_getting_tested="function_getting_tested",
+                iteration_id="0",
+            ),
+            file_name="file_name",
+            did_pass=True,
+            runtime=10,
+            test_framework="unittest",
+            test_type=TestType.EXISTING_UNIT_TEST,
+            return_value=5,
+            timed_out=False,
+            loop_index=1,
+        )
     )
 
     assert compare_test_results(original_results, new_results_1)
 
-    new_results_2 = TestResults(
-        test_results=[
-            FunctionTestInvocation(
-                id=InvocationId(
-                    test_module_path="test_module_path",
-                    test_class_name="test_class_name",
-                    test_function_name="test_function_name",
-                    function_getting_tested="function_getting_tested",
-                    iteration_id="0",
-                ),
-                file_name="file_name",
-                did_pass=True,
-                runtime=10,
-                test_framework="unittest",
-                test_type=TestType.EXISTING_UNIT_TEST,
-                return_value=[5],
-                timed_out=False,
-                loop_index=1,
-            )
-        ]
+    new_results_2 = TestResults()
+    new_results_2.add(
+        FunctionTestInvocation(
+            id=InvocationId(
+                test_module_path="test_module_path",
+                test_class_name="test_class_name",
+                test_function_name="test_function_name",
+                function_getting_tested="function_getting_tested",
+                iteration_id="0",
+            ),
+            file_name="file_name",
+            did_pass=True,
+            runtime=10,
+            test_framework="unittest",
+            test_type=TestType.EXISTING_UNIT_TEST,
+            return_value=[5],
+            timed_out=False,
+            loop_index=1,
+        )
     )
 
     assert not compare_test_results(original_results, new_results_2)
 
-    new_results_3 = TestResults(
-        test_results=[
-            FunctionTestInvocation(
-                id=InvocationId(
-                    test_module_path="test_module_path",
-                    test_class_name="test_class_name",
-                    test_function_name="test_function_name",
-                    function_getting_tested="function_getting_tested",
-                    iteration_id="0",
-                ),
-                file_name="file_name",
-                did_pass=True,
-                runtime=10,
-                test_framework="unittest",
-                test_type=TestType.EXISTING_UNIT_TEST,
-                return_value=5,
-                timed_out=False,
-                loop_index=1,
+    new_results_3 = TestResults()
+    new_results_3.add(
+        FunctionTestInvocation(
+            id=InvocationId(
+                test_module_path="test_module_path",
+                test_class_name="test_class_name",
+                test_function_name="test_function_name",
+                function_getting_tested="function_getting_tested",
+                iteration_id="0",
             ),
-            FunctionTestInvocation(
-                id=InvocationId(
-                    test_module_path="test_module_path",
-                    test_class_name="test_class_name",
-                    test_function_name="test_function_name",
-                    function_getting_tested="function_getting_tested",
-                    iteration_id="2",
-                ),
-                file_name="file_name",
-                did_pass=True,
-                runtime=10,
-                test_framework="unittest",
-                test_type=TestType.EXISTING_UNIT_TEST,
-                return_value=5,
-                timed_out=False,
-                loop_index=1,
+            file_name="file_name",
+            did_pass=True,
+            runtime=10,
+            test_framework="unittest",
+            test_type=TestType.EXISTING_UNIT_TEST,
+            return_value=5,
+            timed_out=False,
+            loop_index=1,
+        )
+    )
+    new_results_3.add(
+        FunctionTestInvocation(
+            id=InvocationId(
+                test_module_path="test_module_path",
+                test_class_name="test_class_name",
+                test_function_name="test_function_name",
+                function_getting_tested="function_getting_tested",
+                iteration_id="2",
             ),
-        ]
+            file_name="file_name",
+            did_pass=True,
+            runtime=10,
+            test_framework="unittest",
+            test_type=TestType.EXISTING_UNIT_TEST,
+            return_value=5,
+            timed_out=False,
+            loop_index=1,
+        )
     )
 
     assert compare_test_results(original_results, new_results_3)

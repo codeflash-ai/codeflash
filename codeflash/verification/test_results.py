@@ -75,16 +75,31 @@ class FunctionTestInvocation:
 
 
 class TestResults(BaseModel):
+    # don't add to this list directly, use the add method
+    # also we don't support deletion of test results
     test_results: list[FunctionTestInvocation] = []
+    test_result_idx: dict[str, int] = {}
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
+        if function_test_invocation.id in self.test_result_idx:
+            raise ValueError(f"Test result with id {function_test_invocation.id} already exists.")
+        self.test_result_idx[function_test_invocation.id] = len(self.test_results)
         self.test_results.append(function_test_invocation)
 
     def merge(self, other: TestResults) -> None:
+        original_len = len(self.test_results)
         self.test_results.extend(other.test_results)
+        for k, v in other.test_result_idx.items():
+            if k in self.test_result_idx:
+                raise ValueError(f"Test result with id {k} already exists.")
+            self.test_result_idx[k] = v + original_len
 
     def get_by_id(self, invocation_id: InvocationId) -> FunctionTestInvocation | None:
-        return next((r for r in self.test_results if r.id == invocation_id), None)
+        # return next((r for r in self.test_results if r.id == invocation_id), None)
+        try:
+            return self.test_results[self.test_result_idx[invocation_id]]
+        except (IndexError, KeyError):
+            return None
 
     def get_all_ids(self) -> set[InvocationId]:
         return {test_result.id for test_result in self.test_results}
