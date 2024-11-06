@@ -140,7 +140,7 @@ class CoverageData:
 
         candidates = generate_candidates(source_code_path)
 
-        logger.info(f"Looking for coverage data in {" -> ".join(candidates)}")
+        logger.info(f"Looking for coverage data in {' -> '.join(candidates)}")
         for candidate in candidates:
             try:
                 cov: dict[str, dict[str, Any]] = coverage_data["files"][candidate]["functions"]
