@@ -15,6 +15,11 @@ from codeflash.verification.test_results import TestResults, TestType
 # of the module is foo.eggs.
 
 
+class ValidCode(BaseModel, frozen=True):
+    source_code: str
+    normalized_code: str
+
+
 class DiffbehaviorReturnCode(IntEnum):
     NO_DIFFERENCES = 0
     COUNTER_EXAMPLES = 1
@@ -79,7 +84,8 @@ class TestFiles(BaseModel):
         if test_file not in self.test_files:
             self.test_files.append(test_file)
         else:
-            raise ValueError("Test file already exists in the list")
+            msg = "Test file already exists in the list"
+            raise ValueError(msg)
 
     def get_by_original_file_path(self, file_path: Path) -> TestFile | None:
         return next((test_file for test_file in self.test_files if test_file.original_file_path == file_path), None)

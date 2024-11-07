@@ -1,6 +1,6 @@
 ﻿from pathlib import Path
 
-from codeflash.code_utils.static_analysis import ImportedInternalModuleAnalysis, analyze_imported_internal_modules
+from codeflash.code_utils.static_analysis import ImportedInternalModuleAnalysis, analyze_imported_modules
 
 
 def test_analyze_imported_modules() -> None:
@@ -36,5 +36,5 @@ def a_function():
             name="mymodule", full_name="tests.mymodule", file_path=project_root / Path("tests/mymodule.py")
         ),
     ]
-    actual_imported_module_analysis = analyze_imported_internal_modules(code_str, module_file_path, project_root)
+    actual_imported_module_analysis = analyze_imported_modules(code_str, module_file_path, project_root)
     assert set(actual_imported_module_analysis) == set(expected_imported_module_analysis)

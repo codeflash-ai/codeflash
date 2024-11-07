@@ -80,7 +80,7 @@ def get_module_file_path(module_name: str, project_root: Path) -> Path | None:
     return None
 
 
-def analyze_imported_internal_modules(
+def analyze_imported_modules(
     code_str: str, module_file_path: Path, project_root: Path
 ) -> list[ImportedInternalModuleAnalysis]:
     """Statically finds and analyzes all imported internal modules."""

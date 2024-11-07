@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -44,7 +45,7 @@ from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
-from codeflash.code_utils.static_analysis import analyze_imported_internal_modules
+from codeflash.code_utils.static_analysis import analyze_imported_modules
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize, get_functions_to_optimize
@@ -61,6 +62,7 @@ from codeflash.models.models import (
     OriginalCodeBaseline,
     TestFile,
     TestFiles,
+    ValidCode,
 )
 from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
@@ -138,34 +140,49 @@ class Optimizer:
             logger.info(f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}")
             console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
+
             # TODO CROSSHAIR: Handle no git case.
             git_root = git_root_dir()
 
-            for path in file_to_funcs_to_optimize:
-                original_module_path = Path(path)
+            for original_module_path in file_to_funcs_to_optimize:
                 logger.info(f"Examining file {original_module_path!s}…")
-                # TODO CROSSHAIR Check for IO errors with try block, factor out code extraction and validation.
-                original_code: str = original_module_path.read_text(encoding="utf8")  # TODO CROSSHAIR Parse, Validate
 
-                original_code_imported_module_analysis = analyze_imported_internal_modules(
-                    original_code, original_module_path, self.args.project_root
+                original_module_code: str = original_module_path.read_text(encoding="utf8")
+                imported_module_analyses = analyze_imported_modules(
+                    original_module_code, original_module_path, self.args.project_root
                 )
-                imported_internal_module_information: dict[Path, dict[str, str]] = {}
-                for analysis in original_code_imported_module_analysis:
-                    # TODO CROSSHAIR Check for IO errors, factor out.
-                    imported_internal_module_information[analysis.file_path] = {
-                        "name": analysis.name,
-                        "full_name": analysis.full_name,
-                        # TODO CROSSHAIR Parse, Validate
-                        "code": analysis.file_path.read_text(encoding="utf8"),  # TODO CROSSHAIR Separate try block?
-                    }
-                    # TODO CROSSHAIR Parse/validate ast, norm. ast, libcst. New pydantic model for code.
+                callee_module_paths = {analysis.file_path for analysis in imported_module_analyses}
 
-                for function_to_optimize in file_to_funcs_to_optimize[path]:
-                    # TODO CROSSHAIR Factor out in git tools. Handle no git case.
-                    # TODO CROSSHAIR Pydantic model for worktree info: work_tree_root, work_trees. work_tree_branches
+                try:
+                    normalized_original_module_code = normalize_code(original_module_code)
+                except SyntaxError as e:
+                    logger.warning(f"Syntax error parsing code in {original_module_path}: {e}")
+                    continue
+                validated_original_code: dict[Path, ValidCode] = {
+                    original_module_path: ValidCode(
+                        source_code=original_module_code, normalized_code=normalized_original_module_code
+                    )
+                }
+
+                has_syntax_error = False
+                for analysis in imported_module_analyses:
+                    callee_original_code = analysis.file_path.read_text(encoding="utf8")
+                    try:
+                        normalized_callee_original_code = normalize_code(callee_original_code)
+                    except SyntaxError as e:
+                        logger.warning(f"Syntax error parsing code in {analysis.file_path}: {e}")
+                        has_syntax_error = True
+                        break
+                    validated_original_code[analysis.file_path] = ValidCode(
+                        source_code=callee_original_code, normalized_code=normalized_callee_original_code
+                    )
+                if has_syntax_error:
+                    continue
+
+                for function_to_optimize in file_to_funcs_to_optimize[original_module_path]:
                     worktree_root: Path = Path(tempfile.mkdtemp())
                     worktrees: list[Path] = [Path(tempfile.mkdtemp(dir=worktree_root)) for _ in range(N_CANDIDATES + 1)]
+                    # TODO CROSSHAIR Handle no git case.
                     for worktree in worktrees:
                         subprocess.run(
                             ["git", "worktree", "add", "-d", worktree], cwd=self.args.module_root, check=True
@@ -180,8 +197,8 @@ class Optimizer:
                     best_optimization = self.optimize_function(
                         function_to_optimize,
                         function_to_tests,
-                        original_code,
-                        imported_internal_module_information,
+                        callee_module_paths,
+                        validated_original_code,
                         worktree_root,
                         worktrees,
                         git_root,
@@ -218,8 +235,8 @@ class Optimizer:
         self,
         function_to_optimize: FunctionToOptimize,
         function_to_tests: dict[str, list[FunctionCalledInTest]],
-        original_code: str,
-        imported_internal_module_information: dict[Path, dict[str, str]],
+        callee_module_paths: set[Path],
+        validated_original_code: dict[Path, ValidCode],
         worktree_root: Path,
         worktrees: list[Path],
         git_root: Path,
@@ -230,7 +247,11 @@ class Optimizer:
         ph("cli-optimize-function-start", {"function_trace_id": function_trace_id})
         self.cleanup_leftover_test_return_values()
         file_name_from_test_module_name.cache_clear()
-        ctx_result = self.get_code_optimization_context(function_to_optimize, self.args.project_root, original_code)
+        ctx_result = self.get_code_optimization_context(
+            function_to_optimize,
+            self.args.project_root,
+            validated_original_code[function_to_optimize.file_path].source_code,
+        )
         if not is_successful(ctx_result):
             return Failure(ctx_result.failure())
         code_context: CodeOptimizationContext = ctx_result.unwrap()
@@ -243,7 +264,7 @@ class Optimizer:
 
         code_print(code_context.code_to_optimize_with_helpers)
 
-        module_path = module_name_from_file_path(function_to_optimize.file_path, self.args.project_root)
+        original_module_path = module_name_from_file_path(function_to_optimize.file_path, self.args.project_root)
 
         for module_abspath in original_helper_code:
             code_context.code_to_optimize_with_helpers = add_needed_imports_from_module(
@@ -265,7 +286,7 @@ class Optimizer:
                 code_context.code_to_optimize_with_helpers,
                 function_to_optimize,
                 code_context.helper_functions,
-                Path(module_path),
+                Path(original_module_path),
                 function_trace_id,
                 run_experiment=should_run_experiment,
             )
@@ -298,7 +319,7 @@ class Optimizer:
         function_to_optimize_qualified_name = function_to_optimize.qualified_name
         baseline_result = self.establish_original_code_baseline(
             function_to_optimize_qualified_name,
-            function_to_tests.get(module_path + "." + function_to_optimize_qualified_name, []),
+            function_to_tests.get(original_module_path + "." + function_to_optimize_qualified_name, []),
         )
         console.rule()
         if not is_successful(baseline_result):
@@ -311,13 +332,14 @@ class Optimizer:
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
 
         best_optimization = None
+
         for u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
             if candidates is None:
                 continue
 
-            optimized_module_code_strings = {
+            initial_optimized_code = {
                 candidate.optimization_id: replace_functions_and_add_imports(
-                    original_code,
+                    validated_original_code[function_to_optimize.file_path].source_code,
                     [function_to_optimize_qualified_name],
                     candidate.source_code,
                     function_to_optimize.file_path,
@@ -328,78 +350,62 @@ class Optimizer:
                 )
                 for candidate in candidates
             }
-            callee_module_paths = {callee.file_path for callee in code_context.helper_functions}
-            optimized_callee_modules_code_strings = {
+            callee_original_code = {
+                module_path: validated_original_code[module_path].source_code for module_path in callee_module_paths
+            }
+            intermediate_original_code = {
+                candidate.optimization_id: callee_original_code for candidate in candidates
+            } | {
                 candidate.optimization_id: {
-                    callee_module_path: replace_functions_and_add_imports(
-                        imported_internal_module_information[callee_module_path]["code"],
+                    function_to_optimize.file_path: initial_optimized_code[candidate.optimization_id]
+                }
+                for candidate in candidates
+            }
+            module_paths = callee_module_paths | {function_to_optimize.file_path}
+            optimized_code = {
+                candidate.optimization_id: {
+                    module_path: replace_functions_and_add_imports(
+                        intermediate_original_code[candidate.optimization_id][module_path],
                         (
                             [
                                 callee.qualified_name
                                 for callee in code_context.helper_functions
-                                if callee.file_path == callee_module_path and callee.jedi_definition.type != "class"
+                                if callee.file_path == module_path and callee.jedi_definition.type != "class"
                             ]
                         ),
                         candidate.source_code,
                         function_to_optimize.file_path,
-                        callee_module_path,
-                        code_context.preexisting_objects,
+                        module_path,
+                        [],
                         code_context.contextual_dunder_methods,
                         self.args.project_root,
                     )
-                    for callee_module_path in callee_module_paths
+                    for module_path in module_paths
                 }
                 for candidate in candidates
             }
 
-            normalized_original_code = normalize_code(original_code)
-            are_optimized_module_code_strings_zero_diff = {
-                candidate.optimization_id: normalize_code(optimized_module_code_strings[candidate.optimization_id])
-                == normalized_original_code
-                for candidate in candidates
-            }
-            normalized_callee_module_code_strings = {
-                callee_module_path: normalize_code(imported_internal_module_information[callee_module_path]["code"])
-                for callee_module_path in callee_module_paths
-            }
             are_optimized_callee_module_code_strings_zero_diff = {
                 candidate.optimization_id: {
-                    callee_module_path: normalize_code(
-                        optimized_callee_modules_code_strings[candidate.optimization_id][callee_module_path]
-                    )
-                    == normalized_callee_module_code_strings[callee_module_path]
-                    for callee_module_path in callee_module_paths
+                    callee_module_path: normalize_code(optimized_code[candidate.optimization_id][callee_module_path])
+                    == validated_original_code[callee_module_path].normalized_code
+                    for callee_module_path in module_paths
                 }
                 for candidate in candidates
             }
-
             candidates_with_diffs = [
                 candidate
                 for candidate in candidates
-                if not (
-                    are_optimized_module_code_strings_zero_diff[candidate.optimization_id]
-                    and all(are_optimized_callee_module_code_strings_zero_diff[candidate.optimization_id].values())
-                )
+                if not all(are_optimized_callee_module_code_strings_zero_diff[candidate.optimization_id].values())
             ]
 
-            # TODO CROSSHAIR: refactor filtering + write as single function. Put under try/except block. TODO
-            #  Crosshair: Precalculate or factor out repeated function_to_optimize.file_path.relative_to(
-            #  self.args.module_root)
             for candidate, worktree in zip(candidates_with_diffs, worktrees[1:]):
-                if are_optimized_module_code_strings_zero_diff[candidate.optimization_id]:
-                    (worktree / function_to_optimize.file_path.relative_to(git_root)).write_text(
-                        optimized_module_code_strings[candidate.optimization_id], encoding="utf8"
-                    )
-                for callee_module_path in optimized_callee_modules_code_strings[candidate.optimization_id]:
-                    if are_optimized_callee_module_code_strings_zero_diff[candidate.optimization_id][
-                        callee_module_path
-                    ]:
-                        (worktree / callee_module_path.relative_to(git_root)).write_text(
-                            optimized_callee_modules_code_strings[candidate.optimization_id][callee_module_path],
-                            encoding="utf8",
+                for module_path in optimized_code[candidate.optimization_id]:
+                    if are_optimized_callee_module_code_strings_zero_diff[candidate.optimization_id][module_path]:
+                        (worktree / module_path.relative_to(git_root)).write_text(
+                            optimized_code[candidate.optimization_id][module_path], encoding="utf8"
                         )
 
-            # TODO Crosshair: Factor out relative path munging code, repeated.
             function_to_optimize_original_worktree_fqn = (
                 str(worktrees[0].name / function_to_optimize.file_path.relative_to(git_root).with_suffix("")).replace(
                     "/", "."
@@ -409,22 +415,39 @@ class Optimizer:
             )
 
             diffbehavior_results: dict[str, DiffbehaviorReturnCode] = {}
+            logger.info("Running concolic behavior correctness checking…")
+            console.rule()
             for candidate_index, candidate in enumerate(candidates_with_diffs, start=1):
                 logger.info(f"Optimization candidate {candidate_index}/{len(candidates_with_diffs)}:")
                 code_print(candidate.source_code)
+                function_to_optimize_optimized_worktree_fqn = (
+                    str(
+                        worktrees[candidate_index].name
+                        / function_to_optimize.file_path.relative_to(git_root).with_suffix("")
+                    ).replace("/", ".")
+                    + "."
+                    + function_to_optimize_qualified_name
+                )
                 result = subprocess.run(
                     [
                         "crosshair",
                         "diffbehavior",
-                        "--max_uninteresting_iterations",
-                        "64",
-                        str(
-                            worktrees[candidate_index].name
-                            / function_to_optimize.file_path.relative_to(git_root).with_suffix("")
-                        ).replace("/", ".")
-                        + "."
-                        + function_to_optimize_qualified_name,
+                        "--max_uninteresting_iterations=128",
+                        function_to_optimize_optimized_worktree_fqn,
                         function_to_optimize_original_worktree_fqn,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    cwd=worktree_root,
+                    check=False,
+                )
+                tests = subprocess.run(
+                    [
+                        "crosshair",
+                        "cover",
+                        "--example_output_format=pytest",
+                        "--max_uninteresting_iterations=128",
+                        function_to_optimize_optimized_worktree_fqn,
                     ],
                     capture_output=True,
                     text=True,
@@ -434,17 +457,39 @@ class Optimizer:
 
                 if result.returncode == DiffbehaviorReturnCode.ERROR:
                     diffbehavior_results[candidate.optimization_id] = DiffbehaviorReturnCode.ERROR
-                    logger.info("Inconclusive results from concolic behavior correctness check.")
+                    logger.info("Inconclusive results from concolic behavior correctness checking.")
                     logger.warning(
                         f"Error running crosshair diffbehavior{': ' + result.stderr if result.stderr else '.'}"
                     )
                 elif result.returncode == DiffbehaviorReturnCode.COUNTER_EXAMPLES:
-                    diffbehavior_results[candidate.optimization_id] = DiffbehaviorReturnCode.COUNTER_EXAMPLES
-                    logger.info(f"Optimization candidate failed concolic behavior correctness check:\n{result.stdout}")
+                    split_counter_examples = re.split("(Given: )", result.stdout)[1:]
+                    joined_counter_examples = [
+                        "".join(map(str, split_counter_examples[i : i + 2]))
+                        for i in range(0, len(split_counter_examples), 2)
+                    ]
+                    concrete_counter_examples = "".join(
+                        [elt for elt in joined_counter_examples if not re.search(r" object at 0x[0-9a-fA-F]+", elt)]
+                    )
+                    if concrete_counter_examples:
+                        diffbehavior_results[candidate.optimization_id] = DiffbehaviorReturnCode.COUNTER_EXAMPLES
+                        logger.info(
+                            f"Optimization candidate failed concolic behavior correctness "
+                            f"checking:\n{concrete_counter_examples}"
+                        )
+                        if result.stdout != concrete_counter_examples:
+                            objectid_counter_examples = "".join(
+                                [elt for elt in joined_counter_examples if re.search(r" object at 0x[0-9a-fA-F]+", elt)]
+                            )
+                            logger.warning(f"Counter-examples with object ID found:\n{objectid_counter_examples}")
+                    else:
+                        diffbehavior_results[candidate.optimization_id] = DiffbehaviorReturnCode.ERROR
+                        logger.info("Inconclusive results from concolic behavior correctness checking.")
+                        console.rule()
+                        logger.warning(f"Counter-examples with object ID found:\n{result.stdout}")
                 elif result.returncode == DiffbehaviorReturnCode.NO_DIFFERENCES:
                     diffbehavior_results[candidate.optimization_id] = DiffbehaviorReturnCode.NO_DIFFERENCES
                     logger.info(
-                        f"Optimization candidate passed concolic behavior correctness check"
+                        f"Optimization candidate passed concolic behavior correctness checking"
                         f"{': ' + chr(10) + result.stdout.split(chr(10), 1)[0] if chr(10) in result.stdout else '.'}"
                     )
                     if result.stdout.endswith("All paths exhausted, functions are likely the same!\n"):
@@ -452,8 +497,11 @@ class Optimizer:
                     else:
                         logger.warning("Consider increasing the --max_uninteresting_iterations option.")
                 else:
-                    logger.info("Inconclusive results from concolic behavior correctness check.")
+                    logger.info("Inconclusive results from concolic behavior correctness checking.")
                     logger.error("Unknown return code running crosshair diffbehavior.")
+                console.rule()
+                logger.info(f"Tests generated through concolic coverage checking:\n{tests.stdout}")
+                console.rule()
 
             tests_in_file: list[FunctionCalledInTest] = function_to_tests.get(
                 function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root), []
@@ -463,7 +511,7 @@ class Optimizer:
                 candidates=candidates_with_diffs,
                 code_context=code_context,
                 function_to_optimize=function_to_optimize,
-                original_code=original_code,
+                original_code=validated_original_code[function_to_optimize.file_path].source_code,
                 original_code_baseline=original_code_baseline,
                 original_helper_code=original_helper_code,
                 function_trace_id=function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
@@ -503,7 +551,9 @@ class Optimizer:
                 )
 
                 new_code, new_helper_code = self.reformat_code_and_helpers(
-                    code_context.helper_functions, explanation.file_path, original_code
+                    code_context.helper_functions,
+                    explanation.file_path,
+                    validated_original_code[function_to_optimize.file_path].source_code,
                 )
 
                 existing_tests = existing_tests_source_for(
@@ -513,7 +563,9 @@ class Optimizer:
                 )
 
                 original_code_combined = original_helper_code.copy()
-                original_code_combined[explanation.file_path] = original_code
+                original_code_combined[explanation.file_path] = validated_original_code[
+                    function_to_optimize.file_path
+                ].source_code
                 new_code_combined = new_helper_code.copy()
                 new_code_combined[explanation.file_path] = new_code
                 if not self.args.no_pr:
@@ -528,7 +580,11 @@ class Optimizer:
                         function_trace_id=function_trace_id,
                     )
                     if self.args.all or env_utils.get_pr_number():
-                        self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
+                        self.write_code_and_helpers(
+                            validated_original_code[function_to_optimize.file_path].source_code,
+                            original_helper_code,
+                            function_to_optimize.file_path,
+                        )
         for generated_test_path in generated_tests_paths:
             generated_test_path.unlink(missing_ok=True)
         for test_paths in instrumented_unittests_created_for_function:
@@ -643,7 +699,6 @@ class Optimizer:
             logger.exception(f"Optimization interrupted: {e}")
             raise
 
-        # TODO Crosshair: Report on regression vs concolic, false negatives vs matches
         self.aiservice_client.log_results(
             function_trace_id=function_trace_id,
             speedup_ratio=speedup_ratios,
@@ -843,7 +898,8 @@ class Optimizer:
                 elif test_type == TestType.REPLAY_TEST:
                     replay_test_files_count += 1
                 else:
-                    raise ValueError(f"Unexpected test type: {test_type}")
+                    msg = f"Unexpected test type: {test_type}"
+                    raise ValueError(msg)
                 success, injected_test = inject_profiling_into_existing_test(
                     test_path=path_obj_test_file,
                     call_positions=positions,
@@ -1200,14 +1256,14 @@ class Optimizer:
             logger.warning("Concolic behavior correctness check inconclusive.")
             console.rule()
 
-            if (total_candidate_timing := candidate_results.total_passed_runtime()) == 0:
-                logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
-                console.rule()
-            get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.bin")).unlink(missing_ok=True)
+        if (total_candidate_timing := candidate_results.total_passed_runtime()) == 0:
+            logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
+            console.rule()
+        get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.bin")).unlink(missing_ok=True)
 
-            get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
-            if not equal_results:
-                success = False
+        get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
+        if not equal_results:
+            success = False
 
         if not success:
             return Failure("Failed to run the optimization candidate.")
