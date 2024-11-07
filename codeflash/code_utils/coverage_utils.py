@@ -226,6 +226,7 @@ class CoverageData:
         """Annotate the source code with the coverage data."""
         if not self.coverage:
             logger.debug(self)
+            logger.info(f"No coverage data found for {self.function_name}")
             return
 
         from rich.panel import Panel

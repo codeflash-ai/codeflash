@@ -85,11 +85,6 @@ class Optimizer:
             pytest_cmd=args.pytest_cmd,
         )
 
-        for file in Path(args.project_root).glob(".coverage*"):
-            if file.name != ".coveragerc":
-                logger.info(f"Removing coverage file {file}")
-                file.unlink()
-
         self.aiservice_client = AiServiceClient()
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
@@ -842,6 +837,7 @@ class Optimizer:
                         enable_coverage=True,
                         function_name=function_name,
                         source_file=function_file_path,
+                        code_context=code_context,
                     )
                     unittest_results.merge(unittest_loop_results)
 

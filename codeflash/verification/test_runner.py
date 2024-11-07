@@ -60,6 +60,12 @@ def run_tests(
 
         if enable_coverage:
             assert project_root is not None, "project_root must be provided for coverage analysis"
+            if not source_file:
+                msg = "source_file must be provided for coverage analysis"
+                raise ValueError(msg)
+            if not function_name:
+                msg = "function_name must be provided for coverage analysis"
+                raise ValueError(msg)
 
             coverage_out_file, coveragercfile = prepare_coverage_files(project_root)
 
@@ -73,20 +79,24 @@ def run_tests(
 
             pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
             pytest_args = [
-                f"--timeout={pytest_timeout* 2}",
-                f"--codeflash_seconds={pytest_target_runtime_seconds * 2}",
+                f"--timeout={pytest_timeout}",
+                f"--codeflash_seconds={pytest_target_runtime_seconds}",
                 "--codeflash_min_loops=1",
-                "--codeflash_max_loops=3",
+                "--codeflash_max_loops=1",
                 "--codeflash_loops_scope=session",
             ]
 
             cov_erase = execute_test_subprocess(
                 shlex.split(f"{sys.executable} -m coverage erase"), cwd=cwd, env=pytest_test_env
-            )
+            )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any, then the current run will be appended to the previous data, which skews the results
             logger.debug(cov_erase)
 
-            files = [str(file.instrumented_file_path) for file in test_paths.test_files]
-
+            files = [
+                str(file.instrumented_file_path)
+                for file in test_paths.test_files
+                if file.test_type == TestType.GENERATED_REGRESSION
+            ]
+            logger.info(files)
             cov_run = execute_test_subprocess(
                 shlex.split(f"{sys.executable} -m coverage run --rcfile={coveragercfile} -m pytest")
                 + files
@@ -101,9 +111,8 @@ def run_tests(
                 shlex.split(f"{sys.executable} -m coverage json --rcfile={coveragercfile}"),
                 cwd=cwd,
                 env=pytest_test_env,
-            )
+            )  # this will generate a json file with the coverage data
             logger.debug(cov_report)
-
             coveragepy_coverage = CoverageData.load_from_coverage_file(
                 coverage_out_file, source_file, function_name, code_context=code_context
             )
