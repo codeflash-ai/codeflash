@@ -414,8 +414,25 @@ class Optimizer:
                 + function_to_optimize_qualified_name
             )
 
+            logger.info("Running concolic coverage checking for the original code…")
+            original_code_coverage_tests = subprocess.run(
+                [
+                    "crosshair",
+                    "cover",
+                    "--example_output_format=pytest",
+                    "--max_uninteresting_iterations=256",
+                    function_to_optimize_original_worktree_fqn,
+                ],
+                capture_output=True,
+                text=True,
+                cwd=worktree_root,
+                check=False,
+            )
+            logger.info(f"Tests generated through concolic coverage checking:\n{original_code_coverage_tests.stdout}")
+            console.rule()
+
             diffbehavior_results: dict[str, DiffbehaviorReturnCode] = {}
-            logger.info("Running concolic behavior correctness checking…")
+            logger.info("Running concolic behavior correctness and coverage checking on optimized code…")
             console.rule()
             for candidate_index, candidate in enumerate(candidates_with_diffs, start=1):
                 logger.info(f"Optimization candidate {candidate_index}/{len(candidates_with_diffs)}:")
@@ -441,7 +458,7 @@ class Optimizer:
                     cwd=worktree_root,
                     check=False,
                 )
-                tests = subprocess.run(
+                optimized_code_tests = subprocess.run(
                     [
                         "crosshair",
                         "cover",
@@ -500,7 +517,7 @@ class Optimizer:
                     logger.info("Inconclusive results from concolic behavior correctness checking.")
                     logger.error("Unknown return code running crosshair diffbehavior.")
                 console.rule()
-                logger.info(f"Tests generated through concolic coverage checking:\n{tests.stdout}")
+                logger.info(f"Tests generated through concolic coverage checking:\n{optimized_code_tests.stdout}")
                 console.rule()
 
             tests_in_file: list[FunctionCalledInTest] = function_to_tests.get(
