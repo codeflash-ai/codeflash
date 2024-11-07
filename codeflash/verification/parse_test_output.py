@@ -184,7 +184,15 @@ def parse_test_xml(
                 return test_results
 
             test_class_path = testcase.classname
-            test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
+            try:
+                test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
+            except (AttributeError, TypeError) as e:
+                msg = (
+                    f"Accessing testcase.name in parse_test_xml for testcase {testcase!r} in file"
+                    f" {test_xml_file_path} has exception: {e}"
+                )
+                logger.exception(msg)
+                continue
             if test_file_name is None:
                 if test_class_path:
                     # TODO : This might not be true if the test is organized under a class
@@ -195,7 +203,6 @@ def parse_test_xml(
                 else:
                     test_file_path = file_path_from_module_name(test_function, base_dir)
             else:
-                # TODO: not sure which root path fits better here
                 test_file_path = base_dir / test_file_name
             if not test_file_path.exists():
                 logger.warning(f"Could not find the test for file name - {test_file_path} ")
@@ -209,10 +216,7 @@ def parse_test_xml(
                 test_class = class_name[len(test_module_path) + 1 :]  # +1 for the dot, gets Unittest class name
 
             loop_index = 1
-            if test_function is None:
-                msg = f"testcase.name is None in parse_test_xml for testcase {testcase!r} in file {test_xml_file_path}"
-                logger.warning(msg)
-                continue
+
             timed_out = False
             if test_config.test_framework == "pytest":
                 loop_index = int(testcase.name.split("[ ")[-1][:-2]) if "[" in testcase.name else 1
