@@ -449,7 +449,7 @@ class Optimizer:
                     [
                         "crosshair",
                         "diffbehavior",
-                        "--max_uninteresting_iterations=128",
+                        "--max_uninteresting_iterations=256",
                         function_to_optimize_optimized_worktree_fqn,
                         function_to_optimize_original_worktree_fqn,
                     ],
@@ -463,7 +463,7 @@ class Optimizer:
                         "crosshair",
                         "cover",
                         "--example_output_format=pytest",
-                        "--max_uninteresting_iterations=128",
+                        "--max_uninteresting_iterations=256",
                         function_to_optimize_optimized_worktree_fqn,
                     ],
                     capture_output=True,
