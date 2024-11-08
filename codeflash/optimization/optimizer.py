@@ -141,7 +141,7 @@ class Optimizer:
             console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
 
-            git_root = git_root_dir() if check_running_in_git_repo else None
+            git_root = git_root_dir() if check_running_in_git_repo(self.args.module_root) else None
 
             for original_module_path in file_to_funcs_to_optimize:
                 logger.info(f"Examining file {original_module_path!s}…")
@@ -180,17 +180,15 @@ class Optimizer:
 
                 for function_to_optimize in file_to_funcs_to_optimize[original_module_path]:
                     if git_root:
-                        worktree_root: Path | None = Path(tempfile.mkdtemp())
-                        worktrees: list[Path] | None = [
-                            Path(tempfile.mkdtemp(dir=worktree_root)) for _ in range(N_CANDIDATES + 1)
-                        ]
+                        worktree_root = Path(tempfile.mkdtemp())
+                        worktrees = [Path(tempfile.mkdtemp(dir=worktree_root)) for _ in range(N_CANDIDATES + 1)]
                         for worktree in worktrees:
                             subprocess.run(
                                 ["git", "worktree", "add", "-d", worktree], cwd=self.args.module_root, check=True
                             )
                     else:
                         worktree_root = None
-                        worktrees = None
+                        worktrees = []
 
                     function_iterator_count += 1
                     logger.info(
@@ -209,12 +207,13 @@ class Optimizer:
                     )
                     self.test_files = TestFiles(test_files=[])
 
-                    try:
-                        for worktree in worktrees:
-                            subprocess.run(["git", "worktree", "remove", "-f", worktree], check=True)
-                    except subprocess.CalledProcessError as e:
-                        logger.warning(f"Error removing worktrees: {e}")
-                    shutil.rmtree(worktree_root)
+                    if worktree_root:
+                        try:
+                            for worktree in worktrees:
+                                subprocess.run(["git", "worktree", "remove", "-f", worktree], check=True)
+                        except subprocess.CalledProcessError as e:
+                            logger.warning(f"Error removing worktrees: {e}")
+                        shutil.rmtree(worktree_root)
 
                     if is_successful(best_optimization):
                         optimizations_found += 1
@@ -242,7 +241,7 @@ class Optimizer:
         callee_module_paths: set[Path],
         validated_original_code: dict[Path, ValidCode],
         worktree_root: Path | None,
-        worktrees: list[Path] | None,
+        worktrees: list[Path],
         git_root: Path | None,
     ) -> Result[BestOptimization, str]:
         should_run_experiment = self.experiment_id is not None
@@ -357,7 +356,7 @@ class Optimizer:
             callee_original_code = {
                 module_path: validated_original_code[module_path].source_code for module_path in callee_module_paths
             }
-            intermediate_original_code = {
+            intermediate_original_code: dict[str, dict[Path, str]] = {
                 candidate.optimization_id: callee_original_code for candidate in candidates
             } | {
                 candidate.optimization_id: {
