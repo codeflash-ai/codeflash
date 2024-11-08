@@ -21,6 +21,7 @@ class ValidCode(BaseModel, frozen=True):
 
 
 class DiffbehaviorReturnCode(IntEnum):
+    DID_NOT_RUN = -1
     NO_DIFFERENCES = 0
     COUNTER_EXAMPLES = 1
     ERROR = 2

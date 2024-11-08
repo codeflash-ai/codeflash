@@ -42,7 +42,7 @@ from codeflash.code_utils.config_consts import (
     TOTAL_LOOPING_TIME,
 )
 from codeflash.code_utils.formatter import format_code, sort_imports
-from codeflash.code_utils.git_utils import git_root_dir
+from codeflash.code_utils.git_utils import check_running_in_git_repo, git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
 from codeflash.code_utils.static_analysis import analyze_imported_modules
@@ -141,8 +141,7 @@ class Optimizer:
             console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
 
-            # TODO CROSSHAIR: Handle no git case.
-            git_root = git_root_dir()
+            git_root = git_root_dir() if check_running_in_git_repo else None
 
             for original_module_path in file_to_funcs_to_optimize:
                 logger.info(f"Examining file {original_module_path!s}…")
@@ -180,13 +179,18 @@ class Optimizer:
                     continue
 
                 for function_to_optimize in file_to_funcs_to_optimize[original_module_path]:
-                    worktree_root: Path = Path(tempfile.mkdtemp())
-                    worktrees: list[Path] = [Path(tempfile.mkdtemp(dir=worktree_root)) for _ in range(N_CANDIDATES + 1)]
-                    # TODO CROSSHAIR Handle no git case.
-                    for worktree in worktrees:
-                        subprocess.run(
-                            ["git", "worktree", "add", "-d", worktree], cwd=self.args.module_root, check=True
-                        )
+                    if git_root:
+                        worktree_root: Path | None = Path(tempfile.mkdtemp())
+                        worktrees: list[Path] | None = [
+                            Path(tempfile.mkdtemp(dir=worktree_root)) for _ in range(N_CANDIDATES + 1)
+                        ]
+                        for worktree in worktrees:
+                            subprocess.run(
+                                ["git", "worktree", "add", "-d", worktree], cwd=self.args.module_root, check=True
+                            )
+                    else:
+                        worktree_root = None
+                        worktrees = None
 
                     function_iterator_count += 1
                     logger.info(
@@ -237,9 +241,9 @@ class Optimizer:
         function_to_tests: dict[str, list[FunctionCalledInTest]],
         callee_module_paths: set[Path],
         validated_original_code: dict[Path, ValidCode],
-        worktree_root: Path,
-        worktrees: list[Path],
-        git_root: Path,
+        worktree_root: Path | None,
+        worktrees: list[Path] | None,
+        git_root: Path | None,
     ) -> Result[BestOptimization, str]:
         should_run_experiment = self.experiment_id is not None
         function_trace_id: str = str(uuid.uuid4())
@@ -385,7 +389,7 @@ class Optimizer:
                 for candidate in candidates
             }
 
-            are_optimized_callee_module_code_strings_zero_diff = {
+            are_optimized_module_code_strings_zero_diff = {
                 candidate.optimization_id: {
                     callee_module_path: normalize_code(optimized_code[candidate.optimization_id][callee_module_path])
                     == validated_original_code[callee_module_path].normalized_code
@@ -396,61 +400,33 @@ class Optimizer:
             candidates_with_diffs = [
                 candidate
                 for candidate in candidates
-                if not all(are_optimized_callee_module_code_strings_zero_diff[candidate.optimization_id].values())
+                if not all(are_optimized_module_code_strings_zero_diff[candidate.optimization_id].values())
             ]
 
-            for candidate, worktree in zip(candidates_with_diffs, worktrees[1:]):
-                for module_path in optimized_code[candidate.optimization_id]:
-                    if are_optimized_callee_module_code_strings_zero_diff[candidate.optimization_id][module_path]:
-                        (worktree / module_path.relative_to(git_root)).write_text(
-                            optimized_code[candidate.optimization_id][module_path], encoding="utf8"
-                        )
-
-            function_to_optimize_original_worktree_fqn = (
-                str(worktrees[0].name / function_to_optimize.file_path.relative_to(git_root).with_suffix("")).replace(
-                    "/", "."
-                )
-                + "."
-                + function_to_optimize_qualified_name
-            )
-
-            logger.info("Running concolic coverage checking for the original code…")
-            original_code_coverage_tests = subprocess.run(
-                [
-                    "crosshair",
-                    "cover",
-                    "--example_output_format=pytest",
-                    "--max_uninteresting_iterations=256",
-                    function_to_optimize_original_worktree_fqn,
-                ],
-                capture_output=True,
-                text=True,
-                cwd=worktree_root,
-                check=False,
-            )
-            logger.info(f"Tests generated through concolic coverage checking:\n{original_code_coverage_tests.stdout}")
-            console.rule()
-
             diffbehavior_results: dict[str, DiffbehaviorReturnCode] = {}
-            logger.info("Running concolic behavior correctness and coverage checking on optimized code…")
-            console.rule()
-            for candidate_index, candidate in enumerate(candidates_with_diffs, start=1):
-                logger.info(f"Optimization candidate {candidate_index}/{len(candidates_with_diffs)}:")
-                code_print(candidate.source_code)
-                function_to_optimize_optimized_worktree_fqn = (
+            if git_root:
+                for candidate, worktree in zip(candidates_with_diffs, worktrees[1:]):
+                    for module_path in optimized_code[candidate.optimization_id]:
+                        if not are_optimized_module_code_strings_zero_diff[candidate.optimization_id][module_path]:
+                            (worktree / module_path.relative_to(git_root)).write_text(
+                                optimized_code[candidate.optimization_id][module_path], encoding="utf8"
+                            )
+
+                function_to_optimize_original_worktree_fqn = (
                     str(
-                        worktrees[candidate_index].name
-                        / function_to_optimize.file_path.relative_to(git_root).with_suffix("")
+                        worktrees[0].name / function_to_optimize.file_path.relative_to(git_root).with_suffix("")
                     ).replace("/", ".")
                     + "."
                     + function_to_optimize_qualified_name
                 )
-                result = subprocess.run(
+
+                logger.info("Generating concolic coverage tests for the original code…")
+                original_code_coverage_tests = subprocess.run(
                     [
                         "crosshair",
-                        "diffbehavior",
+                        "cover",
+                        "--example_output_format=pytest",
                         "--max_uninteresting_iterations=256",
-                        function_to_optimize_optimized_worktree_fqn,
                         function_to_optimize_original_worktree_fqn,
                     ],
                     capture_output=True,
@@ -458,67 +434,102 @@ class Optimizer:
                     cwd=worktree_root,
                     check=False,
                 )
-                optimized_code_tests = subprocess.run(
-                    [
-                        "crosshair",
-                        "cover",
-                        "--example_output_format=pytest",
-                        "--max_uninteresting_iterations=256",
-                        function_to_optimize_optimized_worktree_fqn,
-                    ],
-                    capture_output=True,
-                    text=True,
-                    cwd=worktree_root,
-                    check=False,
-                )
+                logger.info(f"Tests generated through concolic coverage:\n{original_code_coverage_tests.stdout}")
+                console.rule()
 
-                if result.returncode == DiffbehaviorReturnCode.ERROR:
-                    diffbehavior_results[candidate.optimization_id] = DiffbehaviorReturnCode.ERROR
-                    logger.info("Inconclusive results from concolic behavior correctness checking.")
-                    logger.warning(
-                        f"Error running crosshair diffbehavior{': ' + result.stderr if result.stderr else '.'}"
+                logger.info("Running concolic behavior correctness checking and coverage generation on optimized code…")
+                console.rule()
+                for candidate_index, candidate in enumerate(candidates_with_diffs, start=1):
+                    logger.info(f"Optimization candidate {candidate_index}/{len(candidates_with_diffs)}:")
+                    code_print(candidate.source_code)
+                    function_to_optimize_optimized_worktree_fqn = (
+                        str(
+                            worktrees[candidate_index].name
+                            / function_to_optimize.file_path.relative_to(git_root).with_suffix("")
+                        ).replace("/", ".")
+                        + "."
+                        + function_to_optimize_qualified_name
                     )
-                elif result.returncode == DiffbehaviorReturnCode.COUNTER_EXAMPLES:
-                    split_counter_examples = re.split("(Given: )", result.stdout)[1:]
-                    joined_counter_examples = [
-                        "".join(map(str, split_counter_examples[i : i + 2]))
-                        for i in range(0, len(split_counter_examples), 2)
-                    ]
-                    concrete_counter_examples = "".join(
-                        [elt for elt in joined_counter_examples if not re.search(r" object at 0x[0-9a-fA-F]+", elt)]
+                    result = subprocess.run(
+                        [
+                            "crosshair",
+                            "diffbehavior",
+                            "--max_uninteresting_iterations=256",
+                            function_to_optimize_optimized_worktree_fqn,
+                            function_to_optimize_original_worktree_fqn,
+                        ],
+                        capture_output=True,
+                        text=True,
+                        cwd=worktree_root,
+                        check=False,
                     )
-                    if concrete_counter_examples:
-                        diffbehavior_results[candidate.optimization_id] = DiffbehaviorReturnCode.COUNTER_EXAMPLES
-                        logger.info(
-                            f"Optimization candidate failed concolic behavior correctness "
-                            f"checking:\n{concrete_counter_examples}"
-                        )
-                        if result.stdout != concrete_counter_examples:
-                            objectid_counter_examples = "".join(
-                                [elt for elt in joined_counter_examples if re.search(r" object at 0x[0-9a-fA-F]+", elt)]
-                            )
-                            logger.warning(f"Counter-examples with object ID found:\n{objectid_counter_examples}")
-                    else:
+                    optimized_code_tests = subprocess.run(
+                        [
+                            "crosshair",
+                            "cover",
+                            "--example_output_format=pytest",
+                            "--max_uninteresting_iterations=256",
+                            function_to_optimize_optimized_worktree_fqn,
+                        ],
+                        capture_output=True,
+                        text=True,
+                        cwd=worktree_root,
+                        check=False,
+                    )
+
+                    if result.returncode == DiffbehaviorReturnCode.ERROR:
                         diffbehavior_results[candidate.optimization_id] = DiffbehaviorReturnCode.ERROR
                         logger.info("Inconclusive results from concolic behavior correctness checking.")
-                        console.rule()
-                        logger.warning(f"Counter-examples with object ID found:\n{result.stdout}")
-                elif result.returncode == DiffbehaviorReturnCode.NO_DIFFERENCES:
-                    diffbehavior_results[candidate.optimization_id] = DiffbehaviorReturnCode.NO_DIFFERENCES
-                    logger.info(
-                        f"Optimization candidate passed concolic behavior correctness checking"
-                        f"{': ' + chr(10) + result.stdout.split(chr(10), 1)[0] if chr(10) in result.stdout else '.'}"
-                    )
-                    if result.stdout.endswith("All paths exhausted, functions are likely the same!\n"):
-                        logger.info("All paths exhausted, functions are likely the same!")
+                        logger.warning(
+                            f"Error running crosshair diffbehavior{': ' + result.stderr if result.stderr else '.'}"
+                        )
+                    elif result.returncode == DiffbehaviorReturnCode.COUNTER_EXAMPLES:
+                        split_counter_examples = re.split("(Given: )", result.stdout)[1:]
+                        joined_counter_examples = [
+                            "".join(map(str, split_counter_examples[i : i + 2]))
+                            for i in range(0, len(split_counter_examples), 2)
+                        ]
+                        concrete_counter_examples = "".join(
+                            [elt for elt in joined_counter_examples if not re.search(r" object at 0x[0-9a-fA-F]+", elt)]
+                        )
+                        if concrete_counter_examples:
+                            diffbehavior_results[candidate.optimization_id] = DiffbehaviorReturnCode.COUNTER_EXAMPLES
+                            logger.info(
+                                f"Optimization candidate failed concolic behavior correctness "
+                                f"checking:\n{concrete_counter_examples}"
+                            )
+                            if result.stdout != concrete_counter_examples:
+                                object_id_counter_examples = "".join(
+                                    [
+                                        elt
+                                        for elt in joined_counter_examples
+                                        if re.search(r" object at 0x[0-9a-fA-F]+", elt)
+                                    ]
+                                )
+                                logger.warning(f"Counter-examples with object ID found:\n{object_id_counter_examples}")
+                        else:
+                            diffbehavior_results[candidate.optimization_id] = DiffbehaviorReturnCode.ERROR
+                            logger.info("Inconclusive results from concolic behavior correctness checking.")
+                            console.rule()
+                            logger.warning(f"Counter-examples with object ID found:\n{result.stdout}")
+                    elif result.returncode == DiffbehaviorReturnCode.NO_DIFFERENCES:
+                        diffbehavior_results[candidate.optimization_id] = DiffbehaviorReturnCode.NO_DIFFERENCES
+                        first_line = "".join([": ", chr(10), result.stdout.split(chr(10), 1)[0]])
+                        logger.info(
+                            f"Optimization candidate passed concolic behavior correctness checking"
+                            f"{first_line if chr(10) in result.stdout else '.'}"
+                        )
+                        paths_exhausted = "All paths exhausted, functions are likely the same!\n"
+                        if result.stdout.endswith(paths_exhausted):
+                            logger.info(paths_exhausted)
+                        else:
+                            logger.warning("Consider increasing the --max_uninteresting_iterations option.")
                     else:
-                        logger.warning("Consider increasing the --max_uninteresting_iterations option.")
-                else:
-                    logger.info("Inconclusive results from concolic behavior correctness checking.")
-                    logger.error("Unknown return code running crosshair diffbehavior.")
-                console.rule()
-                logger.info(f"Tests generated through concolic coverage checking:\n{optimized_code_tests.stdout}")
-                console.rule()
+                        logger.info("Inconclusive results from concolic behavior correctness checking.")
+                        logger.error("Unknown return code running crosshair diffbehavior.")
+                    console.rule()
+                    logger.info(f"Tests generated through concolic coverage:\n{optimized_code_tests.stdout}")
+                    console.rule()
 
             tests_in_file: list[FunctionCalledInTest] = function_to_tests.get(
                 function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root), []
@@ -625,7 +636,7 @@ class Optimizer:
         diffbehavior_results: dict[str, DiffbehaviorReturnCode],
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
-        best_runtime_until_now = original_code_baseline.runtime  # The fastest code runtime until now
+        best_runtime_until_now = original_code_baseline.runtime
 
         speedup_ratios: dict[str, float | None] = {}
         optimized_runtimes: dict[str, float | None] = {}
@@ -663,7 +674,9 @@ class Optimizer:
                     optimization_candidate_index=candidate_index,
                     original_test_results=original_code_baseline.overall_test_results,
                     tests_in_file=only_run_this_test_function,
-                    diffbehavior_result=diffbehavior_results[candidate.optimization_id],
+                    diffbehavior_result=diffbehavior_results[candidate.optimization_id]
+                    if diffbehavior_results
+                    else DiffbehaviorReturnCode.DID_NOT_RUN,
                 )
                 console.rule()
                 if not is_successful(run_results):
@@ -1229,9 +1242,6 @@ class Optimizer:
             )
             console.rule()
 
-        # TestType.CONCOLIC_TESTING: "🔍 Dynamic Symbolic Execution",
-        # 🔍 Dynamic Symbolic Execution - No differences found. (attempted 154 iterations)
-        # console.rule
         initial_loop_original_test_results = TestResults(
             test_results=[result for result in original_test_results.test_results if result.loop_index == 1]
         )
@@ -1269,7 +1279,7 @@ class Optimizer:
             else:
                 logger.info("True positive: Concolic behavior correctness check failed and test results did not match.")
             console.rule()
-        else:
+        elif diffbehavior_result == DiffbehaviorReturnCode.ERROR:
             logger.warning("Concolic behavior correctness check inconclusive.")
             console.rule()
 
