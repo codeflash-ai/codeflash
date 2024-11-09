@@ -360,11 +360,10 @@ class Optimizer:
                 module_path: validated_original_code[module_path].source_code for module_path in callee_module_paths
             }
             intermediate_original_code: dict[str, dict[Path, str]] = {
-                candidate.optimization_id: callee_original_code for candidate in candidates
-            } | {
-                candidate.optimization_id: {
-                    function_to_optimize.file_path: initial_optimized_code[candidate.optimization_id]
-                }
+                candidate.optimization_id: (
+                    callee_original_code
+                    | {function_to_optimize.file_path: initial_optimized_code[candidate.optimization_id]}
+                )
                 for candidate in candidates
             }
             module_paths = callee_module_paths | {function_to_optimize.file_path}
