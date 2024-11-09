@@ -127,6 +127,9 @@ class Optimizer:
 
         function_iterator_count: int = 0
 
+        git_root = git_root_dir() if check_running_in_git_repo(self.args.module_root) else None
+        worktree_root_root = Path(tempfile.mkdtemp()) if git_root else None
+
         try:
             ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
             if num_optimizable_functions == 0:
@@ -140,8 +143,6 @@ class Optimizer:
             logger.info(f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}")
             console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
-
-            git_root = git_root_dir() if check_running_in_git_repo(self.args.module_root) else None
 
             for original_module_path in file_to_funcs_to_optimize:
                 logger.info(f"Examining file {original_module_path!s}…")
@@ -180,7 +181,7 @@ class Optimizer:
 
                 for function_to_optimize in file_to_funcs_to_optimize[original_module_path]:
                     if git_root:
-                        worktree_root = Path(tempfile.mkdtemp())
+                        worktree_root = Path(tempfile.mkdtemp(dir=worktree_root_root))
                         worktrees = [Path(tempfile.mkdtemp(dir=worktree_root)) for _ in range(N_CANDIDATES + 1)]
                         for worktree in worktrees:
                             subprocess.run(
@@ -233,6 +234,8 @@ class Optimizer:
                 test_file.instrumented_file_path.unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
+            if worktree_root_root:
+                shutil.rmtree(worktree_root_root)
 
     def optimize_function(
         self,
@@ -388,7 +391,7 @@ class Optimizer:
                 for candidate in candidates
             }
 
-            are_optimized_module_code_strings_zero_diff = {
+            is_optimized_module_code_zero_diff = {
                 candidate.optimization_id: {
                     callee_module_path: normalize_code(optimized_code[candidate.optimization_id][callee_module_path])
                     == validated_original_code[callee_module_path].normalized_code
@@ -399,14 +402,14 @@ class Optimizer:
             candidates_with_diffs = [
                 candidate
                 for candidate in candidates
-                if not all(are_optimized_module_code_strings_zero_diff[candidate.optimization_id].values())
+                if not all(is_optimized_module_code_zero_diff[candidate.optimization_id].values())
             ]
 
             diffbehavior_results: dict[str, DiffbehaviorReturnCode] = {}
             if git_root:
                 for candidate, worktree in zip(candidates_with_diffs, worktrees[1:]):
                     for module_path in optimized_code[candidate.optimization_id]:
-                        if not are_optimized_module_code_strings_zero_diff[candidate.optimization_id][module_path]:
+                        if not is_optimized_module_code_zero_diff[candidate.optimization_id][module_path]:
                             (worktree / module_path.relative_to(git_root)).write_text(
                                 optimized_code[candidate.optimization_id][module_path], encoding="utf8"
                             )
@@ -1241,68 +1244,72 @@ class Optimizer:
             )
             console.rule()
 
-        initial_loop_original_test_results = TestResults(
-            test_results=[result for result in original_test_results.test_results if result.loop_index == 1]
-        )
+            initial_loop_original_test_results = TestResults(
+                test_results=[result for result in original_test_results.test_results if result.loop_index == 1]
+            )
 
-        if compare_test_results(initial_loop_original_test_results, initial_loop_candidate_results):
-            logger.info("Test results matched!")
-            equal_results = True
-        else:
-            logger.info("Test results did not match the test results of the original code.")
-            success = False
-            equal_results = False
-        console.rule()
-
-        if diffbehavior_result == DiffbehaviorReturnCode.NO_DIFFERENCES:
-            logger.info("Concolic behavior correctness check successful!")
-            console.rule()
-            if equal_results:
-                logger.info("True negative: Concolic behavior correctness check successful and test results matched.")
+            if compare_test_results(initial_loop_original_test_results, initial_loop_candidate_results):
+                logger.info("Test results matched!")
+                equal_results = True
             else:
-                logger.warning(
-                    "False negative for concolic testing: Concolic behavior correctness check successful but test "
-                    "results did not match."
-                )
-            console.rule()
-        elif diffbehavior_result == DiffbehaviorReturnCode.COUNTER_EXAMPLES:
-            logger.warning("Concolic behavior correctness check failed.")
-            console.rule()
-            if equal_results:
-                logger.warning(
-                    "False negative for regression testing: Concolic behavior correctness check failed but test "
-                    "results matched."
-                )
+                logger.info("Test results did not match the test results of the original code.")
                 success = False
                 equal_results = False
-            else:
-                logger.info("True positive: Concolic behavior correctness check failed and test results did not match.")
-            console.rule()
-        elif diffbehavior_result == DiffbehaviorReturnCode.ERROR:
-            logger.warning("Concolic behavior correctness check inconclusive.")
             console.rule()
 
-        if (total_candidate_timing := candidate_results.total_passed_runtime()) == 0:
-            logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
-            console.rule()
-        get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.bin")).unlink(missing_ok=True)
+            if diffbehavior_result == DiffbehaviorReturnCode.NO_DIFFERENCES:
+                logger.info("Concolic behavior correctness check successful!")
+                console.rule()
+                if equal_results:
+                    logger.info(
+                        "True negative: Concolic behavior correctness check successful and test results matched."
+                    )
+                else:
+                    logger.warning(
+                        "False negative for concolic testing: Concolic behavior correctness check successful but test "
+                        "results did not match."
+                    )
+                console.rule()
+            elif diffbehavior_result == DiffbehaviorReturnCode.COUNTER_EXAMPLES:
+                logger.warning("Concolic behavior correctness check failed.")
+                console.rule()
+                if equal_results:
+                    logger.warning(
+                        "False negative for regression testing: Concolic behavior correctness check failed but test "
+                        "results matched."
+                    )
+                    success = False
+                    equal_results = False
+                else:
+                    logger.info(
+                        "True positive: Concolic behavior correctness check failed and test results did not match."
+                    )
+                console.rule()
+            elif diffbehavior_result == DiffbehaviorReturnCode.ERROR:
+                logger.warning("Concolic behavior correctness check inconclusive.")
+                console.rule()
 
-        get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
-        if not equal_results:
-            success = False
+            if (total_candidate_timing := candidate_results.total_passed_runtime()) == 0:
+                logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
+                console.rule()
+            get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.bin")).unlink(missing_ok=True)
 
-        if not success:
-            return Failure("Failed to run the optimization candidate.")
-        logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
-        return Success(
-            OptimizedCandidateResult(
-                max_loop_count=loop_count,
-                best_test_runtime=total_candidate_timing,
-                test_results=candidate_results,
-                optimization_candidate_index=optimization_candidate_index,
-                total_candidate_timing=total_candidate_timing,
+            get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
+            if not equal_results:
+                success = False
+
+            if not success:
+                return Failure("Failed to run the optimization candidate.")
+            logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
+            return Success(
+                OptimizedCandidateResult(
+                    max_loop_count=loop_count,
+                    best_test_runtime=total_candidate_timing,
+                    test_results=candidate_results,
+                    optimization_candidate_index=optimization_candidate_index,
+                    total_candidate_timing=total_candidate_timing,
+                )
             )
-        )
 
     def run_and_parse_tests(
         self,
