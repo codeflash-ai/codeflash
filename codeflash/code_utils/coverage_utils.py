@@ -10,7 +10,7 @@ from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_utils import get_run_tmp_file
-from codeflash.models.models import CodeOptimizationContext, FunctionCoverage
+from codeflash.models.models import CodeOptimizationContext
 
 
 def extract_dependent_function(main_function: str, code_context: CodeOptimizationContext) -> str | Literal[False]:
@@ -74,6 +74,8 @@ def grab_dependent_function_from_coverage_data(
         except KeyError:
             raise ValueError(msg) from None
 
+    return FunctionCoverage(name=dependent_function_name, coverage=0, executed_lines=[], unexecuted_lines=[])
+
 
 def prepare_coverage_files(project_root: Path) -> tuple[Path, Path]:
     """Prepare coverage configuration and output files."""
@@ -88,6 +90,16 @@ def prepare_coverage_files(project_root: Path) -> tuple[Path, Path]:
     )
     coveragercfile.write_text(coveragerc_content)
     return coverage_out_file, coveragercfile
+
+
+@dataclass
+class FunctionCoverage:
+    """Represents the coverage data for a specific function in a source file."""
+
+    name: str
+    coverage: float
+    executed_lines: list[int]
+    unexecuted_lines: list[int]
 
 
 @dataclass

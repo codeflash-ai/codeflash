@@ -57,34 +57,32 @@ def run_tests(
                 )
             else:
                 test_files.append(str(file.instrumented_file_path))
+        pytest_cmd_list = shlex.split(pytest_cmd, posix=is_posix)
+
+        common_pytest_args = [
+            "--capture=tee-sys",
+            f"--timeout={pytest_timeout}",
+            "-q",
+            f"--codeflash_seconds={pytest_target_runtime_seconds}",
+            "--codeflash_loops_scope=session",
+        ]
+        pytest_test_env = test_env.copy()
+        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
 
         if enable_coverage:
             assert project_root is not None, "project_root must be provided for coverage analysis"
             if not source_file:
-                msg = "source_file must be provided for coverage analysis"
-                raise ValueError(msg)
+                src_file_msg = "source_file must be provided for coverage analysis"
+                raise ValueError(src_file_msg)
             if not function_name:
-                msg = "function_name must be provided for coverage analysis"
-                raise ValueError(msg)
+                function_name_msg = "function_name must be provided for coverage analysis"
+                raise ValueError(function_name_msg)
 
             coverage_out_file, coveragercfile = prepare_coverage_files(project_root)
 
-            pytest_ignore_files = [
-                "--ignore-glob=build/*",
-                "--ignore-glob=dist/*",
-                "--ignore-glob=*.egg-info/*",
-            ]  # --ignore-glob=path, let's use this to ignore leftover build artifacts from setuptools for local installs https://pip.pypa.io/en/stable/topics/local-project-installs/#build-artifacts
+            pytest_ignore_files = ["--ignore-glob=build/*", "--ignore-glob=dist/*", "--ignore-glob=*.egg-info/*"]
 
-            pytest_test_env = test_env.copy()
-
-            pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
-            pytest_args = [
-                f"--timeout={pytest_timeout}",
-                f"--codeflash_seconds={pytest_target_runtime_seconds}",
-                "--codeflash_min_loops=1",
-                "--codeflash_max_loops=1",
-                "--codeflash_loops_scope=session",
-            ]
+            coverage_args = ["--codeflash_min_loops=1", "--codeflash_max_loops=1"]
 
             cov_erase = execute_test_subprocess(
                 shlex.split(f"{sys.executable} -m coverage erase"), cwd=cwd, env=pytest_test_env
@@ -96,11 +94,12 @@ def run_tests(
                 for file in test_paths.test_files
                 if file.test_type == TestType.GENERATED_REGRESSION
             ]
-            logger.info(files)
+
             cov_run = execute_test_subprocess(
                 shlex.split(f"{sys.executable} -m coverage run --rcfile={coveragercfile} -m pytest")
                 + files
-                + pytest_args
+                + common_pytest_args
+                + coverage_args
                 + pytest_ignore_files,
                 cwd=cwd,
                 env=pytest_test_env,
@@ -119,37 +118,29 @@ def run_tests(
             coveragepy_coverage.log_coverage()
 
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
-        pytest_cmd_list = shlex.split(pytest_cmd, posix=is_posix)
-        pytest_test_env = test_env.copy()
-        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
-        pytest_args = [
-            "--capture=tee-sys",
-            f"--timeout={pytest_timeout}",
-            "-q",
-            f"--junitxml={result_file_path}",
-            "-o",
-            "junit_logging=all",
-            f"--codeflash_seconds={pytest_target_runtime_seconds}",
-            f"--codeflash_min_loops={pytest_min_loops}",
-            f"--codeflash_max_loops={pytest_max_loops}",
-            "--codeflash_loops_scope=session",
-        ]
+        result_args = [f"--junitxml={result_file_path}", "-o", "junit_logging=all"]
 
         results = execute_test_subprocess(
-            pytest_cmd_list + test_files + pytest_args,
+            pytest_cmd_list
+            + test_files
+            + common_pytest_args
+            + result_args
+            + [f"--codeflash_min_loops={pytest_min_loops}", f"--codeflash_max_loops={pytest_max_loops}"],
             cwd=cwd,
             env=pytest_test_env,
             timeout=600,  # TODO: Make this dynamic
         )
     elif test_framework == "unittest":
         result_file_path = get_run_tmp_file(Path("unittest_results.xml"))
-        unittest_cmd = ["python", "-m", "unittest"]
-        verbosity = ["-v"] if verbose else []
-        test_files = [str(file.instrumented_file_path) for file in test_paths.test_files]
-        output_file_command = ["--output-file", str(result_file_path)]
+        unittest_cmd_list = [sys.executable, "-m", "xmlrunner"]
+        log_level = ["-v"] if verbose else []
+        files = [str(file.instrumented_file_path) for file in test_paths.test_files]
+        output_file = ["--output-file", str(result_file_path)]
+
         results = execute_test_subprocess(
-            unittest_cmd + verbosity + test_files + output_file_command, cwd=cwd, env=test_env
+            unittest_cmd_list + log_level + files + output_file, cwd=cwd, env=test_env, timeout=600
         )
+
     else:
         raise ValueError("Invalid test framework -- I only support Pytest and Unittest currently.")
     return result_file_path, results

@@ -139,13 +139,3 @@ class CodePosition:
 class FunctionParent:
     name: str
     type: str
-
-
-@dataclass
-class FunctionCoverage:
-    """Represents the coverage data for a specific function in a source file."""
-
-    name: str
-    coverage: float
-    executed_lines: list[int]
-    unexecuted_lines: list[int]

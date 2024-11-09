@@ -2,6 +2,7 @@ import os
 import tempfile
 from pathlib import Path
 
+from codeflash.cli_cmds.console import logger
 from codeflash.models.models import TestFile, TestFiles
 from codeflash.verification.parse_test_output import parse_test_xml
 from codeflash.verification.test_results import TestType
@@ -41,7 +42,12 @@ class TestUnittestRunnerSorter(unittest.TestCase):
         fp.write(code.encode("utf-8"))
         fp.flush()
         result_file, process = run_tests(
-            test_files, test_framework=config.test_framework, cwd=Path(config.project_root_path)
+            test_files,
+            test_framework=config.test_framework,
+            cwd=Path(config.project_root_path),
+            test_env=os.environ.copy(),
+            function_name="test_sort",
+            source_file=Path(fp.name),
         )
         results = parse_test_xml(result_file, test_files, config, process)
     assert results[0].did_pass, "Test did not pass as expected"
@@ -66,13 +72,21 @@ def test_sort():
         test_framework="pytest",
         tests_project_rootdir=cur_dir_path.parent,
     )
+
+    test_env = os.environ.copy()
+    test_env["CODEFLASH_TEST_ITERATION"] = "0"
+    test_env["CODEFLASH_TRACER_DISABLE"] = "1"
+    if "PYTHONPATH" not in test_env:
+        test_env["PYTHONPATH"] = str(config.project_root_path)
+    else:
+        test_env["PYTHONPATH"] += os.pathsep + str(config.project_root_path)
+
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         test_files = TestFiles(
             test_files=[TestFile(instrumented_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
         )
         fp.write(code.encode("utf-8"))
         fp.flush()
-        test_env = os.environ.copy()
         result_file, process = run_tests(
             test_files,
             test_framework=config.test_framework,
@@ -82,6 +96,8 @@ def test_sort():
             pytest_min_loops=1,
             pytest_max_loops=1,
             pytest_target_runtime_seconds=1,
+            function_name="test_sort",
+            source_file=Path(fp.name),
         )
         results = parse_test_xml(
             test_xml_file_path=result_file, test_files=test_files, test_config=config, run_result=process
