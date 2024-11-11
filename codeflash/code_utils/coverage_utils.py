@@ -4,7 +4,7 @@ import ast
 import json
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Union
 
 from pydantic.dataclasses import dataclass
 
@@ -81,13 +81,7 @@ def prepare_coverage_files(project_root: Path) -> tuple[Path, Path]:
     """Prepare coverage configuration and output files."""
     coverage_out_file = get_run_tmp_file(Path("coverage.json"))
     coveragercfile = get_run_tmp_file(Path(".coveragerc"))
-    coveragerc_content = (
-        "[run]\n"
-        f"source = {project_root.as_posix()}\n"
-        "branch = True\n"
-        "[json]\n"
-        f"output = {coverage_out_file.as_posix()}\n"
-    )
+    coveragerc_content = f"[run]\n branch = True\n [json]\n output = {coverage_out_file.as_posix()}\n"
     coveragercfile.write_text(coveragerc_content)
     return coverage_out_file, coveragercfile
 
@@ -113,7 +107,7 @@ class CoverageData:
     graph: dict[str, dict[str, set[int]]]
     code_context: CodeOptimizationContext
     main_func_coverage: FunctionCoverage
-    dependent_func_coverage: FunctionCoverage | None
+    dependent_func_coverage: Union[FunctionCoverage, None]
     blank_re = re.compile(r"\s*(#|$)")
     else_re = re.compile(r"\s*else\s*:\s*(#|$)")
 
@@ -183,7 +177,7 @@ class CoverageData:
         code_context: CodeOptimizationContext,
         coverage_data: dict[str, dict[str, Any]],
         original_cov_data: dict[str, dict[str, Any]],
-    ) -> tuple[FunctionCoverage, FunctionCoverage | None]:
+    ) -> tuple[FunctionCoverage, Union[FunctionCoverage, None]]:
         try:
             main_function_coverage = FunctionCoverage(
                 name=function_name,
@@ -206,7 +200,7 @@ class CoverageData:
 
     @staticmethod
     def _aggregate_coverage(
-        main_func_coverage: FunctionCoverage, dependent_func_coverage: FunctionCoverage | None
+        main_func_coverage: FunctionCoverage, dependent_func_coverage: Union[FunctionCoverage, None]
     ) -> tuple[set[int], set[int]]:
         total_executed_lines = set(main_func_coverage.executed_lines)
         total_unexecuted_lines = set(main_func_coverage.unexecuted_lines)
@@ -219,7 +213,7 @@ class CoverageData:
 
     @staticmethod
     def _build_graph(
-        main_func_coverage: FunctionCoverage, dependent_func_coverage: FunctionCoverage | None
+        main_func_coverage: FunctionCoverage, dependent_func_coverage: Union[FunctionCoverage, None]
     ) -> dict[str, dict[str, set[int]]]:
         graph = {
             main_func_coverage.name: {
