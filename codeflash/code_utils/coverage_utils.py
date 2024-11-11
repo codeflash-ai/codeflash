@@ -4,7 +4,7 @@ import ast
 import json
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Union
 
 from pydantic.dataclasses import dataclass
 
@@ -26,8 +26,7 @@ def extract_dependent_function(main_function: str, code_context: CodeOptimizatio
         return False
 
     if len(dependent_functions) != 1:
-        msg = f"Expected exactly one dependent function, found {len(dependent_functions)}"
-        raise ValueError(msg)
+        return False
 
     return dependent_functions.pop()
 
@@ -54,7 +53,7 @@ def grab_dependent_function_from_coverage_data(
             name=dependent_function_name,
             coverage=coverage_data[dependent_function_name]["summary"]["percent_covered"],
             executed_lines=coverage_data[dependent_function_name]["executed_lines"],
-            unexecuted_lines=coverage_data[dependent_function_name]["excluded_lines"],
+            unexecuted_lines=coverage_data[dependent_function_name]["missing_lines"],
         )
     except KeyError:
         msg = f"Coverage data not found for dependent function {dependent_function_name} in the coverage data"
@@ -68,7 +67,7 @@ def grab_dependent_function_from_coverage_data(
                             name=dependent_function_name,
                             coverage=functions[function]["summary"]["percent_covered"],
                             executed_lines=functions[function]["executed_lines"],
-                            unexecuted_lines=functions[function]["excluded_lines"],
+                            unexecuted_lines=functions[function]["missing_lines"],
                         )
             msg = f"Coverage data not found for dependent function {dependent_function_name} in the original coverage data"
         except KeyError:
@@ -113,7 +112,7 @@ class CoverageData:
     graph: dict[str, dict[str, set[int]]]
     code_context: CodeOptimizationContext
     main_func_coverage: FunctionCoverage
-    dependent_func_coverage: FunctionCoverage | None
+    dependent_func_coverage: Union[FunctionCoverage, None]
     blank_re = re.compile(r"\s*(#|$)")
     else_re = re.compile(r"\s*else\s*:\s*(#|$)")
 
@@ -136,7 +135,7 @@ class CoverageData:
         )
 
         total_lines = total_executed_lines | total_unexecuted_lines
-        coverage = len(total_executed_lines) / len(total_lines) * 100 if total_lines else 0
+        coverage = len(total_executed_lines) / len(total_lines) * 100 if total_lines else 0.0
         # coverage = (lines covered of the original function + its 1 level deep helpers) / (lines spanned by original function + its 1 level deep helpers), if no helpers then just the original function coverage
 
         functions_being_tested = [main_func_coverage.name]
@@ -172,9 +171,8 @@ class CoverageData:
             except KeyError:
                 continue
         else:
-            console.print(coverage_data)
-            msg = f"Coverage data not found for {source_code_path} in {candidates}"
-            raise ValueError(msg)
+            logger.debug(f"No coverage data found for {source_code_path} in {candidates}")
+            cov = {}
         return cov
 
     @staticmethod
@@ -183,17 +181,18 @@ class CoverageData:
         code_context: CodeOptimizationContext,
         coverage_data: dict[str, dict[str, Any]],
         original_cov_data: dict[str, dict[str, Any]],
-    ) -> tuple[FunctionCoverage, FunctionCoverage | None]:
+    ) -> tuple[FunctionCoverage, Union[FunctionCoverage, None]]:
         try:
             main_function_coverage = FunctionCoverage(
                 name=function_name,
                 coverage=coverage_data[function_name]["summary"]["percent_covered"],
                 executed_lines=coverage_data[function_name]["executed_lines"],
-                unexecuted_lines=coverage_data[function_name]["excluded_lines"],
+                unexecuted_lines=coverage_data[function_name]["missing_lines"],
             )
         except KeyError:
-            msg = f"Coverage data not found for main function {function_name}"
-            raise ValueError(msg) from None
+            main_function_coverage = FunctionCoverage(
+                name=function_name, coverage=0, executed_lines=[], unexecuted_lines=[]
+            )
 
         dependent_function = extract_dependent_function(function_name, code_context)
         dependent_func_coverage = (
@@ -206,7 +205,7 @@ class CoverageData:
 
     @staticmethod
     def _aggregate_coverage(
-        main_func_coverage: FunctionCoverage, dependent_func_coverage: FunctionCoverage | None
+        main_func_coverage: FunctionCoverage, dependent_func_coverage: Union[FunctionCoverage, None]
     ) -> tuple[set[int], set[int]]:
         total_executed_lines = set(main_func_coverage.executed_lines)
         total_unexecuted_lines = set(main_func_coverage.unexecuted_lines)
@@ -219,7 +218,7 @@ class CoverageData:
 
     @staticmethod
     def _build_graph(
-        main_func_coverage: FunctionCoverage, dependent_func_coverage: FunctionCoverage | None
+        main_func_coverage: FunctionCoverage, dependent_func_coverage: Union[FunctionCoverage, None]
     ) -> dict[str, dict[str, set[int]]]:
         graph = {
             main_func_coverage.name: {
@@ -238,51 +237,47 @@ class CoverageData:
         """Annotate the source code with the coverage data."""
         if not self.coverage:
             logger.debug(self)
-            logger.info(f"No coverage data found for {self.function_name}")
+            console.rule(f"No coverage data found for {self.function_name}")
             return
 
-        from rich.panel import Panel
-        from rich.syntax import Syntax
-
-        union_executed_lines = sorted(
-            {line for func in self.functions_being_tested for line in self.graph[func]["executed_lines"]}
+        console.rule(f"Coverage data for {self.function_name}: {self.coverage:.2f}%")
+        console.rule(
+            f"main ex: {self.main_func_coverage.executed_lines} unex: {self.main_func_coverage.unexecuted_lines}"
         )
-        union_unexecuted_lines = sorted(
-            {line for func in self.functions_being_tested for line in self.graph[func]["unexecuted_lines"]}
-        )
-        # adapted from nedbat/coveragepy/coverage/annotate.py:annotate_file
-        src = self.code_context.code_to_optimize_with_helpers
-        output = ""
-        i = j = 0
-        covered = True
-        for lineno, line in enumerate(src.splitlines(keepends=True), start=1):
-            while i < len(union_executed_lines) and union_executed_lines[i] < lineno:
-                i += 1
-            while j < len(union_unexecuted_lines) and union_unexecuted_lines[j] < lineno:
-                j += 1
-            if i < len(union_executed_lines) and union_executed_lines[i] == lineno:
-                covered = j >= len(union_unexecuted_lines) or union_unexecuted_lines[j] > lineno
-            if self.blank_re.match(line):
-                output += "  "
-            elif self.else_re.match(line):
-                if j >= len(union_unexecuted_lines):
-                    output += "✅ "
-                elif union_executed_lines[i] == union_unexecuted_lines[j]:
-                    output += "❌ "
-                else:
-                    output += "> "
-            elif lineno in union_unexecuted_lines:
-                output += "- "
-            elif covered:
-                output += "✅ "
-            else:
-                output += "❌ "
+        # console.rule(
+        #     f"dep ex: {self.dependent_func_coverage.executed_lines} unex: {self.dependent_func_coverage.unexecuted_lines}"
+        # )
+        if self.dependent_func_coverage:
+            console.rule(
+                f"Dependent function {self.dependent_func_coverage.name}: {self.dependent_func_coverage.coverage:.2f}%"
+            )
+        # TODO: fix this eventually to get a visual representation of the coverage data, will make it easier to grasp the coverage data and our impact on it
+        # from rich.panel import Panel
+        # from rich.syntax import Syntax
 
-            output += line
+        # union_executed_lines = sorted(
+        #     {line for func in self.functions_being_tested for line in self.graph[func]["executed_lines"]}
+        # )
+        # union_unexecuted_lines = sorted(
+        #     {line for func in self.functions_being_tested for line in self.graph[func]["unexecuted_lines"]}
+        # )
+        # # adapted from nedbat/coveragepy/coverage/annotate.py:annotate_file
+        # # src = self.code_context.code_to_optimize_with_helpers.splitlines()
+        # src = self.main_func_coverage.
+        # output = ""
+        # for i, line in enumerate(src, 1):
+        #     if i in union_executed_lines:
+        #         output += f"✅ {line}"
+        #     elif i in union_unexecuted_lines:
+        #         output += f"❌ {line}"
+        #     else:
+        #         output += line
+        #     output += "\n"
 
-        panel = Panel(
-            Syntax(output, "python", line_numbers=True, theme="github-dark"),
-            title=f"Coverage: {self.coverage}%",
-            subtitle=f"Functions tested: {', '.join(self.functions_being_tested)}",
-        )
-        console.print(panel)
+        # panel = Panel(
+        #     Syntax(output, "python", line_numbers=True, theme="github-dark"),
+        #     title=f"Coverage: {self.coverage}%",
+        #     subtitle=f"Functions tested: {', '.join(self.functions_being_tested)}",
+        # )
+
+        # console.print(panel)

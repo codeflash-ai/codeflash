@@ -129,16 +129,10 @@ class Optimizer:
             logger.info(f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}")
             console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
-            # for path in file_to_funcs_to_optimize:
-            # let's randomly shuffle the files to avoid running the same file first every time
-            import random
-
-            random_paths = list(file_to_funcs_to_optimize.keys())
-            random.shuffle(random_paths)
-            for path in random_paths:
+            for path in file_to_funcs_to_optimize:
                 logger.info(f"Examining file {path} ...")
                 console.rule()
-                with Path(path).open(encoding="utf8") as f:
+                with path.open(encoding="utf8") as f:
                     original_code: str = f.read()
 
                 for function_to_optimize in file_to_funcs_to_optimize[path]:

@@ -39,6 +39,7 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
     test_results = TestResults()
     if not file_location.exists():
         logger.warning(f"No test results for {file_location} found.")
+        console.rule()
         return test_results
 
     with file_location.open("rb") as file:
@@ -99,6 +100,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
     test_results = TestResults()
     if not sqlite_file_path.exists():
         logger.warning(f"No test results for {sqlite_file_path} found.")
+        console.rule()
         return test_results
     try:
         db = sqlite3.connect(sqlite_file_path)
@@ -156,6 +158,7 @@ def parse_test_xml(
     # Parse unittest output
     if not test_xml_file_path.exists():
         logger.warning(f"No test results for {test_xml_file_path} found.")
+        console.rule()
         return test_results
     try:
         xml = JUnitXml.fromfile(str(test_xml_file_path), parse_func=parse_func)

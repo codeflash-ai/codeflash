@@ -65,6 +65,7 @@ def run_tests(
             "-q",
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
             "--codeflash_loops_scope=session",
+            "-p no:typeguard",
         ]
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
@@ -116,6 +117,9 @@ def run_tests(
                 coverage_out_file, source_file, function_name, code_context=code_context
             )
             coveragepy_coverage.log_coverage()
+
+            coverage_out_file.unlink(missing_ok=True)
+            coveragercfile.unlink(missing_ok=True)
 
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path}", "-o", "junit_logging=all"]
