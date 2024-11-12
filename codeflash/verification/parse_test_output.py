@@ -365,7 +365,7 @@ def merge_test_results(
             # We need to match the iteration_id to the bin results
             for xml_result in xml_results.test_results:
                 try:
-                    bin_result = bin_results.get_by_id(xml_result.id)
+                    bin_result = bin_results.get_by_unique_invocation_loop_id(xml_result.unique_invocation_loop_id)
                 except AttributeError:
                     bin_result = None
                 if bin_result is None:

@@ -73,6 +73,10 @@ class FunctionTestInvocation:
     return_value: Optional[object]  # The return value of the function invocation
     timed_out: Optional[bool]
 
+    @property
+    def unique_invocation_loop_id(self) -> str:
+        return f"{self.loop_index}:{self.id.id()}"
+
 
 class TestResults(BaseModel):
     # don't add to this list directly, use the add method
@@ -81,9 +85,11 @@ class TestResults(BaseModel):
     test_result_idx: dict[str, int] = {}
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
-        if function_test_invocation.id in self.test_result_idx:
-            raise ValueError(f"Test result with id {function_test_invocation.id} already exists.")
-        self.test_result_idx[function_test_invocation.id] = len(self.test_results)
+        if function_test_invocation.unique_invocation_loop_id in self.test_result_idx:
+            raise ValueError(
+                f"Test result with id {function_test_invocation.unique_invocation_loop_id} already exists."
+            )
+        self.test_result_idx[function_test_invocation.unique_invocation_loop_id] = len(self.test_results)
         self.test_results.append(function_test_invocation)
 
     def merge(self, other: TestResults) -> None:
@@ -101,8 +107,18 @@ class TestResults(BaseModel):
         except (IndexError, KeyError):
             return None
 
+    def get_by_unique_invocation_loop_id(self, unique_invocation_loop_id: str) -> FunctionTestInvocation | None:
+        try:
+            return self.test_results[self.test_result_idx[unique_invocation_loop_id]]
+        except (IndexError, KeyError):
+            return None
+
     def get_all_ids(self) -> set[InvocationId]:
         return {test_result.id for test_result in self.test_results}
+
+
+    def get_all_unique_invocation_loop_ids(self) -> set[str]:
+        return {test_result.unique_invocation_loop_id for test_result in self.test_results}
 
     def number_of_loops(self) -> int:
         if not self.test_results:
