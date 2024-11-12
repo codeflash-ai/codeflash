@@ -10,11 +10,10 @@ import isort
 from codeflash.cli_cmds.console import logger
 
 
-def format_code(formatter_cmds: list[str], path: Path) -> str | None:
+def format_code(formatter_cmds: list[str], path: Path) -> str:
     # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
     if not path.exists():
-        logger.error(f"File {path} does not exist. Cannot format the file.")
-        return None
+        raise FileNotFoundError(f"File {path} does not exist. Cannot format the file.")
     if formatter_cmds[0].lower() == "disabled":
         new_code = path.read_text(encoding="utf8")
         return new_code
@@ -27,17 +26,15 @@ def format_code(formatter_cmds: list[str], path: Path) -> str | None:
 
         try:
             result = subprocess.run(formatter_cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+            if result.returncode == 0:
+                logger.info("FORMATTING OK")
+            else:
+                logger.error(f"Failed to format code with {' '.join(formatter_cmd_list)}")
         except Exception as e:
             logger.exception(f"Failed to format code with {' '.join(formatter_cmd_list)}: {e}")
-            return None
-        if result.returncode == 0:
-            logger.info("FORMATTING OK")
-        else:
-            logger.error(f"Failed to format code with {' '.join(formatter_cmd_list)}")
+            # Fall back to original code if formatter fails
 
-    new_code = path.read_text(encoding="utf8")
-
-    return new_code
+    return path.read_text(encoding="utf8")
 
 
 def sort_imports(code: str) -> str:
