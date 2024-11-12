@@ -822,9 +822,10 @@ class Optimizer:
                     )
                     unittest_results.merge(unittest_loop_results)
 
-            initial_loop_unittest_results = TestResults(
-                test_results=[result for result in unittest_results.test_results if result.loop_index == 1]
-            )
+            initial_loop_unittest_results = TestResults()
+            for result in unittest_results.test_results:
+                if result.loop_index == 1:
+                    initial_loop_unittest_results.add(result)
 
             console.print(
                 TestResults.report_to_tree(
@@ -834,14 +835,14 @@ class Optimizer:
             )
             console.rule()
 
-            existing_test_results = TestResults(
-                test_results=[result for result in unittest_results if result.test_type == TestType.EXISTING_UNIT_TEST]
-            )
-            generated_test_results = TestResults(
-                test_results=[
-                    result for result in unittest_results if result.test_type == TestType.GENERATED_REGRESSION
-                ]
-            )
+            existing_test_results = TestResults()
+            for result in unittest_results:
+                if result.test_type == TestType.EXISTING_UNIT_TEST:
+                    existing_test_results.add(result)
+            generated_test_results = TestResults()
+            for result in unittest_results:
+                if result.test_type == TestType.GENERATED_REGRESSION:
+                    generated_test_results.add(result)
 
             total_timing = unittest_results.total_passed_runtime()
 
@@ -951,9 +952,10 @@ class Optimizer:
                     loop_count = i + 1
                     candidate_results.merge(candidate_loop_results)
 
-            initial_loop_candidate_results = TestResults(
-                test_results=[result for result in candidate_results.test_results if result.loop_index == 1]
-            )
+            initial_loop_candidate_results = TestResults()
+            for result in candidate_results.test_results:
+                if result.loop_index == 1:
+                    initial_loop_candidate_results.add(result)
 
             console.print(
                 TestResults.report_to_tree(
@@ -963,9 +965,10 @@ class Optimizer:
             )
             console.rule()
 
-            initial_loop_original_test_results = TestResults(
-                test_results=[result for result in original_test_results.test_results if result.loop_index == 1]
-            )
+            initial_loop_original_test_results = TestResults()
+            for result in original_test_results.test_results:
+                if result.loop_index == 1:
+                    initial_loop_original_test_results.add(result)
 
             if compare_test_results(initial_loop_original_test_results, initial_loop_candidate_results):
                 logger.info("Test results matched!")
