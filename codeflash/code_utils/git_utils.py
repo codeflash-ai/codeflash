@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 from io import StringIO
 from pathlib import Path
@@ -12,6 +15,7 @@ from unidiff import PatchSet
 
 from codeflash.cli_cmds.cli_common import inquirer_wrapper
 from codeflash.cli_cmds.console import logger
+from codeflash.code_utils.config_consts import N_CANDIDATES
 
 if TYPE_CHECKING:
     from git import Repo
@@ -84,9 +88,9 @@ def git_root_dir(repo: Repo | None = None) -> Path:
     return Path(repository.working_dir)
 
 
-def check_running_in_git_repo(module_root: str) -> bool:
+def check_running_in_git_repo(module_root: Path) -> bool:
     try:
-        _ = git.Repo(module_root, search_parent_directories=True).git_dir
+        _ = git.Repo(str(module_root), search_parent_directories=True).git_dir
     except git.InvalidGitRepositoryError:
         return False
     else:
@@ -133,3 +137,33 @@ def check_and_push_branch(repo: git.Repo, wait_for_push: bool = False) -> bool:
         return False
     logger.debug(f"The branch '{current_branch}' is present in the remote repository.")
     return True
+
+
+def create_worktree_root_dir(module_root: Path) -> tuple[Path | None, Path | None]:
+    git_root = git_root_dir() if check_running_in_git_repo(module_root) else None
+    worktree_root_dir = Path(tempfile.mkdtemp()) if git_root else None
+    return git_root, worktree_root_dir
+
+
+def create_git_worktrees(
+    git_root: Path | None, worktree_root_dir: Path | None, module_root: Path
+) -> tuple[Path | None, list[Path]]:
+    if git_root and worktree_root_dir:
+        worktree_root = Path(tempfile.mkdtemp(dir=worktree_root_dir))
+        worktrees = [Path(tempfile.mkdtemp(dir=worktree_root)) for _ in range(N_CANDIDATES + 1)]
+        for worktree in worktrees:
+            subprocess.run(["git", "worktree", "add", "-d", worktree], cwd=module_root, check=True)
+    else:
+        worktree_root = None
+        worktrees = []
+    return worktree_root, worktrees
+
+
+def remove_git_worktrees(worktree_root: Path | None, worktrees: list[Path]) -> None:
+    try:
+        for worktree in worktrees:
+            subprocess.run(["git", "worktree", "remove", "-f", worktree], check=True)
+    except subprocess.CalledProcessError as e:
+        logger.warning(f"Error removing worktrees: {e}")
+    if worktree_root:
+        shutil.rmtree(worktree_root)

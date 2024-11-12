@@ -176,7 +176,6 @@ def get_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str | Non
 
         return find_target(target.body, name_parts[1:])
 
-    # TODO Crosshair: Already extracted and parsed.
     with open(file_path, encoding="utf8") as file:
         source_code: str = file.read()
     try:

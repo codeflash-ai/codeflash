@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from enum import IntEnum
 from pathlib import Path
 from typing import Iterator, Optional
 
@@ -18,13 +17,6 @@ from codeflash.verification.test_results import TestResults, TestType
 class ValidCode(BaseModel, frozen=True):
     source_code: str
     normalized_code: str
-
-
-class DiffbehaviorReturnCode(IntEnum):
-    DID_NOT_RUN = -1
-    NO_DIFFERENCES = 0
-    COUNTER_EXAMPLES = 1
-    ERROR = 2
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})

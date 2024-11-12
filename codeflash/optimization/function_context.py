@@ -14,7 +14,7 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import get_code
 from codeflash.code_utils.code_utils import module_name_from_file_path, path_belongs_to_site_packages
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionSource, FunctionParent
+from codeflash.models.models import FunctionParent, FunctionSource
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -40,7 +40,6 @@ def get_type_annotation_context(
 ) -> tuple[list[FunctionSource], set[tuple[str, str]]]:
     function_name: str = function.function_name
     file_path: Path = function.file_path
-    # TODO Crosshair: IO already done, match file with collected imports
     file_contents: str = file_path.read_text(encoding="utf8")
     try:
         module: ast.Module = ast.parse(file_contents)
