@@ -10,7 +10,7 @@ from codeflash.version import __version__, __version_tuple__
 _posthog = None
 
 
-def initialize_posthog(enabled: bool) -> None:
+def initialize_posthog(enabled: bool = True) -> None:
     """Enable or disable PostHog.
     :param enabled: Whether to enable PostHog.
     """
@@ -18,7 +18,7 @@ def initialize_posthog(enabled: bool) -> None:
         return
 
     global _posthog
-    _posthog = Posthog(project_api_key="phc_aUO790jHd7z1SXwsYCz8dRApxueplZlZWeDSpKc5hol", host="https://us.posthog.com")
+    _posthog = Posthog(project_api_key="phc_aUO790jHd7z1SXwsYCz8dRApxueplZlZWeDSpKc5hol", host="https://us.posthog.com")  # type: ignore
     _posthog.log.setLevel(logging.CRITICAL)  # Suppress PostHog logging
     ph("cli-telemetry-enabled")
 
@@ -37,6 +37,6 @@ def ph(event: str, properties: Optional[Dict[str, Any]] = None) -> None:
     user_id = get_user_id()
 
     if user_id:
-        _posthog.capture(distinct_id=user_id, event=event, properties=properties)
+        _posthog.capture(distinct_id=user_id, event=event, properties=properties)  # type: ignore
     else:
         logger.debug("Failed to log event to PostHog: User ID could not be retrieved.")

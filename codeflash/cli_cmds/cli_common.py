@@ -21,9 +21,9 @@ def inquirer_wrapper(func: Callable[..., str | bool], *args: str | bool, **kwarg
     new_kwargs = {}
 
     if len(args) == 1:
-        message = args[0]
+        message = str(args[0])
     else:
-        message = kwargs["message"]
+        message = str(kwargs["message"])
         new_kwargs = kwargs.copy()
     split_messages = split_string_to_cli_width(message, is_confirm=func == inquirer.confirm)
     for split_message in split_messages[:-1]:
@@ -58,7 +58,7 @@ def split_string_to_cli_width(string: str, is_confirm: bool = False) -> list[str
     return lines
 
 
-def inquirer_wrapper_path(*args: str, **kwargs: str) -> dict[str, str]:
+def inquirer_wrapper_path(*args: str, **kwargs: str) -> dict[str, str] | None:
     new_args = []
     message = kwargs["message"]
     new_kwargs = kwargs.copy()

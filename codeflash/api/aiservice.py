@@ -37,6 +37,20 @@ class AiServiceClient:
     ) -> requests.Response:
         """Make an API request to the given endpoint on the AI service.
 
+        Args:
+            endpoint: The endpoint to call, e.g., "/optimize"
+            method: The HTTP method to use ('GET' or 'POST')
+            payload: Optional JSON payload to include in the POST request body
+            timeout: The timeout for the request in seconds
+
+        Returns:
+            The response object from the API
+
+        Raises:
+            requests.exceptions.RequestException: If the request fails
+        """
+        """Make an API request to the given endpoint on the AI service.
+
         :param endpoint: The endpoint to call, e.g., "/optimize".
         :param method: The HTTP method to use ('GET' or 'POST').
         :param payload: Optional JSON payload to include in the POST request body.
