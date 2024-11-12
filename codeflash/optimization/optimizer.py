@@ -560,19 +560,18 @@ class Optimizer:
             should_sort_imports = False
 
         new_code = format_code(self.args.formatter_cmds, path)
-        if should_sort_imports and new_code is not None:
+        if should_sort_imports:
             new_code = sort_imports(new_code)
 
         new_helper_code: dict[Path, str] = {}
         helper_functions_paths = {hf.file_path for hf in helper_functions}
         for module_abspath in helper_functions_paths:
             formatted_helper_code = format_code(self.args.formatter_cmds, module_abspath)
-            if should_sort_imports and formatted_helper_code is not None:
+            if should_sort_imports:
                 formatted_helper_code = sort_imports(formatted_helper_code)
-            if formatted_helper_code is not None:
-                new_helper_code[module_abspath] = formatted_helper_code
+            new_helper_code[module_abspath] = formatted_helper_code
 
-        return new_code or "", new_helper_code
+        return new_code, new_helper_code
 
     def replace_function_and_helpers_with_optimized_code(
         self,
