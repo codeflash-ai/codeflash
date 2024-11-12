@@ -203,6 +203,10 @@ class Optimizer:
         instrumented_unittests_created_for_function = self.instrument_existing_tests(
             function_to_optimize=function_to_optimize, function_to_tests=function_to_tests
         )
+        generated_test_paths = [
+            get_test_file_path(self.test_cfg.tests_root, function_to_optimize.function_name, test_index)
+            for test_index in range(N_TESTS_TO_GENERATE)
+        ]
 
         with progress_bar(
             f"Generating new tests and optimizations for function {function_to_optimize.function_name}", transient=True
@@ -213,6 +217,7 @@ class Optimizer:
                 code_context.helper_functions,
                 Path(module_path),
                 function_trace_id,
+                generated_test_paths,
                 run_experiment=should_run_experiment,
             )
 
@@ -222,17 +227,13 @@ class Optimizer:
         generated_tests, optimizations_set = tests_and_opts
 
         count_tests = len(generated_tests.generated_tests)
-        generated_tests_paths = [
-            get_test_file_path(self.args.tests_root, function_to_optimize.function_name, i) for i in range(count_tests)
-        ]
 
         for i, generated_test in enumerate(generated_tests.generated_tests):
-            generated_tests_path = generated_tests_paths[i]
-            with generated_tests_path.open("w", encoding="utf8") as f:
+            with generated_test.file_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_test_source)
             self.test_files.add(
                 TestFile(
-                    instrumented_file_path=generated_tests_path,
+                    instrumented_file_path=generated_test.file_path,
                     original_file_path=None,
                     original_source=generated_test.generated_original_test_source,
                     test_type=TestType.GENERATED_REGRESSION,
@@ -247,7 +248,7 @@ class Optimizer:
         )
         console.rule()
         if not is_successful(baseline_result):
-            for generated_test_path in generated_tests_paths:
+            for generated_test_path in generated_test_paths:
                 generated_test_path.unlink(missing_ok=True)
 
             for instrumented_path in instrumented_unittests_created_for_function:
@@ -339,7 +340,7 @@ class Optimizer:
                         #  b) Performance estimates become unstable, as the runtime of an optimization might be
                         #     dependent on the runtime of the previous optimization
                         self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
-        for generated_test_path in generated_tests_paths:
+        for generated_test_path in generated_test_paths:
             generated_test_path.unlink(missing_ok=True)
         for test_paths in instrumented_unittests_created_for_function:
             test_paths.unlink(missing_ok=True)
@@ -696,8 +697,10 @@ class Optimizer:
         helper_functions: list[FunctionSource],
         module_path: Path,
         function_trace_id: str,
+        generated_test_paths: list[Path],
         run_experiment: bool = False,
     ) -> Result[tuple[GeneratedTestsList, OptimizationSet], str]:
+        assert len(generated_test_paths) == N_TESTS_TO_GENERATE
         max_workers = N_TESTS_TO_GENERATE + 1 if not run_experiment else N_TESTS_TO_GENERATE + 2
         console.rule()
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -708,6 +711,7 @@ class Optimizer:
                 function_to_optimize,
                 [definition.fully_qualified_name for definition in helper_functions],
                 module_path,
+                generated_test_paths,
                 (function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id),
             )
             future_optimization_candidates = executor.submit(
@@ -745,11 +749,12 @@ class Optimizer:
             for future in future_tests:
                 res = future.result()
                 if res:
-                    generated_test_source, instrumented_test_source = res
+                    generated_test_source, instrumented_test_source, test_path = res
                     tests.append(
                         GeneratedTests(
                             generated_original_test_source=generated_test_source,
                             instrumented_test_source=instrumented_test_source,
+                            file_path=test_path,
                         )
                     )
             if not tests:
@@ -1051,6 +1056,7 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         helper_function_names: list[str],
         module_path: Path,
+        generated_test_paths: list[Path],
         function_trace_id: str,
     ) -> list[concurrent.futures.Future]:
         futures = [
@@ -1063,11 +1069,11 @@ class Optimizer:
                 module_path,
                 self.test_cfg,
                 INDIVIDUAL_TESTCASE_TIMEOUT,
-                self.args.use_cached_tests,
                 function_trace_id,
                 test_index,
+                test_path,
             )
-            for test_index in range(N_TESTS_TO_GENERATE)
+            for test_index, test_path in enumerate(generated_test_paths)
         ]
         return futures
 
