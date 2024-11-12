@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from enum import Enum
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Iterator, Optional, cast
 
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
@@ -79,8 +79,8 @@ class FunctionTestInvocation:
 
 
 class TestResults(BaseModel):
-    # don't add to this list directly, use the add method
-    # also we don't support deletion of test results
+    # don't modify these directly, use the add method
+    # also we don't support deletion of test results elements - caution is advised
     test_results: list[FunctionTestInvocation] = []
     test_result_idx: dict[str, int] = {}
 
@@ -100,13 +100,6 @@ class TestResults(BaseModel):
                 raise ValueError(f"Test result with id {k} already exists.")
             self.test_result_idx[k] = v + original_len
 
-    def get_by_id(self, invocation_id: InvocationId) -> FunctionTestInvocation | None:
-        # return next((r for r in self.test_results if r.id == invocation_id), None)
-        try:
-            return self.test_results[self.test_result_idx[invocation_id]]
-        except (IndexError, KeyError):
-            return None
-
     def get_by_unique_invocation_loop_id(self, unique_invocation_loop_id: str) -> FunctionTestInvocation | None:
         try:
             return self.test_results[self.test_result_idx[unique_invocation_loop_id]]
@@ -115,7 +108,6 @@ class TestResults(BaseModel):
 
     def get_all_ids(self) -> set[InvocationId]:
         return {test_result.id for test_result in self.test_results}
-
 
     def get_all_unique_invocation_loop_ids(self) -> set[str]:
         return {test_result.unique_invocation_loop_id for test_result in self.test_results}
@@ -202,8 +194,9 @@ class TestResults(BaseModel):
         if len(self) != len(other):
             return False
         original_recursion_limit = sys.getrecursionlimit()
+        cast(TestResults, other)
         for test_result in self:
-            other_test_result = other.get_by_id(test_result.id)
+            other_test_result = other.get_by_unique_invocation_loop_id(test_result.unique_invocation_loop_id)
             if other_test_result is None:
                 return False
 
