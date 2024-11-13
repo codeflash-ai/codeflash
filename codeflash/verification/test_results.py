@@ -86,9 +86,10 @@ class TestResults(BaseModel):
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
         if function_test_invocation.unique_invocation_loop_id in self.test_result_idx:
-            raise ValueError(
-                f"Test result with id {function_test_invocation.unique_invocation_loop_id} already exists."
+            logger.warning(
+                f"Test result with id {function_test_invocation.unique_invocation_loop_id} already exists. SKIPPING"
             )
+            return
         self.test_result_idx[function_test_invocation.unique_invocation_loop_id] = len(self.test_results)
         self.test_results.append(function_test_invocation)
 
