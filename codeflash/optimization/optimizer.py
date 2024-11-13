@@ -22,7 +22,7 @@ from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code, find_preexisting_objects
-from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
+from codeflash.code_utils.code_replacer import normalize_code, replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     file_name_from_test_module_name,
     get_run_tmp_file,
@@ -37,6 +37,7 @@ from codeflash.code_utils.config_consts import (
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
+from codeflash.code_utils.static_analysis import analyze_imported_modules
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize, get_functions_to_optimize
@@ -52,6 +53,7 @@ from codeflash.models.models import (
     OriginalCodeBaseline,
     TestFile,
     TestFiles,
+    ValidCode,
 )
 from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
@@ -119,30 +121,63 @@ class Optimizer:
         try:
             ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
             if num_optimizable_functions == 0:
-                logger.info("No functions found to optimize. Exiting...")
+                logger.info("No functions found to optimize. Exiting…")
                 return
 
             console.rule()
-            logger.info(f"Discovering existing unit tests in {self.test_cfg.tests_root} ...")
+            logger.info(f"Discovering existing unit tests in {self.test_cfg.tests_root}…")
             function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
             num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
             logger.info(f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}")
             console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
-            for path in file_to_funcs_to_optimize:
-                logger.info(f"Examining file {path} ...")
-                console.rule()
-                with Path(path).open(encoding="utf8") as f:
-                    original_code: str = f.read()
 
-                for function_to_optimize in file_to_funcs_to_optimize[path]:
+            for original_module_path in file_to_funcs_to_optimize:
+                logger.info(f"Examining file {original_module_path!s}…")
+
+                original_module_code: str = original_module_path.read_text(encoding="utf8")
+                try:
+                    normalized_original_module_code = normalize_code(original_module_code)
+                except SyntaxError as e:
+                    logger.warning(f"Syntax error parsing code in {original_module_path}: {e}")
+                    logger.info("Skipping optimization due to file error.")
+                    continue
+                validated_original_code: dict[Path, ValidCode] = {
+                    original_module_path: ValidCode(
+                        source_code=original_module_code, normalized_code=normalized_original_module_code
+                    )
+                }
+
+                imported_module_analyses = analyze_imported_modules(
+                    original_module_code, original_module_path, self.args.project_root
+                )
+
+                has_syntax_error = False
+                for analysis in imported_module_analyses:
+                    callee_original_code = analysis.file_path.read_text(encoding="utf8")
+                    try:
+                        normalized_callee_original_code = normalize_code(callee_original_code)
+                    except SyntaxError as e:
+                        logger.warning(f"Syntax error parsing code in callee module {analysis.file_path}: {e}")
+                        logger.info("Skipping optimization due to helper file error.")
+                        has_syntax_error = True
+                        break
+                    validated_original_code[analysis.file_path] = ValidCode(
+                        source_code=callee_original_code, normalized_code=normalized_callee_original_code
+                    )
+                if has_syntax_error:
+                    continue
+
+                for function_to_optimize in file_to_funcs_to_optimize[original_module_path]:
                     function_iterator_count += 1
                     logger.info(
                         f"Optimizing function {function_iterator_count} of {num_optimizable_functions}: "
                         f"{function_to_optimize.qualified_name}"
                     )
 
-                    best_optimization = self.optimize_function(function_to_optimize, function_to_tests, original_code)
+                    best_optimization = self.optimize_function(
+                        function_to_optimize, function_to_tests, validated_original_code
+                    )
                     self.test_files = TestFiles(test_files=[])
                     if is_successful(best_optimization):
                         optimizations_found += 1
@@ -158,7 +193,6 @@ class Optimizer:
         finally:
             for test_file in self.test_files.get_by_type(TestType.GENERATED_REGRESSION).test_files:
                 test_file.instrumented_file_path.unlink(missing_ok=True)
-            # TODO: Missed replay tests here, should just delete all instrumented tests
             for test_file in self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
                 test_file.instrumented_file_path.unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
@@ -168,7 +202,7 @@ class Optimizer:
         self,
         function_to_optimize: FunctionToOptimize,
         function_to_tests: dict[str, list[FunctionCalledInTest]],
-        original_code: str,
+        validated_original_code: dict[Path, ValidCode],
     ) -> Result[BestOptimization, str]:
         should_run_experiment = self.experiment_id is not None
         function_trace_id: str = str(uuid.uuid4())
@@ -176,7 +210,11 @@ class Optimizer:
         ph("cli-optimize-function-start", {"function_trace_id": function_trace_id})
         self.cleanup_leftover_test_return_values()
         file_name_from_test_module_name.cache_clear()
-        ctx_result = self.get_code_optimization_context(function_to_optimize, self.args.project_root, original_code)
+        ctx_result = self.get_code_optimization_context(
+            function_to_optimize,
+            self.args.project_root,
+            validated_original_code[function_to_optimize.file_path].source_code,
+        )
         if not is_successful(ctx_result):
             return Failure(ctx_result.failure())
         code_context: CodeOptimizationContext = ctx_result.unwrap()
@@ -189,7 +227,7 @@ class Optimizer:
 
         code_print(code_context.code_to_optimize_with_helpers)
 
-        module_path = module_name_from_file_path(function_to_optimize.file_path, self.args.project_root)
+        original_module_path = module_name_from_file_path(function_to_optimize.file_path, self.args.project_root)
 
         for module_abspath in original_helper_code:
             code_context.code_to_optimize_with_helpers = add_needed_imports_from_module(
@@ -215,7 +253,7 @@ class Optimizer:
                 code_context.code_to_optimize_with_helpers,
                 function_to_optimize,
                 code_context.helper_functions,
-                Path(module_path),
+                Path(original_module_path),
                 function_trace_id,
                 generated_test_paths,
                 run_experiment=should_run_experiment,
@@ -223,9 +261,9 @@ class Optimizer:
 
         if not is_successful(generated_results):
             return Failure(generated_results.failure())
-        tests_and_opts: tuple[GeneratedTestsList, OptimizationSet] = generated_results.unwrap()
-        generated_tests, optimizations_set = tests_and_opts
-
+        generated_tests: GeneratedTestsList
+        optimizations_set: OptimizationSet
+        generated_tests, optimizations_set = generated_results.unwrap()
         count_tests = len(generated_tests.generated_tests)
 
         for i, generated_test in enumerate(generated_tests.generated_tests):
@@ -242,9 +280,10 @@ class Optimizer:
             logger.info(f"Generated test {i + 1}/{count_tests}:")
             code_print(generated_test.generated_original_test_source)
 
+        function_to_optimize_qualified_name = function_to_optimize.qualified_name
         baseline_result = self.establish_original_code_baseline(
-            function_to_optimize.qualified_name,
-            function_to_tests.get(module_path + "." + function_to_optimize.qualified_name, []),
+            function_to_optimize_qualified_name,
+            function_to_tests.get(original_module_path + "." + function_to_optimize_qualified_name, []),
         )
         console.rule()
         if not is_successful(baseline_result):
@@ -254,11 +293,10 @@ class Optimizer:
             for instrumented_path in instrumented_unittests_created_for_function:
                 instrumented_path.unlink(missing_ok=True)
             return Failure(baseline_result.failure())
-
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
-        # TODO: Postprocess the optimized function to include the original docstring and such
 
         best_optimization = None
+
         for u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
             if candidates is None:
                 continue
@@ -271,7 +309,7 @@ class Optimizer:
                 candidates=candidates,
                 code_context=code_context,
                 function_to_optimize=function_to_optimize,
-                original_code=original_code,
+                original_code=validated_original_code[function_to_optimize.file_path].source_code,
                 original_code_baseline=original_code_baseline,
                 original_helper_code=original_helper_code,
                 function_trace_id=function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
@@ -296,7 +334,7 @@ class Optimizer:
                     winning_test_results=best_optimization.winning_test_results,
                     original_runtime_ns=original_code_baseline.runtime,
                     best_runtime_ns=best_optimization.runtime,
-                    function_name=function_to_optimize.qualified_name,
+                    function_name=function_to_optimize_qualified_name,
                     file_path=function_to_optimize.file_path,
                 )
 
@@ -306,11 +344,13 @@ class Optimizer:
                     code_context=code_context,
                     function_to_optimize_file_path=explanation.file_path,
                     optimized_code=best_optimization.candidate.source_code,
-                    qualified_function_name=function_to_optimize.qualified_name,
+                    qualified_function_name=function_to_optimize_qualified_name,
                 )
 
                 new_code, new_helper_code = self.reformat_code_and_helpers(
-                    code_context.helper_functions, explanation.file_path, original_code
+                    code_context.helper_functions,
+                    explanation.file_path,
+                    validated_original_code[function_to_optimize.file_path].source_code,
                 )
 
                 existing_tests = existing_tests_source_for(
@@ -320,7 +360,9 @@ class Optimizer:
                 )
 
                 original_code_combined = original_helper_code.copy()
-                original_code_combined[explanation.file_path] = original_code
+                original_code_combined[explanation.file_path] = validated_original_code[
+                    function_to_optimize.file_path
+                ].source_code
                 new_code_combined = new_helper_code.copy()
                 new_code_combined[explanation.file_path] = new_code
                 if not self.args.no_pr:
@@ -335,11 +377,11 @@ class Optimizer:
                         function_trace_id=function_trace_id,
                     )
                     if self.args.all or env_utils.get_pr_number():
-                        # Reverting to original code, because optimizing functions in a sequence can lead to
-                        #  a) Error propagation, where error in one function can cause the next optimization to fail
-                        #  b) Performance estimates become unstable, as the runtime of an optimization might be
-                        #     dependent on the runtime of the previous optimization
-                        self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
+                        self.write_code_and_helpers(
+                            validated_original_code[function_to_optimize.file_path].source_code,
+                            original_helper_code,
+                            function_to_optimize.file_path,
+                        )
         for generated_test_path in generated_test_paths:
             generated_test_path.unlink(missing_ok=True)
         for test_paths in instrumented_unittests_created_for_function:
@@ -362,21 +404,22 @@ class Optimizer:
         only_run_this_test_function: list[FunctionCalledInTest] | None = None,
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
-        best_runtime_until_now = original_code_baseline.runtime  # The fastest code runtime until now
+        best_runtime_until_now = original_code_baseline.runtime
 
         speedup_ratios: dict[str, float | None] = {}
         optimized_runtimes: dict[str, float | None] = {}
         is_correct = {}
 
         logger.info(
-            f"Determining best optimized candidate (out of {len(candidates)}) for {function_to_optimize.qualified_name} ..."
+            f"Determining best optimization candidate (out of {len(candidates)}) for "
+            f"{function_to_optimize.qualified_name}…"
         )
         console.rule()
         try:
             for candidate_index, candidate in enumerate(candidates, start=1):
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
-                logger.info(f"Optimized candidate {candidate_index}/{len(candidates)}:")
+                logger.info(f"Optimization candidate {candidate_index}/{len(candidates)}:")
                 code_print(candidate.source_code)
                 try:
                     did_update = self.replace_function_and_helpers_with_optimized_code(
@@ -394,14 +437,6 @@ class Optimizer:
                     logger.error(e)
                     self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
                     continue
-
-                # Run generated tests if at least one of them passed
-                run_generated_tests = False
-                if original_code_baseline.generated_test_results:
-                    for test_result in original_code_baseline.generated_test_results.test_results:
-                        if test_result.did_pass:
-                            run_generated_tests = True
-                            break
 
                 run_results = self.run_optimized_candidate(
                     optimization_candidate_index=candidate_index,
@@ -430,7 +465,9 @@ class Optimizer:
                         tree.add("This candidate is faster than the previous best candidate. 🚀")
                         tree.add(f"Original runtime: {humanize_runtime(original_code_baseline.runtime)}")
                         tree.add(
-                            f"Best test runtime: {humanize_runtime(candidate_result.best_test_runtime)} (measured over {candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                            f"Best test runtime: {humanize_runtime(candidate_result.best_test_runtime)} "
+                            f"(measured over {candidate_result.max_loop_count} "
+                            f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
                         )
                         tree.add(f"Speedup ratio: {perf_gain:.3f}")
 
@@ -443,7 +480,9 @@ class Optimizer:
                         best_runtime_until_now = best_test_runtime
                     else:
                         tree.add(
-                            f"Runtime: {humanize_runtime(best_test_runtime)} (measured over {candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                            f"Runtime: {humanize_runtime(best_test_runtime)} "
+                            f"(measured over {candidate_result.max_loop_count} "
+                            f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
                         )
                         tree.add(f"Speedup ratio: {perf_gain:.3f}")
                     console.print(tree)
@@ -453,7 +492,7 @@ class Optimizer:
         except KeyboardInterrupt as e:
             self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
             logger.exception(f"Optimization interrupted: {e}")
-            raise e
+            raise
 
         self.aiservice_client.log_results(
             function_trace_id=function_trace_id,
@@ -653,7 +692,8 @@ class Optimizer:
                 elif test_type == TestType.REPLAY_TEST:
                     replay_test_files_count += 1
                 else:
-                    raise ValueError(f"Unexpected test type: {test_type}")
+                    msg = f"Unexpected test type: {test_type}"
+                    raise ValueError(msg)
                 success, injected_test = inject_profiling_into_existing_test(
                     test_path=path_obj_test_file,
                     call_positions=positions,
@@ -671,7 +711,8 @@ class Optimizer:
                     with new_test_path.open("w", encoding="utf8") as _f:
                         _f.write(injected_test)
                 else:
-                    raise ValueError("injected_test is None")
+                    msg = "injected_test is None"
+                    raise ValueError(msg)
 
                 unique_instrumented_test_files.add(new_test_path)
                 if not self.test_files.get_by_original_file_path(path_obj_test_file):
@@ -722,7 +763,7 @@ class Optimizer:
                 ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             )
             future_candidates_exp = None
-            futures: list = future_tests + [future_optimization_candidates]
+            futures: list[concurrent.futures.Future] = [*future_tests, future_optimization_candidates]
             if run_experiment:
                 future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
@@ -874,7 +915,8 @@ class Optimizer:
 
             loop_count = max([int(result.loop_index) for result in unittest_results.test_results])
             logger.info(
-                f"Original code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: {humanize_runtime(total_timing)} per full loop"
+                f"Original code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: "
+                f"{humanize_runtime(total_timing)} per full loop"
             )
             console.rule()
             logger.debug(f"Total original code runtime (ns): {total_timing}")
@@ -978,11 +1020,9 @@ class Optimizer:
 
             if compare_test_results(initial_loop_original_test_results, initial_loop_candidate_results):
                 logger.info("Test results matched!")
-                console.rule()
                 equal_results = True
             else:
                 logger.info("Test results did not match the test results of the original code.")
-                console.rule()
                 success = False
                 equal_results = False
 
@@ -996,8 +1036,8 @@ class Optimizer:
                 success = False
 
             if not success:
-                return Failure("Failed to run the optimized candidate.")
-
+                return Failure("Failed to run the optimization candidate.")
+            logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
             return Success(
                 OptimizedCandidateResult(
                     max_loop_count=loop_count,
@@ -1040,7 +1080,8 @@ class Optimizer:
             return TestResults()
         if run_result.returncode != 0:
             logger.debug(
-                f'Nonzero return code {run_result.returncode} when running tests in {", ".join([str(f.instrumented_file_path) for f in test_files.test_files])}.\n'
+                f'Nonzero return code {run_result.returncode} when running tests in '
+                f'{", ".join([str(f.instrumented_file_path) for f in test_files.test_files])}.\n'
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
@@ -1063,7 +1104,7 @@ class Optimizer:
         generated_test_paths: list[Path],
         function_trace_id: str,
     ) -> list[concurrent.futures.Future]:
-        futures = [
+        return [
             executor.submit(
                 generate_tests,
                 self.aiservice_client,
@@ -1079,7 +1120,6 @@ class Optimizer:
             )
             for test_index, test_path in enumerate(generated_test_paths)
         ]
-        return futures
 
 
 def run_with_args(args: Namespace) -> None:

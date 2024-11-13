@@ -14,7 +14,7 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import get_code
 from codeflash.code_utils.code_utils import module_name_from_file_path, path_belongs_to_site_packages
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionSource, FunctionParent
+from codeflash.models.models import FunctionParent, FunctionSource
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -245,8 +245,6 @@ def get_constrained_function_context_and_helper_functions(
     code_to_optimize: str,
     max_tokens: int = MAX_PROMPT_TOKENS,
 ) -> tuple[str, list[FunctionSource], set[tuple[str, str]]]:
-    # TODO: Not just do static analysis, but also find the datatypes of function arguments by running the existing
-    #  unittests and inspecting the arguments to resolve the real definitions and dependencies.
     helper_functions, dunder_methods = get_function_variables_definitions(function_to_optimize, project_root_path)
     tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")
     code_to_optimize_tokens = tokenizer.encode(code_to_optimize)

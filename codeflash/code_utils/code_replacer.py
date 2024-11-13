@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, TypeVar
 
 import libcst as cst
 
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module
 from codeflash.models.models import FunctionParent
 
@@ -13,6 +14,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from libcst import FunctionDef
+
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.models.models import CodeOptimizationContext, OptimizedCandidate, ValidCode
 
 ASTNodeT = TypeVar("ASTNodeT", bound=ast.AST)
 
@@ -164,8 +168,9 @@ def replace_functions_in_file(
         elif original_function_name.count(".") == 1:
             class_name, function_name = original_function_name.split(".")
         else:
-            msg = f"Don't know how to find {original_function_name} yet!"
-            raise ValueError(msg)
+            msg = f"Unable to find {original_function_name}. Returning unchanged source code."
+            logger.error(msg)
+            return source_code
         parsed_function_names.append((function_name, class_name))
 
     module = cst.metadata.MetadataWrapper(cst.parse_module(optimized_code))
@@ -177,8 +182,9 @@ def replace_functions_in_file(
         if visitor.optim_body is None and not preexisting_objects:
             continue
         if visitor.optim_body is None:
-            msg = f"Did not find the function {function_name} in the optimized code"
-            raise ValueError(msg)
+            msg = f"Unable to find function {function_name} in optimized code. Returning unchanged source code."
+            logger.error(msg)
+            return source_code
 
         transformer = OptimFunctionReplacer(
             visitor.function_name,
@@ -243,3 +249,115 @@ def replace_function_definitions_in_module(
 
 def is_zero_diff(original_code: str, new_code: str) -> bool:
     return normalize_code(original_code) == normalize_code(new_code)
+
+
+def replace_optimized_code(
+    callee_module_paths: set[Path],
+    candidates: list[OptimizedCandidate],
+    code_context: CodeOptimizationContext,
+    function_to_optimize: FunctionToOptimize,
+    validated_original_code: dict[Path, ValidCode],
+    project_root: Path,
+) -> tuple[set[Path], dict[str, dict[Path, str]]]:
+    initial_optimized_code = {
+        candidate.optimization_id: replace_functions_and_add_imports(
+            validated_original_code[function_to_optimize.file_path].source_code,
+            [function_to_optimize.qualified_name],
+            candidate.source_code,
+            function_to_optimize.file_path,
+            function_to_optimize.file_path,
+            code_context.preexisting_objects,
+            code_context.contextual_dunder_methods,
+            project_root,
+        )
+        for candidate in candidates
+    }
+    callee_original_code = {
+        module_path: validated_original_code[module_path].source_code for module_path in callee_module_paths
+    }
+    intermediate_original_code: dict[str, dict[Path, str]] = {
+        candidate.optimization_id: (
+            callee_original_code | {function_to_optimize.file_path: initial_optimized_code[candidate.optimization_id]}
+        )
+        for candidate in candidates
+    }
+    module_paths = callee_module_paths | {function_to_optimize.file_path}
+    optimized_code = {
+        candidate.optimization_id: {
+            module_path: replace_functions_and_add_imports(
+                intermediate_original_code[candidate.optimization_id][module_path],
+                (
+                    [
+                        callee.qualified_name
+                        for callee in code_context.helper_functions
+                        if callee.file_path == module_path and callee.jedi_definition.type != "class"
+                    ]
+                ),
+                candidate.source_code,
+                function_to_optimize.file_path,
+                module_path,
+                [],
+                code_context.contextual_dunder_methods,
+                project_root,
+            )
+            for module_path in module_paths
+        }
+        for candidate in candidates
+    }
+    return module_paths, optimized_code
+
+
+def is_optimized_module_code_zero_diff(
+    candidates: list[OptimizedCandidate],
+    validated_original_code: dict[Path, ValidCode],
+    optimized_code: dict[str, dict[Path, str]],
+    module_paths: set[Path],
+) -> dict[str, dict[Path, bool]]:
+    return {
+        candidate.optimization_id: {
+            callee_module_path: normalize_code(optimized_code[candidate.optimization_id][callee_module_path])
+            == validated_original_code[callee_module_path].normalized_code
+            for callee_module_path in module_paths
+        }
+        for candidate in candidates
+    }
+
+
+def candidates_with_diffs(
+    candidates: list[OptimizedCandidate],
+    validated_original_code: ValidCode,
+    optimized_code: dict[str, dict[Path, str]],
+    module_paths: set[Path],
+) -> list[OptimizedCandidate]:
+    return [
+        candidate
+        for candidate in candidates
+        if not all(
+            is_optimized_module_code_zero_diff(candidates, validated_original_code, optimized_code, module_paths)[
+                candidate.optimization_id
+            ].values()
+        )
+    ]
+
+
+def replace_optimized_code_in_worktrees(
+    optimized_code: dict[str, dict[Path, str]],
+    candidates: list[OptimizedCandidate],  # Should be candidates_with_diffs
+    worktrees: list[Path],
+    git_root: Path,  # Handle None case
+) -> None:
+    for candidate, worktree in zip(candidates, worktrees[1:]):
+        for module_path in optimized_code[candidate.optimization_id]:
+            (worktree / module_path.relative_to(git_root)).write_text(
+                optimized_code[candidate.optimization_id][module_path], encoding="utf8"
+            )  # Check with is_optimized_module_code_zero_diff
+
+
+def function_to_optimize_original_worktree_fqn(
+    function_to_optimize: FunctionToOptimize, worktrees: list[Path], git_root: Path
+) -> str:
+    return (
+        str(worktrees[0].name / function_to_optimize.file_path.relative_to(git_root).with_suffix("")).replace("/", ".")
+        + "."
+        + function_to_optimize.qualified_name
+    )

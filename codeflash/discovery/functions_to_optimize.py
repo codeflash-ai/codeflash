@@ -156,26 +156,18 @@ def get_functions_to_optimize(
     module_root: Path,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     assert (
-        sum(
-            [  # Ensure only one of the options is provided
-                bool(optimize_all),
-                bool(replay_test),
-                bool(file),
-            ]
-        )
-        <= 1
+        sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1
     ), "Only one of optimize_all, replay_test, or file should be provided"
     functions: dict[str, list[FunctionToOptimize]]
     if optimize_all:
-        logger.info("Finding all functions in the module '%s' ...", optimize_all)
+        logger.info("Finding all functions in the module '%s'…", optimize_all)
         functions = get_all_files_and_functions(Path(optimize_all))
     elif replay_test is not None:
         functions = get_all_replay_test_functions(
             replay_test=replay_test, test_cfg=test_cfg, project_root_path=project_root
         )
-
     elif file is not None:
-        logger.info("Finding all functions in the file '%s' ...", file)
+        logger.info("Finding all functions in the file '%s'…", file)
         functions = find_all_functions_in_file(file)
         if only_get_this_function is not None:
             split_function = only_get_this_function.split(".")
@@ -236,7 +228,6 @@ def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
 
 def get_all_files_and_functions(module_root_path: Path) -> dict[str, list[FunctionToOptimize]]:
     functions: dict[str, list[FunctionToOptimize]] = {}
-    module_root_path = Path(module_root_path)
     for file_path in module_root_path.rglob("*.py"):
         # Find all the functions in the file
         functions.update(find_all_functions_in_file(file_path).items())

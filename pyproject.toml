@@ -86,6 +86,7 @@ isort = ">=5.11.0"
 dill = "^0.3.8"
 rich = "^13.8.1"
 lxml = "^5.3.0"
+crosshair-tool = ">=0.0.77"
 
 
 [tool.poetry.group.dev]
@@ -98,6 +99,7 @@ optional = true
 ipython = "^8.12.0"
 mypy = ">=1.13"
 ruff = ">=0.7.0"
+lxml-stubs = "^0.5.1"
 pandas-stubs = ">=2.2.2.240807, <2.2.3.241009"
 types-Pygments = "^2.18.0.20240506"
 types-colorama = "^0.4.15.20240311"
@@ -107,6 +109,7 @@ types-requests = "^2.32.0.20241016"
 types-six = "^1.16.21.20241009"
 types-cffi = "^1.16.0.20240331"
 types-openpyxl = "^3.1.5.20241020"
+types-regex = "^2024.9.11.20240912"
 
 [tool.poetry.build]
 script = "codeflash/update_license_version.py"
@@ -150,7 +153,8 @@ exclude= ["code_to_optimize/", "pie_test_set/"]
 
 [tool.ruff.lint]
 select = ["ALL"]
-ignore = ["S101", "FIX002", "ANN101"]
+ignore = ["C901", "D100", "D101", "D102", "D103", "D105", "D107", "S101", "S603", "S607", "ANN101",
+    "COM812", "FIX002", "PLR0912", "PLR0913", "PLR0915", "TD002", "TD003", "TD004"]
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true
