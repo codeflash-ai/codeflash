@@ -890,7 +890,7 @@ class Optimizer:
                 if result.test_type == TestType.GENERATED_REGRESSION:
                     generated_test_results.add(result)
 
-            total_timing = unittest_results.total_passed_runtime()
+            total_timing = unittest_results.total_passed_runtime()  # caution: doesn't handle the loop index
 
             functions_to_remove = [
                 result.id.test_function_name for result in generated_test_results.test_results if not result.did_pass
