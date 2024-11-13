@@ -7,17 +7,20 @@ INCREASED_RECURSION_LIMIT = 5000
 
 
 def compare_test_results(original_results: TestResults, candidate_results: TestResults) -> bool:
+    # This is meant to be only called with test results for the first loop index
     if len(original_results) == 0 or len(candidate_results) == 0:
         return False  # empty test results are not equal
     original_recursion_limit = sys.getrecursionlimit()
     if original_recursion_limit < INCREASED_RECURSION_LIMIT:
         sys.setrecursionlimit(INCREASED_RECURSION_LIMIT)  # Increase recursion limit to avoid RecursionError
-    test_ids_superset = original_results.get_all_ids().union(set(candidate_results.get_all_ids()))
+    test_ids_superset = original_results.get_all_unique_invocation_loop_ids().union(
+        set(candidate_results.get_all_unique_invocation_loop_ids())
+    )
     are_equal: bool = True
     did_all_timeout: bool = True
     for test_id in test_ids_superset:
-        original_test_result = original_results.get_by_id(test_id)
-        cdd_test_results = candidate_results.get_by_id(test_id)
+        original_test_result = original_results.get_by_unique_invocation_loop_id(test_id)
+        cdd_test_results = candidate_results.get_by_unique_invocation_loop_id(test_id)
         if cdd_test_results is not None and original_test_result is None:
             continue
 

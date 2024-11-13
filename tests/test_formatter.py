@@ -3,7 +3,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.formatter import format_code, sort_imports
 
@@ -184,4 +183,20 @@ def foo():
         actual = format_code(
             formatter_cmds=["ruff check --exit-zero --fix $file", "ruff format $file"], path=Path(tmp_path)
         )
+        assert actual == expected
+
+
+def test_formatter_error():
+    original_code = """
+import os
+import sys
+def foo():
+    return os.path.join(sys.path[0], 'bar')"""
+    expected = original_code
+    with tempfile.NamedTemporaryFile("w") as tmp:
+        tmp.write(original_code)
+        tmp.flush()
+        tmp_path = tmp.name
+
+        actual = format_code(formatter_cmds=["exit 1"], path=Path(tmp_path))
         assert actual == expected

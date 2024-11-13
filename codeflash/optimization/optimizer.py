@@ -241,6 +241,10 @@ class Optimizer:
         instrumented_unittests_created_for_function = self.instrument_existing_tests(
             function_to_optimize=function_to_optimize, function_to_tests=function_to_tests
         )
+        generated_test_paths = [
+            get_test_file_path(self.test_cfg.tests_root, function_to_optimize.function_name, test_index)
+            for test_index in range(N_TESTS_TO_GENERATE)
+        ]
 
         with progress_bar(
             f"Generating new tests and optimizations for function {function_to_optimize.function_name}", transient=True
@@ -251,6 +255,7 @@ class Optimizer:
                 code_context.helper_functions,
                 Path(original_module_path),
                 function_trace_id,
+                generated_test_paths,
                 run_experiment=should_run_experiment,
             )
 
@@ -260,17 +265,13 @@ class Optimizer:
         optimizations_set: OptimizationSet
         generated_tests, optimizations_set = generated_results.unwrap()
         count_tests = len(generated_tests.generated_tests)
-        generated_tests_paths = [
-            get_test_file_path(self.args.tests_root, function_to_optimize.function_name, i) for i in range(count_tests)
-        ]
 
         for i, generated_test in enumerate(generated_tests.generated_tests):
-            generated_tests_path = generated_tests_paths[i]
-            with generated_tests_path.open("w", encoding="utf8") as f:
+            with generated_test.file_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_test_source)
             self.test_files.add(
                 TestFile(
-                    instrumented_file_path=generated_tests_path,
+                    instrumented_file_path=generated_test.file_path,
                     original_file_path=None,
                     original_source=generated_test.generated_original_test_source,
                     test_type=TestType.GENERATED_REGRESSION,
@@ -286,7 +287,7 @@ class Optimizer:
         )
         console.rule()
         if not is_successful(baseline_result):
-            for generated_test_path in generated_tests_paths:
+            for generated_test_path in generated_test_paths:
                 generated_test_path.unlink(missing_ok=True)
 
             for instrumented_path in instrumented_unittests_created_for_function:
@@ -560,19 +561,18 @@ class Optimizer:
             should_sort_imports = False
 
         new_code = format_code(self.args.formatter_cmds, path)
-        if should_sort_imports and new_code is not None:
+        if should_sort_imports:
             new_code = sort_imports(new_code)
 
         new_helper_code: dict[Path, str] = {}
         helper_functions_paths = {hf.file_path for hf in helper_functions}
         for module_abspath in helper_functions_paths:
             formatted_helper_code = format_code(self.args.formatter_cmds, module_abspath)
-            if should_sort_imports and formatted_helper_code is not None:
+            if should_sort_imports:
                 formatted_helper_code = sort_imports(formatted_helper_code)
-            if formatted_helper_code is not None:
-                new_helper_code[module_abspath] = formatted_helper_code
+            new_helper_code[module_abspath] = formatted_helper_code
 
-        return new_code or "", new_helper_code
+        return new_code, new_helper_code
 
     def replace_function_and_helpers_with_optimized_code(
         self,
@@ -738,8 +738,10 @@ class Optimizer:
         helper_functions: list[FunctionSource],
         module_path: Path,
         function_trace_id: str,
+        generated_test_paths: list[Path],
         run_experiment: bool = False,
     ) -> Result[tuple[GeneratedTestsList, OptimizationSet], str]:
+        assert len(generated_test_paths) == N_TESTS_TO_GENERATE
         max_workers = N_TESTS_TO_GENERATE + 1 if not run_experiment else N_TESTS_TO_GENERATE + 2
         console.rule()
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -750,6 +752,7 @@ class Optimizer:
                 function_to_optimize,
                 [definition.fully_qualified_name for definition in helper_functions],
                 module_path,
+                generated_test_paths,
                 (function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id),
             )
             future_optimization_candidates = executor.submit(
@@ -787,11 +790,12 @@ class Optimizer:
             for future in future_tests:
                 res = future.result()
                 if res:
-                    generated_test_source, instrumented_test_source = res
+                    generated_test_source, instrumented_test_source, test_path = res
                     tests.append(
                         GeneratedTests(
                             generated_original_test_source=generated_test_source,
                             instrumented_test_source=instrumented_test_source,
+                            file_path=test_path,
                         )
                     )
             if not tests:
@@ -860,12 +864,14 @@ class Optimizer:
                         optimization_iteration=0,
                         test_functions=only_run_these_test_functions_for_test_files,
                         testing_time=TOTAL_LOOPING_TIME,
+                        unittest_loop_index=i + 1,
                     )
                     unittest_results.merge(unittest_loop_results)
 
-            initial_loop_unittest_results = TestResults(
-                test_results=[result for result in unittest_results.test_results if result.loop_index == 1]
-            )
+            initial_loop_unittest_results = TestResults()
+            for result in unittest_results.test_results:
+                if result.loop_index == 1:
+                    initial_loop_unittest_results.add(result)
 
             console.print(
                 TestResults.report_to_tree(
@@ -875,14 +881,14 @@ class Optimizer:
             )
             console.rule()
 
-            existing_test_results = TestResults(
-                test_results=[result for result in unittest_results if result.test_type == TestType.EXISTING_UNIT_TEST]
-            )
-            generated_test_results = TestResults(
-                test_results=[
-                    result for result in unittest_results if result.test_type == TestType.GENERATED_REGRESSION
-                ]
-            )
+            existing_test_results = TestResults()
+            for result in unittest_results:
+                if result.test_type == TestType.EXISTING_UNIT_TEST:
+                    existing_test_results.add(result)
+            generated_test_results = TestResults()
+            for result in unittest_results:
+                if result.test_type == TestType.GENERATED_REGRESSION:
+                    generated_test_results.add(result)
 
             total_timing = unittest_results.total_passed_runtime()
 
@@ -989,13 +995,15 @@ class Optimizer:
                         optimization_iteration=optimization_candidate_index,
                         test_functions=only_run_these_test_functions_for_test_files,
                         testing_time=TOTAL_LOOPING_TIME,
+                        unittest_loop_index=i + 1,
                     )
                     loop_count = i + 1
                     candidate_results.merge(candidate_loop_results)
 
-            initial_loop_candidate_results = TestResults(
-                test_results=[result for result in candidate_results.test_results if result.loop_index == 1]
-            )
+            initial_loop_candidate_results = TestResults()
+            for result in candidate_results.test_results:
+                if result.loop_index == 1:
+                    initial_loop_candidate_results.add(result)
 
             console.print(
                 TestResults.report_to_tree(
@@ -1005,9 +1013,10 @@ class Optimizer:
             )
             console.rule()
 
-            initial_loop_original_test_results = TestResults(
-                test_results=[result for result in original_test_results.test_results if result.loop_index == 1]
-            )
+            initial_loop_original_test_results = TestResults()
+            for result in original_test_results.test_results:
+                if result.loop_index == 1:
+                    initial_loop_original_test_results.add(result)
 
             if compare_test_results(initial_loop_original_test_results, initial_loop_candidate_results):
                 logger.info("Test results matched!")
@@ -1048,6 +1057,7 @@ class Optimizer:
         testing_time: float = TOTAL_LOOPING_TIME,
         pytest_min_loops: int = 5,
         pytest_max_loops: int = 100_000,
+        unittest_loop_index: int | None = None,
     ) -> TestResults:
         try:
             result_file_path, run_result = run_tests(
@@ -1081,6 +1091,7 @@ class Optimizer:
             test_config=self.test_cfg,
             optimization_iteration=optimization_iteration,
             run_result=run_result,
+            unittest_loop_index=unittest_loop_index,
         )
 
     def generate_and_instrument_tests(
@@ -1090,6 +1101,7 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         helper_function_names: list[str],
         module_path: Path,
+        generated_test_paths: list[Path],
         function_trace_id: str,
     ) -> list[concurrent.futures.Future]:
         return [
@@ -1102,11 +1114,11 @@ class Optimizer:
                 module_path,
                 self.test_cfg,
                 INDIVIDUAL_TESTCASE_TIMEOUT,
-                self.args.use_cached_tests,
                 function_trace_id,
                 test_index,
+                test_path,
             )
-            for test_index in range(N_TESTS_TO_GENERATE)
+            for test_index, test_path in enumerate(generated_test_paths)
         ]
 
 

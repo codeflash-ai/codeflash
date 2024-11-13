@@ -54,6 +54,7 @@ class OptimizedCandidateResult(BaseModel):
 class GeneratedTests(BaseModel):
     generated_original_test_source: str
     instrumented_test_source: str
+    file_path: Path
 
 
 class GeneratedTestsList(BaseModel):
