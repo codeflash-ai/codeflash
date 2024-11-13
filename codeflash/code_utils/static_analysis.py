@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import ast
+from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, field_validator
+
+if TYPE_CHECKING:
+    from codeflash.models.models import FunctionParent
 
 
 class ImportedInternalModuleAnalysis(BaseModel, frozen=True):
@@ -34,6 +39,13 @@ class ImportedInternalModuleAnalysis(BaseModel, frozen=True):
             msg = "must be an existing path"
             raise ValueError(msg)
         return v
+
+
+class FunctionKind(Enum):
+    FUNCTION = 0
+    STATIC_METHOD = 1
+    CLASS_METHOD = 2
+    INSTANCE_METHOD = 3
 
 
 def parse_imports(code: str) -> list[ast.Import | ast.ImportFrom]:
@@ -99,3 +111,25 @@ def analyze_imported_modules(
         for mod_name in internal_modules
         if (file_path := get_module_file_path(mod_name, project_root)) is not None
     ]
+
+
+def function_kind(node: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[FunctionParent]) -> FunctionKind | None:
+    if not parents or (parents and parents[0].type in ["FunctionDef", "AsyncFunctionDef"]):
+        return FunctionKind.FUNCTION
+    if parents[0].type == "ClassDef":
+        for decorator in node.decorator_list:
+            if isinstance(decorator, ast.Name) and decorator.id == "classmethod":
+                return FunctionKind.CLASS_METHOD
+            if isinstance(decorator, ast.Name) and decorator.id == "staticmethod":
+                return FunctionKind.STATIC_METHOD
+        return FunctionKind.INSTANCE_METHOD
+    return None
+
+
+def has_typed_parameters(node: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[FunctionParent]) -> bool:
+    kind = function_kind(node, parents)
+    if kind in [FunctionKind.FUNCTION, FunctionKind.STATIC_METHOD]:
+        return all(arg.annotation for arg in node.args.args)
+    if kind in [FunctionKind.CLASS_METHOD, FunctionKind.INSTANCE_METHOD]:
+        return all(arg.annotation for arg in node.args.args[1:])
+    return False
