@@ -85,12 +85,11 @@ class TestResults(BaseModel):
     test_result_idx: dict[str, int] = {}
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
-        if function_test_invocation.unique_invocation_loop_id in self.test_result_idx:
-            logger.warning(
-                f"Test result with id {function_test_invocation.unique_invocation_loop_id} already exists. SKIPPING"
-            )
+        unique_id = function_test_invocation.unique_invocation_loop_id
+        if unique_id in self.test_result_idx:
+            logger.warning(f"Test result with id {unique_id} already exists. SKIPPING")
             return
-        self.test_result_idx[function_test_invocation.unique_invocation_loop_id] = len(self.test_results)
+        self.test_result_idx[unique_id] = len(self.test_results)
         self.test_results.append(function_test_invocation)
 
     def merge(self, other: TestResults) -> None:
@@ -214,4 +213,21 @@ class TestResults(BaseModel):
                 sys.setrecursionlimit(original_recursion_limit)
                 return False
         sys.setrecursionlimit(original_recursion_limit)
+        return True
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.test_results = []
+        self.test_result_idx = {}
+
+    def _compare_results(self, first: FunctionTestInvocation, second: FunctionTestInvocation) -> bool:
+        if (
+            first.file_name != second.file_name
+            or first.did_pass != second.did_pass
+            or first.runtime != second.runtime
+            or first.test_framework != second.test_framework
+            or first.test_type != second.test_type
+            or not comparator(first.return_value, second.return_value)
+        ):
+            return False
         return True
