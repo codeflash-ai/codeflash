@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from enum import Enum
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Iterator, Optional, cast
 
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
@@ -73,21 +73,44 @@ class FunctionTestInvocation:
     return_value: Optional[object]  # The return value of the function invocation
     timed_out: Optional[bool]
 
+    @property
+    def unique_invocation_loop_id(self) -> str:
+        return f"{self.loop_index}:{self.id.id()}"
+
 
 class TestResults(BaseModel):
+    # don't modify these directly, use the add method
+    # also we don't support deletion of test results elements - caution is advised
     test_results: list[FunctionTestInvocation] = []
+    test_result_idx: dict[str, int] = {}
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
+        unique_id = function_test_invocation.unique_invocation_loop_id
+        if unique_id in self.test_result_idx:
+            logger.warning(f"Test result with id {unique_id} already exists. SKIPPING")
+            return
+        self.test_result_idx[unique_id] = len(self.test_results)
         self.test_results.append(function_test_invocation)
 
     def merge(self, other: TestResults) -> None:
+        original_len = len(self.test_results)
         self.test_results.extend(other.test_results)
+        for k, v in other.test_result_idx.items():
+            if k in self.test_result_idx:
+                raise ValueError(f"Test result with id {k} already exists.")
+            self.test_result_idx[k] = v + original_len
 
-    def get_by_id(self, invocation_id: InvocationId) -> FunctionTestInvocation | None:
-        return next((r for r in self.test_results if r.id == invocation_id), None)
+    def get_by_unique_invocation_loop_id(self, unique_invocation_loop_id: str) -> FunctionTestInvocation | None:
+        try:
+            return self.test_results[self.test_result_idx[unique_invocation_loop_id]]
+        except (IndexError, KeyError):
+            return None
 
     def get_all_ids(self) -> set[InvocationId]:
         return {test_result.id for test_result in self.test_results}
+
+    def get_all_unique_invocation_loop_ids(self) -> set[str]:
+        return {test_result.unique_invocation_loop_id for test_result in self.test_results}
 
     def number_of_loops(self) -> int:
         if not self.test_results:
@@ -171,8 +194,9 @@ class TestResults(BaseModel):
         if len(self) != len(other):
             return False
         original_recursion_limit = sys.getrecursionlimit()
+        cast(TestResults, other)
         for test_result in self:
-            other_test_result = other.get_by_id(test_result.id)
+            other_test_result = other.get_by_unique_invocation_loop_id(test_result.unique_invocation_loop_id)
             if other_test_result is None:
                 return False
 

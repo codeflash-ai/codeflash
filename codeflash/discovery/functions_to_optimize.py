@@ -88,7 +88,7 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
         # Check if the function has a return statement and add it to the list
-        if function_has_return_statement(node):
+        if function_has_return_statement(node) and not function_is_a_property(node):
             self.functions.append(
                 FunctionToOptimize(function_name=node.name, file_path=self.file_path, parents=self.ast_path[:])
             )
@@ -186,7 +186,7 @@ def get_functions_to_optimize(
                 ):
                     found_function = fn
             if found_function is None:
-                msg = f"Function {only_function_name} not found in file {file} or the function does not have a 'return' statement."
+                msg = f"Function {only_function_name} not found in file {file} or the function does not have a 'return' statement or is a property"
                 raise ValueError(msg)
             functions[file] = [found_function]
     else:
@@ -500,3 +500,7 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
 
 def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
     return any(isinstance(node, ast.Return) for node in ast.walk(function_node))
+
+
+def function_is_a_property(function_node: FunctionDef | AsyncFunctionDef) -> bool:
+    return any(isinstance(node, ast.Name) and node.id == "property" for node in function_node.decorator_list)
