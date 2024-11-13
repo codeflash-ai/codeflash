@@ -382,7 +382,7 @@ class Optimizer:
                             original_helper_code,
                             function_to_optimize.file_path,
                         )
-        for generated_test_path in generated_tests_paths:
+        for generated_test_path in generated_test_paths:
             generated_test_path.unlink(missing_ok=True)
         for test_paths in instrumented_unittests_created_for_function:
             test_paths.unlink(missing_ok=True)
