@@ -148,6 +148,7 @@ def parse_test_xml(
     test_files: TestFiles,
     test_config: TestConfig,
     run_result: subprocess.CompletedProcess | None = None,
+    unittest_loop_index: int | None = None,
 ) -> TestResults:
     test_results = TestResults()
     # Parse unittest output
@@ -215,7 +216,7 @@ def parse_test_xml(
             if class_name is not None and class_name.startswith(test_module_path):
                 test_class = class_name[len(test_module_path) + 1 :]  # +1 for the dot, gets Unittest class name
 
-            loop_index = 1
+            loop_index = unittest_loop_index if unittest_loop_index is not None else 1
 
             timed_out = False
             if test_config.test_framework == "pytest":
@@ -243,7 +244,7 @@ def parse_test_xml(
                             test_class_name=test_class,
                             test_function_name=test_function,
                             function_getting_tested="",  # FIXME
-                            iteration_id=None,
+                            iteration_id="",
                         ),
                         file_name=test_file_path,
                         runtime=None,
@@ -419,9 +420,14 @@ def parse_test_results(
     test_config: TestConfig,
     optimization_iteration: int,
     run_result: subprocess.CompletedProcess | None = None,
+    unittest_loop_index: int | None = None,
 ) -> TestResults:
     test_results_xml = parse_test_xml(
-        test_xml_path, test_files=test_files, test_config=test_config, run_result=run_result
+        test_xml_path,
+        test_files=test_files,
+        test_config=test_config,
+        run_result=run_result,
+        unittest_loop_index=unittest_loop_index,
     )
 
     try:

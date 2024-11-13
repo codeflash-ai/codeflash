@@ -823,6 +823,7 @@ class Optimizer:
                         optimization_iteration=0,
                         test_functions=only_run_these_test_functions_for_test_files,
                         testing_time=TOTAL_LOOPING_TIME,
+                        unittest_loop_index=i + 1,
                     )
                     unittest_results.merge(unittest_loop_results)
 
@@ -952,6 +953,7 @@ class Optimizer:
                         optimization_iteration=optimization_candidate_index,
                         test_functions=only_run_these_test_functions_for_test_files,
                         testing_time=TOTAL_LOOPING_TIME,
+                        unittest_loop_index=i + 1,
                     )
                     loop_count = i + 1
                     candidate_results.merge(candidate_loop_results)
@@ -1015,6 +1017,7 @@ class Optimizer:
         testing_time: float = TOTAL_LOOPING_TIME,
         pytest_min_loops: int = 5,
         pytest_max_loops: int = 100_000,
+        unittest_loop_index: int | None = None,
     ) -> TestResults:
         try:
             result_file_path, run_result = run_tests(
@@ -1047,6 +1050,7 @@ class Optimizer:
             test_config=self.test_cfg,
             optimization_iteration=optimization_iteration,
             run_result=run_result,
+            unittest_loop_index=unittest_loop_index,
         )
 
     def generate_and_instrument_tests(
