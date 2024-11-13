@@ -9,7 +9,6 @@ from pydantic.dataclasses import dataclass
 
 from codeflash.verification.test_results import TestResults, TestType
 
-
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
 # qualified name of the method is foo.eggs.Ham.spam, its qualified name is Ham.spam, and its name is spam. The full name
 # of the module is foo.eggs.
@@ -50,6 +49,7 @@ class OptimizedCandidateResult(BaseModel):
 class GeneratedTests(BaseModel):
     generated_original_test_source: str
     instrumented_test_source: str
+    file_path: Path
 
 
 class GeneratedTestsList(BaseModel):

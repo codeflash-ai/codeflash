@@ -51,9 +51,6 @@ def parse_args() -> Namespace:
     )
     parser.add_argument("--test-framework", choices=["pytest", "unittest"], default="pytest")
     parser.add_argument("--config-file", type=str, help="Path to the pyproject.toml with codeflash configs.")
-    parser.add_argument(
-        "--use-cached-tests", action="store_true", help="Use cached tests from a specified file for debugging."
-    )
     parser.add_argument("--replay-test", type=str, help="Path to replay test to optimize functions from")
     parser.add_argument(
         "--no-pr", action="store_true", help="Do not create a PR for the optimization, only update the code locally."

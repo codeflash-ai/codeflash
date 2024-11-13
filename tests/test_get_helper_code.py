@@ -3,11 +3,10 @@ from argparse import Namespace
 from pathlib import Path
 
 import pytest
-from returns.pipeline import is_successful
-
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
 from codeflash.optimization.optimizer import Optimizer
+from returns.pipeline import is_successful
 
 
 class HelperClass:
@@ -21,7 +20,7 @@ def OptimizeMe(a, b, c):
 
 @pytest.mark.skip
 def test_get_outside_method_helper() -> None:
-    file_path = pathlib.Path(__file__).resolve()
+    file_path = Path(__file__).resolve()
     opt = Optimizer(
         Namespace(
             project_root=str(file_path.parent.resolve()),
