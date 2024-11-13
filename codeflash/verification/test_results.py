@@ -214,20 +214,3 @@ class TestResults(BaseModel):
                 return False
         sys.setrecursionlimit(original_recursion_limit)
         return True
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.test_results = []
-        self.test_result_idx = {}
-
-    def _compare_results(self, first: FunctionTestInvocation, second: FunctionTestInvocation) -> bool:
-        if (
-            first.file_name != second.file_name
-            or first.did_pass != second.did_pass
-            or first.runtime != second.runtime
-            or first.test_framework != second.test_framework
-            or first.test_type != second.test_type
-            or not comparator(first.return_value, second.return_value)
-        ):
-            return False
-        return True
