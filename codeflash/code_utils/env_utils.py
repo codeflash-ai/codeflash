@@ -7,7 +7,7 @@ from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
 
 
 @lru_cache(maxsize=1)
-def get_codeflash_api_key() -> Optional[str]:
+def get_codeflash_api_key() -> str:
     api_key = os.environ.get("CODEFLASH_API_KEY") or read_api_key_from_shell_config()
     if not api_key:
         raise OSError(
