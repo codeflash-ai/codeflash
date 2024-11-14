@@ -100,6 +100,7 @@ class OriginalCodeBaseline(BaseModel):
     existing_test_results: TestResults
     overall_test_results: Optional[TestResults]
     runtime: int
+    coverage_pct: float
 
 
 class OptimizationSet(BaseModel):

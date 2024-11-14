@@ -426,6 +426,7 @@ def parse_test_results(
     test_files: TestFiles,
     test_config: TestConfig,
     optimization_iteration: int,
+    coverage_pct: float,
     run_result: subprocess.CompletedProcess | None = None,
 ) -> TestResults:
     test_results_xml = parse_test_xml(
@@ -456,4 +457,6 @@ def parse_test_results(
     get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin")).unlink(missing_ok=True)
 
     get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
-    return merge_test_results(test_results_xml, test_results_bin_file, test_config.test_framework)
+    results = merge_test_results(test_results_xml, test_results_bin_file, test_config.test_framework)
+    results.coverage = coverage_pct
+    return results

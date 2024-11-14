@@ -248,6 +248,7 @@ class Optimizer:
             function_file_path=function_to_optimize.file_path,
             code_context=code_context,
         )
+
         console.rule()
         if not is_successful(baseline_result):
             for generated_test_path in generated_tests_paths:
@@ -259,7 +260,6 @@ class Optimizer:
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
         # TODO: Postprocess the optimized function to include the original docstring and such
-
         best_optimization = None
         for u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
             if candidates is None:
@@ -335,6 +335,7 @@ class Optimizer:
                             [test.generated_original_test_source for test in generated_tests.generated_tests]
                         ),
                         function_trace_id=function_trace_id,
+                        coverage_pct=original_code_baseline.coverage_pct,
                     )
                     if self.args.all or env_utils.get_pr_number():
                         # Reverting to original code, because optimizing functions in a sequence can lead to
@@ -892,6 +893,7 @@ class Optimizer:
                         existing_test_results=existing_test_results,
                         overall_test_results=unittest_results,
                         runtime=total_timing,
+                        coverage_pct=unittest_results.coverage if test_framework == "pytest" else 0.0,
                     ),
                     functions_to_remove,
                 )
@@ -1028,7 +1030,7 @@ class Optimizer:
         code_context: CodeOptimizationContext | None = None,
     ) -> TestResults:
         try:
-            result_file_path, run_result = run_tests(
+            result_file_path, run_result, coverage_pct = run_tests(
                 test_files,
                 test_framework=self.args.test_framework,
                 cwd=self.args.project_root,
@@ -1063,6 +1065,7 @@ class Optimizer:
             test_config=self.test_cfg,
             optimization_iteration=optimization_iteration,
             run_result=run_result,
+            coverage_pct=coverage_pct,
         )
 
     def generate_and_instrument_tests(

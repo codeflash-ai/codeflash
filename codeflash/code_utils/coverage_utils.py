@@ -241,12 +241,7 @@ class CoverageData:
             return
 
         console.rule(f"Coverage data for {self.function_name}: {self.coverage:.2f}%")
-        console.rule(
-            f"main ex: {self.main_func_coverage.executed_lines} unex: {self.main_func_coverage.unexecuted_lines}"
-        )
-        # console.rule(
-        #     f"dep ex: {self.dependent_func_coverage.executed_lines} unex: {self.dependent_func_coverage.unexecuted_lines}"
-        # )
+
         if self.dependent_func_coverage:
             console.rule(
                 f"Dependent function {self.dependent_func_coverage.name}: {self.dependent_func_coverage.coverage:.2f}%"

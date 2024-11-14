@@ -76,6 +76,7 @@ class FunctionTestInvocation:
 
 class TestResults(BaseModel):
     test_results: list[FunctionTestInvocation] = []
+    coverage: float = 0.0
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
         self.test_results.append(function_test_invocation)

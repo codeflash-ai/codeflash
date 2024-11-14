@@ -40,6 +40,7 @@ def check_create_pr(
     existing_tests_source: str,
     generated_original_test_source: str,
     function_trace_id: str,
+    coverage_pct: float,
 ) -> None:
     pr_number: Optional[int] = env_utils.get_pr_number()
     git_repo = git.Repo(search_parent_directories=True)
@@ -118,6 +119,7 @@ def check_create_pr(
             existing_tests=existing_tests_source,
             generated_tests=generated_original_test_source,
             trace_id=function_trace_id,
+            coverage_pct=coverage_pct,
         )
         if response.ok:
             logger.info(f"Successfully created a new PR #{response.text} with the optimized code.")

@@ -45,9 +45,9 @@ def run_tests(
     enable_coverage: bool = False,
     code_context: CodeOptimizationContext | None = None,
     project_root: Path | None = None,
-) -> tuple[Path, subprocess.CompletedProcess]:
+) -> tuple[Path, subprocess.CompletedProcess, float]:
     assert test_framework in ["pytest", "unittest"]
-
+    coveragepy_coverage = None
     if test_framework == "pytest":
         test_files = []
         for file in test_paths.test_files:
@@ -65,7 +65,6 @@ def run_tests(
             "-q",
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
             "--codeflash_loops_scope=session",
-            "-p no:typeguard",
         ]
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
@@ -120,7 +119,7 @@ def run_tests(
 
             coverage_out_file.unlink(missing_ok=True)
             coveragercfile.unlink(missing_ok=True)
-
+            coveragepy_coverage = coveragepy_coverage.coverage
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path}", "-o", "junit_logging=all"]
 
@@ -147,4 +146,4 @@ def run_tests(
 
     else:
         raise ValueError("Invalid test framework -- I only support Pytest and Unittest currently.")
-    return result_file_path, results
+    return result_file_path, results, coveragepy_coverage if enable_coverage else 0.0
