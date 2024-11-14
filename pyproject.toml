@@ -69,6 +69,7 @@ types-six = "^1.16.21.20241009"
 types-cffi = "^1.16.0.20240331"
 types-openpyxl = "^3.1.5.20241020"
 types-regex = "^2024.9.11.20240912"
+types-python-dateutil = "^2.9.0.20241003"
 
 [tool.poetry.build]
 script = "codeflash/update_license_version.py"
