@@ -153,6 +153,7 @@ def parse_test_xml(
     test_files: TestFiles,
     test_config: TestConfig,
     run_result: subprocess.CompletedProcess | None = None,
+    unittest_loop_index: int | None = None,
 ) -> TestResults:
     test_results = TestResults()
     # Parse unittest output
@@ -223,7 +224,7 @@ def parse_test_xml(
             if class_name is not None and class_name.startswith(test_module_path):
                 test_class = class_name[len(test_module_path) + 1 :]  # +1 for the dot, gets Unittest class name
 
-            loop_index = 1
+            loop_index = unittest_loop_index if unittest_loop_index is not None else 1
 
             timed_out = False
             if test_config.test_framework == "pytest":
@@ -251,7 +252,7 @@ def parse_test_xml(
                             test_class_name=test_class,
                             test_function_name=test_function,
                             function_getting_tested="",  # FIXME
-                            iteration_id=None,
+                            iteration_id="",
                         ),
                         file_name=test_file_path,
                         runtime=None,
@@ -373,7 +374,7 @@ def merge_test_results(
             # We need to match the iteration_id to the bin results
             for xml_result in xml_results.test_results:
                 try:
-                    bin_result = bin_results.get_by_id(xml_result.id)
+                    bin_result = bin_results.get_by_unique_invocation_loop_id(xml_result.unique_invocation_loop_id)
                 except AttributeError:
                     bin_result = None
                 if bin_result is None:
@@ -428,9 +429,14 @@ def parse_test_results(
     optimization_iteration: int,
     coverage_pct: float,
     run_result: subprocess.CompletedProcess | None = None,
+    unittest_loop_index: int | None = None,
 ) -> TestResults:
     test_results_xml = parse_test_xml(
-        test_xml_path, test_files=test_files, test_config=test_config, run_result=run_result
+        test_xml_path,
+        test_files=test_files,
+        test_config=test_config,
+        run_result=run_result,
+        unittest_loop_index=unittest_loop_index,
     )
     try:
         bin_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin"))

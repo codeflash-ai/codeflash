@@ -88,7 +88,7 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
         # Check if the function has a return statement and add it to the list
-        if function_has_return_statement(node):
+        if function_has_return_statement(node) and not function_is_a_property(node):
             self.functions.append(
                 FunctionToOptimize(function_name=node.name, file_path=self.file_path, parents=self.ast_path[:])
             )
@@ -156,26 +156,18 @@ def get_functions_to_optimize(
     module_root: Path,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     assert (
-        sum(
-            [  # Ensure only one of the options is provided
-                bool(optimize_all),
-                bool(replay_test),
-                bool(file),
-            ]
-        )
-        <= 1
+        sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1
     ), "Only one of optimize_all, replay_test, or file should be provided"
     functions: dict[str, list[FunctionToOptimize]]
     if optimize_all:
-        logger.info("Finding all functions in the module '%s' ...", optimize_all)
+        logger.info("Finding all functions in the module '%s'…", optimize_all)
         functions = get_all_files_and_functions(Path(optimize_all))
     elif replay_test is not None:
         functions = get_all_replay_test_functions(
             replay_test=replay_test, test_cfg=test_cfg, project_root_path=project_root
         )
-
     elif file is not None:
-        logger.info("Finding all functions in the file '%s' ...", file)
+        logger.info("Finding all functions in the file '%s'…", file)
         functions = find_all_functions_in_file(file)
         if only_get_this_function is not None:
             split_function = only_get_this_function.split(".")
@@ -194,7 +186,7 @@ def get_functions_to_optimize(
                 ):
                     found_function = fn
             if found_function is None:
-                msg = f"Function {only_function_name} not found in file {file} or the function does not have a 'return' statement."
+                msg = f"Function {only_function_name} not found in file {file} or the function does not have a 'return' statement or is a property"
                 raise ValueError(msg)
             functions[file] = [found_function]
     else:
@@ -236,7 +228,6 @@ def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
 
 def get_all_files_and_functions(module_root_path: Path) -> dict[str, list[FunctionToOptimize]]:
     functions: dict[str, list[FunctionToOptimize]] = {}
-    module_root_path = Path(module_root_path)
     for file_path in module_root_path.rglob("*.py"):
         # Find all the functions in the file
         functions.update(find_all_functions_in_file(file_path).items())
@@ -509,3 +500,7 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
 
 def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
     return any(isinstance(node, ast.Return) for node in ast.walk(function_node))
+
+
+def function_is_a_property(function_node: FunctionDef | AsyncFunctionDef) -> bool:
+    return any(isinstance(node, ast.Name) and node.id == "property" for node in function_node.decorator_list)

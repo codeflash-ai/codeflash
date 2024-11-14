@@ -81,7 +81,7 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
         }
 
-        logger.info("Generating optimized candidates ...")
+        logger.info("Generating optimized candidates…")
         console.rule()
         try:
             response = self.make_ai_service_request("/optimize", payload=payload, timeout=600)

@@ -14,6 +14,11 @@ from codeflash.verification.test_results import TestResults, TestType
 # of the module is foo.eggs.
 
 
+class ValidCode(BaseModel, frozen=True):
+    source_code: str
+    normalized_code: str
+
+
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
 class FunctionSource:
     file_path: Path
@@ -49,6 +54,7 @@ class OptimizedCandidateResult(BaseModel):
 class GeneratedTests(BaseModel):
     generated_original_test_source: str
     instrumented_test_source: str
+    file_path: Path
 
 
 class GeneratedTestsList(BaseModel):
@@ -72,7 +78,8 @@ class TestFiles(BaseModel):
         if test_file not in self.test_files:
             self.test_files.append(test_file)
         else:
-            raise ValueError("Test file already exists in the list")
+            msg = "Test file already exists in the list"
+            raise ValueError(msg)
 
     def get_by_original_file_path(self, file_path: Path) -> TestFile | None:
         return next((test_file for test_file in self.test_files if test_file.original_file_path == file_path), None)
@@ -91,7 +98,7 @@ class TestFiles(BaseModel):
     def __iter__(self) -> Iterator[TestFile]:
         return iter(self.test_files)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.test_files)
 
 
