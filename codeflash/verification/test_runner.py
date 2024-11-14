@@ -87,7 +87,7 @@ def run_tests(
             cov_erase = execute_test_subprocess(
                 shlex.split(f"{sys.executable} -m coverage erase"), cwd=cwd, env=pytest_test_env
             )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any, then the current run will be appended to the previous data, which skews the results
-            logger.debug(cov_erase)
+            logger.info(cov_erase)
 
             files = [
                 str(file.instrumented_file_path)
@@ -104,14 +104,14 @@ def run_tests(
                 cwd=cwd,
                 env=pytest_test_env,
             )
-            logger.debug(cov_run)
+            logger.info(cov_run)
 
             cov_report = execute_test_subprocess(
                 shlex.split(f"{sys.executable} -m coverage json --rcfile={coveragercfile}"),
                 cwd=cwd,
                 env=pytest_test_env,
             )  # this will generate a json file with the coverage data
-            logger.debug(cov_report)
+            logger.info(cov_report)
             coveragepy_coverage = CoverageData.load_from_coverage_file(
                 coverage_out_file, source_file, function_name, code_context=code_context
             )
