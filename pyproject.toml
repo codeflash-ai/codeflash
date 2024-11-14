@@ -17,6 +17,53 @@ keywords = [
     "machine learning",
     "LLM",
 ]
+exclude = [
+    "docs/*",
+    "experiments/*",
+    "tests/*",
+    "*.pyc",
+    "__pycache__",
+    "*.pyo",
+    "*.pyd",
+    "*.so",
+    "*.dylib",
+    "*.dll",
+    "*.exe",
+    "*.log",
+    "*.tmp",
+    ".env",
+    ".env.*",
+    "**/.env",
+    "**/.env.*",
+    ".env.example",
+    "*.pem",
+    "*.key",
+    "secrets.*",
+    "config.yaml",
+    "config.json",
+    ".git",
+    ".gitignore",
+    ".gitattributes",
+    ".github",
+    "Dockerfile",
+    "docker-compose.yml",
+    "*.md",
+    "*.txt",
+    "*.csv",
+    "*.db",
+    "*.sqlite3",
+    "*.pdf",
+    "*.docx",
+    "*.xlsx",
+    "*.pptx",
+    "*.iml",
+    ".idea",
+    ".vscode",
+    ".DS_Store",
+    "Thumbs.db",
+    "venv",
+    "env",
+]
 
 # Versions here the minimum required versions for the project. These should be as loose as possible.
 [tool.poetry.dependencies]
@@ -105,8 +152,27 @@ exclude = ["code_to_optimize/", "pie_test_set/"]
 
 [tool.ruff.lint]
 select = ["ALL"]
-ignore = ["C901", "D100", "D101", "D102", "D103", "D105", "D107", "S101", "S603", "S607", "ANN101",
-    "COM812", "FIX002", "PLR0912", "PLR0913", "PLR0915", "TD002", "TD003", "TD004"]
+ignore = [
+    "C901",
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D105",
+    "D107",
+    "S101",
+    "S603",
+    "S607",
+    "ANN101",
+    "COM812",
+    "FIX002",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "TD002",
+    "TD003",
+    "TD004",
+]
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true

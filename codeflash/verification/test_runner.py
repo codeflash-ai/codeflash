@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME
-from codeflash.code_utils.coverage_utils import CoverageData, prepare_coverage_files
+from codeflash.code_utils.coverage_utils import prepare_coverage_files
 from codeflash.models.models import CodeOptimizationContext, TestFiles
 from codeflash.verification.test_results import TestType
 
@@ -32,8 +32,6 @@ def run_tests(
     test_paths: TestFiles,
     test_framework: str,
     test_env: dict[str, str],
-    function_name: str | None,
-    source_file: Path | None,
     cwd: Path | None = None,
     pytest_timeout: int | None = None,
     pytest_cmd: str = "pytest",
@@ -43,11 +41,8 @@ def run_tests(
     pytest_min_loops: int = 5,
     pytest_max_loops: int = 100_000,
     enable_coverage: bool = False,
-    code_context: CodeOptimizationContext | None = None,
-    project_root: Path | None = None,
-) -> tuple[Path, subprocess.CompletedProcess, float]:
+) -> tuple[Path, subprocess.CompletedProcess, Path | None]:
     assert test_framework in ["pytest", "unittest"]
-    coveragepy_coverage = None
     if test_framework == "pytest":
         test_files = []
         for file in test_paths.test_files:
@@ -70,15 +65,7 @@ def run_tests(
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
 
         if enable_coverage:
-            assert project_root is not None, "project_root must be provided for coverage analysis"
-            if not source_file:
-                src_file_msg = "source_file must be provided for coverage analysis"
-                raise ValueError(src_file_msg)
-            if not function_name:
-                function_name_msg = "function_name must be provided for coverage analysis"
-                raise ValueError(function_name_msg)
-
-            coverage_out_file, coveragercfile = prepare_coverage_files(project_root)
+            coverage_out_file, coveragercfile = prepare_coverage_files()
 
             pytest_ignore_files = ["--ignore-glob=build/*", "--ignore-glob=dist/*", "--ignore-glob=*.egg-info/*"]
 
@@ -87,7 +74,7 @@ def run_tests(
             cov_erase = execute_test_subprocess(
                 shlex.split(f"{sys.executable} -m coverage erase"), cwd=cwd, env=pytest_test_env
             )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any, then the current run will be appended to the previous data, which skews the results
-            logger.info(cov_erase)
+            logger.debug(cov_erase)
 
             files = [
                 str(file.instrumented_file_path)
@@ -104,22 +91,14 @@ def run_tests(
                 cwd=cwd,
                 env=pytest_test_env,
             )
-            logger.info(cov_run)
+            logger.debug(cov_run)
 
             cov_report = execute_test_subprocess(
                 shlex.split(f"{sys.executable} -m coverage json --rcfile={coveragercfile}"),
                 cwd=cwd,
                 env=pytest_test_env,
             )  # this will generate a json file with the coverage data
-            logger.info(cov_report)
-            coveragepy_coverage = CoverageData.load_from_coverage_file(
-                coverage_out_file, source_file, function_name, code_context=code_context
-            )
-            coveragepy_coverage.log_coverage()
-
-            coverage_out_file.unlink(missing_ok=True)
-            coveragercfile.unlink(missing_ok=True)
-            coveragepy_coverage = coveragepy_coverage.coverage
+            logger.debug(cov_report)
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path}", "-o", "junit_logging=all"]
 
@@ -146,4 +125,5 @@ def run_tests(
 
     else:
         raise ValueError("Invalid test framework -- I only support Pytest and Unittest currently.")
-    return result_file_path, results, coveragepy_coverage if enable_coverage else 0.0
+
+    return result_file_path, results, coverage_out_file if enable_coverage else None

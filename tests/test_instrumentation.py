@@ -14,7 +14,7 @@ from codeflash.code_utils.instrument_existing_tests import (
     inject_profiling_into_existing_test,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import TestFile, TestFiles, CodePosition, FunctionParent
+from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.test_results import TestType
 
@@ -336,6 +336,7 @@ def test_sort():
             pytest_min_loops=1,
             pytest_max_loops=1,
             testing_time=0.1,
+            coverage=True,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
         assert test_results[0].id.iteration_id == "1_0"

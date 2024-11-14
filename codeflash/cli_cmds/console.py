@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
-console = Console(record=True)
+console = Console()
 logging.basicConfig(
     level=logging.INFO,
     handlers=[RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)],

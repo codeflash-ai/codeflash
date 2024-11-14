@@ -20,12 +20,14 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
+from codeflash.models.Coverage import CoverageData
+from codeflash.models.models import TestFiles
 from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults
 
 if TYPE_CHECKING:
     import subprocess
 
-    from codeflash.models.models import TestFiles
+    from codeflash.models.models import CodeOptimizationContext
     from codeflash.verification.verification_utils import TestConfig
 
 
@@ -427,10 +429,13 @@ def parse_test_results(
     test_files: TestFiles,
     test_config: TestConfig,
     optimization_iteration: int,
-    coverage_pct: float,
+    function_name: str | None,
+    source_file: Path | None,
+    coverage_file: Path | None,
+    code_context: CodeOptimizationContext | None = None,
     run_result: subprocess.CompletedProcess | None = None,
     unittest_loop_index: int | None = None,
-) -> TestResults:
+) -> tuple[TestResults, CoverageData | None]:
     test_results_xml = parse_test_xml(
         test_xml_path,
         test_files=test_files,
@@ -464,5 +469,16 @@ def parse_test_results(
 
     get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
     results = merge_test_results(test_results_xml, test_results_bin_file, test_config.test_framework)
-    results.coverage = coverage_pct
-    return results
+
+    all_args = False
+    if coverage_file and source_file and code_context and function_name:
+        all_args = True
+        coverage = CoverageData.load_from_coverage_file(
+            coverage_file_path=coverage_file,
+            source_code_path=source_file,
+            code_context=code_context,
+            function_name=function_name,
+        )
+        coverage_file.unlink(missing_ok=True)
+
+    return results, coverage if all_args else None

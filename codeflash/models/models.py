@@ -102,14 +102,6 @@ class TestFiles(BaseModel):
         return len(self.test_files)
 
 
-class OriginalCodeBaseline(BaseModel):
-    generated_test_results: TestResults
-    existing_test_results: TestResults
-    overall_test_results: Optional[TestResults]
-    runtime: int
-    coverage_pct: float
-
-
 class OptimizationSet(BaseModel):
     control: list[OptimizedCandidate]
     experiment: Optional[list[OptimizedCandidate]]

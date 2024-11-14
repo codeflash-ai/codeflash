@@ -82,7 +82,6 @@ class TestResults(BaseModel):
     # don't modify these directly, use the add method
     # also we don't support deletion of test results elements - caution is advised
     test_results: list[FunctionTestInvocation] = []
-    coverage: float = 0.0
     test_result_idx: dict[str, int] = {}
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
