@@ -284,6 +284,8 @@ class Optimizer:
         baseline_result = self.establish_original_code_baseline(
             function_to_optimize_qualified_name,
             function_to_tests.get(original_module_path + "." + function_to_optimize_qualified_name, []),
+            function_file_path=function_to_optimize.file_path,
+            code_context=code_context,
         )
 
         console.rule()
@@ -810,7 +812,6 @@ class Optimizer:
     def establish_original_code_baseline(
         self,
         function_name: str,
-        generated_tests_paths: list[Path],
         tests_in_file: list[FunctionCalledInTest],
         function_file_path: Path,
         code_context: CodeOptimizationContext,
