@@ -80,13 +80,7 @@ def prepare_coverage_files(project_root: Path) -> tuple[Path, Path]:
     """Prepare coverage configuration and output files."""
     coverage_out_file = get_run_tmp_file(Path("coverage.json"))
     coveragercfile = get_run_tmp_file(Path(".coveragerc"))
-    coveragerc_content = (
-        "[run]\n"
-        f"source = {project_root.as_posix()}\n"
-        "branch = True\n"
-        "[json]\n"
-        f"output = {coverage_out_file.as_posix()}\n"
-    )
+    coveragerc_content = f"[run]\n branch = True\n [json]\n output = {coverage_out_file.as_posix()}\n"
     coveragercfile.write_text(coveragerc_content)
     return coverage_out_file, coveragercfile
 
