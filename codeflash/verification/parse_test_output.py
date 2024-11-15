@@ -73,8 +73,8 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
             try:
                 test_pickle = pickle.loads(test_pickle_bin) if loop_index == 1 else None
             except Exception as e:
-                logger.exception(f"Failed to load pickle file. Exception: {e}")
-                return test_results
+                logger.info(f"Failed to load pickle file for {encoded_test_name} Exception: {e}")
+                continue
             assert test_type is not None, f"Test type not found for {test_file_path}"
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
