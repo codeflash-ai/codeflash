@@ -143,7 +143,7 @@ def is_github_app_installed_on_repo(owner: str, repo: str) -> bool:
     return True
 
 
-def get_blocklisted_functions() -> dict[str, set[str]]:
+def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
     """Retrieve blocklisted functions for the current pull request.
 
     Returns A dictionary mapping filenames to sets of blocklisted function names.

@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Dict
 
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
@@ -18,7 +18,7 @@ class PrComment:
     speedup_pct: str
     winning_test_results: TestResults
 
-    def to_json(self) -> dict[str, Union[str, dict[str, dict[str, int]]]]:
+    def to_json(self) -> Dict[str, Union[str, Dict[str, Dict[str, int]], int, str]]:
         return {
             "optimization_explanation": self.optimization_explanation,
             "best_runtime": humanize_runtime(self.best_runtime),
