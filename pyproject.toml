@@ -86,6 +86,7 @@ isort = ">=5.11.0"
 dill = "^0.3.8"
 rich = "^13.8.1"
 lxml = "^5.3.0"
+crosshair-tool = ">=0.0.78"
 
 
 [tool.poetry.group.dev]
