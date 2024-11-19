@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import ast
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
-from typing import TYPE_CHECKING, Any, Literal, Union
 
 from pydantic.dataclasses import dataclass
 

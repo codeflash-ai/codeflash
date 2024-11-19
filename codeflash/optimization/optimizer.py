@@ -853,6 +853,7 @@ class Optimizer:
                     logger.warning(
                         f"Multiple tests found ub the replay test {test_file} for {function_name}. Should not happen"
                     )
+            coverage_results = None
             if test_framework == "pytest":
                 unittest_results, coverage_results = self.run_and_parse_tests(
                     test_env=test_env,
@@ -938,6 +939,9 @@ class Optimizer:
             )
             console.rule()
             logger.debug(f"Total original code runtime (ns): {total_timing}")
+            in_github_actions_mode = os.getenv("GITHUB_ACTIONS") == "true"
+            if in_github_actions_mode:
+                console.print(coverage_results)
             return Success(
                 (
                     OriginalCodeBaseline(
