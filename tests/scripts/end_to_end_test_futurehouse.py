@@ -35,6 +35,29 @@ def main():
     num_unit_tests = int(unit_test_search.group(1))
     assert num_unit_tests == 2, "Could not find existing unit tests"
 
+    assert "CoverageData(" in stdout, "Failed to find CoverageData in stdout"
+
+    coverage_search = re.search(
+        r"main_func_coverage=FunctionCoverage\(\n\s+name='find_common_tags',\n\s+coverage=([\d.]+),\n\s+executed_lines=\[(.+)\],",
+        stdout,
+    )
+    coverage = float(coverage_search.group(1))
+    assert coverage == 100.0, f"Coverage was {coverage} instead of 100.0"
+
+    executed_lines = list(map(int, coverage_search.group(2).split(", ")))
+
+    assert executed_lines == [
+        5,
+        6,
+        7,
+        8,
+        9,
+        11,
+        12,
+        13,
+        14,
+    ], f"Executed lines were {executed_lines} instead of [5, 6, 7, 8, 9, 11, 12, 13, 14]"
+
 
 if __name__ == "__main__":
     main()

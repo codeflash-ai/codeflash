@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any, Collection, Optional, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
@@ -19,7 +19,7 @@ from codeflash.models.models import CodeOptimizationContext
 from codeflash.verification.test_results import TestResults
 
 
-@dataclass(config=dict(arbitrary_types_allowed=True))
+@dataclass(config=ConfigDict(arbitrary_types_allowed=True))
 class CoverageData:
     """Represents the coverage data for a specific function in a source file, using one or more test files."""
 

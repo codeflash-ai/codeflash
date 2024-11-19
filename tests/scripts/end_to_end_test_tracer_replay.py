@@ -61,6 +61,25 @@ def main():
     assert passed > 0, f"Expected >0 passed replay tests, found {passed}"
     assert failed == 0, f"Expected 0 failed replay tests, found {failed}"
 
+    funca_coverage_search = re.search(
+        r"main_func_coverage=FunctionCoverage\(\n\s+name='funcA',\n\s+coverage=([\d.]+),\n\s+executed_lines=\[(.+)\],",
+        stdout,
+    )
+
+    funca_coverage = float(funca_coverage_search.group(1))
+
+    assert funca_coverage == 100.0, f"Coverage was {funca_coverage} instead of 100.0"
+
+    funca_executed_lines = list(map(int, funca_coverage_search.group(2).split(", ")))
+
+    assert funca_executed_lines == [
+        2,
+        3,
+        4,
+        6,
+        9,
+    ], f"Executed lines were {funca_executed_lines} instead of [2, 3, 4, 6, 9]"
+
 
 if __name__ == "__main__":
     main()

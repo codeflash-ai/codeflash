@@ -3,6 +3,8 @@ import pathlib
 import re
 import subprocess
 
+import pytest
+
 
 def main():
     module_root = (pathlib.Path(__file__).parent.parent.parent / "code_to_optimize").resolve()
@@ -52,6 +54,33 @@ def main():
     unit_test_search = re.search(r"Discovered (\d+) existing unit tests", stdout)
     num_unit_tests = int(unit_test_search.group(1))
     assert num_unit_tests > 0, "Could not find existing unit tests"
+
+    pattern = r"""
+    main_func_coverage=FunctionCoverage\(
+        .*?coverage=(?P<coverage>[\d.]+),
+        \s*executed_lines=\[(?P<executed_lines>[\d,\s]*)\]
+    """
+
+    match = re.search(pattern, stdout, re.VERBOSE)
+
+    if match:
+        coverage = float(match.group("coverage"))
+
+        executed_lines = list(map(int, match.group("executed_lines").split(", ")))
+
+        assert coverage == 100.0, f"Coverage was {coverage} instead of 100.0"
+
+        assert executed_lines == [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+        ], f"Executed lines were {executed_lines} instead of [2, 3, 4, 6, 9]"
+    else:
+        pytest.fail("Failed to find coverage data in stdout")
 
 
 if __name__ == "__main__":

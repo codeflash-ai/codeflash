@@ -41,7 +41,7 @@ from codeflash.code_utils.static_analysis import analyze_imported_modules
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize, get_functions_to_optimize
-from codeflash.models.Coverage import CoverageData, OriginalCodeBaseline
+from codeflash.models.coverage import CoverageData, OriginalCodeBaseline
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
@@ -879,7 +879,7 @@ class Optimizer:
                         optimization_iteration=0,
                         test_functions=only_run_these_test_functions_for_test_files,
                         testing_time=TOTAL_LOOPING_TIME,
-                        enable_coverage=True,
+                        enable_coverage=False,
                         function_name=function_name,
                         source_file=function_file_path,
                         code_context=code_context,
@@ -939,7 +939,9 @@ class Optimizer:
             )
             console.rule()
             logger.debug(f"Total original code runtime (ns): {total_timing}")
-            in_github_actions_mode = os.getenv("GITHUB_ACTIONS") == "true"
+            # in_github_actions_mode = bool(env_utils.is_in_CI())
+            in_github_actions_mode = bool(env_utils.get_pr_number())
+            logger.info(f"{in_github_actions_mode=}: {env_utils.get_pr_number()=}")
             if in_github_actions_mode:
                 console.print(coverage_results)
             return Success(

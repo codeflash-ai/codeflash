@@ -20,7 +20,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
-from codeflash.models.Coverage import CoverageData
+from codeflash.models.coverage import CoverageData
 from codeflash.models.models import TestFiles
 from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults
 

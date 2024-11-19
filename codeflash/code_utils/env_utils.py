@@ -56,3 +56,8 @@ def ensure_pr_number() -> bool:
             "Codeflash can comment on the right PR"
         )
     return True
+
+
+@lru_cache(maxsize=1)
+def is_in_CI() -> bool:
+    return any([bool(get_pr_number()), bool(os.environ.get("CI")), bool(os.environ.get("GITHUB_ACTIONS"))])
