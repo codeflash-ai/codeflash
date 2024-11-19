@@ -109,7 +109,6 @@ class CoverageData:
                 executed_branches=coverage_data[function_name]["executed_branches"],
                 unexecuted_branches=coverage_data[function_name]["missing_branches"],
             )
-            console.print(main_function_coverage)
         except KeyError:
             main_function_coverage = FunctionCoverage(
                 name=function_name,

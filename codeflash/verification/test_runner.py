@@ -43,6 +43,7 @@ def run_tests(
     enable_coverage: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None]:
     assert test_framework in ["pytest", "unittest"]
+    coverage_out_file = None
     if test_framework == "pytest":
         test_files = []
         for file in test_paths.test_files:

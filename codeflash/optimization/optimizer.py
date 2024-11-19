@@ -1083,7 +1083,6 @@ class Optimizer:
         code_context: CodeOptimizationContext | None = None,
         unittest_loop_index: int | None = None,
     ) -> tuple[TestResults, CoverageData | None]:
-        coverage_out_file = None
         try:
             result_file_path, run_result, coverage_out_file = run_tests(
                 test_files,
