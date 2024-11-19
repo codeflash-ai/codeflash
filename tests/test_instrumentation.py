@@ -328,7 +328,7 @@ def test_sort():
         test_files = TestFiles(
             test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -336,7 +336,6 @@ def test_sort():
             pytest_min_loops=1,
             pytest_max_loops=1,
             testing_time=0.1,
-            coverage=True,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
         assert test_results[0].id.iteration_id == "1_0"
@@ -455,7 +454,7 @@ def test_sort_parametrized(input, expected_output):
                 test_project_root=project_root_path,
             )
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -595,7 +594,7 @@ def test_sort_parametrized_loop(input, expected_output):
                 test_project_root=project_root_path,
             )
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -766,7 +765,7 @@ def test_sort():
                 test_project_root=project_root_path,
             )
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -923,7 +922,7 @@ class TestPigLatin(unittest.TestCase):
                 test_project_root=project_root_path,
             )
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -1067,7 +1066,7 @@ class TestPigLatin(unittest.TestCase):
                 test_project_root=project_root_path,
             )
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -1214,7 +1213,7 @@ class TestPigLatin(unittest.TestCase):
                 test_project_root=project_root_path,
             )
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -1361,7 +1360,7 @@ class TestPigLatin(unittest.TestCase):
                 test_project_root=project_root_path,
             )
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -1950,7 +1949,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
         test_files = TestFiles(
             test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -2072,7 +2071,7 @@ class TestPigLatin(unittest.TestCase):
         test_files = TestFiles(
             test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env, test_files=test_files, optimization_iteration=0, test_functions=None, testing_time=0.1
         )
 

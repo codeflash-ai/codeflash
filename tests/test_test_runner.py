@@ -46,8 +46,6 @@ class TestUnittestRunnerSorter(unittest.TestCase):
             test_framework=config.test_framework,
             cwd=Path(config.project_root_path),
             test_env=os.environ.copy(),
-            function_name="test_sort",
-            source_file=Path(fp.name),
         )
         results = parse_test_xml(result_file, test_files, config, process)
     assert results[0].did_pass, "Test did not pass as expected"
@@ -96,8 +94,6 @@ def test_sort():
             pytest_min_loops=1,
             pytest_max_loops=1,
             pytest_target_runtime_seconds=1,
-            function_name="test_sort",
-            source_file=Path(fp.name),
         )
         results = parse_test_xml(
             test_xml_file_path=result_file, test_files=test_files, test_config=config, run_result=process
