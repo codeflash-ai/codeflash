@@ -940,9 +940,6 @@ class Optimizer:
             )
             console.rule()
             logger.debug(f"Total original code runtime (ns): {total_timing}")
-            in_github_actions_mode = bool(env_utils.is_in_CI())
-            if in_github_actions_mode:
-                console.print(coverage_results)
             return Success(
                 (
                     OriginalCodeBaseline(

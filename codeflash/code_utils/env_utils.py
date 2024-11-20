@@ -59,5 +59,5 @@ def ensure_pr_number() -> bool:
 
 
 @lru_cache(maxsize=1)
-def is_in_CI() -> bool:
-    return any([os.environ.get("CI"), os.environ.get("GITHUB_ACTIONS")])
+def is_end_to_end() -> bool:
+    return bool(os.environ.get("CODEFLASH_END_TO_END"))

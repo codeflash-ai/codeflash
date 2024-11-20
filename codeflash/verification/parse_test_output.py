@@ -19,6 +19,7 @@ from codeflash.code_utils.code_utils import (
     get_run_tmp_file,
     module_name_from_file_path,
 )
+from codeflash.code_utils.env_utils import is_end_to_end
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.models.models import CoverageData, TestFiles
 from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults
@@ -479,5 +480,6 @@ def parse_test_results(
             function_name=function_name,
         )
         coverage_file.unlink(missing_ok=True)
-
+        if is_end_to_end():
+            console.print(coverage)
     return results, coverage if all_args else None
