@@ -60,4 +60,4 @@ def ensure_pr_number() -> bool:
 
 @lru_cache(maxsize=1)
 def is_in_CI() -> bool:
-    return any([bool(get_pr_number()), bool(os.environ.get("CI")), bool(os.environ.get("GITHUB_ACTIONS"))])
+    return any([os.environ.get("CI"), os.environ.get("GITHUB_ACTIONS")])
