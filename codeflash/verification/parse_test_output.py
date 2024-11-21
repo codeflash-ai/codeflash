@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import os
 import re
 import sqlite3
@@ -11,20 +12,22 @@ import dill as pickle
 from junitparser.xunit2 import JUnitXml
 from lxml.etree import XMLParser, parse
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import DEBUG_MODE, console, logger
 from codeflash.code_utils.code_utils import (
     file_name_from_test_module_name,
     file_path_from_module_name,
     get_run_tmp_file,
     module_name_from_file_path,
 )
+from codeflash.code_utils.env_utils import is_end_to_end
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
+from codeflash.models.models import CoverageData, TestFiles
 from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults
 
 if TYPE_CHECKING:
     import subprocess
 
-    from codeflash.models.models import TestFiles
+    from codeflash.models.models import CodeOptimizationContext
     from codeflash.verification.verification_utils import TestConfig
 
 
@@ -38,6 +41,7 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
     test_results = TestResults()
     if not file_location.exists():
         logger.warning(f"No test results for {file_location} found.")
+        console.rule()
         return test_results
 
     with file_location.open("rb") as file:
@@ -56,7 +60,8 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
             try:
                 test_pickle_bin = file.read(len_next)
             except Exception as e:
-                logger.exception(f"Failed to load pickle file. Exception: {e}")
+                if DEBUG_MODE:
+                    logger.exception(f"Failed to load pickle file. Exception: {e}")
                 return test_results
             loop_index_bytes = file.read(8)
             loop_index = int.from_bytes(loop_index_bytes, byteorder="big")
@@ -73,7 +78,8 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
             try:
                 test_pickle = pickle.loads(test_pickle_bin) if loop_index == 1 else None
             except Exception as e:
-                logger.info(f"Failed to load pickle file for {encoded_test_name} Exception: {e}")
+                if DEBUG_MODE:
+                    logger.exception(f"Failed to load pickle file for {encoded_test_name} Exception: {e}")
                 continue
             assert test_type is not None, f"Test type not found for {test_file_path}"
             test_results.add(
@@ -96,6 +102,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
     test_results = TestResults()
     if not sqlite_file_path.exists():
         logger.warning(f"No test results for {sqlite_file_path} found.")
+        console.rule()
         return test_results
     try:
         db = sqlite3.connect(sqlite_file_path)
@@ -154,6 +161,7 @@ def parse_test_xml(
     # Parse unittest output
     if not test_xml_file_path.exists():
         logger.warning(f"No test results for {test_xml_file_path} found.")
+        console.rule()
         return test_results
     try:
         xml = JUnitXml.fromfile(str(test_xml_file_path), parse_func=parse_func)
@@ -205,6 +213,8 @@ def parse_test_xml(
                     test_file_path = file_path_from_module_name(test_function, base_dir)
             else:
                 test_file_path = base_dir / test_file_name
+            assert test_file_path, f"Test file path not found for {test_file_name}"
+
             if not test_file_path.exists():
                 logger.warning(f"Could not find the test for file name - {test_file_path} ")
                 continue
@@ -419,9 +429,13 @@ def parse_test_results(
     test_files: TestFiles,
     test_config: TestConfig,
     optimization_iteration: int,
+    function_name: str | None,
+    source_file: Path | None,
+    coverage_file: Path | None,
+    code_context: CodeOptimizationContext | None = None,
     run_result: subprocess.CompletedProcess | None = None,
     unittest_loop_index: int | None = None,
-) -> TestResults:
+) -> tuple[TestResults, CoverageData | None]:
     test_results_xml = parse_test_xml(
         test_xml_path,
         test_files=test_files,
@@ -429,7 +443,6 @@ def parse_test_results(
         run_result=run_result,
         unittest_loop_index=unittest_loop_index,
     )
-
     try:
         bin_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin"))
         test_results_bin_file = (
@@ -455,5 +468,18 @@ def parse_test_results(
     get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin")).unlink(missing_ok=True)
 
     get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
+    results = merge_test_results(test_results_xml, test_results_bin_file, test_config.test_framework)
 
-    return merge_test_results(test_results_xml, test_results_bin_file, test_config.test_framework)
+    all_args = False
+    if coverage_file and source_file and code_context and function_name:
+        all_args = True
+        coverage = CoverageData.load_from_coverage_file(
+            coverage_file_path=coverage_file,
+            source_code_path=source_file,
+            code_context=code_context,
+            function_name=function_name,
+        )
+        coverage_file.unlink(missing_ok=True)
+        if is_end_to_end():
+            console.print(coverage)
+    return results, coverage if all_args else None

@@ -56,3 +56,8 @@ def ensure_pr_number() -> bool:
             "Codeflash can comment on the right PR"
         )
     return True
+
+
+@lru_cache(maxsize=1)
+def is_end_to_end() -> bool:
+    return bool(os.environ.get("CODEFLASH_END_TO_END"))

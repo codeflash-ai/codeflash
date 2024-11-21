@@ -7,10 +7,16 @@ license = "BSL-1.1"
 authors = ["CodeFlash Inc. <contact@codeflash.ai>"]
 homepage = "https://codeflash.ai"
 readme = "README.md"
-packages = [
-    { include = "codeflash" },
+packages = [{ include = "codeflash" }]
+keywords = [
+    "codeflash",
+    "performance",
+    "optimization",
+    "ai",
+    "code",
+    "machine learning",
+    "LLM",
 ]
-keywords = ["codeflash", "performance", "optimization", "ai", "code", "machine learning", "LLM"]
 exclude = [
     "docs/*",
     "experiments/*",
@@ -83,9 +89,10 @@ sentry-sdk = ">=1.40.6,<3.0.0"
 parameterized = ">=0.9.0"
 returns = ">=0.23"
 isort = ">=5.11.0"
-dill = "^0.3.8"
-rich = "^13.8.1"
-lxml = "^5.3.0"
+dill = ">=0.3.8"
+rich = ">=13.8.1"
+lxml = ">=5.3.0"
+coverage = ">=7.6.4"
 
 
 [tool.poetry.group.dev]
@@ -126,18 +133,10 @@ show_error_end = true
 strict = true
 warn_unreachable = true
 install_types = true
-plugins = [
-    "returns.contrib.mypy.returns_plugin",
-    "pydantic.mypy"
-]
+plugins = ["returns.contrib.mypy.returns_plugin", "pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = [
-    "jedi",
-    "jedi.api.classes",
-    "inquirer",
-    "inquirer.themes"
-]
+module = ["jedi", "jedi.api.classes", "inquirer", "inquirer.themes"]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
@@ -149,12 +148,31 @@ warn_required_dynamic_aliases = true
 line-length = 120
 fix = true
 show-fixes = true
-exclude= ["code_to_optimize/", "pie_test_set/"]
+exclude = ["code_to_optimize/", "pie_test_set/"]
 
 [tool.ruff.lint]
 select = ["ALL"]
-ignore = ["C901", "D100", "D101", "D102", "D103", "D105", "D107", "S101", "S603", "S607", "ANN101",
-    "COM812", "FIX002", "PLR0912", "PLR0913", "PLR0915", "TD002", "TD003", "TD004"]
+ignore = [
+    "C901",
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D105",
+    "D107",
+    "S101",
+    "S603",
+    "S607",
+    "ANN101",
+    "COM812",
+    "FIX002",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "TD002",
+    "TD003",
+    "TD004",
+]
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true
@@ -192,7 +210,10 @@ initial-content = """
 module-root = "codeflash"
 tests-root = "tests"
 test-framework = "pytest"
-formatter-cmds = ["poetry run ruff check --exit-zero --fix $file", "poetry run ruff format $file"]
+formatter-cmds = [
+    "poetry run ruff check --exit-zero --fix $file",
+    "poetry run ruff format $file",
+]
 
 
 [build-system]
