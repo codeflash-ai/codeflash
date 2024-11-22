@@ -50,7 +50,6 @@ from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
     CodeOptimizationContext,
-    CoverageData,
     FunctionParent,
     GeneratedTests,
     GeneratedTestsList,
@@ -78,7 +77,7 @@ if TYPE_CHECKING:
 
     from returns.result import Result
 
-    from codeflash.models.models import FunctionCalledInTest, FunctionSource, OptimizedCandidate
+    from codeflash.models.models import CoverageData, FunctionCalledInTest, FunctionSource, OptimizedCandidate
 
 
 class Optimizer:
