@@ -3,15 +3,20 @@ from __future__ import annotations
 import ast
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 if TYPE_CHECKING:
     from codeflash.models.models import FunctionParent
 
 
-class ImportedInternalModuleAnalysis(BaseModel, frozen=True):
+ObjectDefT = TypeVar("ObjectDefT", ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+
+class ImportedInternalModuleAnalysis(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     name: str
     full_name: str
     file_path: Path
@@ -71,9 +76,7 @@ def get_module_full_name(node: ast.Import | ast.ImportFrom, current_module: str)
     if base_module is None:
         return []
     if node.module is None and node.level > 0:
-        # Relative import with no module specified
         return [f"{base_module}.{alias.name}" for alias in node.names]
-    # Import with module specified
     return [base_module]
 
 
@@ -98,14 +101,11 @@ def analyze_imported_modules(
     """Statically finds and analyzes all imported internal modules."""
     module_rel_path = module_file_path.relative_to(project_root).with_suffix("")
     current_module = ".".join(module_rel_path.parts)
-
     imports = parse_imports(code_str)
     module_names: set[str] = set()
     for node in imports:
         module_names.update(get_module_full_name(node, current_module))
-
     internal_modules = {module_name for module_name in module_names if is_internal_module(module_name, project_root)}
-
     return [
         ImportedInternalModuleAnalysis(name=str(mod_name).split(".")[-1], full_name=mod_name, file_path=file_path)
         for mod_name in internal_modules
@@ -113,15 +113,41 @@ def analyze_imported_modules(
     ]
 
 
+def get_first_top_level_object_def_ast(
+    object_name: str, object_type: type[ObjectDefT], node: ast.AST
+) -> ObjectDefT | None:
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, object_type) and child.name == object_name:
+            return child
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        if descendant := get_first_top_level_object_def_ast(object_name, object_type, child):
+            return descendant
+    return None
+
+
+def get_first_top_level_function_or_method_ast(
+    function_name: str, parents: list[FunctionParent], node: ast.AST
+) -> ast.FunctionDef | None:
+    if not parents:
+        return get_first_top_level_object_def_ast(function_name, ast.FunctionDef, node)
+    if parents[0].type == "ClassDef" and (
+        class_node := get_first_top_level_object_def_ast(parents[0].name, ast.ClassDef, node)
+    ):
+        return get_first_top_level_object_def_ast(function_name, ast.FunctionDef, class_node)
+    return None
+
+
 def function_kind(node: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[FunctionParent]) -> FunctionKind | None:
-    if not parents or (parents and parents[0].type in ["FunctionDef", "AsyncFunctionDef"]):
+    if not parents or parents[0].type in ["FunctionDef", "AsyncFunctionDef"]:
         return FunctionKind.FUNCTION
     if parents[0].type == "ClassDef":
         for decorator in node.decorator_list:
-            if isinstance(decorator, ast.Name) and decorator.id == "classmethod":
-                return FunctionKind.CLASS_METHOD
-            if isinstance(decorator, ast.Name) and decorator.id == "staticmethod":
-                return FunctionKind.STATIC_METHOD
+            if isinstance(decorator, ast.Name):
+                if decorator.id == "classmethod":
+                    return FunctionKind.CLASS_METHOD
+                if decorator.id == "staticmethod":
+                    return FunctionKind.STATIC_METHOD
         return FunctionKind.INSTANCE_METHOD
     return None
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import concurrent.futures
 import os
 import subprocess
@@ -22,7 +23,7 @@ from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code, find_preexisting_objects
-from codeflash.code_utils.code_replacer import normalize_code, replace_function_definitions_in_module
+from codeflash.code_utils.code_replacer import normalize_code, normalize_node, replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     file_name_from_test_module_name,
     get_run_tmp_file,
@@ -37,7 +38,11 @@ from codeflash.code_utils.config_consts import (
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
-from codeflash.code_utils.static_analysis import analyze_imported_modules
+from codeflash.code_utils.static_analysis import (
+    analyze_imported_modules,
+    get_first_top_level_function_or_method_ast,
+    has_typed_parameters,
+)
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize, get_functions_to_optimize
@@ -137,11 +142,12 @@ class Optimizer:
 
                 original_module_code: str = original_module_path.read_text(encoding="utf8")
                 try:
-                    normalized_original_module_code = normalize_code(original_module_code)
+                    original_module_ast = ast.parse(original_module_code)
                 except SyntaxError as e:
                     logger.warning(f"Syntax error parsing code in {original_module_path}: {e}")
                     logger.info("Skipping optimization due to file error.")
                     continue
+                normalized_original_module_code = ast.unparse(normalize_node(original_module_ast))
                 validated_original_code: dict[Path, ValidCode] = {
                     original_module_path: ValidCode(
                         source_code=original_module_code, normalized_code=normalized_original_module_code
@@ -174,6 +180,142 @@ class Optimizer:
                         f"Optimizing function {function_iterator_count} of {num_optimizable_functions}: "
                         f"{function_to_optimize.qualified_name}"
                     )
+
+                    if not (
+                        function_to_optimize_ast := get_first_top_level_function_or_method_ast(
+                            function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
+                        )
+                    ):
+                        logger.warning(
+                            f"Function {function_to_optimize.qualified_name} not found in {original_module_path}.\n"
+                            f"Skipping optimization."
+                        )
+                        continue
+                    if (
+                        has_typed_parameters(function_to_optimize_ast, function_to_optimize.parents)
+                        and self.test_cfg.test_framework == "pytest"
+                    ):
+                        logger.info("Generating concolic coverage tests for the original code…")
+                        cover_result = subprocess.run(
+                            [
+                                "crosshair",
+                                "cover",
+                                "--example_output_format=pytest",
+                                "--max_uninteresting_iterations=256",
+                                ".".join(
+                                    [
+                                        function_to_optimize.file_path.relative_to(self.args.project_root)
+                                        .with_suffix("")
+                                        .as_posix()
+                                        .replace("/", "."),
+                                        function_to_optimize.qualified_name,
+                                    ]
+                                ),
+                            ],
+                            capture_output=True,
+                            text=True,
+                            cwd=self.args.project_root,
+                            check=False,
+                        )
+                        logger.info(f"Tests generated through concolic coverage:\n{cover_result.stdout}")
+                        console.rule()
+
+                    # [--max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS]
+                    # [--per_path_timeout FLOAT]
+                    # [--per_condition_timeout FLOAT]
+
+                    # original_code_coverage_tests
+                    # def cover(
+                    #         args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO, stderr: TextIO
+                    # ) -> int:
+                    #     entities = checked_load(args.target, stderr)
+                    #     if isinstance(entities, int):
+                    #         return entities
+                    #     to_be_processed = deque(entities)
+                    #     fns = []
+                    #     while to_be_processed:
+                    #         entity = to_be_processed.pop()
+                    #         if isinstance(entity, ModuleType):
+                    #             to_be_processed.extend(
+                    #                 v for k, v in get_top_level_classes_and_functions(entity)
+                    #             )
+                    #         elif isinstance(entity, FunctionInfo):
+                    #             fns.append(entity)
+                    #         else:
+                    #             assert isinstance(entity, type)
+                    #             fns.extend(
+                    #                 FunctionInfo.from_class(entity, n)
+                    #                 for n, e in entity.__dict__.items()
+                    #                 if isinstance(e, FUNCTIONINFO_DESCRIPTOR_TYPES)
+                    #             )
+                    #
+                    #     if not fns:
+                    #         print("No functions or methods found.", file=stderr)
+                    #         return 2
+                    #     example_output_format = args.example_output_format
+                    #     options.stats = Counter()
+                    #     imports, lines = set(), []
+                    #     for ctxfn in fns:
+                    #         debug("Begin cover on", ctxfn.name)
+                    #         pair = ctxfn.get_callable()
+                    #         if pair is None:
+                    #             continue
+                    #         fn = pair[0]
+                    #
+                    #         try:
+                    #             paths = path_cover(
+                    #                 ctxfn,
+                    #                 options,
+                    #                 args.coverage_type,
+                    #                 arg_formatter=format_boundargs_as_dictionary
+                    #                 if example_output_format == ExampleOutputFormat.ARG_DICTIONARY
+                    #                 else format_boundargs,
+                    #             )
+                    #         except NotDeterministic:
+                    #             print(
+                    #                 "Repeated executions are not behaving deterministically.", file=stderr
+                    #             )
+                    #             if not in_debug():
+                    #                 print("Re-run in verbose mode for debugging information.", file=stderr)
+                    #             return 2
+                    #         if example_output_format == ExampleOutputFormat.ARG_DICTIONARY:
+                    #             output_argument_dictionary_paths(fn, paths, stdout, stderr)
+                    #         elif example_output_format == ExampleOutputFormat.EVAL_EXPRESSION:
+                    #             output_eval_exression_paths(fn, paths, stdout, stderr)
+                    #         elif example_output_format == ExampleOutputFormat.PYTEST:
+                    #             (cur_imports, cur_lines) = output_pytest_paths(fn, paths)
+                    #             imports |= cur_imports
+                    #             # imports.add(f"import {fn.__qualname__}")
+                    #             lines.extend(cur_lines)
+                    #         else:
+                    #             assert False, "unexpected output format"
+                    #     if example_output_format == ExampleOutputFormat.PYTEST:
+                    #         stdout.write("\n".join(sorted(imports) + [""] + lines) + "\n")
+                    #         stdout.flush()
+                    #
+                    #     return 0
+
+                    # class DiffbehaviorReturnCode(IntEnum):
+                    #     DID_NOT_RUN = -1
+                    #     NO_DIFFERENCES = 0
+                    #     COUNTER_EXAMPLES = 1
+                    #     ERROR = 2
+                    #
+                    # def run_concolic_correctness(
+                    #         function_to_optimize: FunctionToOptimize,
+                    #         function_to_optimize_original_worktree_fqn: str,
+                    #         candidates: list[OptimizedCandidate],
+                    #         worktrees: list[Path],
+                    #         worktree_root: Path,
+                    #         git_root: Path,
+                    # ) -> None:
+
+                    # run cover under try block to catch single possible exception
+                    # parse results: exist status, std out
+                    # write test suite to a file with tmp dir, same directory as the other tests (test_root?)
+                    # get test suite in TestsInFile format, process test suite with process_test_files.
+                    # add resulting test data to existing tests
+                    # delete test suite file in cleanup phase
 
                     best_optimization = self.optimize_function(
                         function_to_optimize, function_to_tests, validated_original_code
@@ -824,7 +966,7 @@ class Optimizer:
             else:
                 test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
 
-            only_run_these_test_functions_for_test_files: dict[str, str] = {}
+            only_run_these_test_functions_for_test_files: dict[Path, str] = {}
 
             # Replay tests can have hundreds of test functions and running them can be very slow,
             # so we only run the test functions that are relevant to the function we are optimizing
@@ -936,8 +1078,8 @@ class Optimizer:
         self,
         *,
         optimization_candidate_index: int,
-        original_test_results: TestResults | None,
-        tests_in_file: list[FunctionCalledInTest] | None,
+        original_test_results: TestResults,
+        tests_in_file: list[FunctionCalledInTest],
     ) -> Result[OptimizedCandidateResult, str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
@@ -955,7 +1097,7 @@ class Optimizer:
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
 
-            only_run_these_test_functions_for_test_files: dict[str, str] = {}
+            only_run_these_test_functions_for_test_files: dict[Path, str] = {}
             # Replay tests can have hundreds of test functions and running them can be very slow,
             # so we only run the test functions that are relevant to the function we are optimizing
             for test_file in self.test_files.get_by_type(TestType.REPLAY_TEST).test_files:
@@ -1053,7 +1195,7 @@ class Optimizer:
         test_env: dict[str, str],
         test_files: TestFiles,
         optimization_iteration: int,
-        test_functions: list[str | None] | None = None,
+        test_functions: dict[Path, str] | None = None,
         testing_time: float = TOTAL_LOOPING_TIME,
         pytest_min_loops: int = 5,
         pytest_max_loops: int = 100_000,

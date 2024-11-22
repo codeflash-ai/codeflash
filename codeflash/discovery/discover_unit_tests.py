@@ -49,7 +49,7 @@ def discover_tests_pytest(
     project_root = cfg.project_root_path
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
-    process = subprocess.run(
+    subprocess.run(
         [
             sys.executable,
             Path(__file__).parent / "pytest_new_process_discovery.py",

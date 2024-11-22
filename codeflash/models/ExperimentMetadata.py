@@ -4,5 +4,5 @@ from pydantic import BaseModel
 
 
 class ExperimentMetadata(BaseModel):
-    id: str
+    id: str | None
     group: str

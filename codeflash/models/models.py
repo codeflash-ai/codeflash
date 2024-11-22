@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Iterator, Optional
 
 from jedi.api.classes import Name
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from pydantic.dataclasses import dataclass
 
 from codeflash.verification.test_results import TestResults, TestType
@@ -14,7 +14,9 @@ from codeflash.verification.test_results import TestResults, TestType
 # of the module is foo.eggs.
 
 
-class ValidCode(BaseModel, frozen=True):
+class ValidCode(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     source_code: str
     normalized_code: str
 
