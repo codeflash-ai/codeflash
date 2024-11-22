@@ -14,7 +14,7 @@ from codeflash.code_utils.instrument_existing_tests import (
     inject_profiling_into_existing_test,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import TestFile, TestFiles, CodePosition, FunctionParent
+from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.test_results import TestType
 
@@ -328,7 +328,7 @@ def test_sort():
         test_files = TestFiles(
             test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -454,7 +454,7 @@ def test_sort_parametrized(input, expected_output):
                 test_project_root=project_root_path,
             )
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -594,7 +594,7 @@ def test_sort_parametrized_loop(input, expected_output):
                 test_project_root=project_root_path,
             )
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -765,7 +765,7 @@ def test_sort():
                 test_project_root=project_root_path,
             )
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -922,7 +922,7 @@ class TestPigLatin(unittest.TestCase):
                 test_project_root=project_root_path,
             )
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -1066,7 +1066,7 @@ class TestPigLatin(unittest.TestCase):
                 test_project_root=project_root_path,
             )
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -1213,7 +1213,7 @@ class TestPigLatin(unittest.TestCase):
                 test_project_root=project_root_path,
             )
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -1360,7 +1360,7 @@ class TestPigLatin(unittest.TestCase):
                 test_project_root=project_root_path,
             )
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -1949,7 +1949,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
         test_files = TestFiles(
             test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -2071,7 +2071,7 @@ class TestPigLatin(unittest.TestCase):
         test_files = TestFiles(
             test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
         )
-        test_results = opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env, test_files=test_files, optimization_iteration=0, test_functions=None, testing_time=0.1
         )
 

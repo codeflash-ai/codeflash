@@ -8,7 +8,7 @@ import sys
 import unittest
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 import jedi
 from pydantic.dataclasses import dataclass
@@ -34,12 +34,12 @@ class TestFunction:
 def discover_unit_tests(
     cfg: TestConfig, discover_only_these_tests: list[Path] | None = None
 ) -> dict[str, list[FunctionCalledInTest]]:
-    if cfg.test_framework == "pytest":
-        return discover_tests_pytest(cfg, discover_only_these_tests)
-    if cfg.test_framework == "unittest":
-        return discover_tests_unittest(cfg, discover_only_these_tests)
-    msg = f"Unsupported test framework: {cfg.test_framework}"
-    raise ValueError(msg)
+    framework_strategies: dict[str, Callable] = {"pytest": discover_tests_pytest, "unittest": discover_tests_unittest}
+    strategy = framework_strategies.get(cfg.test_framework, None)
+    if not strategy:
+        error_message = f"Unsupported test framework: {cfg.test_framework}"
+        raise ValueError(error_message)
+    return strategy(cfg, discover_only_these_tests)
 
 
 def discover_tests_pytest(
