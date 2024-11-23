@@ -3,7 +3,9 @@ from __future__ import annotations
 import ast
 import concurrent.futures
 import os
+import shutil
 import subprocess
+import tempfile
 import time
 import uuid
 from collections import defaultdict
@@ -107,7 +109,6 @@ class Optimizer:
 
         file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
         num_optimizable_functions: int
-
         (file_to_funcs_to_optimize, num_optimizable_functions) = get_functions_to_optimize(
             optimize_all=self.args.all,
             replay_test=self.args.replay_test,
@@ -120,9 +121,10 @@ class Optimizer:
         )
 
         optimizations_found: int = 0
-
         function_iterator_count: int = 0
-
+        concolic_test_suite_dir_root = None
+        if self.args.test_framework == "pytest":
+            concolic_test_suite_dir_root = Path(tempfile.mkdtemp(dir=self.args.tests_root))
         try:
             ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
             if num_optimizable_functions == 0:
@@ -191,11 +193,13 @@ class Optimizer:
                             f"Skipping optimization."
                         )
                         continue
-                    if (
-                        has_typed_parameters(function_to_optimize_ast, function_to_optimize.parents)
-                        and self.test_cfg.test_framework == "pytest"
+
+                    concolic_test_suite_dir: Path | None = None
+                    function_to_concolic_tests: dict[str, list[FunctionCalledInTest]] = {}
+                    if concolic_test_suite_dir_root and has_typed_parameters(
+                        function_to_optimize_ast, function_to_optimize.parents
                     ):
-                        logger.info("Generating concolic coverage tests for the original code…")
+                        logger.info("Generating concolic opcode coverage test suite for the original code…")
                         cover_result = subprocess.run(
                             [
                                 "crosshair",
@@ -217,110 +221,55 @@ class Optimizer:
                             cwd=self.args.project_root,
                             check=False,
                         )
-                        logger.info(f"Tests generated through concolic coverage:\n{cover_result.stdout}")
+
+                        if cover_result.returncode == 0:
+                            concolic_test_suite_code: str = cover_result.stdout
+                            logger.info(
+                                f"Test suite generated through concolic opcode coverage:\n{concolic_test_suite_code}"
+                            )
+                            concolic_test_suite_dir = Path(tempfile.mkdtemp(dir=concolic_test_suite_dir_root))
+                            concolic_test_suite_path = concolic_test_suite_dir / "concolic_test_suite.py"
+                            concolic_test_suite_path.write_text(concolic_test_suite_code, encoding="utf8")
+
+                            logger.info(f"Discovering concolic unit tests in {concolic_test_suite_path}…")
+                            concolic_test_cfg = TestConfig(
+                                tests_root=concolic_test_suite_dir,
+                                tests_project_rootdir=concolic_test_suite_dir_root,
+                                project_root_path=self.args.project_root,
+                                test_framework=self.args.test_framework,
+                                pytest_cmd=self.args.pytest_cmd,
+                            )
+                            function_to_concolic_tests = discover_unit_tests(concolic_test_cfg)
+                            num_discovered_concolic_tests: int = sum(
+                                [len(value) for value in function_to_concolic_tests.values()]
+                            )
+                            logger.info(
+                                f"Discovered {num_discovered_concolic_tests} "
+                                f"concolic unit tests in {concolic_test_suite_path}"
+                            )
+                            console.rule()
+                            ph("cli-optimize-concolic-tests", {"num_tests": num_discovered_concolic_tests})
+
+                        else:
+                            (
+                                logger.warning(
+                                    "Error running CrossHair Cover"
+                                    f"{': ' + cover_result.stderr if cover_result.stderr else '.'}"
+                                )
+                            )
                         console.rule()
 
-                    # [--max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS]
-                    # [--per_path_timeout FLOAT]
-                    # [--per_condition_timeout FLOAT]
-
-                    # original_code_coverage_tests
-                    # def cover(
-                    #         args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO, stderr: TextIO
-                    # ) -> int:
-                    #     entities = checked_load(args.target, stderr)
-                    #     if isinstance(entities, int):
-                    #         return entities
-                    #     to_be_processed = deque(entities)
-                    #     fns = []
-                    #     while to_be_processed:
-                    #         entity = to_be_processed.pop()
-                    #         if isinstance(entity, ModuleType):
-                    #             to_be_processed.extend(
-                    #                 v for k, v in get_top_level_classes_and_functions(entity)
-                    #             )
-                    #         elif isinstance(entity, FunctionInfo):
-                    #             fns.append(entity)
-                    #         else:
-                    #             assert isinstance(entity, type)
-                    #             fns.extend(
-                    #                 FunctionInfo.from_class(entity, n)
-                    #                 for n, e in entity.__dict__.items()
-                    #                 if isinstance(e, FUNCTIONINFO_DESCRIPTOR_TYPES)
-                    #             )
-                    #
-                    #     if not fns:
-                    #         print("No functions or methods found.", file=stderr)
-                    #         return 2
-                    #     example_output_format = args.example_output_format
-                    #     options.stats = Counter()
-                    #     imports, lines = set(), []
-                    #     for ctxfn in fns:
-                    #         debug("Begin cover on", ctxfn.name)
-                    #         pair = ctxfn.get_callable()
-                    #         if pair is None:
-                    #             continue
-                    #         fn = pair[0]
-                    #
-                    #         try:
-                    #             paths = path_cover(
-                    #                 ctxfn,
-                    #                 options,
-                    #                 args.coverage_type,
-                    #                 arg_formatter=format_boundargs_as_dictionary
-                    #                 if example_output_format == ExampleOutputFormat.ARG_DICTIONARY
-                    #                 else format_boundargs,
-                    #             )
-                    #         except NotDeterministic:
-                    #             print(
-                    #                 "Repeated executions are not behaving deterministically.", file=stderr
-                    #             )
-                    #             if not in_debug():
-                    #                 print("Re-run in verbose mode for debugging information.", file=stderr)
-                    #             return 2
-                    #         if example_output_format == ExampleOutputFormat.ARG_DICTIONARY:
-                    #             output_argument_dictionary_paths(fn, paths, stdout, stderr)
-                    #         elif example_output_format == ExampleOutputFormat.EVAL_EXPRESSION:
-                    #             output_eval_exression_paths(fn, paths, stdout, stderr)
-                    #         elif example_output_format == ExampleOutputFormat.PYTEST:
-                    #             (cur_imports, cur_lines) = output_pytest_paths(fn, paths)
-                    #             imports |= cur_imports
-                    #             # imports.add(f"import {fn.__qualname__}")
-                    #             lines.extend(cur_lines)
-                    #         else:
-                    #             assert False, "unexpected output format"
-                    #     if example_output_format == ExampleOutputFormat.PYTEST:
-                    #         stdout.write("\n".join(sorted(imports) + [""] + lines) + "\n")
-                    #         stdout.flush()
-                    #
-                    #     return 0
-
-                    # class DiffbehaviorReturnCode(IntEnum):
-                    #     DID_NOT_RUN = -1
-                    #     NO_DIFFERENCES = 0
-                    #     COUNTER_EXAMPLES = 1
-                    #     ERROR = 2
-                    #
-                    # def run_concolic_correctness(
-                    #         function_to_optimize: FunctionToOptimize,
-                    #         function_to_optimize_original_worktree_fqn: str,
-                    #         candidates: list[OptimizedCandidate],
-                    #         worktrees: list[Path],
-                    #         worktree_root: Path,
-                    #         git_root: Path,
-                    # ) -> None:
-
-                    # run cover under try block to catch single possible exception
-                    # parse results: exist status, std out
-                    # write test suite to a file with tmp dir, same directory as the other tests (test_root?)
-                    # get test suite in TestsInFile format, process test suite with process_test_files.
-                    # add resulting test data to existing tests
-                    # delete test suite file in cleanup phase
-
                     best_optimization = self.optimize_function(
-                        function_to_optimize, function_to_tests, validated_original_code
+                        function_to_optimize,
+                        {
+                            key: function_to_tests.get(key, []) + function_to_concolic_tests.get(key, [])
+                            for key in set(function_to_tests) | set(function_to_concolic_tests)
+                        },
+                        validated_original_code,
                     )
                     self.test_files = TestFiles(test_files=[])
+                    if concolic_test_suite_dir:
+                        shutil.rmtree(concolic_test_suite_dir)
                     if is_successful(best_optimization):
                         optimizations_found += 1
                     else:
@@ -339,6 +288,8 @@ class Optimizer:
                 test_file.instrumented_file_path.unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
+            if concolic_test_suite_dir_root:
+                shutil.rmtree(concolic_test_suite_dir_root)
 
     def optimize_function(
         self,
@@ -913,7 +864,7 @@ class Optimizer:
                 ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             )
             future_candidates_exp = None
-            futures: list[concurrent.futures.Future] = [*future_tests, future_optimization_candidates]
+            futures = [*future_tests, future_optimization_candidates]
             if run_experiment:
                 future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
@@ -1098,8 +1049,8 @@ class Optimizer:
         self,
         *,
         optimization_candidate_index: int,
-        original_test_results: TestResults,
-        tests_in_file: list[FunctionCalledInTest],
+        original_test_results: TestResults | None,
+        tests_in_file: list[FunctionCalledInTest] | None,
     ) -> Result[OptimizedCandidateResult, str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 

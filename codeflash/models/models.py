@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from enum import IntEnum
 from pathlib import Path
 from typing import Any, Collection, Iterator, Optional, Union
 
@@ -23,6 +24,14 @@ class ValidCode(BaseModel):
 
     source_code: str
     normalized_code: str
+
+
+# TODO COVER FIX
+class CoverReturnCode(IntEnum):
+    DID_NOT_RUN = -1
+    NO_DIFFERENCES = 0
+    COUNTER_EXAMPLES = 1
+    ERROR = 2
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
@@ -347,7 +356,7 @@ class CoverageData:
             unexecuted_branches=[],
         )
 
-    def log_coverage(self) -> None:  # noqa: C901, PLR0912
+    def log_coverage(self) -> None:
         """Annotate the source code with the coverage data."""
         if not self.coverage:
             logger.debug(self)
