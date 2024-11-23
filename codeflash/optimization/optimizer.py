@@ -385,6 +385,7 @@ class Optimizer:
                         ),
                         function_trace_id=function_trace_id,
                         coverage_pct=coverage_pct,
+                        remote_name=self.args.remote_name,
                     )
                     if self.args.all or env_utils.get_pr_number():
                         self.write_code_and_helpers(

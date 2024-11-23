@@ -115,6 +115,7 @@ def process_pyproject_config(args: Namespace) -> Namespace:
         "formatter_cmds",
         "disable_telemetry",
         "disable_imports_sorting",
+        "remote_name",
     ]
     for key in supported_keys:
         if key in pyproject_config and (

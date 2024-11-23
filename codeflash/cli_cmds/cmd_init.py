@@ -22,7 +22,7 @@ from codeflash.cli_cmds.cli_common import apologize_and_exit, inquirer_wrapper, 
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import get_codeflash_api_key
-from codeflash.code_utils.git_utils import get_repo_owner_and_name
+from codeflash.code_utils.git_utils import get_remote_names, get_repo_owner_and_name
 from codeflash.code_utils.github_utils import get_github_secrets_page_url, require_github_app_or_exit
 from codeflash.code_utils.shell_utils import get_shell_rc_path, save_api_key_to_rc
 from codeflash.telemetry.posthog_cf import ph
@@ -49,6 +49,7 @@ class SetupInfo:
     test_framework: str
     ignore_paths: list[str]
     formatter: str
+    remote_name: str
 
 
 def init_codeflash() -> None:
@@ -186,6 +187,19 @@ def collect_setup_info() -> SetupInfo:
         carousel=True,
     )
 
+    repo = Repo(str(module_root), search_parent_directories=True)
+    remote_names = get_remote_names(repo)
+    if len(remote_names) > 1:
+        remote_name = inquirer_wrapper(
+            inquirer.list_input,
+            message="What is the name of the remote you use to push your code to Github? Codeflash will suggest PRs here ",
+            choices=remote_names,
+            default="origin",
+            carousel=True,
+        )
+    else:
+        remote_name = remote_names[0]
+
     ignore_paths: list[str] = []
     return SetupInfo(
         module_root=str(module_root),
@@ -193,6 +207,7 @@ def collect_setup_info() -> SetupInfo:
         test_framework=cast(str, test_framework),
         ignore_paths=ignore_paths,
         formatter=cast(str, formatter),
+        remote_name=str(remote_name),
     )
 
 
@@ -406,6 +421,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     codeflash_section["tests-root"] = setup_info.tests_root
     codeflash_section["test-framework"] = setup_info.test_framework
     codeflash_section["ignore-paths"] = setup_info.ignore_paths
+    codeflash_section["remote-name"] = setup_info.remote_name
     formatter = setup_info.formatter
     formatter_cmds = []
     if formatter == "black":
