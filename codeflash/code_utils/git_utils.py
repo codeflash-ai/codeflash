@@ -69,7 +69,7 @@ def get_current_branch(repo: Repo | None = None) -> str:
     return repository.active_branch.name
 
 
-def get_remote_url(repo: Repo | None = None, remote_name: str = "origin") -> str:
+def get_remote_url(repo: Repo | None = None, remote_name: str | None = "origin") -> str:
     repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
     return repository.remote(name=remote_name).url
 
@@ -79,7 +79,7 @@ def get_remote_names(repo: Repo) -> list[str]:
     return [remote.name for remote in repository.remotes]
 
 
-def get_repo_owner_and_name(repo: Repo | None = None, remote_name: str = "origin") -> tuple[str, str]:
+def get_repo_owner_and_name(repo: Repo | None = None, remote_name: str | None = "origin") -> tuple[str, str]:
     remote_url = get_remote_url(repo, remote_name)  # call only once
     remote_url = get_remote_url(repo, remote_name).removesuffix(".git") if remote_url.endswith(".git") else remote_url
     split_url = remote_url.split("/")
