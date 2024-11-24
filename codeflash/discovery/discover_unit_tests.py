@@ -84,7 +84,7 @@ def discover_tests_pytest(
     for test in tests:
         if "__replay_test" in test["test_file"]:
             test_type = TestType.REPLAY_TEST
-        elif "test_concolic_coverage.py" in test["test_file"]:
+        elif "test_concolic_coverage" in test["test_file"]:
             test_type = TestType.CONCOLIC_COVERAGE_TEST
         else:
             test_type = TestType.EXISTING_UNIT_TEST
@@ -126,7 +126,7 @@ def discover_tests_unittest(
             return None
         if "__replay_test" in str(_test_module_path):
             test_type = TestType.REPLAY_TEST
-        elif "test_concolic_coverage.py" in str(_test_module_path):
+        elif "test_concolic_coverage" in str(_test_module_path):
             test_type = TestType.CONCOLIC_COVERAGE_TEST
         else:
             test_type = TestType.EXISTING_UNIT_TEST

@@ -224,9 +224,8 @@ class Optimizer:
 
                         if cover_result.returncode == 0:
                             concolic_test_suite_code: str = cover_result.stdout
-                            logger.info(
-                                f"Test suite generated through concolic opcode coverage:\n{concolic_test_suite_code}"
-                            )
+                            logger.info("Test suite generated through concolic opcode coverage:")
+                            code_print(concolic_test_suite_code)
                             concolic_test_suite_dir = Path(tempfile.mkdtemp(dir=concolic_test_suite_dir_root))
                             concolic_test_suite_path = concolic_test_suite_dir / "test_concolic_coverage.py"
                             concolic_test_suite_path.write_text(concolic_test_suite_code, encoding="utf8")
@@ -285,6 +284,8 @@ class Optimizer:
             for test_file in self.test_files.get_by_type(TestType.GENERATED_REGRESSION).test_files:
                 test_file.instrumented_file_path.unlink(missing_ok=True)
             for test_file in self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
+                test_file.instrumented_file_path.unlink(missing_ok=True)
+            for test_file in self.test_files.get_by_type(TestType.CONCOLIC_COVERAGE_TEST).test_files:
                 test_file.instrumented_file_path.unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
@@ -831,9 +832,9 @@ class Optimizer:
             logger.info(
                 f"Discovered {existing_test_files_count} existing unit test file"
                 f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
-                f"{'s' if replay_test_files_count != 1 else ''}, and  "
+                f"{'s' if replay_test_files_count != 1 else ''}, and "
                 f"{concolic_coverage_test_files_count} concolic coverage test file"
-                f"{'s' if replay_test_files_count != 1 else ''} for {func_qualname}"
+                f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
             )
         return unique_instrumented_test_files
 
@@ -999,9 +1000,12 @@ class Optimizer:
             console.rule()
 
             existing_test_results = TestResults()
+            concolic_test_results = TestResults()
             for result in unittest_results:
                 if result.test_type == TestType.EXISTING_UNIT_TEST:
                     existing_test_results.add(result)
+                elif result.test_type == TestType.CONCOLIC_COVERAGE_TEST:
+                    concolic_test_results.add(result)
             generated_test_results = TestResults()
             for result in unittest_results:
                 if result.test_type == TestType.GENERATED_REGRESSION:
@@ -1042,6 +1046,7 @@ class Optimizer:
                     OriginalCodeBaseline(
                         generated_test_results=generated_test_results,
                         existing_test_results=existing_test_results,
+                        concolic_test_results=concolic_test_results,
                         overall_test_results=unittest_results,
                         runtime=total_timing,
                         coverage_results=coverage_results,

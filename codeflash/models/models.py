@@ -159,6 +159,7 @@ class FunctionParent:
 class OriginalCodeBaseline(BaseModel):
     generated_test_results: TestResults
     existing_test_results: TestResults
+    concolic_test_results: TestResults
     overall_test_results: Optional[TestResults]
     runtime: int
     coverage_results: Optional[CoverageData]
