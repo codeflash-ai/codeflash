@@ -199,13 +199,13 @@ class Optimizer:
                     if concolic_test_suite_dir_root and has_typed_parameters(
                         function_to_optimize_ast, function_to_optimize.parents
                     ):
-                        logger.info("Generating concolic opcode coverage test suite for the original code…")
+                        logger.info("Generating concolic opcode coverage tests for the original code…")
                         cover_result = subprocess.run(
                             [
                                 "crosshair",
                                 "cover",
                                 "--example_output_format=pytest",
-                                "--max_uninteresting_iterations=256",
+                                "--per_condition_timeout=64",
                                 ".".join(
                                     [
                                         function_to_optimize.file_path.relative_to(self.args.project_root)
@@ -228,7 +228,7 @@ class Optimizer:
                                 f"Test suite generated through concolic opcode coverage:\n{concolic_test_suite_code}"
                             )
                             concolic_test_suite_dir = Path(tempfile.mkdtemp(dir=concolic_test_suite_dir_root))
-                            concolic_test_suite_path = concolic_test_suite_dir / "concolic_test_suite.py"
+                            concolic_test_suite_path = concolic_test_suite_dir / "test_concolic_coverage.py"
                             concolic_test_suite_path.write_text(concolic_test_suite_code, encoding="utf8")
 
                             logger.info(f"Discovering concolic unit tests in {concolic_test_suite_path}…")
@@ -245,9 +245,9 @@ class Optimizer:
                             )
                             logger.info(
                                 f"Discovered {num_discovered_concolic_tests} "
-                                f"concolic unit tests in {concolic_test_suite_path}"
+                                f"concolic unit test{'s' if num_discovered_concolic_tests != 1 else ''} "
+                                f"in {concolic_test_suite_path}"
                             )
-                            console.rule()
                             ph("cli-optimize-concolic-tests", {"num_tests": num_discovered_concolic_tests})
 
                         else:
@@ -775,6 +775,7 @@ class Optimizer:
     ) -> set[Path]:
         existing_test_files_count = 0
         replay_test_files_count = 0
+        concolic_coverage_test_files_count = 0
         unique_instrumented_test_files = set()
 
         func_qualname = function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
@@ -792,6 +793,8 @@ class Optimizer:
                     existing_test_files_count += 1
                 elif test_type == TestType.REPLAY_TEST:
                     replay_test_files_count += 1
+                elif test_type == TestType.CONCOLIC_COVERAGE_TEST:
+                    concolic_coverage_test_files_count += 1
                 else:
                     msg = f"Unexpected test type: {test_type}"
                     raise ValueError(msg)
@@ -827,7 +830,9 @@ class Optimizer:
                     )
             logger.info(
                 f"Discovered {existing_test_files_count} existing unit test file"
-                f"{'s' if existing_test_files_count != 1 else ''} and {replay_test_files_count} replay test file"
+                f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
+                f"{'s' if replay_test_files_count != 1 else ''}, and  "
+                f"{concolic_coverage_test_files_count} concolic coverage test file"
                 f"{'s' if replay_test_files_count != 1 else ''} for {func_qualname}"
             )
         return unique_instrumented_test_files
