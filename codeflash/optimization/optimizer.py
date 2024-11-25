@@ -43,7 +43,6 @@ from codeflash.code_utils.remove_generated_tests import remove_functions_from_ge
 from codeflash.code_utils.static_analysis import (
     analyze_imported_modules,
     get_first_top_level_function_or_method_ast,
-    has_typed_parameters,
 )
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
@@ -67,6 +66,7 @@ from codeflash.result.create_pr import check_create_pr, existing_tests_source_fo
 from codeflash.result.critic import performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
+from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestResults, TestType
@@ -122,9 +122,8 @@ class Optimizer:
 
         optimizations_found: int = 0
         function_iterator_count: int = 0
-        concolic_test_suite_dir_root = None
         if self.args.test_framework == "pytest":
-            concolic_test_suite_dir_root = Path(tempfile.mkdtemp(dir=self.args.tests_root))
+            self.test_cfg.concolic_test_root_dir = Path(tempfile.mkdtemp(dir=self.args.tests_root))
         try:
             ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
             if num_optimizable_functions == 0:
@@ -200,67 +199,10 @@ class Optimizer:
 
                     concolic_test_suite_dir: Path | None = None
                     function_to_concolic_tests: dict[str, list[FunctionCalledInTest]] = {}
-                    if concolic_test_suite_dir_root and has_typed_parameters(
-                        function_to_optimize_ast, function_to_optimize.parents
-                    ):
-                        logger.info("Generating concolic opcode coverage tests for the original code…")
-                        cover_result = subprocess.run(
-                            [
-                                "crosshair",
-                                "cover",
-                                "--example_output_format=pytest",
-                                "--per_condition_timeout=64",
-                                ".".join(
-                                    [
-                                        function_to_optimize.file_path.relative_to(self.args.project_root)
-                                        .with_suffix("")
-                                        .as_posix()
-                                        .replace("/", "."),
-                                        function_to_optimize.qualified_name,
-                                    ]
-                                ),
-                            ],
-                            capture_output=True,
-                            text=True,
-                            cwd=self.args.project_root,
-                            check=False,
-                        )
+                    generate_concolic_tests(test_cfg=self.test_cfg, args=self.args,
+                                            function_to_optimize=function_to_optimize,
+                                            function_to_optimize_ast=function_to_optimize_ast)
 
-                        if cover_result.returncode == 0:
-                            concolic_test_suite_code: str = cover_result.stdout
-                            logger.info("Test suite generated through concolic opcode coverage:")
-                            code_print(concolic_test_suite_code)
-                            concolic_test_suite_dir = Path(tempfile.mkdtemp(dir=concolic_test_suite_dir_root))
-                            concolic_test_suite_path = concolic_test_suite_dir / "test_concolic_coverage.py"
-                            concolic_test_suite_path.write_text(concolic_test_suite_code, encoding="utf8")
-
-                            logger.debug(f"Discovering concolic unit tests in {concolic_test_suite_path}…")
-                            concolic_test_cfg = TestConfig(
-                                tests_root=concolic_test_suite_dir,
-                                tests_project_rootdir=concolic_test_suite_dir_root,
-                                project_root_path=self.args.project_root,
-                                test_framework=self.args.test_framework,
-                                pytest_cmd=self.args.pytest_cmd,
-                            )
-                            function_to_concolic_tests = discover_unit_tests(concolic_test_cfg)
-                            num_discovered_concolic_tests: int = sum(
-                                [len(value) for value in function_to_concolic_tests.values()]
-                            )
-                            logger.debug(
-                                f"Discovered {num_discovered_concolic_tests} "
-                                f"concolic unit test{'s' if num_discovered_concolic_tests != 1 else ''} "
-                                f"in {concolic_test_suite_path}"
-                            )
-                            ph("cli-optimize-concolic-tests", {"num_tests": num_discovered_concolic_tests})
-
-                        else:
-                            (
-                                logger.warning(
-                                    "Error running CrossHair Cover"
-                                    f"{': ' + cover_result.stderr if cover_result.stderr else '.'}"
-                                )
-                            )
-                        console.rule()
 
                     best_optimization = self.optimize_function(
                         function_to_optimize,
@@ -293,8 +235,8 @@ class Optimizer:
                 test_file.instrumented_file_path.unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
-            if concolic_test_suite_dir_root:
-                shutil.rmtree(concolic_test_suite_dir_root)
+            if self.test_cfg.concolic_test_suite_dir_root:
+                shutil.rmtree(self.test_cfg.concolic_test_suite_dir_root)
 
     def optimize_function(
         self,
