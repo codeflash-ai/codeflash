@@ -246,7 +246,7 @@ class Optimizer:
                             num_discovered_concolic_tests: int = sum(
                                 [len(value) for value in function_to_concolic_tests.values()]
                             )
-                            logger.warning(
+                            logger.debug(
                                 f"Discovered {num_discovered_concolic_tests} "
                                 f"concolic unit test{'s' if num_discovered_concolic_tests != 1 else ''} "
                                 f"in {concolic_test_suite_path}"
