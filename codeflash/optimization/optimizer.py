@@ -235,8 +235,8 @@ class Optimizer:
                 test_file.instrumented_file_path.unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
-            if self.test_cfg.concolic_test_suite_dir_root:
-                shutil.rmtree(self.test_cfg.concolic_test_suite_dir_root)
+            if self.test_cfg.concolic_test_root_dir:
+                shutil.rmtree(self.test_cfg.concolic_test_root_dir)
 
     def optimize_function(
         self,
