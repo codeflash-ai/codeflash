@@ -76,7 +76,6 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
         logger.info(f"Codeflash version {version}")
         sys.exit()
     if not check_running_in_git_repo(module_root=args.module_root):
-        logger.info("Running in a non-git repository")
         if not confirm_proceeding_with_no_git_repo():
             logger.critical("No git repository detected and user aborted run. Exiting...")
             sys.exit(1)
