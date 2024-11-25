@@ -11,6 +11,7 @@ from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.coverage_utils import extract_dependent_function, generate_candidates
+from codeflash.code_utils.env_utils import is_end_to_end
 from codeflash.verification.test_results import TestResults, TestType
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
@@ -195,7 +196,6 @@ class CoverageData:
             functions_being_tested.append(dependent_func_coverage.name)
 
         graph = CoverageData._build_graph(main_func_coverage, dependent_func_coverage)
-
         return CoverageData(
             file_path=source_code_path,
             coverage=coverage,
@@ -345,49 +345,23 @@ class CoverageData:
             unexecuted_branches=[],
         )
 
-    def log_coverage(self) -> None:  # noqa: C901, PLR0912
-        """Annotate the source code with the coverage data."""
-        if not self.coverage:
-            logger.debug(self)
-            console.rule(f"No coverage data found for {self.function_name}")
-            return
+    def log_coverage(self) -> None:
+        from rich.tree import Tree
 
-        console.rule(f"Coverage data for {self.function_name}: {self.coverage:.2f}%")
-
+        tree = Tree("Test Coverage Results")
+        tree.add(f"Main Function: {self.main_func_coverage.name}: {self.coverage:.2f}%")
         if self.dependent_func_coverage:
-            console.rule(
-                f"Dependent function {self.dependent_func_coverage.name}: {self.dependent_func_coverage.coverage:.2f}%"
+            tree.add(
+                f"Dependent Function: {self.dependent_func_coverage.name}: {self.dependent_func_coverage.coverage:.2f}%"
             )
-        # TODO: fix this eventually to get a visual representation of the coverage data, will make it easier to grasp the coverage data and our impact on it
-        # from rich.panel import Panel
-        # from rich.syntax import Syntax
+        tree.add(f"Total Coverage: {self.coverage:.2f}%")
+        console.print(tree)
+        console.rule()
 
-        # union_executed_lines = sorted(
-        #     {line for func in self.functions_being_tested for line in self.graph[func]["executed_lines"]}
-        # )
-        # union_unexecuted_lines = sorted(
-        #     {line for func in self.functions_being_tested for line in self.graph[func]["unexecuted_lines"]}
-        # )
-        # # adapted from nedbat/coveragepy/coverage/annotate.py:annotate_file
-        # # src = self.code_context.code_to_optimize_with_helpers.splitlines()
-        # src = self.main_func_coverage.
-        # output = ""
-        # for i, line in enumerate(src, 1):
-        #     if i in union_executed_lines:
-        #         output += f"✅ {line}"
-        #     elif i in union_unexecuted_lines:
-        #         output += f"❌ {line}"
-        #     else:
-        #         output += line
-        #     output += "\n"
-
-        # panel = Panel(
-        #     Syntax(output, "python", line_numbers=True, theme="github-dark"),
-        #     title=f"Coverage: {self.coverage}%",
-        #     subtitle=f"Functions tested: {', '.join(self.functions_being_tested)}",
-        # )
-
-        # console.print(panel)
+        if not self.coverage:
+            logger.debug(self.graph)
+        if is_end_to_end():
+            console.print(self)
 
 
 @dataclass
