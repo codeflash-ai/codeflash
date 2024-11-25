@@ -188,11 +188,15 @@ class Optimizer:
                             function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
                         )
                     ):
-                        logger.warning(
+                        logger.info(
                             f"Function {function_to_optimize.qualified_name} not found in {original_module_path}.\n"
                             f"Skipping optimization."
                         )
                         continue
+                    if function_to_optimize_code := ast.get_source_segment(
+                        original_module_code, function_to_optimize_ast, padded=True
+                    ):
+                        code_print(function_to_optimize_code)
 
                     concolic_test_suite_dir: Path | None = None
                     function_to_concolic_tests: dict[str, list[FunctionCalledInTest]] = {}
@@ -230,7 +234,7 @@ class Optimizer:
                             concolic_test_suite_path = concolic_test_suite_dir / "test_concolic_coverage.py"
                             concolic_test_suite_path.write_text(concolic_test_suite_code, encoding="utf8")
 
-                            logger.info(f"Discovering concolic unit tests in {concolic_test_suite_path}…")
+                            logger.debug(f"Discovering concolic unit tests in {concolic_test_suite_path}…")
                             concolic_test_cfg = TestConfig(
                                 tests_root=concolic_test_suite_dir,
                                 tests_project_rootdir=concolic_test_suite_dir_root,
@@ -242,7 +246,7 @@ class Optimizer:
                             num_discovered_concolic_tests: int = sum(
                                 [len(value) for value in function_to_concolic_tests.values()]
                             )
-                            logger.info(
+                            logger.warning(
                                 f"Discovered {num_discovered_concolic_tests} "
                                 f"concolic unit test{'s' if num_discovered_concolic_tests != 1 else ''} "
                                 f"in {concolic_test_suite_path}"

@@ -22,7 +22,7 @@ class TestType(Enum):
 
     def to_name(self) -> str:
         names = {
-            TestType.EXISTING_UNIT_TEST: "⚙  Existing Unit Tests",
+            TestType.EXISTING_UNIT_TEST: "⚙️Existing Unit Tests",
             TestType.INSPIRED_REGRESSION: "🎨 Inspired Regression Tests",
             TestType.GENERATED_REGRESSION: "🌀 Generated Regression Tests",
             TestType.REPLAY_TEST: "⏪  Replay Tests",

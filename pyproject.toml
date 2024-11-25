@@ -67,7 +67,7 @@ exclude = [
 
 # Versions here the minimum required versions for the project. These should be as loose as possible.
 [tool.poetry.dependencies]
-python = "^3.9"
+python = ">=3.9"
 unidiff = ">=0.7.4"
 pytest = ">=7.0.0"
 gitpython = ">=3.1.31"
@@ -89,9 +89,9 @@ sentry-sdk = ">=1.40.6,<3.0.0"
 parameterized = ">=0.9.0"
 returns = ">=0.23"
 isort = ">=5.11.0"
-dill = "^0.3.8"
-rich = "^13.8.1"
-lxml = "^5.3.0"
+dill = ">=0.3.8"
+rich = ">=13.8.1"
+lxml = ">=5.3.0"
 crosshair-tool = ">=0.0.78"
 coverage = ">=7.6.4"
 
@@ -103,21 +103,21 @@ optional = true
 # poetry self add poetry-dynamic-versioning
 
 [tool.poetry.group.dev.dependencies]
-ipython = "^8.12.0"
+ipython = ">=8.12.0"
 mypy = ">=1.13"
 ruff = ">=0.7.0"
-lxml-stubs = "^0.5.1"
+lxml-stubs = ">=0.5.1"
 pandas-stubs = ">=2.2.2.240807, <2.2.3.241009"
-types-Pygments = "^2.18.0.20240506"
-types-colorama = "^0.4.15.20240311"
-types-decorator = "^5.1.8.20240310"
-types-jsonschema = "^4.23.0.20240813"
-types-requests = "^2.32.0.20241016"
-types-six = "^1.16.21.20241009"
-types-cffi = "^1.16.0.20240331"
-types-openpyxl = "^3.1.5.20241020"
-types-regex = "^2024.9.11.20240912"
-types-python-dateutil = "^2.9.0.20241003"
+types-Pygments = ">=2.18.0.20240506"
+types-colorama = ">=0.4.15.20240311"
+types-decorator = ">=5.1.8.20240310"
+types-jsonschema = ">=4.23.0.20240813"
+types-requests = ">=2.32.0.20241016"
+types-six = ">=1.16.21.20241009"
+types-cffi = ">=1.16.0.20240331"
+types-openpyxl = ">=3.1.5.20241020"
+types-regex = ">=2024.9.11.20240912"
+types-python-dateutil = ">=2.9.0.20241003"
 
 [tool.poetry.build]
 script = "codeflash/update_license_version.py"
