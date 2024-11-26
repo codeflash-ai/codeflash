@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from enum import Enum
+from enum import Enum, IntEnum
 from pathlib import Path
 from typing import Any, Collection, Iterator, Optional, Union
 
@@ -20,9 +20,19 @@ from codeflash.verification.test_results import TestResults, TestType
 # of the module is foo.eggs.
 
 
-class ValidCode(BaseModel, frozen=True):
+class ValidCode(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     source_code: str
     normalized_code: str
+
+
+# TODO COVER FIX
+class CoverReturnCode(IntEnum):
+    DID_NOT_RUN = -1
+    NO_DIFFERENCES = 0
+    COUNTER_EXAMPLES = 1
+    ERROR = 2
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
@@ -150,6 +160,7 @@ class FunctionParent:
 class OriginalCodeBaseline(BaseModel):
     generated_test_results: TestResults
     existing_test_results: TestResults
+    concolic_test_results: TestResults
     overall_test_results: Optional[TestResults]
     runtime: int
     coverage_results: Optional[CoverageData]
