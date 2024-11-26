@@ -369,10 +369,10 @@ class Optimizer:
                 new_code_combined = new_helper_code.copy()
                 new_code_combined[explanation.file_path] = new_code
                 if not self.args.no_pr:
-                    coverage_pct = (
-                        original_code_baseline.coverage_results.coverage
+                    coverage_message = (
+                        original_code_baseline.coverage_results.build_message()
                         if original_code_baseline.coverage_results
-                        else 0.0
+                        else "Coverage data not available"
                     )
 
                     check_create_pr(
@@ -384,7 +384,7 @@ class Optimizer:
                             [test.generated_original_test_source for test in generated_tests.generated_tests]
                         ),
                         function_trace_id=function_trace_id,
-                        coverage_pct=coverage_pct,
+                        coverage_message=coverage_message,
                     )
                     if self.args.all or env_utils.get_pr_number():
                         self.write_code_and_helpers(
@@ -813,7 +813,6 @@ class Optimizer:
             logger.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
             console.rule()
             generated_tests = GeneratedTestsList(generated_tests=tests)
-
         return Success((generated_tests, OptimizationSet(control=candidates, experiment=candidates_experiment)))
 
     def establish_original_code_baseline(

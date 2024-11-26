@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from enum import Enum
 from pathlib import Path
 from typing import Any, Collection, Iterator, Optional, Union
 
@@ -154,6 +155,11 @@ class OriginalCodeBaseline(BaseModel):
     coverage_results: Optional[CoverageData]
 
 
+class CoverageStatus(Enum):
+    NOT_FOUND = "Coverage Data Not Found"
+    PARSED_SUCCESSFULLY = "Parsed Successfully"
+
+
 @dataclass(config=ConfigDict(arbitrary_types_allowed=True))
 class CoverageData:
     """Represents the coverage data for a specific function in a source file, using one or more test files."""
@@ -166,6 +172,7 @@ class CoverageData:
     code_context: CodeOptimizationContext
     main_func_coverage: FunctionCoverage
     dependent_func_coverage: Union[FunctionCoverage, None]
+    status: CoverageStatus
     blank_re = re.compile(r"\s*(#|$)")
     else_re = re.compile(r"\s*else\s*:\s*(#|$)")
 
@@ -178,7 +185,7 @@ class CoverageData:
 
         with coverage_file_path.open() as f:
             original_coverage_data = load(f)  # we can remove this once we're done debugging
-        coverage_data = CoverageData._parse_coverage_file(coverage_file_path, source_code_path)
+        coverage_data, status = CoverageData._parse_coverage_file(coverage_file_path, source_code_path)
         main_func_coverage, dependent_func_coverage = CoverageData._fetch_function_coverages(
             function_name, code_context, coverage_data, original_cov_data=original_coverage_data
         )
@@ -205,10 +212,13 @@ class CoverageData:
             code_context=code_context,
             main_func_coverage=main_func_coverage,
             dependent_func_coverage=dependent_func_coverage,
+            status=status,
         )
 
     @staticmethod
-    def _parse_coverage_file(coverage_file_path: Path, source_code_path: Path) -> dict[str, dict[str, Any]]:
+    def _parse_coverage_file(
+        coverage_file_path: Path, source_code_path: Path
+    ) -> tuple[dict[str, dict[str, Any]], CoverageStatus]:
         with coverage_file_path.open() as f:
             coverage_data = json.load(f)
 
@@ -219,13 +229,15 @@ class CoverageData:
             try:
                 cov: dict[str, dict[str, Any]] = coverage_data["files"][candidate]["functions"]
                 logger.debug(f"Coverage data found for {source_code_path} in {candidate}")
+                status = CoverageStatus.PARSED_SUCCESSFULLY
                 break
             except KeyError:
                 continue
         else:
             logger.debug(f"No coverage data found for {source_code_path} in {candidates}")
             cov = {}
-        return cov
+            status = CoverageStatus.NOT_FOUND
+        return cov, status
 
     @staticmethod
     def _fetch_function_coverages(
@@ -344,6 +356,11 @@ class CoverageData:
             executed_branches=[],
             unexecuted_branches=[],
         )
+
+    def build_message(self) -> str:
+        if self.status == CoverageStatus.NOT_FOUND:
+            return f"No coverage data found for {self.function_name}"
+        return f"{self.coverage:.2f}%"
 
     def log_coverage(self) -> None:
         from rich.tree import Tree
