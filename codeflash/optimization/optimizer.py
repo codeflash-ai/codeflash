@@ -190,14 +190,12 @@ class Optimizer:
                         )
                         continue
 
-                    concolic_test_suite_dir: Path | None = None
-
                     best_optimization = self.optimize_function(
                         function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code
                     )
+                    if self.test_cfg.concolic_test_root_dir:
+                        shutil.rmtree(self.test_cfg.concolic_test_root_dir)  # TODO: This will not work for --all
                     self.test_files = TestFiles(test_files=[])
-                    if concolic_test_suite_dir:
-                        shutil.rmtree(concolic_test_suite_dir)
                     if is_successful(best_optimization):
                         optimizations_found += 1
                     else:
