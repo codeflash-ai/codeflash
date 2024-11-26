@@ -199,8 +199,7 @@ def parse_test_xml(
                     f"Accessing testcase.name in parse_test_xml for testcase {testcase!r} in file"
                     f" {test_xml_file_path} has exception: {e}"
                 )
-                if DEBUG_MODE:
-                    logger.exception(msg)
+                logger.exception(msg)
                 continue
             if test_file_name is None:
                 if test_class_path:

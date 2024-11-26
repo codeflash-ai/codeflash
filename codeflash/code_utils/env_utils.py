@@ -38,11 +38,6 @@ def ensure_codeflash_api_key() -> bool:
 
 
 @lru_cache(maxsize=1)
-def get_codeflash_org_key() -> Optional[str]:
-    return os.environ.get("CODEFLASH_ORG_KEY")
-
-
-@lru_cache(maxsize=1)
 def get_pr_number() -> Optional[int]:
     pr_number = os.environ.get("CODEFLASH_PR_NUMBER")
     if not pr_number:
