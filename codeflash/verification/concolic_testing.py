@@ -59,7 +59,7 @@ def generate_concolic_tests(
             )
             function_to_concolic_tests = discover_unit_tests(concolic_test_cfg)
             num_discovered_concolic_tests: int = sum([len(value) for value in function_to_concolic_tests.values()])
-            logger.debug(
+            logger.info(
                 f"Created {num_discovered_concolic_tests} "
                 f"concolic unit test case{'s' if num_discovered_concolic_tests != 1 else ''} "
             )
