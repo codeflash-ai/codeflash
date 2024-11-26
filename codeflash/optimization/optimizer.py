@@ -189,10 +189,6 @@ class Optimizer:
                             f"Skipping optimization."
                         )
                         continue
-                    if function_to_optimize_code := ast.get_source_segment(
-                        original_module_code, function_to_optimize_ast, padded=True
-                    ):
-                        code_print(function_to_optimize_code)
 
                     concolic_test_suite_dir: Path | None = None
 
