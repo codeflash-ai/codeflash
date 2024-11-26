@@ -193,8 +193,6 @@ class Optimizer:
                     best_optimization = self.optimize_function(
                         function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code
                     )
-                    if self.test_cfg.concolic_test_root_dir:
-                        shutil.rmtree(self.test_cfg.concolic_test_root_dir)  # TODO: This will not work for --all
                     self.test_files = TestFiles(test_files=[])
                     if is_successful(best_optimization):
                         optimizations_found += 1
@@ -217,7 +215,7 @@ class Optimizer:
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
             if self.test_cfg.concolic_test_root_dir:
-                shutil.rmtree(self.test_cfg.concolic_test_root_dir)
+                shutil.rmtree(self.test_cfg.concolic_test_root_dir, ignore_errors=True)
 
     def optimize_function(
         self,
@@ -428,6 +426,11 @@ class Optimizer:
             generated_test_path.unlink(missing_ok=True)
         for test_paths in instrumented_unittests_created_for_function:
             test_paths.unlink(missing_ok=True)
+        for fn in function_to_concolic_tests:
+            for test in function_to_concolic_tests[fn]:
+                shutil.rmtree(test.tests_in_file.test_file.parent)
+                break  # need to delete only one test directory
+
         if not best_optimization:
             return Failure(f"No best optimizations found for function {function_to_optimize.qualified_name}")
         return Success(best_optimization)
