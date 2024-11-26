@@ -260,9 +260,6 @@ class Optimizer:
                 self.args.project_root,
             )
 
-        instrumented_unittests_created_for_function = self.instrument_existing_tests(
-            function_to_optimize=function_to_optimize, function_to_tests=function_to_tests
-        )
         generated_test_paths = [
             get_test_file_path(self.test_cfg.tests_root, function_to_optimize.function_name, test_index)
             for test_index in range(N_TESTS_TO_GENERATE)
@@ -313,6 +310,9 @@ class Optimizer:
             key: function_to_tests.get(key, []) + function_to_concolic_tests.get(key, [])
             for key in set(function_to_tests) | set(function_to_concolic_tests)
         }
+        instrumented_unittests_created_for_function = self.instrument_existing_tests(
+            function_to_optimize=function_to_optimize, function_to_tests=function_to_all_tests
+        )
 
         baseline_result = self.establish_original_code_baseline(
             function_to_optimize_qualified_name,
