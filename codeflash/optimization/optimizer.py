@@ -292,8 +292,10 @@ class Optimizer:
             return Failure(generated_results.failure())
         generated_tests: GeneratedTestsList
         optimizations_set: OptimizationSet
-        generated_tests, function_to_concolic_tests, optimizations_set = generated_results.unwrap()
+        generated_tests, function_to_concolic_tests, concolic_test_str, optimizations_set = generated_results.unwrap()
         count_tests = len(generated_tests.generated_tests)
+        if concolic_test_str:
+            count_tests += 1
 
         for i, generated_test in enumerate(generated_tests.generated_tests):
             with generated_test.file_path.open("w", encoding="utf8") as f:
@@ -308,6 +310,9 @@ class Optimizer:
             )
             logger.info(f"Generated test {i + 1}/{count_tests}:")
             code_print(generated_test.generated_original_test_source)
+        if concolic_test_str:
+            logger.info(f"Generated test {count_tests}/{count_tests}:")
+            code_print(concolic_test_str)
 
         function_to_optimize_qualified_name = function_to_optimize.qualified_name
         function_to_all_tests = {
@@ -853,7 +858,7 @@ class Optimizer:
             if not tests:
                 logger.warning(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")
                 return Failure(f"/!\\ NO TESTS GENERATED for {function_to_optimize.function_name}")
-            function_to_concolic_tests: dict[str, list[FunctionCalledInTest]] = future_concolic_tests.result()
+            function_to_concolic_tests, concolic_test_str = future_concolic_tests.result()
             logger.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
             console.rule()
             generated_tests = GeneratedTestsList(generated_tests=tests)
@@ -862,6 +867,7 @@ class Optimizer:
             (
                 generated_tests,
                 function_to_concolic_tests,
+                concolic_test_str,
                 OptimizationSet(control=candidates, experiment=candidates_experiment),
             )
         )
