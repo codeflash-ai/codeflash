@@ -18,6 +18,7 @@ class TestType(Enum):
     INSPIRED_REGRESSION = 2
     GENERATED_REGRESSION = 3
     REPLAY_TEST = 4
+    CONCOLIC_COVERAGE_TEST = 5
 
     def to_name(self) -> str:
         names = {
@@ -25,6 +26,7 @@ class TestType(Enum):
             TestType.INSPIRED_REGRESSION: "🎨 Inspired Regression Tests",
             TestType.GENERATED_REGRESSION: "🌀 Generated Regression Tests",
             TestType.REPLAY_TEST: "⏪ Replay Tests",
+            TestType.CONCOLIC_COVERAGE_TEST: "🔎 Concolic Coverage Tests",
         }
         return names[self]
 

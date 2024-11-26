@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import ast
 import concurrent.futures
 import os
+import shutil
 import subprocess
+import tempfile
 import time
 import uuid
 from collections import defaultdict
@@ -22,7 +25,7 @@ from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code, find_preexisting_objects
-from codeflash.code_utils.code_replacer import normalize_code, replace_function_definitions_in_module
+from codeflash.code_utils.code_replacer import normalize_code, normalize_node, replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     file_name_from_test_module_name,
     get_run_tmp_file,
@@ -37,7 +40,7 @@ from codeflash.code_utils.config_consts import (
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
-from codeflash.code_utils.static_analysis import analyze_imported_modules
+from codeflash.code_utils.static_analysis import analyze_imported_modules, get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize, get_functions_to_optimize
@@ -45,7 +48,6 @@ from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
     CodeOptimizationContext,
-    CoverageData,
     FunctionParent,
     GeneratedTests,
     GeneratedTestsList,
@@ -61,6 +63,7 @@ from codeflash.result.create_pr import check_create_pr, existing_tests_source_fo
 from codeflash.result.critic import performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
+from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestResults, TestType
@@ -73,7 +76,7 @@ if TYPE_CHECKING:
 
     from returns.result import Result
 
-    from codeflash.models.models import FunctionCalledInTest, FunctionSource, OptimizedCandidate
+    from codeflash.models.models import CoverageData, FunctionCalledInTest, FunctionSource, OptimizedCandidate
 
 
 class Optimizer:
@@ -103,7 +106,6 @@ class Optimizer:
 
         file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
         num_optimizable_functions: int
-
         (file_to_funcs_to_optimize, num_optimizable_functions) = get_functions_to_optimize(
             optimize_all=self.args.all,
             replay_test=self.args.replay_test,
@@ -116,9 +118,9 @@ class Optimizer:
         )
 
         optimizations_found: int = 0
-
         function_iterator_count: int = 0
-
+        if self.args.test_framework == "pytest":
+            self.test_cfg.concolic_test_root_dir = Path(tempfile.mkdtemp(dir=self.args.tests_root))
         try:
             ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
             if num_optimizable_functions == 0:
@@ -138,11 +140,12 @@ class Optimizer:
 
                 original_module_code: str = original_module_path.read_text(encoding="utf8")
                 try:
-                    normalized_original_module_code = normalize_code(original_module_code)
+                    original_module_ast = ast.parse(original_module_code)
                 except SyntaxError as e:
                     logger.warning(f"Syntax error parsing code in {original_module_path}: {e}")
                     logger.info("Skipping optimization due to file error.")
                     continue
+                normalized_original_module_code = ast.unparse(normalize_node(original_module_ast))
                 validated_original_code: dict[Path, ValidCode] = {
                     original_module_path: ValidCode(
                         source_code=original_module_code, normalized_code=normalized_original_module_code
@@ -176,8 +179,19 @@ class Optimizer:
                         f"{function_to_optimize.qualified_name}"
                     )
 
+                    if not (
+                        function_to_optimize_ast := get_first_top_level_function_or_method_ast(
+                            function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
+                        )
+                    ):
+                        logger.info(
+                            f"Function {function_to_optimize.qualified_name} not found in {original_module_path}.\n"
+                            f"Skipping optimization."
+                        )
+                        continue
+
                     best_optimization = self.optimize_function(
-                        function_to_optimize, function_to_tests, validated_original_code
+                        function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code
                     )
                     self.test_files = TestFiles(test_files=[])
                     if is_successful(best_optimization):
@@ -196,12 +210,17 @@ class Optimizer:
                 test_file.instrumented_file_path.unlink(missing_ok=True)
             for test_file in self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
                 test_file.instrumented_file_path.unlink(missing_ok=True)
+            for test_file in self.test_files.get_by_type(TestType.CONCOLIC_COVERAGE_TEST).test_files:
+                test_file.instrumented_file_path.unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
+            if self.test_cfg.concolic_test_root_dir:
+                shutil.rmtree(self.test_cfg.concolic_test_root_dir, ignore_errors=True)
 
     def optimize_function(
         self,
         function_to_optimize: FunctionToOptimize,
+        function_to_optimize_ast: ast.FunctionDef,
         function_to_tests: dict[str, list[FunctionCalledInTest]],
         validated_original_code: dict[Path, ValidCode],
     ) -> Result[BestOptimization, str]:
@@ -239,9 +258,6 @@ class Optimizer:
                 self.args.project_root,
             )
 
-        instrumented_unittests_created_for_function = self.instrument_existing_tests(
-            function_to_optimize=function_to_optimize, function_to_tests=function_to_tests
-        )
         generated_test_paths = [
             get_test_file_path(self.test_cfg.tests_root, function_to_optimize.function_name, test_index)
             for test_index in range(N_TESTS_TO_GENERATE)
@@ -257,6 +273,7 @@ class Optimizer:
                 Path(original_module_path),
                 function_trace_id,
                 generated_test_paths,
+                function_to_optimize_ast,
                 run_experiment=should_run_experiment,
             )
 
@@ -264,8 +281,10 @@ class Optimizer:
             return Failure(generated_results.failure())
         generated_tests: GeneratedTestsList
         optimizations_set: OptimizationSet
-        generated_tests, optimizations_set = generated_results.unwrap()
+        generated_tests, function_to_concolic_tests, concolic_test_str, optimizations_set = generated_results.unwrap()
         count_tests = len(generated_tests.generated_tests)
+        if concolic_test_str:
+            count_tests += 1
 
         for i, generated_test in enumerate(generated_tests.generated_tests):
             with generated_test.file_path.open("w", encoding="utf8") as f:
@@ -280,11 +299,22 @@ class Optimizer:
             )
             logger.info(f"Generated test {i + 1}/{count_tests}:")
             code_print(generated_test.generated_original_test_source)
+        if concolic_test_str:
+            logger.info(f"Generated test {count_tests}/{count_tests}:")
+            code_print(concolic_test_str)
 
         function_to_optimize_qualified_name = function_to_optimize.qualified_name
+        function_to_all_tests = {
+            key: function_to_tests.get(key, []) + function_to_concolic_tests.get(key, [])
+            for key in set(function_to_tests) | set(function_to_concolic_tests)
+        }
+        instrumented_unittests_created_for_function = self.instrument_existing_tests(
+            function_to_optimize=function_to_optimize, function_to_tests=function_to_all_tests
+        )
+
         baseline_result = self.establish_original_code_baseline(
             function_to_optimize_qualified_name,
-            function_to_tests.get(original_module_path + "." + function_to_optimize_qualified_name, []),
+            function_to_all_tests.get(original_module_path + "." + function_to_optimize_qualified_name, []),
             function_file_path=function_to_optimize.file_path,
             code_context=code_context,
         )
@@ -304,7 +334,7 @@ class Optimizer:
             if candidates is None:
                 continue
 
-            tests_in_file: list[FunctionCalledInTest] = function_to_tests.get(
+            tests_in_file: list[FunctionCalledInTest] = function_to_all_tests.get(
                 function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root), []
             )
 
@@ -358,7 +388,7 @@ class Optimizer:
 
                 existing_tests = existing_tests_source_for(
                     function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root),
-                    function_to_tests,
+                    function_to_all_tests,
                     tests_root=self.test_cfg.tests_root,
                 )
 
@@ -396,6 +426,11 @@ class Optimizer:
             generated_test_path.unlink(missing_ok=True)
         for test_paths in instrumented_unittests_created_for_function:
             test_paths.unlink(missing_ok=True)
+        for fn in function_to_concolic_tests:
+            for test in function_to_concolic_tests[fn]:
+                shutil.rmtree(test.tests_in_file.test_file.parent)
+                break  # need to delete only one test directory
+
         if not best_optimization:
             return Failure(f"No best optimizations found for function {function_to_optimize.qualified_name}")
         return Success(best_optimization)
@@ -683,6 +718,7 @@ class Optimizer:
     ) -> set[Path]:
         existing_test_files_count = 0
         replay_test_files_count = 0
+        concolic_coverage_test_files_count = 0
         unique_instrumented_test_files = set()
 
         func_qualname = function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
@@ -700,6 +736,8 @@ class Optimizer:
                     existing_test_files_count += 1
                 elif test_type == TestType.REPLAY_TEST:
                     replay_test_files_count += 1
+                elif test_type == TestType.CONCOLIC_COVERAGE_TEST:
+                    concolic_coverage_test_files_count += 1
                 else:
                     msg = f"Unexpected test type: {test_type}"
                     raise ValueError(msg)
@@ -735,8 +773,10 @@ class Optimizer:
                     )
             logger.info(
                 f"Discovered {existing_test_files_count} existing unit test file"
-                f"{'s' if existing_test_files_count != 1 else ''} and {replay_test_files_count} replay test file"
-                f"{'s' if replay_test_files_count != 1 else ''} for {func_qualname}"
+                f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
+                f"{'s' if replay_test_files_count != 1 else ''}, and "
+                f"{concolic_coverage_test_files_count} concolic coverage test file"
+                f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
             )
         return unique_instrumented_test_files
 
@@ -748,10 +788,11 @@ class Optimizer:
         module_path: Path,
         function_trace_id: str,
         generated_test_paths: list[Path],
+        function_to_optimize_ast: ast.FunctionDef,
         run_experiment: bool = False,
-    ) -> Result[tuple[GeneratedTestsList, OptimizationSet], str]:
+    ) -> Result[tuple[GeneratedTestsList, dict[str, list[FunctionCalledInTest]], OptimizationSet], str]:
         assert len(generated_test_paths) == N_TESTS_TO_GENERATE
-        max_workers = N_TESTS_TO_GENERATE + 1 if not run_experiment else N_TESTS_TO_GENERATE + 2
+        max_workers = N_TESTS_TO_GENERATE + 2 if not run_experiment else N_TESTS_TO_GENERATE + 3
         console.rule()
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit the test generation task as future
@@ -772,7 +813,11 @@ class Optimizer:
                 ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             )
             future_candidates_exp = None
-            futures: list[concurrent.futures.Future] = [*future_tests, future_optimization_candidates]
+
+            future_concolic_tests = executor.submit(
+                generate_concolic_tests, self.test_cfg, self.args, function_to_optimize, function_to_optimize_ast
+            )
+            futures = [*future_tests, future_optimization_candidates, future_concolic_tests]
             if run_experiment:
                 future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
@@ -810,11 +855,19 @@ class Optimizer:
             if not tests:
                 logger.warning(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")
                 return Failure(f"/!\\ NO TESTS GENERATED for {function_to_optimize.function_name}")
+            function_to_concolic_tests, concolic_test_str = future_concolic_tests.result()
             logger.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
             console.rule()
             generated_tests = GeneratedTestsList(generated_tests=tests)
 
-        return Success((generated_tests, OptimizationSet(control=candidates, experiment=candidates_experiment)))
+        return Success(
+            (
+                generated_tests,
+                function_to_concolic_tests,
+                concolic_test_str,
+                OptimizationSet(control=candidates, experiment=candidates_experiment),
+            )
+        )
 
     def establish_original_code_baseline(
         self,
@@ -836,7 +889,7 @@ class Optimizer:
             else:
                 test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
 
-            only_run_these_test_functions_for_test_files: dict[str, str] = {}
+            only_run_these_test_functions_for_test_files: dict[Path, str] = {}
 
             # Replay tests can have hundreds of test functions and running them can be very slow,
             # so we only run the test functions that are relevant to the function we are optimizing
@@ -902,9 +955,12 @@ class Optimizer:
             console.rule()
 
             existing_test_results = TestResults()
+            concolic_test_results = TestResults()
             for result in unittest_results:
                 if result.test_type == TestType.EXISTING_UNIT_TEST:
                     existing_test_results.add(result)
+                elif result.test_type == TestType.CONCOLIC_COVERAGE_TEST:
+                    concolic_test_results.add(result)
             generated_test_results = TestResults()
             for result in unittest_results:
                 if result.test_type == TestType.GENERATED_REGRESSION:
@@ -945,6 +1001,7 @@ class Optimizer:
                     OriginalCodeBaseline(
                         generated_test_results=generated_test_results,
                         existing_test_results=existing_test_results,
+                        concolic_test_results=concolic_test_results,
                         overall_test_results=unittest_results,
                         runtime=total_timing,
                         coverage_results=coverage_results,
@@ -976,7 +1033,7 @@ class Optimizer:
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
 
-            only_run_these_test_functions_for_test_files: dict[str, str] = {}
+            only_run_these_test_functions_for_test_files: dict[Path, str] = {}
             # Replay tests can have hundreds of test functions and running them can be very slow,
             # so we only run the test functions that are relevant to the function we are optimizing
             for test_file in self.test_files.get_by_type(TestType.REPLAY_TEST).test_files:
@@ -1074,7 +1131,7 @@ class Optimizer:
         test_env: dict[str, str],
         test_files: TestFiles,
         optimization_iteration: int,
-        test_functions: list[str | None] | None = None,
+        test_functions: dict[Path, str] | None = None,
         testing_time: float = TOTAL_LOOPING_TIME,
         *,
         enable_coverage: bool = False,
