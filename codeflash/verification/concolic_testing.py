@@ -6,7 +6,7 @@ import tempfile
 from argparse import Namespace
 from pathlib import Path
 
-from codeflash.cli_cmds.console import code_print, console, logger
+from codeflash.cli_cmds.console import code_print, logger
 from codeflash.code_utils.static_analysis import has_typed_parameters
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -15,13 +15,11 @@ from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
 
 
-def generate_concolic_tests(test_cfg: TestConfig, args: Namespace,
-                            function_to_optimize: FunctionToOptimize, function_to_optimize_ast: ast.AST) -> dict[str, list[FunctionCalledInTest]]:
+def generate_concolic_tests(
+    test_cfg: TestConfig, args: Namespace, function_to_optimize: FunctionToOptimize, function_to_optimize_ast: ast.AST
+) -> dict[str, list[FunctionCalledInTest]]:
     function_to_concolic_tests = {}
-    if test_cfg.concolic_test_root_dir and has_typed_parameters(
-            function_to_optimize_ast, function_to_optimize.parents
-    ):
-
+    if test_cfg.concolic_test_root_dir and has_typed_parameters(function_to_optimize_ast, function_to_optimize.parents):
         logger.info("Generating concolic opcode coverage tests for the original code…")
         cover_result = subprocess.run(
             [
@@ -61,9 +59,7 @@ def generate_concolic_tests(test_cfg: TestConfig, args: Namespace,
                 pytest_cmd=args.pytest_cmd,
             )
             function_to_concolic_tests = discover_unit_tests(concolic_test_cfg)
-            num_discovered_concolic_tests: int = sum(
-                [len(value) for value in function_to_concolic_tests.values()]
-            )
+            num_discovered_concolic_tests: int = sum([len(value) for value in function_to_concolic_tests.values()])
             logger.debug(
                 f"Created {num_discovered_concolic_tests} "
                 f"concolic unit test case{'s' if num_discovered_concolic_tests != 1 else ''} "
@@ -73,10 +69,7 @@ def generate_concolic_tests(test_cfg: TestConfig, args: Namespace,
         else:
             (
                 logger.warning(
-                    "Error running CrossHair Cover"
-                    f"{': ' + cover_result.stderr if cover_result.stderr else '.'}"
+                    "Error running CrossHair Cover" f"{': ' + cover_result.stderr if cover_result.stderr else '.'}"
                 )
             )
-    console.rule()
     return function_to_concolic_tests
-

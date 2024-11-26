@@ -40,10 +40,7 @@ from codeflash.code_utils.config_consts import (
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
-from codeflash.code_utils.static_analysis import (
-    analyze_imported_modules,
-    get_first_top_level_function_or_method_ast,
-)
+from codeflash.code_utils.static_analysis import analyze_imported_modules, get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize, get_functions_to_optimize
@@ -198,19 +195,9 @@ class Optimizer:
                         code_print(function_to_optimize_code)
 
                     concolic_test_suite_dir: Path | None = None
-                    function_to_concolic_tests: dict[str, list[FunctionCalledInTest]] = {}
-                    generate_concolic_tests(test_cfg=self.test_cfg, args=self.args,
-                                            function_to_optimize=function_to_optimize,
-                                            function_to_optimize_ast=function_to_optimize_ast)
-
 
                     best_optimization = self.optimize_function(
-                        function_to_optimize,
-                        {
-                            key: function_to_tests.get(key, []) + function_to_concolic_tests.get(key, [])
-                            for key in set(function_to_tests) | set(function_to_concolic_tests)
-                        },
-                        validated_original_code,
+                        function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code
                     )
                     self.test_files = TestFiles(test_files=[])
                     if concolic_test_suite_dir:
@@ -241,6 +228,7 @@ class Optimizer:
     def optimize_function(
         self,
         function_to_optimize: FunctionToOptimize,
+        function_to_optimize_ast: ast.FunctionDef,
         function_to_tests: dict[str, list[FunctionCalledInTest]],
         validated_original_code: dict[Path, ValidCode],
     ) -> Result[BestOptimization, str]:
@@ -296,6 +284,7 @@ class Optimizer:
                 Path(original_module_path),
                 function_trace_id,
                 generated_test_paths,
+                function_to_optimize_ast,
                 run_experiment=should_run_experiment,
             )
 
@@ -303,7 +292,7 @@ class Optimizer:
             return Failure(generated_results.failure())
         generated_tests: GeneratedTestsList
         optimizations_set: OptimizationSet
-        generated_tests, optimizations_set = generated_results.unwrap()
+        generated_tests, function_to_concolic_tests, optimizations_set = generated_results.unwrap()
         count_tests = len(generated_tests.generated_tests)
 
         for i, generated_test in enumerate(generated_tests.generated_tests):
@@ -321,9 +310,14 @@ class Optimizer:
             code_print(generated_test.generated_original_test_source)
 
         function_to_optimize_qualified_name = function_to_optimize.qualified_name
+        function_to_all_tests = {
+            key: function_to_tests.get(key, []) + function_to_concolic_tests.get(key, [])
+            for key in set(function_to_tests) | set(function_to_concolic_tests)
+        }
+
         baseline_result = self.establish_original_code_baseline(
             function_to_optimize_qualified_name,
-            function_to_tests.get(original_module_path + "." + function_to_optimize_qualified_name, []),
+            function_to_all_tests.get(original_module_path + "." + function_to_optimize_qualified_name, []),
             function_file_path=function_to_optimize.file_path,
             code_context=code_context,
         )
@@ -343,7 +337,7 @@ class Optimizer:
             if candidates is None:
                 continue
 
-            tests_in_file: list[FunctionCalledInTest] = function_to_tests.get(
+            tests_in_file: list[FunctionCalledInTest] = function_to_all_tests.get(
                 function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root), []
             )
 
@@ -397,7 +391,7 @@ class Optimizer:
 
                 existing_tests = existing_tests_source_for(
                     function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root),
-                    function_to_tests,
+                    function_to_all_tests,
                     tests_root=self.test_cfg.tests_root,
                 )
 
@@ -792,10 +786,11 @@ class Optimizer:
         module_path: Path,
         function_trace_id: str,
         generated_test_paths: list[Path],
+        function_to_optimize_ast: ast.FunctionDef,
         run_experiment: bool = False,
-    ) -> Result[tuple[GeneratedTestsList, OptimizationSet], str]:
+    ) -> Result[tuple[GeneratedTestsList, dict[str, list[FunctionCalledInTest]], OptimizationSet], str]:
         assert len(generated_test_paths) == N_TESTS_TO_GENERATE
-        max_workers = N_TESTS_TO_GENERATE + 1 if not run_experiment else N_TESTS_TO_GENERATE + 2
+        max_workers = N_TESTS_TO_GENERATE + 2 if not run_experiment else N_TESTS_TO_GENERATE + 3
         console.rule()
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit the test generation task as future
@@ -816,7 +811,11 @@ class Optimizer:
                 ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             )
             future_candidates_exp = None
-            futures = [*future_tests, future_optimization_candidates]
+
+            future_concolic_tests = executor.submit(
+                generate_concolic_tests, self.test_cfg, self.args, function_to_optimize, function_to_optimize_ast
+            )
+            futures = [*future_tests, future_optimization_candidates, future_concolic_tests]
             if run_experiment:
                 future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
@@ -854,11 +853,18 @@ class Optimizer:
             if not tests:
                 logger.warning(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")
                 return Failure(f"/!\\ NO TESTS GENERATED for {function_to_optimize.function_name}")
+            function_to_concolic_tests: dict[str, list[FunctionCalledInTest]] = future_concolic_tests.result()
             logger.info(f"Generated {len(tests)} tests for {function_to_optimize.function_name}")
             console.rule()
             generated_tests = GeneratedTestsList(generated_tests=tests)
 
-        return Success((generated_tests, OptimizationSet(control=candidates, experiment=candidates_experiment)))
+        return Success(
+            (
+                generated_tests,
+                function_to_concolic_tests,
+                OptimizationSet(control=candidates, experiment=candidates_experiment),
+            )
+        )
 
     def establish_original_code_baseline(
         self,

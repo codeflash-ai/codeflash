@@ -73,4 +73,3 @@ class TestConfig:
     # or for unittest - project_root_from_module_root(args.tests_root, pyproject_file_path)
     concolic_test_root_dir: Path | None = None
     pytest_cmd: str = "pytest"
-
