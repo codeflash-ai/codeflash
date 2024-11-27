@@ -120,7 +120,9 @@ class Optimizer:
         optimizations_found: int = 0
         function_iterator_count: int = 0
         if self.args.test_framework == "pytest":
-            self.test_cfg.concolic_test_root_dir = Path(tempfile.mkdtemp(dir=self.args.tests_root))
+            self.test_cfg.concolic_test_root_dir = Path(
+                tempfile.mkdtemp(dir=self.args.tests_root, prefix="codeflash_concolic_")
+            )
         try:
             ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
             if num_optimizable_functions == 0:
