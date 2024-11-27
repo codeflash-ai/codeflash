@@ -4,18 +4,19 @@ import json
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import requests
 from pydantic.json import pydantic_encoder
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
 from codeflash.code_utils.git_utils import get_repo_owner_and_name
-from codeflash.github.PrComment import FileDiffContent, PrComment
 
 if TYPE_CHECKING:
     from requests import Response
+
+    from codeflash.github.PrComment import FileDiffContent, PrComment
 
 if os.environ.get("CODEFLASH_CFAPI_SERVER", default="prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
@@ -169,6 +170,7 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
         req.raise_for_status()
         content: dict[str, list[str]] = req.json()
     except Exception as e:
-        logger.error(f"Error getting blocklisted functions: {e}")
+        logger.error(f"Error getting blocklisted functions: {e}", exc_info=True)
         return {}
+
     return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
