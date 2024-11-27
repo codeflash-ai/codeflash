@@ -25,7 +25,7 @@ def normalize_node(node: ASTNodeT) -> ASTNodeT:
     if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and ast.get_docstring(node):
         node.body = node.body[1:]
     if hasattr(node, "body"):
-        node.body = [normalize_node(node) for node in node.body if not isinstance(node, (ast.Import, ast.ImportFrom))]
+        node.body = [normalize_node(n) for n in node.body if not isinstance(n, (ast.Import, ast.ImportFrom))]
     return node
 
 

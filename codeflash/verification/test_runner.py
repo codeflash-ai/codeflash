@@ -36,7 +36,7 @@ def run_tests(
     pytest_timeout: int | None = None,
     pytest_cmd: str = "pytest",
     verbose: bool = False,
-    only_run_these_test_functions: list[str | None] | None = None,
+    only_run_these_test_functions: dict[Path, str] | None = None,
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME,
     pytest_min_loops: int = 5,
     pytest_max_loops: int = 100_000,

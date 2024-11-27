@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import ast
 from pathlib import Path
+from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
@@ -69,4 +72,5 @@ class TestConfig:
     tests_project_rootdir: Path
     # tests_project_rootdir corresponds to pytest rootdir,
     # or for unittest - project_root_from_module_root(args.tests_root, pyproject_file_path)
+    concolic_test_root_dir: Optional[Path] = None
     pytest_cmd: str = "pytest"

@@ -103,7 +103,7 @@ def create_pr(
     existing_tests: str,
     generated_tests: str,
     trace_id: str,
-    coverage_pct: float,
+    coverage_pct: str,
 ) -> Response:
     """Create a pull request, targeting the specified branch. (usually 'main').
 
@@ -125,10 +125,9 @@ def create_pr(
         "existingTests": existing_tests,
         "generatedTests": generated_tests,
         "traceId": trace_id,
-        "coveragePct": coverage_pct,
+        "coverage": coverage_pct,
     }
-    response = make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
-    return response
+    return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
 
 def is_github_app_installed_on_repo(owner: str, repo: str) -> bool:

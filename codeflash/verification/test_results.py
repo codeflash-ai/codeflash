@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 from rich.tree import Tree
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import DEBUG_MODE, logger
 from codeflash.verification.comparator import comparator
 
 
@@ -18,6 +18,7 @@ class TestType(Enum):
     INSPIRED_REGRESSION = 2
     GENERATED_REGRESSION = 3
     REPLAY_TEST = 4
+    CONCOLIC_COVERAGE_TEST = 5
 
     def to_name(self) -> str:
         names = {
@@ -25,6 +26,7 @@ class TestType(Enum):
             TestType.INSPIRED_REGRESSION: "🎨 Inspired Regression Tests",
             TestType.GENERATED_REGRESSION: "🌀 Generated Regression Tests",
             TestType.REPLAY_TEST: "⏪ Replay Tests",
+            TestType.CONCOLIC_COVERAGE_TEST: "🔎 Concolic Coverage Tests",
         }
         return names[self]
 
@@ -87,7 +89,8 @@ class TestResults(BaseModel):
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
         unique_id = function_test_invocation.unique_invocation_loop_id
         if unique_id in self.test_result_idx:
-            logger.warning(f"Test result with id {unique_id} already exists. SKIPPING")
+            if DEBUG_MODE:
+                logger.warning(f"Test result with id {unique_id} already exists. SKIPPING")
             return
         self.test_result_idx[unique_id] = len(self.test_results)
         self.test_results.append(function_test_invocation)
@@ -97,7 +100,8 @@ class TestResults(BaseModel):
         self.test_results.extend(other.test_results)
         for k, v in other.test_result_idx.items():
             if k in self.test_result_idx:
-                raise ValueError(f"Test result with id {k} already exists.")
+                msg = f"Test result with id {k} already exists."
+                raise ValueError(msg)
             self.test_result_idx[k] = v + original_len
 
     def get_by_unique_invocation_loop_id(self, unique_invocation_loop_id: str) -> FunctionTestInvocation | None:

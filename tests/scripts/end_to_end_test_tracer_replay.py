@@ -1,85 +1,23 @@
 import os
 import pathlib
-import re
-import subprocess
+
+from end_to_end_test_utilities import CoverageExpectation, TestConfig, run_codeflash_command, run_with_retries
 
 
-def main():
+def run_test(expected_improvement_pct: int) -> bool:
+    config = TestConfig(
+        trace_mode=True,
+        min_improvement_x=0.1,
+        expected_unit_tests=1,
+        coverage_expectations=[
+            CoverageExpectation(function_name="funcA", expected_coverage=100.0, expected_lines=[2, 3, 4, 6, 9])
+        ],
+    )
     cwd = (
         pathlib.Path(__file__).parent.parent.parent / "code_to_optimize" / "code_directories" / "simple_tracer_e2e"
     ).resolve()
-    print("cwd", cwd)
-    command = ["python", "-m", "codeflash.tracer", "-o", "codeflash.trace", "workload.py"]
-    process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
-    )
-    output = []
-
-    for line in process.stdout:
-        print(line, end="")  # Print each line in real-time
-        output.append(line)  # Store each line in the output variable
-    return_code = process.wait()
-    stdout = "".join(output)
-    assert return_code == 0, f"The codeflash command returned exit code {return_code} instead of 0"
-    functions_traced = re.search(r"Traced (\d+) function calls successfully and replay test created at - (.*)$", stdout)
-    assert functions_traced, "Failed to find any traced functions or replay test"
-    assert int(functions_traced.group(1)) == 3, "Failed to find the correct number of traced functions"
-    replay_test_path = pathlib.Path(functions_traced.group(2))
-    assert replay_test_path, "Failed to find the replay test file path"
-    assert replay_test_path.exists(), f"Replay test file does not exist at - {replay_test_path}"
-
-    command = ["python", "../../../codeflash/main.py", "--replay-test", str(replay_test_path), "--no-pr"]
-    process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
-    )
-    output = []
-
-    for line in process.stdout:
-        print(line, end="")  # Print each line in real-time
-        output.append(line)  # Store each line in the output variable
-    return_code = process.wait()
-    stdout = "".join(output)
-    assert return_code == 0, f"The codeflash command returned exit code {return_code} instead of 0"
-
-    improvement_pct = int(re.search(r"📈 ([\d,]+)% improvement", stdout).group(1).replace(",", ""))
-    improvement_x = float(improvement_pct) / 100
-
-    assert improvement_pct > 10, f"Performance improvement percentage was {improvement_pct}, which was not above 10%"
-    assert improvement_x > 0.1, f"Performance improvement rate was {improvement_x}x, which was not above 0.1x"
-
-    # Check for the line indicating the number of discovered existing unit tests
-    unit_test_search = re.search(r"Discovered (\d+) existing unit tests", stdout)
-    num_unit_tests = int(unit_test_search.group(1))
-    assert num_unit_tests == 1, f"Could not find 1 existing unit test, found {num_unit_tests} instead"
-
-    # check if the replay test was correctly run for the original code
-    m = re.search(r"Replay Tests - Passed: (\d+), Failed: (\d+)", stdout)
-    assert m, "Failed to run replay tests"
-
-    passed, failed = int(m.group(1)), int(m.group(2))
-
-    assert passed > 0, f"Expected >0 passed replay tests, found {passed}"
-    assert failed == 0, f"Expected 0 failed replay tests, found {failed}"
-
-    funca_coverage_search = re.search(
-        r"main_func_coverage=FunctionCoverage\(\n\s+name='funcA',\n\s+coverage=([\d.]+),\n\s+executed_lines=\[(.+)\],",
-        stdout,
-    )
-
-    funca_coverage = float(funca_coverage_search.group(1))
-
-    assert funca_coverage == 100.0, f"Coverage was {funca_coverage} instead of 100.0"
-
-    funca_executed_lines = list(map(int, funca_coverage_search.group(2).split(", ")))
-
-    assert funca_executed_lines == [
-        2,
-        3,
-        4,
-        6,
-        9,
-    ], f"Executed lines were {funca_executed_lines} instead of [2, 3, 4, 6, 9]"
+    return run_codeflash_command(cwd, config, expected_improvement_pct)
 
 
 if __name__ == "__main__":
-    main()
+    exit(run_with_retries(run_test, int(os.getenv("EXPECTED_IMPROVEMENT_PCT", 10))))
