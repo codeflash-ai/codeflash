@@ -727,6 +727,7 @@ class Optimizer:
         func_qualname = function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
         if func_qualname not in function_to_tests:
             logger.info(f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.")
+            console.rule()
         else:
             test_file_invocation_positions = defaultdict(list)
             for tests_in_file in function_to_tests.get(func_qualname):
