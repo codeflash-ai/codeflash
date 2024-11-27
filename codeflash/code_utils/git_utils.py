@@ -69,14 +69,20 @@ def get_current_branch(repo: Repo | None = None) -> str:
     return repository.active_branch.name
 
 
-def get_remote_url(repo: Repo | None = None) -> str:
+def get_remote_url(repo: Repo | None = None, git_remote: str | None = "origin") -> str:
     repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
-    return repository.remote().url
+    return repository.remote(name=git_remote).url
 
 
-def get_repo_owner_and_name(repo: Repo | None = None) -> tuple[str, str]:
-    remote_url = get_remote_url(repo)  # call only once
-    remote_url = get_remote_url(repo).removesuffix(".git") if remote_url.endswith(".git") else remote_url
+def get_git_remotes(repo: Repo) -> list[str]:
+    repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+    return [remote.name for remote in repository.remotes]
+
+
+def get_repo_owner_and_name(repo: Repo | None = None, git_remote: str | None = "origin") -> tuple[str, str]:
+    remote_url = get_remote_url(repo, git_remote)  # call only once
+    remote_url = remote_url.removesuffix(".git") if remote_url.endswith(".git") else remote_url
+    # remote_url = get_remote_url(repo, git_remote).removesuffix(".git") if remote_url.endswith(".git") else remote_url
     split_url = remote_url.split("/")
     repo_owner_with_github, repo_name = split_url[-2], split_url[-1]
     repo_owner = repo_owner_with_github.split(":")[1] if ":" in repo_owner_with_github else repo_owner_with_github
