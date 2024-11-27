@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Optional
 import requests
 from pydantic.json import pydantic_encoder
 
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
 from codeflash.code_utils.git_utils import get_repo_owner_and_name
 
