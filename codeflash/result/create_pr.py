@@ -41,6 +41,7 @@ def check_create_pr(
     generated_original_test_source: str,
     function_trace_id: str,
     coverage_message: str,
+    git_remote: Optional[str] = None,
 ) -> None:
     pr_number: Optional[int] = env_utils.get_pr_number()
     git_repo = git.Repo(search_parent_directories=True)
@@ -87,8 +88,8 @@ def check_create_pr(
             )
     else:
         logger.info("Creating a new PR with the optimized code...")
-        owner, repo = get_repo_owner_and_name(git_repo)
-
+        owner, repo = get_repo_owner_and_name(git_repo, git_remote)
+        logger.info(f"Pushing to {git_remote} - Owner: {owner}, Repo: {repo}")
         if not check_and_push_branch(git_repo, wait_for_push=True):
             logger.warning("⏭️ Branch is not pushed, skipping PR creation...")
             return
