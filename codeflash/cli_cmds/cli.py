@@ -123,12 +123,10 @@ def process_pyproject_config(args: Namespace) -> Namespace:
             or not hasattr(args, key.replace("-", "_"))
         ):
             setattr(args, key.replace("-", "_"), pyproject_config[key])
-    assert (
-        args.module_root is not None and Path(args.module_root).is_dir()
-    ), f"--module-root {args.module_root} must be a valid directory"
-    assert (
-        args.tests_root is not None and Path(args.tests_root).is_dir()
-    ), f"--tests-root {args.tests_root} must be a valid directory"
+    assert args.module_root is not None, "--module-root must be specified"
+    assert Path(args.module_root).is_dir(), f"--module-root {args.module_root} must be a valid directory"
+    assert args.tests_root is not None, "--tests-root must be specified"
+    assert Path(args.tests_root).is_dir(), f"--tests-root {args.tests_root} must be a valid directory"
 
     assert not (env_utils.get_pr_number() is not None and not env_utils.ensure_codeflash_api_key()), (
         "Codeflash API key not found. When running in a Github Actions Context, provide the "
