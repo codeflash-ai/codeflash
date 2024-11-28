@@ -431,7 +431,7 @@ class Optimizer:
             test_paths.unlink(missing_ok=True)
         for fn in function_to_concolic_tests:
             for test in function_to_concolic_tests[fn]:
-                shutil.rmtree(test.tests_in_file.test_file.parent)
+                shutil.rmtree(test.tests_in_file.test_file.parent, ignore_errors=True)
                 break  # need to delete only one test directory
 
         if not best_optimization:
