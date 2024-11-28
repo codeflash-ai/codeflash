@@ -643,10 +643,9 @@ def test_sort():
     bubble_sort_test_path = Path(args.tests_root) / "test_bubble_sort.py"
     bubble_sort_test_path.write_text(bubble_sort_test_content, encoding="utf8")
 
-    logger.info(f"✅ Created {bubble_sort_path}")
-    console.rule()
-    logger.info(f"✅ Created {bubble_sort_test_path}")
-    console.rule()
+    for path in [bubble_sort_path, bubble_sort_test_path]:
+        logger.info(f"✅ Created {path}")
+        console.rule()
 
     return str(bubble_sort_path), str(bubble_sort_test_path)
 
@@ -655,10 +654,23 @@ def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test
     command = ["codeflash", "--file", "bubble_sort.py", "--function", "sorter"]
     logger.info("Running sample optimization…")
     console.rule()
-    try:
-        process = subprocess.run(command, text=True, cwd=args.module_root, check=False)
+    import logging
 
-        console.print()
+    log = logging.getLogger()
+    log.setLevel(logging.INFO)
+
+    try:
+        output = []
+        with subprocess.Popen(
+            command, text=True, cwd=args.module_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        ) as process:
+            if process.stdout:
+                for line in process.stdout:
+                    stripped = line.strip()
+                    console.print(stripped)
+                    output.append(stripped)
+            process.wait()
+        console.rule()
         if process.returncode == 0:
             logger.info("End-to-end test passed. Codeflash has been correctly set up!")
         else:
@@ -666,9 +678,10 @@ def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test
                 "End-to-end test failed. Please check the logs above, and take a look at https://docs.codeflash.ai/getting-started/local-installation for help and troubleshooting."
             )
     finally:
+        console.rule()
         # Delete the bubble_sort.py file after the test
-        Path(bubble_sort_path).unlink(missing_ok=True)
-        Path(bubble_sort_test_path).unlink(missing_ok=True)
-        logger.info("Cleaning up…")
-        logger.info(f"🗑️  Deleted {bubble_sort_path}")
-        logger.info(f"🗑️  Deleted {bubble_sort_test_path}")
+        logger.info("🧹 Cleaning up…")
+        for path in [bubble_sort_path, bubble_sort_test_path]:
+            console.rule()
+            Path(path).unlink(missing_ok=True)
+            logger.info(f"🗑️  Deleted {path}")
