@@ -654,10 +654,6 @@ def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test
     command = ["codeflash", "--file", "bubble_sort.py", "--function", "sorter"]
     logger.info("Running sample optimization…")
     console.rule()
-    import logging
-
-    log = logging.getLogger()
-    log.setLevel(logging.INFO)
 
     try:
         output = []

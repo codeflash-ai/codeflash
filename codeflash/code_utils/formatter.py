@@ -46,12 +46,8 @@ def format_code(formatter_cmds: list[str], path: Path) -> str:
             )
             console.print(panel)
             sys.exit(1)
-        except Exception:
-            logger.exception(f"Failed to format code with {' '.join(formatter_cmd_list)}")
-            # Fall back to original code if formatter fails
-            return path.read_text(encoding="utf8")
 
-    return None
+    return path.read_text(encoding="utf8")
 
 
 def sort_imports(code: str) -> str:
