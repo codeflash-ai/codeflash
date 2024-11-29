@@ -36,7 +36,7 @@ def format_code(formatter_cmds: list[str], path: Path) -> str:
             if result.returncode == 0:
                 logger.info("FORMATTING OK")
             logger.error(f"Failed to format code with {' '.join(formatter_cmd_list)}")
-        except FileNotFoundError:
+        except FileNotFoundError as e:
             from rich.panel import Panel
             from rich.text import Text
 
@@ -45,7 +45,8 @@ def format_code(formatter_cmds: list[str], path: Path) -> str:
                 expand=False,
             )
             console.print(panel)
-            sys.exit(1)
+
+            raise e from None
 
     return path.read_text(encoding="utf8")
 
