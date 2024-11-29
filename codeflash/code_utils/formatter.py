@@ -35,7 +35,8 @@ def format_code(formatter_cmds: list[str], path: Path) -> str:
             result = subprocess.run(formatter_cmd_list, capture_output=True, check=False)
             if result.returncode == 0:
                 logger.info("FORMATTING OK")
-            logger.error(f"Failed to format code with {' '.join(formatter_cmd_list)}")
+            else:
+                logger.error(f"Failed to format code with {' '.join(formatter_cmd_list)}")
         except FileNotFoundError as e:
             from rich.panel import Panel
             from rich.text import Text
