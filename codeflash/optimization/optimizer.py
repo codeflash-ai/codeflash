@@ -481,6 +481,7 @@ class Optimizer:
                         logger.warning(
                             "No functions were replaced in the optimized code. Skipping optimization candidate."
                         )
+                        console.rule()
                         continue
                 except (ValueError, SyntaxError, cst.ParserSyntaxError, AttributeError) as e:
                     logger.error(e)

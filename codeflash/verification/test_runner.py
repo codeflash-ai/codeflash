@@ -3,15 +3,15 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_utils import get_run_tmp_file
+from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
-from codeflash.models.models import CodeOptimizationContext, TestFiles
+from codeflash.models.models import TestFiles
 from codeflash.verification.test_results import TestType
 
 if TYPE_CHECKING:
@@ -74,7 +74,7 @@ def run_tests(
             coverage_args = ["--codeflash_min_loops=1", "--codeflash_max_loops=1"]
 
             cov_erase = execute_test_subprocess(
-                shlex.split(f"{Path(sys.executable).as_posix()} -m coverage erase"), cwd=cwd, env=pytest_test_env
+                shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env
             )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any, then the current run will be appended to the previous data, which skews the results
             logger.debug(cov_erase)
 
@@ -85,9 +85,7 @@ def run_tests(
             ]
 
             cov_run = execute_test_subprocess(
-                shlex.split(
-                    f"{Path(sys.executable).as_posix()} -m coverage run --rcfile={coveragercfile.as_posix()} -m pytest"
-                )
+                shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage run --rcfile={coveragercfile.as_posix()} -m pytest")
                 + files
                 + common_pytest_args
                 + coverage_args
@@ -98,13 +96,14 @@ def run_tests(
             logger.debug(cov_run)
 
             cov_report = execute_test_subprocess(
-                shlex.split(f"{Path(sys.executable).as_posix()} -m coverage json --rcfile={coveragercfile.as_posix()}"),
+                shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage json --rcfile={coveragercfile.as_posix()}"),
                 cwd=cwd,
                 env=pytest_test_env,
             )  # this will generate a json file with the coverage data
             logger.debug(cov_report)
             if "No data to report." in cov_report.stdout:
                 logger.warning("No coverage data to report. Check if the tests are running correctly.")
+                console.rule()
                 coverage_out_file = None
 
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
@@ -122,7 +121,7 @@ def run_tests(
         )
     elif test_framework == "unittest":
         result_file_path = get_run_tmp_file(Path("unittest_results.xml"))
-        unittest_cmd_list = [sys.executable, "-m", "xmlrunner"]
+        unittest_cmd_list = [SAFE_SYS_EXECUTABLE, "-m", "xmlrunner"]
         log_level = ["-v"] if verbose else []
         files = [str(file.instrumented_file_path) for file in test_paths.test_files]
         output_file = ["--output-file", str(result_file_path)]
