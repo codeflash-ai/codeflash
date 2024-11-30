@@ -6,7 +6,7 @@ import tempfile
 from argparse import Namespace
 from pathlib import Path
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.static_analysis import has_typed_parameters
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -22,6 +22,7 @@ def generate_concolic_tests(
     concolic_test_suite_code = ""
     if test_cfg.concolic_test_root_dir and has_typed_parameters(function_to_optimize_ast, function_to_optimize.parents):
         logger.info("Generating concolic opcode coverage tests for the original code…")
+        console.rule()
         cover_result = subprocess.run(
             [
                 "crosshair",
@@ -63,6 +64,7 @@ def generate_concolic_tests(
                 f"Created {num_discovered_concolic_tests} "
                 f"concolic unit test case{'s' if num_discovered_concolic_tests != 1 else ''} "
             )
+            console.rule()
             ph("cli-optimize-concolic-tests", {"num_tests": num_discovered_concolic_tests})
 
         else:
@@ -71,4 +73,5 @@ def generate_concolic_tests(
                     "Error running CrossHair Cover" f"{': ' + cover_result.stderr if cover_result.stderr else '.'}"
                 )
             )
+            console.rule()
     return function_to_concolic_tests, concolic_test_suite_code
