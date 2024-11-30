@@ -62,6 +62,7 @@ def run_tests(
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
             "--codeflash_loops_scope=session",
         ]
+
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
 
@@ -73,7 +74,7 @@ def run_tests(
             coverage_args = ["--codeflash_min_loops=1", "--codeflash_max_loops=1"]
 
             cov_erase = execute_test_subprocess(
-                shlex.split(f"{sys.executable} -m coverage erase"), cwd=cwd, env=pytest_test_env
+                shlex.split(f"{Path(sys.executable).as_posix()} -m coverage erase"), cwd=cwd, env=pytest_test_env
             )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any, then the current run will be appended to the previous data, which skews the results
             logger.debug(cov_erase)
 
@@ -84,7 +85,9 @@ def run_tests(
             ]
 
             cov_run = execute_test_subprocess(
-                shlex.split(f"{sys.executable} -m coverage run --rcfile={coveragercfile} -m pytest")
+                shlex.split(
+                    f"{Path(sys.executable).as_posix()} -m coverage run --rcfile={coveragercfile.as_posix()} -m pytest"
+                )
                 + files
                 + common_pytest_args
                 + coverage_args
@@ -95,13 +98,17 @@ def run_tests(
             logger.debug(cov_run)
 
             cov_report = execute_test_subprocess(
-                shlex.split(f"{sys.executable} -m coverage json --rcfile={coveragercfile}"),
+                shlex.split(f"{Path(sys.executable).as_posix()} -m coverage json --rcfile={coveragercfile.as_posix()}"),
                 cwd=cwd,
                 env=pytest_test_env,
             )  # this will generate a json file with the coverage data
             logger.debug(cov_report)
+            if "No data to report." in cov_report.stdout:
+                logger.warning("No coverage data to report. Check if the tests are running correctly.")
+                coverage_out_file = None
+
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
-        result_args = [f"--junitxml={result_file_path}", "-o", "junit_logging=all"]
+        result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
 
         results = execute_test_subprocess(
             pytest_cmd_list
@@ -125,6 +132,7 @@ def run_tests(
         )
 
     else:
-        raise ValueError("Invalid test framework -- I only support Pytest and Unittest currently.")
+        msg = "Invalid test framework -- I only support Pytest and Unittest currently."
+        raise ValueError(msg)
 
     return result_file_path, results, coverage_out_file if enable_coverage else None

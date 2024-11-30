@@ -14,7 +14,7 @@ import libcst as cst
 from pydantic.dataclasses import dataclass
 
 from codeflash.api.cfapi import get_blocklisted_functions
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
@@ -161,6 +161,7 @@ def get_functions_to_optimize(
     functions: dict[str, list[FunctionToOptimize]]
     if optimize_all:
         logger.info("Finding all functions in the module '%s'…", optimize_all)
+        console.rule()
         functions = get_all_files_and_functions(Path(optimize_all))
     elif replay_test is not None:
         functions = get_all_replay_test_functions(
@@ -168,6 +169,7 @@ def get_functions_to_optimize(
         )
     elif file is not None:
         logger.info("Finding all functions in the file '%s'…", file)
+        console.rule()
         functions = find_all_functions_in_file(file)
         if only_get_this_function is not None:
             split_function = only_get_this_function.split(".")

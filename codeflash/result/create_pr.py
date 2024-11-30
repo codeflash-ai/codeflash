@@ -88,8 +88,10 @@ def check_create_pr(
             )
     else:
         logger.info("Creating a new PR with the optimized code...")
+        console.rule()
         owner, repo = get_repo_owner_and_name(git_repo, git_remote)
         logger.info(f"Pushing to {git_remote} - Owner: {owner}, Repo: {repo}")
+        console.rule()
         if not check_and_push_branch(git_repo, wait_for_push=True):
             logger.warning("⏭️ Branch is not pushed, skipping PR creation...")
             return
