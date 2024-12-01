@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import os
 import random
+import warnings
 from _ast import AsyncFunctionDef, ClassDef, FunctionDef
 from collections import defaultdict
 from functools import lru_cache
@@ -14,7 +15,7 @@ import libcst as cst
 from pydantic.dataclasses import dataclass
 
 from codeflash.api.cfapi import get_blocklisted_functions
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import DEBUG_MODE, console, logger
 from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
@@ -159,47 +160,49 @@ def get_functions_to_optimize(
         sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1
     ), "Only one of optimize_all, replay_test, or file should be provided"
     functions: dict[str, list[FunctionToOptimize]]
-    if optimize_all:
-        logger.info("Finding all functions in the module '%s'…", optimize_all)
-        console.rule()
-        functions = get_all_files_and_functions(Path(optimize_all))
-    elif replay_test is not None:
-        functions = get_all_replay_test_functions(
-            replay_test=replay_test, test_cfg=test_cfg, project_root_path=project_root
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        if optimize_all:
+            logger.info("Finding all functions in the module '%s'…", optimize_all)
+            console.rule()
+            functions = get_all_files_and_functions(Path(optimize_all))
+        elif replay_test is not None:
+            functions = get_all_replay_test_functions(
+                replay_test=replay_test, test_cfg=test_cfg, project_root_path=project_root
+            )
+        elif file is not None:
+            logger.info("Finding all functions in the file '%s'…", file)
+            console.rule()
+            functions = find_all_functions_in_file(file)
+            if only_get_this_function is not None:
+                split_function = only_get_this_function.split(".")
+                if len(split_function) > 2:
+                    msg = "Function name should be in the format 'function_name' or 'class_name.function_name'"
+                    raise ValueError(msg)
+                if len(split_function) == 2:
+                    class_name, only_function_name = split_function
+                else:
+                    class_name = None
+                    only_function_name = split_function[0]
+                found_function = None
+                for fn in functions.get(file, []):
+                    if only_function_name == fn.function_name and (
+                        class_name is None or class_name == fn.top_level_parent_name
+                    ):
+                        found_function = fn
+                if found_function is None:
+                    msg = f"Function {only_function_name} not found in file {file} or the function does not have a 'return' statement or is a property"
+                    raise ValueError(msg)
+                functions[file] = [found_function]
+        else:
+            logger.info("Finding all functions modified in the current git diff ...")
+            ph("cli-optimizing-git-diff")
+            functions = get_functions_within_git_diff()
+        filtered_modified_functions, functions_count = filter_functions(
+            functions, test_cfg.tests_root, ignore_paths, project_root, module_root
         )
-    elif file is not None:
-        logger.info("Finding all functions in the file '%s'…", file)
-        console.rule()
-        functions = find_all_functions_in_file(file)
-        if only_get_this_function is not None:
-            split_function = only_get_this_function.split(".")
-            if len(split_function) > 2:
-                msg = "Function name should be in the format 'function_name' or 'class_name.function_name'"
-                raise ValueError(msg)
-            if len(split_function) == 2:
-                class_name, only_function_name = split_function
-            else:
-                class_name = None
-                only_function_name = split_function[0]
-            found_function = None
-            for fn in functions.get(file, []):
-                if only_function_name == fn.function_name and (
-                    class_name is None or class_name == fn.top_level_parent_name
-                ):
-                    found_function = fn
-            if found_function is None:
-                msg = f"Function {only_function_name} not found in file {file} or the function does not have a 'return' statement or is a property"
-                raise ValueError(msg)
-            functions[file] = [found_function]
-    else:
-        logger.info("Finding all functions modified in the current git diff ...")
-        ph("cli-optimizing-git-diff")
-        functions = get_functions_within_git_diff()
-    filtered_modified_functions, functions_count = filter_functions(
-        functions, test_cfg.tests_root, ignore_paths, project_root, module_root
-    )
-    logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
-    return filtered_modified_functions, functions_count
+        logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
+        return filtered_modified_functions, functions_count
 
 
 def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
@@ -246,7 +249,8 @@ def find_all_functions_in_file(file_path: Path) -> dict[Path, list[FunctionToOpt
         try:
             ast_module = ast.parse(f.read())
         except Exception as e:
-            logger.exception(e)
+            if DEBUG_MODE:
+                logger.exception(e)
             return functions
         function_name_visitor = FunctionWithReturnStatement(file_path)
         function_name_visitor.visit(ast_module)
@@ -474,6 +478,7 @@ def filter_functions(
         log_string: str
         if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
             logger.info(f"Ignoring: {log_string}")
+            console.rule()
     return {Path(k): v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 
@@ -493,11 +498,10 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
         return False
     if submodule_paths is None:
         submodule_paths = ignored_submodule_paths(module_root)
-    if file_path in submodule_paths or any(
-        file_path.is_relative_to(submodule_path) for submodule_path in submodule_paths
-    ):
-        return False
-    return True
+    return not (
+        file_path in submodule_paths
+        or any(file_path.is_relative_to(submodule_path) for submodule_path in submodule_paths)
+    )
 
 
 def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
