@@ -188,7 +188,8 @@ def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_p
 def run_with_retries(test_func, *args, **kwargs) -> bool:
     max_retries = int(os.getenv("MAX_RETRIES", 3))
     retry_delay = int(os.getenv("RETRY_DELAY", 5))
-
+    log = logging.getLogger()
+    log.setLevel(logging.DEBUG)
     for attempt in range(1, max_retries + 1):
         logging.info(f"\n=== Attempt {attempt} of {max_retries} ===")
 
