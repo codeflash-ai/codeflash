@@ -15,11 +15,8 @@ if TYPE_CHECKING:
 
 
 def format_code(formatter_cmds: list[str], path: Path) -> str:
-    known_formatters = ["ruff", "black", "autopep8", "yapf", "isort", "disabled"]
-    formatter_name = formatter_cmds[0].split()[0].lower()
-    if not any(formatter_name in formatter for formatter in known_formatters):
-        msg = f"The formatter command must start with one of {known_formatters}, but got {formatter_name}."
-
+    # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
+    formatter_name = formatter_cmds[0].lower()
     if not path.exists():
         msg = f"File {path} does not exist. Cannot format the file."
         raise FileNotFoundError(msg)
