@@ -431,6 +431,10 @@ class Optimizer:
             test_paths.unlink(missing_ok=True)
         for fn in function_to_concolic_tests:
             for test in function_to_concolic_tests[fn]:
+                if not test.tests_in_file.test_file.parent.exists():
+                    logger.warning(
+                        f"Concolic test directory {test.tests_in_file.test_file.parent} does not exist so could not be deleted."
+                    )
                 shutil.rmtree(test.tests_in_file.test_file.parent, ignore_errors=True)
                 break  # need to delete only one test directory
 
