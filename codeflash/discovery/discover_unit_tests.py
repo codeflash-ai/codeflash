@@ -49,7 +49,7 @@ def discover_tests_pytest(
     project_root = cfg.project_root_path
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
-    process = subprocess.run(
+    subprocess.run(
         [
             sys.executable,
             Path(__file__).parent / "pytest_new_process_discovery.py",
@@ -68,6 +68,9 @@ def discover_tests_pytest(
     except Exception as e:
         logger.exception(f"Failed to discover tests: {e}")
         exitcode = -1
+    finally:
+        with Path.open(tmp_pickle_path, "w") as f:
+            pass
     if exitcode != 0:
         if 0 <= exitcode <= 5:
             logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}={ExitCode(exitcode).name}")
@@ -79,12 +82,19 @@ def discover_tests_pytest(
         cfg.tests_project_rootdir = Path(pytest_rootdir)
     file_to_test_map = defaultdict(list)
     for test in tests:
+        if "__replay_test" in test["test_file"]:
+            test_type = TestType.REPLAY_TEST
+        elif "test_concolic_coverage" in test["test_file"]:
+            test_type = TestType.CONCOLIC_COVERAGE_TEST
+        else:
+            test_type = TestType.EXISTING_UNIT_TEST
+
         test_obj = TestsInFile(
             test_file=test["test_file"],
             test_class=test["test_class"],
             test_function=test["test_function"],
             test_suite=None,
-            test_type=TestType.REPLAY_TEST if "__replay_test" in test["test_file"] else TestType.EXISTING_UNIT_TEST,
+            test_type=test_type,
         )
         if discover_only_these_tests and test_obj.test_file not in discover_only_these_tests:
             continue
@@ -116,6 +126,8 @@ def discover_tests_unittest(
             return None
         if "__replay_test" in str(_test_module_path):
             test_type = TestType.REPLAY_TEST
+        elif "test_concolic_coverage" in str(_test_module_path):
+            test_type = TestType.CONCOLIC_COVERAGE_TEST
         else:
             test_type = TestType.EXISTING_UNIT_TEST
         return TestsInFile(

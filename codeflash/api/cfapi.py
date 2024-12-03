@@ -4,7 +4,7 @@ import json
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import requests
 from pydantic.json import pydantic_encoder
@@ -12,10 +12,11 @@ from pydantic.json import pydantic_encoder
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
 from codeflash.code_utils.git_utils import get_repo_owner_and_name
-from codeflash.github.PrComment import FileDiffContent, PrComment
 
 if TYPE_CHECKING:
     from requests import Response
+
+    from codeflash.github.PrComment import FileDiffContent, PrComment
 
 if os.environ.get("CODEFLASH_CFAPI_SERVER", default="prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
@@ -103,7 +104,7 @@ def create_pr(
     existing_tests: str,
     generated_tests: str,
     trace_id: str,
-    coverage_pct: float,
+    coverage_pct: str,
 ) -> Response:
     """Create a pull request, targeting the specified branch. (usually 'main').
 
@@ -125,10 +126,9 @@ def create_pr(
         "existingTests": existing_tests,
         "generatedTests": generated_tests,
         "traceId": trace_id,
-        "coveragePct": coverage_pct,
+        "coverage": coverage_pct,
     }
-    response = make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
-    return response
+    return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
 
 def is_github_app_installed_on_repo(owner: str, repo: str) -> bool:
@@ -170,6 +170,7 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
         req.raise_for_status()
         content: dict[str, list[str]] = req.json()
     except Exception as e:
-        logger.error(f"Error getting blocklisted functions: {e}")
+        logger.error(f"Error getting blocklisted functions: {e}", exc_info=True)
         return {}
+
     return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}

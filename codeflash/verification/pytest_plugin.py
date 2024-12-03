@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 import os
 import re
-import shutil
 import time
 import warnings
 from typing import TYPE_CHECKING
@@ -131,7 +130,6 @@ class PyTest_Loops:
                 item._report_sections.clear()  # clear reports for new test
 
                 if total_time > SHORTEST_AMOUNT_OF_TIME:
-                    self._print_loop_count(count)
                     item._nodeid = self._set_nodeid(item._nodeid, count)
 
                 next_item: pytest.Item = session.items[index + 1] if index + 1 < len(session.items) else None
@@ -189,17 +187,6 @@ class PyTest_Loops:
             count >= session.config.option.codeflash_min_loops
             and time.time() - start_time > self._get_total_time(session)
         )
-
-    def _print_loop_count(self, count: int) -> None:
-        """Print out current loop number.
-
-        :param count: The number to print.
-        :return: None.
-        """
-        column_length = shutil.get_terminal_size().columns
-        print("\n")
-        print(f" Loop # {count} ".center(column_length, "="))
-        print("\n")
 
     @pytest.fixture
     def __pytest_loop_step_number(self, request: pytest.FixtureRequest) -> int:

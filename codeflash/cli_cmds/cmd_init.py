@@ -13,7 +13,7 @@ import git
 import inquirer
 import inquirer.themes
 import tomlkit
-from git import Repo
+from git import InvalidGitRepositoryError, Repo
 from pydantic.dataclasses import dataclass
 from returns.pipeline import is_successful
 
@@ -22,7 +22,7 @@ from codeflash.cli_cmds.cli_common import apologize_and_exit, inquirer_wrapper, 
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import get_codeflash_api_key
-from codeflash.code_utils.git_utils import get_repo_owner_and_name
+from codeflash.code_utils.git_utils import get_git_remotes, get_repo_owner_and_name
 from codeflash.code_utils.github_utils import get_github_secrets_page_url, require_github_app_or_exit
 from codeflash.code_utils.shell_utils import get_shell_rc_path, save_api_key_to_rc
 from codeflash.telemetry.posthog_cf import ph
@@ -49,6 +49,7 @@ class SetupInfo:
     test_framework: str
     ignore_paths: list[str]
     formatter: str
+    git_remote: str
 
 
 def init_codeflash() -> None:
@@ -186,6 +187,22 @@ def collect_setup_info() -> SetupInfo:
         carousel=True,
     )
 
+    try:
+        repo = Repo(str(module_root), search_parent_directories=True)
+        git_remotes = get_git_remotes(repo)
+        if len(git_remotes) > 1:
+            git_remote = inquirer_wrapper(
+                inquirer.list_input,
+                message="What git remote do you want Codeflash to use for new Pull Requests? ",
+                choices=git_remotes,
+                default="origin",
+                carousel=True,
+            )
+        else:
+            git_remote = git_remotes[0]
+    except InvalidGitRepositoryError:
+        git_remote = ""
+
     ignore_paths: list[str] = []
     return SetupInfo(
         module_root=str(module_root),
@@ -193,6 +210,7 @@ def collect_setup_info() -> SetupInfo:
         test_framework=cast(str, test_framework),
         ignore_paths=ignore_paths,
         formatter=cast(str, formatter),
+        git_remote=str(git_remote),
     )
 
 
@@ -277,7 +295,7 @@ def check_for_toml_or_setup_file() -> str | None:
         # Create a pyproject.toml file because it doesn't exist
         create_toml = inquirer_wrapper(
             inquirer.confirm,
-            "Do you want me to create a pyproject.toml file in the current directory?",
+            message="Do you want me to create a pyproject.toml file in the current directory?",
             default=True,
             show_default=False,
         )
@@ -406,6 +424,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     codeflash_section["tests-root"] = setup_info.tests_root
     codeflash_section["test-framework"] = setup_info.test_framework
     codeflash_section["ignore-paths"] = setup_info.ignore_paths
+    codeflash_section["remote-name"] = setup_info.git_remote
     formatter = setup_info.formatter
     formatter_cmds = []
     if formatter == "black":

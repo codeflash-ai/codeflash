@@ -38,16 +38,20 @@ class AiServiceClient:
         """Make an API request to the given endpoint on the AI service.
 
         Args:
+        ----
             endpoint: The endpoint to call, e.g., "/optimize"
             method: The HTTP method to use ('GET' or 'POST')
             payload: Optional JSON payload to include in the POST request body
             timeout: The timeout for the request in seconds
 
         Returns:
+        -------
             The response object from the API
 
         Raises:
+        ------
             requests.exceptions.RequestException: If the request fails
+
         """
         """Make an API request to the given endpoint on the AI service.
 
@@ -128,9 +132,9 @@ class AiServiceClient:
     def log_results(
         self,
         function_trace_id: str,
-        speedup_ratio: dict[str, float] | None,
+        speedup_ratio: dict[str, float | None] | None,
         original_runtime: float | None,
-        optimized_runtime: dict[str, float] | None,
+        optimized_runtime: dict[str, float | None] | None,
         is_correct: dict[str, bool] | None,
     ) -> None:
         """Log features to the database.
