@@ -33,7 +33,7 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         if not comparator(original_test_result.return_value, cdd_test_result.return_value):
             are_equal = False
             break
-        if original_test_result.test_type == TestType.EXISTING_UNIT_TEST and (
+        if original_test_result.test_type in [TestType.EXISTING_UNIT_TEST, TestType.CONCOLIC_COVERAGE_TEST] and (
             cdd_test_result.did_pass != original_test_result.did_pass
         ):
             are_equal = False
