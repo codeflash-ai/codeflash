@@ -446,3 +446,292 @@ def test_discover_tests_pytest_separate_moduledir():
         # Check if the test for the nested class method is discovered
         assert len(discovered_tests) == 1
         assert discovered_tests["mypackage.code.find_common_tags"][0].tests_in_file.test_file == test_file_path
+
+
+def test_unittest_discovery_with_pytest():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        path_obj_tmpdirname = Path(tmpdirname)
+
+        # Create a simple code file
+        code_file_path = path_obj_tmpdirname / "calculator.py"
+        code_file_content = """
+class Calculator:
+    def add(self, a, b):
+        return a + b
+"""
+        code_file_path.write_text(code_file_content)
+
+        # Create a unittest test file
+        test_file_path = path_obj_tmpdirname / "test_calculator.py"
+        test_file_content = """
+import unittest
+from calculator import Calculator
+
+class TestCalculator(unittest.TestCase):
+    def test_add(self):
+        calc = Calculator()
+        self.assertEqual(calc.add(2, 2), 4)
+"""
+        test_file_path.write_text(test_file_content)
+
+        # Configure test discovery
+        test_config = TestConfig(
+            tests_root=path_obj_tmpdirname,
+            project_root_path=path_obj_tmpdirname,
+            test_framework="pytest",  # Using pytest framework to discover unittest tests
+            tests_project_rootdir=path_obj_tmpdirname.parent,
+        )
+
+        # Discover tests
+        discovered_tests = discover_unit_tests(test_config)
+
+        # Verify the unittest was discovered
+        assert len(discovered_tests) == 1
+        assert "calculator.Calculator.add" in discovered_tests
+        assert len(discovered_tests["calculator.Calculator.add"]) == 1
+        assert discovered_tests["calculator.Calculator.add"][0].tests_in_file.test_file == test_file_path
+        assert discovered_tests["calculator.Calculator.add"][0].tests_in_file.test_function == "test_add"
+
+
+def test_unittest_discovery_with_pytest_parent_class():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        path_obj_tmpdirname = Path(tmpdirname)
+
+        # Create a simple code file
+        code_file_path = path_obj_tmpdirname / "calculator.py"
+        code_file_content = """
+class Calculator:
+    def add(self, a, b):
+        return a + b
+"""
+        code_file_path.write_text(code_file_content)
+
+        # Create a base test class file
+        base_test_file_path = path_obj_tmpdirname / "base_test.py"
+        base_test_content = """
+import unittest
+
+class BaseTestCase(unittest.TestCase):
+    def setUp(self):
+        self.setup_called = True
+
+    def tearDown(self):
+        self.setup_called = False
+
+    def assert_setup_called(self):
+        self.assertTrue(self.setup_called, "Setup was not called")
+"""
+        base_test_file_path.write_text(base_test_content)
+
+        # Create a unittest test file that extends the base test
+        test_file_path = path_obj_tmpdirname / "test_calculator.py"
+        test_file_content = """
+from base_test import BaseTestCase
+from calculator import Calculator
+
+class ExtendedTestCase(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.calc = Calculator()
+
+class TestCalculator(ExtendedTestCase):
+    def test_add(self):
+        self.assert_setup_called()
+        self.assertEqual(self.calc.add(2, 2), 4)
+"""
+        test_file_path.write_text(test_file_content)
+
+        # Configure test discovery
+        test_config = TestConfig(
+            tests_root=path_obj_tmpdirname,
+            project_root_path=path_obj_tmpdirname,
+            test_framework="pytest",  # Using pytest framework to discover unittest tests
+            tests_project_rootdir=path_obj_tmpdirname.parent,
+        )
+
+        # Discover tests
+        discovered_tests = discover_unit_tests(test_config)
+
+        # Verify the unittest was discovered
+        assert len(discovered_tests) == 2
+        assert "calculator.Calculator.add" in discovered_tests
+        assert len(discovered_tests["calculator.Calculator.add"]) == 1
+        assert discovered_tests["calculator.Calculator.add"][0].tests_in_file.test_file == test_file_path
+        assert discovered_tests["calculator.Calculator.add"][0].tests_in_file.test_function == "test_add"
+
+
+def test_unittest_discovery_with_pytest_private():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        path_obj_tmpdirname = Path(tmpdirname)
+
+        # Create a simple code file
+        code_file_path = path_obj_tmpdirname / "calculator.py"
+        code_file_content = """
+class Calculator:
+    def add(self, a, b):
+        return a + b
+"""
+        code_file_path.write_text(code_file_content)
+
+        # Create a unittest test file with a private test method (prefixed with _)
+        test_file_path = path_obj_tmpdirname / "test_calculator.py"
+        test_file_content = """
+import unittest
+from calculator import Calculator
+
+class TestCalculator(unittest.TestCase):
+    def _test_add(self):  # Private test method should not be discovered
+        calc = Calculator()
+        self.assertEqual(calc.add(2, 2), 4)
+"""
+        test_file_path.write_text(test_file_content)
+
+        # Configure test discovery
+        test_config = TestConfig(
+            tests_root=path_obj_tmpdirname,
+            project_root_path=path_obj_tmpdirname,
+            test_framework="pytest",  # Using pytest framework to discover unittest tests
+            tests_project_rootdir=path_obj_tmpdirname.parent,
+        )
+
+        # Discover tests
+        discovered_tests = discover_unit_tests(test_config)
+
+        # Verify no tests were discovered
+        assert len(discovered_tests) == 0
+        assert "calculator.Calculator.add" not in discovered_tests
+
+
+def test_unittest_discovery_with_pytest_subtest():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        path_obj_tmpdirname = Path(tmpdirname)
+
+        # Create a simple code file
+        code_file_path = path_obj_tmpdirname / "calculator.py"
+        code_file_content = """
+class Calculator:
+    def add(self, a, b):
+        return a + b
+"""
+        code_file_path.write_text(code_file_content)
+
+        # Create a unittest test file with parameterized tests
+        test_file_path = path_obj_tmpdirname / "test_calculator.py"
+        test_file_content = """
+import unittest
+from calculator import Calculator
+
+class TestCalculator(unittest.TestCase):
+    def test_add_with_parameters(self):
+        calc = Calculator()
+        test_cases = [
+            {"a": 2, "b": 2, "expected": 4},
+            {"a": 0, "b": 0, "expected": 0},
+            {"a": -1, "b": 1, "expected": 0},
+            {"a": 10, "b": -5, "expected": 5}
+        ]
+
+        for case in test_cases:
+            with self.subTest(a=case["a"], b=case["b"]):
+                result = calc.add(case["a"], case["b"])
+                self.assertEqual(result, case["expected"])
+"""
+        test_file_path.write_text(test_file_content)
+
+        # Configure test discovery
+        test_config = TestConfig(
+            tests_root=path_obj_tmpdirname,
+            project_root_path=path_obj_tmpdirname,
+            test_framework="pytest",  # Using pytest framework to discover unittest tests
+            tests_project_rootdir=path_obj_tmpdirname.parent,
+        )
+
+        # Discover tests
+        discovered_tests = discover_unit_tests(test_config)
+
+        # Verify the unittest was discovered
+        assert len(discovered_tests) == 1
+        assert "calculator.Calculator.add" in discovered_tests
+        assert len(discovered_tests["calculator.Calculator.add"]) == 1
+        assert discovered_tests["calculator.Calculator.add"][0].tests_in_file.test_file == test_file_path
+        assert (
+            discovered_tests["calculator.Calculator.add"][0].tests_in_file.test_function == "test_add_with_parameters"
+        )
+
+
+def test_unittest_discovery_with_pytest_parameterized():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        path_obj_tmpdirname = Path(tmpdirname)
+
+        # Create a simple code file
+        code_file_path = path_obj_tmpdirname / "calculator.py"
+        code_file_content = """
+class Calculator:
+    def add(self, a, b):
+        return a + b
+
+    def multiply(self, a, b):
+        return a * b
+"""
+        code_file_path.write_text(code_file_content)
+
+        # Create a unittest test file with different parameterized patterns
+        test_file_path = path_obj_tmpdirname / "test_calculator.py"
+        test_file_content = """
+import unittest
+from parameterized import parameterized
+from calculator import Calculator
+
+class TestCalculator(unittest.TestCase):
+    # Test with named parameters
+    @parameterized.expand([
+        ("positive_numbers", 2, 2, 4),
+        ("zeros", 0, 0, 0),
+        ("negative_and_positive", -1, 1, 0),
+        ("negative_result", 10, -15, -5),
+    ])
+    def test_add(self, name, a, b, expected):
+        calc = Calculator()
+        result = calc.add(a, b)
+        self.assertEqual(result, expected)
+
+    # Test with unnamed parameters
+    @parameterized.expand([
+        (2, 3, 6),
+        (0, 5, 0),
+        (-2, 3, -6),
+    ])
+    def test_multiply(self, a, b, expected):
+        calc = Calculator()
+        result = calc.multiply(a, b)
+        self.assertEqual(result, expected)
+
+    # Test with mixed naming patterns
+    @parameterized.expand([
+        ("test with spaces", 1, 1, 2),
+        ("test_with_underscores", 2, 2, 4),
+        ("test.with.dots", 3, 3, 6),
+        ("test-with-hyphens", 4, 4, 8),
+    ])
+    def test_add_mixed(self, name, a, b, expected):
+        calc = Calculator()
+        result = calc.add(a, b)
+        self.assertEqual(result, expected)
+"""
+        test_file_path.write_text(test_file_content)
+
+        # Configure test discovery
+        test_config = TestConfig(
+            tests_root=path_obj_tmpdirname,
+            project_root_path=path_obj_tmpdirname,
+            test_framework="pytest",
+            tests_project_rootdir=path_obj_tmpdirname.parent,
+        )
+
+        # Discover tests
+        discovered_tests = discover_unit_tests(test_config)
+
+        # Verify the basic structure
+        assert len(discovered_tests) == 2  # Should have tests for both add and multiply
+        assert "calculator.Calculator.add" in discovered_tests
+        assert "calculator.Calculator.multiply" in discovered_tests
