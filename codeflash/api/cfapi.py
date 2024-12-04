@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Optional
 import requests
 from pydantic.json import pydantic_encoder
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
 from codeflash.code_utils.git_utils import get_repo_owner_and_name
 
@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 if os.environ.get("CODEFLASH_CFAPI_SERVER", default="prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
     logger.info(f"Using local CF API at {CFAPI_BASE_URL}.")
+    console.rule()
 else:
     CFAPI_BASE_URL = "https://app.codeflash.ai"
 

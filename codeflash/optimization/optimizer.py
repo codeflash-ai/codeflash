@@ -131,14 +131,17 @@ class Optimizer:
 
             console.rule()
             logger.info(f"Discovering existing unit tests in {self.test_cfg.tests_root}…")
+            console.rule()
             function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
             num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
+            console.rule()
             logger.info(f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}")
             console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
 
             for original_module_path in file_to_funcs_to_optimize:
                 logger.info(f"Examining file {original_module_path!s}…")
+                console.rule()
 
                 original_module_code: str = original_module_path.read_text(encoding="utf8")
                 try:
@@ -731,6 +734,7 @@ class Optimizer:
         func_qualname = function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
         if func_qualname not in function_to_tests:
             logger.info(f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.")
+            console.rule()
         else:
             test_file_invocation_positions = defaultdict(list)
             for tests_in_file in function_to_tests.get(func_qualname):
@@ -1105,9 +1109,11 @@ class Optimizer:
 
             if compare_test_results(initial_loop_original_test_results, initial_loop_candidate_results):
                 logger.info("Test results matched!")
+                console.rule()
                 equal_results = True
             else:
                 logger.info("Test results did not match the test results of the original code.")
+                console.rule()
                 success = False
                 equal_results = False
 

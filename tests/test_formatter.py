@@ -197,6 +197,5 @@ def foo():
         tmp.write(original_code)
         tmp.flush()
         tmp_path = tmp.name
-
-        actual = format_code(formatter_cmds=["exit 1"], path=Path(tmp_path))
-        assert actual == expected
+        with pytest.raises(FileNotFoundError):
+            format_code(formatter_cmds=["exit 1"], path=Path(tmp_path))

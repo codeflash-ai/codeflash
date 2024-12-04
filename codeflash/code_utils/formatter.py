@@ -3,36 +3,48 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
-from pathlib import Path
+import sys
+from typing import TYPE_CHECKING
 
 import isort
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def format_code(formatter_cmds: list[str], path: Path) -> str:
     # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
+    formatter_name = formatter_cmds[0].lower()
     if not path.exists():
-        raise FileNotFoundError(f"File {path} does not exist. Cannot format the file.")
-    if formatter_cmds[0].lower() == "disabled":
-        new_code = path.read_text(encoding="utf8")
-        return new_code
-    file_token = "$file"
+        msg = f"File {path} does not exist. Cannot format the file."
+        raise FileNotFoundError(msg)
+    if formatter_name == "disabled":
+        return path.read_text(encoding="utf8")
+    file_token = "$file"  # noqa: S105
 
     for command in formatter_cmds:
         formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
         formatter_cmd_list = [str(path) if chunk == file_token else chunk for chunk in formatter_cmd_list]
-        logger.info(f"Formatting code with {' '.join(formatter_cmd_list)} ...")
-
+        console.rule(f"Formatting code with {' '.join(formatter_cmd_list)} ...")
         try:
-            result = subprocess.run(formatter_cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+            result = subprocess.run(formatter_cmd_list, capture_output=True, check=False)
             if result.returncode == 0:
                 logger.info("FORMATTING OK")
             else:
                 logger.error(f"Failed to format code with {' '.join(formatter_cmd_list)}")
-        except Exception as e:
-            logger.exception(f"Failed to format code with {' '.join(formatter_cmd_list)}: {e}")
-            # Fall back to original code if formatter fails
+        except FileNotFoundError as e:
+            from rich.panel import Panel
+            from rich.text import Text
+
+            panel = Panel(
+                Text.from_markup(f"⚠️  Formatter command not found: {' '.join(formatter_cmd_list)}", style="bold red"),
+                expand=False,
+            )
+            console.print(panel)
+
+            raise e from None
 
     return path.read_text(encoding="utf8")
 
