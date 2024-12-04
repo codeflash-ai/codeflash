@@ -182,9 +182,6 @@ class TestResults(BaseModel):
     def __setitem__(self, index: int, value: FunctionTestInvocation) -> None:
         self.test_results[index] = value
 
-    def __delitem__(self, index: int) -> None:
-        del self.test_results[index]
-
     def __contains__(self, value: FunctionTestInvocation) -> bool:
         return value in self.test_results
 
