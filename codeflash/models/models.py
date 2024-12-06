@@ -371,7 +371,7 @@ class CoverageData:
     def build_message(self) -> str:
         if self.status == CoverageStatus.NOT_FOUND:
             return f"No coverage data found for {self.function_name}"
-        return f"{self.coverage:.2f}%"
+        return f"{self.coverage:.1f}%"
 
     def log_coverage(self) -> None:
         from rich.tree import Tree

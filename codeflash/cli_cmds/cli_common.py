@@ -7,12 +7,16 @@ from typing import Callable, cast
 import click
 import inquirer
 
+from codeflash.cli_cmds.console import console, logger
+
 
 def apologize_and_exit() -> None:
-    click.echo(
+    console.rule()
+    logger.info(
         "💡 If you're having trouble, see https://docs.codeflash.ai/getting-started/local-installation for further help getting started with Codeflash!"
     )
-    click.echo("👋 Exiting...")
+    console.rule()
+    logger.info("👋 Exiting...")
     sys.exit(1)
 
 

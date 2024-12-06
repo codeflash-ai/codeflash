@@ -182,46 +182,56 @@ def process_test_files(
     for test_file, functions in file_to_test_map.items():
         script = jedi.Script(path=test_file, project=jedi_project)
         test_functions = set()
-        top_level_names = script.get_names()
+
         all_names = script.get_names(all_scopes=True, references=True)
         all_defs = script.get_names(all_scopes=True, definitions=True)
+        all_names_top = script.get_names(all_scopes=True)
 
-        for name in top_level_names:
-            if test_framework == "pytest":
-                functions_to_search = [elem.test_function for elem in functions]
-                for i, function in enumerate(functions_to_search):
-                    if "[" in function:
-                        function_name = re.split(r"[\[\]]", function)[0]
-                        parameters = re.split(r"[\[\]]", function)[1]
-                        if name.name == function_name and name.type == "function":
-                            test_functions.add(TestFunction(name.name, None, parameters, functions[i].test_type))
-                    elif name.name == function and name.type == "function":
-                        test_functions.add(TestFunction(name.name, None, None, functions[i].test_type))
-                        break
-            if test_framework == "unittest":
-                functions_to_search = [elem.test_function for elem in functions]
-                test_suites = [elem.test_suite for elem in functions]
+        top_level_functions = {name.name: name for name in all_names_top if name.type == "function"}
+        top_level_classes = {name.name: name for name in all_names_top if name.type == "class"}
 
-                if name.name in test_suites and name.type == "class":
-                    for def_name in all_defs:
-                        if (
-                            def_name.type == "function"
-                            and def_name.full_name is not None
-                            and f".{name.name}." in def_name.full_name
-                        ):
-                            for function in functions_to_search:
-                                (is_parameterized, new_function, parameters) = discover_parameters_unittest(function)
+        if test_framework == "pytest":
+            functions_to_search = [elem.test_function for elem in functions]
+            for i, function in enumerate(functions_to_search):
+                if "[" in function:
+                    function_name = re.split(r"[\[\]]", function)[0]
+                    parameters = re.split(r"[\[\]]", function)[1]
+                    if function_name in top_level_functions:
+                        test_functions.add(TestFunction(function_name, None, parameters, functions[i].test_type))
+                elif function in top_level_functions:
+                    test_functions.add(TestFunction(function, None, None, functions[i].test_type))
+                elif re.match(r"^test_\w+_\d+(?:_\w+)*", function):
+                    # Try to match parameterized unittest functions here, although we can't get the parameters.
+                    # Extract base name by removing the numbered suffix and any additional descriptions
+                    base_name = re.sub(r"_\d+(?:_\w+)*$", "", function)
+                    if base_name in top_level_functions:
+                        test_functions.add(TestFunction(base_name, None, function, functions[i].test_type))
 
-                                if is_parameterized and new_function == def_name.name:
-                                    test_functions.add(
-                                        TestFunction(
-                                            def_name.name, name.name, parameters, functions[0].test_type
-                                        )  # A test file must not have more than one test type
-                                    )
-                                elif function == def_name.name:
-                                    test_functions.add(
-                                        TestFunction(def_name.name, name.name, None, functions[0].test_type)
-                                    )
+        elif test_framework == "unittest":
+            functions_to_search = [elem.test_function for elem in functions]
+            test_suites = [elem.test_suite for elem in functions]
+
+            matching_names = test_suites & top_level_classes.keys()
+            for matched_name in matching_names:
+                for def_name in all_defs:
+                    if (
+                        def_name.type == "function"
+                        and def_name.full_name is not None
+                        and f".{matched_name}." in def_name.full_name
+                    ):
+                        for function in functions_to_search:
+                            (is_parameterized, new_function, parameters) = discover_parameters_unittest(function)
+
+                            if is_parameterized and new_function == def_name.name:
+                                test_functions.add(
+                                    TestFunction(
+                                        def_name.name, matched_name, parameters, functions[0].test_type
+                                    )  # A test file must not have more than one test type
+                                )
+                            elif function == def_name.name:
+                                test_functions.add(
+                                    TestFunction(def_name.name, matched_name, None, functions[0].test_type)
+                                )
 
         test_functions_list = list(test_functions)
         test_functions_raw = [elem.function_name for elem in test_functions_list]

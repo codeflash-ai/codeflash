@@ -134,6 +134,7 @@ class Optimizer:
             console.rule()
             function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
             num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
+            console.rule()
             logger.info(f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}")
             console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
@@ -433,7 +434,11 @@ class Optimizer:
             test_paths.unlink(missing_ok=True)
         for fn in function_to_concolic_tests:
             for test in function_to_concolic_tests[fn]:
-                shutil.rmtree(test.tests_in_file.test_file.parent)
+                if not test.tests_in_file.test_file.parent.exists():
+                    logger.warning(
+                        f"Concolic test directory {test.tests_in_file.test_file.parent} does not exist so could not be deleted."
+                    )
+                shutil.rmtree(test.tests_in_file.test_file.parent, ignore_errors=True)
                 break  # need to delete only one test directory
 
         if not best_optimization:

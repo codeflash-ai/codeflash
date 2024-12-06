@@ -19,6 +19,7 @@ from returns.pipeline import is_successful
 
 from codeflash.api.cfapi import is_github_app_installed_on_repo
 from codeflash.cli_cmds.cli_common import apologize_and_exit, inquirer_wrapper, inquirer_wrapper_path
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import get_codeflash_api_key
@@ -88,11 +89,19 @@ def init_codeflash() -> None:
 
 
 def ask_run_end_to_end_test(args: Namespace) -> None:
-    run_tests = inquirer_wrapper(
-        inquirer.confirm,
-        message="⚡️ Do you want to run a sample optimization to make sure everything's set up correctly? (takes about 3 minutes)",
-        default=True,
+    from rich.prompt import Confirm
+
+    run_tests = Confirm.ask(
+        "⚡️ Do you want to run a sample optimization to make sure everything's set up correctly? (takes about 3 minutes)",
+        choices=["y", "n"],
+        default="y",
+        show_choices=True,
+        show_default=False,
+        console=console,
     )
+
+    console.rule()
+
     if run_tests:
         bubble_sort_path, bubble_sort_test_path = create_bubble_sort_file_and_test(args)
         run_end_to_end_test(args, bubble_sort_path, bubble_sort_test_path)
@@ -617,38 +626,61 @@ def test_sort():
     output = sorter(input)
     assert output == list(range(500))
 """
-    else:
-        click.echo(f"❌ Unsupported test framework: {args.test_framework}")
-        apologize_and_exit()
 
     bubble_sort_path = Path(args.module_root) / "bubble_sort.py"
+    if bubble_sort_path.exists():
+        from rich.prompt import Confirm
+
+        overwrite = Confirm.ask(
+            f"🤔 {bubble_sort_path} already exists. Do you want to overwrite it?", default=True, show_default=False
+        )
+        if not overwrite:
+            apologize_and_exit()
+        console.rule()
+
     bubble_sort_path.write_text(bubble_sort_content, encoding="utf8")
 
     bubble_sort_test_path = Path(args.tests_root) / "test_bubble_sort.py"
     bubble_sort_test_path.write_text(bubble_sort_test_content, encoding="utf8")
 
-    click.echo(f"✅ Created {bubble_sort_path}")
-    click.echo(f"✅ Created {bubble_sort_test_path}")
+    for path in [bubble_sort_path, bubble_sort_test_path]:
+        logger.info(f"✅ Created {path}")
+        console.rule()
 
     return str(bubble_sort_path), str(bubble_sort_test_path)
 
 
 def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test_path: str) -> None:
     command = ["codeflash", "--file", "bubble_sort.py", "--function", "sorter"]
-    sys.stdout.write("Running sample optimization…")
-    sys.stdout.flush()
-    try:
-        process = subprocess.run(command, text=True, cwd=args.module_root, check=False)
-    finally:
-        # Delete the bubble_sort.py file after the test
-        Path(bubble_sort_path).unlink(missing_ok=True)
-        Path(bubble_sort_test_path).unlink(missing_ok=True)
-        click.echo(f"{LF}🗑️ Deleted {bubble_sort_path}")
-        click.echo(f"{LF}🗑️ Deleted {bubble_sort_test_path}")
+    if args.no_pr:
+        command.append("--no-pr")
 
-    if process.returncode == 0:
-        click.echo(f"{LF}✅ End-to-end test passed. Codeflash has been correctly set up!")
-    else:
-        click.echo(
-            f"{LF}❌ End-to-end test failed. Please check the logs above, and take a look at https://docs.codeflash.ai/getting-started/local-installation for help and troubleshooting."
-        )
+    logger.info("Running sample optimization…")
+    console.rule()
+
+    try:
+        output = []
+        with subprocess.Popen(
+            command, text=True, cwd=args.module_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        ) as process:
+            if process.stdout:
+                for line in process.stdout:
+                    stripped = line.strip()
+                    console.print(stripped)
+                    output.append(stripped)
+            process.wait()
+        console.rule()
+        if process.returncode == 0:
+            logger.info("End-to-end test passed. Codeflash has been correctly set up!")
+        else:
+            logger.error(
+                "End-to-end test failed. Please check the logs above, and take a look at https://docs.codeflash.ai/getting-started/local-installation for help and troubleshooting."
+            )
+    finally:
+        console.rule()
+        # Delete the bubble_sort.py file after the test
+        logger.info("🧹 Cleaning up…")
+        for path in [bubble_sort_path, bubble_sort_test_path]:
+            console.rule()
+            Path(path).unlink(missing_ok=True)
+            logger.info(f"🗑️  Deleted {path}")

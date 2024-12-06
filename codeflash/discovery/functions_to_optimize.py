@@ -15,7 +15,7 @@ import libcst as cst
 from pydantic.dataclasses import dataclass
 
 from codeflash.api.cfapi import get_blocklisted_functions
-from codeflash.cli_cmds.console import DEBUG_MODE, console, logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
@@ -198,6 +198,9 @@ def get_functions_to_optimize(
             logger.info("Finding all functions modified in the current git diff ...")
             ph("cli-optimizing-git-diff")
             functions = get_functions_within_git_diff()
+        filtered_modified_functions, functions_count = filter_functions(
+            functions, test_cfg.tests_root, ignore_paths, project_root, module_root
+        )
         filtered_modified_functions, functions_count = filter_functions(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root
         )
