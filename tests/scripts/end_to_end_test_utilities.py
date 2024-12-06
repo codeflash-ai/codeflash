@@ -2,6 +2,7 @@ import logging
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -18,13 +19,30 @@ class CoverageExpectation:
 @dataclass
 class TestConfig:
     # Make file_path optional when trace_mode is True
-    file_path: Optional[str] = None
+    file_path: Optional[pathlib.Path] = None
     function_name: Optional[str] = None
     test_framework: Optional[str] = None
     expected_unit_tests: Optional[int] = None
     min_improvement_x: float = 0.1
     trace_mode: bool = False
     coverage_expectations: list[CoverageExpectation] = field(default_factory=list)
+
+
+def clear_directory(directory_path: str | pathlib.Path) -> None:
+    """Empties all the files and subdirectories in the given directory to avoid errors in count of functions to be tested during retry."""
+    dir_path = pathlib.Path(directory_path)
+    if not dir_path.exists():
+        print(f"The directory {directory_path} does not exist.")
+        return
+
+    for item in dir_path.iterdir():
+        try:
+            if item.is_file() or item.is_symlink():
+                item.unlink()  # Remove the file or symbolic link
+            elif item.is_dir():
+                shutil.rmtree(item)  # Remove the subdirectory
+        except Exception as e:
+            print(f"Failed to delete {item}. Reason: {e}")
 
 
 def validate_coverage(stdout: str, expectations: list[CoverageExpectation]) -> bool:
@@ -141,6 +159,8 @@ def validate_output(stdout: str, return_code: int, expected_improvement_pct: int
 
 def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_pct: int) -> bool:
     # First command: Run the tracer
+    test_root = cwd / "tests" / (config.test_framework or "")
+    clear_directory(test_root)
     command = ["python", "-m", "codeflash.tracer", "-o", "codeflash.trace", "workload.py"]
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
