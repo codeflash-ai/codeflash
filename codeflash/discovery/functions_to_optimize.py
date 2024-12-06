@@ -161,7 +161,7 @@ def get_functions_to_optimize(
     ), "Only one of optimize_all, replay_test, or file should be provided"
     functions: dict[str, list[FunctionToOptimize]]
     with warnings.catch_warnings():
-        warnings.simplefilter(category=SyntaxWarning)
+        warnings.simplefilter(action="ignore", category=SyntaxWarning)
         if optimize_all:
             logger.info("Finding all functions in the module '%s'…", optimize_all)
             console.rule()
