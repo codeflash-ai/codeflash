@@ -70,6 +70,7 @@ def suggest_changes(
     existing_tests: str,
     generated_tests: str,
     trace_id: str,
+    coverage_message: str,
 ) -> Response:
     """Suggest changes to a pull request.
 
@@ -92,6 +93,7 @@ def suggest_changes(
         "existingTests": existing_tests,
         "generatedTests": generated_tests,
         "traceId": trace_id,
+        "coverage": coverage_message,
     }
     return make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
 
@@ -105,7 +107,7 @@ def create_pr(
     existing_tests: str,
     generated_tests: str,
     trace_id: str,
-    coverage_pct: str,
+    coverage_message: str,
 ) -> Response:
     """Create a pull request, targeting the specified branch. (usually 'main').
 
@@ -127,7 +129,7 @@ def create_pr(
         "existingTests": existing_tests,
         "generatedTests": generated_tests,
         "traceId": trace_id,
-        "coverage": coverage_pct,
+        "coverage": coverage_message,
     }
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
