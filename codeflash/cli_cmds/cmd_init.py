@@ -651,7 +651,10 @@ def test_sort():
 
 
 def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test_path: str) -> None:
-    command = ["codeflash", "--file", "bubble_sort.py", "--function", "sorter", "--no-pr"]
+    command = ["codeflash", "--file", "bubble_sort.py", "--function", "sorter"]
+    if args.no_pr:
+        command.append("--no-pr")
+
     logger.info("Running sample optimization…")
     console.rule()
 
