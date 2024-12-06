@@ -10,3 +10,5 @@ LF: str = os.linesep
 
 
 SAFE_SYS_EXECUTABLE: str = Path(sys.executable).as_posix()
+
+IS_POSIX = os.name != "nt"

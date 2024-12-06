@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_utils import get_run_tmp_file
-from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
+from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, IS_POSIX
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
 from codeflash.models.models import TestFiles
@@ -16,8 +16,6 @@ from codeflash.verification.test_results import TestType
 
 if TYPE_CHECKING:
     from codeflash.models.models import TestFiles
-
-is_posix = os.name != "nt"
 
 
 def execute_test_subprocess(
@@ -53,7 +51,7 @@ def run_tests(
                 )
             else:
                 test_files.append(str(file.instrumented_file_path))
-        pytest_cmd_list = shlex.split(pytest_cmd, posix=is_posix)
+        pytest_cmd_list = shlex.split(pytest_cmd, posix=IS_POSIX)
 
         common_pytest_args = [
             "--capture=tee-sys",
