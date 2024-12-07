@@ -3,12 +3,11 @@ from argparse import Namespace
 from dataclasses import dataclass
 
 import pytest
-from returns.pipeline import is_successful
-
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
 from codeflash.optimization.function_context import get_function_variables_definitions
 from codeflash.optimization.optimizer import Optimizer
+from returns.pipeline import is_successful
 
 
 def calculate_something(data):
@@ -121,6 +120,10 @@ def calculate_something_ann(data):
 
 def simple_function_with_one_dep_ann(data: MyData):
     return calculate_something_ann(data)
+
+
+def list_comprehension_dependency(data: MyData):
+    return [calculate_something(data) for x in range(10)]
 
 
 def test_simple_dependencies_ann() -> None:
@@ -305,3 +308,13 @@ def test_recursive_function_context() -> None:
         return self.recursive(num) + num_1
 """
     )
+
+
+def test_list_comprehension_dependency() -> None:
+    file_path = pathlib.Path(__file__).resolve()
+    helper_functions = get_function_variables_definitions(
+        FunctionToOptimize("list_comprehension_dependency", str(file_path), []), str(file_path.parent.resolve())
+    )[0]
+    assert len(helper_functions) == 2
+    assert helper_functions[0].jedi_definition.full_name == "test_function_dependencies.MyData"
+    assert helper_functions[1].jedi_definition.full_name == "test_function_dependencies.calculate_something"
