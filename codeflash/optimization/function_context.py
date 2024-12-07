@@ -29,10 +29,27 @@ def belongs_to_function(name: Name, function_name: str) -> bool:
     """Check if the given name belongs to the specified function"""
     if name.full_name and name.full_name.startswith(name.module_name):
         subname: str = name.full_name.replace(name.module_name, "", 1)
-    else:
+        # The name is defined inside the function or is the function itself
+        if f".{function_name}." in subname or f".{function_name}" == subname:
+            return True
+        return bool(name_in_listcomp_in_function(name, function_name))
+    return False
+
+
+def name_in_listcomp_in_function(name: Name, function_name: str) -> bool:
+    """Check if the given name is in a list comprehension in the specified function
+    Special case because jedi has a bug https://github.com/davidhalter/jedi/issues/1944
+    """
+    try:
+        parent_node = name._name.parent_context.tree_node.parent
+        if hasattr(parent_node, "type") and parent_node.type == "testlist_comp":
+            while parent_node := parent_node.parent:
+                if parent_node.type == "funcdef":
+                    return parent_node.name.value == function_name
         return False
-    # The name is defined inside the function or is the function itself
-    return f".{function_name}." in subname or f".{function_name}" == subname
+    except Exception:
+        # don't want to handle conformance with 3rd party library private attribute access exception types
+        return False
 
 
 def get_type_annotation_context(
