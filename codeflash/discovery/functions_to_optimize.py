@@ -6,7 +6,7 @@ import random
 import warnings
 from _ast import AsyncFunctionDef, ClassDef, FunctionDef
 from collections import defaultdict
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -15,7 +15,7 @@ import libcst as cst
 from pydantic.dataclasses import dataclass
 
 from codeflash.api.cfapi import get_blocklisted_functions
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import DEBUG_MODE, console, logger
 from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
@@ -317,7 +317,7 @@ def is_git_repo(file_path: str) -> bool:
         return False
 
 
-@lru_cache(maxsize=None)
+@cache
 def ignored_submodule_paths(module_root: str) -> list[str]:
     if is_git_repo(module_root):
         git_repo = git.Repo(module_root, search_parent_directories=True)
