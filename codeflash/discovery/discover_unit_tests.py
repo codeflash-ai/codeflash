@@ -14,8 +14,9 @@ import jedi
 from pydantic.dataclasses import dataclass
 from pytest import ExitCode
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
+from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile
 from codeflash.verification.test_results import TestType
 
@@ -51,7 +52,7 @@ def discover_tests_pytest(
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
     subprocess.run(
         [
-            sys.executable,
+            SAFE_SYS_EXECUTABLE,
             Path(__file__).parent / "pytest_new_process_discovery.py",
             str(project_root),
             str(tests_root),
@@ -76,6 +77,7 @@ def discover_tests_pytest(
             logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}={ExitCode(exitcode).name}")
         else:
             logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
+        console.rule()
     else:
         logger.debug(f"Pytest collection exit code: {exitcode}")
     if pytest_rootdir is not None:

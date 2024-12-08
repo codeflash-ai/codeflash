@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, TypeVar
 
 import libcst as cst
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module
 from codeflash.models.models import FunctionParent
 
@@ -184,6 +184,7 @@ def replace_functions_in_file(
         if visitor.optim_body is None:
             msg = f"Unable to find function {function_name} in optimized code. Returning unchanged source code."
             logger.error(msg)
+            console.rule()
             return source_code
 
         transformer = OptimFunctionReplacer(
