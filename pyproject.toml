@@ -80,7 +80,7 @@ tomlkit = ">=0.11.7"
 unittest-xml-reporting = ">=3.2.0"
 junitparser = ">=3.1.0"
 pydantic = ">=1.10.1"
-black = ">=22.3.0"
+black = ">=22.3.0" # We should probably remove this dependency
 humanize = ">=4.0.0"
 posthog = ">=3.0.0"
 click = ">=8.1.0"
