@@ -29,8 +29,8 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
     print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
-    gc.disable()
     exception = None
+    gc.disable()
     try:
         counter = time.perf_counter_ns()
         return_value = wrapped(*args, **kwargs)
@@ -99,8 +99,8 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     else:
         expected += """print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!')"""
     expected += """
-    gc.disable()
     exception = None
+    gc.disable()
     try:
         counter = time.perf_counter_ns()
         return_value = wrapped(*args, **kwargs)
@@ -204,8 +204,8 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     else:
         expected += """print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!')"""
     expected += """
-    gc.disable()
     exception = None
+    gc.disable()
     try:
         counter = time.perf_counter_ns()
         return_value = wrapped(*args, **kwargs)
@@ -1832,8 +1832,8 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     else:
         expected += """    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!')"""
     expected += """
-    gc.disable()
     exception = None
+    gc.disable()
     try:
         counter = time.perf_counter_ns()
         return_value = wrapped(*args, **kwargs)
