@@ -23,27 +23,31 @@ def generate_concolic_tests(
     if test_cfg.concolic_test_root_dir and has_typed_parameters(function_to_optimize_ast, function_to_optimize.parents):
         logger.info("Generating concolic opcode coverage tests for the original code…")
         console.rule()
-        cover_result = subprocess.run(
-            [
-                "crosshair",
-                "cover",
-                "--example_output_format=pytest",
-                "--per_condition_timeout=64",
-                ".".join(
-                    [
-                        function_to_optimize.file_path.relative_to(args.project_root)
-                        .with_suffix("")
-                        .as_posix()
-                        .replace("/", "."),
-                        function_to_optimize.qualified_name,
-                    ]
-                ),
-            ],
-            capture_output=True,
-            text=True,
-            cwd=args.project_root,
-            check=False,
-        )
+        try:
+            cover_result = subprocess.run(
+                [
+                    "crosshair",
+                    "cover",
+                    "--example_output_format=pytest",
+                    "--per_condition_timeout=64",
+                    ".".join(
+                        [
+                            function_to_optimize.file_path.relative_to(args.project_root)
+                            .with_suffix("")
+                            .as_posix()
+                            .replace("/", "."),
+                            function_to_optimize.qualified_name,
+                        ]
+                    ),
+                ],
+                capture_output=True,
+                text=True,
+                cwd=args.project_root,
+                check=False,
+                timeout=600,
+            )
+        except subprocess.TimeoutExpired:
+            return function_to_concolic_tests, concolic_test_suite_code
 
         if cover_result.returncode == 0:
             concolic_test_suite_code: str = cover_result.stdout
