@@ -42,3 +42,6 @@ def add_one_level_depth(a, b):
 
 def add(a, b):
     return a + b
+
+def multiply_and_add(a, b, c):
+    return a * b + c
