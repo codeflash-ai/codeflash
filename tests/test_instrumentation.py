@@ -30,16 +30,24 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
     print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
     gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
+    exception = None
+    try:
+        counter = time.perf_counter_ns()
+        return_value = wrapped(*args, **kwargs)
+        codeflash_duration = time.perf_counter_ns() - counter
+    except Exception as e:
+        exception = e
+        codeflash_duration = time.perf_counter_ns() - counter
+    finally:
+        gc.enable()
     if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
+        pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
     else:
         pickled_return_value = None
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
+    if exception:
+        raise exception
     return return_value
 """
 
@@ -92,16 +100,24 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         expected += """print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!')"""
     expected += """
     gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
+    exception = None
+    try:
+        counter = time.perf_counter_ns()
+        return_value = wrapped(*args, **kwargs)
+        codeflash_duration = time.perf_counter_ns() - counter
+    except Exception as e:
+        exception = e
+        codeflash_duration = time.perf_counter_ns() - counter
+    finally:
+        gc.enable()
     if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
+        pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
     else:
         pickled_return_value = None
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
+    if exception:
+        raise exception
     return return_value
 
 class TestPigLatin(unittest.TestCase):
@@ -189,16 +205,24 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         expected += """print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!')"""
     expected += """
     gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
+    exception = None
+    try:
+        counter = time.perf_counter_ns()
+        return_value = wrapped(*args, **kwargs)
+        codeflash_duration = time.perf_counter_ns() - counter
+    except Exception as e:
+        exception = e
+        codeflash_duration = time.perf_counter_ns() - counter
+    finally:
+        gc.enable()
     if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
+        pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
     else:
         pickled_return_value = None
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
+    if exception:
+        raise exception
     return return_value
 
 def test_prepare_image_for_yolo():
@@ -1809,16 +1833,24 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         expected += """    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!')"""
     expected += """
     gc.disable()
-    counter = time.perf_counter_ns()
-    return_value = wrapped(*args, **kwargs)
-    codeflash_duration = time.perf_counter_ns() - counter
-    gc.enable()
+    exception = None
+    try:
+        counter = time.perf_counter_ns()
+        return_value = wrapped(*args, **kwargs)
+        codeflash_duration = time.perf_counter_ns() - counter
+    except Exception as e:
+        exception = e
+        codeflash_duration = time.perf_counter_ns() - counter
+    finally:
+        gc.enable()
     if loop_index == 1:
-        pickled_return_value = pickle.dumps(return_value)
+        pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
     else:
         pickled_return_value = None
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value))
     codeflash_con.commit()
+    if exception:
+        raise exception
     return return_value
 
 def test_code_replacement10() -> None:
