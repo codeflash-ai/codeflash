@@ -47,6 +47,7 @@ def generate_concolic_tests(
                 timeout=600,
             )
         except subprocess.TimeoutExpired:
+            logger.debug("CrossHair Cover test generation timed out")
             return function_to_concolic_tests, concolic_test_suite_code
 
         if cover_result.returncode == 0:
