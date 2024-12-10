@@ -458,6 +458,9 @@ def create_wrapper_function() -> ast.FunctionDef:
                 keywords=[],
             )
         ),
+        ast.Assign(
+            targets=[ast.Name(id="exception", ctx=ast.Store())], value=ast.Constant(value=None), lineno=lineno + 10
+        ),
         ast.Expr(
             value=ast.Call(
                 func=ast.Attribute(value=ast.Name(id="gc", ctx=ast.Load()), attr="disable", ctx=ast.Load()),
@@ -465,9 +468,6 @@ def create_wrapper_function() -> ast.FunctionDef:
                 keywords=[],
             ),
             lineno=lineno + 9,
-        ),
-        ast.Assign(
-            targets=[ast.Name(id="exception", ctx=ast.Store())], value=ast.Constant(value=None), lineno=lineno + 10
         ),
         ast.Try(
             body=[
