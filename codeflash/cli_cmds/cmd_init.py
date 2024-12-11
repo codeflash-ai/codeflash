@@ -254,10 +254,8 @@ def detect_test_framework(curdir: Path, tests_root: Path) -> str | None:
                     if any(
                         isinstance(item, ast.ClassDef)
                         and any(
-                            isinstance(base, ast.Attribute)
-                            and base.attr == "TestCase"
-                            or isinstance(base, ast.Name)
-                            and base.id == "TestCase"
+                            (isinstance(base, ast.Attribute) and base.attr == "TestCase")
+                            or (isinstance(base, ast.Name) and base.id == "TestCase")
                             for base in item.bases
                         )
                         for item in node.body
@@ -433,7 +431,8 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     codeflash_section["tests-root"] = setup_info.tests_root
     codeflash_section["test-framework"] = setup_info.test_framework
     codeflash_section["ignore-paths"] = setup_info.ignore_paths
-    codeflash_section["remote-name"] = setup_info.git_remote
+    if setup_info.git_remote not in ["", "origin"]:
+        codeflash_section["git-remote"] = setup_info.git_remote
     formatter = setup_info.formatter
     formatter_cmds = []
     if formatter == "black":
