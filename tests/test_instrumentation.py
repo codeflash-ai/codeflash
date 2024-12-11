@@ -36,10 +36,9 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
         return_value = wrapped(*args, **kwargs)
         codeflash_duration = time.perf_counter_ns() - counter
     except Exception as e:
-        exception = e
         codeflash_duration = time.perf_counter_ns() - counter
-    finally:
-        gc.enable()
+        exception = e
+    gc.enable()
     if loop_index == 1:
         pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
     else:
@@ -106,10 +105,9 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         return_value = wrapped(*args, **kwargs)
         codeflash_duration = time.perf_counter_ns() - counter
     except Exception as e:
-        exception = e
         codeflash_duration = time.perf_counter_ns() - counter
-    finally:
-        gc.enable()
+        exception = e
+    gc.enable()
     if loop_index == 1:
         pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
     else:
@@ -211,10 +209,9 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         return_value = wrapped(*args, **kwargs)
         codeflash_duration = time.perf_counter_ns() - counter
     except Exception as e:
-        exception = e
         codeflash_duration = time.perf_counter_ns() - counter
-    finally:
-        gc.enable()
+        exception = e
+    gc.enable()
     if loop_index == 1:
         pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
     else:
@@ -1839,10 +1836,9 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         return_value = wrapped(*args, **kwargs)
         codeflash_duration = time.perf_counter_ns() - counter
     except Exception as e:
-        exception = e
         codeflash_duration = time.perf_counter_ns() - counter
-    finally:
-        gc.enable()
+        exception = e
+    gc.enable()
     if loop_index == 1:
         pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
     else:

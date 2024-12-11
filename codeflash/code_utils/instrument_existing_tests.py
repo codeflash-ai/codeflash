@@ -513,11 +513,6 @@ def create_wrapper_function() -> ast.FunctionDef:
                     name="e",
                     body=[
                         ast.Assign(
-                            targets=[ast.Name(id="exception", ctx=ast.Store())],
-                            value=ast.Name(id="e", ctx=ast.Load()),
-                            lineno=lineno + 13,
-                        ),
-                        ast.Assign(
                             targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],
                             value=ast.BinOp(
                                 left=ast.Call(
@@ -534,22 +529,25 @@ def create_wrapper_function() -> ast.FunctionDef:
                             ),
                             lineno=lineno + 15,
                         ),
+                        ast.Assign(
+                            targets=[ast.Name(id="exception", ctx=ast.Store())],
+                            value=ast.Name(id="e", ctx=ast.Load()),
+                            lineno=lineno + 13,
+                        ),
                     ],
                     lineno=lineno + 14,
                 )
             ],
             orelse=[],
-            finalbody=[
-                ast.Expr(
-                    value=ast.Call(
-                        func=ast.Attribute(value=ast.Name(id="gc", ctx=ast.Load()), attr="enable", ctx=ast.Load()),
-                        args=[],
-                        keywords=[],
-                    ),
-                    lineno=lineno + 16,
-                )
-            ],
+            finalbody=[],
             lineno=lineno + 11,
+        ),
+        ast.Expr(
+            value=ast.Call(
+                func=ast.Attribute(value=ast.Name(id="gc", ctx=ast.Load()), attr="enable", ctx=ast.Load()),
+                args=[],
+                keywords=[],
+            )
         ),
         ast.If(
             test=ast.Compare(
