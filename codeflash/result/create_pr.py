@@ -15,7 +15,6 @@ from codeflash.code_utils.git_utils import (
     get_repo_owner_and_name,
     git_root_dir,
 )
-from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.github.PrComment import FileDiffContent, PrComment
 from codeflash.models.models import FunctionCalledInTest
 from codeflash.result.explanation import Explanation
@@ -68,8 +67,8 @@ def check_create_pr(
             file_changes=build_file_changes,
             pr_comment=PrComment(
                 optimization_explanation=explanation.explanation_message(),
-                best_runtime=humanize_runtime(explanation.best_runtime_ns),
-                original_runtime=humanize_runtime(explanation.original_runtime_ns),
+                best_runtime=explanation.best_runtime_ns,
+                original_runtime=explanation.original_runtime_ns,
                 function_name=explanation.function_name,
                 relative_file_path=relative_path,
                 speedup_x=explanation.speedup_x,
