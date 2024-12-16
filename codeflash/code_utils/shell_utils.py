@@ -3,9 +3,8 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from returns.result import Failure, Result, Success
-
 from codeflash.code_utils.compat import LF
+from codeflash.either import Failure, Result, Success
 
 if os.name == "nt":  # Windows
     SHELL_RC_EXPORT_PATTERN = re.compile(r"^set CODEFLASH_API_KEY=(cf-.*)$", re.MULTILINE)
