@@ -3,9 +3,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import mock_open, patch
 
-from returns.result import Failure, Success
-
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config, save_api_key_to_rc
+from codeflash.either import Failure, Success
 
 
 class TestShellUtils(unittest.TestCase):
