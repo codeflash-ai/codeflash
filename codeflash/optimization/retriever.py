@@ -109,7 +109,5 @@ def get_code_optimization_context(
             read_only_list.append(f"```python:{file_path}\n{read_only_context_string_with_imports}```")
 
     read_only_string = "\n".join(read_only_list)
-    print("read_write_string: \n\n", read_write_string)
 
-    print("read_only_string: \n\n", read_only_string)
     return read_write_string, read_only_string
