@@ -104,6 +104,72 @@ def add_needed_imports_from_module(
         return dst_module_code
 
 
+def add_needed_imports_from_module_2(
+    src_module_code: str,
+    dst_module_code: str,
+    src_path: Path,
+    dst_path: Path,
+    project_root: Path,
+    helper_functions_fully_qualified_names: list[str] | None = None,
+) -> str:
+    """Copy of add_needed_imports_from_module. will remove in a future refactor. This function simply changes the 'helper_functions' argument"""
+    src_module_code = delete___future___aliased_imports(src_module_code)
+    if helper_functions_fully_qualified_names is None:
+        helper_functions_fully_qualified_names = []
+
+    src_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, src_path)
+    dst_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, dst_path)
+
+    dst_context: CodemodContext = CodemodContext(
+        filename=src_path.name,
+        full_module_name=dst_module_and_package.name,
+        full_package_name=dst_module_and_package.package,
+    )
+    gatherer: GatherImportsVisitor = GatherImportsVisitor(
+        CodemodContext(
+            filename=src_path.name,
+            full_module_name=src_module_and_package.name,
+            full_package_name=src_module_and_package.package,
+        )
+    )
+    cst.parse_module(src_module_code).visit(gatherer)
+    try:
+        for mod in gatherer.module_imports:
+            AddImportsVisitor.add_needed_import(dst_context, mod)
+            RemoveImportsVisitor.remove_unused_import(dst_context, mod)
+        for mod, obj_seq in gatherer.object_mapping.items():
+            for obj in obj_seq:
+                if f"{mod}.{obj}" in helper_functions_fully_qualified_names:
+                    continue  # Skip adding imports for helper functions already in the context
+                AddImportsVisitor.add_needed_import(dst_context, mod, obj)
+                RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
+    except Exception as e:
+        logger.exception(f"Error adding imports to destination module code: {e}")
+        return dst_module_code
+    for mod, asname in gatherer.module_aliases.items():
+        AddImportsVisitor.add_needed_import(dst_context, mod, asname=asname)
+        RemoveImportsVisitor.remove_unused_import(dst_context, mod, asname=asname)
+    for mod, alias_pairs in gatherer.alias_mapping.items():
+        for alias_pair in alias_pairs:
+            if f"{mod}.{alias_pair[0]}" in helper_functions_fully_qualified_names:
+                continue
+            AddImportsVisitor.add_needed_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
+            RemoveImportsVisitor.remove_unused_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
+
+    try:
+        parsed_module = cst.parse_module(dst_module_code)
+    except cst.ParserSyntaxError as e:
+        logger.exception(f"Syntax error in destination module code: {e}")
+        return dst_module_code  # Return the original code if there's a syntax error
+    try:
+        transformed_module = AddImportsVisitor(dst_context).transform_module(parsed_module)
+        transformed_module = RemoveImportsVisitor(dst_context).transform_module(transformed_module)
+        return transformed_module.code.lstrip("\n")
+    except Exception as e:
+        logger.exception(f"Error adding imports to destination module code: {e}")
+        return dst_module_code
+
+
 def get_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str | None, set[tuple[str, str]]]:
     """Return the code for a function or methods in a Python module. functions_to_optimize is either a singleton
     FunctionToOptimize instance, which represents either a function at the module level or a method of a class at the

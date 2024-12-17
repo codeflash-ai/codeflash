@@ -74,6 +74,7 @@ class AiServiceClient:
     def optimize_python_code(
         self,
         source_code: str,
+        dependency_code: str,
         trace_id: str,
         num_candidates: int = 10,
         experiment_metadata: ExperimentMetadata | None = None,
@@ -83,15 +84,20 @@ class AiServiceClient:
         Parameters
         ----------
         - source_code (str): The python code to optimize.
-        - num_variants (int): Number of optimization variants to generate. Default is 10.
+        - read_write_context (str) : The python code to be used as read-write context.
+        - read_only_context (str): The python code to be used as read-only context.
+        - trace_id (str): Trace id of optimization run
+        - num_candidates (int): Number of optimization variants to generate. Default is 10.
+        - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
 
         Returns
         -------
-        - List[Optimization]: A list of Optimization objects.
+        - List[OptimizationCandidate]: A list of Optimization Candidates.
 
         """
         payload = {
             "source_code": source_code,
+            "dependency_code": dependency_code,
             "num_variants": num_candidates,
             "trace_id": trace_id,
             "python_version": platform.python_version(),
