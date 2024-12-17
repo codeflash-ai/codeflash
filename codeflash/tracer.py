@@ -209,7 +209,7 @@ class Tracer:
         )
 
     def tracer_logic(self, frame: FrameType, event: str):
-        if event not in ["call", "return"]:
+        if event != "call":
             return
         if self.timeout is not None:
             if (time.time() - self.start_time) > self.timeout:
@@ -244,11 +244,6 @@ class Tracer:
         function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
         if function_qualified_name in self.ignored_qualified_functions:
             return
-        if event == "return":
-            self.function_count[function_qualified_name] += 1
-            if self.function_count[function_qualified_name] >= self.max_function_count:
-                self.ignored_qualified_functions.add(function_qualified_name)
-            return
         if function_qualified_name not in self.function_count:
             # seeing this function for the first time
             self.function_count[function_qualified_name] = 0
@@ -271,6 +266,11 @@ class Tracer:
                     line_no=code.co_firstlineno,
                 )
             )
+        else:
+            self.function_count[function_qualified_name] += 1
+            if self.function_count[function_qualified_name] >= self.max_function_count:
+                self.ignored_qualified_functions.add(function_qualified_name)
+                return
 
         # TODO: Also check if this function arguments are unique from the values logged earlier
 
