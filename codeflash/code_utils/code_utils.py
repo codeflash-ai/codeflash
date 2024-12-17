@@ -10,6 +10,12 @@ from tempfile import TemporaryDirectory
 from codeflash.cli_cmds.console import logger
 
 
+def get_qualified_name(module_name: str, full_qualified_name: str):
+    if not full_qualified_name.startswith(module_name):
+        raise ValueError(f"{full_qualified_name} does not start with {module_name}")
+    return full_qualified_name[len(module_name) + 1 :]
+
+
 def module_name_from_file_path(file_path: Path, project_root_path: Path) -> str:
     relative_path = file_path.relative_to(project_root_path)
     return relative_path.with_suffix("").as_posix().replace("/", ".")
