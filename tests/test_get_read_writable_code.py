@@ -1,9 +1,7 @@
 from textwrap import dedent
 
 import pytest
-from codeflash.optimization.cst_manipulator import (
-    get_read_writable_code,  # Update the import path to where these functions live
-)
+from codeflash.optimization.cst_manipulator import get_read_writable_code
 
 
 def test_simple_function() -> None:
