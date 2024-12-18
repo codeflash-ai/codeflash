@@ -4,10 +4,10 @@ from dataclasses import dataclass
 
 import pytest
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.either import is_successful
 from codeflash.models.models import FunctionParent
 from codeflash.optimization.function_context import get_function_variables_definitions
 from codeflash.optimization.optimizer import Optimizer
-from returns.pipeline import is_successful
 
 
 def calculate_something(data):
