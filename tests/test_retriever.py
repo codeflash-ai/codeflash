@@ -261,7 +261,7 @@ class DataProcessor:
         return prefix + data
     """
     expected_read_only_context = f"""
-```python:/Users/alvinryanputra/cf/codeflash/cli/code_to_optimize/code_directories/retriever/main.py
+```python:{path_to_file}
 if __name__ == "__main__":
     result = fetch_and_process_data()
     print("Processed data:", result)
