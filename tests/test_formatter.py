@@ -115,6 +115,11 @@ ignore-paths = []
     finally:
         os.remove(tmp_path)
 
+    try:
+        import black
+    except ImportError:
+        pytest.skip("black is not installed")
+
     original_code = b"""
 import os
 import sys
@@ -137,6 +142,10 @@ def foo():
 
 
 def test_formatter_black():
+    try:
+        import black
+    except ImportError:
+        pytest.skip("black is not installed")
     original_code = b"""
 import os
 import sys    
