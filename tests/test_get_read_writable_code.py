@@ -6,7 +6,7 @@ from codeflash.optimization.cst_manipulator import (
 )
 
 
-def test_simple_function():
+def test_simple_function() -> None:
     code = """
     def target_function():
         x = 1
@@ -24,7 +24,7 @@ def test_simple_function():
     assert result.strip() == expected.strip()
 
 
-def test_class_method():
+def test_class_method() -> None:
     code = """
     class MyClass:
         def target_function(self):
@@ -44,7 +44,7 @@ def test_class_method():
     assert result.strip() == expected.strip()
 
 
-def test_class_with_attributes():
+def test_class_with_attributes() -> None:
     code = """
     class MyClass:
         x: int = 1
@@ -67,7 +67,7 @@ def test_class_with_attributes():
     assert result.strip() == expected.strip()
 
 
-def test_basic_class_structure():
+def test_basic_class_structure() -> None:
     """Test that nested classes are ignored for target function search."""
     code = """
     class Outer:
@@ -90,7 +90,7 @@ def test_basic_class_structure():
     assert result.strip() == expected.strip()
 
 
-def test_top_level_targets():
+def test_top_level_targets() -> None:
     code = """
     class OuterClass:
         x = 1
@@ -109,7 +109,7 @@ def test_top_level_targets():
     assert result.strip() == expected.strip()
 
 
-def test_multiple_top_level_classes():
+def test_multiple_top_level_classes() -> None:
     code = """
     class ClassA:
         def process(self):
@@ -137,7 +137,7 @@ def test_multiple_top_level_classes():
     assert result.strip() == expected.strip()
 
 
-def test_try_except_structure():
+def test_try_except_structure() -> None:
     code = """
     try:
         class TargetClass:
@@ -163,7 +163,7 @@ def test_try_except_structure():
     assert result.strip() == expected.strip()
 
 
-def test_dunder_method():
+def test_dunder_method() -> None:
     code = """
     class MyClass:
         def __init__(self):
@@ -186,7 +186,7 @@ def test_dunder_method():
     assert result.strip() == expected.strip()
 
 
-def test_no_targets_found():
+def test_no_targets_found() -> None:
     code = """
     class MyClass:
         def method(self):
@@ -200,7 +200,7 @@ def test_no_targets_found():
         get_read_writable_code(dedent(code), {"MyClass.Inner.target"})
 
 
-def test_module_var():
+def test_module_var() -> None:
     code = """
     def target_function(self) -> None:
         var2 = "test"

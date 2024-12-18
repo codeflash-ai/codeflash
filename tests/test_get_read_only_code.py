@@ -4,7 +4,7 @@ import pytest
 from codeflash.optimization.cst_manipulator import get_read_only_code
 
 
-def test_basic_class():
+def test_basic_class() -> None:
     code = """
     class TestClass:
         class_var = "value"
@@ -25,7 +25,7 @@ def test_basic_class():
     assert dedent(expected).strip() == output.strip()
 
 
-def test_dunder_methods():
+def test_dunder_methods() -> None:
     code = """
     class TestClass:
         def __init__(self):
@@ -51,7 +51,7 @@ def test_dunder_methods():
     assert dedent(expected).strip() == output.strip()
 
 
-def test_target_in_nested_class():
+def test_target_in_nested_class() -> None:
     """Test that attempting to find a target in a nested class raises an error."""
     code = """
     class Outer:
@@ -68,7 +68,7 @@ def test_target_in_nested_class():
         get_read_only_code(dedent(code), {"Outer.Inner.target_method"})
 
 
-def test_docstrings():
+def test_docstrings() -> None:
     code = """
     class TestClass:
         \"\"\"Class docstring.\"\"\"
@@ -91,7 +91,7 @@ def test_docstrings():
     assert dedent(expected).strip() == output.strip()
 
 
-def test_method_signatures():
+def test_method_signatures() -> None:
     code = """
     class TestClass:
         @property
@@ -110,7 +110,7 @@ def test_method_signatures():
     assert dedent(expected).strip() == output.strip()
 
 
-def test_multiple_top_level_targets():
+def test_multiple_top_level_targets() -> None:
     code = """
     class TestClass:
         def target1(self):
@@ -134,7 +134,7 @@ def test_multiple_top_level_targets():
     assert dedent(expected).strip() == output.strip()
 
 
-def test_class_annotations():
+def test_class_annotations() -> None:
     code = """
     class TestClass:
         var1: int = 42
@@ -154,7 +154,7 @@ def test_class_annotations():
     assert dedent(expected).strip() == output.strip()
 
 
-def test_class_annotations_if():
+def test_class_annotations_if() -> None:
     code = """
     if True:
         class TestClass:
@@ -176,7 +176,7 @@ def test_class_annotations_if():
     assert dedent(expected).strip() == output.strip()
 
 
-def test_class_annotations_try():
+def test_class_annotations_try() -> None:
     code = """
     try:
         class TestClass:
@@ -202,7 +202,7 @@ def test_class_annotations_try():
     assert dedent(expected).strip() == output.strip()
 
 
-def test_class_annotations_else():
+def test_class_annotations_else() -> None:
     code = """
     if x is True:
         class TestClass:
@@ -238,7 +238,7 @@ def test_class_annotations_else():
     assert dedent(expected).strip() == output.strip()
 
 
-def test_top_level_functions():
+def test_top_level_functions() -> None:
     code = """
     def target_function(self) -> None:
         self.var2 = "test"
@@ -253,13 +253,13 @@ def test_top_level_functions():
     assert dedent(expected).strip() == output.strip()
 
 
-def test_module_var():
+def test_module_var() -> None:
     code = """
     def target_function(self) -> None:
         self.var2 = "test"
-    
+
     x = 5
-    
+
     def some_function():
         print("wow")
     """
@@ -272,18 +272,18 @@ def test_module_var():
     assert dedent(expected).strip() == output.strip()
 
 
-def test_module_var():
+def test_module_var_if() -> None:
     code = """
     def target_function(self) -> None:
         var2 = "test"
-    
+
     if y:
         x = 5
     else: 
         z = 10
         def some_function():
             print("wow")
-            
+
     def some_function():
         print("wow")
     """

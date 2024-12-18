@@ -150,7 +150,7 @@ def prune_cst_for_read_only_code(
         if not found_in_class:
             return None, False
 
-        return node.with_changes(body=cst.IndentedBlock(body=new_body)) if new_body else None, True
+        return node.with_changes(body=node.body.with_changes(body=new_body)) if new_body else None, True
 
     # For other nodes, keep the node and recursively filter children
     section_names = get_section_names(node)

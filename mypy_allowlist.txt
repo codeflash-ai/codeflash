@@ -6,6 +6,8 @@ codeflash/result/explanation.py
 codeflash/result/critic.py
 codeflash/version.py
 codeflash/optimization/__init__.py
+codeflash/optimization/retriever.py
+codeflash/optimization/cst_manipulator.py
 codeflash/discovery/__init__.py
 codeflash/__init__.py
 codeflash/models/ExperimentMetadata.py
