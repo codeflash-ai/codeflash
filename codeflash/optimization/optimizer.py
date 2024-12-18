@@ -275,7 +275,7 @@ class Optimizer:
         ):
             generated_results = self.generate_tests_and_optimizations(
                 code_to_optimize_with_helpers=code_context.code_to_optimize_with_helpers,
-                read_write_context_code=code_context.read_write_context_code,
+                read_writable_code=code_context.read_writable_code,
                 read_only_context_code=code_context.read_only_context_code,
                 function_to_optimize=function_to_optimize,
                 helper_functions=code_context.helper_functions,
@@ -715,14 +715,14 @@ class Optimizer:
         contextual_dunder_methods.update(helper_dunder_methods)
 
         # Will eventually refactor to use this function instead of the above
-        read_write_context, read_only_context = retriever.get_code_optimization_context(
+        read_writable_code, read_only_context_code = retriever.get_code_optimization_context(
             function_to_optimize, project_root, original_source_code
         )
         return Success(
             CodeOptimizationContext(
                 code_to_optimize_with_helpers=code_to_optimize_with_helpers_and_imports,
-                read_write_context_code=read_write_context,
-                read_only_context_code=read_only_context,
+                read_writable_code=read_writable_code,
+                read_only_context_code=read_only_context_code,
                 contextual_dunder_methods=contextual_dunder_methods,
                 helper_functions=helper_functions,
                 preexisting_objects=preexisting_objects,
@@ -806,7 +806,7 @@ class Optimizer:
     def generate_tests_and_optimizations(
         self,
         code_to_optimize_with_helpers: str,
-        read_write_context_code: str,
+        read_writable_code: str,
         read_only_context_code: str,
         function_to_optimize: FunctionToOptimize,
         helper_functions: list[FunctionSource],
@@ -832,7 +832,7 @@ class Optimizer:
             )
             future_optimization_candidates = executor.submit(
                 self.aiservice_client.optimize_python_code,
-                read_write_context_code,
+                read_writable_code,
                 read_only_context_code,
                 function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id,
                 N_CANDIDATES,
@@ -847,7 +847,7 @@ class Optimizer:
             if run_experiment:
                 future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
-                    read_write_context_code,
+                    read_writable_code,
                     read_only_context_code,
                     function_trace_id[:-4] + "EXP1",
                     N_CANDIDATES,

@@ -1,7 +1,7 @@
 from textwrap import dedent
 
 import pytest
-from codeflash.optimization.cst_context import create_read_only_context, find_containing_classes, print_tree
+from codeflash.optimization.cst_manipulator import get_read_only_code
 
 
 def test_basic_class():
@@ -21,8 +21,7 @@ def test_basic_class():
         class_var = "value"
     """
 
-    result = find_containing_classes(dedent(code), {"TestClass.target_method"})
-    output = create_read_only_context(result)
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
     assert dedent(expected).strip() == output.strip()
 
 
@@ -46,11 +45,9 @@ def test_dunder_methods():
 
         def __str__(self):
             return f"Value: {self.x}"
-
     """
 
-    result = find_containing_classes(dedent(code), {"TestClass.target_method"})
-    output = create_read_only_context(result)
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
     assert dedent(expected).strip() == output.strip()
 
 
@@ -68,7 +65,7 @@ def test_target_in_nested_class():
     """
 
     with pytest.raises(ValueError, match="No target functions found in the provided code"):
-        find_containing_classes(dedent(code), {"Outer.Inner.target_method"})
+        get_read_only_code(dedent(code), {"Outer.Inner.target_method"})
 
 
 def test_docstrings():
@@ -88,11 +85,9 @@ def test_docstrings():
     expected = """
     class TestClass:
         \"\"\"Class docstring.\"\"\"
-
     """
 
-    result = find_containing_classes(dedent(code), {"TestClass.target_method"})
-    output = create_read_only_context(result)
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
     assert dedent(expected).strip() == output.strip()
 
 
@@ -106,14 +101,12 @@ def test_method_signatures():
 
         @classmethod
         def class_method(cls, param: int = 42) -> None:
-            print("stub this")
+            print("class method")
     """
 
     expected = """"""
 
-    result = find_containing_classes(dedent(code), {"TestClass.target_method"})
-    output = create_read_only_context(result)
-    print(output)
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
     assert dedent(expected).strip() == output.strip()
 
 
@@ -137,8 +130,7 @@ def test_multiple_top_level_targets():
             self.x = 42
     """
 
-    result = find_containing_classes(dedent(code), {"TestClass.target1", "TestClass.target2"})
-    output = create_read_only_context(result)
+    output = get_read_only_code(dedent(code), {"TestClass.target1", "TestClass.target2"})
     assert dedent(expected).strip() == output.strip()
 
 
@@ -156,11 +148,9 @@ def test_class_annotations():
     class TestClass:
         var1: int = 42
         var2: str
-
     """
 
-    result = find_containing_classes(dedent(code), {"TestClass.target_method"})
-    output = create_read_only_context(result)
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
     assert dedent(expected).strip() == output.strip()
 
 
@@ -170,7 +160,7 @@ def test_class_annotations_if():
         class TestClass:
             var1: int = 42
             var2: str
-    
+
             def target_method(self) -> None:
                 self.var2 = "test"
     """
@@ -180,11 +170,9 @@ def test_class_annotations_if():
         class TestClass:
             var1: int = 42
             var2: str
-
     """
 
-    result = find_containing_classes(dedent(code), {"TestClass.target_method"})
-    output = create_read_only_context(result)
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
     assert dedent(expected).strip() == output.strip()
 
 
@@ -210,8 +198,7 @@ def test_class_annotations_try():
         continue
     """
 
-    result = find_containing_classes(dedent(code), {"TestClass.target_method"})
-    output = create_read_only_context(result)
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
     assert dedent(expected).strip() == output.strip()
 
 
@@ -245,13 +232,9 @@ def test_class_annotations_else():
         class TestClass:
             var1: int = 42
             var2: str
-
-
     """
 
-    result = find_containing_classes(dedent(code), {"TestClass.target_method"})
-    print_tree(result)
-    output = create_read_only_context(result)
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
     assert dedent(expected).strip() == output.strip()
 
 
@@ -259,81 +242,58 @@ def test_top_level_functions():
     code = """
     def target_function(self) -> None:
         self.var2 = "test"
-    
+
     def some_function():
         print("wow")
     """
 
     expected = """"""
 
-    result = find_containing_classes(dedent(code), {"target_function"})
-    output = create_read_only_context(result)
+    output = get_read_only_code(dedent(code), {"target_function"})
     assert dedent(expected).strip() == output.strip()
 
 
-def test_module_scope_var():
+def test_module_var():
     code = """
-    y = 3
-    class TestClass:
-        def __init__(self):
-            self.x = 42
-
-        def __str__(self):
-            return f"Value: {self.x}"
-
-        def target_method(self):
-            print("stub me")
+    def target_function(self) -> None:
+        self.var2 = "test"
+    
+    x = 5
+    
+    def some_function():
+        print("wow")
     """
 
     expected = """
-    y = 3
-    class TestClass:
-        def __init__(self):
-            self.x = 42
-
-        def __str__(self):
-            return f"Value: {self.x}"
-
+    x = 5
     """
 
-    result = find_containing_classes(dedent(code), {"TestClass.target_method"})
-    output = create_read_only_context(result)
+    output = get_read_only_code(dedent(code), {"target_function"})
     assert dedent(expected).strip() == output.strip()
 
 
-def test_module_scope_var():
+def test_module_var():
     code = """
-    if True:
-        y = 3
-        
-        class OtherClass:
-            def this_method(self):
-                print("this method")
-            def __init__(self):
-                self.y = y
-    class TestClass:
-        def __init__(self):
-            self.x = 42
-
-        def __str__(self):
-            return f"Value: {self.x}"
-
-        def target_method(self):
-            print("stub me")
+    def target_function(self) -> None:
+        var2 = "test"
+    
+    if y:
+        x = 5
+    else: 
+        z = 10
+        def some_function():
+            print("wow")
+            
+    def some_function():
+        print("wow")
     """
 
     expected = """
-    if True:
-        y = 3
-    class TestClass:
-        def __init__(self):
-            self.x = 42
-
-        def __str__(self):
-            return f"Value: {self.x}"
-
+    if y:
+        x = 5
+    else: 
+        z = 10
     """
 
-    result = find_containing_classes(dedent(code), {"TestClass.target_method"})
-    output = create_read_only_context(result)
+    output = get_read_only_code(dedent(code), {"target_function"})
     assert dedent(expected).strip() == output.strip()

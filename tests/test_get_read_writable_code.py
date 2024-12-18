@@ -1,7 +1,9 @@
 from textwrap import dedent
 
 import pytest
-from codeflash.optimization.cst_context import create_read_write_context, find_containing_classes, print_tree
+from codeflash.optimization.cst_manipulator import (
+    get_read_writable_code,  # Update the import path to where these functions live
+)
 
 
 def test_simple_function():
@@ -11,8 +13,7 @@ def test_simple_function():
         y = 2
         return x + y
     """
-    root = find_containing_classes(dedent(code), {"target_function"})
-    result = create_read_write_context(root)
+    result = get_read_writable_code(dedent(code), {"target_function"})
 
     expected = dedent("""
     def target_function():
@@ -31,8 +32,7 @@ def test_class_method():
             y = 2
             return x + y
     """
-    root = find_containing_classes(dedent(code), {"MyClass.target_function"})
-    result = create_read_write_context(root)
+    result = get_read_writable_code(dedent(code), {"MyClass.target_function"})
 
     expected = dedent("""
     class MyClass:
@@ -56,12 +56,11 @@ def test_class_with_attributes():
         def other_method(self):
             print("this should be excluded")
     """
-    root = find_containing_classes(dedent(code), {"MyClass.target_method"})
-    result = create_read_write_context(root)
+    result = get_read_writable_code(dedent(code), {"MyClass.target_method"})
 
     expected = dedent("""
     class MyClass:
-    
+
         def target_method(self):
             return self.x + 42
     """)
@@ -81,8 +80,7 @@ def test_basic_class_structure():
             def not_findable(self):
                 return 42
     """
-    root = find_containing_classes(dedent(code), {"Outer.target_method"})
-    result = create_read_write_context(root)
+    result = get_read_writable_code(dedent(code), {"Outer.target_method"})
 
     expected = dedent("""
     class Outer:
@@ -102,8 +100,7 @@ def test_top_level_targets():
     def target_function():
         return 42
     """
-    root = find_containing_classes(dedent(code), {"target_function"})
-    result = create_read_write_context(root)
+    result = get_read_writable_code(dedent(code), {"target_function"})
 
     expected = dedent("""
     def target_function():
@@ -126,8 +123,7 @@ def test_multiple_top_level_classes():
         def process(self):
             return "C"
     """
-    root = find_containing_classes(dedent(code), {"ClassA.process", "ClassC.process"})
-    result = create_read_write_context(root)
+    result = get_read_writable_code(dedent(code), {"ClassA.process", "ClassC.process"})
 
     expected = dedent("""
     class ClassA:
@@ -152,9 +148,7 @@ def test_try_except_structure():
             def handle_error(self):
                 print("error")
     """
-    root = find_containing_classes(dedent(code), {"TargetClass.target_method"})
-    print_tree(root)
-    result = create_read_write_context(root)
+    result = get_read_writable_code(dedent(code), {"TargetClass.target_method"})
 
     expected = dedent("""
     try:
@@ -181,12 +175,11 @@ def test_dunder_method():
         def target_method(self):
             return f"Value: {self.x}"
     """
-    root = find_containing_classes(dedent(code), {"MyClass.target_method"})
-    result = create_read_write_context(root)
+    result = get_read_writable_code(dedent(code), {"MyClass.target_method"})
 
     expected = dedent("""
     class MyClass:
-    
+
         def target_method(self):
             return f"Value: {self.x}"
     """)
@@ -204,4 +197,29 @@ def test_no_targets_found():
                 pass
     """
     with pytest.raises(ValueError, match="No target functions found in the provided code"):
-        find_containing_classes(dedent(code), {"MyClass.Inner.target"})
+        get_read_writable_code(dedent(code), {"MyClass.Inner.target"})
+
+
+def test_module_var():
+    code = """
+    def target_function(self) -> None:
+        var2 = "test"
+
+    if y:
+        x = 5
+    else: 
+        z = 10
+        def some_function():
+            print("wow")
+
+    def some_function():
+        print("wow")
+    """
+
+    expected = """
+    def target_function(self) -> None:
+        var2 = "test"
+    """
+
+    output = get_read_writable_code(dedent(code), {"target_function"})
+    assert dedent(expected).strip() == output.strip()

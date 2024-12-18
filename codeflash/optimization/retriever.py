@@ -3,36 +3,27 @@ from collections import defaultdict
 from pathlib import Path
 
 import jedi
-import libcst as cst
 from jedi.api.classes import Name
-from returns.result import Result
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module_2
+from codeflash.code_utils.code_extractor import add_needed_imports_from_module
 from codeflash.code_utils.code_utils import get_qualified_name, path_belongs_to_site_packages
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeOptimizationContext
-from codeflash.optimization.cst_context import (
-    CSTContextNode,
-    build_context_tree,
-    create_read_only_context,
-    create_read_write_context,
-)
+from codeflash.optimization.cst_manipulator import get_read_only_code, get_read_writable_code
 from codeflash.optimization.function_context import belongs_to_class, belongs_to_function
 
 
 def get_code_optimization_context(
     function_to_optimize: FunctionToOptimize, project_root_path: Path, original_source_code: str
-) -> Result[CodeOptimizationContext, str]:
+) -> [str, str]:
     function_name = function_to_optimize.function_name
     file_path = function_to_optimize.file_path
     script = jedi.Script(path=file_path, project=jedi.Project(path=project_root_path))
     file_path_to_qualified_function_names = defaultdict(set)
     file_path_to_qualified_function_names[file_path].add(function_to_optimize.qualified_name)
-    read_write_list = []
     read_only_list = []
-    read_write_string = ""
-    read_only_string = ""
+    final_read_writable_code = ""
+    final_read_only_code = ""
     names = []
     for ref in script.get_names(all_scopes=True, definitions=False, references=True):
         if ref.full_name:
@@ -73,41 +64,43 @@ def get_code_optimization_context(
     for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
         try:
             og_code_containing_helpers = file_path.read_text("utf8")
-            context_tree_root = cst.parse_module(og_code_containing_helpers)
         except Exception as e:
             logger.exception(f"Error while parsing {file_path}: {e}")
             continue
-        context_tree_root = CSTContextNode(cst_node=context_tree_root, target_functions=qualified_function_names)
-        if not build_context_tree(context_tree_root, ""):
-            logger.debug(
-                f"{qualified_function_names} was not found in {file_path} when retrieving code optimization context"
-            )
+        try:
+            read_writable_code = get_read_writable_code(og_code_containing_helpers, qualified_function_names)
+        except ValueError as e:
+            logger.debug(f"Error while getting read-writable code: {e}")
             continue
 
-        read_write_context_string = f"{create_read_write_context(context_tree_root)}"
-        if read_write_context_string:
-            read_write_string += f"\n{read_write_context_string}"
-            read_write_string = add_needed_imports_from_module_2(
-                og_code_containing_helpers,
-                read_write_string,
-                file_path,
-                file_path,
-                project_root_path,
-                list(qualified_function_names),
+        if read_writable_code:
+            final_read_writable_code += f"\n{read_writable_code}"
+            final_read_writable_code = add_needed_imports_from_module(
+                src_module_code=og_code_containing_helpers,
+                dst_module_code=final_read_writable_code,
+                src_path=file_path,
+                dst_path=file_path,
+                project_root=project_root_path,
+                helper_functions_fully_qualified_names=list(qualified_function_names),
             )
 
-        read_only_context_string = f"{create_read_only_context(context_tree_root)}\n"
-        read_only_context_string_with_imports = add_needed_imports_from_module_2(
-            og_code_containing_helpers,
-            read_only_context_string,
-            file_path,
-            file_path,
-            project_root_path,
-            list(qualified_function_names),
+        try:
+            read_only_code = get_read_only_code(og_code_containing_helpers, qualified_function_names)
+        except ValueError as e:
+            logger.debug(f"Error while getting read-only code: {e}")
+            continue
+
+        read_only_code_with_imports = add_needed_imports_from_module(
+            src_module_code=og_code_containing_helpers,
+            dst_module_code=read_only_code,
+            src_path=file_path,
+            dst_path=file_path,
+            project_root=project_root_path,
+            helper_functions_fully_qualified_names=list(qualified_function_names),
         )
-        if read_only_context_string_with_imports:
-            read_only_list.append(f"```python:{file_path}\n{read_only_context_string_with_imports}```")
+        if read_only_code_with_imports:
+            read_only_list.append(f"```python:{file_path}\n{read_only_code_with_imports}```")
 
-    read_only_string = "\n".join(read_only_list)
+    final_read_only_code = "\n".join(read_only_list)
 
-    return read_write_string, read_only_string
+    return final_read_writable_code, final_read_only_code

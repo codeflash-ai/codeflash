@@ -54,7 +54,7 @@ class BestOptimization(BaseModel):
 
 class CodeOptimizationContext(BaseModel):
     code_to_optimize_with_helpers: str
-    read_write_context_code: str = ""
+    read_writable_code: str = ""
     read_only_context_code: str = ""
     contextual_dunder_methods: set[tuple[str, str]]
     helper_functions: list[FunctionSource]

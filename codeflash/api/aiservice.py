@@ -84,8 +84,7 @@ class AiServiceClient:
         Parameters
         ----------
         - source_code (str): The python code to optimize.
-        - read_write_context (str) : The python code to be used as read-write context.
-        - read_only_context (str): The python code to be used as read-only context.
+        - dependency_code (str): The dependency code used as read-only context for the optimization
         - trace_id (str): Trace id of optimization run
         - num_candidates (int): Number of optimization variants to generate. Default is 10.
         - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
