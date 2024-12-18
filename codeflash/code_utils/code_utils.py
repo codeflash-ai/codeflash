@@ -10,9 +10,11 @@ from tempfile import TemporaryDirectory
 from codeflash.cli_cmds.console import logger
 
 
-def get_qualified_name(module_name: str, full_qualified_name: str):
+def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
     if not full_qualified_name.startswith(module_name):
         raise ValueError(f"{full_qualified_name} does not start with {module_name}")
+    if module_name == full_qualified_name:
+        raise ValueError(f"{full_qualified_name} is the same as {module_name}")
     return full_qualified_name[len(module_name) + 1 :]
 
 

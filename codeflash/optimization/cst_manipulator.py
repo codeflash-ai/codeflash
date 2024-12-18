@@ -55,7 +55,7 @@ def prune_cst_for_read_writable_code(
     if not section_names:
         return node, False
 
-    updates = {}
+    updates: dict[str, list[cst.CSTNode] | cst.CSTNode] = {}
     found_any_target = False
 
     for section in section_names:
@@ -65,10 +65,9 @@ def prune_cst_for_read_writable_code(
             section_found_target = False
             for child in original_content:
                 filtered, found_target = prune_cst_for_read_writable_code(child, target_functions, prefix)
-                if filtered is not None:
+                if filtered:
                     new_children.append(filtered)
-                if found_target:
-                    section_found_target = True
+                section_found_target |= found_target
 
             if section_found_target:
                 found_any_target = True
@@ -77,7 +76,8 @@ def prune_cst_for_read_writable_code(
             filtered, found_target = prune_cst_for_read_writable_code(original_content, target_functions, prefix)
             if found_target:
                 found_any_target = True
-                updates[section] = filtered
+                if filtered:
+                    updates[section] = filtered
 
     if not found_any_target:
         return None, False
@@ -134,30 +134,21 @@ def prune_cst_for_read_only_code(
 
         # First pass: detect if there is a target function in the class
         found_in_class = False
-        analyzed_body = []
+        new_body = []
         for stmt in node.body.body:
             filtered, found_target = prune_cst_for_read_only_code(stmt, target_functions, class_prefix)
-            analyzed_body.append((stmt, filtered, found_target))
-            if found_target:
-                found_in_class = True
+            found_in_class |= found_target
+
+            if isinstance(filtered, cst.FunctionDef):
+                # Check if it's a target or non-dunder method
+                qname = f"{class_prefix}.{filtered.name.value}"
+                if qname in target_functions or not is_dunder_method(filtered.name.value):
+                    continue
+            if filtered:
+                new_body.append(filtered)
 
         if not found_in_class:
             return None, False
-
-        # Second pass: rebuild the class body
-        # Keep everything except target functions and non-dunder methods.
-        new_body = []
-        for original_stmt, filtered, found_target in analyzed_body:
-            if isinstance(original_stmt, cst.FunctionDef):
-                # Check if it's a target or non-dunder method
-                qname = f"{class_prefix}.{original_stmt.name.value}"
-                if qname in target_functions:
-                    continue
-                if not is_dunder_method(original_stmt.name.value):
-                    continue
-                new_body.append(filtered if filtered is not None else original_stmt)
-            else:
-                new_body.append(original_stmt)
 
         return node.with_changes(body=cst.IndentedBlock(body=new_body)) if new_body else None, True
 
@@ -166,7 +157,7 @@ def prune_cst_for_read_only_code(
     if not section_names:
         return node, False
 
-    updates = {}
+    updates: dict[str, list[cst.CSTNode] | cst.CSTNode] = {}
     found_any_target = False
 
     for section in section_names:
@@ -176,22 +167,17 @@ def prune_cst_for_read_only_code(
             section_found_target = False
             for child in original_content:
                 filtered, found_target = prune_cst_for_read_only_code(child, target_functions, prefix)
-                if filtered is not None:
+                if filtered:
                     new_children.append(filtered)
-                if found_target:
-                    section_found_target = True
+                section_found_target |= found_target
 
-            if section_found_target:
-                found_any_target = True
-                updates[section] = new_children
-            elif not section_found_target and new_children:
-                # If no target found but children exist, keep them
+            if section_found_target or new_children:
+                found_any_target |= section_found_target
                 updates[section] = new_children
         elif original_content is not None:
             filtered, found_target = prune_cst_for_read_only_code(original_content, target_functions, prefix)
-            if filtered is not None:
-                if found_target:
-                    found_any_target = True
+            found_any_target |= found_target
+            if filtered:
                 updates[section] = filtered
 
     if updates:

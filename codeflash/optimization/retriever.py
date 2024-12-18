@@ -15,7 +15,7 @@ from codeflash.optimization.function_context import belongs_to_class, belongs_to
 
 def get_code_optimization_context(
     function_to_optimize: FunctionToOptimize, project_root_path: Path, original_source_code: str
-) -> [str, str]:
+) -> tuple[str, str]:
     function_name = function_to_optimize.function_name
     file_path = function_to_optimize.file_path
     script = jedi.Script(path=file_path, project=jedi.Project(path=project_root_path))
@@ -57,6 +57,7 @@ def get_code_optimization_context(
                 and not path_belongs_to_site_packages(definition_path)
                 and definition.full_name
                 and not belongs_to_function(definition, function_name)
+                and definition.module_name != definition.full_name
             ):
                 file_path_to_qualified_function_names[definition_path].add(
                     get_qualified_name(definition.module_name, definition.full_name)

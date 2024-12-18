@@ -98,7 +98,6 @@ def test_code_replacement10() -> None:
     class MainClass:
         def __init__(self, name):
             self.name = name
-            
     ```
     """
     assert read_write_context.strip() == dedent(expected_read_write_context).strip()
@@ -158,7 +157,6 @@ class Graph:
         def __init__(self, vertices):
             self.graph = defaultdict(list)
             self.V = vertices  # No. of vertices
-
     ```
     """
     assert read_write_context.strip() == dedent(expected_read_write_context).strip()
@@ -267,7 +265,6 @@ class DataProcessor:
 if __name__ == "__main__":
     result = fetch_and_process_data()
     print("Processed data:", result)
-    
 ```
 ```python:{path_to_utils}
 import math
@@ -286,7 +283,6 @@ class DataProcessor:
     def __repr__(self) -> str:
         \"\"\"Return a string representation of the DataProcessor.\"\"\"
         return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
-
 ```
 """
     assert read_write_context.strip() == dedent(expected_read_write_context).strip()
@@ -616,7 +612,6 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         self.__duration__ = duration
         self.__backend__ = AbstractCacheBackend()
         functools.update_wrapper(self, func)
-        
 ```
 '''
         assert read_write_context.strip() == dedent(expected_read_write_context).strip()
