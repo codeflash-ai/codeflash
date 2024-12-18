@@ -15,7 +15,6 @@ import inquirer.themes
 import tomlkit
 from git import InvalidGitRepositoryError, Repo
 from pydantic.dataclasses import dataclass
-from returns.pipeline import is_successful
 
 from codeflash.api.cfapi import is_github_app_installed_on_repo
 from codeflash.cli_cmds.cli_common import apologize_and_exit, inquirer_wrapper, inquirer_wrapper_path
@@ -26,6 +25,7 @@ from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_git_remotes, get_repo_owner_and_name
 from codeflash.code_utils.github_utils import get_github_secrets_page_url, require_github_app_or_exit
 from codeflash.code_utils.shell_utils import get_shell_rc_path, save_api_key_to_rc
+from codeflash.either import is_successful
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as version
 

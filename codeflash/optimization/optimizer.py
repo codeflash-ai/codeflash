@@ -14,8 +14,6 @@ from typing import TYPE_CHECKING
 
 import isort
 import libcst as cst
-from returns.pipeline import is_successful
-from returns.result import Failure, Success
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -44,6 +42,7 @@ from codeflash.code_utils.static_analysis import analyze_imported_modules, get_f
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize, get_functions_to_optimize
+from codeflash.either import Failure, Success, is_successful
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
@@ -74,8 +73,7 @@ from codeflash.verification.verifier import generate_tests
 if TYPE_CHECKING:
     from argparse import Namespace
 
-    from returns.result import Result
-
+    from codeflash.either import Result
     from codeflash.models.models import CoverageData, FunctionCalledInTest, FunctionSource, OptimizedCandidate
 
 from codeflash.optimization import retriever
