@@ -13,9 +13,7 @@ from codeflash.optimization.cst_manipulator import get_read_only_code, get_read_
 from codeflash.optimization.function_context import belongs_to_class, belongs_to_function
 
 
-def get_code_optimization_context(
-    function_to_optimize: FunctionToOptimize, project_root_path: Path, original_source_code: str
-) -> tuple[str, str]:
+def get_code_optimization_context(function_to_optimize: FunctionToOptimize, project_root_path: Path) -> tuple[str, str]:
     function_name = function_to_optimize.function_name
     file_path = function_to_optimize.file_path
     script = jedi.Script(path=file_path, project=jedi.Project(path=project_root_path))
@@ -23,7 +21,6 @@ def get_code_optimization_context(
     file_path_to_qualified_function_names[file_path].add(function_to_optimize.qualified_name)
     read_only_list = []
     final_read_writable_code = ""
-    final_read_only_code = ""
     names = []
     for ref in script.get_names(all_scopes=True, definitions=False, references=True):
         if ref.full_name:
@@ -82,7 +79,7 @@ def get_code_optimization_context(
                 src_path=file_path,
                 dst_path=file_path,
                 project_root=project_root_path,
-                helper_functions_fully_qualified_names=list(qualified_function_names),
+                helper_functions_fqn=qualified_function_names,
             )
 
         try:
@@ -97,7 +94,7 @@ def get_code_optimization_context(
             src_path=file_path,
             dst_path=file_path,
             project_root=project_root_path,
-            helper_functions_fully_qualified_names=list(qualified_function_names),
+            helper_functions_fqn=qualified_function_names,
         )
         if read_only_code_with_imports:
             read_only_list.append(f"```python:{file_path}\n{read_only_code_with_imports}```")

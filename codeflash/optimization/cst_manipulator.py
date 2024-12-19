@@ -4,7 +4,7 @@ import libcst as cst
 
 
 def is_dunder_method(name: str) -> bool:
-    return name.startswith("__") and name.endswith("__")
+    return len(name) > 4 and name.isascii() and name.startswith("__") and name.endswith("__")
 
 
 def get_section_names(node: cst.CSTNode) -> list[str]:

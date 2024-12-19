@@ -717,7 +717,7 @@ class Optimizer:
 
         # Will eventually refactor to use this function instead of the above
         read_writable_code, read_only_context_code = retriever.get_code_optimization_context(
-            function_to_optimize, project_root, original_source_code
+            function_to_optimize, project_root
         )
         return Success(
             CodeOptimizationContext(

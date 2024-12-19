@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Collection, Iterator, Optional, Union
 
 from jedi.api.classes import Name
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
@@ -54,7 +54,7 @@ class BestOptimization(BaseModel):
 
 class CodeOptimizationContext(BaseModel):
     code_to_optimize_with_helpers: str
-    read_writable_code: str = ""
+    read_writable_code: str = Field(min_length=1)
     read_only_context_code: str = ""
     contextual_dunder_methods: set[tuple[str, str]]
     helper_functions: list[FunctionSource]

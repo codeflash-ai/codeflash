@@ -68,7 +68,7 @@ def test_code_replacement10() -> None:
     )
     original_code = file_path.read_text()
     read_write_context, read_only_context = get_code_optimization_context(
-        function_to_optimize=func_top_optimize, project_root_path=file_path.parent, original_source_code=original_code
+        function_to_optimize=func_top_optimize, project_root_path=file_path.parent
     )
 
     expected_read_write_context = """
@@ -115,10 +115,8 @@ def test_class_method_dependencies() -> None:
         ending_line=None,
     )
 
-    with open(file_path) as f:
-        original_code = f.read()
     read_write_context, read_only_context = get_code_optimization_context(
-        function_to_optimize, file_path.parent.resolve(), original_code
+        function_to_optimize, file_path.parent.resolve()
     )
 
     expected_read_write_context = """
@@ -180,10 +178,8 @@ def test_bubble_sort_helper() -> None:
         ending_line=None,
     )
 
-    with open(path_to_fto) as f:
-        original_code = f.read()
     read_write_context, read_only_context = get_code_optimization_context(
-        function_to_optimize, Path(__file__).resolve().parent.parent, original_code
+        function_to_optimize, Path(__file__).resolve().parent.parent
     )
 
     expected_read_write_context = """
@@ -224,10 +220,8 @@ def test_repo_helper() -> None:
         ending_line=None,
     )
 
-    with open(path_to_file) as f:
-        original_code = f.read()
     read_write_context, read_only_context = get_code_optimization_context(
-        function_to_optimize, Path(__file__).resolve().parent.parent, original_code
+        function_to_optimize, Path(__file__).resolve().parent.parent
     )
     expected_read_write_context = """
      import requests
@@ -477,10 +471,9 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
             starting_line=None,
             ending_line=None,
         )
-        with open(file_path) as f:
-            original_code = f.read()
+
         read_write_context, read_only_context = get_code_optimization_context(
-            function_to_optimize, opt.args.project_root, original_code
+            function_to_optimize, opt.args.project_root
         )
         expected_read_write_context = """
          class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
