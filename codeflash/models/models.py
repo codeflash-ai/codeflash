@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Collection, Iterator
 from enum import Enum, IntEnum
 from pathlib import Path
-from typing import Any, Collection, Iterator, Optional, Union
+from re import Pattern
+from typing import Any, Optional, Union
 
 from jedi.api.classes import Name
 from pydantic import BaseModel, ConfigDict, Field
@@ -186,8 +188,8 @@ class CoverageData:
     main_func_coverage: FunctionCoverage
     dependent_func_coverage: Union[FunctionCoverage, None]
     status: CoverageStatus
-    blank_re = re.compile(r"\s*(#|$)")
-    else_re = re.compile(r"\s*else\s*:\s*(#|$)")
+    blank_re: Pattern = re.compile(r"\s*(#|$)")
+    else_re: Pattern = re.compile(r"\s*else\s*:\s*(#|$)")
 
     @staticmethod
     def load_from_coverage_file(
