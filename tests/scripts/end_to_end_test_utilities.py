@@ -75,11 +75,11 @@ def validate_coverage(stdout: str, expectations: list[CoverageExpectation]) -> b
 
 def run_codeflash_command(cwd: pathlib.Path, config: TestConfig, expected_improvement_pct: int) -> bool:
     logging.basicConfig(level=logging.INFO)
-    logging.info("If you see this, logging is working!")
-    # print("Debug")
     if config.trace_mode:
         return run_trace_test(cwd, config, expected_improvement_pct)
 
+    path_to_file = cwd / config.file_path
+    file_contents = path_to_file.read_text("utf-8")
     test_root = cwd / "tests" / (config.test_framework or "")
     command = build_command(cwd, config, test_root)
 
@@ -95,7 +95,12 @@ def run_codeflash_command(cwd: pathlib.Path, config: TestConfig, expected_improv
     return_code = process.wait()
     stdout = "".join(output)
 
-    return validate_output(stdout, return_code, expected_improvement_pct, config)
+    if not validate_output(stdout, return_code, expected_improvement_pct, config):
+        # Write original file contents back to file
+        path_to_file.write_text(file_contents, "utf-8")
+        logging.info("Codeflash run did not meet expected requirements for testing, reverting file changes.")
+        return False
+    return True
 
 
 def build_command(cwd: pathlib.Path, config: TestConfig, test_root: pathlib.Path) -> list[str]:
