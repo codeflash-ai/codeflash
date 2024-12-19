@@ -411,15 +411,18 @@ class Optimizer:
                         if original_code_baseline.coverage_results
                         else "Coverage data not available"
                     )
+                    generated_tests_str = "\n\n".join(
+                        [test.generated_original_test_source for test in generated_tests.generated_tests]
+                    )
+                    if concolic_test_str:
+                        generated_tests_str += "\n\n" + concolic_test_str
 
                     check_create_pr(
                         original_code=original_code_combined,
                         new_code=new_code_combined,
                         explanation=explanation,
                         existing_tests_source=existing_tests,
-                        generated_original_test_source="\n".join(
-                            [test.generated_original_test_source for test in generated_tests.generated_tests]
-                        ),
+                        generated_original_test_source=generated_tests_str,
                         function_trace_id=function_trace_id,
                         coverage_message=coverage_message,
                         git_remote=self.args.git_remote,
