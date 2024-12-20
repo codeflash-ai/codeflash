@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING
 
 import isort
 
@@ -12,6 +12,8 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from codeflash.models.models import CodePosition
 
 
