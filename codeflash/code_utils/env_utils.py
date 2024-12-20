@@ -12,13 +12,13 @@ def get_codeflash_api_key() -> str:
     if not api_key:
         msg = (
             "I didn't find a Codeflash API key in your environment.\nYou can generate one at "
-            "https://app.codeflash.ai/app/apikeys,\nthen set it as a CODEFLASH_API_KEY environment variable."
+            "https://app.codeflash.ai/app/apikeys ,\nthen set it as a CODEFLASH_API_KEY environment variable."
         )
         raise OSError(msg)
     if not api_key.startswith("cf-"):
         msg = (
             f"Your Codeflash API key seems to be invalid. It should start with a 'cf-' prefix; I found '{api_key}' "
-            f"instead.\nYou can generate one at https://app.codeflash.ai/app/apikeys,\nthen set it as a "
+            f"instead.\nYou can generate one at https://app.codeflash.ai/app/apikeys ,\nthen set it as a "
             f"CODEFLASH_API_KEY environment variable."
         )
         raise OSError(msg)
@@ -31,7 +31,7 @@ def ensure_codeflash_api_key() -> bool:
     except OSError:
         logger.error(
             "Codeflash API key not found in your environment.\nYou can generate one at "
-            "https://app.codeflash.ai/app/apikeys,\nthen set it as a CODEFLASH_API_KEY environment variable."
+            "https://app.codeflash.ai/app/apikeys ,\nthen set it as a CODEFLASH_API_KEY environment variable."
         )
         return False
     return True
