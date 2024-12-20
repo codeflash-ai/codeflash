@@ -9,8 +9,9 @@ from re import Pattern
 from typing import Any, Optional, Union
 
 from jedi.api.classes import Name
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from pydantic.dataclasses import dataclass
+from typing_extensions import Annotated
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.coverage_utils import extract_dependent_function, generate_candidates
@@ -52,6 +53,34 @@ class BestOptimization(BaseModel):
     helper_functions: list[FunctionSource]
     runtime: int
     winning_test_results: TestResults
+
+
+def validate_python_code(code: str) -> str:
+    """Validates a string of python code by attempting to compile it"""
+    try:
+        compile(code, "<string>", "exec")
+    except SyntaxError as e:
+        msg = f"Invalid Python code: {e.msg} (line {e.lineno}, column {e.offset})"
+        raise ValueError(msg) from e
+    return code
+
+
+class CodeString(BaseModel):
+    code: Annotated[str, AfterValidator(validate_python_code)]
+    file_path: Path | None = None
+
+
+class CodeStringsMarkdown(BaseModel):
+    code_strings: list[CodeString] = []
+
+    @property
+    def markdown(self) -> str:
+        return "\n".join(
+            [
+                f"```python{':' + str(code_string.file_path) if code_string.file_path else ""}\n{code_string.code}```"
+                for code_string in self.code_strings
+            ]
+        )
 
 
 class CodeOptimizationContext(BaseModel):

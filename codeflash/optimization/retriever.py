@@ -9,6 +9,7 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module
 from codeflash.code_utils.code_utils import get_qualified_name, path_belongs_to_site_packages
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.models import CodeString, CodeStringsMarkdown
 from codeflash.optimization.cst_manipulator import get_read_only_code, get_read_writable_code
 from codeflash.optimization.function_context import belongs_to_class, belongs_to_function
 
@@ -19,7 +20,7 @@ def get_code_optimization_context(function_to_optimize: FunctionToOptimize, proj
     script = jedi.Script(path=file_path, project=jedi.Project(path=project_root_path))
     file_path_to_qualified_function_names = defaultdict(set)
     file_path_to_qualified_function_names[file_path].add(function_to_optimize.qualified_name)
-    read_only_list = []
+    read_only_code_markdown = CodeStringsMarkdown()
     final_read_writable_code = ""
     names = []
     for ref in script.get_names(all_scopes=True, definitions=False, references=True):
@@ -88,17 +89,18 @@ def get_code_optimization_context(function_to_optimize: FunctionToOptimize, proj
             logger.debug(f"Error while getting read-only code: {e}")
             continue
 
-        read_only_code_with_imports = add_needed_imports_from_module(
-            src_module_code=og_code_containing_helpers,
-            dst_module_code=read_only_code,
-            src_path=file_path,
-            dst_path=file_path,
-            project_root=project_root_path,
-            helper_functions_fqn=qualified_function_names,
+        read_only_code_with_imports = CodeString(
+            code=add_needed_imports_from_module(
+                src_module_code=og_code_containing_helpers,
+                dst_module_code=read_only_code,
+                src_path=file_path,
+                dst_path=file_path,
+                project_root=project_root_path,
+                helper_functions_fqn=qualified_function_names,
+            ),
+            file_path=Path(file_path),
         )
-        if read_only_code_with_imports:
-            read_only_list.append(f"```python:{file_path}\n{read_only_code_with_imports}```")
+        if read_only_code_with_imports.code:
+            read_only_code_markdown.code_strings.append(read_only_code_with_imports)
 
-    final_read_only_code = "\n".join(read_only_list)
-
-    return final_read_writable_code, final_read_only_code
+    return CodeString(code=final_read_writable_code).code, read_only_code_markdown.markdown
