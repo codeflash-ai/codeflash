@@ -23,15 +23,13 @@ def format_code(formatter_cmds: list[str], path: Path) -> str:
     if formatter_name == "disabled":
         return path.read_text(encoding="utf8")
     file_token = "$file"  # noqa: S105
-
-    for command in formatter_cmds:
+    for command in set(formatter_cmds):
         formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
-        formatter_cmd_list = [str(path) if chunk == file_token else chunk for chunk in formatter_cmd_list]
-        console.rule(f"Formatting code with {' '.join(formatter_cmd_list)} ...")
+        formatter_cmd_list = [path.as_posix() if chunk == file_token else chunk for chunk in formatter_cmd_list]
         try:
             result = subprocess.run(formatter_cmd_list, capture_output=True, check=False)
             if result.returncode == 0:
-                logger.info("FORMATTING OK")
+                console.rule(f"Formatted Successfully with: {formatter_name.replace('$file', path.name)}")
             else:
                 logger.error(f"Failed to format code with {' '.join(formatter_cmd_list)}")
         except FileNotFoundError as e:
