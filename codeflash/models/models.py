@@ -77,7 +77,7 @@ class CodeStringsMarkdown(BaseModel):
     def markdown(self) -> str:
         return "\n".join(
             [
-                f"```python{':' + str(code_string.file_path) if code_string.file_path else ""}\n{code_string.code}```"
+                f"```python{':' + str(code_string.file_path) if code_string.file_path else ''}\n{code_string.code}```"
                 for code_string in self.code_strings
             ]
         )
