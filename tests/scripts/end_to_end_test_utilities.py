@@ -63,12 +63,14 @@ def validate_coverage(stdout: str, expectations: list[CoverageExpectation]) -> b
         assert coverage_match, f"Failed to find coverage data for {expect.function_name}"
 
         coverage = float(coverage_match.group(1))
-        assert coverage == expect.expected_coverage, f"Coverage was {coverage} instead of {expect.expected_coverage}"
+        assert (
+            coverage == expect.expected_coverage
+        ), f"Coverage was {coverage} instead of {expect.expected_coverage} for function: {expect.function_name}"
 
         executed_lines = list(map(int, coverage_match.group(2).split(", ")))
         assert (
             executed_lines == expect.expected_lines
-        ), f"Executed lines were {executed_lines} instead of {expect.expected_lines}"
+        ), f"Executed lines were {executed_lines} instead of {expect.expected_lines} for function: {expect.function_name}"
 
     return True
 
