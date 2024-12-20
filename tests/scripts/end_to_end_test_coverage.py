@@ -7,7 +7,7 @@ from end_to_end_test_utilities import CoverageExpectation, TestConfig, run_codef
 def run_test(expected_improvement_pct: int) -> bool:
     config = TestConfig(
         file_path="bubble_sort.py",
-        function_name="sorter",
+        function_name="sorter_one_level_depth",
         coverage_expectations=[
             CoverageExpectation(function_name="sorter_one_level_depth", expected_coverage=100.0, expected_lines=[2]),
             CoverageExpectation(
