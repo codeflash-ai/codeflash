@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import shlex
 import subprocess
 from pathlib import Path
@@ -8,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_utils import get_run_tmp_file
-from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, IS_POSIX
+from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
 from codeflash.models.models import TestFiles
@@ -76,15 +75,9 @@ def run_tests(
             )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any, then the current run will be appended to the previous data, which skews the results
             logger.debug(cov_erase)
 
-            files = [
-                str(file.instrumented_file_path)
-                for file in test_paths.test_files
-                if file.test_type == TestType.GENERATED_REGRESSION
-            ]
-
             cov_run = execute_test_subprocess(
                 shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage run --rcfile={coveragercfile.as_posix()} -m pytest")
-                + files
+                + test_files
                 + common_pytest_args
                 + coverage_args
                 + pytest_ignore_files,
