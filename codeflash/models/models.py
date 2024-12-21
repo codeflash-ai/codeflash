@@ -80,7 +80,8 @@ class GeneratedTestsList(BaseModel):
 
 
 class TestFile(BaseModel):
-    instrumented_file_path: Path
+    instrumented_file_path: Path  # TODO : Update the variable name
+    benchmarking_file_path: Optional[Path] = None  # TODO: Make this mandatory
     original_file_path: Optional[Path] = None
     original_source: Optional[str] = None
     test_type: TestType

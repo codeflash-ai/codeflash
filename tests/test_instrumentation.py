@@ -50,6 +50,32 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
     return return_value
 """
 
+codeflash_wrap_perfonly_string = """def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, *args, **kwargs):
+    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
+    if not hasattr(codeflash_wrap, 'index'):
+        codeflash_wrap.index = {{}}
+    if test_id in codeflash_wrap.index:
+        codeflash_wrap.index[test_id] += 1
+    else:
+        codeflash_wrap.index[test_id] = 0
+    codeflash_test_index = codeflash_wrap.index[test_id]
+    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    exception = None
+    gc.disable()
+    try:
+        counter = time.perf_counter_ns()
+        return_value = wrapped(*args, **kwargs)
+        codeflash_duration = time.perf_counter_ns() - counter
+    except Exception as e:
+        codeflash_duration = time.perf_counter_ns() - counter
+        exception = e
+    gc.enable()
+    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}:{{codeflash_duration}}######!")
+    if exception:
+        raise exception
+    return return_value
+"""
+
 
 def test_perfinjector_bubble_sort() -> None:
     code = """import unittest
@@ -286,8 +312,8 @@ from code_to_optimize.bubble_sort import sorter
         + codeflash_wrap_string
         + """
 def test_sort():
-    codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
+    codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)')
@@ -299,6 +325,28 @@ def test_sort():
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()
 """
+    )
+
+    expected_perfonly = (
+        """import gc
+import os
+import time
+
+from code_to_optimize.bubble_sort import sorter
+
+
+"""
+        + codeflash_wrap_perfonly_string
+        + """
+def test_sort():
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
+    input = [5, 4, 3, 2, 1, 0]
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '1', codeflash_loop_index, input)
+    assert output == [0, 1, 2, 3, 4, 5]
+    input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '4', codeflash_loop_index, input)
+    assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+    """
     )
 
     test_path = (
@@ -316,7 +364,7 @@ def test_sort():
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(6, 13), CodePosition(10, 13)], func, project_root_path, "pytest"
+            test_path, [CodePosition(6, 13), CodePosition(10, 13)], func, project_root_path, "pytest", mode="behavior"
         )
         os.chdir(original_cwd)
         assert success
@@ -326,9 +374,20 @@ def test_sort():
             tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
         ).replace('"', "'")
 
-        # Overwrite old test with new instrumented test
+        success, new_perf_test = inject_profiling_into_existing_test(
+            test_path, [CodePosition(6, 13), CodePosition(10, 13)], func, project_root_path, "pytest", mode="perf"
+        )
+        assert success
+        assert new_perf_test is not None
+        assert new_perf_test.replace('"', "'") == expected_perfonly.format(
+            module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_results_temp",
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+        ).replace('"', "'")
+
         with test_path.open("w") as f:
             f.write(new_test)
+
+        # Overwrite old test with new instrumented test
 
         opt = Optimizer(
             Namespace(
