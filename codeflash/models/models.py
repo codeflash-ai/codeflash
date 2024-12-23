@@ -71,7 +71,8 @@ class OptimizedCandidateResult(BaseModel):
 
 class GeneratedTests(BaseModel):
     generated_original_test_source: str
-    instrumented_test_source: str
+    instrumented_behavior_test_source: str
+    instrumented_perf_test_source: str
     file_path: Path
 
 

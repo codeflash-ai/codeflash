@@ -291,7 +291,7 @@ class Optimizer:
 
         for i, generated_test in enumerate(generated_tests.generated_tests):
             with generated_test.file_path.open("w", encoding="utf8") as f:
-                f.write(generated_test.instrumented_test_source)
+                f.write(generated_test.instrumented_behavior_test_source)
             self.test_files.add(
                 TestFile(
                     instrumented_file_path=generated_test.file_path,
@@ -857,11 +857,17 @@ class Optimizer:
             for future in future_tests:
                 res = future.result()
                 if res:
-                    generated_test_source, instrumented_test_source, test_path = res
+                    (
+                        generated_test_source,
+                        instrumented_behavior_test_source,
+                        instrumented_perf_test_source,
+                        test_path,
+                    ) = res
                     tests.append(
                         GeneratedTests(
                             generated_original_test_source=generated_test_source,
-                            instrumented_test_source=instrumented_test_source,
+                            instrumented_behavior_test_source=instrumented_behavior_test_source,
+                            instrumented_perf_test_source=instrumented_perf_test_source,
                             file_path=test_path,
                         )
                     )

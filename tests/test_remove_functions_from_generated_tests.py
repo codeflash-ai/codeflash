@@ -22,7 +22,7 @@ def test_sorted_list():
     # Outputs were verified to be equal to the original implementation"""
     generated_tests = GeneratedTests(
         generated_original_test_source=generated_test_source,
-        instrumented_test_source="",
+        instrumented_behavior_test_source="",
         file_path=Path("test_sorter.py"),
     )
     generated_tests_list = GeneratedTestsList(generated_tests=[generated_tests])
@@ -61,7 +61,7 @@ def test_sorted_list():
     # Outputs were verified to be equal to the original implementation"""
     generated_tests = GeneratedTests(
         generated_original_test_source=generated_test_source,
-        instrumented_test_source="",
+        instrumented_behavior_test_source="",
         file_path=Path("test_sorter.py"),
     )
     generated_tests_list_1 = GeneratedTestsList(generated_tests=[generated_tests])
@@ -87,7 +87,7 @@ def test_sorted_list():
 
     generated_tests_2 = GeneratedTests(
         generated_original_test_source=generated_test_source,
-        instrumented_test_source="",
+        instrumented_behavior_test_source="",
         file_path=Path("test_sorter.py"),
     )
 
@@ -137,7 +137,7 @@ def test_list_with_mixed_orderable_and_non_orderable_types():
 
     generated_tests = GeneratedTests(
         generated_original_test_source=generated_test_source,
-        instrumented_test_source="",
+        instrumented_behavior_test_source="",
         file_path=Path("test_sorter.py"),
     )
     generated_tests_list = GeneratedTestsList(generated_tests=[generated_tests])
@@ -194,7 +194,7 @@ def test_sorted_list():
     # Outputs were verified to be equal to the original implementation"""
     generated_tests = GeneratedTests(
         generated_original_test_source=generated_test_source,
-        instrumented_test_source="",
+        instrumented_behavior_test_source="",
         file_path=Path("test_sorter.py"),
     )
     generated_tests_list = GeneratedTestsList(generated_tests=[generated_tests])
@@ -257,7 +257,7 @@ def test_sorted_list():
     # Outputs were verified to be equal to the original implementation"""
     generated_tests = GeneratedTests(
         generated_original_test_source=generated_test_source,
-        instrumented_test_source="",
+        instrumented_behavior_test_source="",
         file_path=Path("test_sorter.py"),
     )
     generated_tests_list = GeneratedTestsList(generated_tests=[generated_tests])
