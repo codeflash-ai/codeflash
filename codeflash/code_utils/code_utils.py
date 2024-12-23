@@ -91,3 +91,13 @@ def is_class_defined_in_file(class_name: str, file_path: Path) -> bool:
         source = file.read()
     tree = ast.parse(source)
     return any(isinstance(node, ast.ClassDef) and node.name == class_name for node in ast.walk(tree))
+
+
+def validate_python_code(code: str) -> str:
+    """Validates a string of python code by attempting to compile it"""
+    try:
+        compile(code, "<string>", "exec")
+    except SyntaxError as e:
+        msg = f"Invalid Python code: {e.msg} (line {e.lineno}, column {e.offset})"
+        raise ValueError(msg) from e
+    return code

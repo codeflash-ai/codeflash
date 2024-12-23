@@ -40,6 +40,7 @@ from codeflash.code_utils.instrument_existing_tests import inject_profiling_into
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
 from codeflash.code_utils.static_analysis import analyze_imported_modules, get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
+from codeflash.context import code_context_extractor
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize, get_functions_to_optimize
 from codeflash.either import Failure, Success, is_successful
@@ -75,8 +76,6 @@ if TYPE_CHECKING:
 
     from codeflash.either import Result
     from codeflash.models.models import CoverageData, FunctionCalledInTest, FunctionSource, OptimizedCandidate
-
-from codeflash.optimization import retriever
 
 
 class Optimizer:
@@ -716,9 +715,13 @@ class Optimizer:
         contextual_dunder_methods.update(helper_dunder_methods)
 
         # Will eventually refactor to use this function instead of the above
-        read_writable_code, read_only_context_code = retriever.get_code_optimization_context(
+        read_writable_code, read_only_context_code = code_context_extractor.get_code_optimization_context(
             function_to_optimize, project_root
         )
+        logger.info("Read-writable code:")
+        code_print(read_writable_code)
+        logger.info("Read-only context code:")
+        # code_print(read_only_context_code)
         return Success(
             CodeOptimizationContext(
                 code_to_optimize_with_helpers=code_to_optimize_with_helpers_and_imports,

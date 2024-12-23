@@ -9,7 +9,7 @@ from textwrap import dedent
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
 from codeflash.optimization.optimizer import Optimizer
-from codeflash.optimization.retriever import get_code_optimization_context
+from codeflash.context.code_context_extractor import get_code_optimization_context
 
 
 class HelperClass:

@@ -1,7 +1,7 @@
 from textwrap import dedent
 
 import pytest
-from codeflash.optimization.cst_manipulator import get_read_only_code
+from codeflash.context.code_context_extractor import get_read_only_code
 
 
 def test_basic_class() -> None:

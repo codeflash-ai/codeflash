@@ -16,6 +16,7 @@ from typing_extensions import Annotated
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.coverage_utils import extract_dependent_function, generate_candidates
 from codeflash.code_utils.env_utils import is_end_to_end
+from codeflash.code_utils.code_utils import validate_python_code
 from codeflash.verification.test_results import TestResults, TestType
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
@@ -55,19 +56,9 @@ class BestOptimization(BaseModel):
     winning_test_results: TestResults
 
 
-def validate_python_code(code: str) -> str:
-    """Validates a string of python code by attempting to compile it"""
-    try:
-        compile(code, "<string>", "exec")
-    except SyntaxError as e:
-        msg = f"Invalid Python code: {e.msg} (line {e.lineno}, column {e.offset})"
-        raise ValueError(msg) from e
-    return code
-
-
 class CodeString(BaseModel):
     code: Annotated[str, AfterValidator(validate_python_code)]
-    file_path: Path | None = None
+    file_path: Optional[Path] = None
 
 
 class CodeStringsMarkdown(BaseModel):
