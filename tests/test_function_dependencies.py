@@ -49,6 +49,12 @@ class A:
         c = global_dependency_1(b)
         return c
 
+    def function_in_list_comprehension(self):
+        return [global_dependency_3(1) for x in range(10)]
+
+    def method_in_list_comprehension(self):
+        return [self.calculate_something_1(1) for x in range(10)]
+
 
 class B:
     def calculate_something_2(self, num):
@@ -318,3 +324,35 @@ def test_list_comprehension_dependency() -> None:
     assert len(helper_functions) == 2
     assert helper_functions[0].jedi_definition.full_name == "test_function_dependencies.MyData"
     assert helper_functions[1].jedi_definition.full_name == "test_function_dependencies.calculate_something"
+
+
+def test_function_in_method_list_comprehension() -> None:
+    file_path = pathlib.Path(__file__).resolve()
+    function_to_optimize = FunctionToOptimize(
+        function_name="function_in_list_comprehension",
+        file_path=str(file_path),
+        parents=[FunctionParent(name="A", type="ClassDef")],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    helper_functions = get_function_variables_definitions(function_to_optimize, str(file_path.parent.resolve()))[0]
+
+    assert len(helper_functions) == 1
+    assert helper_functions[0].jedi_definition.full_name == "test_function_dependencies.global_dependency_3"
+
+
+def test_method_in_method_list_comprehension() -> None:
+    file_path = pathlib.Path(__file__).resolve()
+    function_to_optimize = FunctionToOptimize(
+        function_name="method_in_list_comprehension",
+        file_path=str(file_path),
+        parents=[FunctionParent(name="A", type="ClassDef")],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    helper_functions = get_function_variables_definitions(function_to_optimize, str(file_path.parent.resolve()))[0]
+
+    assert len(helper_functions) == 1
+    assert helper_functions[0].jedi_definition.full_name == "test_function_dependencies.A.calculate_something_1"

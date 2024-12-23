@@ -20,9 +20,19 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def belongs_to_class(name: Name, class_name: str) -> bool:
-    """Check if the given name belongs to the specified class."""
-    return bool(name.full_name and name.full_name.startswith(f"{name.module_name}.{class_name}."))
+def belongs_to_method(name: Name, class_name: str, method_name: str) -> bool:
+    """Check if the given name belongs to the specified method."""
+    # Check if belongs to class
+    if name.full_name and name.full_name.startswith(f"{name.module_name}.{class_name}."):
+        # Check if belongs to method
+        if name.full_name and name.full_name.startswith(name.module_name):
+            subname: str = name.full_name.replace(name.module_name, "", 1)
+            # The name is defined inside the method or is the method itself
+            if f".{method_name}." in subname or f".{method_name}" == subname:
+                return True
+
+    # If not, check if it belongs to a method in a list comprehension
+    return bool(name_in_listcomp_in_function(name, method_name))
 
 
 def belongs_to_function(name: Name, function_name: str) -> bool:
@@ -39,6 +49,7 @@ def belongs_to_function(name: Name, function_name: str) -> bool:
 def name_in_listcomp_in_function(name: Name, function_name: str) -> bool:
     """Check if the given name is in a list comprehension in the specified function
     Special case because jedi has a bug https://github.com/davidhalter/jedi/issues/1944
+    Functions in list comprehensions are identified by jedi but in the wrong scope. We need to iteratively check the parent to determine which function it belongs to.
     """
     try:
         parent_node = name._name.parent_context.tree_node.parent
@@ -176,9 +187,7 @@ def get_function_variables_definitions(
         if ref.full_name:
             if function_to_optimize.parents:
                 # Check if the reference belongs to the specified class when FunctionParent is provided
-                if belongs_to_class(ref, function_to_optimize.parents[-1].name) and belongs_to_function(
-                    ref, function_name
-                ):
+                if belongs_to_method(ref, function_to_optimize.parents[-1].name, function_name):
                     names.append(ref)
             elif belongs_to_function(ref, function_name):
                 names.append(ref)
