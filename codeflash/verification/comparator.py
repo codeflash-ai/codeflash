@@ -45,15 +45,8 @@ except ImportError:
 
 def comparator(orig: Any, new: Any) -> bool:
     try:
-        if type(orig) != type(new):
+        if type(orig) is not type(new):
             return False
-        if isinstance(orig, (list, tuple)):
-            if len(orig) != len(new):
-                return False
-            for elem1, elem2 in zip(orig, new):
-                if not comparator(elem1, elem2):
-                    return False
-            return True
 
         if isinstance(
             orig,
@@ -74,10 +67,25 @@ def comparator(orig: Any, new: Any) -> bool:
             ),
         ):
             return orig == new
+
         if isinstance(orig, float):
             if math.isnan(orig) and math.isnan(new):
                 return True
             return math.isclose(orig, new)
+
+        if isinstance(orig, (list, tuple)):
+            if len(orig) != len(new):
+                return False
+            return all(comparator(elem1, elem2) for elem1, elem2 in zip(orig, new))
+
+        if isinstance(orig, BaseException):
+            if str(orig) != str(new):
+                return False
+            # compare the attributes of the two exception objects to determine if they are equivalent.
+            orig_dict = {k: v for k, v in orig.__dict__.items() if not k.startswith("_")}
+            new_dict = {k: v for k, v in new.__dict__.items() if not k.startswith("_")}
+            return comparator(orig_dict, new_dict)
+
         if HAS_SQLALCHEMY:
             try:
                 insp = sqlalchemy.inspection.inspect(orig)
