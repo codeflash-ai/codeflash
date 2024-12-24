@@ -66,7 +66,7 @@ from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestResults, TestType
-from codeflash.verification.test_runner import run_tests
+from codeflash.verification.test_runner import run_behavioral_tests_pytest, run_benchmarking_tests_pytest
 from codeflash.verification.verification_utils import TestConfig, get_test_file_path
 from codeflash.verification.verifier import generate_tests
 
@@ -265,6 +265,12 @@ class Optimizer:
             get_test_file_path(self.test_cfg.tests_root, function_to_optimize.function_name, test_index)
             for test_index in range(N_TESTS_TO_GENERATE)
         ]
+        generated_perf_test_paths = [
+            get_test_file_path(
+                self.test_cfg.tests_root, function_to_optimize.function_name, test_index, test_type="perf"
+            )
+            for test_index in range(N_TESTS_TO_GENERATE)
+        ]
 
         with progress_bar(
             f"Generating new tests and optimizations for function {function_to_optimize.function_name}", transient=True
@@ -276,6 +282,7 @@ class Optimizer:
                 Path(original_module_path),
                 function_trace_id,
                 generated_test_paths,
+                generated_perf_test_paths,
                 function_to_optimize_ast,
                 run_experiment=should_run_experiment,
             )
@@ -290,11 +297,14 @@ class Optimizer:
             count_tests += 1
 
         for i, generated_test in enumerate(generated_tests.generated_tests):
-            with generated_test.file_path.open("w", encoding="utf8") as f:
+            with generated_test.behavior_file_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_behavior_test_source)
+            with generated_test.perf_file_path.open("w", encoding="utf8") as f:
+                f.write(generated_test.instrumented_perf_test_source)
             self.test_files.add(
                 TestFile(
-                    instrumented_file_path=generated_test.file_path,
+                    instrumented_file_path=generated_test.behavior_file_path,
+                    benchmarking_file_path=generated_test.perf_file_path,
                     original_file_path=None,
                     original_source=generated_test.generated_original_test_source,
                     test_type=TestType.GENERATED_REGRESSION,
@@ -754,7 +764,8 @@ class Optimizer:
                 else:
                     msg = f"Unexpected test type: {test_type}"
                     raise ValueError(msg)
-                success, injected_test = inject_profiling_into_existing_test(
+                success, injected_behavior_test = inject_profiling_into_existing_test(
+                    mode="behavior",
                     test_path=path_obj_test_file,
                     call_positions=positions,
                     function_to_optimize=function_to_optimize,
@@ -763,22 +774,40 @@ class Optimizer:
                 )
                 if not success:
                     continue
-
-                new_test_path = Path(
+                success, injected_perf_test = inject_profiling_into_existing_test(
+                    mode="perf",
+                    test_path=path_obj_test_file,
+                    call_positions=positions,
+                    function_to_optimize=function_to_optimize,
+                    tests_project_root=self.test_cfg.tests_project_rootdir,
+                    test_framework=self.args.test_framework,
+                )
+                if not success:
+                    continue
+                # TODO: this naming logic should be moved to a function and made more standard
+                new_behavioral_test_path = Path(
                     f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}"
                 )
-                if injected_test is not None:
-                    with new_test_path.open("w", encoding="utf8") as _f:
-                        _f.write(injected_test)
+                new_perf_test_path = Path(
+                    f"{os.path.splitext(test_file)[0]}__perfonlyinstrumented{os.path.splitext(test_file)[1]}"
+                )
+                if injected_behavior_test is not None:
+                    with new_behavioral_test_path.open("w", encoding="utf8") as _f:
+                        _f.write(injected_behavior_test)
                 else:
-                    msg = "injected_test is None"
+                    msg = "injected_behavior_test is None"
                     raise ValueError(msg)
+                if injected_perf_test is not None:
+                    with new_perf_test_path.open("w", encoding="utf8") as _f:
+                        _f.write(injected_perf_test)
 
-                unique_instrumented_test_files.add(new_test_path)
+                unique_instrumented_test_files.add(new_behavioral_test_path)
+                unique_instrumented_test_files.add(new_perf_test_path)
                 if not self.test_files.get_by_original_file_path(path_obj_test_file):
                     self.test_files.add(
                         TestFile(
-                            instrumented_file_path=new_test_path,
+                            instrumented_file_path=new_behavioral_test_path,
+                            benchmarking_file_path=new_perf_test_path,
                             original_source=None,
                             original_file_path=Path(test_file),
                             test_type=test_type,
@@ -801,6 +830,7 @@ class Optimizer:
         module_path: Path,
         function_trace_id: str,
         generated_test_paths: list[Path],
+        generated_perf_test_paths: list[Path],
         function_to_optimize_ast: ast.FunctionDef,
         run_experiment: bool = False,
     ) -> Result[tuple[GeneratedTestsList, dict[str, list[FunctionCalledInTest]], OptimizationSet], str]:
@@ -816,6 +846,7 @@ class Optimizer:
                 [definition.fully_qualified_name for definition in helper_functions],
                 module_path,
                 generated_test_paths,
+                generated_perf_test_paths,
                 (function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id),
             )
             future_optimization_candidates = executor.submit(
@@ -861,14 +892,16 @@ class Optimizer:
                         generated_test_source,
                         instrumented_behavior_test_source,
                         instrumented_perf_test_source,
-                        test_path,
+                        test_behavior_path,
+                        test_perf_path,
                     ) = res
                     tests.append(
                         GeneratedTests(
                             generated_original_test_source=generated_test_source,
                             instrumented_behavior_test_source=instrumented_behavior_test_source,
                             instrumented_perf_test_source=instrumented_perf_test_source,
-                            file_path=test_path,
+                            behavior_file_path=test_behavior_path,
+                            perf_file_path=test_perf_path,
                         )
                     )
             if not tests:
@@ -929,6 +962,7 @@ class Optimizer:
             coverage_results = None
             if test_framework == "pytest":
                 unittest_results, coverage_results = self.run_and_parse_tests(
+                    testing_type="behavior",
                     test_env=test_env,
                     test_files=self.test_files,
                     optimization_iteration=0,
@@ -939,6 +973,21 @@ class Optimizer:
                     source_file=function_file_path,
                     code_context=code_context,
                 )
+
+                benchmarking_results, _ = self.run_and_parse_tests(
+                    testing_type="perf",
+                    test_env=test_env,
+                    test_files=self.test_files,
+                    optimization_iteration=0,
+                    test_functions=only_run_these_test_functions_for_test_files,
+                    testing_time=TOTAL_LOOPING_TIME,
+                    enable_coverage=False,
+                    function_name=function_name,
+                    source_file=function_file_path,
+                    code_context=code_context,
+                )
+                print("hi")
+
             else:
                 unittest_results = TestResults()
                 start_time: float = time.time()
@@ -947,6 +996,7 @@ class Optimizer:
                         break
                     test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
                     unittest_loop_results, coverage_results = self.run_and_parse_tests(
+                        testing_type="behavior",  # This is not needed for unittest, refactor this
                         test_env=test_env,
                         test_files=self.test_files,
                         optimization_iteration=0,
@@ -1149,6 +1199,7 @@ class Optimizer:
 
     def run_and_parse_tests(
         self,
+        testing_type: str,
         test_env: dict[str, str],
         test_files: TestFiles,
         optimization_iteration: int,
@@ -1164,20 +1215,32 @@ class Optimizer:
         unittest_loop_index: int | None = None,
     ) -> tuple[TestResults, CoverageData | None]:
         try:
-            result_file_path, run_result, coverage_out_file = run_tests(
-                test_files,
-                test_framework=self.args.test_framework,
-                cwd=self.args.project_root,
-                test_env=test_env,
-                pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                pytest_cmd=self.test_cfg.pytest_cmd,
-                verbose=True,
-                only_run_these_test_functions=test_functions,
-                pytest_target_runtime_seconds=testing_time,
-                pytest_min_loops=pytest_min_loops,
-                pytest_max_loops=pytest_max_loops,
-                enable_coverage=enable_coverage,
-            )
+            if testing_type == "behavior":
+                result_file_path, run_result, coverage_out_file = run_behavioral_tests_pytest(
+                    test_files,
+                    test_framework=self.args.test_framework,
+                    cwd=self.args.project_root,
+                    test_env=test_env,
+                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
+                    pytest_cmd=self.test_cfg.pytest_cmd,
+                    verbose=True,
+                    only_run_these_test_functions=test_functions,
+                    enable_coverage=enable_coverage,
+                )
+            elif testing_type == "perf":
+                result_file_path, run_result = run_benchmarking_tests_pytest(
+                    test_files,
+                    cwd=self.args.project_root,
+                    test_env=test_env,
+                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
+                    pytest_cmd=self.test_cfg.pytest_cmd,
+                    only_run_these_test_functions=test_functions,
+                    pytest_target_runtime_seconds=testing_time,
+                    pytest_min_loops=pytest_min_loops,
+                    pytest_max_loops=pytest_max_loops,
+                )
+            else:
+                raise ValueError(f"Unexpected testing type: {testing_type}")
         except subprocess.TimeoutExpired:
             logger.exception(
                 f'Error running tests in {", ".join(str(f) for f in test_files.test_files)}.\nTimeout Error'
@@ -1191,7 +1254,7 @@ class Optimizer:
                 f"stderr: {run_result.stderr}\n"
             )
 
-        return parse_test_results(
+        results, coverage_results = parse_test_results(
             test_xml_path=result_file_path,
             test_files=test_files,
             test_config=self.test_cfg,
@@ -1203,6 +1266,7 @@ class Optimizer:
             code_context=code_context,
             coverage_file=coverage_out_file,
         )
+        return results, coverage_results
 
     def generate_and_instrument_tests(
         self,
@@ -1212,6 +1276,7 @@ class Optimizer:
         helper_function_names: list[str],
         module_path: Path,
         generated_test_paths: list[Path],
+        generated_perf_test_paths: list[Path],
         function_trace_id: str,
     ) -> list[concurrent.futures.Future]:
         return [
@@ -1227,8 +1292,11 @@ class Optimizer:
                 function_trace_id,
                 test_index,
                 test_path,
+                test_perf_path,
             )
-            for test_index, test_path in enumerate(generated_test_paths)
+            for test_index, (test_path, test_perf_path) in enumerate(
+                zip(generated_test_paths, generated_perf_test_paths)
+            )
         ]
 
 

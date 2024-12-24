@@ -73,7 +73,9 @@ class GeneratedTests(BaseModel):
     generated_original_test_source: str
     instrumented_behavior_test_source: str
     instrumented_perf_test_source: str
-    file_path: Path
+    behavior_file_path: Path
+    perf_file_path: Path
+
 
 
 class GeneratedTestsList(BaseModel):
