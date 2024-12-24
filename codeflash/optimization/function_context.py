@@ -22,15 +22,11 @@ if TYPE_CHECKING:
 
 def belongs_to_method(name: Name, class_name: str, method_name: str) -> bool:
     """Check if the given name belongs to the specified method."""
-    # Check if belongs to class
     if name.full_name and name.full_name.startswith(f"{name.module_name}.{class_name}."):
-        # Check if belongs to method
-        if name.full_name and name.full_name.startswith(name.module_name):
-            subname: str = name.full_name.replace(name.module_name, "", 1)
-            # The name is defined inside the method or is the method itself
-            if f".{method_name}." in subname or f".{method_name}" == subname:
-                return True
-
+        subname: str = name.full_name.replace(name.module_name, "", 1)
+        # The name is defined inside the method or is the method itself
+        if f".{method_name}." in subname or f".{method_name}" == subname:
+            return True
     # If not, check if it belongs to a method in a list comprehension
     return bool(name_in_listcomp_in_function(name, method_name))
 
