@@ -23,7 +23,7 @@ def test_sorted_list():
     generated_tests = GeneratedTests(
         generated_original_test_source=generated_test_source,
         instrumented_behavior_test_source="",
-        file_path=Path("test_sorter.py"),
+        behavior_file_path=Path("test_sorter.py"),
     )
     generated_tests_list = GeneratedTestsList(generated_tests=[generated_tests])
     functions_to_remove = ["test_single_element"]
@@ -62,7 +62,7 @@ def test_sorted_list():
     generated_tests = GeneratedTests(
         generated_original_test_source=generated_test_source,
         instrumented_behavior_test_source="",
-        file_path=Path("test_sorter.py"),
+        behavior_file_path=Path("test_sorter.py"),
     )
     generated_tests_list_1 = GeneratedTestsList(generated_tests=[generated_tests])
     functions_to_remove = ["test_single_element", "test_sorted_list"]
@@ -88,7 +88,7 @@ def test_sorted_list():
     generated_tests_2 = GeneratedTests(
         generated_original_test_source=generated_test_source,
         instrumented_behavior_test_source="",
-        file_path=Path("test_sorter.py"),
+        behavior_file_path=Path("test_sorter.py"),
     )
 
     generated_tests_list_2 = GeneratedTestsList(generated_tests=[generated_tests_2])
@@ -138,7 +138,7 @@ def test_list_with_mixed_orderable_and_non_orderable_types():
     generated_tests = GeneratedTests(
         generated_original_test_source=generated_test_source,
         instrumented_behavior_test_source="",
-        file_path=Path("test_sorter.py"),
+        behavior_file_path=Path("test_sorter.py"),
     )
     generated_tests_list = GeneratedTestsList(generated_tests=[generated_tests])
     functions_to_remove = ["test_list_with_custom_objects"]
@@ -195,7 +195,7 @@ def test_sorted_list():
     generated_tests = GeneratedTests(
         generated_original_test_source=generated_test_source,
         instrumented_behavior_test_source="",
-        file_path=Path("test_sorter.py"),
+        behavior_file_path=Path("test_sorter.py"),
     )
     generated_tests_list = GeneratedTestsList(generated_tests=[generated_tests])
     functions_to_remove = ["test_empty_list", "test_sort_parametrized"]
@@ -258,7 +258,7 @@ def test_sorted_list():
     generated_tests = GeneratedTests(
         generated_original_test_source=generated_test_source,
         instrumented_behavior_test_source="",
-        file_path=Path("test_sorter.py"),
+        behavior_file_path=Path("test_sorter.py"),
     )
     generated_tests_list = GeneratedTestsList(generated_tests=[generated_tests])
     functions_to_remove = ["test_empty_list", "test_sort_parametrized"]

@@ -25,6 +25,7 @@ def generate_tests(
     function_trace_id: str,
     test_index: int,
     test_path: Path,
+    test_perf_path: Path,
 ) -> tuple[str, str, Path] | None:
     # TODO: Sometimes this recreates the original Class definition. This overrides and messes up the original
     #  class import. Remove the recreation of the class definition
@@ -54,7 +55,13 @@ def generate_tests(
         logger.warning(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")
         return None
 
-    return generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source, test_path
+    return (
+        generated_test_source,
+        instrumented_behavior_test_source,
+        instrumented_perf_test_source,
+        test_path,
+        test_perf_path,
+    )
 
 
 def merge_unit_tests(unit_test_source: str, inspired_unit_tests: str, test_framework: str) -> str:
