@@ -77,7 +77,6 @@ class GeneratedTests(BaseModel):
     perf_file_path: Path
 
 
-
 class GeneratedTestsList(BaseModel):
     generated_tests: list[GeneratedTests]
 
@@ -108,7 +107,11 @@ class TestFiles(BaseModel):
 
     def get_test_type_by_instrumented_file_path(self, file_path: Path) -> TestType | None:
         return next(
-            (test_file.test_type for test_file in self.test_files if test_file.instrumented_file_path == file_path),
+            (
+                test_file.test_type
+                for test_file in self.test_files
+                if (file_path in (test_file.instrumented_file_path, test_file.benchmarking_file_path))
+            ),
             None,
         )
 

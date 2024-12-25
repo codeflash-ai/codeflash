@@ -1214,6 +1214,7 @@ class Optimizer:
         code_context: CodeOptimizationContext | None = None,
         unittest_loop_index: int | None = None,
     ) -> tuple[TestResults, CoverageData | None]:
+        coverage_out_file = None
         try:
             if testing_type == "behavior":
                 result_file_path, run_result, coverage_out_file = run_behavioral_tests_pytest(
