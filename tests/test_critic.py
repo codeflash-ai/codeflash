@@ -24,7 +24,7 @@ def test_speedup_critic():
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
         best_test_runtime=800,
-        test_results=TestResults(),
+        behavior_test_results=TestResults(),
         optimization_candidate_index=0,
         total_candidate_timing=12,
     )
@@ -34,7 +34,7 @@ def test_speedup_critic():
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
         best_test_runtime=940,
-        test_results=TestResults(),
+        behavior_test_results=TestResults(),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -47,7 +47,7 @@ def test_speedup_critic():
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
         best_test_runtime=94000,
-        test_results=TestResults(),
+        behavior_test_results=TestResults(),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -169,7 +169,7 @@ def test_generated_test_critic():
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
         best_test_runtime=100,
-        test_results=TestResults(test_results=test_results),
+        behavior_test_results=TestResults(test_results=test_results),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -181,7 +181,7 @@ def test_generated_test_critic():
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
         best_test_runtime=100,
-        test_results=TestResults(test_results=test_results),
+        behavior_test_results=TestResults(test_results=test_results),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -193,7 +193,7 @@ def test_generated_test_critic():
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
         best_test_runtime=100,
-        test_results=TestResults(test_results=test_results),
+        behavior_test_results=TestResults(test_results=test_results),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -205,7 +205,7 @@ def test_generated_test_critic():
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
         best_test_runtime=100,
-        test_results=TestResults(test_results=test_results),
+        behavior_test_results=TestResults(test_results=test_results),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -217,7 +217,7 @@ def test_generated_test_critic():
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
         best_test_runtime=100,
-        test_results=TestResults(test_results=test_results),
+        behavior_test_results=TestResults(test_results=test_results),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -229,7 +229,7 @@ def test_generated_test_critic():
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
         best_test_runtime=100,
-        test_results=TestResults(test_results=test_results),
+        behavior_test_results=TestResults(test_results=test_results),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -241,7 +241,7 @@ def test_generated_test_critic():
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
         best_test_runtime=100,
-        test_results=TestResults(test_results=test_results),
+        behavior_test_results=TestResults(test_results=test_results),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -253,7 +253,7 @@ def test_generated_test_critic():
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
         best_test_runtime=100,
-        test_results=TestResults(test_results=test_results),
+        behavior_test_results=TestResults(test_results=test_results),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -267,7 +267,7 @@ def test_generated_test_critic():
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
         best_test_runtime=100,
-        test_results=TestResults(test_results=test_results),
+        behavior_test_results=TestResults(test_results=test_results),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -279,7 +279,7 @@ def test_generated_test_critic():
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
         best_test_runtime=100,
-        test_results=TestResults(test_results=test_results),
+        behavior_test_results=TestResults(test_results=test_results),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -291,7 +291,7 @@ def test_generated_test_critic():
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
         best_test_runtime=100,
-        test_results=TestResults(test_results=test_results),
+        behavior_test_results=TestResults(test_results=test_results),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )

@@ -114,8 +114,6 @@ def run_behavioral_tests_pytest(
     if enable_coverage:
         coverage_out_file, coveragercfile = prepare_coverage_files()
 
-        pytest_ignore_files = ["--ignore-glob=build/*", "--ignore-glob=dist/*", "--ignore-glob=*.egg-info/*"]
-
         cov_erase = execute_test_subprocess(
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env
         )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any, then the current run will be appended to the previous data, which skews the results
@@ -125,11 +123,11 @@ def run_behavioral_tests_pytest(
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage run --rcfile={coveragercfile.as_posix()} -m")
             + pytest_cmd_list
             + common_pytest_args
-            + pytest_ignore_files
             + result_args
             + test_files,
             cwd=cwd,
             env=pytest_test_env,
+            timeout=600,
         )
         logger.debug(results)
 
@@ -145,7 +143,7 @@ def run_behavioral_tests_pytest(
             coverage_out_file = None
     else:
         results = execute_test_subprocess(
-            pytest_cmd_list + test_files + common_pytest_args + result_args,
+            pytest_cmd_list + common_pytest_args + result_args + test_files,
             cwd=cwd,
             env=pytest_test_env,
             timeout=600,  # TODO: Make this dynamic

@@ -51,7 +51,8 @@ class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
     helper_functions: list[FunctionSource]
     runtime: int
-    winning_test_results: TestResults
+    winning_behavioral_test_results: TestResults
+    winning_benchmarking_test_results: TestResults
 
 
 class CodeOptimizationContext(BaseModel):
@@ -64,7 +65,8 @@ class CodeOptimizationContext(BaseModel):
 class OptimizedCandidateResult(BaseModel):
     max_loop_count: int
     best_test_runtime: int
-    test_results: TestResults
+    behavior_test_results: TestResults
+    benchmarking_test_results: TestResults
     optimization_candidate_index: int
     total_candidate_timing: int
 

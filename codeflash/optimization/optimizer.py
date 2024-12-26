@@ -211,8 +211,10 @@ class Optimizer:
         finally:
             for test_file in self.test_files.get_by_type(TestType.GENERATED_REGRESSION).test_files:
                 test_file.instrumented_file_path.unlink(missing_ok=True)
+                test_file.benchmarking_file_path.unlink(missing_ok=True)
             for test_file in self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
                 test_file.instrumented_file_path.unlink(missing_ok=True)
+                test_file.benchmarking_file_path.unlink(missing_ok=True)
             for test_file in self.test_files.get_by_type(TestType.CONCOLIC_COVERAGE_TEST).test_files:
                 test_file.instrumented_file_path.unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
@@ -441,6 +443,8 @@ class Optimizer:
                         )
         for generated_test_path in generated_test_paths:
             generated_test_path.unlink(missing_ok=True)
+        for generated_perf_test_path in generated_perf_test_paths:
+            generated_perf_test_path.unlink(missing_ok=True)
         for test_paths in instrumented_unittests_created_for_function:
             test_paths.unlink(missing_ok=True)
         for fn in function_to_concolic_tests:
@@ -506,13 +510,54 @@ class Optimizer:
 
                 run_results = self.run_optimized_candidate(
                     optimization_candidate_index=candidate_index,
-                    candidate=candidate,
                     baseline_results=original_code_baseline,
                     tests_in_file=only_run_this_test_function,
-                    speedup_ratios=speedup_ratios,
-                    optimized_runtimes=optimized_runtimes,
-                    is_correct=is_correct,
                 )
+                console.rule()
+                if not is_successful(run_results):
+                    optimized_runtimes[candidate.optimization_id] = None
+                    is_correct[candidate.optimization_id] = False
+                    speedup_ratios[candidate.optimization_id] = None
+                else:
+                    candidate_result: OptimizedCandidateResult = run_results.unwrap()
+                    best_test_runtime = candidate_result.best_test_runtime
+                    optimized_runtimes[candidate.optimization_id] = best_test_runtime
+                    is_correct[candidate.optimization_id] = True
+                    perf_gain = performance_gain(
+                        original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_test_runtime
+                    )
+                    speedup_ratios[candidate.optimization_id] = perf_gain
+
+                    tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
+                    if speedup_critic(
+                        candidate_result, original_code_baseline.runtime, best_runtime_until_now
+                    ) and quantity_of_tests_critic(candidate_result):
+                        tree.add("This candidate is faster than the previous best candidate. 🚀")
+                        tree.add(f"Original runtime: {humanize_runtime(original_code_baseline.runtime)}")
+                        tree.add(
+                            f"Best test runtime: {humanize_runtime(candidate_result.best_test_runtime)} "
+                            f"(measured over {candidate_result.max_loop_count} "
+                            f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                        )
+                        tree.add(f"Speedup ratio: {perf_gain:.3f}")
+
+                        best_optimization = BestOptimization(
+                            candidate=candidate,
+                            helper_functions=code_context.helper_functions,
+                            runtime=best_test_runtime,
+                            winning_behavioral_test_results=candidate_result.behavior_test_results,
+                            winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
+                        )
+                        best_runtime_until_now = best_test_runtime
+                    else:
+                        tree.add(
+                            f"Runtime: {humanize_runtime(best_test_runtime)} "
+                            f"(measured over {candidate_result.max_loop_count} "
+                            f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                        )
+                        tree.add(f"Speedup ratio: {perf_gain:.3f}")
+                    console.print(tree)
+                    console.rule()
 
                 self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
         except KeyboardInterrupt as e:
@@ -1031,12 +1076,8 @@ class Optimizer:
         self,
         *,
         optimization_candidate_index: int,
-        candidate: OptimizedCandidate,
         baseline_results: OriginalCodeBaseline,
         tests_in_file: list[FunctionCalledInTest] | None,
-        speedup_ratios: dict[str, float | None],
-        optimized_runtimes: dict[str, float | None],
-        is_correct: dict[str, bool],
     ) -> Result[OptimizedCandidateResult, str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
@@ -1079,6 +1120,7 @@ class Optimizer:
                 )
 
             else:
+                # TODO: Only loop once here
                 candidate_behavior_results = TestResults()
                 start_time: float = time.time()
                 loop_count = 0
@@ -1097,11 +1139,6 @@ class Optimizer:
                     loop_count = i + 1
                     candidate_behavior_results.merge(candidate_loop_results)
 
-            # initial_loop_candidate_results = TestResults()
-            # for result in candidate_results.test_results:
-            #     if result.loop_index == 1:
-            #         initial_loop_candidate_results.add(result)
-
             console.print(
                 TestResults.report_to_tree(
                     candidate_behavior_results.get_test_pass_fail_report_by_type(),
@@ -1110,34 +1147,13 @@ class Optimizer:
             )
             console.rule()
 
-            # initial_loop_original_test_results = TestResults()
-            # for result in original_test_results.test_results:
-            #     if result.loop_index == 1:
-            #         initial_loop_original_test_results.add(result)
-
             if compare_test_results(baseline_results.behavioral_test_results, candidate_behavior_results):
                 logger.info("Test results matched!")
                 console.rule()
-                equal_results = True
             else:
                 logger.info("Test results did not match the test results of the original code.")
                 console.rule()
-                success = False
-                equal_results = False
-
-            if (total_candidate_timing := candidate_results.total_passed_runtime()) == 0:
-                logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
-                console.rule()
-            get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.bin")).unlink(missing_ok=True)
-
-            get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
-            if not equal_results:
-                success = False
-
-            if not success:
-                optimized_runtimes[candidate.optimization_id] = None
-                is_correct[candidate.optimization_id] = False
-                speedup_ratios[candidate.optimization_id] = None
+                return Failure("Test results did not match the test results of the original code.")
 
             if test_framework == "pytest":
                 candidate_benchmarking_results, _ = self.run_and_parse_tests(
@@ -1149,60 +1165,50 @@ class Optimizer:
                     testing_time=TOTAL_LOOPING_TIME,
                     enable_coverage=False,
                 )
-            loop_count = (
-                max(all_loop_indices)
-                if (all_loop_indices := {result.loop_index for result in candidate_benchmarking_results.test_results})
-                else 0
-            )
-            logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
-            # return Success(
-            #     OptimizedCandidateResult(
-            #         max_loop_count=loop_count,
-            #         best_test_runtime=total_candidate_timing,
-            #         test_results=candidate_results,
-            #         optimization_candidate_index=optimization_candidate_index,
-            #         total_candidate_timing=total_candidate_timing,
-            #     )
-            # )
-            console.rule()
-            # candidate_result: OptimizedCandidateResult = run_results.unwrap()
-            best_test_runtime = total_candidate_timing
-            optimized_runtimes[candidate.optimization_id] = best_test_runtime
-            is_correct[candidate.optimization_id] = True
-            perf_gain = performance_gain(
-                original_runtime_ns=baseline_results.runtime, optimized_runtime_ns=best_test_runtime
-            )
-            speedup_ratios[candidate.optimization_id] = perf_gain
-
-            tree = Tree(f"Candidate #{optimization_candidate_index} - Runtime Information")
-            if speedup_critic(
-                candidate_result, original_code_baseline.runtime, best_runtime_until_now
-            ) and quantity_of_tests_critic(candidate_result):
-                tree.add("This candidate is faster than the previous best candidate. 🚀")
-                tree.add(f"Original runtime: {humanize_runtime(original_code_baseline.runtime)}")
-                tree.add(
-                    f"Best test runtime: {humanize_runtime(candidate_result.best_test_runtime)} "
-                    f"(measured over {candidate_result.max_loop_count} "
-                    f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                loop_count = (
+                    max(all_loop_indices)
+                    if (
+                        all_loop_indices := {
+                            result.loop_index for result in candidate_benchmarking_results.test_results
+                        }
+                    )
+                    else 0
                 )
-                tree.add(f"Speedup ratio: {perf_gain:.3f}")
 
-                best_optimization = BestOptimization(
-                    candidate=candidate,
-                    helper_functions=code_context.helper_functions,
-                    runtime=best_test_runtime,
-                    winning_test_results=candidate_result.test_results,
-                )
-                best_runtime_until_now = best_test_runtime
             else:
-                tree.add(
-                    f"Runtime: {humanize_runtime(best_test_runtime)} "
-                    f"(measured over {candidate_result.max_loop_count} "
-                    f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                candidate_benchmarking_results = TestResults()
+                start_time: float = time.time()
+                loop_count = 0
+                for i in range(100):
+                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME:
+                        break
+                    test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
+                    candidate_benchmarking_results, cov = self.run_and_parse_tests(
+                        test_env=test_env,
+                        test_files=self.test_files,
+                        optimization_iteration=optimization_candidate_index,
+                        test_functions=only_run_these_test_functions_for_test_files,
+                        testing_time=TOTAL_LOOPING_TIME,
+                        unittest_loop_index=i + 1,
+                    )
+                    loop_count = i + 1
+                    candidate_benchmarking_results.merge(candidate_benchmarking_results)
+
+            if (total_candidate_timing := candidate_benchmarking_results.total_passed_runtime()) == 0:
+                logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
+                console.rule()
+
+            logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
+            return Success(
+                OptimizedCandidateResult(
+                    max_loop_count=loop_count,
+                    best_test_runtime=total_candidate_timing,
+                    behavior_test_results=candidate_behavior_results,
+                    benchmarking_test_results=candidate_benchmarking_results,
+                    optimization_candidate_index=optimization_candidate_index,
+                    total_candidate_timing=total_candidate_timing,
                 )
-                tree.add(f"Speedup ratio: {perf_gain:.3f}")
-            console.print(tree)
-            console.rule()
+            )
 
     def run_and_parse_tests(
         self,
