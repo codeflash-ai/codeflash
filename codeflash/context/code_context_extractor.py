@@ -108,43 +108,44 @@ def get_code_optimization_context(
         if read_only_code_with_imports.code:
             read_only_code_markdown.code_strings.append(read_only_code_with_imports)
 
+    # Handle token limits
     tokenizer = tiktoken.encoding_for_model("gpt-4o")
     final_read_writable_tokens = len(tokenizer.encode(final_read_writable_code))
-    print("final_read_writable_tokens", final_read_writable_tokens)
     if final_read_writable_tokens > token_limit:
         raise ValueError("Read-writable code has exceeded token limit, cannot proceed")
-    read_only_code_markdown_tokens = len(tokenizer.encode(read_only_code_markdown.markdown))
 
+    read_only_code_markdown_tokens = len(tokenizer.encode(read_only_code_markdown.markdown))
     total_tokens = final_read_writable_tokens + read_only_code_markdown_tokens
-    print("total_tokens", total_tokens)
-    print(read_only_code_markdown.markdown)
     if total_tokens <= token_limit:
         return CodeString(code=final_read_writable_code).code, read_only_code_markdown.markdown
-
     logger.debug("Code context has exceeded token limit, removing docstrings from read-only code")
+
+    # Get read-only code context again, this time without docstrings
+    read_only_code_markdown = CodeStringsMarkdown()
     for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
         try:
-            read_only_code = get_read_only_code(og_code_containing_helpers, qualified_function_names)
+            read_only_code = get_read_only_code(
+                og_code_containing_helpers, qualified_function_names, remove_docstrings=True
+            )
         except ValueError as e:
             logger.debug(f"Error while getting read-only code: {e}")
             continue
 
-    read_only_code_with_imports = CodeString(
-        code=add_needed_imports_from_module(
-            src_module_code=og_code_containing_helpers,
-            dst_module_code=read_only_code,
-            src_path=file_path,
-            dst_path=file_path,
-            project_root=project_root_path,
-            helper_functions_fqn=qualified_function_names,
-        ),
-        file_path=Path(file_path),
-    )
+        read_only_code_with_imports = CodeString(
+            code=add_needed_imports_from_module(
+                src_module_code=og_code_containing_helpers,
+                dst_module_code=read_only_code,
+                src_path=file_path,
+                dst_path=file_path,
+                project_root=project_root_path,
+                helper_functions_fqn=qualified_function_names,
+            ),
+            file_path=Path(file_path),
+        )
     if read_only_code_with_imports.code:
         read_only_code_markdown.code_strings.append(read_only_code_with_imports)
     read_only_code_markdown_tokens = len(tokenizer.encode(read_only_code_markdown.markdown))
     total_tokens = final_read_writable_tokens + read_only_code_markdown_tokens
-    print("total_tokens after removal", total_tokens)
     if total_tokens <= token_limit:
         return CodeString(code=final_read_writable_code).code, read_only_code_markdown.markdown
 
