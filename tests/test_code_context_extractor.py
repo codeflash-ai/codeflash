@@ -6,10 +6,10 @@ from collections import defaultdict
 from pathlib import Path
 from textwrap import dedent
 
+from codeflash.context.code_context_extractor import get_code_optimization_context
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
 from codeflash.optimization.optimizer import Optimizer
-from codeflash.context.code_context_extractor import get_code_optimization_context
 
 
 class HelperClass:
@@ -607,5 +607,161 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         functools.update_wrapper(self, func)
 ```
 '''
+        assert read_write_context.strip() == dedent(expected_read_write_context).strip()
+        assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+
+
+def test_example_class() -> None:
+    code = """
+class MyClass:
+    \"\"\"A class with a helper method.\"\"\"
+    def __init__(self):
+        self.x = 1
+    def target_method(self):
+        y = HelperClass().helper_method()
+
+class HelperClass:
+    \"\"\"A helper class for MyClass.\"\"\"
+    def __init__(self):
+        \"\"\"Initialize the HelperClass.\"\"\"
+        self.x = 1
+    def __repr__(self):
+        \"\"\"Return a string representation of the HelperClass.\"\"\"
+        return "HelperClass" + str(self.x)
+    def helper_method(self):
+        return self.x
+"""
+    with tempfile.NamedTemporaryFile(mode="w") as f:
+        f.write(code)
+        f.flush()
+        file_path = Path(f.name).resolve()
+        opt = Optimizer(
+            Namespace(
+                project_root=file_path.parent.resolve(),
+                disable_telemetry=True,
+                tests_root="tests",
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=Path().resolve(),
+            )
+        )
+        function_to_optimize = FunctionToOptimize(
+            function_name="target_method",
+            file_path=file_path,
+            parents=[FunctionParent(name="MyClass", type="ClassDef")],
+            starting_line=None,
+            ending_line=None,
+        )
+
+        read_write_context, read_only_context = get_code_optimization_context(
+            function_to_optimize, opt.args.project_root
+        )
+        expected_read_write_context = """
+class MyClass:
+    def target_method(self):
+        y = HelperClass().helper_method()
+
+class HelperClass:
+    def helper_method(self):
+        return self.x
+        """
+        expected_read_only_context = f"""
+```python:{file_path}
+class MyClass:
+    \"\"\"A class with a helper method.\"\"\"
+    def __init__(self):
+        self.x = 1
+
+class HelperClass:
+    \"\"\"A helper class for MyClass.\"\"\"
+    def __init__(self):
+        \"\"\"Initialize the HelperClass.\"\"\"
+        self.x = 1
+    def __repr__(self):
+        \"\"\"Return a string representation of the HelperClass.\"\"\"
+        return "HelperClass" + str(self.x)
+```
+"""
+        assert read_write_context.strip() == dedent(expected_read_write_context).strip()
+        assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+
+
+def test_example_class_token_limit_1() -> None:
+    docstring_filler = "This is a long docstring that will be used to fill up the token limit."
+    docstring_filler_multiplied = " ".join([docstring_filler for _ in range(1000)])
+    code = f"""
+class MyClass:
+    \"\"\"A class with a helper method. 
+    {docstring_filler_multiplied}\"\"\"
+    def __init__(self):
+        self.x = 1
+    def target_method(self):
+        y = HelperClass().helper_method()
+
+class HelperClass:
+    \"\"\"A helper class for MyClass.\"\"\"
+    def __init__(self):
+        \"\"\"Initialize the HelperClass.\"\"\"
+        self.x = 1
+    def __repr__(self):
+        \"\"\"Return a string representation of the HelperClass.\"\"\"
+        return "HelperClass" + str(self.x)
+    def helper_method(self):
+        return self.x
+"""
+    with tempfile.NamedTemporaryFile(mode="w") as f:
+        f.write(code)
+        f.flush()
+        file_path = Path(f.name).resolve()
+        opt = Optimizer(
+            Namespace(
+                project_root=file_path.parent.resolve(),
+                disable_telemetry=True,
+                tests_root="tests",
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=Path().resolve(),
+            )
+        )
+        function_to_optimize = FunctionToOptimize(
+            function_name="target_method",
+            file_path=file_path,
+            parents=[FunctionParent(name="MyClass", type="ClassDef")],
+            starting_line=None,
+            ending_line=None,
+        )
+
+        read_write_context, read_only_context = get_code_optimization_context(
+            function_to_optimize, opt.args.project_root
+        )
+        expected_read_write_context = """
+class MyClass:
+    def target_method(self):
+        y = HelperClass().helper_method()
+
+class HelperClass:
+    def helper_method(self):
+        return self.x
+        """
+        expected_read_only_context = f"""
+```python:{file_path}
+class MyClass:
+    \"\"\"A class with a helper method. 
+    {docstring_filler_multiplied}\"\"\"
+    def __init__(self):
+        self.x = 1
+
+class HelperClass:
+    \"\"\"A helper class for MyClass.\"\"\"
+    def __init__(self):
+        \"\"\"Initialize the HelperClass.\"\"\"
+        self.x = 1
+    def __repr__(self):
+        \"\"\"Return a string representation of the HelperClass.\"\"\"
+        return "HelperClass" + str(self.x)
+```
+"""
         assert read_write_context.strip() == dedent(expected_read_write_context).strip()
         assert read_only_context.strip() == dedent(expected_read_only_context).strip()

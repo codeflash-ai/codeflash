@@ -6,6 +6,7 @@ from pathlib import Path
 
 import jedi
 import libcst as cst
+import tiktoken
 from jedi.api.classes import Name
 
 from codeflash.cli_cmds.console import logger
@@ -106,20 +107,49 @@ def get_code_optimization_context(
         )
         if read_only_code_with_imports.code:
             read_only_code_markdown.code_strings.append(read_only_code_with_imports)
-    # final_read_writable_codestring = CodeString(code=final_read_writable_code)
-    # tokenizer = tiktoken.encoding_for_model("gpt-4o")
-    # final_read_writable_tokens = len(tokenizer.encode(final_read_writable_code))
-    # if final_read_writable_tokens > token_limit:
-    #     logger.debug(
-    #         "Read writable code exceeded token limit, removing helper functions and only keeping function to optimize"
-    #     )
-    #     try:
-    #         read_writable_code = get_read_writable_code(og_code_containing_helpers, qualified_function_names)
-    #     except ValueError as e:
-    #         logger.debug(f"Error while getting read-writable code: {e}")
-    #         continue
+
+    tokenizer = tiktoken.encoding_for_model("gpt-4o")
+    final_read_writable_tokens = len(tokenizer.encode(final_read_writable_code))
+    print("final_read_writable_tokens", final_read_writable_tokens)
+    if final_read_writable_tokens > token_limit:
+        raise ValueError("Read-writable code has exceeded token limit, cannot proceed")
+    read_only_code_markdown_tokens = len(tokenizer.encode(read_only_code_markdown.markdown))
+
+    total_tokens = final_read_writable_tokens + read_only_code_markdown_tokens
+    print("total_tokens", total_tokens)
     print(read_only_code_markdown.markdown)
-    return CodeString(code=final_read_writable_code).code, read_only_code_markdown.markdown
+    if total_tokens <= token_limit:
+        return CodeString(code=final_read_writable_code).code, read_only_code_markdown.markdown
+
+    logger.debug("Code context has exceeded token limit, removing docstrings from read-only code")
+    for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
+        try:
+            read_only_code = get_read_only_code(og_code_containing_helpers, qualified_function_names)
+        except ValueError as e:
+            logger.debug(f"Error while getting read-only code: {e}")
+            continue
+
+    read_only_code_with_imports = CodeString(
+        code=add_needed_imports_from_module(
+            src_module_code=og_code_containing_helpers,
+            dst_module_code=read_only_code,
+            src_path=file_path,
+            dst_path=file_path,
+            project_root=project_root_path,
+            helper_functions_fqn=qualified_function_names,
+        ),
+        file_path=Path(file_path),
+    )
+    if read_only_code_with_imports.code:
+        read_only_code_markdown.code_strings.append(read_only_code_with_imports)
+    read_only_code_markdown_tokens = len(tokenizer.encode(read_only_code_markdown.markdown))
+    total_tokens = final_read_writable_tokens + read_only_code_markdown_tokens
+    print("total_tokens after removal", total_tokens)
+    if total_tokens <= token_limit:
+        return CodeString(code=final_read_writable_code).code, read_only_code_markdown.markdown
+
+    logger.debug("Code context has exceeded token limit, removing read-only code")
+    return CodeString(code=final_read_writable_code).code, ""
 
 
 def is_dunder_method(name: str) -> bool:
@@ -130,6 +160,17 @@ def get_section_names(node: cst.CSTNode) -> list[str]:
     """Returns the section attribute names (e.g., body, orelse) for a given node if they exist."""
     possible_sections = ["body", "orelse", "finalbody", "handlers"]
     return [sec for sec in possible_sections if hasattr(node, sec)]
+
+
+def remove_docstring_from_body(indented_block: cst.IndentedBlock) -> cst.CSTNode:
+    """Removes the docstring from a body of statements if present."""
+    print(indented_block)
+    if not isinstance(indented_block.body[0], cst.SimpleStatementLine):
+        return indented_block
+    first_stmt = indented_block.body[0].body[0]
+    if isinstance(first_stmt, cst.Expr) and isinstance(first_stmt.value, cst.SimpleString):
+        return indented_block.with_changes(body=indented_block.body[1:])
+    return indented_block
 
 
 def prune_cst_for_read_writable_code(
@@ -238,6 +279,9 @@ def prune_cst_for_read_only_code(
             return None, True
         # Keep only dunder methods
         if is_dunder_method(node.name.value):
+            if remove_docstrings and isinstance(node.body, cst.IndentedBlock):
+                new_body = remove_docstring_from_body(node.body)
+                return node.with_changes(body=new_body), False
             return node, False
         return None, False
 
@@ -256,7 +300,7 @@ def prune_cst_for_read_only_code(
         new_body = []
         for stmt in node.body.body:
             filtered, found_target = prune_cst_for_read_only_code(
-                stmt, target_functions, class_prefix, remove_docstrings
+                stmt, target_functions, class_prefix, remove_docstrings=remove_docstrings
             )
             found_in_class |= found_target
 
@@ -271,6 +315,10 @@ def prune_cst_for_read_only_code(
         if not found_in_class:
             return None, False
 
+        if remove_docstrings:
+            return node.with_changes(
+                body=remove_docstring_from_body(node.body.with_changes(body=new_body))
+            ) if new_body else None, True
         return node.with_changes(body=node.body.with_changes(body=new_body)) if new_body else None, True
 
     # For other nodes, keep the node and recursively filter children
@@ -288,7 +336,7 @@ def prune_cst_for_read_only_code(
             section_found_target = False
             for child in original_content:
                 filtered, found_target = prune_cst_for_read_only_code(
-                    child, target_functions, prefix, remove_docstrings
+                    child, target_functions, prefix, remove_docstrings=remove_docstrings
                 )
                 if filtered:
                     new_children.append(filtered)
@@ -299,7 +347,7 @@ def prune_cst_for_read_only_code(
                 updates[section] = new_children
         elif original_content is not None:
             filtered, found_target = prune_cst_for_read_only_code(
-                original_content, target_functions, prefix, remove_docstrings
+                original_content, target_functions, prefix, remove_docstrings=remove_docstrings
             )
             found_any_target |= found_target
             if filtered:
@@ -316,7 +364,9 @@ def get_read_only_code(code: str, target_functions: set[str], remove_docstrings:
     class contextual information, and other module scoped variables.
     """
     module = cst.parse_module(code)
-    filtered_node, found_target = prune_cst_for_read_only_code(module, target_functions, remove_docstrings)
+    filtered_node, found_target = prune_cst_for_read_only_code(
+        module, target_functions, remove_docstrings=remove_docstrings
+    )
     if not found_target:
         raise ValueError("No target functions found in the provided code")
     if filtered_node and isinstance(filtered_node, cst.Module):

@@ -51,6 +51,90 @@ def test_dunder_methods() -> None:
     assert dedent(expected).strip() == output.strip()
 
 
+def test_dunder_methods_remove_docstring() -> None:
+    code = """
+    class TestClass:
+        def __init__(self):
+            \"\"\"Constructor for TestClass.\"\"\"
+            self.x = 42
+
+        def __str__(self):
+            \"\"\"String representation of TestClass.\"\"\"
+            return f"Value: {self.x}"
+
+        def target_method(self):
+            print("stub me")
+    """
+
+    expected = """
+    class TestClass:
+        def __init__(self):
+            self.x = 42
+
+        def __str__(self):
+            return f"Value: {self.x}"
+    """
+
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, remove_docstrings=True)
+    assert dedent(expected).strip() == output.strip()
+
+
+def test_class_remove_docstring() -> None:
+    code = """
+    class TestClass:
+        \"\"\"Class docstring.\"\"\"
+        def __init__(self):
+            self.x = 42
+
+        def __str__(self):
+            return f"Value: {self.x}"
+
+        def target_method(self):
+            print("stub me")
+    """
+
+    expected = """
+    class TestClass:
+        def __init__(self):
+            self.x = 42
+
+        def __str__(self):
+            return f"Value: {self.x}"
+    """
+
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, remove_docstrings=True)
+    assert dedent(expected).strip() == output.strip()
+
+
+def test_mixed_remove_docstring() -> None:
+    code = """
+    class TestClass:
+        \"\"\"Class docstring.\"\"\"
+        def __init__(self):
+            self.x = 42
+
+        def __str__(self):
+            \"\"\"String representation of TestClass.\"\"\"
+            return f"Value: {self.x}"
+
+        def target_method(self):
+            \"\"\"target method docstring.\"\"\"
+            print("stub me")
+    """
+
+    expected = """
+    class TestClass:
+        def __init__(self):
+            self.x = 42
+
+        def __str__(self):
+            return f"Value: {self.x}"
+    """
+
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, remove_docstrings=True)
+    assert dedent(expected).strip() == output.strip()
+
+
 def test_target_in_nested_class() -> None:
     """Test that attempting to find a target in a nested class raises an error."""
     code = """
@@ -602,4 +686,115 @@ def test_simplified_complete_implementation() -> None:
     """
 
     output = get_read_only_code(dedent(code), {"DataProcessor.target_method", "ResultHandler.target_method"})
+    assert dedent(expected).strip() == output.strip()
+
+
+def test_simplified_complete_implementation_no_docstring() -> None:
+    code = """
+    class DataProcessor:
+        \"\"\"A simple data processing class.\"\"\"
+
+        def __init__(self, data: Dict[str, Any]) -> None:
+            self.data = data
+            self._processed = False
+            self.result = None
+
+        def __repr__(self) -> str:
+            return f"DataProcessor(processed={self._processed})"
+
+        def target_method(self, key: str) -> Optional[Any]:
+            \"\"\"Process and retrieve a specific key from the data.\"\"\"
+            if not self._processed:
+                self._process_data()
+            return self.result.get(key) if self.result else None
+
+        def _process_data(self) -> None:
+            \"\"\"Internal method to process the data.\"\"\"
+            processed = {}
+            for key, value in self.data.items():
+                if isinstance(value, (int, float)):
+                    processed[key] = value * 2
+                elif isinstance(value, str):
+                    processed[key] = value.upper()
+                else:
+                    processed[key] = value
+            self.result = processed
+            self._processed = True
+
+        def to_json(self) -> str:
+            \"\"\"Convert the processed data to JSON string.\"\"\"
+            if not self._processed:
+                self._process_data()
+            return json.dumps(self.result)
+
+    try:
+        sample_data = {"number": 42, "text": "hello"}
+        processor = DataProcessor(sample_data)
+
+        class ResultHandler:
+            def __init__(self, processor: DataProcessor):
+                self.processor = processor
+                self.cache = {}
+
+            def __str__(self) -> str:
+                return f"ResultHandler(cache_size={len(self.cache)})"
+
+            def target_method(self, key: str) -> Optional[Any]:
+                \"\"\"Retrieve and cache results for a key.\"\"\"
+                if key not in self.cache:
+                    self.cache[key] = self.processor.target_method(key)
+                return self.cache[key]
+
+            def clear_cache(self) -> None:
+                \"\"\"Clear the internal cache.\"\"\"
+                self.cache.clear()
+
+            def get_stats(self) -> Dict[str, int]:
+                \"\"\"Get cache statistics.\"\"\"
+                return {
+                    "cache_size": len(self.cache),
+                    "hits": sum(1 for v in self.cache.values() if v is not None)
+                }
+
+    except Exception as e:
+        class ResultHandler:
+            def __init__(self):
+                self.error = str(e)
+
+            def target_method(self, key: str) -> None:
+                raise RuntimeError(f"Failed to initialize: {self.error}")
+    """
+
+    expected = """    
+    class DataProcessor:
+
+        def __init__(self, data: Dict[str, Any]) -> None:
+            self.data = data
+            self._processed = False
+            self.result = None
+
+        def __repr__(self) -> str:
+            return f"DataProcessor(processed={self._processed})"
+
+    try:
+        sample_data = {"number": 42, "text": "hello"}
+        processor = DataProcessor(sample_data)
+
+        class ResultHandler:
+            def __init__(self, processor: DataProcessor):
+                self.processor = processor
+                self.cache = {}
+
+            def __str__(self) -> str:
+                return f"ResultHandler(cache_size={len(self.cache)})"
+
+    except Exception as e:
+        class ResultHandler:
+            def __init__(self):
+                self.error = str(e)
+    """
+
+    output = get_read_only_code(
+        dedent(code), {"DataProcessor.target_method", "ResultHandler.target_method"}, remove_docstrings=True
+    )
     assert dedent(expected).strip() == output.strip()

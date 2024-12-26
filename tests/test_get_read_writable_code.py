@@ -221,3 +221,5 @@ def test_module_var() -> None:
 
     output = get_read_writable_code(dedent(code), {"target_function"})
     assert dedent(expected).strip() == output.strip()
+
+

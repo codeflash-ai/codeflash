@@ -715,13 +715,17 @@ class Optimizer:
         contextual_dunder_methods.update(helper_dunder_methods)
 
         # Will eventually refactor to use this function instead of the above
-        read_writable_code, read_only_context_code = code_context_extractor.get_code_optimization_context(
-            function_to_optimize, project_root
-        )
+        try:
+            read_writable_code, read_only_context_code = code_context_extractor.get_code_optimization_context(
+                function_to_optimize, project_root
+            )
+        except ValueError as e:
+            return Failure(str(e))
+
         logger.info("Read-writable code:")
         code_print(read_writable_code)
         logger.info("Read-only context code:")
-        # code_print(read_only_context_code)
+        code_print(read_only_context_code)
         return Success(
             CodeOptimizationContext(
                 code_to_optimize_with_helpers=code_to_optimize_with_helpers_and_imports,
