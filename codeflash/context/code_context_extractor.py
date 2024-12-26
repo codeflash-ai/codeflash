@@ -8,6 +8,7 @@ import jedi
 import libcst as cst
 import tiktoken
 from jedi.api.classes import Name
+from libcst import CSTNode
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module
@@ -164,7 +165,7 @@ def get_section_names(node: cst.CSTNode) -> list[str]:
 
 
 def remove_docstring_from_body(indented_block: cst.IndentedBlock) -> cst.CSTNode:
-    """Removes the docstring from a body of statements if present."""
+    """Removes the docstring from an indented block if it exists"""
     print(indented_block)
     if not isinstance(indented_block.body[0], cst.SimpleStatementLine):
         return indented_block
@@ -177,7 +178,14 @@ def remove_docstring_from_body(indented_block: cst.IndentedBlock) -> cst.CSTNode
 def prune_cst_for_read_writable_code(
     node: cst.CSTNode, target_functions: set[str], prefix: str = ""
 ) -> tuple[cst.CSTNode | None, bool]:
-    """Recursively filter the node and its children to keep nodes that lead to target functions."""
+    """Recursively filter the node and its children to build the read-writable codeblock. This contains nodes that lead to target functions.
+
+    Returns:
+        (filtered_node, found_target):
+          filtered_node: The modified CST node or None if it should be removed.
+          found_target: True if a target function was found in this node's subtree.
+
+    """
     if isinstance(node, (cst.Import, cst.ImportFrom)):
         return None, False
 
@@ -298,7 +306,7 @@ def prune_cst_for_read_only_code(
 
         # First pass: detect if there is a target function in the class
         found_in_class = False
-        new_body = []
+        new_class_body: list[CSTNode] = []
         for stmt in node.body.body:
             filtered, found_target = prune_cst_for_read_only_code(
                 stmt, target_functions, class_prefix, remove_docstrings=remove_docstrings
@@ -311,16 +319,16 @@ def prune_cst_for_read_only_code(
                 if qname in target_functions or not is_dunder_method(filtered.name.value):
                     continue
             if filtered:
-                new_body.append(filtered)
+                new_class_body.append(filtered)
 
         if not found_in_class:
             return None, False
 
         if remove_docstrings:
             return node.with_changes(
-                body=remove_docstring_from_body(node.body.with_changes(body=new_body))
-            ) if new_body else None, True
-        return node.with_changes(body=node.body.with_changes(body=new_body)) if new_body else None, True
+                body=remove_docstring_from_body(node.body.with_changes(body=new_class_body))
+            ) if new_class_body else None, True
+        return node.with_changes(body=node.body.with_changes(body=new_class_body)) if new_class_body else None, True
 
     # For other nodes, keep the node and recursively filter children
     section_names = get_section_names(node)
