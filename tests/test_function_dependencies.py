@@ -49,6 +49,19 @@ class A:
         c = global_dependency_1(b)
         return c
 
+    def function_in_list_comprehension(self):
+        return [global_dependency_3(1) for x in range(10)]
+
+    def add_two(self, num):
+        return num + 2
+
+    def method_in_list_comprehension(self):
+        return [self.add_two(1) for x in range(10)]
+
+    def nested_function(self):
+        def nested():
+            return global_dependency_3(1)
+        return nested() + self.add_two(3)
 
 class B:
     def calculate_something_2(self, num):
@@ -79,13 +92,12 @@ class C:
 
 
 def test_multiple_classes_dependencies() -> None:
-    # TODO: Check if C.run only gets calculate_something_3 as dependency and likewise for other classes
     file_path = pathlib.Path(__file__).resolve()
     helper_functions = get_function_variables_definitions(
         FunctionToOptimize("run", str(file_path), [FunctionParent("C", "ClassDef")]), str(file_path.parent.resolve())
     )
 
-    # assert len(helper_functions) == 2
+    assert len(helper_functions) == 2
     assert list(map(lambda x: x.fully_qualified_name, helper_functions[0])) == [
         "test_function_dependencies.global_dependency_3",
         "test_function_dependencies.C.calculate_something_3",
@@ -291,11 +303,8 @@ def test_recursive_function_context() -> None:
     if not is_successful(ctx_result):
         pytest.fail()
     code_context = ctx_result.unwrap()
-    # The code_context above should have the topologicalSortUtil function in it
-    assert len(code_context.helper_functions) == 2
-    assert set(
-        [code_context.helper_functions[1].fully_qualified_name, code_context.helper_functions[0].fully_qualified_name]
-    ) == set(["test_function_dependencies.C.calculate_something_3", "test_function_dependencies.C.recursive"])
+    assert len(code_context.helper_functions) == 1
+    assert code_context.helper_functions[0].fully_qualified_name == "test_function_dependencies.C.calculate_something_3"
     assert (
         code_context.code_to_optimize_with_helpers
         == """class C:
@@ -318,3 +327,51 @@ def test_list_comprehension_dependency() -> None:
     assert len(helper_functions) == 2
     assert helper_functions[0].jedi_definition.full_name == "test_function_dependencies.MyData"
     assert helper_functions[1].jedi_definition.full_name == "test_function_dependencies.calculate_something"
+
+
+def test_function_in_method_list_comprehension() -> None:
+    file_path = pathlib.Path(__file__).resolve()
+    function_to_optimize = FunctionToOptimize(
+        function_name="function_in_list_comprehension",
+        file_path=str(file_path),
+        parents=[FunctionParent(name="A", type="ClassDef")],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    helper_functions = get_function_variables_definitions(function_to_optimize, str(file_path.parent.resolve()))[0]
+
+    assert len(helper_functions) == 1
+    assert helper_functions[0].jedi_definition.full_name == "test_function_dependencies.global_dependency_3"
+
+
+def test_method_in_method_list_comprehension() -> None:
+    file_path = pathlib.Path(__file__).resolve()
+    function_to_optimize = FunctionToOptimize(
+        function_name="method_in_list_comprehension",
+        file_path=str(file_path),
+        parents=[FunctionParent(name="A", type="ClassDef")],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    helper_functions = get_function_variables_definitions(function_to_optimize, str(file_path.parent.resolve()))[0]
+
+    assert len(helper_functions) == 1
+    assert helper_functions[0].jedi_definition.full_name == "test_function_dependencies.A.add_two"
+
+def test_nested_method() -> None:
+    file_path = pathlib.Path(__file__).resolve()
+    function_to_optimize = FunctionToOptimize(
+        function_name="nested_function",
+        file_path=str(file_path),
+        parents=[FunctionParent(name="A", type="ClassDef")],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    helper_functions = get_function_variables_definitions(function_to_optimize, str(file_path.parent.resolve()))[0]
+
+    # The nested function should be included in the helper functions
+    assert len(helper_functions) == 1
+    assert helper_functions[0].jedi_definition.full_name == "test_function_dependencies.A.add_two"
