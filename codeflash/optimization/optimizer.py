@@ -379,7 +379,8 @@ class Optimizer:
                 )
                 explanation = Explanation(
                     raw_explanation_message=best_optimization.candidate.explanation,
-                    winning_test_results=best_optimization.winning_test_results,
+                    winning_behavioral_test_results=best_optimization.winning_behavioral_test_results,
+                    winning_benchmarking_test_results=best_optimization.winning_benchmarking_test_results,
                     original_runtime_ns=original_code_baseline.runtime,
                     best_runtime_ns=best_optimization.runtime,
                     function_name=function_to_optimize_qualified_name,
@@ -574,8 +575,8 @@ class Optimizer:
         )
         return best_optimization
 
-    @staticmethod
     def log_successful_optimization(
+        self,
         explanation: Explanation,
         function_to_optimize: FunctionToOptimize,
         function_trace_id: str,
@@ -589,17 +590,19 @@ class Optimizer:
             border_style="green",
         )
 
-        tests_panel = Panel(
-            Syntax(
-                "\n".join([test.generated_original_test_source for test in generated_tests.generated_tests]),
-                "python",
-                line_numbers=True,
-            ),
-            title="Validated Tests",
-            border_style="blue",
-        )
+        if self.args.no_pr:
+            tests_panel = Panel(
+                Syntax(
+                    "\n".join([test.generated_original_test_source for test in generated_tests.generated_tests]),
+                    "python",
+                    line_numbers=True,
+                ),
+                title="Validated Tests",
+                border_style="blue",
+            )
 
-        console.print(Group(explanation_panel, tests_panel))
+            console.print(Group(explanation_panel, tests_panel))
+        console.print(explanation_panel)
 
         ph(
             "cli-optimize-success",
@@ -611,7 +614,7 @@ class Optimizer:
                 "original_runtime": explanation.original_runtime_ns,
                 "winning_test_results": {
                     tt.to_name(): v
-                    for tt, v in explanation.winning_test_results.get_test_pass_fail_report_by_type().items()
+                    for tt, v in explanation.winning_behavioral_test_results.get_test_pass_fail_report_by_type().items()
                 },
             },
         )
@@ -1142,7 +1145,7 @@ class Optimizer:
             console.print(
                 TestResults.report_to_tree(
                     candidate_behavior_results.get_test_pass_fail_report_by_type(),
-                    title="Overall initial loop test results for candidate",
+                    title="Behavioral Test Results for candidate",
                 )
             )
             console.rule()

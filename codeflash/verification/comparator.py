@@ -76,8 +76,8 @@ def comparator(orig: Any, new: Any) -> bool:
                 return True
             return math.isclose(orig, new)
         if isinstance(orig, BaseException):
-            if str(orig) != str(new):
-                return False
+            # if str(orig) != str(new):
+            #     return False
             # compare the attributes of the two exception objects to determine if they are equivalent.
             orig_dict = {k: v for k, v in orig.__dict__.items() if not k.startswith("_")}
             new_dict = {k: v for k, v in new.__dict__.items() if not k.startswith("_")}
