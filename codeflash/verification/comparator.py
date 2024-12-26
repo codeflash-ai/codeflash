@@ -47,6 +47,10 @@ def comparator(orig: Any, new: Any) -> bool:
     try:
         if type(orig) is not type(new):
             return False
+        if isinstance(orig, (list, tuple)):
+            if len(orig) != len(new):
+                return False
+            return all(comparator(elem1, elem2) for elem1, elem2 in zip(orig, new))
 
         if isinstance(
             orig,
@@ -67,17 +71,10 @@ def comparator(orig: Any, new: Any) -> bool:
             ),
         ):
             return orig == new
-
         if isinstance(orig, float):
             if math.isnan(orig) and math.isnan(new):
                 return True
             return math.isclose(orig, new)
-
-        if isinstance(orig, (list, tuple)):
-            if len(orig) != len(new):
-                return False
-            return all(comparator(elem1, elem2) for elem1, elem2 in zip(orig, new))
-
         if isinstance(orig, BaseException):
             if str(orig) != str(new):
                 return False
