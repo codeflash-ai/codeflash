@@ -165,9 +165,6 @@ def get_function_variables_definitions(
     names = []
     for ref in script.get_names(all_scopes=True, definitions=False, references=True):
         if ref.full_name:
-            # if ref.name == function_name:  # Skip function itself, and recursive functions
-            #     continue
-
             if function_to_optimize.parents:
                 # Check if the reference belongs to the specified class when FunctionParent is provided
                 if belongs_to_method(ref, function_to_optimize.parents[-1].name, function_name):
