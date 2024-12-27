@@ -406,7 +406,9 @@ def test_sort():
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
+            test_files=[
+                TestFile(instrumented_behavior_file_path=test_path, test_type=test_type, original_file_path=test_path)
+            ]
         )
         test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
@@ -520,7 +522,9 @@ def test_sort_parametrized(input, expected_output):
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
+            test_files=[
+                TestFile(instrumented_behavior_file_path=test_path, test_type=test_type, original_file_path=test_path)
+            ]
         )
 
         opt = Optimizer(
@@ -661,7 +665,9 @@ def test_sort_parametrized_loop(input, expected_output):
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
+            test_files=[
+                TestFile(instrumented_behavior_file_path=test_path, test_type=test_type, original_file_path=test_path)
+            ]
         )
         opt = Optimizer(
             Namespace(
@@ -831,7 +837,9 @@ def test_sort():
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
+            test_files=[
+                TestFile(instrumented_behavior_file_path=test_path, test_type=test_type, original_file_path=test_path)
+            ]
         )
 
         opt = Optimizer(
@@ -989,7 +997,9 @@ class TestPigLatin(unittest.TestCase):
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
+            test_files=[
+                TestFile(instrumented_behavior_file_path=test_path, test_type=test_type, original_file_path=test_path)
+            ]
         )
         opt = Optimizer(
             Namespace(
@@ -1133,7 +1143,9 @@ class TestPigLatin(unittest.TestCase):
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
+            test_files=[
+                TestFile(instrumented_behavior_file_path=test_path, test_type=test_type, original_file_path=test_path)
+            ]
         )
         opt = Optimizer(
             Namespace(
@@ -1279,7 +1291,9 @@ class TestPigLatin(unittest.TestCase):
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
+            test_files=[
+                TestFile(instrumented_behavior_file_path=test_path, test_type=test_type, original_file_path=test_path)
+            ]
         )
 
         opt = Optimizer(
@@ -1427,7 +1441,9 @@ class TestPigLatin(unittest.TestCase):
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
+            test_files=[
+                TestFile(instrumented_behavior_file_path=test_path, test_type=test_type, original_file_path=test_path)
+            ]
         )
         opt = Optimizer(
             Namespace(
@@ -2034,7 +2050,9 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
             )
         )
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
+            test_files=[
+                TestFile(instrumented_behavior_file_path=test_path, test_type=test_type, original_file_path=test_path)
+            ]
         )
         test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
@@ -2156,7 +2174,9 @@ class TestPigLatin(unittest.TestCase):
             )
         )
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_file_path=test_path, test_type=test_type, original_file_path=test_path)]
+            test_files=[
+                TestFile(instrumented_behavior_file_path=test_path, test_type=test_type, original_file_path=test_path)
+            ]
         )
         test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env, test_files=test_files, optimization_iteration=0, test_functions=None, testing_time=0.1

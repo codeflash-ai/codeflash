@@ -84,11 +84,12 @@ class GeneratedTestsList(BaseModel):
 
 
 class TestFile(BaseModel):
-    instrumented_file_path: Path  # TODO : Update the variable name
-    benchmarking_file_path: Optional[Path] = None  # TODO: Make this mandatory
+    instrumented_behavior_file_path: Path
+    benchmarking_file_path: Path = None
     original_file_path: Optional[Path] = None
     original_source: Optional[str] = None
     test_type: TestType
+    tests_in_file: Optional[list[TestsInFile]] = None
 
 
 class TestFiles(BaseModel):
@@ -112,7 +113,7 @@ class TestFiles(BaseModel):
             (
                 test_file.test_type
                 for test_file in self.test_files
-                if (file_path in (test_file.instrumented_file_path, test_file.benchmarking_file_path))
+                if (file_path in (test_file.instrumented_behavior_file_path, test_file.benchmarking_file_path))
             ),
             None,
         )
@@ -139,7 +140,6 @@ class TestsInFile:
     test_file: Path
     test_class: Optional[str]  # This might be unused...
     test_function: str
-    test_suite: Optional[str]
     test_type: TestType
 
 

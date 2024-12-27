@@ -4,7 +4,6 @@ import os
 import pickle
 import re
 import subprocess
-import sys
 import unittest
 from collections import defaultdict
 from pathlib import Path
@@ -27,7 +26,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class TestFunction:
     function_name: str
-    test_suite_name: Optional[str]
+    test_class: Optional[str]
     parameters: Optional[str]
     test_type: TestType
 
@@ -95,7 +94,6 @@ def discover_tests_pytest(
             test_file=test["test_file"],
             test_class=test["test_class"],
             test_function=test["test_function"],
-            test_suite=None,
             test_type=test_type,
         )
         if discover_only_these_tests and test_obj.test_file not in discover_only_these_tests:
@@ -134,10 +132,9 @@ def discover_tests_unittest(
             test_type = TestType.EXISTING_UNIT_TEST
         return TestsInFile(
             test_file=str(_test_module_path),
-            test_suite=_test_suite_name,
             test_function=_test_function,
             test_type=test_type,
-            test_class=None,  # TODO: Validate if it is correct to set test_class to None
+            test_class=_test_suite_name,
         )
 
     for _test_suite in tests._tests:
@@ -191,25 +188,35 @@ def process_test_files(
         top_level_classes = {name.name: name for name in all_names_top if name.type == "class"}
 
         if test_framework == "pytest":
-            functions_to_search = [elem.test_function for elem in functions]
-            for i, function in enumerate(functions_to_search):
-                if "[" in function:
-                    function_name = re.split(r"[\[\]]", function)[0]
-                    parameters = re.split(r"[\[\]]", function)[1]
+            for function in functions:
+                if "[" in function.test_function:
+                    function_name = re.split(r"[\[\]]", function.test_function)[0]
+                    parameters = re.split(r"[\[\]]", function.test_function)[1]
                     if function_name in top_level_functions:
-                        test_functions.add(TestFunction(function_name, None, parameters, functions[i].test_type))
-                elif function in top_level_functions:
-                    test_functions.add(TestFunction(function, None, None, functions[i].test_type))
-                elif re.match(r"^test_\w+_\d+(?:_\w+)*", function):
+                        test_functions.add(
+                            TestFunction(function_name, function.test_class, parameters, function.test_type)
+                        )
+                elif function.test_function in top_level_functions:
+                    test_functions.add(
+                        TestFunction(function.test_function, function.test_class, None, function.test_type)
+                    )
+                elif re.match(r"^test_\w+_\d+(?:_\w+)*", function.test_function):
                     # Try to match parameterized unittest functions here, although we can't get the parameters.
                     # Extract base name by removing the numbered suffix and any additional descriptions
-                    base_name = re.sub(r"_\d+(?:_\w+)*$", "", function)
+                    base_name = re.sub(r"_\d+(?:_\w+)*$", "", function.test_function)
                     if base_name in top_level_functions:
-                        test_functions.add(TestFunction(base_name, None, function, functions[i].test_type))
+                        test_functions.add(
+                            TestFunction(
+                                function_name=base_name,
+                                test_class=function.test_class,
+                                parameters=function.test_function,
+                                test_type=function.test_type,
+                            )
+                        )
 
         elif test_framework == "unittest":
             functions_to_search = [elem.test_function for elem in functions]
-            test_suites = [elem.test_suite for elem in functions]
+            test_suites = [elem.test_class for elem in functions]
 
             matching_names = test_suites & top_level_classes.keys()
             for matched_name in matching_names:
@@ -225,12 +232,20 @@ def process_test_files(
                             if is_parameterized and new_function == def_name.name:
                                 test_functions.add(
                                     TestFunction(
-                                        def_name.name, matched_name, parameters, functions[0].test_type
+                                        function_name=def_name.name,
+                                        test_class=matched_name,
+                                        parameters=parameters,
+                                        test_type=functions[0].test_type,
                                     )  # A test file must not have more than one test type
                                 )
                             elif function == def_name.name:
                                 test_functions.add(
-                                    TestFunction(def_name.name, matched_name, None, functions[0].test_type)
+                                    TestFunction(
+                                        function_name=def_name.name,
+                                        test_class=matched_name,
+                                        parameters=None,
+                                        test_type=functions[0].test_type,
+                                    )
                                 )
 
         test_functions_list = list(test_functions)
@@ -246,7 +261,7 @@ def process_test_files(
             indices = [i for i, x in enumerate(test_functions_raw) if x == scope]
             for index in indices:
                 scope_test_function = test_functions_list[index].function_name
-                scope_test_suite = test_functions_list[index].test_suite_name
+                scope_test_class = test_functions_list[index].test_class
                 scope_parameters = test_functions_list[index].parameters
                 test_type = test_functions_list[index].test_type
                 try:
@@ -275,9 +290,8 @@ def process_test_files(
                             FunctionCalledInTest(
                                 tests_in_file=TestsInFile(
                                     test_file=test_file,
-                                    test_class=None,
+                                    test_class=scope_test_class,
                                     test_function=scope_test_function,
-                                    test_suite=scope_test_suite,
                                     test_type=test_type,
                                 ),
                                 position=CodePosition(line_no=name.line, col_no=name.column),

@@ -25,53 +25,6 @@ def execute_test_subprocess(
     return subprocess.run(cmd_list, capture_output=True, cwd=cwd, env=env, text=True, timeout=timeout, check=False)
 
 
-def run_tests(
-    test_paths: TestFiles,
-    test_framework: str,
-    test_env: dict[str, str],
-    cwd: Path,
-    pytest_timeout: int | None = None,
-    pytest_cmd: str = "pytest",
-    verbose: bool = False,
-    only_run_these_test_functions: dict[Path, str] | None = None,
-    pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME,
-    pytest_min_loops: int = 5,
-    pytest_max_loops: int = 100_000,
-    enable_coverage: bool = False,
-) -> tuple[Path, subprocess.CompletedProcess, Path | None]:
-    assert test_framework in ["pytest", "unittest"]
-    coverage_out_file = None
-    if test_framework == "pytest":
-        run_behavioral_tests_pytest(
-            test_paths=test_paths,
-            test_framework=test_framework,
-            test_env=test_env,
-            cwd=cwd,
-            pytest_timeout=pytest_timeout,
-            pytest_cmd=pytest_cmd,
-            verbose=verbose,
-            only_run_these_test_functions=only_run_these_test_functions,
-            enable_coverage=enable_coverage,
-        )
-        run_benchmarking_tests_pytest()
-    elif test_framework == "unittest":
-        result_file_path = get_run_tmp_file(Path("unittest_results.xml"))
-        unittest_cmd_list = [SAFE_SYS_EXECUTABLE, "-m", "xmlrunner"]
-        log_level = ["-v"] if verbose else []
-        files = [str(file.instrumented_file_path) for file in test_paths.test_files]
-        output_file = ["--output-file", str(result_file_path)]
-
-        results = execute_test_subprocess(
-            unittest_cmd_list + log_level + files + output_file, cwd=cwd, env=test_env, timeout=600
-        )
-
-    else:
-        msg = "Invalid test framework -- I only support Pytest and Unittest currently."
-        raise ValueError(msg)
-
-    return result_file_path, results, coverage_out_file if enable_coverage else None
-
-
 def run_behavioral_tests_pytest(
     test_paths: TestFiles,
     test_framework: str,
@@ -81,18 +34,19 @@ def run_behavioral_tests_pytest(
     pytest_cmd: str = "pytest",
     verbose: bool = False,
     pytest_target_runtime_seconds: int = TOTAL_LOOPING_TIME,
-    only_run_these_test_functions: dict[Path, str] | None = None,
     enable_coverage: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None]:
     assert test_framework == "pytest"
-    test_files = []
+    test_files: list[str] = []
     for file in test_paths.test_files:
         if file.test_type == TestType.REPLAY_TEST:
-            test_files.append(
-                str(file.instrumented_file_path) + "::" + only_run_these_test_functions[file.instrumented_file_path]
+            # TODO: Does this work for unittest framework?
+            test_files.extend(
+                [str(file.instrumented_behavior_file_path) + "::" + test.test_function for test in file.tests_in_file]
             )
         else:
-            test_files.append(str(file.instrumented_file_path))
+            test_files.append(str(file.instrumented_behavior_file_path))
+    test_files = list(set(test_files))  # remove multiple calls in the same test function
     pytest_cmd_list = shlex.split(pytest_cmd, posix=IS_POSIX)
 
     common_pytest_args = [
@@ -116,7 +70,8 @@ def run_behavioral_tests_pytest(
 
         cov_erase = execute_test_subprocess(
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env
-        )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any, then the current run will be appended to the previous data, which skews the results
+        )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any,
+        # then the current run will be appended to the previous data, which skews the results
         logger.debug(cov_erase)
 
         results = execute_test_subprocess(
@@ -158,25 +113,26 @@ def run_benchmarking_tests_pytest(
     test_env: dict[str, str],
     cwd: Path,
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME,
-    only_run_these_test_functions: dict[Path, str] | None = None,
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,
     pytest_max_loops: int = 100_000,
 ):
     pytest_cmd_list = shlex.split(pytest_cmd, posix=IS_POSIX)
-    test_files = []
-    # TODO: For existing unit tests, also add only the specific tests not entire test files
+    test_files: list[str] = []
     for file in test_paths.test_files:
-        if file.test_type == TestType.REPLAY_TEST:
-            test_files.append(
-                str(file.benchmarking_file_path)
-                + "::"
-                + only_run_these_test_functions[
-                    file.instrumented_file_path
-                ]  # the lookup key should be made more general
+        if file.test_type in [TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST]:
+            test_files.extend(
+                [
+                    str(file.benchmarking_file_path)
+                    + "::"
+                    + (test.test_class + "::" if test.test_class else "")
+                    + (test.test_function.split("[", 1)[0] if "[" in test.test_function else test.test_function)
+                    for test in file.tests_in_file
+                ]
             )
         else:
             test_files.append(str(file.benchmarking_file_path))
+    test_files = list(set(test_files))  # remove multiple calls in the same test function
     pytest_args = [
         "--capture=tee-sys",
         f"--timeout={pytest_timeout}",
@@ -191,7 +147,7 @@ def run_benchmarking_tests_pytest(
     pytest_test_env = test_env.copy()
     pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
     results = execute_test_subprocess(
-        pytest_cmd_list + test_files + pytest_args + result_args,
+        pytest_cmd_list + pytest_args + result_args + test_files,
         cwd=cwd,
         env=pytest_test_env,
         timeout=600,  # TODO: Make this dynamic

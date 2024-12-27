@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import git
 
@@ -16,8 +16,10 @@ from codeflash.code_utils.git_utils import (
     git_root_dir,
 )
 from codeflash.github.PrComment import FileDiffContent, PrComment
-from codeflash.models.models import FunctionCalledInTest
-from codeflash.result.explanation import Explanation
+
+if TYPE_CHECKING:
+    from codeflash.models.models import FunctionCalledInTest
+    from codeflash.result.explanation import Explanation
 
 
 def existing_tests_source_for(

@@ -2,7 +2,6 @@ import os
 import tempfile
 from pathlib import Path
 
-from codeflash.cli_cmds.console import logger
 from codeflash.models.models import TestFile, TestFiles
 from codeflash.verification.parse_test_output import parse_test_xml
 from codeflash.verification.test_results import TestType
@@ -37,7 +36,7 @@ class TestUnittestRunnerSorter(unittest.TestCase):
 
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
+            test_files=[TestFile(instrumented_behavior_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
         )
         fp.write(code.encode("utf-8"))
         fp.flush()
@@ -81,7 +80,7 @@ def test_sort():
 
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
+            test_files=[TestFile(instrumented_behavior_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
         )
         fp.write(code.encode("utf-8"))
         fp.flush()
