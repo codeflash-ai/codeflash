@@ -652,44 +652,26 @@ def create_wrapper_function(mode: str = "behavior") -> ast.FunctionDef:
         ),
         *(
             [
-                ast.If(
-                    test=ast.Compare(
-                        left=ast.Name(id="loop_index", ctx=ast.Load()),
-                        ops=[ast.Eq()],
-                        comparators=[ast.Constant(value=1)],
-                        lineno=lineno + 17,
-                    ),
-                    body=[
-                        ast.Assign(
-                            targets=[ast.Name(id="pickled_return_value", ctx=ast.Store())],
-                            value=ast.IfExp(
-                                test=ast.Name(id="exception", ctx=ast.Load()),
-                                body=ast.Call(
-                                    func=ast.Attribute(
-                                        value=ast.Name(id="pickle", ctx=ast.Load()), attr="dumps", ctx=ast.Load()
-                                    ),
-                                    args=[ast.Name(id="exception", ctx=ast.Load())],
-                                    keywords=[],
-                                ),
-                                orelse=ast.Call(
-                                    func=ast.Attribute(
-                                        value=ast.Name(id="pickle", ctx=ast.Load()), attr="dumps", ctx=ast.Load()
-                                    ),
-                                    args=[ast.Name(id="return_value", ctx=ast.Load())],
-                                    keywords=[],
-                                ),
+                ast.Assign(
+                    targets=[ast.Name(id="pickled_return_value", ctx=ast.Store())],
+                    value=ast.IfExp(
+                        test=ast.Name(id="exception", ctx=ast.Load()),
+                        body=ast.Call(
+                            func=ast.Attribute(
+                                value=ast.Name(id="pickle", ctx=ast.Load()), attr="dumps", ctx=ast.Load()
                             ),
-                            lineno=lineno + 18,
-                        )
-                    ],
-                    orelse=[
-                        ast.Assign(
-                            targets=[ast.Name(id="pickled_return_value", ctx=ast.Store())],
-                            value=ast.Constant(value=None),
-                            lineno=lineno + 19,
-                        )
-                    ],
-                    # lineno=lineno + 16,
+                            args=[ast.Name(id="exception", ctx=ast.Load())],
+                            keywords=[],
+                        ),
+                        orelse=ast.Call(
+                            func=ast.Attribute(
+                                value=ast.Name(id="pickle", ctx=ast.Load()), attr="dumps", ctx=ast.Load()
+                            ),
+                            args=[ast.Name(id="return_value", ctx=ast.Load())],
+                            keywords=[],
+                        ),
+                    ),
+                    lineno=lineno + 18,
                 )
             ]
             if mode == "behavior"

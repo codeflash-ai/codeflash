@@ -67,7 +67,7 @@ from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestResults, TestType
-from codeflash.verification.test_runner import run_behavioral_tests_pytest, run_benchmarking_tests_pytest
+from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests
 from codeflash.verification.verification_utils import TestConfig, get_test_file_path
 from codeflash.verification.verifier import generate_tests
 
@@ -942,19 +942,18 @@ class Optimizer:
                 test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
 
             coverage_results = None
+            behavioral_results, coverage_results = self.run_and_parse_tests(
+                testing_type="behavior",
+                test_env=test_env,
+                test_files=self.test_files,
+                optimization_iteration=0,
+                testing_time=TOTAL_LOOPING_TIME,
+                enable_coverage=test_framework == "pytest",
+                function_name=function_name,
+                source_file=function_file_path,
+                code_context=code_context,
+            )
             if test_framework == "pytest":
-                behavioral_results, coverage_results = self.run_and_parse_tests(
-                    testing_type="behavior",
-                    test_env=test_env,
-                    test_files=self.test_files,
-                    optimization_iteration=0,
-                    testing_time=TOTAL_LOOPING_TIME,
-                    enable_coverage=True,
-                    function_name=function_name,
-                    source_file=function_file_path,
-                    code_context=code_context,
-                )
-
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type="perf",
                     test_env=test_env,
@@ -968,15 +967,15 @@ class Optimizer:
                 )
 
             else:
-                # TODO: Separate this into behavioral and benchmarking tests
-                behavioral_results = TestResults()
+                benchmarking_results = TestResults()
                 start_time: float = time.time()
                 for i in range(100):
-                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME:
+                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME * 1.5:
+                        # * 1.5 to give unittest a bit more time to run
                         break
                     test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
-                    unittest_loop_results, coverage_results = self.run_and_parse_tests(
-                        testing_type="behavior",  # This is not needed for unittest, refactor this
+                    unittest_loop_results, _ = self.run_and_parse_tests(
+                        testing_type="perf",
                         test_env=test_env,
                         test_files=self.test_files,
                         optimization_iteration=0,
@@ -987,7 +986,7 @@ class Optimizer:
                         code_context=code_context,
                         unittest_loop_index=i + 1,
                     )
-                    behavioral_results.merge(unittest_loop_results)
+                    benchmarking_results.merge(unittest_loop_results)
 
             console.print(
                 TestResults.report_to_tree(
@@ -1058,34 +1057,14 @@ class Optimizer:
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
 
-            if test_framework == "pytest":
-                candidate_behavior_results, _ = self.run_and_parse_tests(
-                    testing_type="behavior",
-                    test_env=test_env,
-                    test_files=self.test_files,
-                    optimization_iteration=optimization_candidate_index,
-                    testing_time=TOTAL_LOOPING_TIME,
-                    enable_coverage=False,
-                )
-
-            else:
-                # TODO: Only loop once here
-                candidate_behavior_results = TestResults()
-                start_time: float = time.time()
-                loop_count = 0
-                for i in range(100):
-                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME:
-                        break
-                    test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
-                    candidate_loop_results, cov = self.run_and_parse_tests(
-                        test_env=test_env,
-                        test_files=self.test_files,
-                        optimization_iteration=optimization_candidate_index,
-                        testing_time=TOTAL_LOOPING_TIME,
-                        unittest_loop_index=i + 1,
-                    )
-                    loop_count = i + 1
-                    candidate_behavior_results.merge(candidate_loop_results)
+            candidate_behavior_results, _ = self.run_and_parse_tests(
+                testing_type="behavior",
+                test_env=test_env,
+                test_files=self.test_files,
+                optimization_iteration=optimization_candidate_index,
+                testing_time=TOTAL_LOOPING_TIME,
+                enable_coverage=False,
+            )
 
             console.print(
                 TestResults.report_to_tree(
@@ -1127,10 +1106,12 @@ class Optimizer:
                 start_time: float = time.time()
                 loop_count = 0
                 for i in range(100):
-                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME:
+                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME * 1.5:
+                        # * 1.5 to give unittest a bit more time to run
                         break
                     test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
-                    candidate_benchmarking_results, cov = self.run_and_parse_tests(
+                    unittest_loop_results, cov = self.run_and_parse_tests(
+                        testing_type="perf",
                         test_env=test_env,
                         test_files=self.test_files,
                         optimization_iteration=optimization_candidate_index,
@@ -1138,7 +1119,7 @@ class Optimizer:
                         unittest_loop_index=i + 1,
                     )
                     loop_count = i + 1
-                    candidate_benchmarking_results.merge(candidate_benchmarking_results)
+                    candidate_benchmarking_results.merge(unittest_loop_results)
 
             if (total_candidate_timing := candidate_benchmarking_results.total_passed_runtime()) == 0:
                 logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
@@ -1175,7 +1156,7 @@ class Optimizer:
         coverage_out_file = None
         try:
             if testing_type == "behavior":
-                result_file_path, run_result, coverage_out_file = run_behavioral_tests_pytest(
+                result_file_path, run_result, coverage_out_file = run_behavioral_tests(
                     test_files,
                     test_framework=self.args.test_framework,
                     cwd=self.args.project_root,
@@ -1186,7 +1167,7 @@ class Optimizer:
                     enable_coverage=enable_coverage,
                 )
             elif testing_type == "perf":
-                result_file_path, run_result = run_benchmarking_tests_pytest(
+                result_file_path, run_result = run_benchmarking_tests(
                     test_files,
                     cwd=self.args.project_root,
                     test_env=test_env,
@@ -1195,6 +1176,7 @@ class Optimizer:
                     pytest_target_runtime_seconds=testing_time,
                     pytest_min_loops=pytest_min_loops,
                     pytest_max_loops=pytest_max_loops,
+                    test_framework=self.args.test_framework,
                 )
             else:
                 raise ValueError(f"Unexpected testing type: {testing_type}")

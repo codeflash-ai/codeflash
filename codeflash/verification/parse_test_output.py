@@ -473,6 +473,7 @@ def parse_test_results(
     get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin")).unlink(missing_ok=True)
 
     get_run_tmp_file(Path("pytest_results.xml")).unlink(missing_ok=True)
+    get_run_tmp_file(Path("unittest_results.xml")).unlink(missing_ok=True)
     get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
     results = merge_test_results(test_results_xml, test_results_bin_file, test_config.test_framework)
 
