@@ -134,7 +134,7 @@ def run_benchmarking_tests(
         pytest_cmd_list = shlex.split(pytest_cmd, posix=IS_POSIX)
         test_files: list[str] = []
         for file in test_paths.test_files:
-            if file.test_type in [TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST]:
+            if file.test_type in [TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST] and file.tests_in_file:
                 test_files.extend(
                     [
                         str(file.benchmarking_file_path)

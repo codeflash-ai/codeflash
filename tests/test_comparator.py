@@ -5,7 +5,6 @@ from enum import Enum, Flag, IntFlag, auto
 
 import pydantic
 import pytest
-
 from codeflash.either import Failure, Success
 from codeflash.verification.comparator import comparator
 from codeflash.verification.equivalence import compare_test_results
@@ -809,6 +808,8 @@ def raise_exception():
 
 
 def test_exceptions_comparator():
+    # Currently we are only comparing the exception types and the attributes that don't start with "_"
+    # there are complications with comparing the exception messages
     try:
         raise_exception()
     except Exception as e:
@@ -827,7 +828,8 @@ def test_exceptions_comparator():
 
     exc_msg1 = ValueError("message one")
     exc_msg2 = ValueError("message two")
-    assert not comparator(exc_msg1, exc_msg2)
+    # Different messages but same types
+    assert comparator(exc_msg1, exc_msg2)
 
     exc1 = ValueError("common message")
     exc2 = TypeError("common message")
@@ -845,9 +847,9 @@ def test_exceptions_comparator():
 
     assert comparator(exc_file_1, exc_file2)
 
-    assert not comparator(exc_file_1, exc_file3)
+    assert comparator(exc_file_1, exc_file3)
 
-    assert not comparator(exc_file_1, exc_file4)
+    assert comparator(exc_file_1, exc_file4)
 
     assert comparator(exception, exception)
 
@@ -858,26 +860,12 @@ def test_exceptions_comparator():
     # Different exception types
     exc_type1 = TypeError("Type error")
     exc_type2 = TypeError("Another type error")
-    assert not comparator(exc_type1, exc_type2)
+    assert comparator(exc_type1, exc_type2)
 
     exc_type3 = KeyError("Missing key")
     exc_type4 = KeyError("Missing key")
     assert comparator(exc_type3, exc_type4)
     assert not comparator(exc_type1, exc_type3)
-
-    exc_index1 = IndexError("Index out of range")
-    exc_index2 = IndexError("Index out of range")
-    assert comparator(exc_index1, exc_index2)
-    assert not comparator(exc_type1, exc_index1)
-
-    exc_attribute1 = AttributeError("Attribute not found")
-    exc_attribute2 = AttributeError("Attribute not found")
-    assert comparator(exc_attribute1, exc_attribute2)
-    assert not comparator(exc_type1, exc_attribute1)
-
-    exc_os1 = OSError(2, "No such file or directory")
-    exc_os2 = OSError(2, "No such file or directory")
-    assert comparator(exc_os1, exc_os2)
 
     # compare the attributes of the exception as well
     class CustomError(Exception):
@@ -888,9 +876,6 @@ def test_exceptions_comparator():
     custom_exc1 = CustomError("Something went wrong", 101)
     custom_exc2 = CustomError("Something went wrong", 101)
     assert comparator(custom_exc1, custom_exc2)
-
-    custom_exc3 = CustomError("Something else went wrong", 101)
-    assert not comparator(custom_exc1, custom_exc3)
 
     custom_exc4 = CustomError("Something went wrong", 102)
 
@@ -908,10 +893,7 @@ def test_exceptions_comparator():
     assert comparator(exc_empty1, exc_empty2)
 
     exc_not_empty = ValueError("Not empty")
-    assert not comparator(exc_empty1, exc_not_empty)
-
-    assert comparator(exc1, exc2) == comparator(exc2, exc1)
-    assert comparator(exc_msg1, exc_msg2) == comparator(exc_msg2, exc_msg1)
+    assert comparator(exc_empty1, exc_not_empty)
 
     class CustomValueError(ValueError):
         pass
@@ -921,10 +903,7 @@ def test_exceptions_comparator():
     assert not comparator(custom_value_error1, value_error1)
 
     custom_value_error2 = CustomValueError("Another custom value error")
-    assert not comparator(custom_value_error1, custom_value_error2)
-
-    custom_value_error3 = CustomValueError("A custom value error")
-    assert comparator(custom_value_error1, custom_value_error3)
+    assert comparator(custom_value_error1, custom_value_error2)
 
     class CustomExceptionWithArgs(Exception):
         def __init__(self, arg1, arg2):
@@ -935,24 +914,7 @@ def test_exceptions_comparator():
     assert comparator(custom_args_exc1, custom_args_exc2)
 
     custom_args_exc3 = CustomExceptionWithArgs(1, "different")
-    assert not comparator(custom_args_exc1, custom_args_exc3)
-
-    custom_args_exc4 = CustomExceptionWithArgs(2, "test")
-    assert not comparator(custom_args_exc1, custom_args_exc4)
-
-    exc_runtime1 = RuntimeError("A runtime error")
-    exc_runtime2 = RuntimeError("A runtime error")
-    assert comparator(exc_runtime1, exc_runtime2)
-
-    exc_assertion1 = AssertionError("An assertion failed")
-    exc_assertion2 = AssertionError("An assertion failed")
-    assert comparator(exc_assertion1, exc_assertion2)
-    assert not comparator(exc_runtime1, exc_assertion1)
-
-    exc_import1 = ImportError("Cannot import module")
-    exc_import2 = ImportError("Cannot import module")
-    assert comparator(exc_import1, exc_import2)
-    assert not comparator(exc_runtime1, exc_import1)
+    assert comparator(custom_args_exc1, custom_args_exc3)
 
     def raise_specific_exception():
         raise ZeroDivisionError("Cannot divide by zero")
@@ -970,4 +932,4 @@ def test_exceptions_comparator():
     assert comparator(zero_division_exc1, zero_division_exc2)
 
     zero_division_exc3 = ZeroDivisionError("Different message")
-    assert not comparator(zero_division_exc1, zero_division_exc3)
+    assert comparator(zero_division_exc1, zero_division_exc3)

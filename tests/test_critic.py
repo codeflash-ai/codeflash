@@ -25,6 +25,7 @@ def test_speedup_critic():
         max_loop_count=5,
         best_test_runtime=800,
         behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
         optimization_candidate_index=0,
         total_candidate_timing=12,
     )
@@ -35,6 +36,7 @@ def test_speedup_critic():
         max_loop_count=5,
         best_test_runtime=940,
         behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -48,6 +50,7 @@ def test_speedup_critic():
         max_loop_count=5,
         best_test_runtime=94000,
         behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -170,6 +173,7 @@ def test_generated_test_critic():
         max_loop_count=5,
         best_test_runtime=100,
         behavior_test_results=TestResults(test_results=test_results),
+        benchmarking_test_results=TestResults(),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -182,6 +186,7 @@ def test_generated_test_critic():
         max_loop_count=5,
         best_test_runtime=100,
         behavior_test_results=TestResults(test_results=test_results),
+        benchmarking_test_results=TestResults(),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -194,6 +199,7 @@ def test_generated_test_critic():
         max_loop_count=5,
         best_test_runtime=100,
         behavior_test_results=TestResults(test_results=test_results),
+        benchmarking_test_results=TestResults(),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -206,6 +212,7 @@ def test_generated_test_critic():
         max_loop_count=5,
         best_test_runtime=100,
         behavior_test_results=TestResults(test_results=test_results),
+        benchmarking_test_results=TestResults(),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -218,6 +225,7 @@ def test_generated_test_critic():
         max_loop_count=5,
         best_test_runtime=100,
         behavior_test_results=TestResults(test_results=test_results),
+        benchmarking_test_results=TestResults(),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -230,6 +238,7 @@ def test_generated_test_critic():
         max_loop_count=5,
         best_test_runtime=100,
         behavior_test_results=TestResults(test_results=test_results),
+        benchmarking_test_results=TestResults(),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -242,6 +251,7 @@ def test_generated_test_critic():
         max_loop_count=5,
         best_test_runtime=100,
         behavior_test_results=TestResults(test_results=test_results),
+        benchmarking_test_results=TestResults(),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -254,6 +264,7 @@ def test_generated_test_critic():
         max_loop_count=5,
         best_test_runtime=100,
         behavior_test_results=TestResults(test_results=test_results),
+        benchmarking_test_results=TestResults(),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -268,6 +279,7 @@ def test_generated_test_critic():
         max_loop_count=5,
         best_test_runtime=100,
         behavior_test_results=TestResults(test_results=test_results),
+        benchmarking_test_results=TestResults(),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -280,6 +292,7 @@ def test_generated_test_critic():
         max_loop_count=5,
         best_test_runtime=100,
         behavior_test_results=TestResults(test_results=test_results),
+        benchmarking_test_results=TestResults(),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )
@@ -292,6 +305,7 @@ def test_generated_test_critic():
         max_loop_count=5,
         best_test_runtime=100,
         behavior_test_results=TestResults(test_results=test_results),
+        benchmarking_test_results=TestResults(),
         total_candidate_timing=12,
         optimization_candidate_index=0,
     )

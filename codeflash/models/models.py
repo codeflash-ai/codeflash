@@ -138,7 +138,7 @@ class OptimizationSet(BaseModel):
 @dataclass(frozen=True)
 class TestsInFile:
     test_file: Path
-    test_class: Optional[str]  # This might be unused...
+    test_class: Optional[str]
     test_function: str
     test_type: TestType
 
