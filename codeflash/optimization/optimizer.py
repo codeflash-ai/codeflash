@@ -40,6 +40,7 @@ from codeflash.code_utils.instrument_existing_tests import inject_profiling_into
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
 from codeflash.code_utils.static_analysis import analyze_imported_modules, get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
+from codeflash.context import code_context_extractor
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize, get_functions_to_optimize
 from codeflash.either import Failure, Success, is_successful
@@ -282,14 +283,16 @@ class Optimizer:
             f"Generating new tests and optimizations for function {function_to_optimize.function_name}", transient=True
         ):
             generated_results = self.generate_tests_and_optimizations(
-                code_context.code_to_optimize_with_helpers,
-                function_to_optimize,
-                code_context.helper_functions,
-                Path(original_module_path),
-                function_trace_id,
-                generated_test_paths,
-                generated_perf_test_paths,
-                function_to_optimize_ast,
+                code_to_optimize_with_helpers=code_context.code_to_optimize_with_helpers,
+                read_writable_code=code_context.read_writable_code,
+                read_only_context_code=code_context.read_only_context_code,
+                function_to_optimize=function_to_optimize,
+                helper_functions=code_context.helper_functions,
+                module_path=Path(original_module_path),
+                function_trace_id=function_trace_id,
+                generated_test_paths=generated_test_paths,
+                generated_perf_test_paths=generated_perf_test_paths,
+                function_to_optimize_ast=function_to_optimize_ast,
                 run_experiment=should_run_experiment,
             )
 
@@ -726,9 +729,20 @@ class Optimizer:
         )
         preexisting_objects = find_preexisting_objects(code_to_optimize_with_helpers)
         contextual_dunder_methods.update(helper_dunder_methods)
+
+        # Will eventually refactor to use this function instead of the above
+        try:
+            read_writable_code, read_only_context_code = code_context_extractor.get_code_optimization_context(
+                function_to_optimize, project_root
+            )
+        except ValueError as e:
+            return Failure(str(e))
+
         return Success(
             CodeOptimizationContext(
                 code_to_optimize_with_helpers=code_to_optimize_with_helpers_and_imports,
+                read_writable_code=read_writable_code,
+                read_only_context_code=read_only_context_code,
                 contextual_dunder_methods=contextual_dunder_methods,
                 helper_functions=helper_functions,
                 preexisting_objects=preexisting_objects,
@@ -832,6 +846,8 @@ class Optimizer:
     def generate_tests_and_optimizations(
         self,
         code_to_optimize_with_helpers: str,
+        read_writable_code: str,
+        read_only_context_code: str,
         function_to_optimize: FunctionToOptimize,
         helper_functions: list[FunctionSource],
         module_path: Path,
@@ -858,7 +874,8 @@ class Optimizer:
             )
             future_optimization_candidates = executor.submit(
                 self.aiservice_client.optimize_python_code,
-                code_to_optimize_with_helpers,
+                read_writable_code,
+                read_only_context_code,
                 function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id,
                 N_CANDIDATES,
                 ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
@@ -872,7 +889,8 @@ class Optimizer:
             if run_experiment:
                 future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
-                    code_to_optimize_with_helpers,
+                    read_writable_code,
+                    read_only_context_code,
                     function_trace_id[:-4] + "EXP1",
                     N_CANDIDATES,
                     ExperimentMetadata(id=self.experiment_id, group="experiment"),

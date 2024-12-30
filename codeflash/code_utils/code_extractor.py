@@ -45,12 +45,13 @@ def add_needed_imports_from_module(
     dst_path: Path,
     project_root: Path,
     helper_functions: list[FunctionSource] | None = None,
+    helper_functions_fqn: set[str] | None = None,
 ) -> str:
     """Add all needed and used source module code imports to the destination module code, and return it."""
     src_module_code = delete___future___aliased_imports(src_module_code)
-    if helper_functions is None:
-        helper_functions = []
-    helper_functions_fqn = {f.fully_qualified_name for f in helper_functions}
+    if not helper_functions_fqn:
+        helper_functions_fqn = {f.fully_qualified_name for f in (helper_functions or [])}
+
     src_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, src_path)
     dst_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, dst_path)
 

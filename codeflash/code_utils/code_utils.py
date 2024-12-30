@@ -10,6 +10,14 @@ from tempfile import TemporaryDirectory
 from codeflash.cli_cmds.console import logger
 
 
+def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
+    if not full_qualified_name.startswith(module_name):
+        raise ValueError(f"{full_qualified_name} does not start with {module_name}")
+    if module_name == full_qualified_name:
+        raise ValueError(f"{full_qualified_name} is the same as {module_name}")
+    return full_qualified_name[len(module_name) + 1 :]
+
+
 def module_name_from_file_path(file_path: Path, project_root_path: Path) -> str:
     relative_path = file_path.relative_to(project_root_path)
     return relative_path.with_suffix("").as_posix().replace("/", ".")
@@ -83,3 +91,13 @@ def is_class_defined_in_file(class_name: str, file_path: Path) -> bool:
         source = file.read()
     tree = ast.parse(source)
     return any(isinstance(node, ast.ClassDef) and node.name == class_name for node in ast.walk(tree))
+
+
+def validate_python_code(code: str) -> str:
+    """Validates a string of python code by attempting to compile it"""
+    try:
+        compile(code, "<string>", "exec")
+    except SyntaxError as e:
+        msg = f"Invalid Python code: {e.msg} (line {e.lineno}, column {e.offset})"
+        raise ValueError(msg) from e
+    return code
