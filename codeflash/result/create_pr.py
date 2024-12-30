@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import git
 
@@ -16,8 +16,10 @@ from codeflash.code_utils.git_utils import (
     git_root_dir,
 )
 from codeflash.github.PrComment import FileDiffContent, PrComment
-from codeflash.models.models import FunctionCalledInTest
-from codeflash.result.explanation import Explanation
+
+if TYPE_CHECKING:
+    from codeflash.models.models import FunctionCalledInTest
+    from codeflash.result.explanation import Explanation
 
 
 def existing_tests_source_for(
@@ -73,7 +75,8 @@ def check_create_pr(
                 relative_file_path=relative_path,
                 speedup_x=explanation.speedup_x,
                 speedup_pct=explanation.speedup_pct,
-                winning_test_results=explanation.winning_test_results,
+                winning_behavioral_test_results=explanation.winning_behavioral_test_results,
+                winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
             ),
             existing_tests=existing_tests_source,
             generated_tests=generated_original_test_source,
@@ -118,7 +121,8 @@ def check_create_pr(
                 relative_file_path=relative_path,
                 speedup_x=explanation.speedup_x,
                 speedup_pct=explanation.speedup_pct,
-                winning_test_results=explanation.winning_test_results,
+                winning_behavioral_test_results=explanation.winning_behavioral_test_results,
+                winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
             ),
             existing_tests=existing_tests_source,
             generated_tests=generated_original_test_source,

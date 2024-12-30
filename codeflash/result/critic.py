@@ -38,7 +38,7 @@ def speedup_critic(
 
 
 def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool:
-    test_results = candidate_result.test_results
+    test_results = candidate_result.behavior_test_results
     in_github_actions_mode = bool(env_utils.get_pr_number())
 
     report = test_results.get_test_pass_fail_report_by_type()

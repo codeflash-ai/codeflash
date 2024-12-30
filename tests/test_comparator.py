@@ -793,3 +793,143 @@ def test_compare_results_fn():
     assert not compare_test_results(original_results, new_results_4)
 
     assert not compare_test_results(TestResults(), TestResults())
+
+
+def test_exceptions():
+    type_error = TypeError("This is a type error")
+
+    type_error_2 = TypeError("This is a type error")
+
+    assert comparator(type_error, type_error_2)
+
+
+def raise_exception():
+    raise Exception("This is an exception")
+
+
+def test_exceptions_comparator():
+    # Currently we are only comparing the exception types and the attributes that don't start with "_"
+    # there are complications with comparing the exception messages
+    try:
+        raise_exception()
+    except Exception as e:
+        exception = e
+
+    try:
+        raise_exception()
+    except Exception as b:
+        exception_2 = b
+
+    assert comparator(exception, exception_2)
+
+    exc1 = ValueError("same message")
+    exc2 = ValueError("same message")
+    assert comparator(exc1, exc2)
+
+    exc_msg1 = ValueError("message one")
+    exc_msg2 = ValueError("message two")
+    # Different messages but same types
+    assert comparator(exc_msg1, exc_msg2)
+
+    exc1 = ValueError("common message")
+    exc2 = TypeError("common message")
+    assert not comparator(exc1, exc2)
+
+    exc_file_1 = FileNotFoundError(2, "No such file or directory")
+
+    exc_file2 = FileNotFoundError(2, "No such file or directory")
+
+    exc_file4 = FileNotFoundError(2, "File not found")
+
+    exc_file3 = FileNotFoundError(3, "No such file or directory")
+
+    assert not comparator(exc1, exc2)
+
+    assert comparator(exc_file_1, exc_file2)
+
+    assert comparator(exc_file_1, exc_file3)
+
+    assert comparator(exc_file_1, exc_file4)
+
+    assert comparator(exception, exception)
+
+    assert not comparator(exception, None)
+    assert not comparator(None, exception)
+    assert comparator(None, None)
+
+    # Different exception types
+    exc_type1 = TypeError("Type error")
+    exc_type2 = TypeError("Another type error")
+    assert comparator(exc_type1, exc_type2)
+
+    exc_type3 = KeyError("Missing key")
+    exc_type4 = KeyError("Missing key")
+    assert comparator(exc_type3, exc_type4)
+    assert not comparator(exc_type1, exc_type3)
+
+    # compare the attributes of the exception as well
+    class CustomError(Exception):
+        def __init__(self, message, code):
+            super().__init__(message)
+            self.code = code
+
+    custom_exc1 = CustomError("Something went wrong", 101)
+    custom_exc2 = CustomError("Something went wrong", 101)
+    assert comparator(custom_exc1, custom_exc2)
+
+    custom_exc4 = CustomError("Something went wrong", 102)
+
+    assert not comparator(custom_exc1, custom_exc4)
+
+    class CustomErrorNoArgs(Exception):
+        pass
+
+    custom_no_args1 = CustomErrorNoArgs()
+    custom_no_args2 = CustomErrorNoArgs()
+    assert comparator(custom_no_args1, custom_no_args2)
+
+    exc_empty1 = ValueError("")
+    exc_empty2 = ValueError("")
+    assert comparator(exc_empty1, exc_empty2)
+
+    exc_not_empty = ValueError("Not empty")
+    assert comparator(exc_empty1, exc_not_empty)
+
+    class CustomValueError(ValueError):
+        pass
+
+    custom_value_error1 = CustomValueError("A custom value error")
+    value_error1 = ValueError("A custom value error")
+    assert not comparator(custom_value_error1, value_error1)
+
+    custom_value_error2 = CustomValueError("Another custom value error")
+    assert comparator(custom_value_error1, custom_value_error2)
+
+    class CustomExceptionWithArgs(Exception):
+        def __init__(self, arg1, arg2):
+            self.args = (arg1, arg2)
+
+    custom_args_exc1 = CustomExceptionWithArgs(1, "test")
+    custom_args_exc2 = CustomExceptionWithArgs(1, "test")
+    assert comparator(custom_args_exc1, custom_args_exc2)
+
+    custom_args_exc3 = CustomExceptionWithArgs(1, "different")
+    assert comparator(custom_args_exc1, custom_args_exc3)
+
+    def raise_specific_exception():
+        raise ZeroDivisionError("Cannot divide by zero")
+
+    try:
+        raise_specific_exception()
+    except ZeroDivisionError as z1:
+        zero_division_exc1 = z1
+
+    try:
+        raise_specific_exception()
+    except ZeroDivisionError as z2:
+        zero_division_exc2 = z2
+
+    assert comparator(zero_division_exc1, zero_division_exc2)
+
+    zero_division_exc3 = ZeroDivisionError("Different message")
+    assert comparator(zero_division_exc1, zero_division_exc3)

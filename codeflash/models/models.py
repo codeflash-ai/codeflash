@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import enum
 import json
 import re
 from collections.abc import Collection, Iterator
@@ -51,7 +52,8 @@ class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
     helper_functions: list[FunctionSource]
     runtime: int
-    winning_test_results: TestResults
+    winning_behavioral_test_results: TestResults
+    winning_benchmarking_test_results: TestResults
 
 
 class CodeOptimizationContext(BaseModel):
@@ -64,15 +66,18 @@ class CodeOptimizationContext(BaseModel):
 class OptimizedCandidateResult(BaseModel):
     max_loop_count: int
     best_test_runtime: int
-    test_results: TestResults
+    behavior_test_results: TestResults
+    benchmarking_test_results: TestResults
     optimization_candidate_index: int
     total_candidate_timing: int
 
 
 class GeneratedTests(BaseModel):
     generated_original_test_source: str
-    instrumented_test_source: str
-    file_path: Path
+    instrumented_behavior_test_source: str
+    instrumented_perf_test_source: str
+    behavior_file_path: Path
+    perf_file_path: Path
 
 
 class GeneratedTestsList(BaseModel):
@@ -80,10 +85,12 @@ class GeneratedTestsList(BaseModel):
 
 
 class TestFile(BaseModel):
-    instrumented_file_path: Path
+    instrumented_behavior_file_path: Path
+    benchmarking_file_path: Path = None
     original_file_path: Optional[Path] = None
     original_source: Optional[str] = None
     test_type: TestType
+    tests_in_file: Optional[list[TestsInFile]] = None
 
 
 class TestFiles(BaseModel):
@@ -104,7 +111,11 @@ class TestFiles(BaseModel):
 
     def get_test_type_by_instrumented_file_path(self, file_path: Path) -> TestType | None:
         return next(
-            (test_file.test_type for test_file in self.test_files if test_file.instrumented_file_path == file_path),
+            (
+                test_file.test_type
+                for test_file in self.test_files
+                if (file_path in (test_file.instrumented_behavior_file_path, test_file.benchmarking_file_path))
+            ),
             None,
         )
 
@@ -128,9 +139,8 @@ class OptimizationSet(BaseModel):
 @dataclass(frozen=True)
 class TestsInFile:
     test_file: Path
-    test_class: Optional[str]  # This might be unused...
+    test_class: Optional[str]
     test_function: str
-    test_suite: Optional[str]
     test_type: TestType
 
 
@@ -160,10 +170,8 @@ class FunctionParent:
 
 
 class OriginalCodeBaseline(BaseModel):
-    generated_test_results: TestResults
-    existing_test_results: TestResults
-    concolic_test_results: TestResults
-    overall_test_results: Optional[TestResults]
+    behavioral_test_results: TestResults
+    benchmarking_test_results: TestResults
     runtime: int
     coverage_results: Optional[CoverageData]
 
@@ -404,3 +412,8 @@ class FunctionCoverage:
     unexecuted_lines: list[int]
     executed_branches: list[list[int]]
     unexecuted_branches: list[list[int]]
+
+
+class TestingMode(enum.Enum):
+    BEHAVIOR = "behavior"
+    PERFORMANCE = "performance"

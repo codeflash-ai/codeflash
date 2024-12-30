@@ -172,7 +172,7 @@ class AiServiceClient:
         test_timeout: int,
         trace_id: str,
         test_index: int,
-    ) -> tuple[str, str] | None:
+    ) -> tuple[str, str, str] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
 
         Parameters
@@ -220,7 +220,11 @@ class AiServiceClient:
         if response.status_code == 200:
             response_json = response.json()
             logger.debug(f"Generated tests for function {function_to_optimize.function_name}")
-            return response_json["generated_tests"], response_json["instrumented_tests"]
+            return (
+                response_json["generated_tests"],
+                response_json["instrumented_behavior_tests"],
+                response_json["instrumented_perf_tests"],
+            )
         try:
             error = response.json()["error"]
             logger.error(f"Error generating tests: {response.status_code} - {error}")
