@@ -9,7 +9,7 @@ import isort
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionParent
+from codeflash.models.models import FunctionParent, TestingMode
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -55,10 +55,9 @@ class InjectPerfOnly(ast.NodeTransformer):
         module_path: str,
         test_framework: str,
         call_positions: list[CodePosition],
-        mode: str = "behavior",
+        mode: TestingMode = TestingMode.BEHAVIOR,
     ) -> None:
-        assert mode in ["behavior", "perf"]
-        self.mode = mode
+        self.mode: TestingMode = mode
         self.function_object = function
         self.class_name = None
         self.only_function_name = function.function_name
@@ -88,7 +87,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                         ast.Name(id="codeflash_loop_index", ctx=ast.Load()),
                         *(
                             [ast.Name(id="codeflash_cur", ctx=ast.Load()), ast.Name(id="codeflash_con", ctx=ast.Load())]
-                            if self.mode == "behavior"
+                            if self.mode == TestingMode.BEHAVIOR
                             else []
                         ),
                         *call_node.args,
@@ -113,7 +112,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                     ast.Name(id="codeflash_cur", ctx=ast.Load()),
                                     ast.Name(id="codeflash_con", ctx=ast.Load()),
                                 ]
-                                if self.mode == "behavior"
+                                if self.mode == TestingMode.BEHAVIOR
                                 else []
                             ),
                             *call_node.args,
@@ -261,7 +260,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                 col_offset=node.col_offset,
                             ),
                         ]
-                        if self.mode == "behavior"
+                        if self.mode == TestingMode.BEHAVIOR
                         else []
                     ),
                     *node.body,
@@ -277,7 +276,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                 )
                             )
                         ]
-                        if self.mode == "behavior"
+                        if self.mode == TestingMode.BEHAVIOR
                         else []
                     ),
                 ]
@@ -328,7 +327,7 @@ def inject_profiling_into_existing_test(
     function_to_optimize: FunctionToOptimize,
     tests_project_root: Path,
     test_framework: str,
-    mode: str = "behavior",
+    mode: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[bool, str | None]:
     with test_path.open(encoding="utf8") as f:
         test_code = f.read()
@@ -349,7 +348,7 @@ def inject_profiling_into_existing_test(
         ast.Import(names=[ast.alias(name="gc")]),
         ast.Import(names=[ast.alias(name="os")]),
     ]
-    if mode == "behavior":
+    if mode == TestingMode.BEHAVIOR:
         new_imports.extend(
             [ast.Import(names=[ast.alias(name="sqlite3")]), ast.Import(names=[ast.alias(name="dill", asname="pickle")])]
         )
@@ -359,7 +358,7 @@ def inject_profiling_into_existing_test(
     return True, isort.code(ast.unparse(tree), float_to_top=True)
 
 
-def create_wrapper_function(mode: str = "behavior") -> ast.FunctionDef:
+def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.FunctionDef:
     lineno = 1
     wrapper_body: list[ast.stmt] = [
         ast.Assign(
@@ -505,7 +504,7 @@ def create_wrapper_function(mode: str = "behavior") -> ast.FunctionDef:
                     )
                 )
             ]
-            if mode == "behavior"
+            if mode == TestingMode.BEHAVIOR
             else []
         ),
         ast.Assign(
@@ -647,7 +646,7 @@ def create_wrapper_function(mode: str = "behavior") -> ast.FunctionDef:
                     )
                 )
             ]
-            if mode == "perf"
+            if mode == TestingMode.PERFORMANCE
             else []
         ),
         *(
@@ -674,7 +673,7 @@ def create_wrapper_function(mode: str = "behavior") -> ast.FunctionDef:
                     lineno=lineno + 18,
                 )
             ]
-            if mode == "behavior"
+            if mode == TestingMode.BEHAVIOR
             else []
         ),
         *(
@@ -715,7 +714,7 @@ def create_wrapper_function(mode: str = "behavior") -> ast.FunctionDef:
                     lineno=lineno + 21,
                 ),
             ]
-            if mode == "behavior"
+            if mode == TestingMode.BEHAVIOR
             else []
         ),
         ast.If(
@@ -737,8 +736,8 @@ def create_wrapper_function(mode: str = "behavior") -> ast.FunctionDef:
                 ast.arg(arg="function_name", annotation=None),
                 ast.arg(arg="line_id", annotation=None),
                 ast.arg(arg="loop_index", annotation=None),
-                *([ast.arg(arg="codeflash_cur", annotation=None)] if mode == "behavior" else []),
-                *([ast.arg(arg="codeflash_con", annotation=None)] if mode == "behavior" else []),
+                *([ast.arg(arg="codeflash_cur", annotation=None)] if mode == TestingMode.BEHAVIOR else []),
+                *([ast.arg(arg="codeflash_con", annotation=None)] if mode == TestingMode.BEHAVIOR else []),
             ],
             vararg=ast.arg(arg="args"),
             kwarg=ast.arg(arg="kwargs"),

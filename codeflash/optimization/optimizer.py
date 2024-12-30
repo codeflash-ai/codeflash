@@ -56,6 +56,7 @@ from codeflash.models.models import (
     OriginalCodeBaseline,
     TestFile,
     TestFiles,
+    TestingMode,
     ValidCode,
 )
 from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
@@ -270,7 +271,10 @@ class Optimizer:
         ]
         generated_perf_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root, function_to_optimize.function_name, test_index, test_type="perf"
+                self.test_cfg.tests_root,
+                function_to_optimize.function_name,
+                test_index,
+                test_type=TestingMode.PERFORMANCE,
             )
             for test_index in range(N_TESTS_TO_GENERATE)
         ]
@@ -768,7 +772,7 @@ class Optimizer:
                     msg = f"Unexpected test type: {test_type}"
                     raise ValueError(msg)
                 success, injected_behavior_test = inject_profiling_into_existing_test(
-                    mode="behavior",
+                    mode=TestingMode.BEHAVIOR,
                     test_path=path_obj_test_file,
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=function_to_optimize,
@@ -778,7 +782,7 @@ class Optimizer:
                 if not success:
                     continue
                 success, injected_perf_test = inject_profiling_into_existing_test(
-                    mode="perf",
+                    mode=TestingMode.PERFORMANCE,
                     test_path=path_obj_test_file,
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=function_to_optimize,
@@ -943,7 +947,7 @@ class Optimizer:
 
             coverage_results = None
             behavioral_results, coverage_results = self.run_and_parse_tests(
-                testing_type="behavior",
+                testing_type=TestingMode.BEHAVIOR,
                 test_env=test_env,
                 test_files=self.test_files,
                 optimization_iteration=0,
@@ -955,7 +959,7 @@ class Optimizer:
             )
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
-                    testing_type="perf",
+                    testing_type=TestingMode.PERFORMANCE,
                     test_env=test_env,
                     test_files=self.test_files,
                     optimization_iteration=0,
@@ -975,7 +979,7 @@ class Optimizer:
                         break
                     test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
                     unittest_loop_results, _ = self.run_and_parse_tests(
-                        testing_type="perf",
+                        testing_type=TestingMode.PERFORMANCE,
                         test_env=test_env,
                         test_files=self.test_files,
                         optimization_iteration=0,
@@ -1058,7 +1062,7 @@ class Optimizer:
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
 
             candidate_behavior_results, _ = self.run_and_parse_tests(
-                testing_type="behavior",
+                testing_type=TestingMode.BEHAVIOR,
                 test_env=test_env,
                 test_files=self.test_files,
                 optimization_iteration=optimization_candidate_index,
@@ -1084,7 +1088,7 @@ class Optimizer:
 
             if test_framework == "pytest":
                 candidate_benchmarking_results, _ = self.run_and_parse_tests(
-                    testing_type="perf",
+                    testing_type=TestingMode.PERFORMANCE,
                     test_env=test_env,
                     test_files=self.test_files,
                     optimization_iteration=optimization_candidate_index,
@@ -1111,7 +1115,7 @@ class Optimizer:
                         break
                     test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
                     unittest_loop_results, cov = self.run_and_parse_tests(
-                        testing_type="perf",
+                        testing_type=TestingMode.PERFORMANCE,
                         test_env=test_env,
                         test_files=self.test_files,
                         optimization_iteration=optimization_candidate_index,
@@ -1139,7 +1143,7 @@ class Optimizer:
 
     def run_and_parse_tests(
         self,
-        testing_type: str,
+        testing_type: TestingMode,
         test_env: dict[str, str],
         test_files: TestFiles,
         optimization_iteration: int,
@@ -1155,7 +1159,7 @@ class Optimizer:
     ) -> tuple[TestResults, CoverageData | None]:
         coverage_out_file = None
         try:
-            if testing_type == "behavior":
+            if testing_type == TestingMode.BEHAVIOR:
                 result_file_path, run_result, coverage_out_file = run_behavioral_tests(
                     test_files,
                     test_framework=self.args.test_framework,
@@ -1166,7 +1170,7 @@ class Optimizer:
                     verbose=True,
                     enable_coverage=enable_coverage,
                 )
-            elif testing_type == "perf":
+            elif testing_type == TestingMode.PERFORMANCE:
                 result_file_path, run_result = run_benchmarking_tests(
                     test_files,
                     cwd=self.args.project_root,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import enum
 import json
 import re
 from collections.abc import Collection, Iterator
@@ -411,3 +412,8 @@ class FunctionCoverage:
     unexecuted_lines: list[int]
     executed_branches: list[list[int]]
     unexecuted_branches: list[list[int]]
+
+
+class TestingMode(enum.StrEnum):
+    BEHAVIOR = "behavior"
+    PERFORMANCE = "performance"

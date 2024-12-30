@@ -14,7 +14,7 @@ from codeflash.code_utils.instrument_existing_tests import (
     inject_profiling_into_existing_test,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles, TestsInFile
+from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles, TestingMode, TestsInFile
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.test_results import TestType
 
@@ -359,7 +359,12 @@ def test_sort():
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(6, 13), CodePosition(10, 13)], func, project_root_path, "pytest", mode="behavior"
+            test_path,
+            [CodePosition(6, 13), CodePosition(10, 13)],
+            func,
+            project_root_path,
+            "pytest",
+            mode=TestingMode.BEHAVIOR,
         )
         os.chdir(original_cwd)
         assert success
@@ -370,7 +375,12 @@ def test_sort():
         ).replace('"', "'")
 
         success, new_perf_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(6, 13), CodePosition(10, 13)], func, project_root_path, "pytest", mode="perf"
+            test_path,
+            [CodePosition(6, 13), CodePosition(10, 13)],
+            func,
+            project_root_path,
+            "pytest",
+            mode=TestingMode.PERFORMANCE,
         )
         assert success
         assert new_perf_test is not None
@@ -411,7 +421,7 @@ def test_sort():
             ]
         )
         test_results, coverage_data = opt.run_and_parse_tests(
-            testing_type="behavior",
+            testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -446,7 +456,7 @@ def test_sort():
             f.write(new_perf_test)
 
         test_results_perf, _ = opt.run_and_parse_tests(
-            testing_type="perf",
+            testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -566,11 +576,11 @@ def test_sort_parametrized(input, expected_output):
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(14, 13)], func, project_root_path, "pytest", mode="behavior"
+            test_path, [CodePosition(14, 13)], func, project_root_path, "pytest", mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(14, 13)], func, project_root_path, "pytest", mode="perf"
+            test_path, [CodePosition(14, 13)], func, project_root_path, "pytest", mode=TestingMode.PERFORMANCE
         )
 
         os.chdir(original_cwd)
@@ -617,7 +627,7 @@ def test_sort_parametrized(input, expected_output):
             )
         )
         test_results, coverage_data = opt.run_and_parse_tests(
-            testing_type="behavior",
+            testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -659,7 +669,7 @@ def test_sort_parametrized(input, expected_output):
         assert test_results[2].did_pass
 
         test_results_perf, coverage_data = opt.run_and_parse_tests(
-            testing_type="perf",
+            testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -798,11 +808,11 @@ def test_sort_parametrized_loop(input, expected_output):
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(15, 17)], func, project_root_path, "pytest", mode="behavior"
+            test_path, [CodePosition(15, 17)], func, project_root_path, "pytest", mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(15, 17)], func, project_root_path, "pytest", mode="perf"
+            test_path, [CodePosition(15, 17)], func, project_root_path, "pytest", mode=TestingMode.PERFORMANCE
         )
 
         os.chdir(original_cwd)
@@ -859,7 +869,7 @@ def test_sort_parametrized_loop(input, expected_output):
             )
         )
         test_results, coverage_data = opt.run_and_parse_tests(
-            testing_type="behavior",
+            testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -935,7 +945,7 @@ def test_sort_parametrized_loop(input, expected_output):
         assert test_results[5].did_pass
 
         test_results, _ = opt.run_and_parse_tests(
-            testing_type="perf",
+            testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -1112,11 +1122,11 @@ def test_sort():
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
         os.chdir(str(run_cwd))
         success, new_test_behavior = inject_profiling_into_existing_test(
-            test_path, [CodePosition(11, 17)], func, project_root_path, "pytest", mode="behavior"
+            test_path, [CodePosition(11, 17)], func, project_root_path, "pytest", mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(11, 17)], func, project_root_path, "pytest", mode="perf"
+            test_path, [CodePosition(11, 17)], func, project_root_path, "pytest", mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
         assert success
@@ -1171,7 +1181,7 @@ def test_sort():
             )
         )
         test_results, coverage_data = opt.run_and_parse_tests(
-            testing_type="behavior",
+            testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -1213,7 +1223,7 @@ def test_sort():
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
         test_results, coverage_data = opt.run_and_parse_tests(
-            testing_type="perf",
+            testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -1378,7 +1388,7 @@ class TestPigLatin(unittest.TestCase):
             func,
             project_root_path,
             "unittest",
-            mode="behavior",
+            mode=TestingMode.BEHAVIOR,
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
@@ -1387,7 +1397,7 @@ class TestPigLatin(unittest.TestCase):
             func,
             project_root_path,
             "unittest",
-            mode="perf",
+            mode=TestingMode.PERFORMANCE,
         )
         os.chdir(original_cwd)
 
@@ -1442,7 +1452,7 @@ class TestPigLatin(unittest.TestCase):
             )
         )
         test_results, coverage_data = opt.run_and_parse_tests(
-            testing_type="behavior",
+            testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -1484,7 +1494,7 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
         test_results, coverage_data = opt.run_and_parse_tests(
-            testing_type="perf",
+            testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -1631,11 +1641,11 @@ class TestPigLatin(unittest.TestCase):
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
-            test_path, [CodePosition(16, 17)], func, project_root_path, "unittest", mode="behavior"
+            test_path, [CodePosition(16, 17)], func, project_root_path, "unittest", mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(16, 17)], func, project_root_path, "unittest", mode="perf"
+            test_path, [CodePosition(16, 17)], func, project_root_path, "unittest", mode=TestingMode.PERFORMANCE
         )
 
         os.chdir(original_cwd)
@@ -1692,7 +1702,7 @@ class TestPigLatin(unittest.TestCase):
             )
         )
         test_results, coverage_data = opt.run_and_parse_tests(
-            testing_type="behavior",
+            testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -1735,7 +1745,7 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[2].did_pass
 
         test_results, coverage_data = opt.run_and_parse_tests(
-            testing_type="perf",
+            testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -1889,11 +1899,11 @@ class TestPigLatin(unittest.TestCase):
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
-            test_path, [CodePosition(14, 21)], func, project_root_path, "unittest", mode="behavior"
+            test_path, [CodePosition(14, 21)], func, project_root_path, "unittest", mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(14, 21)], func, project_root_path, "unittest", mode="perf"
+            test_path, [CodePosition(14, 21)], func, project_root_path, "unittest", mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
         assert success
@@ -1948,7 +1958,7 @@ class TestPigLatin(unittest.TestCase):
         )
         test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
-            testing_type="behavior",
+            testing_type=TestingMode.BEHAVIOR,
             test_files=test_files,
             optimization_iteration=0,
             pytest_min_loops=1,
@@ -1991,7 +2001,7 @@ class TestPigLatin(unittest.TestCase):
 
         test_results, coverage_data = opt.run_and_parse_tests(
             test_env=test_env,
-            testing_type="perf",
+            testing_type=TestingMode.PERFORMANCE,
             test_files=test_files,
             optimization_iteration=0,
             pytest_min_loops=1,
@@ -2141,10 +2151,10 @@ class TestPigLatin(unittest.TestCase):
         f = FunctionToOptimize(function_name="sorter", file_path=Path("module.py"), parents=[])
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
-            test_path, [CodePosition(17, 21)], f, project_root_path, "unittest", mode="behavior"
+            test_path, [CodePosition(17, 21)], f, project_root_path, "unittest", mode=TestingMode.BEHAVIOR
         )
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(17, 21)], f, project_root_path, "unittest", mode="perf"
+            test_path, [CodePosition(17, 21)], f, project_root_path, "unittest", mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
         assert success
@@ -2199,7 +2209,7 @@ class TestPigLatin(unittest.TestCase):
             )
         )
         test_results, coverage_data = opt.run_and_parse_tests(
-            testing_type="behavior",
+            testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -2274,7 +2284,7 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[5].runtime > 0
         assert test_results[5].did_pass
         test_results, coverage_data = opt.run_and_parse_tests(
-            testing_type="perf",
+            testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -2830,7 +2840,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
         func = FunctionToOptimize(function_name="accurate_sleepfunc", parents=[], file_path=Path("module.py"))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(8, 13)], func, project_root_path, "pytest", mode="perf"
+            test_path, [CodePosition(8, 13)], func, project_root_path, "pytest", mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
 
@@ -2870,7 +2880,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
             ]
         )
         test_results, coverage_data = opt.run_and_parse_tests(
-            testing_type="perf",
+            testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
@@ -2952,7 +2962,7 @@ class TestPigLatin(unittest.TestCase):
         func = FunctionToOptimize(function_name="accurate_sleepfunc", parents=[], file_path=Path("module.py"))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(12, 17)], func, project_root_path, "unittest", mode="perf"
+            test_path, [CodePosition(12, 17)], func, project_root_path, "unittest", mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
 
@@ -3000,7 +3010,11 @@ class TestPigLatin(unittest.TestCase):
             ]
         )
         test_results, coverage_data = opt.run_and_parse_tests(
-            testing_type="perf", test_env=test_env, test_files=test_files, optimization_iteration=0, testing_time=0.1
+            testing_type=TestingMode.PERFORMANCE,
+            test_env=test_env,
+            test_files=test_files,
+            optimization_iteration=0,
+            testing_time=0.1,
         )
 
         assert test_results[0].id.function_getting_tested == "accurate_sleepfunc"
