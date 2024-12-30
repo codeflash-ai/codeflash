@@ -266,15 +266,14 @@ class Optimizer:
             )
 
         generated_test_paths = [
-            get_test_file_path(self.test_cfg.tests_root, function_to_optimize.function_name, test_index)
+            get_test_file_path(
+                self.test_cfg.tests_root, function_to_optimize.function_name, test_index, test_type="unit"
+            )
             for test_index in range(N_TESTS_TO_GENERATE)
         ]
         generated_perf_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root,
-                function_to_optimize.function_name,
-                test_index,
-                test_type=TestingMode.PERFORMANCE,
+                self.test_cfg.tests_root, function_to_optimize.function_name, test_index, test_type="perf"
             )
             for test_index in range(N_TESTS_TO_GENERATE)
         ]
