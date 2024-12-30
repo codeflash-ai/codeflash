@@ -414,6 +414,6 @@ class FunctionCoverage:
     unexecuted_branches: list[list[int]]
 
 
-class TestingMode(enum.StrEnum):
+class TestingMode(enum.Enum):
     BEHAVIOR = "behavior"
     PERFORMANCE = "performance"
