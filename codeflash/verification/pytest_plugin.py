@@ -67,7 +67,7 @@ def pytest_addoption(parser: Parser) -> None:
     pytest_loops.addoption(
         "--codeflash_min_loops",
         action="store",
-        default=2,
+        default=1,
         type=int,
         help="The minimum number of times to loop each test",
     )
@@ -183,7 +183,7 @@ class PyTest_Loops:
         :param session: Pytest session object.
         :return: Returns True if the timeout has expired, False otherwise.
         """
-        return count > session.config.option.codeflash_max_loops or (
+        return count >= session.config.option.codeflash_max_loops or (
             count >= session.config.option.codeflash_min_loops
             and time.time() - start_time > self._get_total_time(session)
         )
@@ -196,7 +196,7 @@ class PyTest_Loops:
         :return: request.param.
         """
         marker = request.node.get_closest_marker("loops")
-        count = marker and marker.args[0] or request.config.option.codeflash_loops
+        count = (marker and marker.args[0]) or request.config.option.codeflash_loops
         if count > 1:
             try:
                 return request.param

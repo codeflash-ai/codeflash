@@ -1,4 +1,4 @@
-from typing import Union, Dict
+from typing import Dict, Union
 
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
@@ -16,7 +16,8 @@ class PrComment:
     relative_file_path: str
     speedup_x: str
     speedup_pct: str
-    winning_test_results: TestResults
+    winning_behavioral_test_results: TestResults
+    winning_benchmarking_test_results: TestResults
 
     def to_json(self) -> Dict[str, Union[str, Dict[str, Dict[str, int]], int, str]]:
         return {
@@ -27,10 +28,10 @@ class PrComment:
             "file_path": self.relative_file_path,
             "speedup_x": self.speedup_x,
             "speedup_pct": self.speedup_pct,
-            "loop_count": self.winning_test_results.number_of_loops(),
+            "loop_count": self.winning_benchmarking_test_results.number_of_loops(),
             "report_table": {
                 test_type.to_name(): result
-                for test_type, result in self.winning_test_results.get_test_pass_fail_report_by_type().items()
+                for test_type, result in self.winning_behavioral_test_results.get_test_pass_fail_report_by_type().items()
             },
         }
 

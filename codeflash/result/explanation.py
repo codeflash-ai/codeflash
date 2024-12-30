@@ -9,7 +9,8 @@ from codeflash.verification.test_results import TestResults
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
 class Explanation:
     raw_explanation_message: str
-    winning_test_results: TestResults
+    winning_behavioral_test_results: TestResults
+    winning_benchmarking_test_results: TestResults
     original_runtime_ns: int
     best_runtime_ns: int
     function_name: str
@@ -45,7 +46,7 @@ class Explanation:
             + self.raw_explanation_message
             + " \n\n"
             + "The new optimized code was tested for correctness. The results are listed below.\n"
-            + f"{TestResults.report_to_string(self.winning_test_results.get_test_pass_fail_report_by_type())}\n"
+            + f"{TestResults.report_to_string(self.winning_behavioral_test_results.get_test_pass_fail_report_by_type())}\n"
         )
 
         return explanation

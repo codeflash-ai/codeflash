@@ -2,11 +2,10 @@ import os
 import tempfile
 from pathlib import Path
 
-from codeflash.cli_cmds.console import logger
 from codeflash.models.models import TestFile, TestFiles
 from codeflash.verification.parse_test_output import parse_test_xml
 from codeflash.verification.test_results import TestType
-from codeflash.verification.test_runner import run_tests
+from codeflash.verification.test_runner import run_behavioral_tests
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -37,11 +36,11 @@ class TestUnittestRunnerSorter(unittest.TestCase):
 
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
+            test_files=[TestFile(instrumented_behavior_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
         )
         fp.write(code.encode("utf-8"))
         fp.flush()
-        result_file, process, coverage_pct = run_tests(
+        result_file, process, coverage_pct = run_behavioral_tests(
             test_files,
             test_framework=config.test_framework,
             cwd=Path(config.project_root_path),
@@ -81,18 +80,16 @@ def test_sort():
 
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
+            test_files=[TestFile(instrumented_behavior_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
         )
         fp.write(code.encode("utf-8"))
         fp.flush()
-        result_file, process, coverage_pct = run_tests(
+        result_file, process, coverage_pct = run_behavioral_tests(
             test_files,
             test_framework=config.test_framework,
             cwd=Path(config.project_root_path),
             test_env=test_env,
             pytest_timeout=1,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
             pytest_target_runtime_seconds=1,
         )
         results = parse_test_xml(

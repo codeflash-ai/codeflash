@@ -3,13 +3,13 @@ from __future__ import annotations
 import os
 import re
 import sqlite3
+import subprocess
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import dill as pickle
 from junitparser.xunit2 import JUnitXml
-import subprocess
 from lxml.etree import XMLParser, parse
 
 from codeflash.cli_cmds.console import DEBUG_MODE, console, logger
@@ -267,6 +267,12 @@ def parse_test_xml(
 
             else:
                 for match in matches:
+                    split_val = match[5].split(":")
+                    if len(split_val) > 1:
+                        iteration_id = split_val[0]
+                        runtime = int(split_val[1])
+                    else:
+                        iteration_id, runtime = split_val[0], None
                     test_results.add(
                         FunctionTestInvocation(
                             loop_index=int(match[4]),
@@ -275,10 +281,10 @@ def parse_test_xml(
                                 test_class_name=None if match[1] == "" else match[1][:-1],
                                 test_function_name=match[2],
                                 function_getting_tested=match[3],
-                                iteration_id=match[5],
+                                iteration_id=iteration_id,
                             ),
                             file_name=test_file_path,
-                            runtime=None,
+                            runtime=runtime,
                             test_framework=test_config.test_framework,
                             did_pass=result,
                             test_type=test_type,
@@ -466,6 +472,8 @@ def parse_test_results(
 
     get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin")).unlink(missing_ok=True)
 
+    get_run_tmp_file(Path("pytest_results.xml")).unlink(missing_ok=True)
+    get_run_tmp_file(Path("unittest_results.xml")).unlink(missing_ok=True)
     get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
     results = merge_test_results(test_results_xml, test_results_bin_file, test_config.test_framework)
 

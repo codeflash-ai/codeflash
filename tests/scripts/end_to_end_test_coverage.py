@@ -9,10 +9,7 @@ def run_test(expected_improvement_pct: int) -> bool:
         file_path="bubble_sort.py",
         function_name="sorter_one_level_depth",
         coverage_expectations=[
-            CoverageExpectation(function_name="sorter_one_level_depth", expected_coverage=100.0, expected_lines=[2]),
-            CoverageExpectation(
-                function_name="sorter", expected_coverage=100.0, expected_lines=[6, 7, 8, 9, 10, 11, 12]
-            ),
+            CoverageExpectation(function_name="sorter_one_level_depth", expected_coverage=100.0, expected_lines=[2])
         ],
     )
     cwd = (

@@ -48,6 +48,7 @@ from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
     CodeOptimizationContext,
+    FunctionCalledInTest,
     FunctionParent,
     GeneratedTests,
     GeneratedTestsList,
@@ -56,6 +57,7 @@ from codeflash.models.models import (
     OriginalCodeBaseline,
     TestFile,
     TestFiles,
+    TestingMode,
     ValidCode,
 )
 from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
@@ -67,7 +69,7 @@ from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestResults, TestType
-from codeflash.verification.test_runner import run_tests
+from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests
 from codeflash.verification.verification_utils import TestConfig, get_test_file_path
 from codeflash.verification.verifier import generate_tests
 
@@ -75,7 +77,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
     from codeflash.either import Result
-    from codeflash.models.models import CoverageData, FunctionCalledInTest, FunctionSource, OptimizedCandidate
+    from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
 
 
 class Optimizer:
@@ -211,11 +213,13 @@ class Optimizer:
                 logger.info("✨ All functions have been optimized! ✨")
         finally:
             for test_file in self.test_files.get_by_type(TestType.GENERATED_REGRESSION).test_files:
-                test_file.instrumented_file_path.unlink(missing_ok=True)
+                test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
+                test_file.benchmarking_file_path.unlink(missing_ok=True)
             for test_file in self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
-                test_file.instrumented_file_path.unlink(missing_ok=True)
+                test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
+                test_file.benchmarking_file_path.unlink(missing_ok=True)
             for test_file in self.test_files.get_by_type(TestType.CONCOLIC_COVERAGE_TEST).test_files:
-                test_file.instrumented_file_path.unlink(missing_ok=True)
+                test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
             if self.test_cfg.concolic_test_root_dir:
@@ -253,9 +257,9 @@ class Optimizer:
 
         original_module_path = module_name_from_file_path(function_to_optimize.file_path, self.args.project_root)
 
-        for module_abspath in original_helper_code:
+        for module_abspath, helper_code_source in original_helper_code.items():
             code_context.code_to_optimize_with_helpers = add_needed_imports_from_module(
-                original_helper_code[module_abspath],
+                helper_code_source,
                 code_context.code_to_optimize_with_helpers,
                 module_abspath,
                 function_to_optimize.file_path,
@@ -263,7 +267,15 @@ class Optimizer:
             )
 
         generated_test_paths = [
-            get_test_file_path(self.test_cfg.tests_root, function_to_optimize.function_name, test_index)
+            get_test_file_path(
+                self.test_cfg.tests_root, function_to_optimize.function_name, test_index, test_type="unit"
+            )
+            for test_index in range(N_TESTS_TO_GENERATE)
+        ]
+        generated_perf_test_paths = [
+            get_test_file_path(
+                self.test_cfg.tests_root, function_to_optimize.function_name, test_index, test_type="perf"
+            )
             for test_index in range(N_TESTS_TO_GENERATE)
         ]
 
@@ -279,6 +291,7 @@ class Optimizer:
                 module_path=Path(original_module_path),
                 function_trace_id=function_trace_id,
                 generated_test_paths=generated_test_paths,
+                generated_perf_test_paths=generated_perf_test_paths,
                 function_to_optimize_ast=function_to_optimize_ast,
                 run_experiment=should_run_experiment,
             )
@@ -293,14 +306,18 @@ class Optimizer:
             count_tests += 1
 
         for i, generated_test in enumerate(generated_tests.generated_tests):
-            with generated_test.file_path.open("w", encoding="utf8") as f:
-                f.write(generated_test.instrumented_test_source)
+            with generated_test.behavior_file_path.open("w", encoding="utf8") as f:
+                f.write(generated_test.instrumented_behavior_test_source)
+            with generated_test.perf_file_path.open("w", encoding="utf8") as f:
+                f.write(generated_test.instrumented_perf_test_source)
             self.test_files.add(
                 TestFile(
-                    instrumented_file_path=generated_test.file_path,
+                    instrumented_behavior_file_path=generated_test.behavior_file_path,
+                    benchmarking_file_path=generated_test.perf_file_path,
                     original_file_path=None,
                     original_source=generated_test.generated_original_test_source,
                     test_type=TestType.GENERATED_REGRESSION,
+                    tests_in_file=None,  # This is currently unused. We can discover the tests in the file if needed.
                 )
             )
             logger.info(f"Generated test {i + 1}/{count_tests}:")
@@ -319,8 +336,7 @@ class Optimizer:
         )
 
         baseline_result = self.establish_original_code_baseline(
-            function_to_optimize_qualified_name,
-            function_to_all_tests.get(original_module_path + "." + function_to_optimize_qualified_name, []),
+            function_name=function_to_optimize_qualified_name,
             function_file_path=function_to_optimize.file_path,
             code_context=code_context,
         )
@@ -329,6 +345,8 @@ class Optimizer:
         if not is_successful(baseline_result):
             for generated_test_path in generated_test_paths:
                 generated_test_path.unlink(missing_ok=True)
+            for generated_perf_test_path in generated_perf_test_paths:
+                generated_perf_test_path.unlink(missing_ok=True)
 
             for instrumented_path in instrumented_unittests_created_for_function:
                 instrumented_path.unlink(missing_ok=True)
@@ -340,10 +358,6 @@ class Optimizer:
             if candidates is None:
                 continue
 
-            tests_in_file: list[FunctionCalledInTest] = function_to_all_tests.get(
-                function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root), []
-            )
-
             best_optimization = self.determine_best_candidate(
                 candidates=candidates,
                 code_context=code_context,
@@ -352,7 +366,6 @@ class Optimizer:
                 original_code_baseline=original_code_baseline,
                 original_helper_code=original_helper_code,
                 function_trace_id=function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
-                only_run_this_test_function=tests_in_file,
             )
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
@@ -370,7 +383,8 @@ class Optimizer:
                 )
                 explanation = Explanation(
                     raw_explanation_message=best_optimization.candidate.explanation,
-                    winning_test_results=best_optimization.winning_test_results,
+                    winning_behavioral_test_results=best_optimization.winning_behavioral_test_results,
+                    winning_benchmarking_test_results=best_optimization.winning_benchmarking_test_results,
                     original_runtime_ns=original_code_baseline.runtime,
                     best_runtime_ns=best_optimization.runtime,
                     function_name=function_to_optimize_qualified_name,
@@ -434,6 +448,8 @@ class Optimizer:
                         )
         for generated_test_path in generated_test_paths:
             generated_test_path.unlink(missing_ok=True)
+        for generated_perf_test_path in generated_perf_test_paths:
+            generated_perf_test_path.unlink(missing_ok=True)
         for test_paths in instrumented_unittests_created_for_function:
             test_paths.unlink(missing_ok=True)
         for fn in function_to_concolic_tests:
@@ -459,7 +475,6 @@ class Optimizer:
         original_code_baseline: OriginalCodeBaseline,
         original_helper_code: dict[Path, str],
         function_trace_id: str,
-        only_run_this_test_function: list[FunctionCalledInTest] | None = None,
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime
@@ -498,9 +513,7 @@ class Optimizer:
                     continue
 
                 run_results = self.run_optimized_candidate(
-                    optimization_candidate_index=candidate_index,
-                    original_test_results=original_code_baseline.overall_test_results,
-                    tests_in_file=only_run_this_test_function,
+                    optimization_candidate_index=candidate_index, baseline_results=original_code_baseline
                 )
                 console.rule()
                 if not is_successful(run_results):
@@ -534,7 +547,8 @@ class Optimizer:
                             candidate=candidate,
                             helper_functions=code_context.helper_functions,
                             runtime=best_test_runtime,
-                            winning_test_results=candidate_result.test_results,
+                            winning_behavioral_test_results=candidate_result.behavior_test_results,
+                            winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
                         )
                         best_runtime_until_now = best_test_runtime
                     else:
@@ -562,8 +576,8 @@ class Optimizer:
         )
         return best_optimization
 
-    @staticmethod
     def log_successful_optimization(
+        self,
         explanation: Explanation,
         function_to_optimize: FunctionToOptimize,
         function_trace_id: str,
@@ -577,17 +591,19 @@ class Optimizer:
             border_style="green",
         )
 
-        tests_panel = Panel(
-            Syntax(
-                "\n".join([test.generated_original_test_source for test in generated_tests.generated_tests]),
-                "python",
-                line_numbers=True,
-            ),
-            title="Validated Tests",
-            border_style="blue",
-        )
+        if self.args.no_pr:
+            tests_panel = Panel(
+                Syntax(
+                    "\n".join([test.generated_original_test_source for test in generated_tests.generated_tests]),
+                    "python",
+                    line_numbers=True,
+                ),
+                title="Validated Tests",
+                border_style="blue",
+            )
 
-        console.print(Group(explanation_panel, tests_panel))
+            console.print(Group(explanation_panel, tests_panel))
+        console.print(explanation_panel)
 
         ph(
             "cli-optimize-success",
@@ -599,7 +615,7 @@ class Optimizer:
                 "original_runtime": explanation.original_runtime_ns,
                 "winning_test_results": {
                     tt.to_name(): v
-                    for tt, v in explanation.winning_test_results.get_test_pass_fail_report_by_type().items()
+                    for tt, v in explanation.winning_behavioral_test_results.get_test_pass_fail_report_by_type().items()
                 },
             },
         )
@@ -722,10 +738,6 @@ class Optimizer:
         except ValueError as e:
             return Failure(str(e))
 
-        logger.info("Read-writable code:")
-        code_print(read_writable_code)
-        logger.info("Read-only context code:")
-        code_print(read_only_context_code)
         return Success(
             CodeOptimizationContext(
                 code_to_optimize_with_helpers=code_to_optimize_with_helpers_and_imports,
@@ -756,12 +768,12 @@ class Optimizer:
             logger.info(f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.")
             console.rule()
         else:
-            test_file_invocation_positions = defaultdict(list)
+            test_file_invocation_positions = defaultdict(list[FunctionCalledInTest])
             for tests_in_file in function_to_tests.get(func_qualname):
                 test_file_invocation_positions[
                     (tests_in_file.tests_in_file.test_file, tests_in_file.tests_in_file.test_type)
-                ].append(tests_in_file.position)
-            for (test_file, test_type), positions in test_file_invocation_positions.items():
+                ].append(tests_in_file)
+            for (test_file, test_type), tests_in_file_list in test_file_invocation_positions.items():
                 path_obj_test_file = Path(test_file)
                 if test_type == TestType.EXISTING_UNIT_TEST:
                     existing_test_files_count += 1
@@ -772,34 +784,54 @@ class Optimizer:
                 else:
                     msg = f"Unexpected test type: {test_type}"
                     raise ValueError(msg)
-                success, injected_test = inject_profiling_into_existing_test(
+                success, injected_behavior_test = inject_profiling_into_existing_test(
+                    mode=TestingMode.BEHAVIOR,
                     test_path=path_obj_test_file,
-                    call_positions=positions,
+                    call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
                     test_framework=self.args.test_framework,
                 )
                 if not success:
                     continue
-
-                new_test_path = Path(
+                success, injected_perf_test = inject_profiling_into_existing_test(
+                    mode=TestingMode.PERFORMANCE,
+                    test_path=path_obj_test_file,
+                    call_positions=[test.position for test in tests_in_file_list],
+                    function_to_optimize=function_to_optimize,
+                    tests_project_root=self.test_cfg.tests_project_rootdir,
+                    test_framework=self.args.test_framework,
+                )
+                if not success:
+                    continue
+                # TODO: this naming logic should be moved to a function and made more standard
+                new_behavioral_test_path = Path(
                     f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}"
                 )
-                if injected_test is not None:
-                    with new_test_path.open("w", encoding="utf8") as _f:
-                        _f.write(injected_test)
+                new_perf_test_path = Path(
+                    f"{os.path.splitext(test_file)[0]}__perfonlyinstrumented{os.path.splitext(test_file)[1]}"
+                )
+                if injected_behavior_test is not None:
+                    with new_behavioral_test_path.open("w", encoding="utf8") as _f:
+                        _f.write(injected_behavior_test)
                 else:
-                    msg = "injected_test is None"
+                    msg = "injected_behavior_test is None"
                     raise ValueError(msg)
+                if injected_perf_test is not None:
+                    with new_perf_test_path.open("w", encoding="utf8") as _f:
+                        _f.write(injected_perf_test)
 
-                unique_instrumented_test_files.add(new_test_path)
+                unique_instrumented_test_files.add(new_behavioral_test_path)
+                unique_instrumented_test_files.add(new_perf_test_path)
                 if not self.test_files.get_by_original_file_path(path_obj_test_file):
                     self.test_files.add(
                         TestFile(
-                            instrumented_file_path=new_test_path,
+                            instrumented_behavior_file_path=new_behavioral_test_path,
+                            benchmarking_file_path=new_perf_test_path,
                             original_source=None,
                             original_file_path=Path(test_file),
                             test_type=test_type,
+                            tests_in_file=[t.tests_in_file for t in tests_in_file_list],
                         )
                     )
             logger.info(
@@ -821,6 +853,7 @@ class Optimizer:
         module_path: Path,
         function_trace_id: str,
         generated_test_paths: list[Path],
+        generated_perf_test_paths: list[Path],
         function_to_optimize_ast: ast.FunctionDef,
         run_experiment: bool = False,
     ) -> Result[tuple[GeneratedTestsList, dict[str, list[FunctionCalledInTest]], OptimizationSet], str]:
@@ -836,6 +869,7 @@ class Optimizer:
                 [definition.fully_qualified_name for definition in helper_functions],
                 module_path,
                 generated_test_paths,
+                generated_perf_test_paths,
                 (function_trace_id[:-4] + "EXP0" if run_experiment else function_trace_id),
             )
             future_optimization_candidates = executor.submit(
@@ -879,12 +913,20 @@ class Optimizer:
             for future in future_tests:
                 res = future.result()
                 if res:
-                    generated_test_source, instrumented_test_source, test_path = res
+                    (
+                        generated_test_source,
+                        instrumented_behavior_test_source,
+                        instrumented_perf_test_source,
+                        test_behavior_path,
+                        test_perf_path,
+                    ) = res
                     tests.append(
                         GeneratedTests(
                             generated_original_test_source=generated_test_source,
-                            instrumented_test_source=instrumented_test_source,
-                            file_path=test_path,
+                            instrumented_behavior_test_source=instrumented_behavior_test_source,
+                            instrumented_perf_test_source=instrumented_perf_test_source,
+                            behavior_file_path=test_behavior_path,
+                            perf_file_path=test_perf_path,
                         )
                     )
             if not tests:
@@ -905,11 +947,7 @@ class Optimizer:
         )
 
     def establish_original_code_baseline(
-        self,
-        function_name: str,
-        tests_in_file: list[FunctionCalledInTest],
-        function_file_path: Path,
-        code_context: CodeOptimizationContext,
+        self, function_name: str, function_file_path: Path, code_context: CodeOptimizationContext
     ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
         # For the original function - run the tests and get the runtime, plus coverage
         with progress_bar(f"Establishing original code baseline for {function_name}"):
@@ -924,49 +962,44 @@ class Optimizer:
             else:
                 test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
 
-            only_run_these_test_functions_for_test_files: dict[Path, str] = {}
-
-            # Replay tests can have hundreds of test functions and running them can be very slow,
-            # so we only run the test functions that are relevant to the function we are optimizing
-            for test_file in self.test_files.get_by_type(TestType.REPLAY_TEST).test_files:
-                relevant_tests_in_file = [
-                    test_in_file
-                    for test_in_file in tests_in_file
-                    if test_in_file.tests_in_file.test_file == test_file.original_file_path
-                ]
-                only_run_these_test_functions_for_test_files[test_file.instrumented_file_path] = relevant_tests_in_file[
-                    0
-                ].tests_in_file.test_function
-
-                if len(relevant_tests_in_file) > 1:
-                    logger.warning(
-                        f"Multiple tests found ub the replay test {test_file} for {function_name}. Should not happen"
-                    )
             coverage_results = None
+            behavioral_results, coverage_results = self.run_and_parse_tests(
+                testing_type=TestingMode.BEHAVIOR,
+                test_env=test_env,
+                test_files=self.test_files,
+                optimization_iteration=0,
+                testing_time=TOTAL_LOOPING_TIME,
+                enable_coverage=test_framework == "pytest",
+                function_name=function_name,
+                source_file=function_file_path,
+                code_context=code_context,
+            )
             if test_framework == "pytest":
-                unittest_results, coverage_results = self.run_and_parse_tests(
+                benchmarking_results, _ = self.run_and_parse_tests(
+                    testing_type=TestingMode.PERFORMANCE,
                     test_env=test_env,
                     test_files=self.test_files,
                     optimization_iteration=0,
-                    test_functions=only_run_these_test_functions_for_test_files,
                     testing_time=TOTAL_LOOPING_TIME,
-                    enable_coverage=True,
+                    enable_coverage=False,
                     function_name=function_name,
                     source_file=function_file_path,
                     code_context=code_context,
                 )
+
             else:
-                unittest_results = TestResults()
+                benchmarking_results = TestResults()
                 start_time: float = time.time()
                 for i in range(100):
-                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME:
+                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME * 1.5:
+                        # * 1.5 to give unittest a bit more time to run
                         break
                     test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
-                    unittest_loop_results, coverage_results = self.run_and_parse_tests(
+                    unittest_loop_results, _ = self.run_and_parse_tests(
+                        testing_type=TestingMode.PERFORMANCE,
                         test_env=test_env,
                         test_files=self.test_files,
                         optimization_iteration=0,
-                        test_functions=only_run_these_test_functions_for_test_files,
                         testing_time=TOTAL_LOOPING_TIME,
                         enable_coverage=False,
                         function_name=function_name,
@@ -974,40 +1007,25 @@ class Optimizer:
                         code_context=code_context,
                         unittest_loop_index=i + 1,
                     )
-                    unittest_results.merge(unittest_loop_results)
-
-            initial_loop_unittest_results = TestResults()
-            for result in unittest_results.test_results:
-                if result.loop_index == 1:
-                    initial_loop_unittest_results.add(result)
+                    benchmarking_results.merge(unittest_loop_results)
 
             console.print(
                 TestResults.report_to_tree(
-                    initial_loop_unittest_results.get_test_pass_fail_report_by_type(),
-                    title="Overall initial loop test results for original code",
+                    behavioral_results.get_test_pass_fail_report_by_type(),
+                    title="Overall test results for original code",
                 )
             )
             console.rule()
 
-            existing_test_results = TestResults()
-            concolic_test_results = TestResults()
-            for result in unittest_results:
-                if result.test_type == TestType.EXISTING_UNIT_TEST:
-                    existing_test_results.add(result)
-                elif result.test_type == TestType.CONCOLIC_COVERAGE_TEST:
-                    concolic_test_results.add(result)
-            generated_test_results = TestResults()
-            for result in unittest_results:
-                if result.test_type == TestType.GENERATED_REGRESSION:
-                    generated_test_results.add(result)
-
-            total_timing = unittest_results.total_passed_runtime()  # caution: doesn't handle the loop index
+            total_timing = benchmarking_results.total_passed_runtime()  # caution: doesn't handle the loop index
 
             functions_to_remove = [
-                result.id.test_function_name for result in generated_test_results.test_results if not result.did_pass
+                result.id.test_function_name
+                for result in behavioral_results
+                if (result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass)
             ]
 
-            if not initial_loop_unittest_results:
+            if not behavioral_results:
                 logger.warning(
                     f"Couldn't run any tests for original function {function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
                 )
@@ -1024,7 +1042,7 @@ class Optimizer:
             if not success:
                 return Failure("Failed to establish a baseline for the original code.")
 
-            loop_count = max([int(result.loop_index) for result in unittest_results.test_results])
+            loop_count = max([int(result.loop_index) for result in benchmarking_results.test_results])
             logger.info(
                 f"Original code runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: "
                 f"{humanize_runtime(total_timing)} per full loop"
@@ -1034,10 +1052,8 @@ class Optimizer:
             return Success(
                 (
                     OriginalCodeBaseline(
-                        generated_test_results=generated_test_results,
-                        existing_test_results=existing_test_results,
-                        concolic_test_results=concolic_test_results,
-                        overall_test_results=unittest_results,
+                        behavioral_test_results=behavioral_results,
+                        benchmarking_test_results=benchmarking_results,
                         runtime=total_timing,
                         coverage_results=coverage_results,
                     ),
@@ -1046,17 +1062,11 @@ class Optimizer:
             )
 
     def run_optimized_candidate(
-        self,
-        *,
-        optimization_candidate_index: int,
-        original_test_results: TestResults | None,
-        tests_in_file: list[FunctionCalledInTest] | None,
+        self, *, optimization_candidate_index: int, baseline_results: OriginalCodeBaseline
     ) -> Result[OptimizedCandidateResult, str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
         with progress_bar("Testing optimization candidate"):
-            success = True
-
             test_env = os.environ.copy()
             test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_candidate_index)
             test_env["CODEFLASH_TRACER_DISABLE"] = "1"
@@ -1068,96 +1078,81 @@ class Optimizer:
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
 
-            only_run_these_test_functions_for_test_files: dict[Path, str] = {}
-            # Replay tests can have hundreds of test functions and running them can be very slow,
-            # so we only run the test functions that are relevant to the function we are optimizing
-            for test_file in self.test_files.get_by_type(TestType.REPLAY_TEST).test_files:
-                relevant_tests_in_file = [
-                    test_in_file
-                    for test_in_file in tests_in_file
-                    if test_in_file.tests_in_file.test_file == test_file.original_file_path
-                ]
-                only_run_these_test_functions_for_test_files[test_file.instrumented_file_path] = relevant_tests_in_file[
-                    0
-                ].tests_in_file.test_function
-
-            if test_framework == "pytest":
-                candidate_results, cov = self.run_and_parse_tests(
-                    test_env=test_env,
-                    test_files=self.test_files,
-                    optimization_iteration=optimization_candidate_index,
-                    test_functions=only_run_these_test_functions_for_test_files,
-                    testing_time=TOTAL_LOOPING_TIME,
-                )
-                loop_count = (
-                    max(all_loop_indices)
-                    if (all_loop_indices := {result.loop_index for result in candidate_results.test_results})
-                    else 0
-                )
-            else:
-                candidate_results = TestResults()
-                start_time: float = time.time()
-                loop_count = 0
-                for i in range(100):
-                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME:
-                        break
-                    test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
-                    candidate_loop_results, cov = self.run_and_parse_tests(
-                        test_env=test_env,
-                        test_files=self.test_files,
-                        optimization_iteration=optimization_candidate_index,
-                        test_functions=only_run_these_test_functions_for_test_files,
-                        testing_time=TOTAL_LOOPING_TIME,
-                        unittest_loop_index=i + 1,
-                    )
-                    loop_count = i + 1
-                    candidate_results.merge(candidate_loop_results)
-
-            initial_loop_candidate_results = TestResults()
-            for result in candidate_results.test_results:
-                if result.loop_index == 1:
-                    initial_loop_candidate_results.add(result)
+            candidate_behavior_results, _ = self.run_and_parse_tests(
+                testing_type=TestingMode.BEHAVIOR,
+                test_env=test_env,
+                test_files=self.test_files,
+                optimization_iteration=optimization_candidate_index,
+                testing_time=TOTAL_LOOPING_TIME,
+                enable_coverage=False,
+            )
 
             console.print(
                 TestResults.report_to_tree(
-                    initial_loop_candidate_results.get_test_pass_fail_report_by_type(),
-                    title="Overall initial loop test results for candidate",
+                    candidate_behavior_results.get_test_pass_fail_report_by_type(),
+                    title="Behavioral Test Results for candidate",
                 )
             )
             console.rule()
 
-            initial_loop_original_test_results = TestResults()
-            for result in original_test_results.test_results:
-                if result.loop_index == 1:
-                    initial_loop_original_test_results.add(result)
-
-            if compare_test_results(initial_loop_original_test_results, initial_loop_candidate_results):
+            if compare_test_results(baseline_results.behavioral_test_results, candidate_behavior_results):
                 logger.info("Test results matched!")
                 console.rule()
-                equal_results = True
             else:
                 logger.info("Test results did not match the test results of the original code.")
                 console.rule()
-                success = False
-                equal_results = False
+                return Failure("Test results did not match the test results of the original code.")
 
-            if (total_candidate_timing := candidate_results.total_passed_runtime()) == 0:
+            if test_framework == "pytest":
+                candidate_benchmarking_results, _ = self.run_and_parse_tests(
+                    testing_type=TestingMode.PERFORMANCE,
+                    test_env=test_env,
+                    test_files=self.test_files,
+                    optimization_iteration=optimization_candidate_index,
+                    testing_time=TOTAL_LOOPING_TIME,
+                    enable_coverage=False,
+                )
+                loop_count = (
+                    max(all_loop_indices)
+                    if (
+                        all_loop_indices := {
+                            result.loop_index for result in candidate_benchmarking_results.test_results
+                        }
+                    )
+                    else 0
+                )
+
+            else:
+                candidate_benchmarking_results = TestResults()
+                start_time: float = time.time()
+                loop_count = 0
+                for i in range(100):
+                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME * 1.5:
+                        # * 1.5 to give unittest a bit more time to run
+                        break
+                    test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
+                    unittest_loop_results, cov = self.run_and_parse_tests(
+                        testing_type=TestingMode.PERFORMANCE,
+                        test_env=test_env,
+                        test_files=self.test_files,
+                        optimization_iteration=optimization_candidate_index,
+                        testing_time=TOTAL_LOOPING_TIME,
+                        unittest_loop_index=i + 1,
+                    )
+                    loop_count = i + 1
+                    candidate_benchmarking_results.merge(unittest_loop_results)
+
+            if (total_candidate_timing := candidate_benchmarking_results.total_passed_runtime()) == 0:
                 logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
                 console.rule()
-            get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.bin")).unlink(missing_ok=True)
 
-            get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
-            if not equal_results:
-                success = False
-
-            if not success:
-                return Failure("Failed to run the optimization candidate.")
             logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
             return Success(
                 OptimizedCandidateResult(
                     max_loop_count=loop_count,
                     best_test_runtime=total_candidate_timing,
-                    test_results=candidate_results,
+                    behavior_test_results=candidate_behavior_results,
+                    benchmarking_test_results=candidate_benchmarking_results,
                     optimization_candidate_index=optimization_candidate_index,
                     total_candidate_timing=total_candidate_timing,
                 )
@@ -1165,10 +1160,10 @@ class Optimizer:
 
     def run_and_parse_tests(
         self,
+        testing_type: TestingMode,
         test_env: dict[str, str],
         test_files: TestFiles,
         optimization_iteration: int,
-        test_functions: dict[Path, str] | None = None,
         testing_time: float = TOTAL_LOOPING_TIME,
         *,
         enable_coverage: bool = False,
@@ -1179,21 +1174,33 @@ class Optimizer:
         code_context: CodeOptimizationContext | None = None,
         unittest_loop_index: int | None = None,
     ) -> tuple[TestResults, CoverageData | None]:
+        coverage_out_file = None
         try:
-            result_file_path, run_result, coverage_out_file = run_tests(
-                test_files,
-                test_framework=self.args.test_framework,
-                cwd=self.args.project_root,
-                test_env=test_env,
-                pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                pytest_cmd=self.test_cfg.pytest_cmd,
-                verbose=True,
-                only_run_these_test_functions=test_functions,
-                pytest_target_runtime_seconds=testing_time,
-                pytest_min_loops=pytest_min_loops,
-                pytest_max_loops=pytest_max_loops,
-                enable_coverage=enable_coverage,
-            )
+            if testing_type == TestingMode.BEHAVIOR:
+                result_file_path, run_result, coverage_out_file = run_behavioral_tests(
+                    test_files,
+                    test_framework=self.args.test_framework,
+                    cwd=self.args.project_root,
+                    test_env=test_env,
+                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
+                    pytest_cmd=self.test_cfg.pytest_cmd,
+                    verbose=True,
+                    enable_coverage=enable_coverage,
+                )
+            elif testing_type == TestingMode.PERFORMANCE:
+                result_file_path, run_result = run_benchmarking_tests(
+                    test_files,
+                    cwd=self.args.project_root,
+                    test_env=test_env,
+                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
+                    pytest_cmd=self.test_cfg.pytest_cmd,
+                    pytest_target_runtime_seconds=testing_time,
+                    pytest_min_loops=pytest_min_loops,
+                    pytest_max_loops=pytest_max_loops,
+                    test_framework=self.args.test_framework,
+                )
+            else:
+                raise ValueError(f"Unexpected testing type: {testing_type}")
         except subprocess.TimeoutExpired:
             logger.exception(
                 f'Error running tests in {", ".join(str(f) for f in test_files.test_files)}.\nTimeout Error'
@@ -1202,12 +1209,12 @@ class Optimizer:
         if run_result.returncode != 0:
             logger.debug(
                 f'Nonzero return code {run_result.returncode} when running tests in '
-                f'{", ".join([str(f.instrumented_file_path) for f in test_files.test_files])}.\n'
+                f'{", ".join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n'
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
 
-        return parse_test_results(
+        results, coverage_results = parse_test_results(
             test_xml_path=result_file_path,
             test_files=test_files,
             test_config=self.test_cfg,
@@ -1219,6 +1226,7 @@ class Optimizer:
             code_context=code_context,
             coverage_file=coverage_out_file,
         )
+        return results, coverage_results
 
     def generate_and_instrument_tests(
         self,
@@ -1228,6 +1236,7 @@ class Optimizer:
         helper_function_names: list[str],
         module_path: Path,
         generated_test_paths: list[Path],
+        generated_perf_test_paths: list[Path],
         function_trace_id: str,
     ) -> list[concurrent.futures.Future]:
         return [
@@ -1243,8 +1252,11 @@ class Optimizer:
                 function_trace_id,
                 test_index,
                 test_path,
+                test_perf_path,
             )
-            for test_index, test_path in enumerate(generated_test_paths)
+            for test_index, (test_path, test_perf_path) in enumerate(
+                zip(generated_test_paths, generated_perf_test_paths)
+            )
         ]
 
 
