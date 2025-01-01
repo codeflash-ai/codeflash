@@ -12,7 +12,11 @@ from jedi.api.classes import Name
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import get_code
-from codeflash.code_utils.code_utils import module_name_from_file_path, path_belongs_to_site_packages
+from codeflash.code_utils.code_utils import (
+    get_qualified_name,
+    module_name_from_file_path,
+    path_belongs_to_site_packages,
+)
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent, FunctionSource
 
@@ -26,7 +30,7 @@ def belongs_to_method(name: Name, class_name: str, method_name: str) -> bool:
 
 
 def belongs_to_function(name: Name, function_name: str) -> bool:
-    """Check if the given jedi Name is a direct child of the specified function"""
+    """Check if the given jedi Name is a direct child of the specified function."""
     if name.name == function_name:  # Handles function definition and recursive function calls
         return False
     if name := name.parent():
@@ -36,11 +40,26 @@ def belongs_to_function(name: Name, function_name: str) -> bool:
 
 
 def belongs_to_class(name: Name, class_name: str) -> bool:
-    """Check if given jedi Name is a direct child of the specified class"""
+    """Check if given jedi Name is a direct child of the specified class."""
     while name := name.parent():
         if name.type == "class":
             return name.name == class_name
     return False
+
+
+def belongs_to_function_qualified(name: Name, qualified_function_name: str) -> bool:
+    """Check if the given jedi Name is a direct child of the specified function, matched by qualified function name."""
+    try:
+        if get_qualified_name(name.module_name, name.full_name) == qualified_function_name:
+            # Handles function definition and recursive function calls
+            return False
+        if name := name.parent():
+            if name.type == "function":
+                return get_qualified_name(name.module_name, name.full_name) == qualified_function_name
+        return False
+    except ValueError as e:
+        logger.exception(f"Error while checking if {name.full_name} belongs to {qualified_function_name}: {e}")
+        return False
 
 
 def get_type_annotation_context(

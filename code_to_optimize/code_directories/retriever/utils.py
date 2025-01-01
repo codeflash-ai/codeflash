@@ -1,5 +1,9 @@
 import math
 
+from transform_utils import DataTransformer
+
+GLOBAL_VAR = 10
+
 
 class DataProcessor:
     """A class for processing data."""
@@ -25,3 +29,19 @@ class DataProcessor:
 
     def do_something(self):
         print("something")
+
+    def transform_data(self, data: str) -> str:
+        """Transform the processed data"""
+        return DataTransformer().transform(data)
+
+    def transform_data_own_method(self, data: str) -> str:
+        """Transform the processed data using own method"""
+        return DataTransformer().transform_using_own_method(data)
+
+    def transform_data_same_file_function(self, data: str) -> str:
+        """Transform the processed data using a function from the same file"""
+        return DataTransformer().transform_using_same_file_function(data)
+
+    def circular_dependency(self, data: str) -> str:
+        """Test circular dependency"""
+        return DataTransformer().circular_dependency(data)

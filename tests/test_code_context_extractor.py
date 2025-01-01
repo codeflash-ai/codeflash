@@ -24,6 +24,10 @@ class HelperClass:
         return self.name
 
 
+def main_method():
+    return "hello"
+
+
 class MainClass:
     def __init__(self, name):
         self.name = name
@@ -67,7 +71,7 @@ def test_code_replacement10() -> None:
     func_top_optimize = FunctionToOptimize(
         function_name="main_method", file_path=file_path, parents=[FunctionParent("MainClass", "ClassDef")]
     )
-    original_code = file_path.read_text()
+
     read_write_context, read_only_context = get_code_optimization_context(
         function_to_optimize=func_top_optimize, project_root_path=file_path.parent
     )
@@ -89,7 +93,6 @@ def test_code_replacement10() -> None:
     expected_read_only_context = f"""
     ```python:{file_path}
     from __future__ import annotations
-
 
     class HelperClass:
         def __init__(self, name):
@@ -151,7 +154,6 @@ class Graph:
     from __future__ import annotations
     from collections import defaultdict
 
-
     class Graph:
         def __init__(self, vertices):
             self.graph = defaultdict(list)
@@ -184,14 +186,8 @@ def test_bubble_sort_helper() -> None:
     )
 
     expected_read_write_context = """
-from bubble_sort_with_math import sorter
 import math
-
-def sort_from_another_file(arr):
-    sorted_arr = sorter(arr)
-    return sorted_arr
-
-
+from bubble_sort_with_math import sorter
 
 def sorter(arr):
     arr.sort()
@@ -199,87 +195,15 @@ def sorter(arr):
     print(x)
     return arr
 
+
+
+def sort_from_another_file(arr):
+    sorted_arr = sorter(arr)
+    return sorted_arr
+
 """
     expected_read_only_context = ""
 
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
-
-
-def test_repo_helper() -> None:
-    path_to_file = (
-        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever" / "main.py"
-    )
-    path_to_utils = (
-        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever" / "utils.py"
-    )
-    function_to_optimize = FunctionToOptimize(
-        function_name="fetch_and_process_data",
-        file_path=str(path_to_file),
-        parents=[],
-        starting_line=None,
-        ending_line=None,
-    )
-
-    read_write_context, read_only_context = get_code_optimization_context(
-        function_to_optimize, Path(__file__).resolve().parent.parent
-    )
-    expected_read_write_context = """
-     import requests
-from globals import API_URL
-from utils import DataProcessor
-
-def fetch_and_process_data():
-    # Use the global variable for the request
-    response = requests.get(API_URL)
-    response.raise_for_status()
-
-    raw_data = response.text
-
-    # Use code from another file (utils.py)
-    processor = DataProcessor()
-    processed = processor.process_data(raw_data)
-    processed = processor.add_prefix(processed)
-
-    return processed
-
-
-
-class DataProcessor:
-
-    def process_data(self, raw_data: str) -> str:
-        \"\"\"Process raw data by converting it to uppercase.\"\"\"
-        return raw_data.upper()
-
-    def add_prefix(self, data: str, prefix: str = "PREFIX_") -> str:
-        \"\"\"Add a prefix to the processed data.\"\"\"
-        return prefix + data
-    """
-    expected_read_only_context = f"""
-```python:{path_to_file}
-if __name__ == "__main__":
-    result = fetch_and_process_data()
-    print("Processed data:", result)
-```
-```python:{path_to_utils}
-import math
-
-
-class DataProcessor:
-    \"\"\"A class for processing data.\"\"\"
-
-    number = 1
-
-    def __init__(self, default_prefix: str = "PREFIX_"):
-        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
-        self.default_prefix = default_prefix
-        self.number += math.log(self.number)
-
-    def __repr__(self) -> str:
-        \"\"\"Return a string representation of the DataProcessor.\"\"\"
-        return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
-```
-"""
     assert read_write_context.strip() == dedent(expected_read_write_context).strip()
     assert read_only_context.strip() == dedent(expected_read_only_context).strip()
 
@@ -569,7 +493,27 @@ class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
     """Interface for cache backends used by the persistent cache decorator."""
 
     def __init__(self) -> None: ...
+    
+    def hash_key(
+        self,
+        *,
+        func: Callable[_P, Any],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> tuple[str, _KEY_T]: ...
 
+    def encode(self, *, data: Any) -> _STORE_T:  # noqa: ANN401
+        ...
+
+    def decode(self, *, data: _STORE_T) -> Any:  # noqa: ANN401
+        ...
+
+    def get(self, *, key: tuple[str, _KEY_T]) -> tuple[datetime.datetime, _STORE_T] | None: ...
+
+    def delete(self, *, key: tuple[str, _KEY_T]) -> None: ...
+
+    def put(self, *, key: tuple[str, _KEY_T], data: _STORE_T) -> None: ...
+    
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
 _CacheBackendT = TypeVar("_CacheBackendT", bound=CacheBackend)
@@ -885,3 +829,462 @@ class HelperClass:
             read_write_context, read_only_context = get_code_optimization_context(
                 function_to_optimize, opt.args.project_root
             )
+
+
+def test_repo_helper() -> None:
+    path_to_file = (
+        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever" / "main.py"
+    )
+    path_to_utils = (
+        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever" / "utils.py"
+    )
+    function_to_optimize = FunctionToOptimize(
+        function_name="fetch_and_process_data",
+        file_path=str(path_to_file),
+        parents=[],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    read_write_context, read_only_context = get_code_optimization_context(
+        function_to_optimize,
+        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever",
+    )
+    expected_read_write_context = """
+     import requests
+from globals import API_URL
+from utils import DataProcessor
+
+class DataProcessor:
+
+    def process_data(self, raw_data: str) -> str:
+        \"\"\"Process raw data by converting it to uppercase.\"\"\"
+        return raw_data.upper()
+
+    def add_prefix(self, data: str, prefix: str = "PREFIX_") -> str:
+        \"\"\"Add a prefix to the processed data.\"\"\"
+        return prefix + data
+
+
+
+def fetch_and_process_data():
+    # Use the global variable for the request
+    response = requests.get(API_URL)
+    response.raise_for_status()
+
+    raw_data = response.text
+
+    # Use code from another file (utils.py)
+    processor = DataProcessor()
+    processed = processor.process_data(raw_data)
+    processed = processor.add_prefix(processed)
+
+    return processed
+
+    """
+    expected_read_only_context = f"""
+```python:{path_to_utils}
+import math
+
+GLOBAL_VAR = 10
+
+
+class DataProcessor:
+    \"\"\"A class for processing data.\"\"\"
+
+    number = 1
+
+    def __init__(self, default_prefix: str = "PREFIX_"):
+        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
+        self.default_prefix = default_prefix
+        self.number += math.log(self.number)
+
+    def __repr__(self) -> str:
+        \"\"\"Return a string representation of the DataProcessor.\"\"\"
+        return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
+```
+```python:{path_to_file}
+if __name__ == "__main__":
+    result = fetch_and_process_data()
+    print("Processed data:", result)
+```
+"""
+    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
+    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+
+
+def test_repo_helper_of_helper() -> None:
+    path_to_file = (
+        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever" / "main.py"
+    )
+    path_to_utils = (
+        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever" / "utils.py"
+    )
+    path_to_transform_utils = (
+        Path(__file__).resolve().parent.parent
+        / "code_to_optimize"
+        / "code_directories"
+        / "retriever"
+        / "transform_utils.py"
+    )
+    function_to_optimize = FunctionToOptimize(
+        function_name="fetch_and_transform_data",
+        file_path=str(path_to_file),
+        parents=[],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    read_write_context, read_only_context = get_code_optimization_context(
+        function_to_optimize,
+        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever",
+    )
+    expected_read_write_context = """
+from transform_utils import DataTransformer
+import requests
+from globals import API_URL
+from utils import DataProcessor
+
+class DataProcessor:
+
+    def process_data(self, raw_data: str) -> str:
+        \"\"\"Process raw data by converting it to uppercase.\"\"\"
+        return raw_data.upper()
+
+    def transform_data(self, data: str) -> str:
+        \"\"\"Transform the processed data\"\"\"
+        return DataTransformer().transform(data)
+
+
+
+def fetch_and_transform_data():
+    # Use the global variable for the request
+    response = requests.get(API_URL)
+
+    raw_data = response.text
+
+    # Use code from another file (utils.py)
+    processor = DataProcessor()
+    processed = processor.process_data(raw_data)
+    transformed = processor.transform_data(processed)
+
+    return transformed
+
+    """
+    expected_read_only_context = f"""
+```python:{path_to_utils}
+import math
+
+GLOBAL_VAR = 10
+
+
+class DataProcessor:
+    \"\"\"A class for processing data.\"\"\"
+
+    number = 1
+
+    def __init__(self, default_prefix: str = "PREFIX_"):
+        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
+        self.default_prefix = default_prefix
+        self.number += math.log(self.number)
+
+    def __repr__(self) -> str:
+        \"\"\"Return a string representation of the DataProcessor.\"\"\"
+        return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
+```
+```python:{path_to_file}
+if __name__ == "__main__":
+    result = fetch_and_process_data()
+    print("Processed data:", result)
+```
+```python:{path_to_transform_utils}
+class DataTransformer:
+    def __init__(self):
+        self.data = None
+
+    def transform(self, data):
+        self.data = data
+        return self.data
+```
+"""
+
+    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
+    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+
+
+def test_repo_helper_of_helper_same_class() -> None:
+    path_to_utils = (
+        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever" / "utils.py"
+    )
+    path_to_transform_utils = (
+        Path(__file__).resolve().parent.parent
+        / "code_to_optimize"
+        / "code_directories"
+        / "retriever"
+        / "transform_utils.py"
+    )
+    function_to_optimize = FunctionToOptimize(
+        function_name="transform_data_own_method",
+        file_path=str(path_to_utils),
+        parents=[FunctionParent(name="DataProcessor", type="ClassDef")],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    read_write_context, read_only_context = get_code_optimization_context(
+        function_to_optimize,
+        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever",
+    )
+    expected_read_write_context = """
+from transform_utils import DataTransformer
+
+class DataTransformer:
+
+    def transform_using_own_method(self, data):
+        return self.transform(data)
+
+
+
+class DataProcessor:
+
+    def transform_data_own_method(self, data: str) -> str:
+        \"\"\"Transform the processed data using own method\"\"\"
+        return DataTransformer().transform_using_own_method(data)
+
+"""
+    expected_read_only_context = f"""
+```python:{path_to_transform_utils}
+class DataTransformer:
+    def __init__(self):
+        self.data = None
+
+    def transform(self, data):
+        self.data = data
+        return self.data
+```
+```python:{path_to_utils}
+import math
+
+GLOBAL_VAR = 10
+
+
+class DataProcessor:
+    \"\"\"A class for processing data.\"\"\"
+
+    number = 1
+
+    def __init__(self, default_prefix: str = "PREFIX_"):
+        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
+        self.default_prefix = default_prefix
+        self.number += math.log(self.number)
+
+    def __repr__(self) -> str:
+        \"\"\"Return a string representation of the DataProcessor.\"\"\"
+        return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
+```
+
+"""
+
+    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
+    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+
+
+def test_repo_helper_of_helper_same_file() -> None:
+    path_to_utils = (
+        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever" / "utils.py"
+    )
+    path_to_transform_utils = (
+        Path(__file__).resolve().parent.parent
+        / "code_to_optimize"
+        / "code_directories"
+        / "retriever"
+        / "transform_utils.py"
+    )
+    function_to_optimize = FunctionToOptimize(
+        function_name="transform_data_same_file_function",
+        file_path=str(path_to_utils),
+        parents=[FunctionParent(name="DataProcessor", type="ClassDef")],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    read_write_context, read_only_context = get_code_optimization_context(
+        function_to_optimize,
+        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever",
+    )
+    expected_read_write_context = """
+from transform_utils import DataTransformer
+
+class DataTransformer:
+
+    def transform_using_same_file_function(self, data):
+        return update_data(data)
+
+
+
+class DataProcessor:
+
+    def transform_data_same_file_function(self, data: str) -> str:
+        \"\"\"Transform the processed data using a function from the same file\"\"\"
+        return DataTransformer().transform_using_same_file_function(data)
+    """
+    expected_read_only_context = f"""
+```python:{path_to_transform_utils}
+class DataTransformer:
+    def __init__(self):
+        self.data = None
+
+
+def update_data(data):
+    return data + " updated"
+```
+```python:{path_to_utils}
+import math
+
+GLOBAL_VAR = 10
+
+
+class DataProcessor:
+    \"\"\"A class for processing data.\"\"\"
+
+    number = 1
+
+    def __init__(self, default_prefix: str = "PREFIX_"):
+        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
+        self.default_prefix = default_prefix
+        self.number += math.log(self.number)
+
+    def __repr__(self) -> str:
+        \"\"\"Return a string representation of the DataProcessor.\"\"\"
+        return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
+```
+"""
+
+    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
+    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+
+
+def test_repo_helper_all_same_file() -> None:
+    path_to_transform_utils = (
+        Path(__file__).resolve().parent.parent
+        / "code_to_optimize"
+        / "code_directories"
+        / "retriever"
+        / "transform_utils.py"
+    )
+    function_to_optimize = FunctionToOptimize(
+        function_name="transform_data_all_same_file",
+        file_path=str(path_to_transform_utils),
+        parents=[FunctionParent(name="DataTransformer", type="ClassDef")],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    read_write_context, read_only_context = get_code_optimization_context(
+        function_to_optimize,
+        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever",
+    )
+    expected_read_write_context = """
+class DataTransformer:
+
+    def transform_using_own_method(self, data):
+        return self.transform(data)
+
+    def transform_data_all_same_file(self, data):
+        new_data = update_data(data)
+        return self.transform_using_own_method(new_data)
+
+
+def update_data(data):
+    return data + " updated"
+    """
+    expected_read_only_context = f"""
+```python:{path_to_transform_utils}
+class DataTransformer:
+    def __init__(self):
+        self.data = None
+    
+    def transform(self, data):
+        self.data = data
+        return self.data
+```
+
+"""
+
+    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
+    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+
+
+def test_repo_helper_circular_dependency() -> None:
+    path_to_transform_utils = (
+        Path(__file__).resolve().parent.parent
+        / "code_to_optimize"
+        / "code_directories"
+        / "retriever"
+        / "transform_utils.py"
+    )
+    path_to_utils = (
+        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever" / "utils.py"
+    )
+    function_to_optimize = FunctionToOptimize(
+        function_name="circular_dependency",
+        file_path=str(path_to_transform_utils),
+        parents=[FunctionParent(name="DataTransformer", type="ClassDef")],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    read_write_context, read_only_context = get_code_optimization_context(
+        function_to_optimize,
+        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever",
+    )
+    expected_read_write_context = """
+from transform_utils import DataTransformer
+from code_to_optimize.code_directories.retriever.utils import DataProcessor
+
+class DataProcessor:
+
+    def circular_dependency(self, data: str) -> str:
+        \"\"\"Test circular dependency\"\"\"
+        return DataTransformer().circular_dependency(data)
+
+
+
+class DataTransformer:
+
+    def circular_dependency(self, data):
+        return DataProcessor().circular_dependency(data)
+
+
+    """
+    expected_read_only_context = f"""
+```python:{path_to_utils}
+import math
+
+GLOBAL_VAR = 10
+
+
+class DataProcessor:
+    \"\"\"A class for processing data.\"\"\"
+
+    number = 1
+
+    def __init__(self, default_prefix: str = "PREFIX_"):
+        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
+        self.default_prefix = default_prefix
+        self.number += math.log(self.number)
+
+    def __repr__(self) -> str:
+        \"\"\"Return a string representation of the DataProcessor.\"\"\"
+        return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
+```
+```python:{path_to_transform_utils}
+class DataTransformer:
+    def __init__(self):
+        self.data = None
+```
+
+"""
+
+    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
+    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
