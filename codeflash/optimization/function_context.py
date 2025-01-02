@@ -57,8 +57,7 @@ def belongs_to_function_qualified(name: Name, qualified_function_name: str) -> b
             if name.type == "function":
                 return get_qualified_name(name.module_name, name.full_name) == qualified_function_name
         return False
-    except ValueError as e:
-        logger.exception(f"Error while checking if {name.full_name} belongs to {qualified_function_name}: {e}")
+    except ValueError:
         return False
 
 

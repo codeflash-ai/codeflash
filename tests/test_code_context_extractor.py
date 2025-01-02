@@ -91,7 +91,7 @@ def test_code_replacement10() -> None:
             return HelperClass(self.name).helper_method()
 """
     expected_read_only_context = f"""
-    ```python:{file_path}
+    ```python:{file_path.relative_to(file_path.parent)}
     from __future__ import annotations
 
     class HelperClass:
@@ -150,7 +150,7 @@ class Graph:
 
 """
     expected_read_only_context = f"""
-    ```python:{file_path}
+    ```python:{file_path.relative_to(file_path.parent)}
     from __future__ import annotations
     from collections import defaultdict
 
@@ -485,7 +485,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         )
         """
         expected_read_only_context = f'''
-```python:{file_path}
+```python:{file_path.relative_to(opt.args.project_root)}
 _P = ParamSpec("_P")
 _KEY_T = TypeVar("_KEY_T")
 _STORE_T = TypeVar("_STORE_T")
@@ -612,7 +612,7 @@ class HelperClass:
         return self.x
         """
         expected_read_only_context = f"""
-```python:{file_path}
+```python:{file_path.relative_to(opt.args.project_root)}
 class MyClass:
     \"\"\"A class with a helper method.\"\"\"
     def __init__(self):
@@ -695,7 +695,7 @@ class HelperClass:
         return self.x
         """
         expected_read_only_context = f"""
-```python:{file_path}
+```python:{file_path.relative_to(opt.args.project_root)}
 class MyClass:
     def __init__(self):
         self.x = 1
@@ -832,12 +832,9 @@ class HelperClass:
 
 
 def test_repo_helper() -> None:
-    path_to_file = (
-        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever" / "main.py"
-    )
-    path_to_utils = (
-        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever" / "utils.py"
-    )
+    project_root = Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever"
+    path_to_file = project_root / "main.py"
+    path_to_utils = project_root / "utils.py"
     function_to_optimize = FunctionToOptimize(
         function_name="fetch_and_process_data",
         file_path=str(path_to_file),
@@ -846,10 +843,7 @@ def test_repo_helper() -> None:
         ending_line=None,
     )
 
-    read_write_context, read_only_context = get_code_optimization_context(
-        function_to_optimize,
-        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever",
-    )
+    read_write_context, read_only_context = get_code_optimization_context(function_to_optimize, project_root)
     expected_read_write_context = """
      import requests
 from globals import API_URL
@@ -883,7 +877,7 @@ def fetch_and_process_data():
 
     """
     expected_read_only_context = f"""
-```python:{path_to_utils}
+```python:{path_to_utils.relative_to(project_root)}
 import math
 
 GLOBAL_VAR = 10
@@ -903,7 +897,7 @@ class DataProcessor:
         \"\"\"Return a string representation of the DataProcessor.\"\"\"
         return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
 ```
-```python:{path_to_file}
+```python:{path_to_file.relative_to(project_root)}
 if __name__ == "__main__":
     result = fetch_and_process_data()
     print("Processed data:", result)
@@ -914,19 +908,10 @@ if __name__ == "__main__":
 
 
 def test_repo_helper_of_helper() -> None:
-    path_to_file = (
-        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever" / "main.py"
-    )
-    path_to_utils = (
-        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever" / "utils.py"
-    )
-    path_to_transform_utils = (
-        Path(__file__).resolve().parent.parent
-        / "code_to_optimize"
-        / "code_directories"
-        / "retriever"
-        / "transform_utils.py"
-    )
+    project_root = Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever"
+    path_to_file = project_root / "main.py"
+    path_to_utils = project_root / "utils.py"
+    path_to_transform_utils = project_root / "transform_utils.py"
     function_to_optimize = FunctionToOptimize(
         function_name="fetch_and_transform_data",
         file_path=str(path_to_file),
@@ -935,10 +920,7 @@ def test_repo_helper_of_helper() -> None:
         ending_line=None,
     )
 
-    read_write_context, read_only_context = get_code_optimization_context(
-        function_to_optimize,
-        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever",
-    )
+    read_write_context, read_only_context = get_code_optimization_context(function_to_optimize, project_root)
     expected_read_write_context = """
 from transform_utils import DataTransformer
 import requests
@@ -972,7 +954,7 @@ def fetch_and_transform_data():
 
     """
     expected_read_only_context = f"""
-```python:{path_to_utils}
+```python:{path_to_utils.relative_to(project_root)}
 import math
 
 GLOBAL_VAR = 10
@@ -992,12 +974,12 @@ class DataProcessor:
         \"\"\"Return a string representation of the DataProcessor.\"\"\"
         return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
 ```
-```python:{path_to_file}
+```python:{path_to_file.relative_to(project_root)}
 if __name__ == "__main__":
     result = fetch_and_process_data()
     print("Processed data:", result)
 ```
-```python:{path_to_transform_utils}
+```python:{path_to_transform_utils.relative_to(project_root)}
 class DataTransformer:
     def __init__(self):
         self.data = None
@@ -1013,16 +995,9 @@ class DataTransformer:
 
 
 def test_repo_helper_of_helper_same_class() -> None:
-    path_to_utils = (
-        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever" / "utils.py"
-    )
-    path_to_transform_utils = (
-        Path(__file__).resolve().parent.parent
-        / "code_to_optimize"
-        / "code_directories"
-        / "retriever"
-        / "transform_utils.py"
-    )
+    project_root = Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever"
+    path_to_utils = project_root / "utils.py"
+    path_to_transform_utils = project_root / "transform_utils.py"
     function_to_optimize = FunctionToOptimize(
         function_name="transform_data_own_method",
         file_path=str(path_to_utils),
@@ -1031,10 +1006,7 @@ def test_repo_helper_of_helper_same_class() -> None:
         ending_line=None,
     )
 
-    read_write_context, read_only_context = get_code_optimization_context(
-        function_to_optimize,
-        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever",
-    )
+    read_write_context, read_only_context = get_code_optimization_context(function_to_optimize, project_root)
     expected_read_write_context = """
 from transform_utils import DataTransformer
 
@@ -1053,7 +1025,7 @@ class DataProcessor:
 
 """
     expected_read_only_context = f"""
-```python:{path_to_transform_utils}
+```python:{path_to_transform_utils.relative_to(project_root)}
 class DataTransformer:
     def __init__(self):
         self.data = None
@@ -1062,7 +1034,7 @@ class DataTransformer:
         self.data = data
         return self.data
 ```
-```python:{path_to_utils}
+```python:{path_to_utils.relative_to(project_root)}
 import math
 
 GLOBAL_VAR = 10
@@ -1090,16 +1062,9 @@ class DataProcessor:
 
 
 def test_repo_helper_of_helper_same_file() -> None:
-    path_to_utils = (
-        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever" / "utils.py"
-    )
-    path_to_transform_utils = (
-        Path(__file__).resolve().parent.parent
-        / "code_to_optimize"
-        / "code_directories"
-        / "retriever"
-        / "transform_utils.py"
-    )
+    project_root = Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever"
+    path_to_utils = project_root / "utils.py"
+    path_to_transform_utils = project_root / "transform_utils.py"
     function_to_optimize = FunctionToOptimize(
         function_name="transform_data_same_file_function",
         file_path=str(path_to_utils),
@@ -1108,10 +1073,7 @@ def test_repo_helper_of_helper_same_file() -> None:
         ending_line=None,
     )
 
-    read_write_context, read_only_context = get_code_optimization_context(
-        function_to_optimize,
-        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever",
-    )
+    read_write_context, read_only_context = get_code_optimization_context(function_to_optimize, project_root)
     expected_read_write_context = """
 from transform_utils import DataTransformer
 
@@ -1129,7 +1091,7 @@ class DataProcessor:
         return DataTransformer().transform_using_same_file_function(data)
     """
     expected_read_only_context = f"""
-```python:{path_to_transform_utils}
+```python:{path_to_transform_utils.relative_to(project_root)}
 class DataTransformer:
     def __init__(self):
         self.data = None
@@ -1138,7 +1100,7 @@ class DataTransformer:
 def update_data(data):
     return data + " updated"
 ```
-```python:{path_to_utils}
+```python:{path_to_utils.relative_to(project_root)}
 import math
 
 GLOBAL_VAR = 10
@@ -1165,13 +1127,8 @@ class DataProcessor:
 
 
 def test_repo_helper_all_same_file() -> None:
-    path_to_transform_utils = (
-        Path(__file__).resolve().parent.parent
-        / "code_to_optimize"
-        / "code_directories"
-        / "retriever"
-        / "transform_utils.py"
-    )
+    project_root = Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever"
+    path_to_transform_utils = project_root / "transform_utils.py"
     function_to_optimize = FunctionToOptimize(
         function_name="transform_data_all_same_file",
         file_path=str(path_to_transform_utils),
@@ -1180,10 +1137,7 @@ def test_repo_helper_all_same_file() -> None:
         ending_line=None,
     )
 
-    read_write_context, read_only_context = get_code_optimization_context(
-        function_to_optimize,
-        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever",
-    )
+    read_write_context, read_only_context = get_code_optimization_context(function_to_optimize, project_root)
     expected_read_write_context = """
 class DataTransformer:
 
@@ -1199,7 +1153,7 @@ def update_data(data):
     return data + " updated"
     """
     expected_read_only_context = f"""
-```python:{path_to_transform_utils}
+```python:{path_to_transform_utils.relative_to(project_root)}
 class DataTransformer:
     def __init__(self):
         self.data = None
@@ -1216,16 +1170,9 @@ class DataTransformer:
 
 
 def test_repo_helper_circular_dependency() -> None:
-    path_to_transform_utils = (
-        Path(__file__).resolve().parent.parent
-        / "code_to_optimize"
-        / "code_directories"
-        / "retriever"
-        / "transform_utils.py"
-    )
-    path_to_utils = (
-        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever" / "utils.py"
-    )
+    project_root = Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever"
+    path_to_utils = project_root / "utils.py"
+    path_to_transform_utils = project_root / "transform_utils.py"
     function_to_optimize = FunctionToOptimize(
         function_name="circular_dependency",
         file_path=str(path_to_transform_utils),
@@ -1234,10 +1181,7 @@ def test_repo_helper_circular_dependency() -> None:
         ending_line=None,
     )
 
-    read_write_context, read_only_context = get_code_optimization_context(
-        function_to_optimize,
-        Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever",
-    )
+    read_write_context, read_only_context = get_code_optimization_context(function_to_optimize, project_root)
     expected_read_write_context = """
 from transform_utils import DataTransformer
 from code_to_optimize.code_directories.retriever.utils import DataProcessor
@@ -1258,7 +1202,7 @@ class DataTransformer:
 
     """
     expected_read_only_context = f"""
-```python:{path_to_utils}
+```python:{path_to_utils.relative_to(project_root)}
 import math
 
 GLOBAL_VAR = 10
@@ -1278,7 +1222,7 @@ class DataProcessor:
         \"\"\"Return a string representation of the DataProcessor.\"\"\"
         return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
 ```
-```python:{path_to_transform_utils}
+```python:{path_to_transform_utils.relative_to(project_root)}
 class DataTransformer:
     def __init__(self):
         self.data = None

@@ -151,7 +151,7 @@ def get_all_read_only_code_context(
                 project_root=project_root_path,
                 helper_functions_fqn=helpers_of_fto_fqn[file_path] | helpers_of_helpers_fqn[file_path],
             ),
-            file_path=Path(file_path),
+            file_path=file_path.relative_to(project_root_path),
         )
         if read_only_code_with_imports.code:
             read_only_code_markdown.code_strings.append(read_only_code_with_imports)
@@ -180,7 +180,7 @@ def get_all_read_only_code_context(
                 project_root=project_root_path,
                 helper_functions_fqn=helpers_of_helpers_no_overlap_fqn[file_path],
             ),
-            file_path=Path(file_path),
+            file_path=file_path.relative_to(project_root_path),
         )
         if read_only_code_with_imports.code:
             read_only_code_markdown.code_strings.append(read_only_code_with_imports)
