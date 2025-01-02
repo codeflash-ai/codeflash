@@ -15,9 +15,9 @@ from pydantic.dataclasses import dataclass
 from typing_extensions import Annotated
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.code_utils.code_utils import validate_python_code
 from codeflash.code_utils.coverage_utils import extract_dependent_function, generate_candidates
 from codeflash.code_utils.env_utils import is_end_to_end
-from codeflash.code_utils.code_utils import validate_python_code
 from codeflash.verification.test_results import TestResults, TestType
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
@@ -70,7 +70,7 @@ class CodeStringsMarkdown(BaseModel):
     def markdown(self) -> str:
         return "\n".join(
             [
-                f"```python{':' + str(code_string.file_path) if code_string.file_path else ''}\n{code_string.code}```"
+                f"```python{':' + str(code_string.file_path) if code_string.file_path else ''}\n{code_string.code.strip()}\n```"
                 for code_string in self.code_strings
             ]
         )
