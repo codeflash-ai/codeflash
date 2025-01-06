@@ -101,3 +101,8 @@ def validate_python_code(code: str) -> str:
         msg = f"Invalid Python code: {e.msg} (line {e.lineno}, column {e.offset})"
         raise ValueError(msg) from e
     return code
+
+
+def cleanup_paths(paths: list[Path]) -> None:
+    for path in paths:
+        path.unlink(missing_ok=True)

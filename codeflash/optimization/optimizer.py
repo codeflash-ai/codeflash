@@ -25,11 +25,13 @@ from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code, find_preexisting_objects
 from codeflash.code_utils.code_replacer import normalize_code, normalize_node, replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
+    cleanup_paths,
     file_name_from_test_module_name,
     get_run_tmp_file,
     module_name_from_file_path,
 )
 from codeflash.code_utils.config_consts import (
+    COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
     N_CANDIDATES,
     N_TESTS_TO_GENERATE,
@@ -342,16 +344,20 @@ class Optimizer:
         )
 
         console.rule()
-        if not is_successful(baseline_result):
-            for generated_test_path in generated_test_paths:
-                generated_test_path.unlink(missing_ok=True)
-            for generated_perf_test_path in generated_perf_test_paths:
-                generated_perf_test_path.unlink(missing_ok=True)
+        paths_to_cleanup = (
+            generated_test_paths + generated_perf_test_paths + list(instrumented_unittests_created_for_function)
+        )
 
-            for instrumented_path in instrumented_unittests_created_for_function:
-                instrumented_path.unlink(missing_ok=True)
+        if not is_successful(baseline_result):
+            cleanup_paths(paths_to_cleanup)
             return Failure(baseline_result.failure())
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
+        if (
+            not original_code_baseline.coverage_results
+            or original_code_baseline.coverage_results.coverage < COVERAGE_THRESHOLD
+        ):
+            cleanup_paths(paths_to_cleanup)
+            return Failure("Coverage is below threshold or not available.")
         best_optimization = None
 
         for u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
