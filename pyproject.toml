@@ -7,7 +7,7 @@ license = "BSL-1.1"
 authors = ["CodeFlash Inc. <contact@codeflash.ai>"]
 homepage = "https://codeflash.ai"
 readme = "README.md"
-packages = [{ include = "codeflash" }]
+packages = [{ include = "codeflash", format = ["sdist"] }]
 keywords = [
     "codeflash",
     "performance",
