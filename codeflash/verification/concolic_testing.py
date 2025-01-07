@@ -73,10 +73,6 @@ def generate_concolic_tests(
             ph("cli-optimize-concolic-tests", {"num_tests": num_discovered_concolic_tests})
 
         else:
-            (
-                logger.warning(
-                    "Error running CrossHair Cover" f"{': ' + cover_result.stderr if cover_result.stderr else '.'}"
-                )
-            )
+            logger.debug(f"Error running CrossHair Cover {': ' + cover_result.stderr if cover_result.stderr else '.'}")
             console.rule()
     return function_to_concolic_tests, concolic_test_suite_code
