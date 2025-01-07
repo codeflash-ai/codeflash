@@ -1,12 +1,20 @@
 import os
+from pathlib import Path
+from unittest.mock import Mock
 
 from codeflash.code_utils.env_utils import get_pr_number
-from codeflash.models.models import OptimizedCandidateResult
-from codeflash.result.critic import performance_gain, quantity_of_tests_critic, speedup_critic
+from codeflash.models.models import (
+    CodeOptimizationContext,
+    CoverageData,
+    CoverageStatus,
+    FunctionCoverage,
+    OptimizedCandidateResult,
+)
+from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults, TestType
 
 
-def test_performance_gain():
+def test_performance_gain() -> None:
     assert performance_gain(original_runtime_ns=1000, optimized_runtime_ns=0) == 0.0
 
     assert performance_gain(original_runtime_ns=1000, optimized_runtime_ns=500) == 1.0
@@ -18,7 +26,7 @@ def test_performance_gain():
     assert performance_gain(original_runtime_ns=1000, optimized_runtime_ns=1100) == -0.09090909090909091
 
 
-def test_speedup_critic():
+def test_speedup_critic() -> None:
     original_code_runtime = 1000
     best_runtime_until_now = 1000
     candidate_result = OptimizedCandidateResult(
@@ -58,7 +66,7 @@ def test_speedup_critic():
     assert speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now)  # 6% improvement
 
 
-def test_generated_test_critic():
+def test_generated_test_critic() -> None:
     test_1 = FunctionTestInvocation(
         id=InvocationId(
             test_module_path="",
@@ -67,7 +75,7 @@ def test_generated_test_critic():
             function_getting_tested="sorter",
             iteration_id="",
         ),
-        file_name="test_1",
+        file_name=Path("test_1"),
         did_pass=True,
         runtime=0,
         test_framework="pytest",
@@ -85,7 +93,7 @@ def test_generated_test_critic():
             function_getting_tested="sorter",
             iteration_id="",
         ),
-        file_name="test_2",
+        file_name=Path("test_2"),
         did_pass=True,
         runtime=0,
         test_framework="pytest",
@@ -103,7 +111,7 @@ def test_generated_test_critic():
             function_getting_tested="sorter",
             iteration_id="",
         ),
-        file_name="test_3",
+        file_name=Path("test_3"),
         did_pass=True,
         runtime=0,
         test_framework="pytest",
@@ -121,7 +129,7 @@ def test_generated_test_critic():
             function_getting_tested="sorter",
             iteration_id="",
         ),
-        file_name="test_4",
+        file_name=Path("test_4"),
         did_pass=False,
         runtime=0,
         test_framework="pytest",
@@ -139,7 +147,7 @@ def test_generated_test_critic():
             function_getting_tested="sorter",
             iteration_id="",
         ),
-        file_name="test_5",
+        file_name=Path("test_5"),
         did_pass=True,
         runtime=0,
         test_framework="pytest",
@@ -157,7 +165,7 @@ def test_generated_test_critic():
             function_getting_tested="sorter",
             iteration_id="",
         ),
-        file_name="test_6",
+        file_name=Path("test_6"),
         did_pass=True,
         runtime=0,
         test_framework="pytest",
@@ -313,3 +321,92 @@ def test_generated_test_critic():
     assert quantity_of_tests_critic(candidate_result)
 
     del os.environ["CODEFLASH_PR_NUMBER"]
+
+
+
+def test_coverage_critic() -> None:
+    mock_code_context = Mock(spec=CodeOptimizationContext)
+
+    passing_coverage = CoverageData(
+        file_path=Path("test_file.py"),
+        coverage=100.0,
+        function_name="test_function",
+        functions_being_tested=["function1", "function2"],
+        graph={},
+        code_context=mock_code_context,
+        main_func_coverage=FunctionCoverage(
+            name="test_function",
+            coverage=100.0,
+            executed_lines=[10],
+            unexecuted_lines=[2],
+            executed_branches=[[5]],
+            unexecuted_branches=[[1]]
+        ),
+        dependent_func_coverage=None,
+        status=CoverageStatus.PARSED_SUCCESSFULLY
+    )
+
+    assert coverage_critic(passing_coverage, "pytest") is True
+
+    border_coverage = CoverageData(
+        file_path=Path("test_file.py"),
+        coverage=50.0,
+        function_name="test_function",
+        functions_being_tested=["function1", "function2"],
+        graph={},
+        code_context=mock_code_context,
+        main_func_coverage=FunctionCoverage(
+            name="test_function",
+            coverage=50.0,
+            executed_lines=[10],
+            unexecuted_lines=[2],
+            executed_branches=[[5]],
+            unexecuted_branches=[[1]]
+        ),
+        dependent_func_coverage=None,
+        status=CoverageStatus.PARSED_SUCCESSFULLY
+    )
+
+    assert coverage_critic(border_coverage, "pytest") is True
+
+    failing_coverage = CoverageData(
+        file_path=Path("test_file.py"),
+        coverage=30.0,
+        function_name="test_function",
+        functions_being_tested=["function1", "function2"],
+        graph={},
+        code_context=mock_code_context,
+        main_func_coverage=FunctionCoverage(
+            name="test_function",
+            coverage=0.0,
+            executed_lines=[],
+            unexecuted_lines=[10],
+            executed_branches=[],
+            unexecuted_branches=[[5]]
+        ),
+        dependent_func_coverage=None,
+        status=CoverageStatus.PARSED_SUCCESSFULLY
+    )
+
+    assert coverage_critic(failing_coverage, "pytest") is False
+
+    unittest_coverage = CoverageData(
+        file_path=Path("test_file.py"),
+        coverage=0,
+        function_name="test_function",
+        functions_being_tested=["function1", "function2"],
+        graph={},
+        code_context=mock_code_context,
+        main_func_coverage=FunctionCoverage(
+            name="test_function",
+            coverage=0,
+            executed_lines=[10],
+            unexecuted_lines=[2],
+            executed_branches=[[5]],
+            unexecuted_branches=[[1]]
+        ),
+        dependent_func_coverage=None,
+        status=CoverageStatus.PARSED_SUCCESSFULLY
+    )
+
+    assert coverage_critic(unittest_coverage, "unittest") is True

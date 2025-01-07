@@ -31,7 +31,6 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.code_utils.config_consts import (
-    COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
     N_CANDIDATES,
     N_TESTS_TO_GENERATE,
@@ -64,7 +63,7 @@ from codeflash.models.models import (
 )
 from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
-from codeflash.result.critic import performance_gain, quantity_of_tests_critic, speedup_critic
+from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.concolic_testing import generate_concolic_tests
@@ -351,13 +350,8 @@ class Optimizer:
         if not is_successful(baseline_result):
             cleanup_paths(paths_to_cleanup)
             return Failure(baseline_result.failure())
+
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
-        if (
-            not original_code_baseline.coverage_results
-            or original_code_baseline.coverage_results.coverage < COVERAGE_THRESHOLD
-        ):
-            cleanup_paths(paths_to_cleanup)
-            return Failure("Coverage is below threshold or not available.")
         best_optimization = None
 
         for u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
@@ -537,9 +531,11 @@ class Optimizer:
                     speedup_ratios[candidate.optimization_id] = perf_gain
 
                     tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
-                    if speedup_critic(
-                        candidate_result, original_code_baseline.runtime, best_runtime_until_now
-                    ) and quantity_of_tests_critic(candidate_result):
+                    if (
+                        speedup_critic(candidate_result, original_code_baseline.runtime, best_runtime_until_now)
+                        and quantity_of_tests_critic(candidate_result)
+                        and coverage_critic(original_code_baseline.coverage_results, self.args.test_framework)
+                    ):
                         tree.add("This candidate is faster than the previous best candidate. 🚀")
                         tree.add(f"Original runtime: {humanize_runtime(original_code_baseline.runtime)}")
                         tree.add(
