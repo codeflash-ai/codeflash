@@ -336,7 +336,7 @@ class Optimizer:
             function_to_optimize=function_to_optimize, function_to_tests=function_to_all_tests
         )
 
-        baseline_result = self.establish_original_code_baseline(
+        baseline_result = self.establish_original_code_baseline(  # this needs better typing
             function_name=function_to_optimize_qualified_name,
             function_file_path=function_to_optimize.file_path,
             code_context=code_context,
@@ -352,6 +352,12 @@ class Optimizer:
             return Failure(baseline_result.failure())
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
+        if isinstance(original_code_baseline, OriginalCodeBaseline) and not coverage_critic(
+            original_code_baseline.coverage_results, self.args.test_framework
+        ):
+            cleanup_paths(paths_to_cleanup)
+            return Failure("The threshold for test coverage was not met.")
+
         best_optimization = None
 
         for u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
@@ -531,11 +537,9 @@ class Optimizer:
                     speedup_ratios[candidate.optimization_id] = perf_gain
 
                     tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
-                    if (
-                        speedup_critic(candidate_result, original_code_baseline.runtime, best_runtime_until_now)
-                        and quantity_of_tests_critic(candidate_result)
-                        and coverage_critic(original_code_baseline.coverage_results, self.args.test_framework)
-                    ):
+                    if speedup_critic(
+                        candidate_result, original_code_baseline.runtime, best_runtime_until_now
+                    ) and quantity_of_tests_critic(candidate_result):
                         tree.add("This candidate is faster than the previous best candidate. 🚀")
                         tree.add(f"Original runtime: {humanize_runtime(original_code_baseline.runtime)}")
                         tree.add(
