@@ -227,7 +227,6 @@ def test_numpy():
     j = np.float64(1.0)
     k = np.float64(1.0)
     assert not comparator(h, j)
-    print(comparator(j, k))
     assert comparator(j, k)
 
     l = np.int32(1)
