@@ -2,6 +2,7 @@ import datetime
 import decimal
 import enum
 import math
+import re
 import types
 from typing import Any
 
@@ -168,7 +169,10 @@ def comparator(orig: Any, new: Any) -> bool:
         ):
             return orig == new
 
-        if isinstance(orig, (datetime.datetime, datetime.date, datetime.timedelta, datetime.time, datetime.timezone)):
+        # re.Pattern can be made better by DFA Minimization and then comparing
+        if isinstance(
+            orig, (datetime.datetime, datetime.date, datetime.timedelta, datetime.time, datetime.timezone, re.Pattern)
+        ):
             return orig == new
 
         # If the object passed has a user defined __eq__ method, use that

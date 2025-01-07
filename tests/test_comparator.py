@@ -1,6 +1,7 @@
 import dataclasses
 import datetime
 import decimal
+import re
 from enum import Enum, Flag, IntFlag, auto
 
 import pydantic
@@ -188,6 +189,14 @@ def test_standard_python_library_objects():
     c = Color4.GREEN
     assert comparator(a, b)
     assert not comparator(a, c)
+
+    a: re.Pattern = re.compile("a")
+    b: re.Pattern = re.compile("a")
+    c: re.Pattern = re.compile("b")
+    d: re.Pattern = re.compile("a", re.IGNORECASE)
+    assert comparator(a, b)
+    assert not comparator(a, c)
+    assert not comparator(a, d)
 
 
 def test_numpy():
