@@ -72,9 +72,8 @@ def test_code_replacement10() -> None:
         function_name="main_method", file_path=file_path, parents=[FunctionParent("MainClass", "ClassDef")]
     )
 
-    read_write_context, read_only_context = get_code_optimization_context(
-        function_to_optimize=func_top_optimize, project_root_path=file_path.parent
-    )
+    code_ctx = get_code_optimization_context(function_to_optimize=func_top_optimize, project_root_path=file_path.parent)
+    read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
 
     expected_read_write_context = """
     from __future__ import annotations
@@ -119,10 +118,8 @@ def test_class_method_dependencies() -> None:
         ending_line=None,
     )
 
-    read_write_context, read_only_context = get_code_optimization_context(
-        function_to_optimize, file_path.parent.resolve()
-    )
-
+    code_ctx = get_code_optimization_context(function_to_optimize, file_path.parent.resolve())
+    read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     expected_read_write_context = """
 from __future__ import annotations
 
@@ -181,9 +178,8 @@ def test_bubble_sort_helper() -> None:
         ending_line=None,
     )
 
-    read_write_context, read_only_context = get_code_optimization_context(
-        function_to_optimize, Path(__file__).resolve().parent.parent
-    )
+    code_ctx = get_code_optimization_context(function_to_optimize, Path(__file__).resolve().parent.parent)
+    read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
 
     expected_read_write_context = """
 import math
@@ -397,9 +393,8 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
             ending_line=None,
         )
 
-        read_write_context, read_only_context = get_code_optimization_context(
-            function_to_optimize, opt.args.project_root
-        )
+        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+        read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
         expected_read_write_context = """
          class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
 
@@ -599,9 +594,8 @@ class HelperClass:
             ending_line=None,
         )
 
-        read_write_context, read_only_context = get_code_optimization_context(
-            function_to_optimize, opt.args.project_root
-        )
+        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+        read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
         expected_read_write_context = """
 class MyClass:
     def target_method(self):
@@ -680,9 +674,8 @@ class HelperClass:
             ending_line=None,
         )
 
-        read_write_context, read_only_context = get_code_optimization_context(
-            function_to_optimize, opt.args.project_root
-        )
+        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+        read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
         # In this scenario, the read-only code context is too long, so the read-only docstrings are removed.
         expected_read_write_context = """
 class MyClass:
@@ -759,9 +752,8 @@ class HelperClass:
             ending_line=None,
         )
 
-        read_write_context, read_only_context = get_code_optimization_context(
-            function_to_optimize, opt.args.project_root
-        )
+        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+        read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
         # In this scenario, the read-only code context is too long even after removing docstrings, hence we remove it completely.
         expected_read_write_context = """
 class MyClass:
@@ -826,9 +818,7 @@ class HelperClass:
         )
         # In this scenario, the read-writable code is too long, so we abort.
         with pytest.raises(ValueError, match="Read-writable code has exceeded token limit, cannot proceed"):
-            read_write_context, read_only_context = get_code_optimization_context(
-                function_to_optimize, opt.args.project_root
-            )
+            code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
 
 
 def test_repo_helper() -> None:
@@ -843,7 +833,8 @@ def test_repo_helper() -> None:
         ending_line=None,
     )
 
-    read_write_context, read_only_context = get_code_optimization_context(function_to_optimize, project_root)
+    code_ctx = get_code_optimization_context(function_to_optimize, project_root)
+    read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     expected_read_write_context = """
      import requests
 from globals import API_URL
@@ -920,7 +911,8 @@ def test_repo_helper_of_helper() -> None:
         ending_line=None,
     )
 
-    read_write_context, read_only_context = get_code_optimization_context(function_to_optimize, project_root)
+    code_ctx = get_code_optimization_context(function_to_optimize, project_root)
+    read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     expected_read_write_context = """
 from transform_utils import DataTransformer
 import requests
@@ -1006,7 +998,8 @@ def test_repo_helper_of_helper_same_class() -> None:
         ending_line=None,
     )
 
-    read_write_context, read_only_context = get_code_optimization_context(function_to_optimize, project_root)
+    code_ctx = get_code_optimization_context(function_to_optimize, project_root)
+    read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     expected_read_write_context = """
 from transform_utils import DataTransformer
 
@@ -1073,7 +1066,8 @@ def test_repo_helper_of_helper_same_file() -> None:
         ending_line=None,
     )
 
-    read_write_context, read_only_context = get_code_optimization_context(function_to_optimize, project_root)
+    code_ctx = get_code_optimization_context(function_to_optimize, project_root)
+    read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     expected_read_write_context = """
 from transform_utils import DataTransformer
 
@@ -1137,7 +1131,8 @@ def test_repo_helper_all_same_file() -> None:
         ending_line=None,
     )
 
-    read_write_context, read_only_context = get_code_optimization_context(function_to_optimize, project_root)
+    code_ctx = get_code_optimization_context(function_to_optimize, project_root)
+    read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     expected_read_write_context = """
 class DataTransformer:
 
@@ -1181,7 +1176,8 @@ def test_repo_helper_circular_dependency() -> None:
         ending_line=None,
     )
 
-    read_write_context, read_only_context = get_code_optimization_context(function_to_optimize, project_root)
+    code_ctx = get_code_optimization_context(function_to_optimize, project_root)
+    read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     expected_read_write_context = """
 from transform_utils import DataTransformer
 from code_to_optimize.code_directories.retriever.utils import DataProcessor

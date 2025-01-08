@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 import ast
+from collections import defaultdict
 from functools import lru_cache
 from typing import TYPE_CHECKING, TypeVar
 
 import libcst as cst
 
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    from libcst import FunctionDef
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.models import CodeOptimizationContext, OptimizedCandidate, ValidCode
@@ -39,93 +38,89 @@ class OptimFunctionCollector(cst.CSTVisitor):
 
     def __init__(
         self,
-        function_name: str,
-        class_name: str | None,
-        contextual_functions: set[tuple[str, str]],
         preexisting_objects: list[tuple[str, list[FunctionParent]]] | None = None,
+        function_names: set[tuple[str | None, str]] | None = None,
     ) -> None:
         super().__init__()
-        if preexisting_objects is None:
-            preexisting_objects = []
-        self.function_name = function_name
-        self.class_name = class_name
-        self.optim_body: FunctionDef | None = None
-        self.optim_new_class_functions: list[cst.FunctionDef] = []
-        self.optim_new_functions: list[cst.FunctionDef] = []
-        self.preexisting_objects = preexisting_objects
-        self.contextual_functions = contextual_functions.union({(self.class_name, self.function_name)})
+        self.preexisting_objects = preexisting_objects if preexisting_objects is not None else []
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
-        parent = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-        parent2 = None
-        try:
-            if parent is not None and isinstance(parent, cst.Module):
-                parent2 = self.get_metadata(cst.metadata.ParentNodeProvider, parent)
-        except:
-            pass
-        if node.name.value == self.function_name:
-            self.optim_body = node
+        self.function_names = function_names  # set of (class_name, function_name)
+        self.modified_functions: dict[
+            tuple[str | None, str], cst.FunctionDef
+        ] = {}  # keys are (class_name, function_name)
+        self.new_functions: list[cst.FunctionDef] = []
+        self.new_class_functions: dict[str, list[cst.FunctionDef]] = defaultdict(list)
+        self.current_class = None
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
+        if (self.current_class, node.name.value) in self.function_names:
+            self.modified_functions[(self.current_class, node.name.value)] = node
         elif (
             self.preexisting_objects
             and (node.name.value, []) not in self.preexisting_objects
-            and (isinstance(parent, cst.Module) or (parent2 is not None and not isinstance(parent2, cst.ClassDef)))
+            and self.current_class is None
         ):
-            self.optim_new_functions.append(node)
+            self.new_functions.append(node)
+        return False
 
-    def visit_ClassDef_body(self, node: cst.ClassDef) -> None:
+    def visit_ClassDef(self, node: cst.ClassDef) -> bool:
+        if self.current_class:
+            return False  # If already in a class, do not recurse deeper
+        self.current_class = node.name.value
+
         parents = [FunctionParent(name=node.name.value, type="ClassDef")]
         for child_node in node.body.body:
             if (
                 self.preexisting_objects
                 and isinstance(child_node, cst.FunctionDef)
-                and (node.name.value, child_node.name.value) not in self.contextual_functions
                 and (child_node.name.value, parents) not in self.preexisting_objects
             ):
-                self.optim_new_class_functions.append(child_node)
+                self.new_class_functions[node.name.value].append(child_node)
+        return True
+
+    def leave_ClassDef(self, node: cst.ClassDef) -> None:
+        if self.current_class:
+            self.current_class = None
 
 
 class OptimFunctionReplacer(cst.CSTTransformer):
     def __init__(
         self,
-        function_name: str,
-        optim_body: cst.FunctionDef,
-        optim_new_class_functions: list[cst.FunctionDef],
-        optim_new_functions: list[cst.FunctionDef],
-        class_name: str | None = None,
+        modified_functions: dict[tuple[str | None, str], cst.FunctionDef] = {},
+        new_functions: list[cst.FunctionDef] = [],
+        new_class_functions: dict[str, list[cst.FunctionDef]] = defaultdict(list),
     ) -> None:
         super().__init__()
-        self.function_name = function_name
-        self.optim_body = optim_body
-        self.optim_new_class_functions = optim_new_class_functions
-        self.optim_new_functions = optim_new_functions
-        self.class_name = class_name
-        self.depth: int = 0
-        self.in_class: bool = False
+        self.modified_functions = modified_functions
+        self.new_functions = new_functions
+        self.new_class_functions = new_class_functions
+        self.current_class = None
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
         return False
 
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
-        if original_node.name.value == self.function_name and (self.depth == 0 or (self.depth == 1 and self.in_class)):
-            return updated_node.with_changes(body=self.optim_body.body, decorators=self.optim_body.decorators)
+        if (self.current_class, original_node.name.value) in self.modified_functions:
+            node = self.modified_functions[(self.current_class, original_node.name.value)]
+            return updated_node.with_changes(body=node.body, decorators=node.decorators)
+
         return updated_node
 
     def visit_ClassDef(self, node: cst.ClassDef) -> bool:
-        self.depth += 1
-        if self.in_class:
-            return False
-        self.in_class = (self.depth == 1) and (node.name.value == self.class_name)
-        return self.in_class
+        if self.current_class:
+            return False  # If already in a class, do not recurse deeper
+        self.current_class = node.name.value
+        return True
 
     def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:
-        self.depth -= 1
-        if self.in_class and (self.depth == 0) and (original_node.name.value == self.class_name):
-            self.in_class = False
-            return updated_node.with_changes(
-                body=updated_node.body.with_changes(
-                    body=(list(updated_node.body.body) + self.optim_new_class_functions)
+        if self.current_class and self.current_class == original_node.name.value:
+            self.current_class = None
+            if original_node.name.value in self.new_class_functions:
+                return updated_node.with_changes(
+                    body=updated_node.body.with_changes(
+                        body=(list(updated_node.body.body) + list(self.new_class_functions[original_node.name.value]))
+                    )
                 )
-            )
         return updated_node
 
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
@@ -139,18 +134,14 @@ class OptimFunctionReplacer(cst.CSTTransformer):
                 class_index = index
         if max_function_index is not None:
             node = node.with_changes(
-                body=(
-                    *node.body[: max_function_index + 1],
-                    *self.optim_new_functions,
-                    *node.body[max_function_index + 1 :],
-                )
+                body=(*node.body[: max_function_index + 1], *self.new_functions, *node.body[max_function_index + 1 :])
             )
         elif class_index is not None:
             node = node.with_changes(
-                body=(*node.body[: class_index + 1], *self.optim_new_functions, *node.body[class_index + 1 :])
+                body=(*node.body[: class_index + 1], *self.new_functions, *node.body[class_index + 1 :])
             )
         else:
-            node = node.with_changes(body=(*self.optim_new_functions, *node.body))
+            node = node.with_changes(body=(*self.new_functions, *node.body))
         return node
 
 
@@ -159,7 +150,6 @@ def replace_functions_in_file(
     original_function_names: list[str],
     optimized_code: str,
     preexisting_objects: list[tuple[str, list[FunctionParent]]],
-    contextual_functions: set[tuple[str, str]],
 ) -> str:
     parsed_function_names = []
     for original_function_name in original_function_names:
@@ -171,34 +161,22 @@ def replace_functions_in_file(
             msg = f"Unable to find {original_function_name}. Returning unchanged source code."
             logger.error(msg)
             return source_code
-        parsed_function_names.append((function_name, class_name))
+        parsed_function_names.append((class_name, function_name))
 
+    # Collect functions we want to modify from the optimized code
     module = cst.metadata.MetadataWrapper(cst.parse_module(optimized_code))
+    visitor = OptimFunctionCollector(preexisting_objects, set(parsed_function_names))
+    module.visit(visitor)
 
-    for function_name, class_name in parsed_function_names:
-        visitor = OptimFunctionCollector(function_name, class_name, contextual_functions, preexisting_objects)
-        module.visit(visitor)
-
-        if visitor.optim_body is None and not preexisting_objects:
-            continue
-        if visitor.optim_body is None:
-            msg = f"Unable to find function {function_name} in optimized code. Returning unchanged source code."
-            logger.error(msg)
-            console.rule()
-            return source_code
-
-        transformer = OptimFunctionReplacer(
-            visitor.function_name,
-            visitor.optim_body,
-            visitor.optim_new_class_functions,
-            visitor.optim_new_functions,
-            class_name=class_name,
-        )
-        original_module = cst.parse_module(source_code)
-        modified_tree = original_module.visit(transformer)
-        source_code = modified_tree.code
-
-    return source_code
+    # Replace these functions in the original code
+    transformer = OptimFunctionReplacer(
+        modified_functions=visitor.modified_functions,
+        new_functions=visitor.new_functions,
+        new_class_functions=visitor.new_class_functions,
+    )
+    original_module = cst.parse_module(source_code)
+    modified_tree = original_module.visit(transformer)
+    return modified_tree.code
 
 
 def replace_functions_and_add_imports(
@@ -208,14 +186,11 @@ def replace_functions_and_add_imports(
     file_path_of_module_with_function_to_optimize: Path,
     module_abspath: Path,
     preexisting_objects: list[tuple[str, list[FunctionParent]]],
-    contextual_functions: set[tuple[str, str]],
     project_root_path: Path,
 ) -> str:
     return add_needed_imports_from_module(
         optimized_code,
-        replace_functions_in_file(
-            source_code, function_names, optimized_code, preexisting_objects, contextual_functions
-        ),
+        replace_functions_in_file(source_code, function_names, optimized_code, preexisting_objects),
         file_path_of_module_with_function_to_optimize,
         module_abspath,
         project_root_path,
@@ -228,7 +203,6 @@ def replace_function_definitions_in_module(
     file_path_of_module_with_function_to_optimize: Path,
     module_abspath: Path,
     preexisting_objects: list[tuple[str, list[FunctionParent]]],
-    contextual_functions: set[tuple[str, str]],
     project_root_path: Path,
 ) -> bool:
     source_code: str = module_abspath.read_text(encoding="utf8")
@@ -239,7 +213,6 @@ def replace_function_definitions_in_module(
         file_path_of_module_with_function_to_optimize,
         module_abspath,
         preexisting_objects,
-        contextual_functions,
         project_root_path,
     )
     if is_zero_diff(source_code, new_code):
@@ -268,7 +241,6 @@ def replace_optimized_code(
             function_to_optimize.file_path,
             function_to_optimize.file_path,
             code_context.preexisting_objects,
-            code_context.contextual_dunder_methods,
             project_root,
         )
         for candidate in candidates
@@ -298,7 +270,6 @@ def replace_optimized_code(
                 function_to_optimize.file_path,
                 module_path,
                 [],
-                code_context.contextual_dunder_methods,
                 project_root,
             )
             for module_path in module_paths

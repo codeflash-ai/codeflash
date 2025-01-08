@@ -80,7 +80,6 @@ class CodeOptimizationContext(BaseModel):
     code_to_optimize_with_helpers: str
     read_writable_code: str = Field(min_length=1)
     read_only_context_code: str = ""
-    contextual_dunder_methods: set[tuple[str, str]]
     helper_functions: list[FunctionSource]
     preexisting_objects: list[tuple[str, list[FunctionParent]]]
 

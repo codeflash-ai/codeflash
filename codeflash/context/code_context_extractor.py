@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from collections import defaultdict
+from itertools import chain
 from pathlib import Path
 
 import jedi
@@ -11,24 +12,23 @@ from jedi.api.classes import Name
 from libcst import CSTNode
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module
+from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
 from codeflash.code_utils.code_utils import get_qualified_name, path_belongs_to_site_packages
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeString, CodeStringsMarkdown
+from codeflash.models.models import CodeOptimizationContext, CodeString, CodeStringsMarkdown, FunctionSource
 from codeflash.optimization.function_context import belongs_to_function_qualified
 
 
 def get_code_optimization_context(
     function_to_optimize: FunctionToOptimize, project_root_path: Path, token_limit: int = 8000
-) -> tuple[str, str]:
+) -> CodeOptimizationContext:
     # Get qualified names and fully qualified names(fqn) of helpers
-    helpers_of_fto, helpers_of_fto_fqn = get_file_path_to_helper_functions_dict(
+    helpers_of_fto, helpers_of_fto_fqn, helpers_of_fto_obj_list = get_file_path_to_helper_functions_dict(
         {function_to_optimize.file_path: {function_to_optimize.qualified_name}}, project_root_path
     )
-    helpers_of_helpers, helpers_of_helpers_fqn = get_file_path_to_helper_functions_dict(
+    helpers_of_helpers, helpers_of_helpers_fqn, _ = get_file_path_to_helper_functions_dict(
         helpers_of_fto, project_root_path
     )
-
     # Add function to optimize
     helpers_of_fto[function_to_optimize.file_path].add(function_to_optimize.qualified_name)
     helpers_of_fto_fqn[function_to_optimize.file_path].add(
@@ -36,7 +36,7 @@ def get_code_optimization_context(
     )
 
     # Extract code
-    final_read_writable_code = get_all_read_writable_code(helpers_of_fto, helpers_of_fto_fqn, project_root_path)
+    final_read_writable_code = get_all_read_writable_code(helpers_of_fto, helpers_of_fto_fqn, project_root_path).code
     read_only_code_markdown = get_all_read_only_code_context(
         helpers_of_fto,
         helpers_of_fto_fqn,
@@ -52,10 +52,24 @@ def get_code_optimization_context(
     if final_read_writable_tokens > token_limit:
         raise ValueError("Read-writable code has exceeded token limit, cannot proceed")
 
+    # Setup preexisting objects for code replacer TODO: should remove duplicates
+    preexisting_objects = list(
+        chain(
+            find_preexisting_objects(final_read_writable_code),
+            *(find_preexisting_objects(codestring.code) for codestring in read_only_code_markdown.code_strings),
+        )
+    )
     read_only_code_markdown_tokens = len(tokenizer.encode(read_only_code_markdown.markdown))
     total_tokens = final_read_writable_tokens + read_only_code_markdown_tokens
     if total_tokens <= token_limit:
-        return CodeString(code=final_read_writable_code).code, read_only_code_markdown.markdown
+        return CodeOptimizationContext(
+            code_to_optimize_with_helpers="",
+            read_writable_code=CodeString(code=final_read_writable_code).code,
+            read_only_context_code=read_only_code_markdown.markdown,
+            helper_functions=helpers_of_fto_obj_list,
+            preexisting_objects=preexisting_objects,
+        )
+
     logger.debug("Code context has exceeded token limit, removing docstrings from read-only code")
 
     # Extract read only code without docstrings
@@ -70,15 +84,29 @@ def get_code_optimization_context(
     read_only_code_no_docstring_markdown_tokens = len(tokenizer.encode(read_only_code_no_docstring_markdown.markdown))
     total_tokens = final_read_writable_tokens + read_only_code_no_docstring_markdown_tokens
     if total_tokens <= token_limit:
-        return CodeString(code=final_read_writable_code).code, read_only_code_no_docstring_markdown.markdown
+        return CodeOptimizationContext(
+            code_to_optimize_with_helpers="",
+            read_writable_code=CodeString(code=final_read_writable_code).code,
+            read_only_context_code=read_only_code_no_docstring_markdown.markdown,
+            contextual_dunder_methods=set(),
+            helper_functions=helpers_of_fto_obj_list,
+            preexisting_objects=preexisting_objects,
+        )
 
     logger.debug("Code context has exceeded token limit, removing read-only code")
-    return CodeString(code=final_read_writable_code).code, ""
+    return CodeOptimizationContext(
+        code_to_optimize_with_helpers="",
+        read_writable_code=CodeString(code=final_read_writable_code).code,
+        read_only_context_code="",
+        contextual_dunder_methods=set(),
+        helper_functions=helpers_of_fto_obj_list,
+        preexisting_objects=preexisting_objects,
+    )
 
 
 def get_all_read_writable_code(
     helpers_of_fto: dict[Path, set[str]], helpers_of_fto_fqn: dict[Path, set[str]], project_root_path: Path
-) -> str:
+) -> CodeString:
     final_read_writable_code = ""
     # Extract code from file paths that contain fto and first degree helpers
     for file_path, qualified_function_names in helpers_of_fto.items():
@@ -103,7 +131,7 @@ def get_all_read_writable_code(
                 project_root=project_root_path,
                 helper_functions_fqn=helpers_of_fto_fqn[file_path],
             )
-    return final_read_writable_code
+    return CodeString(code=final_read_writable_code)
 
 
 def get_all_read_only_code_context(
@@ -189,9 +217,10 @@ def get_all_read_only_code_context(
 
 def get_file_path_to_helper_functions_dict(
     file_path_to_qualified_function_names: dict[Path, set[str]], project_root_path: Path
-) -> tuple[dict[Path, set[str]], dict[Path, set[str]]]:
+) -> tuple[dict[Path, set[str]], dict[Path, set[str]], list[FunctionSource]]:
     file_path_to_helper_function_qualified_names = defaultdict(set)
     file_path_to_helper_function_fqn = defaultdict(set)
+    function_source_list: list[FunctionSource] = []
     for file_path in file_path_to_qualified_function_names:
         script = jedi.Script(path=file_path, project=jedi.Project(path=project_root_path))
         file_refs = script.get_names(all_scopes=True, definitions=False, references=True)
@@ -229,8 +258,18 @@ def get_file_path_to_helper_functions_dict(
                             get_qualified_name(definition.module_name, definition.full_name)
                         )
                         file_path_to_helper_function_fqn[definition_path].add(definition.full_name)
+                        function_source_list.append(
+                            FunctionSource(
+                                file_path=definition_path,
+                                qualified_name=get_qualified_name(definition.module_name, definition.full_name),
+                                fully_qualified_name=definition.full_name,
+                                only_function_name=definition.name,
+                                source_code=definition.get_line_code(),
+                                jedi_definition=definition,
+                            )
+                        )
 
-    return file_path_to_helper_function_qualified_names, file_path_to_helper_function_fqn
+    return file_path_to_helper_function_qualified_names, file_path_to_helper_function_fqn, function_source_list
 
 
 def is_dunder_method(name: str) -> bool:
