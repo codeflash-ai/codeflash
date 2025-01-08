@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
 from enum import Enum
 from pathlib import Path
-from typing import Iterator, Optional, cast
+from typing import Optional, cast
 
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
@@ -151,22 +152,30 @@ class TestResults(BaseModel):
             )
         return tree
 
+    def usable_runtime_data_by_test_case(self) -> dict[InvocationId, list[int]]:
+        for result in self.test_results:
+            if result.did_pass and not result.runtime:
+                logger.debug(
+                    f"Ignoring test case that passed but had no runtime -> {result.id}, Loop # {result.loop_index}"
+                )
+        usable_runtimes = [
+            (result.id, result.runtime) for result in self.test_results if result.did_pass and result.runtime
+        ]
+        return {
+            usable_id: [runtime[1] for runtime in usable_runtimes if runtime[0] == usable_id]
+            for usable_id in {runtime[0] for runtime in usable_runtimes}
+        }
+
     def total_passed_runtime(self) -> int:
         """Calculate the sum of runtimes of all test cases that passed, where a testcase runtime
         is the minimum value of all looped execution runtimes.
 
         :return: The runtime in nanoseconds.
         """
-        for result in self.test_results:
-            if result.did_pass and not result.runtime:
-                logger.debug(
-                    f"Ignoring test case that passed but had no runtime -> {result.id}, Loop # {result.loop_index}"
-                )
-        usable_results = [result for result in self.test_results if result.did_pass and result.runtime]
         return sum(
             [
-                min([result.runtime for result in usable_results if result.id == invocation_id])
-                for invocation_id in {result.id for result in usable_results}
+                min(usable_runtime_data)
+                for invocation_id, usable_runtime_data in self.usable_runtime_data_by_test_case().items()
             ]
         )
 
