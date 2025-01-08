@@ -86,14 +86,14 @@ class OptimFunctionCollector(cst.CSTVisitor):
 class OptimFunctionReplacer(cst.CSTTransformer):
     def __init__(
         self,
-        modified_functions: dict[tuple[str | None, str], cst.FunctionDef] = {},
-        new_functions: list[cst.FunctionDef] = [],
-        new_class_functions: dict[str, list[cst.FunctionDef]] = defaultdict(list),
+        modified_functions: dict[tuple[str | None, str], cst.FunctionDef] = None,
+        new_functions: list[cst.FunctionDef] = None,
+        new_class_functions: dict[str, list[cst.FunctionDef]] = None,
     ) -> None:
         super().__init__()
-        self.modified_functions = modified_functions
-        self.new_functions = new_functions
-        self.new_class_functions = new_class_functions
+        self.modified_functions = modified_functions if modified_functions is not None else {}
+        self.new_functions = new_functions if new_functions is not None else []
+        self.new_class_functions = new_class_functions if new_class_functions is not None else defaultdict(list)
         self.current_class = None
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:

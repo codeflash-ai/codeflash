@@ -88,7 +88,6 @@ def get_code_optimization_context(
             code_to_optimize_with_helpers="",
             read_writable_code=CodeString(code=final_read_writable_code).code,
             read_only_context_code=read_only_code_no_docstring_markdown.markdown,
-            contextual_dunder_methods=set(),
             helper_functions=helpers_of_fto_obj_list,
             preexisting_objects=preexisting_objects,
         )
@@ -98,7 +97,6 @@ def get_code_optimization_context(
         code_to_optimize_with_helpers="",
         read_writable_code=CodeString(code=final_read_writable_code).code,
         read_only_context_code="",
-        contextual_dunder_methods=set(),
         helper_functions=helpers_of_fto_obj_list,
         preexisting_objects=preexisting_objects,
     )
