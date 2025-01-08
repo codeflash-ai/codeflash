@@ -12,9 +12,11 @@ from codeflash.cli_cmds.console import logger
 
 def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
     if not full_qualified_name.startswith(module_name):
-        raise ValueError(f"{full_qualified_name} does not start with {module_name}")
+        msg = f"{full_qualified_name} does not start with {module_name}"
+        raise ValueError(msg)
     if module_name == full_qualified_name:
-        raise ValueError(f"{full_qualified_name} is the same as {module_name}")
+        msg = f"{full_qualified_name} is the same as {module_name}"
+        raise ValueError(msg)
     return full_qualified_name[len(module_name) + 1 :]
 
 
@@ -94,10 +96,15 @@ def is_class_defined_in_file(class_name: str, file_path: Path) -> bool:
 
 
 def validate_python_code(code: str) -> str:
-    """Validates a string of python code by attempting to compile it"""
+    """Validate a string of Python code by attempting to compile it."""
     try:
         compile(code, "<string>", "exec")
     except SyntaxError as e:
         msg = f"Invalid Python code: {e.msg} (line {e.lineno}, column {e.offset})"
         raise ValueError(msg) from e
     return code
+
+
+def cleanup_paths(paths: list[Path]) -> None:
+    for path in paths:
+        path.unlink(missing_ok=True)

@@ -25,6 +25,7 @@ from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code, find_preexisting_objects
 from codeflash.code_utils.code_replacer import normalize_code, normalize_node, replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
+    cleanup_paths,
     file_name_from_test_module_name,
     get_run_tmp_file,
     module_name_from_file_path,
@@ -62,7 +63,7 @@ from codeflash.models.models import (
 )
 from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
-from codeflash.result.critic import performance_gain, quantity_of_tests_critic, speedup_critic
+from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.concolic_testing import generate_concolic_tests
@@ -335,23 +336,28 @@ class Optimizer:
             function_to_optimize=function_to_optimize, function_to_tests=function_to_all_tests
         )
 
-        baseline_result = self.establish_original_code_baseline(
+        baseline_result = self.establish_original_code_baseline(  # this needs better typing
             function_name=function_to_optimize_qualified_name,
             function_file_path=function_to_optimize.file_path,
             code_context=code_context,
         )
 
         console.rule()
-        if not is_successful(baseline_result):
-            for generated_test_path in generated_test_paths:
-                generated_test_path.unlink(missing_ok=True)
-            for generated_perf_test_path in generated_perf_test_paths:
-                generated_perf_test_path.unlink(missing_ok=True)
+        paths_to_cleanup = (
+            generated_test_paths + generated_perf_test_paths + list(instrumented_unittests_created_for_function)
+        )
 
-            for instrumented_path in instrumented_unittests_created_for_function:
-                instrumented_path.unlink(missing_ok=True)
+        if not is_successful(baseline_result):
+            cleanup_paths(paths_to_cleanup)
             return Failure(baseline_result.failure())
+
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
+        if isinstance(original_code_baseline, OriginalCodeBaseline) and not coverage_critic(
+            original_code_baseline.coverage_results, self.args.test_framework
+        ):
+            cleanup_paths(paths_to_cleanup)
+            return Failure("The threshold for test coverage was not met.")
+
         best_optimization = None
 
         for u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
