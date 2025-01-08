@@ -5,16 +5,47 @@ from pathlib import Path
 import pytest
 
 from codeflash.code_utils.code_utils import (
+    cleanup_paths,
+    file_name_from_test_module_name,
     file_path_from_module_name,
     get_all_function_names,
     get_imports_from_file,
+    get_qualified_name,
     get_run_tmp_file,
     is_class_defined_in_file,
     module_name_from_file_path,
     path_belongs_to_site_packages,
-    file_name_from_test_module_name,
 )
 
+
+@pytest.fixture
+def multiple_existing_and_non_existing_files(tmp_path: Path) -> list[Path]:
+    existing_files = [tmp_path / f"existing_file{i}.txt" for i in range(3)]
+    non_existing_files = [tmp_path / f"non_existing_file{i}.txt" for i in range(2)]
+    for file in existing_files:
+        file.touch()
+    return existing_files + non_existing_files
+
+def test_get_qualified_name_valid() -> None:
+    module_name = "codeflash"
+    full_qualified_name = "codeflash.utils.module"
+
+    result = get_qualified_name(module_name, full_qualified_name)
+    assert result == "utils.module"
+
+
+def test_get_qualified_name_invalid_prefix() -> None:
+    module_name = "codeflash"
+    full_qualified_name = "otherflash.utils.module"
+    with pytest.raises(ValueError, match="does not start with codeflash"):
+        get_qualified_name(module_name, full_qualified_name)
+
+
+def test_get_qualified_name_same_name() -> None:
+    module_name = "codeflash"
+    full_qualified_name = "codeflash"
+    with pytest.raises(ValueError, match="is the same as codeflash"):
+        get_qualified_name(module_name, full_qualified_name)
 
 # tests for module_name_from_file_path
 def test_module_name_from_file_path() -> None:
@@ -49,7 +80,6 @@ def test_module_name_from_file_path_with_root_as_file() -> None:
     assert module_name == "code_utils"
 
 
-# tests for get_imports_from_file
 def test_get_imports_from_file_with_file_path(tmp_path: Path) -> None:
     test_file = tmp_path / "test_file.py"
     test_file.write_text("import os\nfrom sys import path\n")
@@ -61,8 +91,6 @@ def test_get_imports_from_file_with_file_path(tmp_path: Path) -> None:
     assert imports[0].names[0].name == "os"
     assert imports[1].module == "sys"
     assert imports[1].names[0].name == "path"
-
-
 def test_get_imports_from_file_with_file_string() -> None:
     file_string = "import os\nfrom sys import path\n"
 
@@ -73,7 +101,6 @@ def test_get_imports_from_file_with_file_string() -> None:
     assert imports[0].names[0].name == "os"
     assert imports[1].module == "sys"
     assert imports[1].names[0].name == "path"
-
 
 def test_get_imports_from_file_with_file_ast() -> None:
     file_string = "import os\nfrom sys import path\n"
@@ -87,8 +114,7 @@ def test_get_imports_from_file_with_file_ast() -> None:
     assert imports[1].module == "sys"
     assert imports[1].names[0].name == "path"
 
-
-def test_get_imports_from_file_with_syntax_error(caplog) -> None:
+def test_get_imports_from_file_with_syntax_error(caplog: pytest.LogCaptureFixture) -> None:
     file_string = "import os\nfrom sys import path\ninvalid syntax"
 
     imports = get_imports_from_file(file_string=file_string)
@@ -147,8 +173,7 @@ async def bar():
     assert success is True
     assert function_names == ["foo", "bar"]
 
-
-def test_get_all_function_names_with_syntax_error(caplog) -> None:
+def test_get_all_function_names_with_syntax_error(caplog: pytest.LogCaptureFixture) -> None:
     code = """
 def foo():
     pass
@@ -209,25 +234,21 @@ def test_get_run_tmp_file_reuses_temp_directory() -> None:
     assert tmp_file_path1.parent.name.startswith("codeflash_")
     assert tmp_file_path1.parent.exists()
 
-
-# tests for path_belongs_to_site_packages
-def test_path_belongs_to_site_packages_with_site_package_path(monkeypatch) -> None:
+def test_path_belongs_to_site_packages_with_site_package_path(monkeypatch: pytest.MonkeyPatch) -> None:
     site_packages = [Path("/usr/local/lib/python3.9/site-packages")]
     monkeypatch.setattr(site, "getsitepackages", lambda: site_packages)
 
     file_path = Path("/usr/local/lib/python3.9/site-packages/some_package")
     assert path_belongs_to_site_packages(file_path) is True
 
-
-def test_path_belongs_to_site_packages_with_non_site_package_path(monkeypatch) -> None:
+def test_path_belongs_to_site_packages_with_non_site_package_path(monkeypatch: pytest.MonkeyPatch) -> None:
     site_packages = [Path("/usr/local/lib/python3.9/site-packages")]
     monkeypatch.setattr(site, "getsitepackages", lambda: site_packages)
 
     file_path = Path("/usr/local/lib/python3.9/other_directory/some_package")
     assert path_belongs_to_site_packages(file_path) is False
 
-
-def test_path_belongs_to_site_packages_with_relative_path(monkeypatch) -> None:
+def test_path_belongs_to_site_packages_with_relative_path(monkeypatch: pytest.MonkeyPatch) -> None:
     site_packages = [Path("/usr/local/lib/python3.9/site-packages")]
     monkeypatch.setattr(site, "getsitepackages", lambda: site_packages)
 
@@ -273,7 +294,7 @@ def test_is_class_defined_in_file_with_non_existing_file() -> None:
 
 
 @pytest.fixture
-def base_dir(tmp_path):
+def base_dir(tmp_path: Path) -> Path:
     base_dir = tmp_path / "project"
     base_dir.mkdir(parents=True, exist_ok=True)
     (base_dir / "test_module.py").touch()
@@ -282,26 +303,32 @@ def base_dir(tmp_path):
     return base_dir
 
 
-def test_existing_module(base_dir):
+def test_existing_module(base_dir: Path) -> None:
     result = file_name_from_test_module_name("test_module", base_dir)
     assert result == base_dir / "test_module.py"
 
 
-def test_existing_submodule(base_dir):
+def test_existing_submodule(base_dir: Path) -> None:
     result = file_name_from_test_module_name("subdir.test_submodule", base_dir)
     assert result == base_dir / "subdir" / "test_submodule.py"
 
 
-def test_non_existing_module(base_dir):
+def test_non_existing_module(base_dir: Path) -> None:
     result = file_name_from_test_module_name("non_existing_module", base_dir)
     assert result is None
 
 
-def test_partial_module_name(base_dir):
+def test_partial_module_name(base_dir: Path) -> None:
     result = file_name_from_test_module_name("subdir.test_submodule.TestClass", base_dir)
     assert result == base_dir / "subdir" / "test_submodule.py"
 
 
-def test_partial_module_name2(base_dir):
+def test_partial_module_name2(base_dir: Path) -> None:
     result = file_name_from_test_module_name("subdir.test_submodule.TestClass.TestClass2", base_dir)
     assert result == base_dir / "subdir" / "test_submodule.py"
+
+
+def test_cleanup_paths(multiple_existing_and_non_existing_files: list[Path]) -> None:
+    cleanup_paths(multiple_existing_and_non_existing_files)
+    for file in multiple_existing_and_non_existing_files:
+        assert not file.exists()

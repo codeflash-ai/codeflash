@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.config_consts import MIN_IMPROVEMENT_THRESHOLD
-from codeflash.models.models import OptimizedCandidateResult
+from codeflash.code_utils.config_consts import COVERAGE_THRESHOLD, MIN_IMPROVEMENT_THRESHOLD
+from codeflash.models.models import CoverageData, OptimizedCandidateResult
 from codeflash.verification.test_results import TestType
 
 
@@ -53,7 +54,14 @@ def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool
     elif pass_count >= 2:
         return True
     # If only one test passed, check if it's a REPLAY_TEST
-    if pass_count == 1 and report[TestType.REPLAY_TEST]["passed"] == 1:
-        return True
+    return bool(pass_count == 1 and report[TestType.REPLAY_TEST]["passed"] == 1)
 
+
+def coverage_critic(original_code_coverage: CoverageData | None, test_framework: str) -> bool:
+    """Check if the coverage meets the threshold."""
+    if test_framework == "unittest":
+        logger.debug("Coverage critic is not implemented for unittest yet.")
+        return True
+    if original_code_coverage:
+        return original_code_coverage.coverage >= COVERAGE_THRESHOLD
     return False
