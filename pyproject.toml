@@ -92,7 +92,6 @@ rich = ">=13.8.1"
 lxml = ">=5.3.0"
 crosshair-tool = ">=0.0.78"
 coverage = ">=7.6.4"
-numpy = ">=2.2.0"
 numba = ">=0.60.0"
 
 
