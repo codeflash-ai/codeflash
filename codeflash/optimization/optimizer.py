@@ -22,7 +22,7 @@ from rich.tree import Tree
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code, find_preexisting_objects
+from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code
 from codeflash.code_utils.code_replacer import normalize_code, normalize_node, replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     cleanup_paths,
@@ -254,7 +254,8 @@ class Optimizer:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
 
-        code_print(code_context.code_to_optimize_with_helpers)
+        logger.info("Code to be optimized:")
+        code_print(code_context.read_writable_code)
 
         original_module_path = module_name_from_file_path(function_to_optimize.file_path, self.args.project_root)
 
@@ -662,27 +663,19 @@ class Optimizer:
         optimized_code: str,
         qualified_function_name: str,
     ) -> bool:
-        did_update = replace_function_definitions_in_module(
-            function_names=[qualified_function_name],
-            optimized_code=optimized_code,
-            file_path_of_module_with_function_to_optimize=function_to_optimize_file_path,
-            module_abspath=function_to_optimize_file_path,
-            preexisting_objects=code_context.preexisting_objects,
-            contextual_functions=code_context.contextual_dunder_methods,
-            project_root_path=self.args.project_root,
-        )
-        helper_functions_by_module_abspath = defaultdict(set)
+        did_update = False
+        read_writable_functions_by_file_path = defaultdict(set)
+        read_writable_functions_by_file_path[function_to_optimize_file_path].add(qualified_function_name)
         for helper_function in code_context.helper_functions:
             if helper_function.jedi_definition.type != "class":
-                helper_functions_by_module_abspath[helper_function.file_path].add(helper_function.qualified_name)
-        for module_abspath, qualified_names in helper_functions_by_module_abspath.items():
+                read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
+        for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
             did_update |= replace_function_definitions_in_module(
                 function_names=list(qualified_names),
                 optimized_code=optimized_code,
                 file_path_of_module_with_function_to_optimize=function_to_optimize_file_path,
                 module_abspath=module_abspath,
-                preexisting_objects=[],
-                contextual_functions=code_context.contextual_dunder_methods,
+                preexisting_objects=code_context.preexisting_objects,
                 project_root_path=self.args.project_root,
             )
         return did_update
@@ -733,25 +726,19 @@ class Optimizer:
             project_root,
             helper_functions,
         )
-        preexisting_objects = find_preexisting_objects(code_to_optimize_with_helpers)
-        contextual_dunder_methods.update(helper_dunder_methods)
 
-        # Will eventually refactor to use this function instead of the above
         try:
-            read_writable_code, read_only_context_code = code_context_extractor.get_code_optimization_context(
-                function_to_optimize, project_root
-            )
+            new_code_ctx = code_context_extractor.get_code_optimization_context(function_to_optimize, project_root)
         except ValueError as e:
             return Failure(str(e))
 
         return Success(
             CodeOptimizationContext(
                 code_to_optimize_with_helpers=code_to_optimize_with_helpers_and_imports,
-                read_writable_code=read_writable_code,
-                read_only_context_code=read_only_context_code,
-                contextual_dunder_methods=contextual_dunder_methods,
-                helper_functions=helper_functions,
-                preexisting_objects=preexisting_objects,
+                read_writable_code=new_code_ctx.read_writable_code,
+                read_only_context_code=new_code_ctx.read_only_context_code,
+                helper_functions=new_code_ctx.helper_functions,  # only functions that are read writable
+                preexisting_objects=new_code_ctx.preexisting_objects,
             )
         )
 

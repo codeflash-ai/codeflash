@@ -6,7 +6,7 @@ from argparse import Namespace
 from collections import defaultdict
 from pathlib import Path
 
-from codeflash.code_utils.code_extractor import delete___future___aliased_imports
+from codeflash.code_utils.code_extractor import delete___future___aliased_imports, find_preexisting_objects
 from codeflash.code_utils.code_replacer import (
     is_zero_diff,
     replace_functions_and_add_imports,
@@ -74,10 +74,7 @@ print("Hello world")
 """
 
     function_name: str = "NewClass.new_function"
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = [
-        ("new_function", [FunctionParent(name="NewClass", type="ClassDef")])
-    ]
-    contextual_functions: set[tuple[str, str]] = {("NewClass", "__init__")}
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=[function_name],
@@ -85,7 +82,6 @@ print("Hello world")
         file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
-        contextual_functions=contextual_functions,
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
@@ -133,12 +129,14 @@ class NewClass:
 def totally_new_function(value):
     return value
 
+def other_function(st):
+    return(st * 2)
+
 print("Hello world")
 """
 
     function_name: str = "NewClass.new_function"
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = [("new_function", []), ("other_function", [])]
-    contextual_functions: set[tuple[str, str]] = {("NewClass", "__init__")}
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=[function_name],
@@ -146,7 +144,6 @@ print("Hello world")
         file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
-        contextual_functions=contextual_functions,
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
@@ -194,12 +191,14 @@ def yet_another_function(values):
 def other_function(st):
     return(st * 2)
 
+def totally_new_function(value):
+    return value
+
 print("Salut monde")
 """
 
-    function_names: list[str] = ["module.other_function"]
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = []
-    contextual_functions: set[tuple[str, str]] = set()
+    function_names: list[str] = ["other_function"]
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -207,7 +206,6 @@ print("Salut monde")
         file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
-        contextual_functions=contextual_functions,
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
@@ -258,12 +256,14 @@ def yet_another_function(values):
 def other_function(st):
     return(st * 2)
 
+def totally_new_function(value):
+    return value
+
 print("Salut monde")
 """
 
-    function_names: list[str] = ["module.yet_another_function", "module.other_function"]
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = []
-    contextual_functions: set[tuple[str, str]] = set()
+    function_names: list[str] = ["yet_another_function", "other_function"]
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -271,7 +271,6 @@ print("Salut monde")
         file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
-        contextual_functions=contextual_functions,
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
@@ -318,8 +317,7 @@ def supersort(doink):
 """
 
     function_names: list[str] = ["sorter_deps"]
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = [("sorter_deps", [])]
-    contextual_functions: set[tuple[str, str]] = set()
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -327,7 +325,6 @@ def supersort(doink):
         file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
-        contextual_functions=contextual_functions,
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
@@ -396,14 +393,14 @@ def blab(st):
 
 print("Not cool")
 """
+    preexisting_objects = find_preexisting_objects(original_code_main) + find_preexisting_objects(original_code_helper)
     new_main_code: str = replace_functions_and_add_imports(
         source_code=original_code_main,
         function_names=["other_function"],
         optimized_code=optim_code,
         file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
-        preexisting_objects=[("other_function", []), ("yet_another_function", []), ("blob", [])],
-        contextual_functions=set(),
+        preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_main_code == expected_main
@@ -414,8 +411,7 @@ print("Not cool")
         optimized_code=optim_code,
         file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
-        preexisting_objects=[],
-        contextual_functions=set(),
+        preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_helper_code == expected_helper
@@ -602,14 +598,8 @@ class CacheConfig(BaseConfig):
             )
 """
     function_names: list[str] = ["CacheSimilarityEvalConfig.from_config"]
-    parents = [FunctionParent(name="CacheConfig", type="ClassDef")]
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = [("__init__", parents), ("from_config", parents)]
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
 
-    contextual_functions: set[tuple[str, str]] = {
-        ("CacheSimilarityEvalConfig", "__init__"),
-        ("CacheConfig", "__init__"),
-        ("CacheInitConfig", "__init__"),
-    }
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -617,7 +607,6 @@ class CacheConfig(BaseConfig):
         file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
-        contextual_functions=contextual_functions,
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
@@ -681,10 +670,7 @@ def test_test_libcst_code_replacement8() -> None:
         return np.sum(a != b) / a.size
 '''
     function_names: list[str] = ["_EmbeddingDistanceChainMixin._hamming_distance"]
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = [
-        ("_hamming_distance", [FunctionParent("_EmbeddingDistanceChainMixin", "ClassDef")])
-    ]
-    contextual_functions: set[tuple[str, str]] = set()
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -692,7 +678,6 @@ def test_test_libcst_code_replacement8() -> None:
         file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
-        contextual_functions=contextual_functions,
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
@@ -738,10 +723,8 @@ def totally_new_function(value: Optional[str]):
 
 print("Hello world")
 """
-    parents = [FunctionParent(name="NewClass", type="ClassDef")]
     function_name: str = "NewClass.__init__"
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = [("__init__", parents), ("__call__", parents)]
-    contextual_functions: set[tuple[str, str]] = {("NewClass", "__init__"), ("NewClass", "__call__")}
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=[function_name],
@@ -749,7 +732,6 @@ print("Hello world")
         file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
-        contextual_functions=contextual_functions,
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
@@ -847,13 +829,11 @@ def test_code_replacement11() -> None:
     function_name: str = "Fu.foo"
     parents = [FunctionParent("Fu", "ClassDef")]
     preexisting_objects: list[tuple[str, list[FunctionParent]]] = [("foo", parents), ("real_bar", parents)]
-    contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_in_file(
         source_code=original_code,
         original_function_names=[function_name],
         optimized_code=optim_code,
         preexisting_objects=preexisting_objects,
-        contextual_functions=contextual_functions,
     )
     assert new_code == expected_code
 
@@ -888,13 +868,11 @@ def test_code_replacement12() -> None:
 '''
 
     preexisting_objects: list[tuple[str, list[FunctionParent]]] = []
-    contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_in_file(
         source_code=original_code,
         original_function_names=["Fu.real_bar"],
         optimized_code=optim_code,
         preexisting_objects=preexisting_objects,
-        contextual_functions=contextual_functions,
     )
     assert new_code == expected_code
 
@@ -924,9 +902,8 @@ def test_test_libcst_code_replacement13() -> None:
         return self.name
 """
 
-    function_names: list[str] = ["module.yet_another_function", "module.other_function"]
+    function_names: list[str] = ["yet_another_function", "other_function"]
     preexisting_objects: list[tuple[str, list[FunctionParent]]] = []
-    contextual_functions: set[tuple[str, str]] = set()
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -934,7 +911,6 @@ def test_test_libcst_code_replacement13() -> None:
         file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
-        contextual_functions=contextual_functions,
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == original_code
@@ -1100,31 +1076,7 @@ class TestResults(BaseModel):
                 report[test_result.test_type][key] += 1
         return report"""
 
-    preexisting_objects = [
-        ("__contains__", [FunctionParent(name="TestResults", type="ClassDef")]),
-        ("__len__", [FunctionParent(name="TestResults", type="ClassDef")]),
-        ("__bool__", [FunctionParent(name="TestResults", type="ClassDef")]),
-        ("__eq__", [FunctionParent(name="TestResults", type="ClassDef")]),
-        ("__delitem__", [FunctionParent(name="TestResults", type="ClassDef")]),
-        ("__iter__", [FunctionParent(name="TestResults", type="ClassDef")]),
-        ("__setitem__", [FunctionParent(name="TestResults", type="ClassDef")]),
-        ("__getitem__", [FunctionParent(name="TestResults", type="ClassDef")]),
-        ("get_test_pass_fail_report_by_type", [FunctionParent(name="TestResults", type="ClassDef")]),
-        ("TestType", []),
-        ("TestResults", []),
-        ("to_name", [FunctionParent(name="TestType", type="ClassDef")]),
-    ]
-
-    contextual_functions = {
-        ("TestResults", "__bool__"),
-        ("TestResults", "__contains__"),
-        ("TestResults", "__delitem__"),
-        ("TestResults", "__eq__"),
-        ("TestResults", "__getitem__"),
-        ("TestResults", "__iter__"),
-        ("TestResults", "__len__"),
-        ("TestResults", "__setitem__"),
-    }
+    preexisting_objects = find_preexisting_objects(original_code)
 
     helper_functions = [
         FakeFunctionSource(
@@ -1146,7 +1098,6 @@ class TestResults(BaseModel):
         file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
-        contextual_functions=contextual_functions,
         project_root_path=Path(__file__).parent.resolve(),
     )
 
@@ -1162,7 +1113,6 @@ class TestResults(BaseModel):
             file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
             module_abspath=module_abspath,
             preexisting_objects=preexisting_objects,
-            contextual_functions=contextual_functions,
             project_root_path=Path(__file__).parent.resolve(),
         )
 
@@ -1343,13 +1293,8 @@ def cosine_similarity_top_k(
     
     return ret_idxs, scores
 '''
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = [
-        ("cosine_similarity_top_k", []),
-        ("Matrix", []),
-        ("cosine_similarity", []),
-    ]
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
 
-    contextual_functions: set[tuple[str, str]] = set()
     helper_functions = [
         FakeFunctionSource(
             file_path=(Path(__file__).parent / "code_to_optimize" / "math_utils.py").resolve(),
@@ -1376,7 +1321,6 @@ def cosine_similarity_top_k(
         file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=(Path(__file__).parent / "code_to_optimize").resolve(),
         preexisting_objects=preexisting_objects,
-        contextual_functions=contextual_functions,
         project_root_path=Path(__file__).parent.parent.resolve(),
     )
     assert (
@@ -1436,7 +1380,6 @@ def cosine_similarity_top_k(
             file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
             module_abspath=module_abspath,
             preexisting_objects=preexisting_objects,
-            contextual_functions=contextual_functions,
             project_root_path=Path(__file__).parent.parent.resolve(),
         )
 
@@ -1599,3 +1542,105 @@ def functionA():
     return np.array([1, 2, 3])
     '''
     assert is_zero_diff(original_code, optim_code_e)
+
+
+def test_nested_class() -> None:
+    optim_code = """import libcst as cst
+from typing import Optional
+
+class NewClass:
+    def __init__(self, name):
+        self.name = str(name)
+    def __call__(self, value):
+        return self.name
+    def new_function2(value):
+        return cst.ensure_type(value, int)
+
+    class NestedClass:
+        def nested_function(self):
+            return "I am nested and modified"
+    """
+
+    original_code = """class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+
+    class NestedClass:
+        def nested_function(self):
+            return "I am nested"
+
+print("Hello world")
+"""
+    expected = """import libcst as cst
+
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, int)
+
+    class NestedClass:
+        def nested_function(self):
+            return "I am nested"
+
+print("Hello world")
+"""
+
+    function_names: list[str] = [
+        "NewClass.new_function2",
+        "NestedClass.nested_function",
+    ]  # Nested classes should be ignored, even if provided as target
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
+    new_code: str = replace_functions_and_add_imports(
+        source_code=original_code,
+        function_names=function_names,
+        optimized_code=optim_code,
+        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
+        module_abspath=Path(__file__).resolve(),
+        preexisting_objects=preexisting_objects,
+        project_root_path=Path(__file__).resolve().parent.resolve(),
+    )
+    assert new_code == expected
+
+
+def test_modify_back_to_original() -> None:
+    optim_code = """class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+
+print("Hello world")
+"""
+
+    original_code = """class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+
+print("Hello world")
+"""
+
+    function_names: list[str] = ["NewClass.__init__", "NewClass.__call__", "NewClass.new_function2"]
+    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
+    new_code: str = replace_functions_and_add_imports(
+        source_code=original_code,
+        function_names=function_names,
+        optimized_code=optim_code,
+        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
+        module_abspath=Path(__file__).resolve(),
+        preexisting_objects=preexisting_objects,
+        project_root_path=Path(__file__).resolve().parent.resolve(),
+    )
+    assert new_code == original_code
