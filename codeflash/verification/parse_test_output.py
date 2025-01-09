@@ -478,7 +478,7 @@ def parse_test_results(
     results = merge_test_results(test_results_xml, test_results_bin_file, test_config.test_framework)
 
     all_args = False
-    if coverage_file and source_file and code_context and function_name:
+    if coverage_file and coverage_file.exists() and source_file and code_context and function_name:
         all_args = True
         coverage = CoverageData.load_from_coverage_file(
             coverage_file_path=coverage_file,
