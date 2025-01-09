@@ -254,7 +254,8 @@ class Optimizer:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
 
-        code_print(code_context.code_to_optimize_with_helpers)
+        logger.info("Code to be optimized:")
+        code_print(code_context.read_writable_code)
 
         original_module_path = module_name_from_file_path(function_to_optimize.file_path, self.args.project_root)
 
