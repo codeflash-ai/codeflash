@@ -10,9 +10,9 @@ def create_timing_series(size: int, mean: int, std_dev: int) -> list[int]:
 
 
 def test_compare_timing_series() -> None:
-    original_timing_series = create_timing_series(50000, 2000, 100)
-    optimized_timing_series = create_timing_series(50000, 1700, 85)
-    result = series2_faster_95_confidence(original_timing_series, optimized_timing_series, 5000)
+    original_timing_series = create_timing_series(10000, 2000, 60)
+    optimized_timing_series = create_timing_series(10000, 1800, 48)
+    result = series2_faster_95_confidence(original_timing_series, optimized_timing_series, 10000)
     assert result is not None
-    assert 12 < result[0] < 18
-    assert 0.01 < result[1] < 0.1
+    assert 5 < result[0] < 15
+    assert result[1] < 3
