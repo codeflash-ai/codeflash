@@ -663,19 +663,13 @@ class Optimizer:
         optimized_code: str,
         qualified_function_name: str,
     ) -> bool:
-        did_update = replace_function_definitions_in_module(
-            function_names=[qualified_function_name],
-            optimized_code=optimized_code,
-            file_path_of_module_with_function_to_optimize=function_to_optimize_file_path,
-            module_abspath=function_to_optimize_file_path,
-            preexisting_objects=code_context.preexisting_objects,
-            project_root_path=self.args.project_root,
-        )
-        helper_functions_by_module_abspath = defaultdict(set)
+        did_update = False
+        read_writable_functions_by_file_path = defaultdict(set)
+        read_writable_functions_by_file_path[function_to_optimize_file_path].add(qualified_function_name)
         for helper_function in code_context.helper_functions:
             if helper_function.jedi_definition.type != "class":
-                helper_functions_by_module_abspath[helper_function.file_path].add(helper_function.qualified_name)
-        for module_abspath, qualified_names in helper_functions_by_module_abspath.items():
+                read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
+        for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
             did_update |= replace_function_definitions_in_module(
                 function_names=list(qualified_names),
                 optimized_code=optimized_code,
