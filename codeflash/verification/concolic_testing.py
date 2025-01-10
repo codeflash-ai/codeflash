@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import subprocess
+import sys
 import tempfile
 from argparse import Namespace
 from pathlib import Path
@@ -26,6 +27,8 @@ def generate_concolic_tests(
         try:
             cover_result = subprocess.run(
                 [
+                    sys.executable,
+                    "-m",
                     "crosshair",
                     "cover",
                     "--example_output_format=pytest",
