@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import ast
 import subprocess
-import sys
 import tempfile
 from argparse import Namespace
 from pathlib import Path
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.static_analysis import has_typed_parameters
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -27,7 +27,7 @@ def generate_concolic_tests(
         try:
             cover_result = subprocess.run(
                 [
-                    sys.executable,
+                    SAFE_SYS_EXECUTABLE,
                     "-m",
                     "crosshair",
                     "cover",
