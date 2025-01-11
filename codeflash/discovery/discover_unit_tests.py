@@ -49,7 +49,7 @@ def discover_tests_pytest(
     project_root = cfg.project_root_path
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
-    subprocess.run(
+    result = subprocess.run(
         [
             SAFE_SYS_EXECUTABLE,
             Path(__file__).parent / "pytest_new_process_discovery.py",
@@ -59,8 +59,9 @@ def discover_tests_pytest(
         ],
         cwd=project_root,
         check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
     )
     try:
         with tmp_pickle_path.open(mode="rb") as f:
@@ -72,7 +73,17 @@ def discover_tests_pytest(
         with Path.open(tmp_pickle_path, "w") as f:
             pass
     if exitcode != 0:
-        if 0 <= exitcode <= 5:
+        if exitcode == 2 and "ERROR collecting" in result.stdout:
+            # Pattern matches "===== ERRORS =====" (any number of =) and captures everything after
+            error_pattern = r"={3,}\s*ERRORS\s*={3,}\n([\s\S]*?)(?:={3,}|$)"
+            match = re.search(error_pattern, result.stdout)
+            error_section = match.group(1) if match else result.stdout
+
+            logger.warning(
+                f"Failed to collect tests. Pytest Exit code: {exitcode}={ExitCode(exitcode).name}\n {error_section}"
+            )
+
+        elif 0 <= exitcode <= 5:
             logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}={ExitCode(exitcode).name}")
         else:
             logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
