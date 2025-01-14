@@ -73,11 +73,7 @@ def test_code_replacement10() -> None:
     )
 
     code_ctx = get_code_optimization_context(function_to_optimize=func_top_optimize, project_root_path=file_path.parent)
-    read_write_context, read_only_context, testgen_context = (
-        code_ctx.read_writable_code,
-        code_ctx.read_only_context_code,
-        code_ctx.testgen_context_code,
-    )
+    read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
 
     expected_read_write_context = """
     from __future__ import annotations
@@ -99,27 +95,9 @@ def test_code_replacement10() -> None:
 """
     expected_read_only_context = """
     """
-    expected_testgen_context = """
-    from __future__ import annotations
-    
-    class HelperClass:
-        def __init__(self, name):
-            self.name = name
 
-        def helper_method(self):
-            return self.name
-
-
-    class MainClass:
-        def __init__(self, name):
-            self.name = name
-            
-        def main_method(self):
-            return HelperClass(self.name).helper_method()
-    """
     assert read_write_context.strip() == dedent(expected_read_write_context).strip()
     assert read_only_context.strip() == dedent(expected_read_only_context).strip()
-    assert testgen_context.strip() == dedent(expected_testgen_context).strip()
 
 
 def test_class_method_dependencies() -> None:

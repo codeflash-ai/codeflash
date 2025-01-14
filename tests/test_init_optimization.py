@@ -124,7 +124,6 @@ def test_docstrings_and_comments() -> None:
     original = """
     class MyClass:
         def __init__(self):
-            \"\"\"Original docstring.\"\"\"
             # Setup configuration
             self.config = {}  # Empty config
     """
@@ -138,13 +137,10 @@ def test_docstrings_and_comments() -> None:
     result = merge_init_functions(
         cst.parse_module(dedent(original)).body[0].body.body[0], cst.parse_module(dedent(new)).body[0].body.body[0]
     )
-    # TODO: handle docstrings differently
     expected = """
     def __init__(self):
-        \"\"\"Original docstring.\"\"\"
         # Setup configuration
         self.config = {}  # Empty config
-        \"\"\"New docstring.\"\"\"
         # Initialize database
         self.db = None  # Database connection
     """

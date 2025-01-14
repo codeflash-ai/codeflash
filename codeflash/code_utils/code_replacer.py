@@ -236,7 +236,16 @@ def merge_init_functions(original_init: cst.FunctionDef, new_init: cst.FunctionD
     original_stmts = {get_only_code_content(cst_to_code(stmt)) for stmt in original_init.body.body}
     # Filter new init body statements
     filtered_body = []
+
     for stmt in new_init.body.body:
+        # Filter out docstring of new init
+        if (
+            isinstance(stmt, cst.SimpleStatementLine)
+            and len(stmt.body) == 1
+            and isinstance(stmt.body[0], cst.Expr)
+            and isinstance(stmt.body[0].value, cst.SimpleString)
+        ):
+            continue
         # Filter out duplicate statements
         if get_only_code_content(cst_to_code(stmt)) in original_stmts:
             continue
