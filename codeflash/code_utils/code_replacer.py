@@ -232,12 +232,13 @@ def merge_init_functions(original_init: cst.FunctionDef, new_init: cst.FunctionD
     collector = AttributeCollector()
     original_init.visit(collector)
     existing_attrs = collector.attributes
-    # Get set of existing statements as strings. # This should just be in terms of code, not comments?
-    original_stmts = {cst.Module([stmt]).code for stmt in original_init.body.body}
+    # Get set of existing statements, without comments
+    original_stmts = {get_only_code_content(cst_to_code(stmt)) for stmt in original_init.body.body}
     # Filter new init body statements
     filtered_body = []
     for stmt in new_init.body.body:
-        if cst.Module([stmt]).code in original_stmts:
+        # Filter out duplicate statements
+        if get_only_code_content(cst_to_code(stmt)) in original_stmts:
             continue
         # Check for assignments to existing attributes
         assign_collector = AssignmentCollector()
@@ -292,7 +293,6 @@ def replace_functions_and_add_imports(
     source_code: str,
     function_names: list[str],
     optimized_code: str,
-    file_path_of_module_with_function_to_optimize: Path,
     module_abspath: Path,
     preexisting_objects: list[tuple[str, list[FunctionParent]]],
     project_root_path: Path,
@@ -309,20 +309,13 @@ def replace_functions_and_add_imports(
 def replace_function_definitions_in_module(
     function_names: list[str],
     optimized_code: str,
-    file_path_of_module_with_function_to_optimize: Path,
     module_abspath: Path,
     preexisting_objects: list[tuple[str, list[FunctionParent]]],
     project_root_path: Path,
 ) -> bool:
     source_code: str = module_abspath.read_text(encoding="utf8")
     new_code: str = replace_functions_and_add_imports(
-        source_code,
-        function_names,
-        optimized_code,
-        file_path_of_module_with_function_to_optimize,
-        module_abspath,
-        preexisting_objects,
-        project_root_path,
+        source_code, function_names, optimized_code, module_abspath, preexisting_objects, project_root_path
     )
     if is_zero_diff(source_code, new_code):
         return False

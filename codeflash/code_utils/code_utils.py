@@ -30,8 +30,9 @@ def get_only_code_content(code: str) -> str:
 
     # Remove docstrings from function
     for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and (ast.get_docstring(node)):
-            # If first element is docstring, remove it
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module, ast.ClassDef)) and (
+            ast.get_docstring(node)
+        ):
             node.body = node.body[1:]
 
     # Unparse back to source code for comparison
