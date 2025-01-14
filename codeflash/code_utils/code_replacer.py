@@ -9,6 +9,7 @@ import libcst as cst
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module
+from codeflash.code_utils.code_utils import cst_to_code, get_only_code_content
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
@@ -51,10 +52,13 @@ class OptimFunctionCollector(cst.CSTVisitor):
         self.new_functions: list[cst.FunctionDef] = []
         self.new_class_functions: dict[str, list[cst.FunctionDef]] = defaultdict(list)
         self.current_class = None
+        self.modified_init_functions: dict[str, cst.FunctionDef] = {}
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
         if (self.current_class, node.name.value) in self.function_names:
             self.modified_functions[(self.current_class, node.name.value)] = node
+        elif self.current_class and node.name.value == "__init__":
+            self.modified_init_functions[self.current_class] = node
         elif (
             self.preexisting_objects
             and (node.name.value, []) not in self.preexisting_objects
@@ -76,6 +80,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
                 and (child_node.name.value, parents) not in self.preexisting_objects
             ):
                 self.new_class_functions[node.name.value].append(child_node)
+
         return True
 
     def leave_ClassDef(self, node: cst.ClassDef) -> None:
@@ -89,11 +94,15 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         modified_functions: dict[tuple[str | None, str], cst.FunctionDef] = None,
         new_functions: list[cst.FunctionDef] = None,
         new_class_functions: dict[str, list[cst.FunctionDef]] = None,
+        modified_init_functions: dict[str, cst.FunctionDef] = None,
     ) -> None:
         super().__init__()
         self.modified_functions = modified_functions if modified_functions is not None else {}
         self.new_functions = new_functions if new_functions is not None else []
         self.new_class_functions = new_class_functions if new_class_functions is not None else defaultdict(list)
+        self.modified_init_functions: dict[str, cst.FunctionDef] = (
+            modified_init_functions if modified_init_functions is not None else {}
+        )
         self.current_class = None
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
@@ -102,7 +111,15 @@ class OptimFunctionReplacer(cst.CSTTransformer):
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
         if (self.current_class, original_node.name.value) in self.modified_functions:
             node = self.modified_functions[(self.current_class, original_node.name.value)]
+            if get_only_code_content(cst_to_code(original_node)) == get_only_code_content(cst_to_code(node)):
+                return original_node  # Code was unchanged, so don't modify docstrings / comments
             return updated_node.with_changes(body=node.body, decorators=node.decorators)
+        if original_node.name.value == "__init__" and self.current_class in self.modified_init_functions:
+            if get_only_code_content(cst_to_code(original_node)) == get_only_code_content(
+                cst_to_code(self.modified_init_functions[self.current_class])
+            ):
+                return original_node  # Code was unchanged, so don't modify docstrings / comments
+            return merge_init_functions(updated_node, self.modified_init_functions[self.current_class])
 
         return updated_node
 
@@ -145,6 +162,97 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         return node
 
 
+class AttributeCollector(cst.CSTVisitor):
+    """Collects all self.attribute mentions in a CST."""
+
+    def __init__(self):
+        super().__init__()
+        self.attributes: set[str] = set()
+
+    def visit_Attribute(self, node: cst.Attribute) -> bool:
+        """Record any self.attribute access."""
+        if isinstance(node.value, cst.Name) and node.value.value == "self":
+            self.attributes.add(node.attr.value)
+        return True
+
+
+class AssignmentCollector(cst.CSTVisitor):
+    """Collects attributes being assigned to in a CST."""
+
+    def __init__(self):
+        super().__init__()
+        self.assigned_attrs: set[str] = set()
+
+    def visit_Assign(self, node: cst.Assign) -> bool:
+        """Check regular assignments like self.x = ..."""
+        for target in node.targets:
+            if (
+                isinstance(target.target, cst.Attribute)
+                and isinstance(target.target.value, cst.Name)
+                and target.target.value.value == "self"
+            ):
+                self.assigned_attrs.add(target.target.attr.value)
+        return True
+
+    def visit_AnnAssign(self, node: cst.AnnAssign) -> bool:
+        """Check annotated assignments like self.x: str = ..."""
+        if (
+            isinstance(node.target, cst.Attribute)
+            and isinstance(node.target.value, cst.Name)
+            and node.target.value.value == "self"
+        ):
+            self.assigned_attrs.add(node.target.attr.value)
+        return True
+
+    def visit_AugAssign(self, node: cst.AugAssign) -> bool:
+        """Check augmented assignments like self.x += ..."""
+        if (
+            isinstance(node.target, cst.Attribute)
+            and isinstance(node.target.value, cst.Name)
+            and node.target.value.value == "self"
+        ):
+            self.assigned_attrs.add(node.target.attr.value)
+        return True
+
+
+def merge_init_functions(original_init: cst.FunctionDef, new_init: cst.FunctionDef) -> cst.FunctionDef:
+    """Merges two __init__ function definitions. Collects all self.attribute mentions
+    from the original init, then filters out statements from the new init that
+    assign to those attributes (but allows reading them).
+
+    Args:
+        original_init: The original __init__ function to preserve
+        new_init: The new __init__ function whose body will be filtered and appended
+
+    Returns:
+        A merged FunctionDef
+
+    """
+    # Collect all self.attribute mentions from original init
+    collector = AttributeCollector()
+    original_init.visit(collector)
+    existing_attrs = collector.attributes
+    # Get set of existing statements as strings. # This should just be in terms of code, not comments?
+    original_stmts = {cst.Module([stmt]).code for stmt in original_init.body.body}
+    # Filter new init body statements
+    filtered_body = []
+    for stmt in new_init.body.body:
+        if cst.Module([stmt]).code in original_stmts:
+            continue
+        # Check for assignments to existing attributes
+        assign_collector = AssignmentCollector()
+        stmt.visit(assign_collector)
+
+        # Keep statement if it doesn't assign to any existing attributes
+        if not assign_collector.assigned_attrs.intersection(existing_attrs):
+            filtered_body.append(stmt)
+
+    # Merge bodies using with_changes
+    return original_init.with_changes(
+        body=original_init.body.with_changes(body=original_init.body.body + tuple(filtered_body))
+    )
+
+
 def replace_functions_in_file(
     source_code: str,
     original_function_names: list[str],
@@ -173,6 +281,7 @@ def replace_functions_in_file(
         modified_functions=visitor.modified_functions,
         new_functions=visitor.new_functions,
         new_class_functions=visitor.new_class_functions,
+        modified_init_functions=visitor.modified_init_functions,
     )
     original_module = cst.parse_module(source_code)
     modified_tree = original_module.visit(transformer)
@@ -191,7 +300,7 @@ def replace_functions_and_add_imports(
     return add_needed_imports_from_module(
         optimized_code,
         replace_functions_in_file(source_code, function_names, optimized_code, preexisting_objects),
-        file_path_of_module_with_function_to_optimize,
+        module_abspath,
         module_abspath,
         project_root_path,
     )

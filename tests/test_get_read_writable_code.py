@@ -161,11 +161,35 @@ def test_try_except_structure() -> None:
     assert result.strip() == expected.strip()
 
 
-def test_dunder_method() -> None:
+def test_init_method() -> None:
     code = """
     class MyClass:
         def __init__(self):
             self.x = 1
+
+        def other_method(self):
+            return "other"
+
+        def target_method(self):
+            return f"Value: {self.x}"
+    """
+    result = get_read_writable_code(dedent(code), {"MyClass.target_method"})
+
+    expected = dedent("""
+    class MyClass:
+        def __init__(self):
+            self.x = 1
+
+        def target_method(self):
+            return f"Value: {self.x}"
+    """)
+    assert result.strip() == expected.strip()
+
+def test_dunder_method() -> None:
+    code = """
+    class MyClass:
+        def __repr__(self):
+            return "MyClass"
 
         def other_method(self):
             return "other"
@@ -182,7 +206,6 @@ def test_dunder_method() -> None:
             return f"Value: {self.x}"
     """)
     assert result.strip() == expected.strip()
-
 
 def test_no_targets_found() -> None:
     code = """

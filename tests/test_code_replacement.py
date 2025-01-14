@@ -894,6 +894,7 @@ def test_test_libcst_code_replacement13() -> None:
     original_code = """class NewClass:
     def __init__(self, name):
         self.name = name
+        self.new_attribute = "Sorry i modified a dunder method"
     def new_function(self, value):
         return other_function(self.name)
     def new_function2(value):

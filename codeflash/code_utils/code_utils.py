@@ -7,7 +7,35 @@ from functools import lru_cache
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import libcst as cst
+
 from codeflash.cli_cmds.console import logger
+
+
+def cst_to_code(node: cst.CSTNode) -> str:
+    return cst.Module([node]).code.strip()
+
+
+def get_only_code_content(code: str) -> str:
+    """Extract just the code content from code, ignoring comments and docstrings.
+
+    Args:
+        code: Source code as a string
+    Returns:
+        String of code with comments and docstrings removed
+
+    """
+    # Parse into AST - this automatically strips comments
+    tree = ast.parse(code)
+
+    # Remove docstrings from function
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and (ast.get_docstring(node)):
+            # If first element is docstring, remove it
+            node.body = node.body[1:]
+
+    # Unparse back to source code for comparison
+    return ast.unparse(tree)
 
 
 def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
@@ -80,6 +108,7 @@ def get_all_function_names(code: str) -> tuple[bool, list[str]]:
 def get_run_tmp_file(file_path: Path) -> Path:
     if not hasattr(get_run_tmp_file, "tmpdir"):
         get_run_tmp_file.tmpdir = TemporaryDirectory(prefix="codeflash_")
+        logger.info(f"Created new temp directory for codeflash: {Path(get_run_tmp_file.tmpdir.name)!s}")
     return Path(get_run_tmp_file.tmpdir.name) / file_path
 
 

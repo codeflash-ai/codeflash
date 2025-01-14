@@ -3,13 +3,13 @@ import site
 from pathlib import Path
 
 import pytest
-
 from codeflash.code_utils.code_utils import (
     cleanup_paths,
     file_name_from_test_module_name,
     file_path_from_module_name,
     get_all_function_names,
     get_imports_from_file,
+    get_only_code_content,
     get_qualified_name,
     get_run_tmp_file,
     is_class_defined_in_file,
@@ -25,6 +25,7 @@ def multiple_existing_and_non_existing_files(tmp_path: Path) -> list[Path]:
     for file in existing_files:
         file.touch()
     return existing_files + non_existing_files
+
 
 def test_get_qualified_name_valid() -> None:
     module_name = "codeflash"
@@ -46,6 +47,7 @@ def test_get_qualified_name_same_name() -> None:
     full_qualified_name = "codeflash"
     with pytest.raises(ValueError, match="is the same as codeflash"):
         get_qualified_name(module_name, full_qualified_name)
+
 
 # tests for module_name_from_file_path
 def test_module_name_from_file_path() -> None:
@@ -91,6 +93,8 @@ def test_get_imports_from_file_with_file_path(tmp_path: Path) -> None:
     assert imports[0].names[0].name == "os"
     assert imports[1].module == "sys"
     assert imports[1].names[0].name == "path"
+
+
 def test_get_imports_from_file_with_file_string() -> None:
     file_string = "import os\nfrom sys import path\n"
 
@@ -101,6 +105,7 @@ def test_get_imports_from_file_with_file_string() -> None:
     assert imports[0].names[0].name == "os"
     assert imports[1].module == "sys"
     assert imports[1].names[0].name == "path"
+
 
 def test_get_imports_from_file_with_file_ast() -> None:
     file_string = "import os\nfrom sys import path\n"
@@ -113,6 +118,7 @@ def test_get_imports_from_file_with_file_ast() -> None:
     assert imports[0].names[0].name == "os"
     assert imports[1].module == "sys"
     assert imports[1].names[0].name == "path"
+
 
 def test_get_imports_from_file_with_syntax_error(caplog: pytest.LogCaptureFixture) -> None:
     file_string = "import os\nfrom sys import path\ninvalid syntax"
@@ -172,6 +178,7 @@ async def bar():
     success, function_names = get_all_function_names(code)
     assert success is True
     assert function_names == ["foo", "bar"]
+
 
 def test_get_all_function_names_with_syntax_error(caplog: pytest.LogCaptureFixture) -> None:
     code = """
@@ -234,6 +241,7 @@ def test_get_run_tmp_file_reuses_temp_directory() -> None:
     assert tmp_file_path1.parent.name.startswith("codeflash_")
     assert tmp_file_path1.parent.exists()
 
+
 def test_path_belongs_to_site_packages_with_site_package_path(monkeypatch: pytest.MonkeyPatch) -> None:
     site_packages = [Path("/usr/local/lib/python3.9/site-packages")]
     monkeypatch.setattr(site, "getsitepackages", lambda: site_packages)
@@ -241,12 +249,14 @@ def test_path_belongs_to_site_packages_with_site_package_path(monkeypatch: pytes
     file_path = Path("/usr/local/lib/python3.9/site-packages/some_package")
     assert path_belongs_to_site_packages(file_path) is True
 
+
 def test_path_belongs_to_site_packages_with_non_site_package_path(monkeypatch: pytest.MonkeyPatch) -> None:
     site_packages = [Path("/usr/local/lib/python3.9/site-packages")]
     monkeypatch.setattr(site, "getsitepackages", lambda: site_packages)
 
     file_path = Path("/usr/local/lib/python3.9/other_directory/some_package")
     assert path_belongs_to_site_packages(file_path) is False
+
 
 def test_path_belongs_to_site_packages_with_relative_path(monkeypatch: pytest.MonkeyPatch) -> None:
     site_packages = [Path("/usr/local/lib/python3.9/site-packages")]
@@ -332,3 +342,51 @@ def test_cleanup_paths(multiple_existing_and_non_existing_files: list[Path]) -> 
     cleanup_paths(multiple_existing_and_non_existing_files)
     for file in multiple_existing_and_non_existing_files:
         assert not file.exists()
+
+
+def test_get_only_code_content_with_docstring() -> None:
+    """Test function with only a docstring."""
+    input_code = '''def foo():
+    """This is a docstring."""
+    return 42'''
+    expected = """def foo():
+    return 42"""
+    assert get_only_code_content(input_code) == expected
+
+
+def test_get_only_code_content_with_comments() -> None:
+    """Test function with only comments."""
+    input_code = """def foo():
+    # This is a comment
+    return 42  # Another comment"""
+    expected = """def foo():
+    return 42"""
+    assert get_only_code_content(input_code) == expected
+
+
+def test_get_only_code_content_with_docstring_and_comments() -> None:
+    """Test function with both docstring and comments."""
+    input_code = '''def foo():
+    """This is a docstring."""
+    # This is a comment
+    return 42  # Another comment'''
+
+    expected = """def foo():
+    return 42"""
+    assert get_only_code_content(input_code) == expected
+
+
+def test_get_only_code_content_nested_functions() -> None:
+    """Test nested functions with docstrings."""
+    input_code = '''def outer():
+    """Outer docstring."""
+    def inner():
+        """Inner docstring."""
+        return 42
+    return inner()'''
+    expected = """def outer():
+
+    def inner():
+        return 42
+    return inner()"""
+    assert get_only_code_content(input_code) == expected
