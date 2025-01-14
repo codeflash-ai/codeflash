@@ -30,10 +30,7 @@ def get_code_optimization_context(
     helpers_of_helpers, helpers_of_helpers_fqn, _ = get_file_path_to_helper_functions_dict(
         helpers_of_fto, project_root_path
     )
-    print("helpers_of_fto")
-    print(helpers_of_fto)
-    print("helpers_of_helpers")
-    print(helpers_of_helpers)
+
     # Add function to optimize
     helpers_of_fto[function_to_optimize.file_path].add(function_to_optimize.qualified_name)
     helpers_of_fto_fqn[function_to_optimize.file_path].add(
@@ -50,15 +47,13 @@ def get_code_optimization_context(
         project_root_path,
         remove_docstrings=False,
     )
-    testgen_context_code = get_all_testgen_context(helpers_of_fto, helpers_of_fto_fqn, project_root_path)
 
     # Handle token limits
     tokenizer = tiktoken.encoding_for_model("gpt-4o")
     final_read_writable_tokens = len(tokenizer.encode(final_read_writable_code))
     if final_read_writable_tokens > token_limit:
         raise ValueError("Read-writable code has exceeded token limit, cannot proceed")
-    # if len(tokenizer.encode(testgen_context_code.code)) > token_limit:
-    #     raise ValueError("Testgen context has exceeded token limit, cannot proceed")
+
     # Setup preexisting objects for code replacer TODO: should remove duplicates
     preexisting_objects = list(
         chain(
@@ -75,7 +70,6 @@ def get_code_optimization_context(
             read_only_context_code=read_only_code_markdown.markdown,
             helper_functions=helpers_of_fto_obj_list,
             preexisting_objects=preexisting_objects,
-            testgen_context_code=testgen_context_code.code,
         )
 
     logger.debug("Code context has exceeded token limit, removing docstrings from read-only code")
@@ -98,7 +92,6 @@ def get_code_optimization_context(
             read_only_context_code=read_only_code_no_docstring_markdown.markdown,
             helper_functions=helpers_of_fto_obj_list,
             preexisting_objects=preexisting_objects,
-            testgen_context_code=testgen_context_code.code,
         )
 
     logger.debug("Code context has exceeded token limit, removing read-only code")
@@ -108,38 +101,7 @@ def get_code_optimization_context(
         read_only_context_code="",
         helper_functions=helpers_of_fto_obj_list,
         preexisting_objects=preexisting_objects,
-        testgen_context_code=testgen_context_code.code,
     )
-
-
-def get_all_testgen_context(
-    helpers_of_fto: dict[Path, set[str]], helpers_of_fto_fqn: dict[Path, set[str]], project_root_path: Path
-) -> CodeString:
-    final_testgen_context = ""
-    # Extract code from file paths that contain fto and first degree helpers. helpers of helpers may also be included if they are in the same files
-    for file_path, qualified_function_names in helpers_of_fto.items():
-        try:
-            original_code = file_path.read_text("utf8")
-        except Exception as e:
-            logger.exception(f"Error while parsing {file_path}: {e}")
-            continue
-        try:
-            testgen_context_code = get_testgen_context(original_code, qualified_function_names)
-        except ValueError as e:
-            logger.debug(f"Error while getting read-only code: {e}")
-            continue
-
-        if testgen_context_code:
-            final_testgen_context += f"\n{testgen_context_code}"
-            final_testgen_context = add_needed_imports_from_module(
-                src_module_code=original_code,
-                dst_module_code=final_testgen_context,
-                src_path=file_path,
-                dst_path=file_path,
-                project_root=project_root_path,
-                helper_functions_fqn=helpers_of_fto_fqn[file_path],
-            )
-    return CodeString(code=final_testgen_context)
 
 
 def get_all_read_writable_code(
@@ -535,112 +497,6 @@ def get_read_only_code(
     module = cst.parse_module(code)
     filtered_node, found_target = prune_cst_for_read_only_code(
         module, target_functions, helpers_of_helper_functions, remove_docstrings=remove_docstrings
-    )
-    if not found_target:
-        raise ValueError("No target functions found in the provided code")
-    if filtered_node and isinstance(filtered_node, cst.Module):
-        return str(filtered_node.code)
-    return ""
-
-
-def prune_cst_for_testgen_context(
-    node: cst.CSTNode, target_functions: set[str], prefix: str = "", remove_docstrings: bool = False
-) -> tuple[cst.CSTNode | None, bool]:
-    """Recursively filter the node for read-only context:
-
-    Returns:
-        (filtered_node, found_target):
-          filtered_node: The modified CST node or None if it should be removed.
-          found_target: True if a target function was found in this node's subtree.
-
-    """
-    if isinstance(node, (cst.Import, cst.ImportFrom)):
-        return None, False
-
-    if isinstance(node, cst.FunctionDef):
-        qualified_name = f"{prefix}.{node.name.value}" if prefix else node.name.value
-        if qualified_name in target_functions:
-            return node, True
-        # Keep only dunder methods
-        if is_dunder_method(node.name.value):
-            if remove_docstrings and isinstance(node.body, cst.IndentedBlock):
-                new_body = remove_docstring_from_body(node.body)
-                return node.with_changes(body=new_body), False
-            return node, False
-        return None, False
-
-    if isinstance(node, cst.ClassDef):
-        # Do not recurse into nested classes
-        if prefix:
-            return None, False
-        # Assuming always an IndentedBlock
-        if not isinstance(node.body, cst.IndentedBlock):
-            raise ValueError("ClassDef body is not an IndentedBlock")
-
-        class_prefix = f"{prefix}.{node.name.value}" if prefix else node.name.value
-
-        # First pass: detect if there is a target function in the class
-        found_in_class = False
-        new_class_body: list[CSTNode] = []
-        for stmt in node.body.body:
-            filtered, found_target = prune_cst_for_testgen_context(
-                stmt, target_functions, class_prefix, remove_docstrings=remove_docstrings
-            )
-            found_in_class |= found_target
-            if filtered:
-                new_class_body.append(filtered)
-
-        if not found_in_class:
-            return None, False
-
-        if remove_docstrings:
-            return node.with_changes(
-                body=remove_docstring_from_body(node.body.with_changes(body=new_class_body))
-            ) if new_class_body else None, True
-        return node.with_changes(body=node.body.with_changes(body=new_class_body)) if new_class_body else None, True
-
-    # For other nodes, keep the node and recursively filter children
-    section_names = get_section_names(node)
-    if not section_names:
-        return node, False
-
-    updates: dict[str, list[cst.CSTNode] | cst.CSTNode] = {}
-    found_any_target = False
-
-    for section in section_names:
-        original_content = getattr(node, section, None)
-        if isinstance(original_content, (list, tuple)):
-            new_children = []
-            section_found_target = False
-            for child in original_content:
-                filtered, found_target = prune_cst_for_testgen_context(
-                    child, target_functions, prefix, remove_docstrings=remove_docstrings
-                )
-                if filtered:
-                    new_children.append(filtered)
-                section_found_target |= found_target
-
-            if section_found_target or new_children:
-                found_any_target |= section_found_target
-                updates[section] = new_children
-        elif original_content is not None:
-            filtered, found_target = prune_cst_for_testgen_context(
-                original_content, target_functions, prefix, remove_docstrings=remove_docstrings
-            )
-            found_any_target |= found_target
-            if filtered:
-                updates[section] = filtered
-    if updates:
-        return (node.with_changes(**updates), found_any_target)
-
-    return None, False
-
-
-def get_testgen_context(code: str, target_functions: set[str], remove_docstrings: bool = False) -> str:
-    """Creates testgen_context. Similar to get_read_only_code, except the target functions are included."""
-    module = cst.parse_module(code)
-    filtered_node, found_target = prune_cst_for_testgen_context(
-        module, target_functions, remove_docstrings=remove_docstrings
     )
     if not found_target:
         raise ValueError("No target functions found in the provided code")
