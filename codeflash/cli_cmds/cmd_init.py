@@ -466,7 +466,6 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     tool_section["codeflash"] = codeflash_section
     pyproject_data["tool"] = tool_section
 
-    click.echo("Writing Codeflash configuration…\r", nl=False)
     with toml_path.open("w", encoding="utf8") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
     click.echo(f"✅ Added Codeflash configuration to {toml_path}")
