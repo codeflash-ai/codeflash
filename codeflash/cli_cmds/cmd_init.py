@@ -126,7 +126,8 @@ def collect_setup_info() -> SetupInfo:
     valid_module_subdirs = [d for d in valid_subdirs if d != "tests"]
 
     curdir_option = f"current directory ({curdir})"
-    module_subdir_options = [*valid_module_subdirs, curdir_option]
+    custom_dir_option = "enter a custom directory…"
+    module_subdir_options = [*valid_module_subdirs, curdir_option, custom_dir_option]
 
     module_root_answer = inquirer_wrapper(
         inquirer.list_input,
@@ -135,7 +136,20 @@ def collect_setup_info() -> SetupInfo:
         choices=module_subdir_options,
         default=(project_name if project_name in module_subdir_options else module_subdir_options[0]),
     )
-    module_root = "." if module_root_answer == curdir_option else module_root_answer
+    if module_root_answer == curdir_option:
+        module_root = "."
+    elif module_root_answer == custom_dir_option:
+        custom_module_root_answer = inquirer_wrapper_path(
+            "path",
+            message=f"Enter the path to your module directory inside {Path(curdir).resolve()}{os.path.sep} ",
+            path_type=inquirer.Path.DIRECTORY,
+        )
+        if custom_module_root_answer:
+            module_root = Path(curdir) / Path(custom_module_root_answer["path"])
+        else:
+            apologize_and_exit()
+    else:
+        module_root = module_root_answer
     ph("cli-project-root-provided")
 
     # Discover test directory
