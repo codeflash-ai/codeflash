@@ -49,7 +49,7 @@ def discover_tests_pytest(
     project_root = cfg.project_root_path
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
-    subprocess.run(
+    result = subprocess.run(
         [
             SAFE_SYS_EXECUTABLE,
             Path(__file__).parent / "pytest_new_process_discovery.py",
@@ -59,8 +59,9 @@ def discover_tests_pytest(
         ],
         cwd=project_root,
         check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
     )
     try:
         with tmp_pickle_path.open(mode="rb") as f:
@@ -69,10 +70,19 @@ def discover_tests_pytest(
         logger.exception(f"Failed to discover tests: {e}")
         exitcode = -1
     finally:
-        with Path.open(tmp_pickle_path, "w") as f:
-            pass
+        tmp_pickle_path.unlink(missing_ok=True)
     if exitcode != 0:
-        if 0 <= exitcode <= 5:
+        if exitcode == 2 and "ERROR collecting" in result.stdout:
+            # Pattern matches "===== ERRORS =====" (any number of =) and captures everything after
+            error_pattern = r"={3,}\s*ERRORS\s*={3,}\n([\s\S]*?)(?:={3,}|$)"
+            match = re.search(error_pattern, result.stdout)
+            error_section = match.group(1) if match else result.stdout
+
+            logger.warning(
+                f"Failed to collect tests. Pytest Exit code: {exitcode}={ExitCode(exitcode).name}\n {error_section}"
+            )
+
+        elif 0 <= exitcode <= 5:
             logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}={ExitCode(exitcode).name}")
         else:
             logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
@@ -91,7 +101,7 @@ def discover_tests_pytest(
             test_type = TestType.EXISTING_UNIT_TEST
 
         test_obj = TestsInFile(
-            test_file=test["test_file"],
+            test_file=Path(test["test_file"]),
             test_class=test["test_class"],
             test_function=test["test_function"],
             test_type=test_type,
@@ -267,7 +277,7 @@ def process_test_files(
                 try:
                     definition = name.goto(follow_imports=True, follow_builtin_imports=False)
                 except Exception as e:
-                    logger.exception(str(e))
+                    logger.debug(str(e))
                     continue
                 if definition and definition[0].type == "function":
                     definition_path = str(definition[0].module_path)

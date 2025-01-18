@@ -61,7 +61,9 @@ class A:
     def nested_function(self):
         def nested():
             return global_dependency_3(1)
+
         return nested() + self.add_two(3)
+
 
 class B:
     def calculate_something_2(self, num):
@@ -217,7 +219,6 @@ def test_class_method_dependencies() -> None:
         code_context.helper_functions[0].fully_qualified_name == "test_function_dependencies.Graph.topologicalSortUtil"
     )
     assert code_context.helper_functions[0].qualified_name == "Graph.topologicalSortUtil"
-    assert code_context.contextual_dunder_methods == {("Graph", "__init__")}
     assert (
         code_context.code_to_optimize_with_helpers
         == """from collections import defaultdict
@@ -303,8 +304,9 @@ def test_recursive_function_context() -> None:
     if not is_successful(ctx_result):
         pytest.fail()
     code_context = ctx_result.unwrap()
-    assert len(code_context.helper_functions) == 1
+    assert len(code_context.helper_functions) == 2
     assert code_context.helper_functions[0].fully_qualified_name == "test_function_dependencies.C.calculate_something_3"
+    assert code_context.helper_functions[1].fully_qualified_name == "test_function_dependencies.C.recursive"
     assert (
         code_context.code_to_optimize_with_helpers
         == """class C:
@@ -359,6 +361,7 @@ def test_method_in_method_list_comprehension() -> None:
 
     assert len(helper_functions) == 1
     assert helper_functions[0].jedi_definition.full_name == "test_function_dependencies.A.add_two"
+
 
 def test_nested_method() -> None:
     file_path = pathlib.Path(__file__).resolve()

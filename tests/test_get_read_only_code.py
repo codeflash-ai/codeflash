@@ -21,7 +21,7 @@ def test_basic_class() -> None:
         class_var = "value"
     """
 
-    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -47,7 +47,7 @@ def test_dunder_methods() -> None:
             return f"Value: {self.x}"
     """
 
-    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -75,7 +75,7 @@ def test_dunder_methods_remove_docstring() -> None:
             return f"Value: {self.x}"
     """
 
-    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, remove_docstrings=True)
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, set(), remove_docstrings=True)
     assert dedent(expected).strip() == output.strip()
 
 
@@ -102,7 +102,7 @@ def test_class_remove_docstring() -> None:
             return f"Value: {self.x}"
     """
 
-    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, remove_docstrings=True)
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, set(), remove_docstrings=True)
     assert dedent(expected).strip() == output.strip()
 
 
@@ -131,7 +131,7 @@ def test_mixed_remove_docstring() -> None:
             return f"Value: {self.x}"
     """
 
-    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, remove_docstrings=True)
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, set(), remove_docstrings=True)
     assert dedent(expected).strip() == output.strip()
 
 
@@ -149,7 +149,7 @@ def test_target_in_nested_class() -> None:
     """
 
     with pytest.raises(ValueError, match="No target functions found in the provided code"):
-        get_read_only_code(dedent(code), {"Outer.Inner.target_method"})
+        get_read_only_code(dedent(code), {"Outer.Inner.target_method"}, set())
 
 
 def test_docstrings() -> None:
@@ -171,7 +171,7 @@ def test_docstrings() -> None:
         \"\"\"Class docstring.\"\"\"
     """
 
-    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -190,7 +190,7 @@ def test_method_signatures() -> None:
 
     expected = """"""
 
-    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -214,7 +214,7 @@ def test_multiple_top_level_targets() -> None:
             self.x = 42
     """
 
-    output = get_read_only_code(dedent(code), {"TestClass.target1", "TestClass.target2"})
+    output = get_read_only_code(dedent(code), {"TestClass.target1", "TestClass.target2"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -234,7 +234,7 @@ def test_class_annotations() -> None:
         var2: str
     """
 
-    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -256,7 +256,7 @@ def test_class_annotations_if() -> None:
             var2: str
     """
 
-    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -282,7 +282,7 @@ def test_class_annotations_try() -> None:
         continue
     """
 
-    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -318,7 +318,7 @@ def test_class_annotations_else() -> None:
             var2: str
     """
 
-    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -333,7 +333,7 @@ def test_top_level_functions() -> None:
 
     expected = """"""
 
-    output = get_read_only_code(dedent(code), {"target_function"})
+    output = get_read_only_code(dedent(code), {"target_function"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -352,7 +352,7 @@ def test_module_var() -> None:
     x = 5
     """
 
-    output = get_read_only_code(dedent(code), {"target_function"})
+    output = get_read_only_code(dedent(code), {"target_function"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -379,7 +379,7 @@ def test_module_var_if() -> None:
         z = 10
     """
 
-    output = get_read_only_code(dedent(code), {"target_function"})
+    output = get_read_only_code(dedent(code), {"target_function"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -414,7 +414,7 @@ def test_conditional_class_definitions() -> None:
             platform = "other"
     """
 
-    output = get_read_only_code(dedent(code), {"PlatformClass.target_method"})
+    output = get_read_only_code(dedent(code), {"PlatformClass.target_method"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -473,7 +473,7 @@ def test_multiple_except_clauses() -> None:
             error_type = "cleanup"
     """
 
-    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -526,7 +526,7 @@ def test_with_statement_and_loops() -> None:
                     context = "cleanup"
     """
 
-    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -575,7 +575,7 @@ def test_async_with_try_except() -> None:
                 status = "cancelled"
     """
 
-    output = get_read_only_code(dedent(code), {"TestClass.target_method"})
+    output = get_read_only_code(dedent(code), {"TestClass.target_method"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -685,7 +685,7 @@ def test_simplified_complete_implementation() -> None:
                 self.error = str(e)
     """
 
-    output = get_read_only_code(dedent(code), {"DataProcessor.target_method", "ResultHandler.target_method"})
+    output = get_read_only_code(dedent(code), {"DataProcessor.target_method", "ResultHandler.target_method"}, set())
     assert dedent(expected).strip() == output.strip()
 
 
@@ -795,6 +795,6 @@ def test_simplified_complete_implementation_no_docstring() -> None:
     """
 
     output = get_read_only_code(
-        dedent(code), {"DataProcessor.target_method", "ResultHandler.target_method"}, remove_docstrings=True
+        dedent(code), {"DataProcessor.target_method", "ResultHandler.target_method"}, set(), remove_docstrings=True
     )
     assert dedent(expected).strip() == output.strip()
