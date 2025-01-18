@@ -2,7 +2,9 @@ import dataclasses
 import datetime
 import decimal
 import re
+import sys
 from enum import Enum, Flag, IntFlag, auto
+from pathlib import Path
 
 import pydantic
 import pytest
@@ -665,6 +667,76 @@ def test_custom_object():
 
     E = C
     assert comparator(C, E)
+
+
+def test_custom_object_2():
+    fto_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort_method.py").resolve()
+    original_code = fto_path.read_text("utf-8")
+    from code_to_optimize.bubble_sort_method import BubbleSorter
+
+    a = BubbleSorter()
+    assert a.x == 0
+    try:
+        # Remove the module from sys.modules, to get the updated class
+        sys.modules.pop("code_to_optimize.bubble_sort_method", None)
+        from code_to_optimize.bubble_sort_method import BubbleSorter
+
+        b = BubbleSorter()
+        assert comparator(
+            a, b
+        )  # Note that type(a) != type(b) as the class type objects are different, even if the code is the same.
+
+        optimized_code_mutated_attr = """
+class BubbleSorter:
+    z = 0
+
+    def __init__(self, x=1):
+        self.x = x
+
+    def sorter(self, arr):
+        for i in range(len(arr)):
+            for j in range(len(arr) - 1):
+                if arr[j] > arr[j + 1]:
+                    temp = arr[j]
+                    arr[j] = arr[j + 1]
+                    arr[j + 1] = temp
+        return arr
+                                    """
+        fto_path.write_text(optimized_code_mutated_attr, "utf-8")
+        sys.modules.pop("code_to_optimize.bubble_sort_method", None)
+        from code_to_optimize.bubble_sort_method import BubbleSorter
+
+        c = BubbleSorter()
+        assert c.x == 1
+        assert not comparator(a, c)
+
+        optimized_code_new_attr = """
+class BubbleSorter:
+    z = 5
+
+    def __init__(self, x=0):
+        self.x = x
+
+    def sorter(self, arr):
+        for i in range(len(arr)):
+            for j in range(len(arr) - 1):
+                if arr[j] > arr[j + 1]:
+                    temp = arr[j]
+                    arr[j] = arr[j + 1]
+                    arr[j + 1] = temp
+        return arr
+                                            """
+        fto_path.write_text(optimized_code_new_attr, "utf-8")
+        sys.modules.pop("code_to_optimize.bubble_sort_method", None)
+        from code_to_optimize.bubble_sort_method import BubbleSorter
+
+        d = BubbleSorter()
+        assert d.x == 0
+        # Currently, we do not check if class variables are different, since the code replacer does not allow this.
+        # In the future, if this functionality is allowed, this assert should be false.
+        assert comparator(a, d)
+    finally:
+        fto_path.write_text(original_code, "utf-8")
 
 
 def test_compare_results_fn():
