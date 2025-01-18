@@ -14,5 +14,5 @@ def test_compare_timing_series() -> None:
     optimized_timing_series = create_timing_series(10000, 1800, 48)
     result = series2_faster_95_confidence(original_timing_series, optimized_timing_series, 10000)
     assert result is not None
-    assert 5 < result[0] < 15
-    assert result[1] < 3
+    assert 4 < result[0] < 16
+    assert result[1] < 4

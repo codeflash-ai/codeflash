@@ -139,7 +139,7 @@ install_types = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["jedi", "jedi.api.classes", "inquirer", "inquirer.themes"]
+module = ["jedi", "jedi.api.classes", "inquirer", "inquirer.themes", "numba"]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
