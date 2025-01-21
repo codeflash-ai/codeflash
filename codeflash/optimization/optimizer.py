@@ -68,6 +68,7 @@ from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
+from codeflash.verification.instrument_code import instrument_code
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestResults, TestType
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests
@@ -335,11 +336,18 @@ class Optimizer:
             function_to_optimize=function_to_optimize, function_to_tests=function_to_all_tests
         )
 
+        # Instrument code
+        original_code = validated_original_code[function_to_optimize.file_path].source_code
+        instrument_code(function_to_optimize)
+
         baseline_result = self.establish_original_code_baseline(  # this needs better typing
             function_name=function_to_optimize_qualified_name,
             function_file_path=function_to_optimize.file_path,
             code_context=code_context,
         )
+
+        # Remove instrumentation
+        self.write_code_and_helpers(original_code, {}, function_to_optimize.file_path)
 
         console.rule()
         paths_to_cleanup = (
