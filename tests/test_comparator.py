@@ -739,6 +739,21 @@ class BubbleSorter:
         fto_path.write_text(original_code, "utf-8")
 
 
+def test_superset():
+    class A:
+        def __init__(self):
+            self.a = 1
+
+    class B(A):
+        def __init__(self):
+            super().__init__()
+            self.b = 2
+
+    assert comparator(A(), B(), superset_obj=True)
+    assert not comparator(B(), A(), superset_obj=True)
+    assert not comparator(A(), B())
+
+
 def test_compare_results_fn():
     original_results = TestResults()
     original_results.add(

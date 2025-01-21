@@ -514,6 +514,8 @@ class Optimizer:
                         optimized_code=candidate.source_code,
                         qualified_function_name=function_to_optimize.qualified_name,
                     )
+                    # If init was modified, instrument the code with codeflash capture
+
                     if not did_update:
                         logger.warning(
                             "No functions were replaced in the optimized code. Skipping optimization candidate."
@@ -529,6 +531,9 @@ class Optimizer:
                     optimization_candidate_index=candidate_index, baseline_results=original_code_baseline
                 )
                 console.rule()
+
+                # Remove codeflash capture
+
                 if not is_successful(run_results):
                     optimized_runtimes[candidate.optimization_id] = None
                     is_correct[candidate.optimization_id] = False

@@ -44,43 +44,7 @@ except ImportError:
     HAS_PYRSISTENT = False
 
 
-def type_comparator(orig: Any, new: Any) -> bool:
-    """Custom type comparator for comparing two objects of the same type."""
-    if isinstance(
-        orig,
-        (
-            str,
-            int,
-            float,
-            bool,
-            complex,
-            type(None),
-            decimal.Decimal,
-            set,
-            list,
-            tuple,
-            bytes,
-            bytearray,
-            memoryview,
-            frozenset,
-            enum.Enum,
-            type,
-        ),
-    ):
-        return type(orig) == type(new)
-    # Compare attributes of the type object, not the type itself. Reimported class objects have different memory addresses.
-    type_obj = type(orig)
-    new_type_obj = type(new)
-    if (
-        type_obj.__name__ != new_type_obj.__name__
-        or type_obj.__qualname__ != new_type_obj.__qualname__
-        or type_obj.__bases__ != new_type_obj.__bases__
-    ):
-        return False
-    return True
-
-
-def comparator(orig: Any, new: Any) -> bool:
+def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
     try:
         # if not type_comparator(orig, new):
         if type(orig) is not type(new):
@@ -239,14 +203,11 @@ def comparator(orig: Any, new: Any) -> bool:
                 new_keys = dict(new_keys)
                 orig_keys = {k: v for k, v in orig_keys.items() if not k.startswith("__")}
                 new_keys = {k: v for k, v in new_keys.items() if not k.startswith("__")}
+
+            if superset_obj:
+                # allow new object to be a superset of the original object
+                return all(k in new_keys and comparator(v, new_keys[k]) for k, v in orig_keys.items())
             return comparator(orig_keys, new_keys)
-            # # Check that all original attributes exist and match in new object
-            # for key, value in orig_keys.items():
-            #     if key not in new_keys:
-            #         return False
-            #     if not comparator(value, new_keys[key]):
-            #         return False
-            # return True  # Allow additional attributes in new_keys
 
         if type(orig) in [types.BuiltinFunctionType, types.BuiltinMethodType]:
             return new == orig

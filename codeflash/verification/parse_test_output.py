@@ -108,7 +108,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
         cur = db.cursor()
         data = cur.execute(
             "SELECT test_module_path, test_class_name, test_function_name, "
-            "function_getting_tested, loop_index, iteration_id, runtime, return_value FROM test_results"
+            "function_getting_tested, loop_index, iteration_id, runtime, return_value,verification_type FROM test_results"
         ).fetchall()
     finally:
         db.close()
@@ -119,6 +119,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             # TODO : this is because sqlite writes original file module path. Should make it consistent
             test_type = test_files.get_test_type_by_original_file_path(test_file_path)
             loop_index = val[4]
+            verification_type = val[8]
             try:
                 ret_val = (pickle.loads(val[7]) if loop_index == 1 else None,)
             except Exception:
@@ -140,6 +141,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                     test_type=test_type,
                     return_value=ret_val,
                     timed_out=False,
+                    verification_type=verification_type if verification_type else None,
                 )
             )
         except Exception:

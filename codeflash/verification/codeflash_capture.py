@@ -9,6 +9,8 @@ import time
 
 import dill as pickle
 
+from codeflash.models.models import VerificationType
+
 
 def get_test_info_from_stack() -> tuple[str, str | None, str, str]:
     """Extract test information from the call stack."""
@@ -92,7 +94,7 @@ def codeflash_capture(function_name: str, tmp_dir_path: str):
             instance_state = args[0].__dict__  # self is always the first argument
             print(instance_state)
             codeflash_cur.execute(
-                "CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)"
+                "CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)"
             )
 
             # Write to sqlite
@@ -108,7 +110,7 @@ def codeflash_capture(function_name: str, tmp_dir_path: str):
                 pickled_return_value,
             )
             codeflash_cur.execute(
-                "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     test_module_name,
                     test_class_name,
@@ -118,6 +120,7 @@ def codeflash_capture(function_name: str, tmp_dir_path: str):
                     invocation_id,
                     codeflash_duration,
                     pickled_return_value,
+                    VerificationType.INSTANCE_STATE,
                 ),
             )
             codeflash_con.commit()

@@ -30,6 +30,8 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         did_all_timeout = did_all_timeout and original_test_result.timed_out
         if original_test_result.timed_out:
             continue
+        # if original_test_result.verification_type and original_test_result.verification_type == VerificationType.INSTANCE_STATE:
+        # Do superset comparator
         if not comparator(original_test_result.return_value, cdd_test_result.return_value):
             are_equal = False
             break
