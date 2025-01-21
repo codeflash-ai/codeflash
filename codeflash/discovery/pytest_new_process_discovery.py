@@ -1,4 +1,5 @@
 import sys
+from typing import Any
 
 # This script should not have any relation to the codeflash package, be careful with imports
 cwd = sys.argv[1]
@@ -16,8 +17,8 @@ class PytestCollectionPlugin:
         pytest_rootdir = session.config.rootdir
 
 
-def parse_pytest_collection_results(pytest_tests: list[any]) -> list[dict[str, str]]:
-    test_results: list[list[str]] = []
+def parse_pytest_collection_results(pytest_tests: list[Any]) -> list[dict[str, str]]:
+    test_results = []
     for test in pytest_tests:
         test_class = None
         if test.cls:

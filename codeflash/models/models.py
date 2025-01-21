@@ -215,19 +215,51 @@ class CoverageData:
     main_func_coverage: FunctionCoverage
     dependent_func_coverage: Union[FunctionCoverage, None]
     status: CoverageStatus
-    blank_re: Pattern = re.compile(r"\s*(#|$)")
-    else_re: Pattern = re.compile(r"\s*else\s*:\s*(#|$)")
+    blank_re: Pattern[str] = re.compile(r"\s*(#|$)")
+    else_re: Pattern[str] = re.compile(r"\s*else\s*:\s*(#|$)")
 
     @staticmethod
-    def load_from_coverage_file(
-        coverage_file_path: Path, source_code_path: Path, function_name: str, code_context: CodeOptimizationContext
+    def load_from_sqlite_database(
+        database_path: Path, function_name: str, code_context: CodeOptimizationContext, source_code_path: Path
     ) -> CoverageData:
-        """Load coverage data, including main function and its dependencies."""
-        from json import load
+        """Load coverage data from an SQLite database, mimicking the behavior of load_from_coverage_file."""
+        from coverage import Coverage
+        from coverage.jsonreport import JsonReporter
 
-        with coverage_file_path.open() as f:
-            original_coverage_data = load(f)  # we can remove this once we're done debugging
-        coverage_data, status = CoverageData._parse_coverage_file(coverage_file_path, source_code_path)
+        cov = Coverage(data_file=database_path, data_suffix=True, auto_data=True, branch=True)
+        if not database_path.stat().st_size or not database_path.exists():
+            logger.debug(f"Coverage database {database_path} is empty or does not exist")
+            return CoverageData(
+                file_path=source_code_path,
+                coverage=0.0,
+                function_name=function_name,
+                functions_being_tested=[],
+                graph={},
+                code_context=code_context,
+                main_func_coverage=FunctionCoverage(
+                    name=function_name,
+                    coverage=0.0,
+                    executed_lines=[],
+                    unexecuted_lines=[],
+                    executed_branches=[],
+                    unexecuted_branches=[],
+                ),
+                dependent_func_coverage=None,
+                status=CoverageStatus.NOT_FOUND,
+            )
+
+        cov.load()
+
+        reporter = JsonReporter(cov)
+        temp_json_file = database_path.with_suffix(".report.json")
+        with temp_json_file.open("w") as f:
+            reporter.report(morfs=[source_code_path.as_posix()], outfile=f)
+
+        with temp_json_file.open() as f:
+            original_coverage_data = json.load(f)
+
+        coverage_data, status = CoverageData._parse_coverage_file(temp_json_file, source_code_path)
+
         main_func_coverage, dependent_func_coverage = CoverageData._fetch_function_coverages(
             function_name, code_context, coverage_data, original_cov_data=original_coverage_data
         )
@@ -245,6 +277,8 @@ class CoverageData:
             functions_being_tested.append(dependent_func_coverage.name)
 
         graph = CoverageData._build_graph(main_func_coverage, dependent_func_coverage)
+        temp_json_file.unlink()
+
         return CoverageData(
             file_path=source_code_path,
             coverage=coverage,
