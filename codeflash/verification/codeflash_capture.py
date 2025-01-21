@@ -35,7 +35,7 @@ def get_test_info_from_stack() -> tuple[str, str | None, str, str]:
     return test_module_name, test_class_name, test_name, line_id
 
 
-def codeflash_capture(function_name, tmp_dir_path):
+def codeflash_capture(function_name: str, tmp_dir_path: str):
     """Defines decorator to be instrumented onto the init function in the code. Collects info of the test that called this, and captures the state of the instance."""
 
     def decorator(wrapped):
