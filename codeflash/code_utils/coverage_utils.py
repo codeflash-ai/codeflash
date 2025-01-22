@@ -43,8 +43,8 @@ def generate_candidates(source_code_path: Path) -> list[str]:
 
 def prepare_coverage_files() -> tuple[Path, Path]:
     """Prepare coverage configuration and output files."""
-    coverage_out_file = get_run_tmp_file(Path("coverage.json"))
+    coverage_database_file = get_run_tmp_file(Path(".coverage"))
     coveragercfile = get_run_tmp_file(Path(".coveragerc"))
-    coveragerc_content = f"[run]\n branch = True\n [json]\n output = {coverage_out_file.as_posix()}\n"
+    coveragerc_content = f"[run]\n branch = True\ndata_file={coverage_database_file}\n"
     coveragercfile.write_text(coveragerc_content)
-    return coverage_out_file, coveragercfile
+    return coverage_database_file, coveragercfile

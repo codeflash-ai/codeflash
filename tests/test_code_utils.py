@@ -1,8 +1,11 @@
 import ast
 import site
+from collections.abc import Generator
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
+
 from codeflash.code_utils.code_utils import (
     cleanup_paths,
     file_name_from_test_module_name,
@@ -15,6 +18,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
     path_belongs_to_site_packages,
 )
+from codeflash.code_utils.coverage_utils import generate_candidates, prepare_coverage_files
 
 
 @pytest.fixture
@@ -24,6 +28,12 @@ def multiple_existing_and_non_existing_files(tmp_path: Path) -> list[Path]:
     for file in existing_files:
         file.touch()
     return existing_files + non_existing_files
+
+
+@pytest.fixture
+def mock_get_run_tmp_file() -> Generator[MagicMock, None, None]:
+    with patch("codeflash.code_utils.coverage_utils.get_run_tmp_file") as mock:
+        yield mock
 
 
 def test_get_qualified_name_valid() -> None:
@@ -341,3 +351,30 @@ def test_cleanup_paths(multiple_existing_and_non_existing_files: list[Path]) -> 
     cleanup_paths(multiple_existing_and_non_existing_files)
     for file in multiple_existing_and_non_existing_files:
         assert not file.exists()
+
+
+def test_generate_candidates() -> None:
+    source_code_path = Path("/Users/krrt7/Desktop/work/codeflash/cli/codeflash/code_utils/coverage_utils.py")
+    expected_candidates = [
+        "coverage_utils.py",
+        "code_utils/coverage_utils.py",
+        "codeflash/code_utils/coverage_utils.py",
+        "cli/codeflash/code_utils/coverage_utils.py",
+        "codeflash/cli/codeflash/code_utils/coverage_utils.py",
+        "work/codeflash/cli/codeflash/code_utils/coverage_utils.py",
+        "Desktop/work/codeflash/cli/codeflash/code_utils/coverage_utils.py",
+        "krrt7/Desktop/work/codeflash/cli/codeflash/code_utils/coverage_utils.py",
+        "Users/krrt7/Desktop/work/codeflash/cli/codeflash/code_utils/coverage_utils.py",
+    ]
+    assert generate_candidates(source_code_path) == expected_candidates
+
+
+def test_prepare_coverage_files(mock_get_run_tmp_file: MagicMock) -> None:
+    mock_coverage_file = MagicMock(spec=Path)
+    mock_coveragerc_file = MagicMock(spec=Path)
+    mock_get_run_tmp_file.side_effect = [mock_coverage_file, mock_coveragerc_file]
+
+    coverage_database_file, coveragercfile = prepare_coverage_files()
+    assert coverage_database_file == mock_coverage_file
+    assert coveragercfile == mock_coveragerc_file
+    mock_coveragerc_file.write_text.assert_called_once_with(f"[run]\n branch = True\ndata_file={mock_coverage_file}\n")

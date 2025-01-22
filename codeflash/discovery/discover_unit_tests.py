@@ -70,8 +70,7 @@ def discover_tests_pytest(
         logger.exception(f"Failed to discover tests: {e}")
         exitcode = -1
     finally:
-        with Path.open(tmp_pickle_path, "w") as f:
-            pass
+        tmp_pickle_path.unlink(missing_ok=True)
     if exitcode != 0:
         if exitcode == 2 and "ERROR collecting" in result.stdout:
             # Pattern matches "===== ERRORS =====" (any number of =) and captures everything after
@@ -102,7 +101,7 @@ def discover_tests_pytest(
             test_type = TestType.EXISTING_UNIT_TEST
 
         test_obj = TestsInFile(
-            test_file=test["test_file"],
+            test_file=Path(test["test_file"]),
             test_class=test["test_class"],
             test_function=test["test_function"],
             test_type=test_type,
@@ -278,7 +277,7 @@ def process_test_files(
                 try:
                     definition = name.goto(follow_imports=True, follow_builtin_imports=False)
                 except Exception as e:
-                    logger.exception(str(e))
+                    logger.debug(str(e))
                     continue
                 if definition and definition[0].type == "function":
                     definition_path = str(definition[0].module_path)

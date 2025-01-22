@@ -446,7 +446,7 @@ def parse_test_results(
     optimization_iteration: int,
     function_name: str | None,
     source_file: Path | None,
-    coverage_file: Path | None,
+    coverage_database_file: Path | None,
     code_context: CodeOptimizationContext | None = None,
     run_result: subprocess.CompletedProcess | None = None,
     unittest_loop_index: int | None = None,
@@ -488,15 +488,13 @@ def parse_test_results(
     results = merge_test_results(test_results_xml, test_results_bin_file, test_config.test_framework)
 
     all_args = False
-    if coverage_file and coverage_file.exists() and source_file and code_context and function_name:
+    if coverage_database_file and source_file and code_context and function_name:
         all_args = True
-        coverage = CoverageData.load_from_coverage_file(
-            coverage_file_path=coverage_file,
+        coverage = CoverageData.load_from_sqlite_database(
+            database_path=coverage_database_file,
             source_code_path=source_file,
             code_context=code_context,
             function_name=function_name,
         )
-        coverage_file.unlink(missing_ok=True)
-        Path(".coverage").unlink(missing_ok=True)
         coverage.log_coverage()
     return results, coverage if all_args else None
