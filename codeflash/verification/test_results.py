@@ -17,8 +17,10 @@ class VerificationType(str, Enum):
     FUNCTION_TO_OPTIMIZE = (
         "function_to_optimize"  # Correctness verification for fto, checks input values and output values
     )
-    INSTANCE_STATE_FTO = "instance_state_fto"  # Correctness verification for instance state of fto, checks instance attributes right after __init__ is called
-    INSTANCE_STATE_HELPER = "instance_state_helper"  # Correctness verification for instance state of helper classes, checks instance attributes right after __init__ is called
+    INSTANCE_STATE_FTO = "instance_state_fto"  # Correctness verification for fto class instance attributes after init
+    INSTANCE_STATE_HELPER = (
+        "instance_state_helper"  # Correctness verification for helper class instance attributes after init
+    )
 
     def __new__(cls, value: str) -> VerificationType | None:
         obj = str.__new__(cls, value)

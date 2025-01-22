@@ -93,8 +93,6 @@ def codeflash_capture(function_name: str, tmp_dir_path: str, is_fto: bool = Fals
             codeflash_con = sqlite3.connect(f"{tmp_dir_path}_{codeflash_iteration}.sqlite")
             codeflash_cur = codeflash_con.cursor()
 
-            print(args)
-
             # Record timing information
             exception = None
             gc.disable()
@@ -110,23 +108,12 @@ def codeflash_capture(function_name: str, tmp_dir_path: str, is_fto: bool = Fals
 
             # Capture instance state after initialization
             instance_state = args[0].__dict__  # self is always the first argument
-            print(instance_state)
             codeflash_cur.execute(
                 "CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)"
             )
 
             # Write to sqlite
             pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(instance_state)
-            print(
-                test_module_name,
-                test_class_name,
-                test_name,
-                function_name,
-                loop_index,
-                invocation_id,
-                codeflash_duration,
-                pickled_return_value,
-            )
             codeflash_cur.execute(
                 "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (

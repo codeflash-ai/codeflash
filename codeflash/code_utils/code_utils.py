@@ -80,7 +80,6 @@ def get_all_function_names(code: str) -> tuple[bool, list[str]]:
 def get_run_tmp_file(file_path: Path) -> Path:
     if not hasattr(get_run_tmp_file, "tmpdir"):
         get_run_tmp_file.tmpdir = TemporaryDirectory(prefix="codeflash_")
-        logger.info(f"Created new temp directory for codeflash: {Path(get_run_tmp_file.tmpdir.name)!s}")
     return Path(get_run_tmp_file.tmpdir.name) / file_path
 
 
