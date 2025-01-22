@@ -22,7 +22,7 @@ def get_test_info_from_stack() -> tuple[str, str | None, str, str]:
     test_name = None
     function_name = ""
     line_id = ""  # Note that the way this line_id is defined is from the line_id called in our usual instrumentation
-
+    function_found = False
     # Search through stack for test information
     for frame in stack:
         if frame.function.startswith("test_"):  # May need a more robust way to find the test file
@@ -32,7 +32,26 @@ def get_test_info_from_stack() -> tuple[str, str | None, str, str]:
             # Check if it's a method in a class
             if "self" in frame.frame.f_locals:
                 test_class_name = frame.frame.f_locals["self"].__class__.__name__
+            function_found = True
             break
+
+    if not function_found:  # Likely defined at module level, or as a helper test function.
+        for frame in stack:
+            # First try to get the module name directly from the frame
+            module = inspect.getmodule(frame[0])
+            if module:
+                test_module_name = module.__name__
+                line_id = str(frame.lineno)
+
+                # If it's in a function, the function name will be in frame.function
+                # If at module level, frame.function will be '<module>'
+                if frame.function != "<module>":
+                    test_name = frame.function
+
+                # Check if it's in a class
+                if "self" in frame.frame.f_locals:
+                    test_class_name = frame.frame.f_locals["self"].__class__.__name__
+                break
 
     return test_module_name, test_class_name, test_name, line_id
 
@@ -70,7 +89,6 @@ def codeflash_capture(function_name: str, tmp_dir_path: str, is_fto: bool = Fals
             print(
                 f"!######{test_module_name}:{(test_class_name + '.' if test_class_name else '')}{test_name}:{function_name}:{loop_index}:{invocation_id}######!"
             )
-
             # Connect to sqlite
             codeflash_con = sqlite3.connect(f"{tmp_dir_path}_{codeflash_iteration}.sqlite")
             codeflash_cur = codeflash_con.cursor()

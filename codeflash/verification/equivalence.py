@@ -1,7 +1,7 @@
 import sys
 
 from codeflash.verification.comparator import comparator
-from codeflash.verification.test_results import TestResults, TestType
+from codeflash.verification.test_results import TestResults, TestType, VerificationType
 
 INCREASED_RECURSION_LIMIT = 5000
 
@@ -24,15 +24,25 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         if cdd_test_result is not None and original_test_result is None:
             continue
         # If helper function instance_state verification is not present, that's ok. continue
+        if (
+            original_test_result.verification_type
+            and original_test_result.verification_type == VerificationType.INSTANCE_STATE_HELPER
+            and cdd_test_result is None
+        ):
+            continue
         if original_test_result is None or cdd_test_result is None:
             are_equal = False
             break
         did_all_timeout = did_all_timeout and original_test_result.timed_out
         if original_test_result.timed_out:
             continue
-        # if original_test_result.verification_type and original_test_result.verification_type == VerificationType.INSTANCE_STATE:
-        # Do superset comparator
-        if not comparator(original_test_result.return_value, cdd_test_result.return_value):
+        superset_obj = False
+        if original_test_result.verification_type and (
+            original_test_result.verification_type == VerificationType.INSTANCE_STATE_HELPER
+            or original_test_result.verification_type == VerificationType.INSTANCE_STATE_FTO
+        ):
+            superset_obj = True
+        if not comparator(original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj):
             are_equal = False
             break
         if original_test_result.test_type in [TestType.EXISTING_UNIT_TEST, TestType.CONCOLIC_COVERAGE_TEST] and (

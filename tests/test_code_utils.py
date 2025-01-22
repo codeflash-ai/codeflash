@@ -9,7 +9,6 @@ from codeflash.code_utils.code_utils import (
     file_path_from_module_name,
     get_all_function_names,
     get_imports_from_file,
-    get_only_code_content,
     get_qualified_name,
     get_run_tmp_file,
     is_class_defined_in_file,
@@ -342,51 +341,3 @@ def test_cleanup_paths(multiple_existing_and_non_existing_files: list[Path]) -> 
     cleanup_paths(multiple_existing_and_non_existing_files)
     for file in multiple_existing_and_non_existing_files:
         assert not file.exists()
-
-
-def test_get_only_code_content_with_docstring() -> None:
-    """Test function with only a docstring."""
-    input_code = '''def foo():
-    """This is a docstring."""
-    return 42'''
-    expected = """def foo():
-    return 42"""
-    assert get_only_code_content(input_code) == expected
-
-
-def test_get_only_code_content_with_comments() -> None:
-    """Test function with only comments."""
-    input_code = """def foo():
-    # This is a comment
-    return 42  # Another comment"""
-    expected = """def foo():
-    return 42"""
-    assert get_only_code_content(input_code) == expected
-
-
-def test_get_only_code_content_with_docstring_and_comments() -> None:
-    """Test function with both docstring and comments."""
-    input_code = '''def foo():
-    """This is a docstring."""
-    # This is a comment
-    return 42  # Another comment'''
-
-    expected = """def foo():
-    return 42"""
-    assert get_only_code_content(input_code) == expected
-
-
-def test_get_only_code_content_nested_functions() -> None:
-    """Test nested functions with docstrings."""
-    input_code = '''def outer():
-    """Outer docstring."""
-    def inner():
-        """Inner docstring."""
-        return 42
-    return inner()'''
-    expected = """def outer():
-
-    def inner():
-        return 42
-    return inner()"""
-    assert get_only_code_content(input_code) == expected

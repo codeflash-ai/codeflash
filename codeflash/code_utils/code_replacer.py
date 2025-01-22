@@ -9,7 +9,6 @@ import libcst as cst
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module
-from codeflash.code_utils.code_utils import cst_to_code, get_only_code_content
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
@@ -111,14 +110,8 @@ class OptimFunctionReplacer(cst.CSTTransformer):
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
         if (self.current_class, original_node.name.value) in self.modified_functions:
             node = self.modified_functions[(self.current_class, original_node.name.value)]
-            if get_only_code_content(cst_to_code(original_node)) == get_only_code_content(cst_to_code(node)):
-                return original_node  # Code was unchanged, so don't modify docstrings / comments
             return updated_node.with_changes(body=node.body, decorators=node.decorators)
         if original_node.name.value == "__init__" and self.current_class in self.modified_init_functions:
-            if get_only_code_content(cst_to_code(original_node)) == get_only_code_content(
-                cst_to_code(self.modified_init_functions[self.current_class])
-            ):
-                return original_node  # Code was unchanged, so don't modify docstrings / comments
             return self.modified_init_functions[self.current_class]
 
         return updated_node

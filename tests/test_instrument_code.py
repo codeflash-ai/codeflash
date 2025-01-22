@@ -21,7 +21,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class MyClass:
 
-    @codeflash_capture(function_name='target_function', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
+    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
     def __init__(self):
         self.x = 1
 
@@ -85,7 +85,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class MyClass(ParentClass):
 
-    @codeflash_capture(function_name='target_function', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
+    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -127,7 +127,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class MyClass:
 
-    @codeflash_capture(function_name='target_function', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
+    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
     def __init__(self):
         self.x = 1
 
@@ -180,7 +180,7 @@ from test_helper_file import HelperClass
 
 class MyClass:
 
-    @codeflash_capture(function_name='target_function', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
+    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
     def __init__(self):
         self.x = 1
 
@@ -191,9 +191,11 @@ class MyClass:
 from codeflash.verification.codeflash_capture import codeflash_capture
 
 class HelperClass:
-    @codeflash_capture(function_name='helper', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=False)
+
+    @codeflash_capture(function_name='HelperClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=False)
     def __init__(self):
         self.y = 1
+
     def helper(self):
         return 1
 """
@@ -210,7 +212,7 @@ class HelperClass:
         instrument_code(function, {helper_path: {"HelperClass"}})
         modified_code = test_path.read_text()
         assert modified_code.strip() == expected.strip()
-
+        assert helper_path.read_text().strip() == expected_helper.strip()
     finally:
         test_path.unlink(missing_ok=True)
         helper_path.unlink(missing_ok=True)
@@ -263,7 +265,7 @@ from helper_file_2 import HelperClass2, AnotherHelperClass
 
 class MyClass:
 
-    @codeflash_capture(function_name='target_function', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
+    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
     def __init__(self):
         self.x = 1
 
@@ -280,7 +282,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class HelperClass1:
 
-    @codeflash_capture(function_name='target_function', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=False)
+    @codeflash_capture(function_name='HelperClass1.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=False)
     def __init__(self):
         self.y = 1
 
@@ -294,7 +296,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class HelperClass2:
 
-    @codeflash_capture(function_name='target_function', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=False)
+    @codeflash_capture(function_name='HelperClass2.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=False)
     def __init__(self):
         self.z = 2
 
@@ -303,7 +305,7 @@ class HelperClass2:
 
 class AnotherHelperClass:
 
-    @codeflash_capture(function_name='target_function', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=False)
+    @codeflash_capture(function_name='AnotherHelperClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=False)
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 

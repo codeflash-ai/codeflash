@@ -116,10 +116,14 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
     for val in data:
         try:
             test_module_path = val[0]
+            test_class_name = val[1] if val[1] else None
+            test_function_name = val[2] if val[2] else None
+            function_getting_tested = val[3]
             test_file_path = file_path_from_module_name(test_module_path, test_config.tests_project_rootdir)
-            # TODO : this is because sqlite writes original file module path. Should make it consistent
-            test_type = test_files.get_test_type_by_original_file_path(test_file_path)
+            test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)  # may not be the best way
             loop_index = val[4]
+            iteration_id = val[5]
+            runtime = val[6]
             verification_type = val[8]
             try:
                 ret_val = (pickle.loads(val[7]) if loop_index == 1 else None,)
@@ -129,15 +133,15 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                 function_test_invocation=FunctionTestInvocation(
                     loop_index=loop_index,
                     id=InvocationId(
-                        test_module_path=val[0],
-                        test_class_name=val[1],
-                        test_function_name=val[2],
-                        function_getting_tested=val[3],
-                        iteration_id=val[5],
+                        test_module_path=test_module_path,
+                        test_class_name=test_class_name,
+                        test_function_name=test_function_name,
+                        function_getting_tested=function_getting_tested,
+                        iteration_id=iteration_id,
                     ),
                     file_name=test_file_path,
                     did_pass=True,
-                    runtime=val[6],
+                    runtime=runtime,
                     test_framework=test_config.test_framework,
                     test_type=test_type,
                     return_value=ret_val,

@@ -45,6 +45,7 @@ except ImportError:
 
 
 def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
+    """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
     try:
         # if not type_comparator(orig, new):
         if type(orig) is not type(new):
@@ -59,7 +60,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
         if isinstance(orig, (list, tuple)):
             if len(orig) != len(new):
                 return False
-            return all(comparator(elem1, elem2) for elem1, elem2 in zip(orig, new))
+            return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
 
         if isinstance(
             orig,
@@ -90,7 +91,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
             # compare the attributes of the two exception objects to determine if they are equivalent.
             orig_dict = {k: v for k, v in orig.__dict__.items() if not k.startswith("_")}
             new_dict = {k: v for k, v in new.__dict__.items() if not k.startswith("_")}
-            return comparator(orig_dict, new_dict)
+            return comparator(orig_dict, new_dict, superset_obj)
 
         if HAS_SQLALCHEMY:
             try:
@@ -101,7 +102,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 for key in list(orig_keys.keys()):
                     if key.startswith("_"):
                         continue
-                    if key not in new_keys or not comparator(orig_keys[key], new_keys[key]):
+                    if key not in new_keys or not comparator(orig_keys[key], new_keys[key], superset_obj):
                         return False
                 return True
 
@@ -109,12 +110,14 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 pass
         # scipy condition because dok_matrix type is also a instance of dict, but dict comparison doesn't work for it
         if isinstance(orig, dict) and not (HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix)):
+            if superset_obj:
+                return all(k in new.keys() and comparator(v, new[k], superset_obj) for k, v in orig.items())
             if len(orig) != len(new):
                 return False
             for key in orig:
                 if key not in new:
                     return False
-                if not comparator(orig[key], new[key]):
+                if not comparator(orig[key], new[key], superset_obj):
                     return False
             return True
 
@@ -127,7 +130,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 return np.allclose(orig, new, equal_nan=True)
             except Exception:
                 # fails at "ufunc 'isfinite' not supported for the input types"
-                return np.all([comparator(x, y) for x, y in zip(orig, new)])
+                return np.all([comparator(x, y, superset_obj) for x, y in zip(orig, new)])
 
         if HAS_NUMPY and isinstance(orig, (np.floating, np.complex64, np.complex128)):
             return np.isclose(orig, new)
@@ -206,8 +209,8 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
 
             if superset_obj:
                 # allow new object to be a superset of the original object
-                return all(k in new_keys and comparator(v, new_keys[k]) for k, v in orig_keys.items())
-            return comparator(orig_keys, new_keys)
+                return all(k in new_keys and comparator(v, new_keys[k], superset_obj) for k, v in orig_keys.items())
+            return comparator(orig_keys, new_keys, superset_obj)
 
         if type(orig) in [types.BuiltinFunctionType, types.BuiltinMethodType]:
             return new == orig

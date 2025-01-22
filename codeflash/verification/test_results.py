@@ -48,7 +48,7 @@ class TestType(Enum):
 class InvocationId:
     test_module_path: str  # The fully qualified name of the test module
     test_class_name: Optional[str]  # The name of the class where the test is defined
-    test_function_name: str  # The name of the test_function. Does not include the components of the file_name
+    test_function_name: Optional[str]  # The name of the test_function. Does not include the components of the file_name
     function_getting_tested: str
     iteration_id: Optional[str]
 

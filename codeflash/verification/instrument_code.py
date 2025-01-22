@@ -106,7 +106,7 @@ class InitDecorator(ast.NodeTransformer):
             func=ast.Name(id="codeflash_capture", ctx=ast.Load()),
             args=[],
             keywords=[
-                ast.keyword(arg="function_name", value=ast.Constant(value=self.fto_name)),
+                ast.keyword(arg="function_name", value=ast.Constant(value=".".join([node.name, "__init__"]))),
                 ast.keyword(arg="tmp_dir_path", value=ast.Constant(value=self.tmp_dir_path)),
                 ast.keyword(arg="is_fto", value=ast.Constant(value=self.is_fto)),
             ],

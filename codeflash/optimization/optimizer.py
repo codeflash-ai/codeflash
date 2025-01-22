@@ -336,7 +336,6 @@ class Optimizer:
             function_to_optimize=function_to_optimize, function_to_tests=function_to_all_tests
         )
 
-        # Instrument code
         # Get a dict of file_path_to_classes of fto and helpers_of_fto
         file_path_to_helper_classes = defaultdict(set)
         for function_source in code_context.helper_functions:
@@ -345,21 +344,15 @@ class Optimizer:
                 and "." in function_source.qualified_name
             ):
                 file_path_to_helper_classes[function_source.file_path].add(function_source.qualified_name.split(".")[0])
-        instrument_code(function_to_optimize, file_path_to_helper_classes)
 
         baseline_result = self.establish_original_code_baseline(  # this needs better typing
             function_name=function_to_optimize_qualified_name,
             function_file_path=function_to_optimize.file_path,
             code_context=code_context,
+            function_to_optimize=function_to_optimize,
+            original_helper_code=original_helper_code,
+            file_path_to_helper_classes=file_path_to_helper_classes,
         )
-
-        # Remove instrumentation
-        self.write_code_and_helpers(
-            validated_original_code[function_to_optimize.file_path].source_code,
-            original_helper_code,
-            function_to_optimize.file_path,
-        )
-
         console.rule()
         paths_to_cleanup = (
             generated_test_paths + generated_perf_test_paths + list(instrumented_unittests_created_for_function)
@@ -390,6 +383,7 @@ class Optimizer:
                 original_code_baseline=original_code_baseline,
                 original_helper_code=original_helper_code,
                 function_trace_id=function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
+                file_path_to_helper_classes=file_path_to_helper_classes,
             )
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
@@ -499,6 +493,7 @@ class Optimizer:
         original_code_baseline: OriginalCodeBaseline,
         original_helper_code: dict[Path, str],
         function_trace_id: str,
+        file_path_to_helper_classes: dict[Path, set[str]],
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime
@@ -538,13 +533,14 @@ class Optimizer:
                     continue
 
                 # Instrument codeflash capture
-
                 run_results = self.run_optimized_candidate(
-                    optimization_candidate_index=candidate_index, baseline_results=original_code_baseline
+                    optimization_candidate_index=candidate_index,
+                    baseline_results=original_code_baseline,
+                    function_to_optimize=function_to_optimize,
+                    original_helper_code=original_helper_code,
+                    file_path_to_helper_classes=file_path_to_helper_classes,
                 )
                 console.rule()
-
-                # Remove codeflash capture
 
                 if not is_successful(run_results):
                     optimized_runtimes[candidate.optimization_id] = None
@@ -962,7 +958,13 @@ class Optimizer:
         )
 
     def establish_original_code_baseline(
-        self, function_name: str, function_file_path: Path, code_context: CodeOptimizationContext
+        self,
+        function_name: str,
+        function_file_path: Path,
+        code_context: CodeOptimizationContext,
+        function_to_optimize: FunctionToOptimize,
+        original_helper_code: dict[Path, str],
+        file_path_to_helper_classes: dict[Path, set[str]],
     ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
         # For the original function - run the tests and get the runtime, plus coverage
         with progress_bar(f"Establishing original code baseline for {function_name}"):
@@ -978,6 +980,8 @@ class Optimizer:
                 test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
 
             coverage_results = None
+            # Instrument codeflash capture
+            instrument_code(function_to_optimize, file_path_to_helper_classes)
             behavioral_results, coverage_results = self.run_and_parse_tests(
                 testing_type=TestingMode.BEHAVIOR,
                 test_env=test_env,
@@ -988,6 +992,10 @@ class Optimizer:
                 function_name=function_name,
                 source_file=function_file_path,
                 code_context=code_context,
+            )
+            # Remove codeflash capture
+            self.write_code_and_helpers(
+                function_file_path.read_text("utf-8"), original_helper_code, function_to_optimize.file_path
             )
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
@@ -1077,7 +1085,13 @@ class Optimizer:
             )
 
     def run_optimized_candidate(
-        self, *, optimization_candidate_index: int, baseline_results: OriginalCodeBaseline
+        self,
+        *,
+        optimization_candidate_index: int,
+        baseline_results: OriginalCodeBaseline,
+        function_to_optimize: FunctionToOptimize,
+        original_helper_code: dict[Path, str],
+        file_path_to_helper_classes: dict[Path, set[str]],
     ) -> Result[OptimizedCandidateResult, str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
@@ -1093,6 +1107,13 @@ class Optimizer:
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
 
+            # Instrument codeflash capture
+            candidate_fto_code = Path(function_to_optimize.file_path).read_text("utf-8")
+            candidate_helper_code = {}
+            for module_abspath in original_helper_code:
+                candidate_helper_code[module_abspath] = Path(module_abspath).read_text("utf-8")
+            instrument_code(function_to_optimize, file_path_to_helper_classes)
+
             candidate_behavior_results, _ = self.run_and_parse_tests(
                 testing_type=TestingMode.BEHAVIOR,
                 test_env=test_env,
@@ -1102,6 +1123,8 @@ class Optimizer:
                 enable_coverage=False,
             )
 
+            # Remove instrumentation
+            self.write_code_and_helpers(candidate_fto_code, candidate_helper_code, function_to_optimize.file_path)
             console.print(
                 TestResults.report_to_tree(
                     candidate_behavior_results.get_test_pass_fail_report_by_type(),
