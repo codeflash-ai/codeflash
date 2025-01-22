@@ -84,11 +84,6 @@ class CodeOptimizationContext(BaseModel):
     preexisting_objects: list[tuple[str, list[FunctionParent]]]
 
 
-class VerificationType(str, Enum):
-    FUNCTION_TO_OPTIMIZE = "function_to_optimize"
-    INSTANCE_STATE = "instance_state"
-
-
 class OptimizedCandidateResult(BaseModel):
     max_loop_count: int
     best_test_runtime: int

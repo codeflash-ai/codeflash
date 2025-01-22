@@ -1,7 +1,6 @@
-
 class BubbleSorter:
-    def __init__(self):
-        self.x = 1
+    def __init__(self, x=0):
+        self.x = x
 
     def sorter(self, arr):
         for i in range(len(arr)):
@@ -11,5 +10,3 @@ class BubbleSorter:
                     arr[j] = arr[j + 1]
                     arr[j + 1] = temp
         return arr
-
-        

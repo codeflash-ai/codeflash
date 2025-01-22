@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import ast
 from pathlib import Path
 
@@ -5,38 +7,56 @@ from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 
-def instrument_code(function_to_optimize: FunctionToOptimize) -> None:
+def instrument_code(function_to_optimize: FunctionToOptimize, file_path_to_helper_class: dict[Path, set[str]]) -> None:
     """Instrument __init__ function with codeflash_capture decorator if it's in a class."""
     # Find the class parent
     if len(function_to_optimize.parents) == 1 and function_to_optimize.parents[0].type == "ClassDef":
         class_parent = function_to_optimize.parents[0]
     else:
         return
-
-    # Read code from file
+    # Remove duplicate fto class from helper classes
+    if function_to_optimize.file_path in file_path_to_helper_class:
+        file_path_to_helper_class[function_to_optimize.file_path].remove(class_parent.name)
+    # Instrument fto class
     with open(function_to_optimize.file_path) as f:
         original_code = f.read()
 
     # Add decorator to init
     modified_code = add_codeflash_capture_to_init(
-        class_name=class_parent.name,
-        function_name=function_to_optimize.function_name,
+        target_classes={class_parent.name},
+        fto_name=function_to_optimize.function_name,
         tmp_dir_path=str(get_run_tmp_file(Path("test_return_values"))),
         code=original_code,
+        is_fto=True,
     )
 
-    # Write modified code back to file
     with open(function_to_optimize.file_path, "w") as f:
         f.write(modified_code)
 
+    # Instrument helper classes
+    for file_path, helper_classes in file_path_to_helper_class.items():
+        with open(file_path) as f:
+            original_code = f.read()
+        modified_code = add_codeflash_capture_to_init(
+            target_classes=helper_classes,
+            fto_name=function_to_optimize.function_name,
+            tmp_dir_path=str(get_run_tmp_file(Path("test_return_values"))),
+            code=original_code,
+            is_fto=False,
+        )
+        with open(file_path, "w") as f:
+            f.write(modified_code)
 
-def add_codeflash_capture_to_init(class_name: str, function_name: str, tmp_dir_path: str, code: str) -> str:
+
+def add_codeflash_capture_to_init(
+    target_classes: set[str], fto_name: str, tmp_dir_path: str, code: str, is_fto: bool = False
+) -> str:
     """Add codeflash_capture decorator to __init__ function in the specified class."""
     # Parse the code into an AST
     tree = ast.parse(code)
 
     # Apply our transformation
-    transformer = InitDecorator(class_name, function_name, tmp_dir_path)
+    transformer = InitDecorator(target_classes, fto_name, tmp_dir_path, is_fto)
     modified_tree = transformer.visit(tree)
     if transformer.inserted_decorator:
         ast.fix_missing_locations(modified_tree)
@@ -48,10 +68,11 @@ def add_codeflash_capture_to_init(class_name: str, function_name: str, tmp_dir_p
 class InitDecorator(ast.NodeTransformer):
     """AST transformer that adds codeflash_capture decorator to specific class's __init__."""
 
-    def __init__(self, target_class_name: str, function_name: str, tmp_dir_path: str):
-        self.target_class_name = target_class_name
-        self.function_name = function_name
+    def __init__(self, target_classes: set[str], fto_name: str, tmp_dir_path: str, is_fto=False) -> None:
+        self.target_classes = target_classes
+        self.fto_name = fto_name
         self.tmp_dir_path = tmp_dir_path
+        self.is_fto = is_fto
         self.has_import = False
         self.inserted_decorator = False
 
@@ -74,7 +95,7 @@ class InitDecorator(ast.NodeTransformer):
 
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
         # Only modify the target class
-        if node.name != self.target_class_name:
+        if node.name not in self.target_classes:
             return node
 
         # Look for __init__ method
@@ -85,8 +106,9 @@ class InitDecorator(ast.NodeTransformer):
             func=ast.Name(id="codeflash_capture", ctx=ast.Load()),
             args=[],
             keywords=[
-                ast.keyword(arg="function_name", value=ast.Constant(value=self.function_name)),
+                ast.keyword(arg="function_name", value=ast.Constant(value=self.fto_name)),
                 ast.keyword(arg="tmp_dir_path", value=ast.Constant(value=self.tmp_dir_path)),
+                ast.keyword(arg="is_fto", value=ast.Constant(value=self.is_fto)),
             ],
         )
 

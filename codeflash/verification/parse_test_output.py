@@ -21,7 +21,7 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.models.models import CoverageData, TestFiles
-from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults
+from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults, VerificationType
 
 if TYPE_CHECKING:
     import subprocess
@@ -92,6 +92,7 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
                     test_type=test_type,
                     return_value=test_pickle,
                     timed_out=False,
+                    verification_type=VerificationType.FUNCTION_TO_OPTIMIZE,
                 )
             )
     return test_results
@@ -141,7 +142,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                     test_type=test_type,
                     return_value=ret_val,
                     timed_out=False,
-                    verification_type=verification_type if verification_type else None,
+                    verification_type=VerificationType(verification_type) if verification_type else None,
                 )
             )
         except Exception:
@@ -376,6 +377,7 @@ def merge_test_results(
                         test_type=xml_result.test_type,
                         return_value=result_bin.return_value,
                         timed_out=xml_result.timed_out,
+                        verification_type=VerificationType(result_bin.verification_type),
                     )
                 )
         elif xml_results.test_results[0].id.iteration_id is not None:
@@ -402,6 +404,7 @@ def merge_test_results(
                         timed_out=xml_result.timed_out
                         if bin_result.runtime is None
                         else False,  # If runtime was measured in the bin file, then the testcase did not time out
+                        verification_type=VerificationType(bin_result.verification_type),
                     )
                 )
         else:
@@ -425,6 +428,7 @@ def merge_test_results(
                         test_type=bin_result.test_type,
                         return_value=bin_result.return_value,
                         timed_out=xml_result.timed_out,  # only the xml gets the timed_out flag
+                        verification_type=VerificationType(bin_result.verification_type),
                     )
                 )
 

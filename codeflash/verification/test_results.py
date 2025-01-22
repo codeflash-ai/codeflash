@@ -13,6 +13,19 @@ from codeflash.cli_cmds.console import DEBUG_MODE, logger
 from codeflash.verification.comparator import comparator
 
 
+class VerificationType(str, Enum):
+    FUNCTION_TO_OPTIMIZE = (
+        "function_to_optimize"  # Correctness verification for fto, checks input values and output values
+    )
+    INSTANCE_STATE_FTO = "instance_state_fto"  # Correctness verification for instance state of fto, checks instance attributes right after __init__ is called
+    INSTANCE_STATE_HELPER = "instance_state_helper"  # Correctness verification for instance state of helper classes, checks instance attributes right after __init__ is called
+
+    def __new__(cls, value: str) -> VerificationType | None:
+        obj = str.__new__(cls, value)
+        obj._value_ = value if value != "" else None
+        return obj
+
+
 class TestType(Enum):
     EXISTING_UNIT_TEST = 1
     INSPIRED_REGRESSION = 2
@@ -74,7 +87,7 @@ class FunctionTestInvocation:
     test_type: TestType
     return_value: Optional[object]  # The return value of the function invocation
     timed_out: Optional[bool]
-    verification_type: Optional[str]
+    verification_type: str = VerificationType.FUNCTION_TO_OPTIMIZE
 
     @property
     def unique_invocation_loop_id(self) -> str:

@@ -337,8 +337,15 @@ class Optimizer:
         )
 
         # Instrument code
-        original_code = validated_original_code[function_to_optimize.file_path].source_code
-        instrument_code(function_to_optimize)
+        # Get a dict of file_path_to_classes of fto and helpers_of_fto
+        file_path_to_helper_classes = defaultdict(set)
+        for function_source in code_context.helper_functions:
+            if (
+                function_source.qualified_name != function_to_optimize.qualified_name
+                and "." in function_source.qualified_name
+            ):
+                file_path_to_helper_classes[function_source.file_path].add(function_source.qualified_name.split(".")[0])
+        instrument_code(function_to_optimize, file_path_to_helper_classes)
 
         baseline_result = self.establish_original_code_baseline(  # this needs better typing
             function_name=function_to_optimize_qualified_name,
@@ -347,7 +354,11 @@ class Optimizer:
         )
 
         # Remove instrumentation
-        self.write_code_and_helpers(original_code, {}, function_to_optimize.file_path)
+        self.write_code_and_helpers(
+            validated_original_code[function_to_optimize.file_path].source_code,
+            original_helper_code,
+            function_to_optimize.file_path,
+        )
 
         console.rule()
         paths_to_cleanup = (
@@ -514,7 +525,6 @@ class Optimizer:
                         optimized_code=candidate.source_code,
                         qualified_function_name=function_to_optimize.qualified_name,
                     )
-                    # If init was modified, instrument the code with codeflash capture
 
                     if not did_update:
                         logger.warning(
@@ -526,6 +536,8 @@ class Optimizer:
                     logger.error(e)
                     self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
                     continue
+
+                # Instrument codeflash capture
 
                 run_results = self.run_optimized_candidate(
                     optimization_candidate_index=candidate_index, baseline_results=original_code_baseline

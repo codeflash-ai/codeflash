@@ -744,14 +744,15 @@ def test_superset():
         def __init__(self):
             self.a = 1
 
-    class B(A):
-        def __init__(self):
-            super().__init__()
-            self.b = 2
+    obj = A()
+    obj.x = 3
 
-    assert comparator(A(), B(), superset_obj=True)
-    assert not comparator(B(), A(), superset_obj=True)
-    assert not comparator(A(), B())
+    assert comparator(A(), obj, superset_obj=True)
+    assert not comparator(obj, A(), superset_obj=True)
+    assert not comparator(A(), obj)
+    assert not comparator(obj, A())
+    assert comparator(obj, obj, superset_obj=True)
+    assert comparator(obj, obj)
 
 
 def test_compare_results_fn():

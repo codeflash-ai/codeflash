@@ -9,7 +9,7 @@ import time
 
 import dill as pickle
 
-from codeflash.models.models import VerificationType
+from codeflash.verification.test_results import VerificationType
 
 
 def get_test_info_from_stack() -> tuple[str, str | None, str, str]:
@@ -37,7 +37,7 @@ def get_test_info_from_stack() -> tuple[str, str | None, str, str]:
     return test_module_name, test_class_name, test_name, line_id
 
 
-def codeflash_capture(function_name: str, tmp_dir_path: str):
+def codeflash_capture(function_name: str, tmp_dir_path: str, is_fto: bool = False):
     """Defines decorator to be instrumented onto the init function in the code. Collects info of the test that called this, and captures the state of the instance."""
 
     def decorator(wrapped):
@@ -120,7 +120,7 @@ def codeflash_capture(function_name: str, tmp_dir_path: str):
                     invocation_id,
                     codeflash_duration,
                     pickled_return_value,
-                    VerificationType.INSTANCE_STATE,
+                    VerificationType.INSTANCE_STATE_FTO if is_fto else VerificationType.INSTANCE_STATE_HELPER,
                 ),
             )
             codeflash_con.commit()

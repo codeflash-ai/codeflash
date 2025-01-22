@@ -23,7 +23,7 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         cdd_test_result = candidate_results.get_by_unique_invocation_loop_id(test_id)
         if cdd_test_result is not None and original_test_result is None:
             continue
-
+        # If helper function instance_state verification is not present, that's ok. continue
         if original_test_result is None or cdd_test_result is None:
             are_equal = False
             break
