@@ -255,6 +255,9 @@ class Optimizer:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
 
+        logger.info("Code to be optimized:")
+        code_print(code_context.read_writable_code)
+
         original_module_path = module_name_from_file_path(function_to_optimize.file_path, self.args.project_root)
 
         for module_abspath, helper_code_source in original_helper_code.items():
@@ -265,8 +268,7 @@ class Optimizer:
                 function_to_optimize.file_path,
                 self.args.project_root,
             )
-        logger.info("Old code with helpers:")
-        code_print(code_context.code_to_optimize_with_helpers)
+
         generated_test_paths = [
             get_test_file_path(
                 self.test_cfg.tests_root, function_to_optimize.function_name, test_index, test_type="unit"
@@ -520,7 +522,6 @@ class Optimizer:
                         optimized_code=candidate.source_code,
                         qualified_function_name=function_to_optimize.qualified_name,
                     )
-
                     if not did_update:
                         logger.warning(
                             "No functions were replaced in the optimized code. Skipping optimization candidate."
