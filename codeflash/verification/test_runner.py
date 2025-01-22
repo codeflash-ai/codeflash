@@ -69,7 +69,7 @@ def run_behavioral_tests(
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
 
         if enable_coverage:
-            coverage_out_file, coveragercfile = prepare_coverage_files()
+            coverage_database_file, coveragercfile = prepare_coverage_files()
 
             cov_erase = execute_test_subprocess(
                 shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env
@@ -88,17 +88,6 @@ def run_behavioral_tests(
                 timeout=600,
             )
             logger.debug(results)
-
-            cov_report = execute_test_subprocess(
-                shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage json --rcfile={coveragercfile.as_posix()}"),
-                cwd=cwd,
-                env=pytest_test_env,
-            )  # this will generate a json file with the coverage data
-            logger.debug(cov_report)
-            if "No data to report." in cov_report.stdout:
-                logger.warning("No coverage data to report. Check if the tests are running correctly.")
-                console.rule()
-                coverage_out_file = None
         else:
             results = execute_test_subprocess(
                 pytest_cmd_list + common_pytest_args + result_args + test_files,
@@ -115,7 +104,7 @@ def run_behavioral_tests(
     else:
         raise ValueError(f"Unsupported test framework: {test_framework}")
 
-    return result_file_path, results, coverage_out_file if enable_coverage else None
+    return result_file_path, results, coverage_database_file if enable_coverage else None
 
 
 def run_benchmarking_tests(
