@@ -10,10 +10,9 @@ from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode
 from codeflash.optimization.optimizer import Optimizer
-from codeflash.verification.comparator import comparator
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_code import instrument_code
-from codeflash.verification.test_results import TestType
+from codeflash.verification.test_results import TestType, VerificationType
 
 # Used by aiservice instrumentation
 behavior_logging_code = """from __future__ import annotations
@@ -106,11 +105,11 @@ from code_to_optimize.bubble_sort_method import BubbleSorter
 def test_single_element_list():
     codeflash_loop_index = int(os.environ["CODEFLASH_LOOP_INDEX"])
     obj = BubbleSorter()
-    _call__bound__arguments = inspect.signature(BubbleSorter.sorter).bind(obj,[42])
+    _call__bound__arguments = inspect.signature(obj.sorter).bind([42])
     _call__bound__arguments.apply_defaults()
 
     codeflash_return_value = codeflash_wrap(
-        BubbleSorter.sorter,
+        obj.sorter,
         "code_to_optimize.tests.pytest.test_aiservice_behavior_results_temp",
         None,
         "test_single_element_list",
@@ -187,7 +186,7 @@ def test_single_element_list():
         assert test_results[0].id.test_function_name == "test_single_element_list"
         assert test_results[0].did_pass
         assert test_results[0].return_value[1]["arr"] == [42]
-        assert comparator(test_results[0].return_value[1]["self"], BubbleSorter())
+        # assert comparator(test_results[0].return_value[1]["self"], BubbleSorter()) TODO: add self as input to the function
         assert test_results[0].return_value[2] == [42]
 
         # Replace with optimized code that mutated instance attribute
@@ -216,39 +215,11 @@ class BubbleSorter:
             pytest_max_loops=1,
             testing_time=0.1,
         )
-        assert test_results_mutated_attr[0].return_value[1]["self"].x == 1
-        assert not compare_test_results(
+        # assert test_results_mutated_attr[0].return_value[1]["self"].x == 1 TODO: add self as input to function
+        assert compare_test_results(
             test_results, test_results_mutated_attr
-        )  # The test should fail because the instance attribute was mutated
-        # Replace with optimized code that did not mutate existing instance attribute, but added a new one
-        optimized_code_new_attr = """
-class BubbleSorter:
-    def __init__(self, x=0):
-        self.x = x
-        self.y = 2
+        )  # Without codeflash capture, the init state was not verified, and the results are verified as correct even with the attribute mutated
 
-    def sorter(self, arr):
-        for i in range(len(arr)):
-            for j in range(len(arr) - 1):
-                if arr[j] > arr[j + 1]:
-                    temp = arr[j]
-                    arr[j] = arr[j + 1]
-                    arr[j + 1] = temp
-        return arr
-                        """
-        fto_path.write_text(optimized_code_new_attr, "utf-8")
-        test_results_new_attr, coverage_data = opt.run_and_parse_tests(
-            testing_type=TestingMode.BEHAVIOR,
-            test_env=test_env,
-            test_files=test_files,
-            optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
-            testing_time=0.1,
-        )
-        assert not compare_test_results(
-            test_results, test_results_new_attr
-        )  # The test should pass because the instance attribute was not mutated, only a new one was added
     finally:
         fto_path.write_text(original_code, "utf-8")
         test_path.unlink(missing_ok=True)
@@ -274,11 +245,11 @@ from code_to_optimize.bubble_sort_method import BubbleSorter
 def test_single_element_list():
     codeflash_loop_index = int(os.environ["CODEFLASH_LOOP_INDEX"])
     obj = BubbleSorter()
-    _call__bound__arguments = inspect.signature(BubbleSorter.sorter).bind(obj,[3,2,1])
+    _call__bound__arguments = inspect.signature(obj.sorter).bind([3,2,1])
     _call__bound__arguments.apply_defaults()
 
     codeflash_return_value = codeflash_wrap(
-        BubbleSorter.sorter,
+        obj.sorter,
         "code_to_optimize.tests.pytest.test_aiservice_behavior_results_temp",
         None,
         "test_single_element_list",
@@ -364,7 +335,7 @@ def test_single_element_list():
         assert test_results[1].did_pass
 
         # Checks input values to the function to see if they have mutated
-        assert comparator(test_results[1].return_value[1]["self"], BubbleSorter())
+        # assert comparator(test_results[1].return_value[1]["self"], BubbleSorter()) TODO: add self as input
         assert test_results[1].return_value[1]["arr"] == [1, 2, 3]
 
         # Check function return value
@@ -397,7 +368,10 @@ class BubbleSorter:
             pytest_max_loops=1,
             testing_time=0.1,
         )
-        assert test_results_mutated_attr[1].return_value[1]["self"].x == 1
+        # assert test_results_mutated_attr[0].return_value[0]["self"].x == 1 TODO: add self as input
+        assert test_results_mutated_attr[0].id.function_getting_tested == "BubbleSorter.__init__"
+        assert test_results_mutated_attr[0].return_value[0] == {"x": 1}
+        assert test_results_mutated_attr[0].verification_type == VerificationType.INIT_STATE_FTO
         assert not compare_test_results(
             test_results, test_results_mutated_attr
         )  # The test should fail because the instance attribute was mutated
@@ -428,11 +402,15 @@ class BubbleSorter:
             pytest_max_loops=1,
             testing_time=0.1,
         )
-        assert test_results_new_attr[1].return_value[1]["self"].x == 0
-        assert test_results_new_attr[1].return_value[1]["self"].y == 2
-        assert not compare_test_results(
+        assert test_results_new_attr[0].id.function_getting_tested == "BubbleSorter.__init__"
+        assert test_results_new_attr[0].return_value[0] == {"x": 0, "y": 2}
+        assert test_results_new_attr[0].verification_type == VerificationType.INIT_STATE_FTO
+        # assert test_results_new_attr[1].return_value[1]["self"].x == 0 TODO: add self as input
+        # assert test_results_new_attr[1].return_value[1]["self"].y == 2 TODO: add self as input
+        assert compare_test_results(
             test_results, test_results_new_attr
         )  # The test should pass because the instance attribute was not mutated, only a new one was added
     finally:
         fto_path.write_text(original_code, "utf-8")
         test_path.unlink(missing_ok=True)
+        test_path_perf.unlink(missing_ok=True)

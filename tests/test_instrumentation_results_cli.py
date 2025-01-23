@@ -148,7 +148,6 @@ def test_sort():
             pytest_max_loops=1,
             testing_time=0.1,
         )
-        print(test_results)
         assert test_results[0].id.function_getting_tested == "sorter"
         assert test_results[0].id.iteration_id == "1_0"
         assert test_results[0].id.test_class_name is None
@@ -392,5 +391,5 @@ class BubbleSorter:
         assert compare_test_results(test_results, new_test_results)
         fto_path.write_text(original_code, "utf-8")
     finally:
-        # test_path.unlink(missing_ok=True)
+        test_path.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
