@@ -20,9 +20,8 @@ def get_test_info_from_stack() -> tuple[str, str | None, str, str]:
     test_module_name = ""
     test_class_name = None
     test_name = None
-    function_name = ""
-    line_id = ""  # Note that the way this line_id is defined is from the line_id called in our usual instrumentation
-    function_found = False
+    line_id = ""  # Note that the way this line_id is defined is from the line_id called in instrumentation
+
     # Search through stack for test information
     for frame in stack:
         if frame.function.startswith("test_"):  # May need a more robust way to find the test file
@@ -32,26 +31,18 @@ def get_test_info_from_stack() -> tuple[str, str | None, str, str]:
             # Check if it's a method in a class
             if "self" in frame.frame.f_locals:
                 test_class_name = frame.frame.f_locals["self"].__class__.__name__
-            function_found = True
             break
-
-    if not function_found:  # Likely defined at module level, or as a helper test function.
-        for frame in stack:
-            # First try to get the module name directly from the frame
-            module = inspect.getmodule(frame[0])
-            if module:
-                test_module_name = module.__name__
-                line_id = str(frame.lineno)
-
-                # If it's in a function, the function name will be in frame.function
-                # If at module level, frame.function will be '<module>'
-                if frame.function != "<module>":
-                    test_name = frame.function
-
-                # Check if it's in a class
-                if "self" in frame.frame.f_locals:
-                    test_class_name = frame.frame.f_locals["self"].__class__.__name__
-                break
+        # Check if module name starts with test
+        module_name = frame.frame.f_globals["__name__"]
+        if module_name and module_name.split(".")[-1].startswith("test_"):
+            test_module_name = module_name
+            line_id = str(frame.lineno)
+            if frame.function != "<module>":
+                test_name = frame.function  # Technically not a test, but save the info since there is no test function
+            # Check if it's in a class
+            if "self" in frame.frame.f_locals:
+                test_class_name = frame.frame.f_locals["self"].__class__.__name__
+            break
 
     return test_module_name, test_class_name, test_name, line_id
 
