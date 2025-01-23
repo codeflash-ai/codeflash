@@ -81,154 +81,16 @@ if TYPE_CHECKING:
     from codeflash.either import Result
     from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
 
+class FunctionOptimizer:
+    def __init__(self, project_root:str, test_cfg:TestConfig, aiservice_client:AiServiceClient, no_pr:bool = False)-> None:
+        self.project_root = project_root
+        self.test_cfg = test_cfg
+        self.aiservice_client = aiservice_client
+        self.no_pr = no_pr
 
-class Optimizer:
-    def __init__(self, args: Namespace) -> None:
-        self.args = args
-
-        self.test_cfg = TestConfig(
-            tests_root=args.tests_root,
-            tests_project_rootdir=args.test_project_root,
-            project_root_path=args.project_root,
-            test_framework=args.test_framework,
-            pytest_cmd=args.pytest_cmd,
-        )
-
-        self.aiservice_client = AiServiceClient()
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
-
         self.test_files = TestFiles(test_files=[])
-
-    def run(self) -> None:
-        ph("cli-optimize-run-start")
-        logger.info("Running optimizer.")
-        console.rule()
-        if not env_utils.ensure_codeflash_api_key():
-            return
-
-        file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
-        num_optimizable_functions: int
-        (file_to_funcs_to_optimize, num_optimizable_functions) = get_functions_to_optimize(
-            optimize_all=self.args.all,
-            replay_test=self.args.replay_test,
-            file=self.args.file,
-            only_get_this_function=self.args.function,
-            test_cfg=self.test_cfg,
-            ignore_paths=self.args.ignore_paths,
-            project_root=self.args.project_root,
-            module_root=self.args.module_root,
-        )
-
-        optimizations_found: int = 0
-        function_iterator_count: int = 0
-        if self.args.test_framework == "pytest":
-            self.test_cfg.concolic_test_root_dir = Path(
-                tempfile.mkdtemp(dir=self.args.tests_root, prefix="codeflash_concolic_")
-            )
-        try:
-            ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
-            if num_optimizable_functions == 0:
-                logger.info("No functions found to optimize. Exiting…")
-                return
-
-            console.rule()
-            logger.info(f"Discovering existing unit tests in {self.test_cfg.tests_root}…")
-            console.rule()
-            function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
-            num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
-            console.rule()
-            logger.info(f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}")
-            console.rule()
-            ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
-
-            for original_module_path in file_to_funcs_to_optimize:
-                logger.info(f"Examining file {original_module_path!s}…")
-                console.rule()
-
-                original_module_code: str = original_module_path.read_text(encoding="utf8")
-                try:
-                    original_module_ast = ast.parse(original_module_code)
-                except SyntaxError as e:
-                    logger.warning(f"Syntax error parsing code in {original_module_path}: {e}")
-                    logger.info("Skipping optimization due to file error.")
-                    continue
-                normalized_original_module_code = ast.unparse(normalize_node(original_module_ast))
-                validated_original_code: dict[Path, ValidCode] = {
-                    original_module_path: ValidCode(
-                        source_code=original_module_code, normalized_code=normalized_original_module_code
-                    )
-                }
-
-                imported_module_analyses = analyze_imported_modules(
-                    original_module_code, original_module_path, self.args.project_root
-                )
-
-                has_syntax_error = False
-                for analysis in imported_module_analyses:
-                    callee_original_code = analysis.file_path.read_text(encoding="utf8")
-                    try:
-                        normalized_callee_original_code = normalize_code(callee_original_code)
-                    except SyntaxError as e:
-                        logger.warning(f"Syntax error parsing code in callee module {analysis.file_path}: {e}")
-                        logger.info("Skipping optimization due to helper file error.")
-                        has_syntax_error = True
-                        break
-                    validated_original_code[analysis.file_path] = ValidCode(
-                        source_code=callee_original_code, normalized_code=normalized_callee_original_code
-                    )
-                if has_syntax_error:
-                    continue
-
-                for function_to_optimize in file_to_funcs_to_optimize[original_module_path]:
-                    function_iterator_count += 1
-                    logger.info(
-                        f"Optimizing function {function_iterator_count} of {num_optimizable_functions}: "
-                        f"{function_to_optimize.qualified_name}"
-                    )
-
-                    if not (
-                        function_to_optimize_ast := get_first_top_level_function_or_method_ast(
-                            function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
-                        )
-                    ):
-                        logger.info(
-                            f"Function {function_to_optimize.qualified_name} not found in {original_module_path}.\n"
-                            f"Skipping optimization."
-                        )
-                        continue
-
-                    best_optimization = self.optimize_function(
-                        function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code
-                    )
-                    # function_optimizer = FunctionOptimizer(function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code
-                    #                     )
-                    # best_optimization = function_optimizer.optimize_function()
-                    self.test_files = TestFiles(test_files=[])
-                    if is_successful(best_optimization):
-                        optimizations_found += 1
-                    else:
-                        logger.warning(best_optimization.failure())
-                        console.rule()
-                        continue
-            ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
-            if optimizations_found == 0:
-                logger.info("❌ No optimizations found.")
-            elif self.args.all:
-                logger.info("✨ All functions have been optimized! ✨")
-        finally:
-            for test_file in self.test_files.get_by_type(TestType.GENERATED_REGRESSION).test_files:
-                test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
-                test_file.benchmarking_file_path.unlink(missing_ok=True)
-            for test_file in self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
-                test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
-                test_file.benchmarking_file_path.unlink(missing_ok=True)
-            for test_file in self.test_files.get_by_type(TestType.CONCOLIC_COVERAGE_TEST).test_files:
-                test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
-            if hasattr(get_run_tmp_file, "tmpdir"):
-                get_run_tmp_file.tmpdir.cleanup()
-            if self.test_cfg.concolic_test_root_dir:
-                shutil.rmtree(self.test_cfg.concolic_test_root_dir, ignore_errors=True)
 
     def optimize_function(
         self,
@@ -245,7 +107,7 @@ class Optimizer:
         file_name_from_test_module_name.cache_clear()
         ctx_result = self.get_code_optimization_context(
             function_to_optimize,
-            self.args.project_root,
+            self.project_root,
             validated_original_code[function_to_optimize.file_path].source_code,
         )
         if not is_successful(ctx_result):
@@ -261,7 +123,7 @@ class Optimizer:
         logger.info("Code to be optimized:")
         code_print(code_context.read_writable_code)
 
-        original_module_path = module_name_from_file_path(function_to_optimize.file_path, self.args.project_root)
+        original_module_path = module_name_from_file_path(function_to_optimize.file_path, self.project_root)
 
         for module_abspath, helper_code_source in original_helper_code.items():
             code_context.code_to_optimize_with_helpers = add_needed_imports_from_module(
@@ -269,7 +131,7 @@ class Optimizer:
                 code_context.code_to_optimize_with_helpers,
                 module_abspath,
                 function_to_optimize.file_path,
-                self.args.project_root,
+                self.project_root,
             )
 
         generated_test_paths = [
@@ -430,7 +292,7 @@ class Optimizer:
                 )
 
                 existing_tests = existing_tests_source_for(
-                    function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root),
+                    function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
                     function_to_all_tests,
                     tests_root=self.test_cfg.tests_root,
                 )
@@ -441,7 +303,7 @@ class Optimizer:
                 ].source_code
                 new_code_combined = new_helper_code.copy()
                 new_code_combined[explanation.file_path] = new_code
-                if not self.args.no_pr:
+                if not self.no_pr:
                     coverage_message = (
                         original_code_baseline.coverage_results.build_message()
                         if original_code_baseline.coverage_results
@@ -487,7 +349,26 @@ class Optimizer:
         if not best_optimization:
             return Failure(f"No best optimizations found for function {function_to_optimize.qualified_name}")
         return Success(best_optimization)
+    def reformat_code_and_helpers(
+        self, helper_functions: list[FunctionSource], path: Path, original_code: str
+    ) -> tuple[str, dict[Path, str]]:
+        should_sort_imports = not self.args.disable_imports_sorting
+        if should_sort_imports and isort.code(original_code) != original_code:
+            should_sort_imports = False
 
+        new_code = format_code(self.args.formatter_cmds, path)
+        if should_sort_imports:
+            new_code = sort_imports(new_code)
+
+        new_helper_code: dict[Path, str] = {}
+        helper_functions_paths = {hf.file_path for hf in helper_functions}
+        for module_abspath in helper_functions_paths:
+            formatted_helper_code = format_code(self.args.formatter_cmds, module_abspath)
+            if should_sort_imports:
+                formatted_helper_code = sort_imports(formatted_helper_code)
+            new_helper_code[module_abspath] = formatted_helper_code
+
+        return new_code, new_helper_code
     def determine_best_candidate(
         self,
         *,
@@ -650,35 +531,6 @@ class Optimizer:
             },
         )
 
-    @staticmethod
-    def write_code_and_helpers(original_code: str, original_helper_code: dict[Path, str], path: Path) -> None:
-        with path.open("w", encoding="utf8") as f:
-            f.write(original_code)
-        for module_abspath in original_helper_code:
-            with Path(module_abspath).open("w", encoding="utf8") as f:
-                f.write(original_helper_code[module_abspath])
-
-    def reformat_code_and_helpers(
-        self, helper_functions: list[FunctionSource], path: Path, original_code: str
-    ) -> tuple[str, dict[Path, str]]:
-        should_sort_imports = not self.args.disable_imports_sorting
-        if should_sort_imports and isort.code(original_code) != original_code:
-            should_sort_imports = False
-
-        new_code = format_code(self.args.formatter_cmds, path)
-        if should_sort_imports:
-            new_code = sort_imports(new_code)
-
-        new_helper_code: dict[Path, str] = {}
-        helper_functions_paths = {hf.file_path for hf in helper_functions}
-        for module_abspath in helper_functions_paths:
-            formatted_helper_code = format_code(self.args.formatter_cmds, module_abspath)
-            if should_sort_imports:
-                formatted_helper_code = sort_imports(formatted_helper_code)
-            new_helper_code[module_abspath] = formatted_helper_code
-
-        return new_code, new_helper_code
-
     def replace_function_and_helpers_with_optimized_code(
         self,
         code_context: CodeOptimizationContext,
@@ -698,7 +550,7 @@ class Optimizer:
                 optimized_code=optimized_code,
                 module_abspath=module_abspath,
                 preexisting_objects=code_context.preexisting_objects,
-                project_root_path=self.args.project_root,
+                project_root_path=self.project_root,
             )
         return did_update
 
@@ -709,7 +561,7 @@ class Optimizer:
         if code_to_optimize is None:
             return Failure("Could not find function to optimize.")
         (helper_code, helper_functions, helper_dunder_methods) = get_constrained_function_context_and_helper_functions(
-            function_to_optimize, self.args.project_root, code_to_optimize
+            function_to_optimize, self.project_root, code_to_optimize
         )
         if function_to_optimize.parents:
             function_class = function_to_optimize.parents[0].name
@@ -778,7 +630,7 @@ class Optimizer:
         concolic_coverage_test_files_count = 0
         unique_instrumented_test_files = set()
 
-        func_qualname = function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
+        func_qualname = function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
         if func_qualname not in function_to_tests:
             logger.info(f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.")
             console.rule()
@@ -979,9 +831,9 @@ class Optimizer:
             test_env["CODEFLASH_TEST_ITERATION"] = "0"
             test_env["CODEFLASH_TRACER_DISABLE"] = "1"
             if "PYTHONPATH" not in test_env:
-                test_env["PYTHONPATH"] = str(self.args.project_root)
+                test_env["PYTHONPATH"] = str(self.project_root)
             else:
-                test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
+                test_env["PYTHONPATH"] += os.pathsep + str(self.project_root)
 
             coverage_results = None
             # Instrument codeflash capture
@@ -1104,9 +956,9 @@ class Optimizer:
             test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_candidate_index)
             test_env["CODEFLASH_TRACER_DISABLE"] = "1"
             if "PYTHONPATH" not in test_env:
-                test_env["PYTHONPATH"] = str(self.args.project_root)
+                test_env["PYTHONPATH"] = str(self.project_root)
             else:
-                test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
+                test_env["PYTHONPATH"] += os.pathsep + str(self.project_root)
 
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
@@ -1222,7 +1074,7 @@ class Optimizer:
                 result_file_path, run_result, coverage_database_file = run_behavioral_tests(
                     test_files,
                     test_framework=self.args.test_framework,
-                    cwd=self.args.project_root,
+                    cwd=self.project_root,
                     test_env=test_env,
                     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     pytest_cmd=self.test_cfg.pytest_cmd,
@@ -1232,7 +1084,7 @@ class Optimizer:
             elif testing_type == TestingMode.PERFORMANCE:
                 result_file_path, run_result = run_benchmarking_tests(
                     test_files,
-                    cwd=self.args.project_root,
+                    cwd=self.project_root,
                     test_env=test_env,
                     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     pytest_cmd=self.test_cfg.pytest_cmd,
@@ -1300,8 +1152,3 @@ class Optimizer:
                 zip(generated_test_paths, generated_perf_test_paths)
             )
         ]
-
-
-def run_with_args(args: Namespace) -> None:
-    optimizer = Optimizer(args)
-    optimizer.run()
