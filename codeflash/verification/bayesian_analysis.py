@@ -93,7 +93,7 @@ def compute_statistics(distribution: npt.NDArray[np.float64], gamma: float = 0.9
     }
 
 
-def analyse_function_runtime_data(
+def analyze_function_runtime_data(
     function_runtime_data: list[list[int]], bootstrap_size: int
 ) -> tuple[npt.NDArray[np.float64], dict[str, np.float64]]:
     rng = np.random.default_rng()
@@ -107,6 +107,6 @@ def analyse_function_runtime_data(
 
 def compare_function_runtime_distributions(
     function1_runtime_distribution: npt.NDArray[np.float64], function2_runtime_distribution: npt.NDArray[np.float64]
-) -> tuple[dict[str, np.float64], np.float64]:
+) -> dict[str, np.float64]:
     speedup_distribution = function1_runtime_distribution / function2_runtime_distribution
-    return compute_statistics(speedup_distribution), np.mean(speedup_distribution > 1)
+    return compute_statistics(speedup_distribution)

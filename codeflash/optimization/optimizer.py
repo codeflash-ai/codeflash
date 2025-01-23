@@ -66,6 +66,7 @@ from codeflash.result.create_pr import check_create_pr, existing_tests_source_fo
 from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
+from codeflash.verification.bayesian_analysis import compare_function_runtime_distributions
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.parse_test_output import parse_test_results
@@ -76,6 +77,9 @@ from codeflash.verification.verifier import generate_tests
 
 if TYPE_CHECKING:
     from argparse import Namespace
+
+    import numpy as np
+    import numpy.typing as npt
 
     from codeflash.either import Result
     from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
@@ -352,7 +356,12 @@ class Optimizer:
             cleanup_paths(paths_to_cleanup)
             return Failure(baseline_result.failure())
 
-        original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
+        (
+            original_code_baseline,
+            original_code_runtime_distribution,
+            original_code_runtime_statistics,
+            test_functions_to_remove,
+        ) = baseline_result.unwrap()
         if isinstance(original_code_baseline, OriginalCodeBaseline) and not coverage_critic(
             original_code_baseline.coverage_results, self.args.test_framework
         ):
@@ -371,6 +380,7 @@ class Optimizer:
                 function_to_optimize=function_to_optimize,
                 original_code=validated_original_code[function_to_optimize.file_path].source_code,
                 original_code_baseline=original_code_baseline,
+                original_code_runtime_distribution=original_code_runtime_distribution,
                 original_helper_code=original_helper_code,
                 function_trace_id=function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
             )
@@ -480,11 +490,13 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         original_code: str,
         original_code_baseline: OriginalCodeBaseline,
+        original_code_runtime_distribution: npt.NDArray[np.float64],
         original_helper_code: dict[Path, str],
         function_trace_id: str,
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime
+        best_speedup_ratio_until_now = 1.0
 
         speedup_ratios: dict[str, float | None] = {}
         optimized_runtimes: dict[str, float | None] = {}
@@ -528,7 +540,9 @@ class Optimizer:
                     is_correct[candidate.optimization_id] = False
                     speedup_ratios[candidate.optimization_id] = None
                 else:
-                    candidate_result: OptimizedCandidateResult = run_results.unwrap()
+                    candidate_result, candidate_runtime_distribution, candidate_runtime_statistics = (
+                        run_results.unwrap()
+                    )
                     best_test_runtime = candidate_result.best_test_runtime
                     optimized_runtimes[candidate.optimization_id] = best_test_runtime
                     is_correct[candidate.optimization_id] = True
@@ -536,6 +550,10 @@ class Optimizer:
                         original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_test_runtime
                     )
                     speedup_ratios[candidate.optimization_id] = perf_gain
+
+                    speedup_stats = compare_function_runtime_distributions(
+                        original_code_runtime_distribution, candidate_runtime_distribution
+                    )
 
                     tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
                     if speedup_critic(
@@ -568,6 +586,24 @@ class Optimizer:
                     console.print(tree)
                     console.rule()
 
+                    logger.info(
+                        f"Overall candidate time (95% Credible Interval) = ["
+                        f"{humanize_runtime(candidate_runtime_statistics['credible_interval_lower_bound'])}, "
+                        f"{humanize_runtime(candidate_runtime_statistics['credible_interval_upper_bound'])}, "
+                        f"median={humanize_runtime(candidate_runtime_statistics['median'])}"
+                        f"\nSpeedup of candidate vs original:"
+                        f"\n95% CI = [{speedup_stats['credible_interval_lower_bound']:.3f}, "
+                        f"{speedup_stats['credible_interval_upper_bound']:.3f}]"
+                        f"\nmedian = {speedup_stats['median']:.3f}"
+                    )
+                    console.rule()
+                    if speedup_stats["credible_interval_lower_bound"] > 1.0:
+                        logger.info("The candidate is faster than the original code with a 95% probability.")
+                        if speedup_stats["median"] > best_speedup_ratio_until_now:
+                            best_speedup_ratio_until_now = speedup_stats["median"]
+                            logger.info("This candidate is the best candidate so far.")
+                    else:
+                        logger.info("This candidate is not faster than the current fastest candidate.")
                 self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
         except KeyboardInterrupt as e:
             self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
@@ -941,7 +977,7 @@ class Optimizer:
 
     def establish_original_code_baseline(
         self, function_name: str, function_file_path: Path, code_context: CodeOptimizationContext
-    ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
+    ) -> Result[tuple[OriginalCodeBaseline, npt.NDArray[np.float64], dict[str, np.float64], list[str]], str]:
         # For the original function - run the tests and get the runtime, plus coverage
         with progress_bar(f"Establishing original code baseline for {function_name}"):
             assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
@@ -1011,7 +1047,9 @@ class Optimizer:
             console.rule()
 
             total_timing = benchmarking_results.total_passed_runtime()  # caution: doesn't handle the loop index
-
+            runtime_distribution, runtime_statistics = benchmarking_results.bayesian_nonparametric_bootstrap_analysis(
+                100_000
+            )
             functions_to_remove = [
                 result.id.test_function_name
                 for result in behavioral_results
@@ -1042,6 +1080,14 @@ class Optimizer:
             )
             console.rule()
             logger.debug(f"Total original code runtime (ns): {total_timing}")
+            console.rule()
+            logger.info(
+                f"Overall code runtime (95% Credible Interval) = ["
+                f"{humanize_runtime(round(runtime_statistics['credible_interval_lower_bound']))}, "
+                f"{humanize_runtime(round(runtime_statistics['credible_interval_upper_bound']))}], median: "
+                f"{humanize_runtime(round(runtime_statistics['median']))}"
+            )
+
             return Success(
                 (
                     OriginalCodeBaseline(
@@ -1050,13 +1096,15 @@ class Optimizer:
                         runtime=total_timing,
                         coverage_results=coverage_results,
                     ),
+                    runtime_distribution,
+                    runtime_statistics,
                     functions_to_remove,
                 )
             )
 
     def run_optimized_candidate(
         self, *, optimization_candidate_index: int, baseline_results: OriginalCodeBaseline
-    ) -> Result[OptimizedCandidateResult, str]:
+    ) -> Result[tuple[OptimizedCandidateResult, npt.NDArray[np.float64], dict[str, np.float64]], str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
         with progress_bar("Testing optimization candidate"):
@@ -1138,16 +1186,30 @@ class Optimizer:
             if (total_candidate_timing := candidate_benchmarking_results.total_passed_runtime()) == 0:
                 logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
                 console.rule()
+            runtime_distribution, runtime_statistics = (
+                candidate_benchmarking_results.bayesian_nonparametric_bootstrap_analysis(100_000)
+            )
 
             logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
+            console.rule()
+            logger.debug(
+                f"Overall code runtime (95% Credible Interval) = ["
+                f"{humanize_runtime(round(runtime_statistics['credible_interval_lower_bound']))}, "
+                f"{humanize_runtime(round(runtime_statistics['credible_interval_upper_bound']))}], median: "
+                f"{humanize_runtime(round(runtime_statistics['median']))}"
+            )
             return Success(
-                OptimizedCandidateResult(
-                    max_loop_count=loop_count,
-                    best_test_runtime=total_candidate_timing,
-                    behavior_test_results=candidate_behavior_results,
-                    benchmarking_test_results=candidate_benchmarking_results,
-                    optimization_candidate_index=optimization_candidate_index,
-                    total_candidate_timing=total_candidate_timing,
+                (
+                    OptimizedCandidateResult(
+                        max_loop_count=loop_count,
+                        best_test_runtime=total_candidate_timing,
+                        behavior_test_results=candidate_behavior_results,
+                        benchmarking_test_results=candidate_benchmarking_results,
+                        optimization_candidate_index=optimization_candidate_index,
+                        total_candidate_timing=total_candidate_timing,
+                    ),
+                    runtime_distribution,
+                    runtime_statistics,
                 )
             )
 
