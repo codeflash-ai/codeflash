@@ -589,12 +589,12 @@ class Optimizer:
                     logger.info(
                         f"Overall candidate time (95% Credible Interval) = ["
                         f"{humanize_runtime(candidate_runtime_statistics['credible_interval_lower_bound'])}, "
-                        f"{humanize_runtime(candidate_runtime_statistics['credible_interval_upper_bound'])}, "
-                        f"median={humanize_runtime(candidate_runtime_statistics['median'])}"
+                        f"{humanize_runtime(candidate_runtime_statistics['credible_interval_upper_bound'])}], "
+                        f"\nmedian = {humanize_runtime(candidate_runtime_statistics['median'])}"
                         f"\nSpeedup of candidate vs original:"
-                        f"\n95% CI = [{speedup_stats['credible_interval_lower_bound']:.3f}, "
-                        f"{speedup_stats['credible_interval_upper_bound']:.3f}]"
-                        f"\nmedian = {speedup_stats['median']:.3f}"
+                        f"\n95% CI = [{speedup_stats['credible_interval_lower_bound']:.3f}X, "
+                        f"{speedup_stats['credible_interval_upper_bound']:.3f}X]"
+                        f"\nmedian = {speedup_stats['median']:.3f}X"
                     )
                     console.rule()
                     if speedup_stats["credible_interval_lower_bound"] > 1.0:
@@ -602,8 +602,10 @@ class Optimizer:
                         if speedup_stats["median"] > best_speedup_ratio_until_now:
                             best_speedup_ratio_until_now = speedup_stats["median"]
                             logger.info("This candidate is the best candidate so far.")
+                        else:
+                            logger.info("This candidate is not faster than the current fastest candidate.")
                     else:
-                        logger.info("This candidate is not faster than the current fastest candidate.")
+                        logger.info("It is inconclusive whether the candidate is faster than the original code.")
                 self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
         except KeyboardInterrupt as e:
             self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
