@@ -623,13 +623,13 @@ class AnotherHelperClass:
         assert len(test_results.test_results) == 4
         assert test_results[0].id.test_function_name == "test_helper_classes"
         assert test_results[0].id.function_getting_tested == "MyClass.__init__"
-        assert test_results[0].verification_type == VerificationType.INSTANCE_STATE_FTO
+        assert test_results[0].verification_type == VerificationType.INIT_STATE_FTO
         assert test_results[1].id.function_getting_tested == "HelperClass1.__init__"
-        assert test_results[1].verification_type == VerificationType.INSTANCE_STATE_HELPER
+        assert test_results[1].verification_type == VerificationType.INIT_STATE_HELPER
         assert test_results[2].id.function_getting_tested == "HelperClass2.__init__"
-        assert test_results[2].verification_type == VerificationType.INSTANCE_STATE_HELPER
+        assert test_results[2].verification_type == VerificationType.INIT_STATE_HELPER
         assert test_results[3].id.function_getting_tested == "AnotherHelperClass.__init__"
-        assert test_results[3].verification_type == VerificationType.INSTANCE_STATE_HELPER
+        assert test_results[3].verification_type == VerificationType.INIT_STATE_HELPER
 
     finally:
         test_path.unlink(missing_ok=True)
@@ -777,13 +777,13 @@ class AnotherHelperClass:
         assert len(test_results.test_results) == 4
         assert test_results[0].id.test_function_name == "test_helper_classes"
         assert test_results[0].id.function_getting_tested == "MyClass.__init__"
-        assert test_results[0].verification_type == VerificationType.INSTANCE_STATE_FTO
+        assert test_results[0].verification_type == VerificationType.INIT_STATE_FTO
         assert test_results[1].id.function_getting_tested == "HelperClass1.__init__"
-        assert test_results[1].verification_type == VerificationType.INSTANCE_STATE_HELPER
+        assert test_results[1].verification_type == VerificationType.INIT_STATE_HELPER
         assert test_results[2].id.function_getting_tested == "HelperClass2.__init__"
-        assert test_results[2].verification_type == VerificationType.INSTANCE_STATE_HELPER
+        assert test_results[2].verification_type == VerificationType.INIT_STATE_HELPER
         assert test_results[3].id.function_getting_tested == "AnotherHelperClass.__init__"
-        assert test_results[3].verification_type == VerificationType.INSTANCE_STATE_HELPER
+        assert test_results[3].verification_type == VerificationType.INIT_STATE_HELPER
 
         # Now, let's say we optimize the code and make changes.
         new_fto_code = """

@@ -26,7 +26,7 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         # If helper function instance_state verification is not present, that's ok. continue
         if (
             original_test_result.verification_type
-            and original_test_result.verification_type == VerificationType.INSTANCE_STATE_HELPER
+            and original_test_result.verification_type == VerificationType.INIT_STATE_HELPER
             and cdd_test_result is None
         ):
             continue
@@ -38,8 +38,8 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             continue
         superset_obj = False
         if original_test_result.verification_type and (
-            original_test_result.verification_type == VerificationType.INSTANCE_STATE_HELPER
-            or original_test_result.verification_type == VerificationType.INSTANCE_STATE_FTO
+            original_test_result.verification_type
+            in (VerificationType.INIT_STATE_HELPER, VerificationType.INIT_STATE_FTO)
         ):
             superset_obj = True
         if not comparator(original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj):

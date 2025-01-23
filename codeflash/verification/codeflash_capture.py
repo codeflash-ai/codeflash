@@ -116,7 +116,7 @@ def codeflash_capture(function_name: str, tmp_dir_path: str, is_fto: bool = Fals
                     invocation_id,
                     codeflash_duration,
                     pickled_return_value,
-                    VerificationType.INSTANCE_STATE_FTO if is_fto else VerificationType.INSTANCE_STATE_HELPER,
+                    VerificationType.INIT_STATE_FTO if is_fto else VerificationType.INIT_STATE_HELPER,
                 ),
             )
             codeflash_con.commit()

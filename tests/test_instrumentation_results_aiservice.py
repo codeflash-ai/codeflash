@@ -317,7 +317,7 @@ def test_single_element_list():
         with test_path.open("w") as f:
             f.write(instrumented_behavior_test_source)
         # Add codeflash capture decorator
-        instrument_code(function_to_optimize)
+        instrument_code(function_to_optimize, {})
         opt = Optimizer(
             Namespace(
                 project_root=project_root_path,
@@ -353,7 +353,7 @@ def test_single_element_list():
             testing_time=0.1,
         )
         # Verify instance_state result, which checks instance state right after __init__, using  codeflash_capture
-        assert test_results[0].id.function_getting_tested == "sorter"
+        assert test_results[0].id.function_getting_tested == "BubbleSorter.__init__"
         assert test_results[0].id.test_function_name == "test_single_element_list"
         assert test_results[0].did_pass
         assert test_results[0].return_value[0] == {"x": 0}
@@ -387,7 +387,7 @@ class BubbleSorter:
         return arr
                         """
         fto_path.write_text(optimized_code_mutated_attr, "utf-8")
-        instrument_code(function_to_optimize)
+        instrument_code(function_to_optimize, {})
         test_results_mutated_attr, coverage_data = opt.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
@@ -418,7 +418,7 @@ class BubbleSorter:
         return arr
                         """
         fto_path.write_text(optimized_code_new_attr, "utf-8")
-        instrument_code(function_to_optimize)
+        instrument_code(function_to_optimize, {})
         test_results_new_attr, coverage_data = opt.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,

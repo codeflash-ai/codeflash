@@ -14,13 +14,18 @@ from codeflash.verification.comparator import comparator
 
 
 class VerificationType(str, Enum):
-    FUNCTION_TO_OPTIMIZE = (
-        "function_to_optimize"  # Correctness verification for fto, checks input values and output values
+    # FUNCTION_TO_OPTIMIZE = (
+    #     "function_test"  # Correctness verification for a test function, checks input values and output values
+    # )
+    # INSTANCE_STATE_FTO = "instance_state_fto"  # Correctness verification for fto class instance attributes after init
+    # INSTANCE_STATE_HELPER = (
+    #     "instance_state_helper"  # Correctness verification for helper class instance attributes after init
+    # )
+    FUNCTION_CALL = (
+        "function_call"  # Correctness verification for a test function, checks input values and output values)
     )
-    INSTANCE_STATE_FTO = "instance_state_fto"  # Correctness verification for fto class instance attributes after init
-    INSTANCE_STATE_HELPER = (
-        "instance_state_helper"  # Correctness verification for helper class instance attributes after init
-    )
+    INIT_STATE_FTO = "init_state_fto"  # Correctness verification for fto class instance attributes after init
+    INIT_STATE_HELPER = "init_state_helper"  # Correctness verification for helper class instance attributes after init
 
     def __new__(cls, value: str) -> VerificationType | None:
         obj = str.__new__(cls, value)
@@ -89,7 +94,7 @@ class FunctionTestInvocation:
     test_type: TestType
     return_value: Optional[object]  # The return value of the function invocation
     timed_out: Optional[bool]
-    verification_type: str = VerificationType.FUNCTION_TO_OPTIMIZE
+    verification_type: str = VerificationType.FUNCTION_CALL
 
     @property
     def unique_invocation_loop_id(self) -> str:

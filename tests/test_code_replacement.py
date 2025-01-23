@@ -1565,7 +1565,7 @@ print("Hello world")
 
 class NewClass:
     def __init__(self, name):
-        self.name = name
+        self.name = str(name)
     def __call__(self, value):
         return "I am still old"
     def new_function2(value):

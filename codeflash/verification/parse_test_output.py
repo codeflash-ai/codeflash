@@ -92,7 +92,7 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
                     test_type=test_type,
                     return_value=test_pickle,
                     timed_out=False,
-                    verification_type=VerificationType.FUNCTION_TO_OPTIMIZE,
+                    verification_type=VerificationType.FUNCTION_CALL,
                 )
             )
     return test_results
@@ -120,7 +120,8 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             test_function_name = val[2] if val[2] else None
             function_getting_tested = val[3]
             test_file_path = file_path_from_module_name(test_module_path, test_config.tests_project_rootdir)
-            test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)  # may not be the best way
+            test_type = (test_files.get_test_type_by_instrumented_file_path(test_file_path) or
+             test_files.get_test_type_by_original_file_path(test_file_path))
             loop_index = val[4]
             iteration_id = val[5]
             runtime = val[6]

@@ -696,7 +696,7 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                                     ast.Name(id="invocation_id", ctx=ast.Load()),
                                     ast.Name(id="codeflash_duration", ctx=ast.Load()),
                                     ast.Name(id="pickled_return_value", ctx=ast.Load()),
-                                    ast.Constant(value=VerificationType.FUNCTION_TO_OPTIMIZE),
+                                    ast.Constant(value=VerificationType.FUNCTION_CALL.value),
                                 ],
                                 ctx=ast.Load(),
                             ),
