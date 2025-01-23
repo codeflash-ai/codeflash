@@ -1086,8 +1086,8 @@ class Optimizer:
             logger.info(
                 f"Overall code runtime (95% Credible Interval) = ["
                 f"{humanize_runtime(round(runtime_statistics['credible_interval_lower_bound']))}, "
-                f"{humanize_runtime(round(runtime_statistics['credible_interval_upper_bound']))}], median: "
-                f"{humanize_runtime(round(runtime_statistics['median']))}"
+                f"{humanize_runtime(round(runtime_statistics['credible_interval_upper_bound']))}], "
+                f"\nmedian: {humanize_runtime(round(runtime_statistics['median']))}"
             )
 
             return Success(
