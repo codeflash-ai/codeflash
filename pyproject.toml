@@ -96,7 +96,7 @@ numba = [
     {version = ">=0.60.0", python = "<3.13"},
     {version = "0.61.0rc2", python = ">=3.13"}
 ]
-
+scipy = ">=0.16"
 [tool.poetry.group.dev]
 optional = true
 
