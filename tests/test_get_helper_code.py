@@ -6,7 +6,9 @@ import pytest
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.either import is_successful
 from codeflash.models.models import FunctionParent
+from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.optimization.optimizer import Optimizer
+from codeflash.verification.verification_utils import TestConfig
 
 
 class HelperClass:
@@ -31,6 +33,7 @@ def test_get_outside_method_helper() -> None:
             experiment_id=None,
         )
     )
+
     function_to_optimize = FunctionToOptimize(
         function_name="OptimizeMe", file_path=file_path, parents=[], starting_line=None, ending_line=None
     )
@@ -213,17 +216,6 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         f.write(code)
         f.flush()
         file_path = Path(f.name).resolve()
-        opt = Optimizer(
-            Namespace(
-                project_root=file_path.parent.resolve(),
-                disable_telemetry=True,
-                tests_root="tests",
-                test_framework="pytest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=Path().resolve(),
-            )
-        )
         function_to_optimize = FunctionToOptimize(
             function_name="__call__",
             file_path=file_path,
@@ -231,9 +223,17 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
             starting_line=None,
             ending_line=None,
         )
+        test_config = TestConfig(
+            tests_root="tests",
+            tests_project_rootdir=Path.cwd(),
+            project_root_path=file_path.parent.resolve(),
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+        func_optimizer = FunctionOptimizer(function_to_optimize=function_to_optimize, test_cfg=test_config)
         with open(file_path) as f:
             original_code = f.read()
-        ctx_result = opt.get_code_optimization_context(function_to_optimize, opt.args.project_root, original_code)
+        ctx_result = func_optimizer.get_code_optimization_context()
         if not is_successful(ctx_result):
             pytest.fail()
         code_context = ctx_result.unwrap()
@@ -338,23 +338,21 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
 
 def test_bubble_sort_deps() -> None:
     file_path = (Path(__file__) / ".." / ".." / "code_to_optimize" / "bubble_sort_deps.py").resolve()
-    opt = Optimizer(
-        Namespace(
-            project_root=file_path.parent.parent.resolve(),
-            disable_telemetry=True,
-            tests_root=str(file_path.parent / "tests"),
-            test_framework="pytest",
-            pytest_cmd="pytest",
-            experiment_id=None,
-            test_project_root=file_path.parent.resolve(),
-        )
-    )
+
     function_to_optimize = FunctionToOptimize(
         function_name="sorter_deps", file_path=file_path, parents=[], starting_line=None, ending_line=None
     )
+    test_config = TestConfig(
+        tests_root=str(file_path.parent / "tests"),
+        tests_project_rootdir=file_path.parent.resolve(),
+        project_root_path=file_path.parent.parent.resolve(),
+        test_framework="pytest",
+        pytest_cmd="pytest",
+    )
+    func_optimizer = FunctionOptimizer(function_to_optimize=function_to_optimize, test_cfg=test_config)
     with open(file_path) as f:
         original_code = f.read()
-    ctx_result = opt.get_code_optimization_context(function_to_optimize, opt.args.project_root, original_code)
+    ctx_result = func_optimizer.get_code_optimization_context()
     if not is_successful(ctx_result):
         pytest.fail()
     code_context = ctx_result.unwrap()

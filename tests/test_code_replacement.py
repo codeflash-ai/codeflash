@@ -14,6 +14,7 @@ from codeflash.code_utils.code_replacer import (
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
 from codeflash.optimization.function_optimizer import FunctionOptimizer
+from codeflash.verification.verification_utils import TestConfig
 
 os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
 
@@ -768,7 +769,14 @@ class MainClass:
     func_top_optimize = FunctionToOptimize(
         function_name="main_method", file_path=file_path, parents=[FunctionParent("MainClass", "ClassDef")]
     )
-    func_optimizer = FunctionOptimizer(project_root=file_path.parent.resolve(), function_to_optimize=func_top_optimize)
+    test_config = TestConfig(
+        tests_root=file_path.parent,
+        tests_project_rootdir=file_path.parent,
+        project_root_path=file_path.parent,
+        test_framework="pytest",
+        pytest_cmd="pytest",
+    )
+    func_optimizer = FunctionOptimizer(function_to_optimize=func_top_optimize, test_cfg=test_config)
     code_context = func_optimizer.get_code_optimization_context().unwrap()
     assert code_context.code_to_optimize_with_helpers == get_code_output
 

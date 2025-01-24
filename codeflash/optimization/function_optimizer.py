@@ -87,6 +87,7 @@ class FunctionOptimizer:
         function_to_optimize_ast: ast.FunctionDef | None = None,
         aiservice_client: AiServiceClient | None = None,
         no_pr: bool = False,
+        project_root: str = "",
     ) -> None:
         self.project_root: str = str(test_cfg.project_root_path)
         self.test_cfg = test_cfg

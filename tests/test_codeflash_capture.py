@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import os
 import re
-from argparse import Namespace
 from pathlib import Path
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode
-from codeflash.optimization.optimizer import Optimizer
+from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_code import instrument_code
 from codeflash.verification.test_results import TestType, VerificationType
 from codeflash.verification.test_runner import execute_test_subprocess
+from codeflash.verification.verification_utils import TestConfig
 
 
 # Tests for get_stack_info. Ensures that when a test is run via pytest, the correct test information is extracted
@@ -326,23 +326,25 @@ class MyClass:
             f.write(test_code)
         with sample_code_path.open("w") as f:
             f.write(sample_code)
-        opt = Optimizer(
-            Namespace(
-                project_root=project_root_path,
-                disable_telemetry=True,
-                tests_root=tests_root,
-                test_framework="pytest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=project_root_path,
-            )
-        )
 
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
-        test_files = TestFiles(
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+        fto = FunctionToOptimize(
+            function_name="some_function",
+            file_path=sample_code_path,
+            parents=[FunctionParent(name="MyClass", type="ClassDef")],
+        )
+        func_optimizer = FunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
+        func_optimizer.test_files = TestFiles(
             test_files=[
                 TestFile(
                     instrumented_behavior_file_path=test_path,
@@ -352,10 +354,10 @@ class MyClass:
                 )
             ]
         )
-        test_results, coverage_data = opt.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
-            test_files=test_files,
+            test_files=func_optimizer.test_files,
             optimization_iteration=0,
             pytest_min_loops=1,
             pytest_max_loops=1,
@@ -436,23 +438,24 @@ class MyClass(ParentClass):
             f.write(test_code)
         with sample_code_path.open("w") as f:
             f.write(sample_code)
-        opt = Optimizer(
-            Namespace(
-                project_root=project_root_path,
-                disable_telemetry=True,
-                tests_root=tests_root,
-                test_framework="pytest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=project_root_path,
-            )
-        )
-
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
-        test_files = TestFiles(
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+        fto = FunctionToOptimize(
+            function_name="some_function",
+            file_path=sample_code_path,
+            parents=[FunctionParent(name="MyClass", type="ClassDef")],
+        )
+        func_optimizer = FunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
+        func_optimizer.test_files = TestFiles(
             test_files=[
                 TestFile(
                     instrumented_behavior_file_path=test_path,
@@ -462,10 +465,10 @@ class MyClass(ParentClass):
                 )
             ]
         )
-        test_results, coverage_data = opt.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
-            test_files=test_files,
+            test_files=func_optimizer.test_files,
             optimization_iteration=0,
             pytest_min_loops=1,
             pytest_max_loops=1,
@@ -582,24 +585,26 @@ class AnotherHelperClass:
             f.write(original_code)
         with test_path.open("w") as f:
             f.write(test_code)
-        opt = Optimizer(
-            Namespace(
-                project_root=project_root_path,
-                disable_telemetry=True,
-                tests_root=tests_root,
-                test_framework="pytest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=project_root_path,
-            )
-        )
 
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
 
         test_type = TestType.EXISTING_UNIT_TEST
-        test_files = TestFiles(
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+        fto = FunctionToOptimize(
+            function_name="target_function",
+            file_path=fto_file_path,
+            parents=[FunctionParent(name="MyClass", type="ClassDef")],
+        )
+        func_optimizer = FunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
+        func_optimizer.test_files = TestFiles(
             test_files=[
                 TestFile(
                     instrumented_behavior_file_path=test_path,
@@ -610,10 +615,10 @@ class AnotherHelperClass:
             ]
         )
 
-        test_results, coverage_data = opt.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
-            test_files=test_files,
+            test_files=func_optimizer.test_files,
             optimization_iteration=0,
             pytest_min_loops=1,
             pytest_max_loops=1,
@@ -722,24 +727,20 @@ class AnotherHelperClass:
             helper_path_2: {"HelperClass2", "AnotherHelperClass"},
         }
         instrument_code(fto, file_path_to_helper_class)
-        opt = Optimizer(
-            Namespace(
-                project_root=project_root_path,
-                disable_telemetry=True,
-                tests_root=tests_root,
-                test_framework="pytest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=project_root_path,
-            )
-        )
-
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
 
         test_type = TestType.EXISTING_UNIT_TEST
-        test_files = TestFiles(
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+        func_optimizer = FunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
+        func_optimizer.test_files = TestFiles(
             test_files=[
                 TestFile(
                     instrumented_behavior_file_path=test_path,
@@ -761,10 +762,10 @@ class AnotherHelperClass:
         }
         instrument_code(fto, file_path_to_helper_classes)
 
-        test_results, coverage_data = opt.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
-            test_files=test_files,
+            test_files=func_optimizer.test_files,
             optimization_iteration=0,
             pytest_min_loops=1,
             pytest_max_loops=1,
@@ -772,7 +773,7 @@ class AnotherHelperClass:
         )
 
         # Remove instrumentation
-        opt.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
+        FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
 
         assert len(test_results.test_results) == 4
         assert test_results[0].id.test_function_name == "test_helper_classes"
@@ -813,17 +814,17 @@ class MyClass:
             Path(helper_path_2): {"HelperClass2", "AnotherHelperClass"},
         }
         instrument_code(fto, file_path_to_helper_classes)
-        modified_test_results, coverage_data = opt.run_and_parse_tests(
+        modified_test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
-            test_files=test_files,
+            test_files=func_optimizer.test_files,
             optimization_iteration=0,
             pytest_min_loops=1,
             pytest_max_loops=1,
             testing_time=0.1,
         )
         # Remove instrumentation
-        opt.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
+        FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
 
         # Now, this fto_code mutates the instance so it should fail
         mutated_fto_code = """
@@ -852,17 +853,17 @@ class MyClass:
             Path(helper_path_2): {"HelperClass2", "AnotherHelperClass"},
         }
         instrument_code(fto, file_path_to_helper_classes)
-        mutated_test_results, coverage_data = opt.run_and_parse_tests(
+        mutated_test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
-            test_files=test_files,
+            test_files=func_optimizer.test_files,
             optimization_iteration=0,
             pytest_min_loops=1,
             pytest_max_loops=1,
             testing_time=0.1,
         )
         # Remove instrumentation
-        opt.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
+        FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
         assert not compare_test_results(test_results, mutated_test_results)
 
         # This fto code stopped using a helper class. it should still pass
@@ -890,17 +891,17 @@ class MyClass:
             Path(helper_path_2): {"HelperClass2", "AnotherHelperClass"},
         }
         instrument_code(fto, file_path_to_helper_classes)
-        no_helper1_test_results, coverage_data = opt.run_and_parse_tests(
+        no_helper1_test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
-            test_files=test_files,
+            test_files=func_optimizer.test_files,
             optimization_iteration=0,
             pytest_min_loops=1,
             pytest_max_loops=1,
             testing_time=0.1,
         )
         # Remove instrumentation
-        opt.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
+        FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
         assert compare_test_results(test_results, no_helper1_test_results)
 
     finally:
