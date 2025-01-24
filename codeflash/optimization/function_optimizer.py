@@ -5,7 +5,6 @@ import concurrent.futures
 import os
 import shutil
 import subprocess
-import tempfile
 import time
 import uuid
 from collections import defaultdict
@@ -23,7 +22,7 @@ from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code
-from codeflash.code_utils.code_replacer import normalize_code, normalize_node, replace_function_definitions_in_module
+from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     cleanup_paths,
     file_name_from_test_module_name,
@@ -39,11 +38,9 @@ from codeflash.code_utils.config_consts import (
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
-from codeflash.code_utils.static_analysis import analyze_imported_modules, get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
-from codeflash.discovery.discover_unit_tests import discover_unit_tests
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize, get_functions_to_optimize
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.either import Failure, Success, is_successful
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
@@ -76,29 +73,36 @@ from codeflash.verification.verification_utils import TestConfig, get_test_file_
 from codeflash.verification.verifier import generate_tests
 
 if TYPE_CHECKING:
-    from argparse import Namespace
-
     from codeflash.either import Result
     from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
 
+
 class FunctionOptimizer:
-    def __init__(self, project_root:str, test_cfg:TestConfig, aiservice_client:AiServiceClient, no_pr:bool = False)-> None:
+    def __init__(
+        self,
+        project_root: str,
+        test_cfg: TestConfig,
+        aiservice_client: AiServiceClient,
+        function_to_optimize: FunctionToOptimize,
+        function_to_optimize_ast: ast.FunctionDef,
+        function_to_tests: dict[str, list[FunctionCalledInTest]],
+        validated_original_code: dict[Path, ValidCode],
+        no_pr: bool = False,
+    ) -> None:
         self.project_root = project_root
         self.test_cfg = test_cfg
         self.aiservice_client = aiservice_client
+        self.function_to_optimize = function_to_optimize
+        self.function_to_optimize_ast = function_to_optimize_ast
+        self.function_to_tests = function_to_tests
+        self.validated_original_code = validated_original_code
         self.no_pr = no_pr
 
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.test_files = TestFiles(test_files=[])
 
-    def optimize_function(
-        self,
-        function_to_optimize: FunctionToOptimize,
-        function_to_optimize_ast: ast.FunctionDef,
-        function_to_tests: dict[str, list[FunctionCalledInTest]],
-        validated_original_code: dict[Path, ValidCode],
-    ) -> Result[BestOptimization, str]:
+    def optimize_function(self) -> Result[BestOptimization, str]:
         should_run_experiment = self.experiment_id is not None
         function_trace_id: str = str(uuid.uuid4())
         logger.debug(f"Function Trace ID: {function_trace_id}")
@@ -106,9 +110,9 @@ class FunctionOptimizer:
         self.cleanup_leftover_test_return_values()
         file_name_from_test_module_name.cache_clear()
         ctx_result = self.get_code_optimization_context(
-            function_to_optimize,
+            self.function_to_optimize,
             self.project_root,
-            validated_original_code[function_to_optimize.file_path].source_code,
+            self.validated_original_code[self.function_to_optimize.file_path].source_code,
         )
         if not is_successful(ctx_result):
             return Failure(ctx_result.failure())
@@ -123,44 +127,45 @@ class FunctionOptimizer:
         logger.info("Code to be optimized:")
         code_print(code_context.read_writable_code)
 
-        original_module_path = module_name_from_file_path(function_to_optimize.file_path, self.project_root)
+        original_module_path = module_name_from_file_path(self.function_to_optimize.file_path, self.project_root)
 
         for module_abspath, helper_code_source in original_helper_code.items():
             code_context.code_to_optimize_with_helpers = add_needed_imports_from_module(
                 helper_code_source,
                 code_context.code_to_optimize_with_helpers,
                 module_abspath,
-                function_to_optimize.file_path,
+                self.function_to_optimize.file_path,
                 self.project_root,
             )
 
         generated_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root, function_to_optimize.function_name, test_index, test_type="unit"
+                self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
             )
             for test_index in range(N_TESTS_TO_GENERATE)
         ]
         generated_perf_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root, function_to_optimize.function_name, test_index, test_type="perf"
+                self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="perf"
             )
             for test_index in range(N_TESTS_TO_GENERATE)
         ]
 
         with progress_bar(
-            f"Generating new tests and optimizations for function {function_to_optimize.function_name}", transient=True
+            f"Generating new tests and optimizations for function {self.function_to_optimize.function_name}",
+            transient=True,
         ):
             generated_results = self.generate_tests_and_optimizations(
                 code_to_optimize_with_helpers=code_context.code_to_optimize_with_helpers,
                 read_writable_code=code_context.read_writable_code,
                 read_only_context_code=code_context.read_only_context_code,
-                function_to_optimize=function_to_optimize,
+                function_to_optimize=self.function_to_optimize,
                 helper_functions=code_context.helper_functions,
                 module_path=Path(original_module_path),
                 function_trace_id=function_trace_id,
                 generated_test_paths=generated_test_paths,
                 generated_perf_test_paths=generated_perf_test_paths,
-                function_to_optimize_ast=function_to_optimize_ast,
+                function_to_optimize_ast=self.function_to_optimize_ast,
                 run_experiment=should_run_experiment,
             )
 
@@ -194,29 +199,29 @@ class FunctionOptimizer:
             logger.info(f"Generated test {count_tests}/{count_tests}:")
             code_print(concolic_test_str)
 
-        function_to_optimize_qualified_name = function_to_optimize.qualified_name
+        function_to_optimize_qualified_name = self.function_to_optimize.qualified_name
         function_to_all_tests = {
-            key: function_to_tests.get(key, []) + function_to_concolic_tests.get(key, [])
-            for key in set(function_to_tests) | set(function_to_concolic_tests)
+            key: self.function_to_tests.get(key, []) + function_to_concolic_tests.get(key, [])
+            for key in set(self.function_to_tests) | set(function_to_concolic_tests)
         }
         instrumented_unittests_created_for_function = self.instrument_existing_tests(
-            function_to_optimize=function_to_optimize, function_to_tests=function_to_all_tests
+            function_to_optimize=self.function_to_optimize, function_to_tests=function_to_all_tests
         )
 
         # Get a dict of file_path_to_classes of fto and helpers_of_fto
         file_path_to_helper_classes = defaultdict(set)
         for function_source in code_context.helper_functions:
             if (
-                function_source.qualified_name != function_to_optimize.qualified_name
+                function_source.qualified_name != self.function_to_optimize.qualified_name
                 and "." in function_source.qualified_name
             ):
                 file_path_to_helper_classes[function_source.file_path].add(function_source.qualified_name.split(".")[0])
 
         baseline_result = self.establish_original_code_baseline(  # this needs better typing
             function_name=function_to_optimize_qualified_name,
-            function_file_path=function_to_optimize.file_path,
+            function_file_path=self.function_to_optimize.file_path,
             code_context=code_context,
-            function_to_optimize=function_to_optimize,
+            function_to_optimize=self.function_to_optimize,
             original_helper_code=original_helper_code,
             file_path_to_helper_classes=file_path_to_helper_classes,
         )
@@ -245,8 +250,8 @@ class FunctionOptimizer:
             best_optimization = self.determine_best_candidate(
                 candidates=candidates,
                 code_context=code_context,
-                function_to_optimize=function_to_optimize,
-                original_code=validated_original_code[function_to_optimize.file_path].source_code,
+                function_to_optimize=self.function_to_optimize,
+                original_code=self.validated_original_code[self.function_to_optimize.file_path].source_code,
                 original_code_baseline=original_code_baseline,
                 original_helper_code=original_helper_code,
                 function_trace_id=function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
@@ -273,10 +278,12 @@ class FunctionOptimizer:
                     original_runtime_ns=original_code_baseline.runtime,
                     best_runtime_ns=best_optimization.runtime,
                     function_name=function_to_optimize_qualified_name,
-                    file_path=function_to_optimize.file_path,
+                    file_path=self.function_to_optimize.file_path,
                 )
 
-                self.log_successful_optimization(explanation, function_to_optimize, function_trace_id, generated_tests)
+                self.log_successful_optimization(
+                    explanation, self.function_to_optimize, function_trace_id, generated_tests
+                )
 
                 self.replace_function_and_helpers_with_optimized_code(
                     code_context=code_context,
@@ -288,18 +295,18 @@ class FunctionOptimizer:
                 new_code, new_helper_code = self.reformat_code_and_helpers(
                     code_context.helper_functions,
                     explanation.file_path,
-                    validated_original_code[function_to_optimize.file_path].source_code,
+                    self.validated_original_code[self.function_to_optimize.file_path].source_code,
                 )
 
                 existing_tests = existing_tests_source_for(
-                    function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
+                    self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
                     function_to_all_tests,
                     tests_root=self.test_cfg.tests_root,
                 )
 
                 original_code_combined = original_helper_code.copy()
-                original_code_combined[explanation.file_path] = validated_original_code[
-                    function_to_optimize.file_path
+                original_code_combined[explanation.file_path] = self.validated_original_code[
+                    self.function_to_optimize.file_path
                 ].source_code
                 new_code_combined = new_helper_code.copy()
                 new_code_combined[explanation.file_path] = new_code
@@ -327,9 +334,9 @@ class FunctionOptimizer:
                     )
                     if self.args.all or env_utils.get_pr_number():
                         self.write_code_and_helpers(
-                            validated_original_code[function_to_optimize.file_path].source_code,
+                            self.validated_original_code[self.function_to_optimize.file_path].source_code,
                             original_helper_code,
-                            function_to_optimize.file_path,
+                            self.function_to_optimize.file_path,
                         )
         for generated_test_path in generated_test_paths:
             generated_test_path.unlink(missing_ok=True)
@@ -347,8 +354,9 @@ class FunctionOptimizer:
                 break  # need to delete only one test directory
 
         if not best_optimization:
-            return Failure(f"No best optimizations found for function {function_to_optimize.qualified_name}")
+            return Failure(f"No best optimizations found for function {self.function_to_optimize.qualified_name}")
         return Success(best_optimization)
+
     def reformat_code_and_helpers(
         self, helper_functions: list[FunctionSource], path: Path, original_code: str
     ) -> tuple[str, dict[Path, str]]:
@@ -369,6 +377,7 @@ class FunctionOptimizer:
             new_helper_code[module_abspath] = formatted_helper_code
 
         return new_code, new_helper_code
+
     def determine_best_candidate(
         self,
         *,
@@ -1152,3 +1161,11 @@ class FunctionOptimizer:
                 zip(generated_test_paths, generated_perf_test_paths)
             )
         ]
+
+    @staticmethod
+    def write_code_and_helpers(original_code: str, original_helper_code: dict[Path, str], path: Path) -> None:
+        with path.open("w", encoding="utf8") as f:
+            f.write(original_code)
+        for module_abspath in original_helper_code:
+            with Path(module_abspath).open("w", encoding="utf8") as f:
+                f.write(original_helper_code[module_abspath])
