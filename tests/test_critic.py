@@ -175,7 +175,25 @@ def test_generated_test_critic() -> None:
         loop_index=2,
     )
 
-    test_results = [test_1, test_2, test_3]
+    test_7 = FunctionTestInvocation(
+        id=InvocationId(
+            test_module_path="",
+            test_class_name="",
+            test_function_name="test_7",
+            function_getting_tested="sorter",
+            iteration_id="",
+        ),
+        file_name=Path("test_7"),
+        did_pass=True,
+        runtime=0,
+        test_framework="pytest",
+        test_type=TestType.EXISTING_UNIT_TEST,
+        return_value=None,
+        timed_out=False,
+        loop_index=1,
+    )
+
+    test_results = [test_1, test_2, test_3, test_7]
 
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
@@ -188,7 +206,7 @@ def test_generated_test_critic() -> None:
 
     assert quantity_of_tests_critic(candidate_result)
 
-    test_results = [test_1, test_3, test_6]
+    test_results = [test_1, test_2, test_3, test_6, test_7]
 
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
@@ -201,7 +219,7 @@ def test_generated_test_critic() -> None:
 
     assert quantity_of_tests_critic(candidate_result)
 
-    test_results = [test_1, test_3, test_4]
+    test_results = [test_1, test_3, test_4, test_2, test_7]
 
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
@@ -227,7 +245,7 @@ def test_generated_test_critic() -> None:
 
     assert not quantity_of_tests_critic(candidate_result)
 
-    test_results = [test_1, test_2]
+    test_results = [test_1, test_2, test_3, test_4, test_5]
 
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
@@ -323,7 +341,6 @@ def test_generated_test_critic() -> None:
     del os.environ["CODEFLASH_PR_NUMBER"]
 
 
-
 def test_coverage_critic() -> None:
     mock_code_context = Mock(spec=CodeOptimizationContext)
 
@@ -340,10 +357,10 @@ def test_coverage_critic() -> None:
             executed_lines=[10],
             unexecuted_lines=[2],
             executed_branches=[[5]],
-            unexecuted_branches=[[1]]
+            unexecuted_branches=[[1]],
         ),
         dependent_func_coverage=None,
-        status=CoverageStatus.PARSED_SUCCESSFULLY
+        status=CoverageStatus.PARSED_SUCCESSFULLY,
     )
 
     assert coverage_critic(passing_coverage, "pytest") is True
@@ -361,10 +378,10 @@ def test_coverage_critic() -> None:
             executed_lines=[10],
             unexecuted_lines=[2],
             executed_branches=[[5]],
-            unexecuted_branches=[[1]]
+            unexecuted_branches=[[1]],
         ),
         dependent_func_coverage=None,
-        status=CoverageStatus.PARSED_SUCCESSFULLY
+        status=CoverageStatus.PARSED_SUCCESSFULLY,
     )
 
     assert coverage_critic(border_coverage, "pytest") is True
@@ -382,10 +399,10 @@ def test_coverage_critic() -> None:
             executed_lines=[],
             unexecuted_lines=[10],
             executed_branches=[],
-            unexecuted_branches=[[5]]
+            unexecuted_branches=[[5]],
         ),
         dependent_func_coverage=None,
-        status=CoverageStatus.PARSED_SUCCESSFULLY
+        status=CoverageStatus.PARSED_SUCCESSFULLY,
     )
 
     assert coverage_critic(failing_coverage, "pytest") is False
@@ -403,10 +420,10 @@ def test_coverage_critic() -> None:
             executed_lines=[10],
             unexecuted_lines=[2],
             executed_branches=[[5]],
-            unexecuted_branches=[[1]]
+            unexecuted_branches=[[1]],
         ),
         dependent_func_coverage=None,
-        status=CoverageStatus.PARSED_SUCCESSFULLY
+        status=CoverageStatus.PARSED_SUCCESSFULLY,
     )
 
     assert coverage_critic(unittest_coverage, "unittest") is True

@@ -46,7 +46,7 @@ def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool
     for test_type in report:
         pass_count += report[test_type]["passed"]
 
-    if pass_count > 4:
+    if pass_count >= 4:
         return True
     # If only one test passed, check if it's a REPLAY_TEST
     return bool(pass_count == 1 and report[TestType.REPLAY_TEST]["passed"] == 1)
