@@ -80,16 +80,15 @@ if TYPE_CHECKING:
 class FunctionOptimizer:
     def __init__(
         self,
-        project_root: str,
         function_to_optimize: FunctionToOptimize,
+        test_cfg: TestConfig,
         function_to_optimize_source_code: str = "",
         function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
         function_to_optimize_ast: ast.FunctionDef | None = None,
         aiservice_client: AiServiceClient | None = None,
         no_pr: bool = False,
-        test_cfg: TestConfig = None,
     ) -> None:
-        self.project_root = project_root
+        self.project_root: str = str(test_cfg.project_root_path)
         self.test_cfg = test_cfg
         self.aiservice_client = aiservice_client if aiservice_client else AiServiceClient()
         self.function_to_optimize = function_to_optimize
@@ -111,6 +110,12 @@ class FunctionOptimizer:
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.test_files = TestFiles(test_files=[])
+
+        # Check defaults for these
+        self.git_remote = ""
+        self.all = False
+        self.disable_imports_sorting = False
+        self.formatter_cmds = []
 
     def optimize_function(self) -> Result[BestOptimization, str]:
         should_run_experiment = self.experiment_id is not None
@@ -244,7 +249,7 @@ class FunctionOptimizer:
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
         if isinstance(original_code_baseline, OriginalCodeBaseline) and not coverage_critic(
-            original_code_baseline.coverage_results, self.args.test_framework
+            original_code_baseline.coverage_results, self.test_cfg.test_framework
         ):
             cleanup_paths(paths_to_cleanup)
             return Failure("The threshold for test coverage was not met.")
@@ -336,9 +341,9 @@ class FunctionOptimizer:
                         generated_original_test_source=generated_tests_str,
                         function_trace_id=function_trace_id,
                         coverage_message=coverage_message,
-                        git_remote=self.args.git_remote,
+                        git_remote=self.git_remote,
                     )
-                    if self.args.all or env_utils.get_pr_number():
+                    if self.all or env_utils.get_pr_number():
                         self.write_code_and_helpers(
                             self.function_to_optimize_source_code,
                             original_helper_code,
@@ -366,18 +371,18 @@ class FunctionOptimizer:
     def reformat_code_and_helpers(
         self, helper_functions: list[FunctionSource], path: Path, original_code: str
     ) -> tuple[str, dict[Path, str]]:
-        should_sort_imports = not self.args.disable_imports_sorting
+        should_sort_imports = not self.disable_imports_sorting
         if should_sort_imports and isort.code(original_code) != original_code:
             should_sort_imports = False
 
-        new_code = format_code(self.args.formatter_cmds, path)
+        new_code = format_code(self.formatter_cmds, path)
         if should_sort_imports:
             new_code = sort_imports(new_code)
 
         new_helper_code: dict[Path, str] = {}
         helper_functions_paths = {hf.file_path for hf in helper_functions}
         for module_abspath in helper_functions_paths:
-            formatted_helper_code = format_code(self.args.formatter_cmds, module_abspath)
+            formatted_helper_code = format_code(self.formatter_cmds, module_abspath)
             if should_sort_imports:
                 formatted_helper_code = sort_imports(formatted_helper_code)
             new_helper_code[module_abspath] = formatted_helper_code
@@ -517,7 +522,7 @@ class FunctionOptimizer:
             border_style="green",
         )
 
-        if self.args.no_pr:
+        if self.no_pr:
             tests_panel = Panel(
                 Syntax(
                     "\n".join([test.generated_original_test_source for test in generated_tests.generated_tests]),
@@ -672,7 +677,7 @@ class FunctionOptimizer:
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
-                    test_framework=self.args.test_framework,
+                    test_framework=self.test_framework,
                 )
                 if not success:
                     continue
@@ -682,7 +687,7 @@ class FunctionOptimizer:
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
-                    test_framework=self.args.test_framework,
+                    test_framework=self.test_framework,
                 )
                 if not success:
                     continue
@@ -766,7 +771,7 @@ class FunctionOptimizer:
 
             future_concolic_tests = executor.submit(
                 generate_concolic_tests, self.test_cfg, self.args, function_to_optimize, function_to_optimize_ast
-            )
+            )  # TODO: reformat the self.args
             futures = [*future_tests, future_optimization_candidates, future_concolic_tests]
             if run_experiment:
                 future_candidates_exp = executor.submit(
@@ -839,7 +844,7 @@ class FunctionOptimizer:
     ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
         # For the original function - run the tests and get the runtime, plus coverage
         with progress_bar(f"Establishing original code baseline for {function_name}"):
-            assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
+            assert (test_framework := self.test_framework) in ["pytest", "unittest"]
             success = True
 
             test_env = os.environ.copy()
@@ -964,7 +969,7 @@ class FunctionOptimizer:
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
     ) -> Result[OptimizedCandidateResult, str]:
-        assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
+        assert (test_framework := self.test_framework) in ["pytest", "unittest"]
 
         with progress_bar("Testing optimization candidate"):
             test_env = os.environ.copy()
@@ -1088,7 +1093,7 @@ class FunctionOptimizer:
             if testing_type == TestingMode.BEHAVIOR:
                 result_file_path, run_result, coverage_database_file = run_behavioral_tests(
                     test_files,
-                    test_framework=self.args.test_framework,
+                    test_framework=self.test_cfg.test_framework,
                     cwd=self.project_root,
                     test_env=test_env,
                     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
@@ -1106,7 +1111,7 @@ class FunctionOptimizer:
                     pytest_target_runtime_seconds=testing_time,
                     pytest_min_loops=pytest_min_loops,
                     pytest_max_loops=pytest_max_loops,
-                    test_framework=self.args.test_framework,
+                    test_framework=self.test_cfg.test_framework,
                 )
             else:
                 raise ValueError(f"Unexpected testing type: {testing_type}")

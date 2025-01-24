@@ -149,7 +149,6 @@ class Optimizer:
                     #     function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code
                     # )
                     function_optimizer = FunctionOptimizer(
-                        project_root=self.args.project_root,
                         test_cfg=self.test_cfg,
                         aiservice_client=self.aiservice_client,
                         function_to_optimize=function_to_optimize,
