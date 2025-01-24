@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
+from argparse import Namespace
 from collections import defaultdict
 from pathlib import Path
 
@@ -13,8 +14,7 @@ from codeflash.code_utils.code_replacer import (
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
-from codeflash.optimization.function_optimizer import FunctionOptimizer
-from codeflash.verification.verification_utils import TestConfig
+from codeflash.optimization.optimizer import Optimizer
 
 os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
 
@@ -766,18 +766,24 @@ class MainClass:
         return HelperClass(self.name).helper_method()
 """
     file_path = Path(__file__).resolve()
+    opt = Optimizer(
+        Namespace(
+            project_root=file_path.parent.resolve(),
+            disable_telemetry=True,
+            tests_root="tests",
+            test_framework="pytest",
+            pytest_cmd="pytest",
+            experiment_id=None,
+            test_project_root=file_path.parent.resolve(),
+        )
+    )
     func_top_optimize = FunctionToOptimize(
         function_name="main_method", file_path=file_path, parents=[FunctionParent("MainClass", "ClassDef")]
     )
-    test_config = TestConfig(
-        tests_root=file_path.parent,
-        tests_project_rootdir=file_path.parent,
-        project_root_path=file_path.parent,
-        test_framework="pytest",
-        pytest_cmd="pytest",
-    )
-    func_optimizer = FunctionOptimizer(function_to_optimize=func_top_optimize, test_cfg=test_config)
-    code_context = func_optimizer.get_code_optimization_context().unwrap()
+    original_code = file_path.read_text()
+    code_context = opt.get_code_optimization_context(
+        function_to_optimize=func_top_optimize, project_root=file_path.parent, original_source_code=original_code
+    ).unwrap()
     assert code_context.code_to_optimize_with_helpers == get_code_output
 
 

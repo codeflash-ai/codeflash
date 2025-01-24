@@ -368,7 +368,6 @@ class BubbleSorter:
             pytest_max_loops=1,
             testing_time=0.1,
         )
-        print(test_results_mutated_attr)
         # assert test_results_mutated_attr[0].return_value[0]["self"].x == 1 TODO: add self as input
         assert test_results_mutated_attr[0].id.function_getting_tested == "BubbleSorter.__init__"
         assert test_results_mutated_attr[0].return_value[0] == {"x": 1}
