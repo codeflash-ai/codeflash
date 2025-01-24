@@ -3,16 +3,16 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
-from argparse import Namespace
 from pathlib import Path
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodePosition, TestFile, TestFiles, TestingMode
-from codeflash.optimization.optimizer import Optimizer
+from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.test_results import TestType
+from codeflash.verification.verification_utils import TestConfig
 
 # Used by cli instrumentation
 codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
@@ -87,7 +87,7 @@ def test_sort():
     codeflash_con.close()
 """
     )
-
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_results_temp.py"
@@ -113,23 +113,20 @@ def test_sort():
 
         # Overwrite old test with new instrumented test
 
-        opt = Optimizer(
-            Namespace(
-                project_root=project_root_path,
-                disable_telemetry=True,
-                tests_root=tests_root,
-                test_framework="pytest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=project_root_path,
-            )
-        )
-
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
-        test_files = TestFiles(
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+        fto = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
+        func_optimizer = FunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
+        func_optimizer.test_files = TestFiles(
             test_files=[
                 TestFile(
                     instrumented_behavior_file_path=test_path,
@@ -139,10 +136,10 @@ def test_sort():
                 )
             ]
         )
-        test_results, coverage_data = opt.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
-            test_files=test_files,
+            test_files=func_optimizer.test_files,
             optimization_iteration=0,
             pytest_min_loops=1,
             pytest_max_loops=1,
@@ -251,11 +248,11 @@ def test_sort():
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()
 """
-
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     with tempfile.NamedTemporaryFile(mode="w") as f:
         f.write(code)
         f.flush()
-        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
         os.chdir(run_cwd)
@@ -275,6 +272,7 @@ def test_sort():
         Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/pytest/test_class_method_behavior_results_perf_temp.py"
     ).resolve()
+
     try:
         with test_path.open("w") as f:
             f.write(code)
@@ -292,23 +290,19 @@ def test_sort():
 
         # Overwrite old test with new instrumented test
 
-        opt = Optimizer(
-            Namespace(
-                project_root=project_root_path,
-                disable_telemetry=True,
-                tests_root=tests_root,
-                test_framework="pytest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=project_root_path,
-            )
-        )
-
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
-        test_files = TestFiles(
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer.test_files = TestFiles(
             test_files=[
                 TestFile(
                     instrumented_behavior_file_path=test_path,
@@ -318,10 +312,10 @@ def test_sort():
                 )
             ]
         )
-        test_results, coverage_data = opt.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
-            test_files=test_files,
+            test_files=func_optimizer.test_files,
             optimization_iteration=0,
             pytest_min_loops=1,
             pytest_max_loops=1,
@@ -370,10 +364,10 @@ class BubbleSorter:
         fto_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort_method.py").resolve()
         original_code = fto_path.read_text("utf-8")
         fto_path.write_text(optimized_code, "utf-8")
-        new_test_results, coverage_data = opt.run_and_parse_tests(
+        new_test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
-            test_files=test_files,
+            test_files=func_optimizer.test_files,
             optimization_iteration=0,
             pytest_min_loops=1,
             pytest_max_loops=1,
