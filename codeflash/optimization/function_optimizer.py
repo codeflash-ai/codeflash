@@ -38,6 +38,7 @@ from codeflash.code_utils.config_consts import (
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
+from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -56,7 +57,6 @@ from codeflash.models.models import (
     TestFile,
     TestFiles,
     TestingMode,
-    ValidCode,
 )
 from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
@@ -81,21 +81,31 @@ class FunctionOptimizer:
     def __init__(
         self,
         project_root: str,
-        test_cfg: TestConfig,
-        aiservice_client: AiServiceClient,
         function_to_optimize: FunctionToOptimize,
-        function_to_optimize_ast: ast.FunctionDef,
-        function_to_tests: dict[str, list[FunctionCalledInTest]],
-        validated_original_code: dict[Path, ValidCode],
+        function_to_optimize_source_code: str = "",
+        function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
+        function_to_optimize_ast: ast.FunctionDef | None = None,
+        aiservice_client: AiServiceClient | None = None,
         no_pr: bool = False,
+        test_cfg: TestConfig = None,
     ) -> None:
         self.project_root = project_root
         self.test_cfg = test_cfg
-        self.aiservice_client = aiservice_client
+        self.aiservice_client = aiservice_client if aiservice_client else AiServiceClient()
         self.function_to_optimize = function_to_optimize
-        self.function_to_optimize_ast = function_to_optimize_ast
+        self.function_to_optimize_source_code = (
+            function_to_optimize_source_code
+            if function_to_optimize_source_code
+            else function_to_optimize.file_path.read_text(encoding="utf8")
+        )
+        if not function_to_optimize_ast:
+            original_module_ast = ast.parse(function_to_optimize_source_code)
+            self.function_to_optimize_ast = get_first_top_level_function_or_method_ast(
+                function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
+            )
+        self.function_to_tests = function_to_tests if function_to_tests else {}
+
         self.function_to_tests = function_to_tests
-        self.validated_original_code = validated_original_code
         self.no_pr = no_pr
 
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
@@ -110,9 +120,7 @@ class FunctionOptimizer:
         self.cleanup_leftover_test_return_values()
         file_name_from_test_module_name.cache_clear()
         ctx_result = self.get_code_optimization_context(
-            self.function_to_optimize,
-            self.project_root,
-            self.validated_original_code[self.function_to_optimize.file_path].source_code,
+            self.function_to_optimize, self.project_root, self.function_to_optimize_source_code
         )
         if not is_successful(ctx_result):
             return Failure(ctx_result.failure())
@@ -251,7 +259,7 @@ class FunctionOptimizer:
                 candidates=candidates,
                 code_context=code_context,
                 function_to_optimize=self.function_to_optimize,
-                original_code=self.validated_original_code[self.function_to_optimize.file_path].source_code,
+                original_code=self.function_to_optimize_source_code,
                 original_code_baseline=original_code_baseline,
                 original_helper_code=original_helper_code,
                 function_trace_id=function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
@@ -293,9 +301,7 @@ class FunctionOptimizer:
                 )
 
                 new_code, new_helper_code = self.reformat_code_and_helpers(
-                    code_context.helper_functions,
-                    explanation.file_path,
-                    self.validated_original_code[self.function_to_optimize.file_path].source_code,
+                    code_context.helper_functions, explanation.file_path, self.function_to_optimize_source_code
                 )
 
                 existing_tests = existing_tests_source_for(
@@ -334,7 +340,7 @@ class FunctionOptimizer:
                     )
                     if self.args.all or env_utils.get_pr_number():
                         self.write_code_and_helpers(
-                            self.validated_original_code[self.function_to_optimize.file_path].source_code,
+                            self.function_to_optimize_source_code,
                             original_helper_code,
                             self.function_to_optimize.file_path,
                         )
@@ -563,17 +569,15 @@ class FunctionOptimizer:
             )
         return did_update
 
-    def get_code_optimization_context(
-        self, function_to_optimize: FunctionToOptimize, project_root: Path, original_source_code: str
-    ) -> Result[CodeOptimizationContext, str]:
-        code_to_optimize, contextual_dunder_methods = extract_code([function_to_optimize])
+    def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
+        code_to_optimize, contextual_dunder_methods = extract_code([self.function_to_optimize])
         if code_to_optimize is None:
             return Failure("Could not find function to optimize.")
         (helper_code, helper_functions, helper_dunder_methods) = get_constrained_function_context_and_helper_functions(
-            function_to_optimize, self.project_root, code_to_optimize
+            self.function_to_optimize, self.project_root, code_to_optimize
         )
-        if function_to_optimize.parents:
-            function_class = function_to_optimize.parents[0].name
+        if self.function_to_optimize.parents:
+            function_class = self.function_to_optimize.parents[0].name
             same_class_helper_methods = [
                 df
                 for df in helper_functions
@@ -588,7 +592,7 @@ class FunctionOptimizer:
                     None,
                 )
                 for df in same_class_helper_methods
-            ] + [function_to_optimize]
+            ] + [self.function_to_optimize]
             dedup_optimizable_methods = []
             added_methods = set()
             for method in reversed(optimizable_methods):
@@ -602,16 +606,18 @@ class FunctionOptimizer:
         code_to_optimize_with_helpers = helper_code + "\n" + code_to_optimize
 
         code_to_optimize_with_helpers_and_imports = add_needed_imports_from_module(
-            original_source_code,
+            self.function_to_optimize_source_code,
             code_to_optimize_with_helpers,
-            function_to_optimize.file_path,
-            function_to_optimize.file_path,
-            project_root,
+            self.function_to_optimize.file_path,
+            self.function_to_optimize.file_path,
+            self.project_root,
             helper_functions,
         )
 
         try:
-            new_code_ctx = code_context_extractor.get_code_optimization_context(function_to_optimize, project_root)
+            new_code_ctx = code_context_extractor.get_code_optimization_context(
+                self.function_to_optimize, self.project_root
+            )
         except ValueError as e:
             return Failure(str(e))
 

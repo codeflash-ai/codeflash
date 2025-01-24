@@ -153,9 +153,9 @@ class Optimizer:
                         test_cfg=self.test_cfg,
                         aiservice_client=self.aiservice_client,
                         function_to_optimize=function_to_optimize,
+                        function_to_optimize_source_code=original_module_code,
                         function_to_optimize_ast=function_to_optimize_ast,
                         function_to_tests=function_to_tests,
-                        validated_original_code=validated_original_code,
                         no_pr=self.args.no_pr,
                     )
                     best_optimization = function_optimizer.optimize_function()
