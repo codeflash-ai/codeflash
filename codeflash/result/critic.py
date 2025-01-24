@@ -40,18 +40,13 @@ def speedup_critic(
 
 def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool:
     test_results = candidate_result.behavior_test_results
-    in_github_actions_mode = bool(env_utils.get_pr_number())
-
     report = test_results.get_test_pass_fail_report_by_type()
 
     pass_count = 0
     for test_type in report:
         pass_count += report[test_type]["passed"]
 
-    if in_github_actions_mode:
-        if pass_count >= 4:
-            return True
-    elif pass_count >= 2:
+    if pass_count > 4:
         return True
     # If only one test passed, check if it's a REPLAY_TEST
     return bool(pass_count == 1 and report[TestType.REPLAY_TEST]["passed"] == 1)
