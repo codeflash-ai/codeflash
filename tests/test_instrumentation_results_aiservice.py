@@ -357,8 +357,20 @@ class BubbleSorter:
                     arr[j + 1] = temp
         return arr
                         """
+
         fto_path.write_text(optimized_code_mutated_attr, "utf-8")
         instrument_code(function_to_optimize, {})
+        opt = Optimizer(
+            Namespace(
+                project_root=project_root_path,
+                disable_telemetry=True,
+                tests_root=tests_root,
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=project_root_path,
+            )
+        )
         test_results_mutated_attr, coverage_data = opt.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
@@ -393,6 +405,17 @@ class BubbleSorter:
                         """
         fto_path.write_text(optimized_code_new_attr, "utf-8")
         instrument_code(function_to_optimize, {})
+        opt = Optimizer(
+            Namespace(
+                project_root=project_root_path,
+                disable_telemetry=True,
+                tests_root=tests_root,
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=project_root_path,
+            )
+        )
         test_results_new_attr, coverage_data = opt.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
