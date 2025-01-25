@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import click
 import git
@@ -23,7 +23,7 @@ from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_git_remotes, get_repo_owner_and_name
-from codeflash.code_utils.github_utils import get_github_secrets_page_url, require_github_app_or_exit
+from codeflash.code_utils.github_utils import get_github_secrets_page_url
 from codeflash.code_utils.shell_utils import get_shell_rc_path, save_api_key_to_rc
 from codeflash.either import is_successful
 from codeflash.telemetry.posthog_cf import ph
@@ -64,6 +64,8 @@ def init_codeflash() -> None:
         configure_pyproject_toml(setup_info)
 
         install_github_app()
+
+        install_github_actions()
 
         click.echo(
             f"{LF}"
@@ -347,47 +349,56 @@ def check_for_toml_or_setup_file() -> str | None:
 
 def install_github_actions() -> None:
     try:
-        click.echo(
-            "⚡️ Codeflash can automatically optimize new Github PRs for you when they're opened. Let's get that set up!"
-        )
         config, config_file_path = parse_config_file()
 
         ph("cli-github-actions-install-started")
-        repo = Repo(config["module_root"], search_parent_directories=True)
+        try:
+            repo = Repo(config["module_root"], search_parent_directories=True)
+        except git.InvalidGitRepositoryError:
+            click.echo(
+                "Skipping GitHub action installation for continuous optimization because you're not in a git repository."
+            )
+            return
 
-        owner, repo_name = get_repo_owner_and_name(repo)
-        require_github_app_or_exit(owner, repo_name)
+        # owner, repo_name = get_repo_owner_and_name(repo)
+        # require_github_app_or_exit(owner, repo_name)
 
         git_root = Path(repo.git.rev_parse("--show-toplevel"))
         workflows_path = git_root / ".github" / "workflows"
-        optimize_yaml_path = workflows_path / "codeflash-optimize.yaml"
+        optimize_yaml_path = workflows_path / "codeflash.yaml"
 
         confirm_creation_yes = inquirer_wrapper(
             inquirer.confirm,
-            message=f"I'm going to create a new GitHub actions workflow file at {optimize_yaml_path}… is this OK?",
+            message="⚡️Codeflash can automatically optimize new code in GitHub PRs for you by setting up a GitHub action."
+            " This is the primary way to use Codeflash so we strongly recommend this step. Shall I set this up?",
             default=True,
         )
         ph("cli-github-optimization-confirm-workflow-creation", {"confirm_creation": confirm_creation_yes})
         if not confirm_creation_yes:
             click.echo("⏩️ Exiting workflow creation.")
             ph("cli-github-workflow-skipped")
-            apologize_and_exit()
+            return
         workflows_path.mkdir(parents=True, exist_ok=True)
         from importlib.resources import files
 
-        py_version = sys.version_info
-        python_version_string = f"'{py_version.major}.{py_version.minor}'"
         optimize_yml_content = (
             files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding="utf-8")
         )
-        optimize_yml_content = optimize_yml_content.replace("{{ python_version }}", python_version_string)
+        materialized_optimize_yml_content = customize_codeflash_yaml_content(optimize_yml_content)
         with optimize_yaml_path.open("w", encoding="utf8") as optimize_yml_file:
-            optimize_yml_file.write(optimize_yml_content)
+            optimize_yml_file.write(materialized_optimize_yml_content)
         click.echo(f"✅ Created {optimize_yaml_path}{LF}")
+        try:
+            existing_api_key = get_codeflash_api_key()
+        except OSError:
+            existing_api_key = None
         click.prompt(
             f"Next, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.{LF}"
             f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)}…{LF}"
-            f"Then, click 'New repository secret' to add your api key with the variable name CODEFLASH_API_KEY.{LF}",
+            f"Then, click 'New repository secret' to add your api key with the variable name CODEFLASH_API_KEY.{LF}"
+            f"{'Here is your CODEFLASH_API_KEY: ' + existing_api_key + ' ' + LF}"
+            if existing_api_key
+            else "",
             default="",
             type=click.STRING,
             prompt_suffix="",
@@ -401,29 +412,26 @@ def install_github_actions() -> None:
         )
         click.pause()
         click.echo()
-        click.prompt(
-            f"Finally, for the workflow to work, you'll need to edit the workflow file to install the right "
-            f"Python version and any project dependencies.{LF}"
-            f"Press Enter to open {optimize_yaml_path} in your editor.{LF}",
-            default="",
-            type=click.STRING,
-            prompt_suffix="",
-            show_default=False,
-        )
-        click.launch(optimize_yaml_path.as_posix())
         click.echo(
-            "📝 I opened the workflow file in your editor! You'll need to edit the steps that install the right Python "
-            f"version and any project dependencies. See the comments in the file for more details.{LF}"
-        )
-        click.pause()
-        click.echo()
-        click.echo(
-            f"Please commit and push this GitHub actions file to your repo, and you're all set!{LF}"
+            f"Please edit, commit and push this GitHub actions file to your repo, and you're all set!{LF}"
             f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
         )
         ph("cli-github-workflow-created")
     except KeyboardInterrupt:
         apologize_and_exit()
+
+
+def customize_codeflash_yaml_content(
+    optimize_yml_content: str, config: tuple[dict[str, Any], Path], git_root: Path
+) -> str:
+    py_version = sys.version_info
+    python_version_string = f"'{py_version.major}.{py_version.minor}'"
+    optimize_yml_content = optimize_yml_content.replace("{{ python_version }}", python_version_string)
+
+    module_path = config["module_root"].relative_to(git_root)
+    optimize_yml_content = optimize_yml_content.replace("{{ codeflash_module_path }}", module_path)
+
+    return optimize_yml_content
 
 
 # Create or update the pyproject.toml file with the Codeflash dependency & configuration
