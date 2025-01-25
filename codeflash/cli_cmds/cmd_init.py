@@ -368,9 +368,6 @@ def install_github_actions() -> None:
             )
             return
 
-        # owner, repo_name = get_repo_owner_and_name(repo)
-        # require_github_app_or_exit(owner, repo_name)
-
         git_root = Path(repo.git.rev_parse("--show-toplevel"))
         workflows_path = git_root / ".github" / "workflows"
         optimize_yaml_path = workflows_path / "codeflash.yaml"
