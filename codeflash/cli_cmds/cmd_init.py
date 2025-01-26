@@ -5,8 +5,9 @@ import os
 import re
 import subprocess
 import sys
+from enum import Enum, auto
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import click
 import git
@@ -23,7 +24,7 @@ from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_git_remotes, get_repo_owner_and_name
-from codeflash.code_utils.github_utils import get_github_secrets_page_url, require_github_app_or_exit
+from codeflash.code_utils.github_utils import get_github_secrets_page_url
 from codeflash.code_utils.shell_utils import get_shell_rc_path, save_api_key_to_rc
 from codeflash.either import is_successful
 from codeflash.telemetry.posthog_cf import ph
@@ -38,7 +39,7 @@ CODEFLASH_LOGO: str = (
     r" _______  ___/ /__ / _/ /__ ____ / / " + f"{LF}"
     r"/ __/ _ \/ _  / -_) _/ / _ `(_-</ _ \ " + f"{LF}"
     r"\__/\___/\_,_/\__/_//_/\_,_/___/_//_/" + f"{LF}"
-    f"{('v'+version).rjust(46)}{LF}"
+    f"{('v' + version).rjust(46)}{LF}"
     f"{LF}"
 )
 
@@ -53,6 +54,13 @@ class SetupInfo:
     git_remote: str
 
 
+class DependencyManager(Enum):
+    PIP = auto()
+    POETRY = auto()
+    UV = auto()
+    UNKNOWN = auto()
+
+
 def init_codeflash() -> None:
     try:
         click.echo(f"⚡️ Welcome to Codeflash! Let's get you set up.{LF}")
@@ -64,6 +72,8 @@ def init_codeflash() -> None:
         configure_pyproject_toml(setup_info)
 
         install_github_app()
+
+        install_github_actions()
 
         click.echo(
             f"{LF}"
@@ -347,47 +357,53 @@ def check_for_toml_or_setup_file() -> str | None:
 
 def install_github_actions() -> None:
     try:
-        click.echo(
-            "⚡️ Codeflash can automatically optimize new Github PRs for you when they're opened. Let's get that set up!"
-        )
         config, config_file_path = parse_config_file()
 
         ph("cli-github-actions-install-started")
-        repo = Repo(config["module_root"], search_parent_directories=True)
-
-        owner, repo_name = get_repo_owner_and_name(repo)
-        require_github_app_or_exit(owner, repo_name)
+        try:
+            repo = Repo(config["module_root"], search_parent_directories=True)
+        except git.InvalidGitRepositoryError:
+            click.echo(
+                "Skipping GitHub action installation for continuous optimization because you're not in a git repository."
+            )
+            return
 
         git_root = Path(repo.git.rev_parse("--show-toplevel"))
         workflows_path = git_root / ".github" / "workflows"
-        optimize_yaml_path = workflows_path / "codeflash-optimize.yaml"
+        optimize_yaml_path = workflows_path / "codeflash.yaml"
 
         confirm_creation_yes = inquirer_wrapper(
             inquirer.confirm,
-            message=f"I'm going to create a new GitHub actions workflow file at {optimize_yaml_path}… is this OK?",
+            message="⚡️Shall I set up a GitHub action that will continuously optimize all new code in GitHub PRs"
+            " for you? This is the main way of using Codeflash so we highly recommend it",
             default=True,
         )
         ph("cli-github-optimization-confirm-workflow-creation", {"confirm_creation": confirm_creation_yes})
         if not confirm_creation_yes:
             click.echo("⏩️ Exiting workflow creation.")
             ph("cli-github-workflow-skipped")
-            apologize_and_exit()
+            return
         workflows_path.mkdir(parents=True, exist_ok=True)
         from importlib.resources import files
 
-        py_version = sys.version_info
-        python_version_string = f"'{py_version.major}.{py_version.minor}'"
         optimize_yml_content = (
             files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding="utf-8")
         )
-        optimize_yml_content = optimize_yml_content.replace("{{ python_version }}", python_version_string)
+        materialized_optimize_yml_content = customize_codeflash_yaml_content(optimize_yml_content, config, git_root)
         with optimize_yaml_path.open("w", encoding="utf8") as optimize_yml_file:
-            optimize_yml_file.write(optimize_yml_content)
-        click.echo(f"✅ Created {optimize_yaml_path}{LF}")
+            optimize_yml_file.write(materialized_optimize_yml_content)
+        click.echo(f"{LF}✅ Created GitHub action workflow at {optimize_yaml_path}{LF}")
+        try:
+            existing_api_key = get_codeflash_api_key()
+        except OSError:
+            existing_api_key = None
         click.prompt(
             f"Next, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.{LF}"
             f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)}…{LF}"
-            f"Then, click 'New repository secret' to add your api key with the variable name CODEFLASH_API_KEY.{LF}",
+            f"Then, click 'New repository secret' to add your api key with the variable name CODEFLASH_API_KEY.{LF}"
+            f"{'Here is your CODEFLASH_API_KEY: ' + existing_api_key + ' ' + LF}"
+            if existing_api_key
+            else "",
             default="",
             type=click.STRING,
             prompt_suffix="",
@@ -401,29 +417,127 @@ def install_github_actions() -> None:
         )
         click.pause()
         click.echo()
-        click.prompt(
-            f"Finally, for the workflow to work, you'll need to edit the workflow file to install the right "
-            f"Python version and any project dependencies.{LF}"
-            f"Press Enter to open {optimize_yaml_path} in your editor.{LF}",
-            default="",
-            type=click.STRING,
-            prompt_suffix="",
-            show_default=False,
-        )
-        click.launch(optimize_yaml_path.as_posix())
         click.echo(
-            "📝 I opened the workflow file in your editor! You'll need to edit the steps that install the right Python "
-            f"version and any project dependencies. See the comments in the file for more details.{LF}"
-        )
-        click.pause()
-        click.echo()
-        click.echo(
-            f"Please commit and push this GitHub actions file to your repo, and you're all set!{LF}"
+            f"Please edit, commit and push this GitHub actions file to your repo, and you're all set!{LF}"
             f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
         )
         ph("cli-github-workflow-created")
     except KeyboardInterrupt:
         apologize_and_exit()
+
+
+def determine_dependency_manager(pyproject_data: dict[str, Any]) -> DependencyManager:
+    """Determine which dependency manager is being used based on pyproject.toml contents."""
+    if (Path.cwd() / "poetry.lock").exists():
+        return DependencyManager.POETRY
+    if (Path.cwd() / "uv.lock").exists():
+        return DependencyManager.UV
+    if "tool" not in pyproject_data:
+        return DependencyManager.PIP
+
+    tool_section = pyproject_data["tool"]
+
+    # Check for poetry
+    if "poetry" in tool_section:
+        return DependencyManager.POETRY
+
+    # Check for uv
+    if any(key.startswith("uv") for key in tool_section.keys()):
+        return DependencyManager.UV
+
+    # Look for pip-specific markers
+    if "pip" in tool_section or "setuptools" in tool_section:
+        return DependencyManager.PIP
+
+    return DependencyManager.UNKNOWN
+
+
+def get_codeflash_github_action_command(dep_manager: DependencyManager) -> str:
+    """Generate the appropriate codeflash command based on the dependency manager."""
+    if dep_manager == DependencyManager.POETRY:
+        return """|
+          poetry env use python
+          poetry run codeflash"""
+    if dep_manager == DependencyManager.UV:
+        return "uv run codeflash"
+    # PIP or UNKNOWN
+    return "codeflash"
+
+
+def get_dependency_installation_commands(dep_manager: DependencyManager) -> tuple[str, str]:
+    """Generate commands to install the dependency manager and project dependencies."""
+    if dep_manager == DependencyManager.POETRY:
+        return """|
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry install --all-extras"""
+    if dep_manager == DependencyManager.UV:
+        return "uv sync --all-extras"
+    # PIP or UNKNOWN
+    return """|
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install codeflash"""
+
+
+def get_dependency_manager_installation_string(dep_manager: DependencyManager) -> str:
+    py_version = sys.version_info
+    python_version_string = f"'{py_version.major}.{py_version.minor}'"
+    if dep_manager == DependencyManager.UV:
+        return """name: Setup UV
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true"""
+    return f"""name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: {python_version_string}"""
+
+
+def get_github_action_working_directory(toml_path: Path, git_root: Path) -> str:
+    if toml_path.parent == git_root:
+        return ""
+    working_dir = str(toml_path.parent.relative_to(git_root))
+    return f"""defaults:
+      run:
+        working-directory: ./{working_dir}"""
+
+
+def customize_codeflash_yaml_content(
+    optimize_yml_content: str, config: tuple[dict[str, Any], Path], git_root: Path
+) -> str:
+    module_path = str(Path(config["module_root"]).relative_to(git_root) / "**")
+    optimize_yml_content = optimize_yml_content.replace("{{ codeflash_module_path }}", module_path)
+
+    # Get dependency installation commands
+    toml_path = Path.cwd() / "pyproject.toml"
+    try:
+        with toml_path.open(encoding="utf8") as pyproject_file:
+            pyproject_data = tomlkit.parse(pyproject_file.read())
+    except FileNotFoundError:
+        click.echo(
+            f"I couldn't find a pyproject.toml in the current directory.{LF}"
+            f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
+        )
+        apologize_and_exit()
+
+    working_dir = get_github_action_working_directory(toml_path, git_root)
+    optimize_yml_content = optimize_yml_content.replace("{{ working_directory }}", working_dir)
+    dep_manager = determine_dependency_manager(pyproject_data)
+
+    python_depmanager_installation = get_dependency_manager_installation_string(dep_manager)
+    optimize_yml_content = optimize_yml_content.replace(
+        "{{ setup_python_dependency_manager }}", python_depmanager_installation
+    )
+    install_deps_cmd = get_dependency_installation_commands(dep_manager)
+
+    optimize_yml_content = optimize_yml_content.replace("{{ install_dependencies_command }}", install_deps_cmd)
+
+    # Add codeflash command
+    codeflash_cmd = get_codeflash_github_action_command(dep_manager)
+    optimize_yml_content = optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
+
+    return optimize_yml_content
 
 
 # Create or update the pyproject.toml file with the Codeflash dependency & configuration
@@ -547,12 +661,7 @@ def prompt_api_key() -> bool:
         display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
         click.echo(f"🔑 I found a CODEFLASH_API_KEY in your environment [{display_key}]!")
 
-        use_existing_key = inquirer_wrapper(
-            inquirer.confirm, message="Do you want to use this key?", default=True, show_default=False
-        )
-        if use_existing_key:
-            ph("cli-existing-api-key-used")
-            return False
+        return False
 
     enter_api_key_and_save_to_rc()
     ph("cli-new-api-key-entered")
