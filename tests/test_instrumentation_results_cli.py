@@ -3,15 +3,17 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import time
 from argparse import Namespace
 from pathlib import Path
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodePosition, TestFile, TestFiles, TestingMode
+from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles, TestingMode
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.equivalence import compare_test_results
+from codeflash.verification.instrument_code import instrument_code
 from codeflash.verification.test_results import TestType
 
 # Used by cli instrumentation
@@ -45,7 +47,7 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
 """
 
 
-def test_bubble_sort_behavior_results() -> None:
+def test_function_codeflash_capture() -> None:
     code = """from code_to_optimize.bubble_sort import sorter
 
 
@@ -102,8 +104,22 @@ def test_sort():
 
         tests_root = Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
         project_root_path = (Path(__file__).parent / "..").resolve()
-
-        new_test = expected.format(
+        original_cwd = Path.cwd()
+        run_cwd = Path(__file__).parent.parent.resolve()
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
+        os.chdir(run_cwd)
+        success, new_test = inject_profiling_into_existing_test(
+            test_path,
+            [CodePosition(6, 13), CodePosition(10, 13)],
+            func,
+            project_root_path,
+            "pytest",
+            mode=TestingMode.BEHAVIOR,
+        )
+        os.chdir(original_cwd)
+        assert success
+        assert new_test is not None
+        assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_results_temp",
             tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
         ).replace('"', "'")
@@ -111,7 +127,8 @@ def test_sort():
         with test_path.open("w") as f:
             f.write(new_test)
 
-        # Overwrite old test with new instrumented test
+        # add codeflash capture
+        instrument_code(func, {})
 
         opt = Optimizer(
             Namespace(
@@ -170,7 +187,6 @@ def test_sort():
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
-
     finally:
         test_path.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
@@ -243,30 +259,32 @@ def test_sort():
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
     input = [5, 4, 3, 2, 1, 0]
     sort_class = BubbleSorter()
-    output = codeflash_wrap(sort_class.sorter, '{module_path}', None, 'test_sort', 'sorter', '2', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    output = codeflash_wrap(sort_class.sorter, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter', '2', codeflash_loop_index, codeflash_cur, codeflash_con, input)
     assert output == [0, 1, 2, 3, 4, 5]
     input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
     sort_class = BubbleSorter()
-    output = codeflash_wrap(sort_class.sorter, '{module_path}', None, 'test_sort', 'sorter', '6', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    output = codeflash_wrap(sort_class.sorter, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter', '6', codeflash_loop_index, codeflash_cur, codeflash_con, input)
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()
 """
-
+    fto_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort_method.py").resolve()
+    fto = FunctionToOptimize(
+        function_name="sorter", parents=[FunctionParent(name="BubbleSorter", type="ClassDef")], file_path=Path(fto_path)
+    )
     with tempfile.NamedTemporaryFile(mode="w") as f:
         f.write(code)
         f.flush()
-        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            Path(f.name), [CodePosition(7, 13), CodePosition(12, 13)], func, Path(f.name).parent, "pytest"
+            Path(f.name), [CodePosition(7, 13), CodePosition(12, 13)], fto, Path(f.name).parent, "pytest"
         )
         os.chdir(original_cwd)
     assert success
-    assert new_test == expected.format(
+    assert new_test.replace('"', "'") == expected.format(
         module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
-    )
+    ).replace('"', "'")
 
     test_path = (
         Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_class_method_behavior_results_temp.py"
@@ -285,12 +303,14 @@ def test_sort():
         new_test = expected.format(
             module_path="code_to_optimize.tests.pytest.test_class_method_behavior_results_temp",
             tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
-        ).replace('"', "'")
+        )
 
         with test_path.open("w") as f:
             f.write(new_test)
 
-        # Overwrite old test with new instrumented test
+        # Add codeflash capture
+        original_code = fto_path.read_text("utf-8")
+        instrument_code(fto, {})
 
         opt = Optimizer(
             Namespace(
@@ -328,20 +348,14 @@ def test_sort():
             testing_time=0.1,
         )
 
-        assert test_results[0].id.function_getting_tested == "sorter"
-        assert test_results[0].id.iteration_id == "2_0"
-        assert test_results[0].id.test_class_name is None
+        assert len(test_results) == 4
+        assert test_results[0].id.function_getting_tested == "BubbleSorter.__init__"
         assert test_results[0].id.test_function_name == "test_sort"
-        assert (
-            test_results[0].id.test_module_path
-            == "code_to_optimize.tests.pytest.test_class_method_behavior_results_temp"
-        )
-        assert test_results[0].runtime > 0
         assert test_results[0].did_pass
-        assert test_results[0].return_value == ([0, 1, 2, 3, 4, 5],)
+        assert test_results[0].return_value[0] == {"x": 0}
 
-        assert test_results[1].id.function_getting_tested == "sorter"
-        assert test_results[1].id.iteration_id == "6_0"
+        assert test_results[1].id.function_getting_tested == "BubbleSorter.sorter"
+        assert test_results[1].id.iteration_id == "2_0"
         assert test_results[1].id.test_class_name is None
         assert test_results[1].id.test_function_name == "test_sort"
         assert (
@@ -350,12 +364,29 @@ def test_sort():
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
+        assert test_results[1].return_value == ([0, 1, 2, 3, 4, 5],)
+
+        assert test_results[2].id.function_getting_tested == "BubbleSorter.__init__"
+        assert test_results[2].id.test_function_name == "test_sort"
+        assert test_results[2].did_pass
+        assert test_results[2].return_value[0] == {"x": 0}
+
+        assert test_results[3].id.function_getting_tested == "BubbleSorter.sorter"
+        assert test_results[3].id.iteration_id == "6_0"
+        assert test_results[3].id.test_class_name is None
+        assert test_results[3].id.test_function_name == "test_sort"
+        assert (
+            test_results[3].id.test_module_path
+            == "code_to_optimize.tests.pytest.test_class_method_behavior_results_temp"
+        )
+        assert test_results[3].runtime > 0
+        assert test_results[3].did_pass
 
         # Replace with optimized code that mutated instance attribute
         optimized_code = """
 class BubbleSorter:
-    def __init__(self):
-        self.x = 1
+    def __init__(self, x=1):
+        self.x = x
 
     def sorter(self, arr):
         for i in range(len(arr)):
@@ -367,9 +398,21 @@ class BubbleSorter:
         return arr
 
         """
-        fto_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort_method.py").resolve()
-        original_code = fto_path.read_text("utf-8")
+        time.sleep(1) # This ensures the new code is used.
         fto_path.write_text(optimized_code, "utf-8")
+        instrument_code(fto, {})
+        opt = Optimizer(
+            Namespace(
+                project_root=project_root_path,
+                disable_telemetry=True,
+                tests_root=tests_root,
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=project_root_path,
+            )
+        )
+
         new_test_results, coverage_data = opt.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
@@ -379,17 +422,42 @@ class BubbleSorter:
             pytest_max_loops=1,
             testing_time=0.1,
         )
-        assert new_test_results[0].id.function_getting_tested == "sorter"
-        assert new_test_results[0].id.iteration_id == "2_0"
-        assert new_test_results[0].id.test_class_name is None
+        assert len(new_test_results) == 4
+        assert new_test_results[0].id.function_getting_tested == "BubbleSorter.__init__"
         assert new_test_results[0].id.test_function_name == "test_sort"
+        assert new_test_results[0].did_pass
+        assert new_test_results[0].return_value[0] == {"x": 1}
+
+        assert new_test_results[1].id.function_getting_tested == "BubbleSorter.sorter"
+        assert new_test_results[1].id.iteration_id == "2_0"
+        assert new_test_results[1].id.test_class_name is None
+        assert new_test_results[1].id.test_function_name == "test_sort"
         assert (
-            new_test_results[0].id.test_module_path
+            new_test_results[1].id.test_module_path
             == "code_to_optimize.tests.pytest.test_class_method_behavior_results_temp"
         )
+        assert new_test_results[1].runtime > 0
+        assert new_test_results[1].did_pass
+        assert new_test_results[1].return_value == ([0, 1, 2, 3, 4, 5],)
 
-        assert compare_test_results(test_results, new_test_results)
-        fto_path.write_text(original_code, "utf-8")
+        assert new_test_results[2].id.function_getting_tested == "BubbleSorter.__init__"
+        assert new_test_results[2].id.test_function_name == "test_sort"
+        assert new_test_results[2].did_pass
+        assert new_test_results[2].return_value[0] == {"x": 1}
+
+        assert new_test_results[3].id.function_getting_tested == "BubbleSorter.sorter"
+        assert new_test_results[3].id.iteration_id == "6_0"
+        assert new_test_results[3].id.test_class_name is None
+        assert new_test_results[3].id.test_function_name == "test_sort"
+        assert (
+            new_test_results[3].id.test_module_path
+            == "code_to_optimize.tests.pytest.test_class_method_behavior_results_temp"
+        )
+        assert new_test_results[3].runtime > 0
+        assert new_test_results[3].did_pass
+        assert not compare_test_results(test_results, new_test_results)
+
     finally:
+        fto_path.write_text(original_code, "utf-8")
         test_path.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)

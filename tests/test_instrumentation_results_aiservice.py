@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from argparse import Namespace
 from pathlib import Path
 
@@ -357,7 +358,7 @@ class BubbleSorter:
                     arr[j + 1] = temp
         return arr
                         """
-
+        time.sleep(1)  # This ensures the new code is used.
         fto_path.write_text(optimized_code_mutated_attr, "utf-8")
         instrument_code(function_to_optimize, {})
         opt = Optimizer(
@@ -403,6 +404,7 @@ class BubbleSorter:
                     arr[j + 1] = temp
         return arr
                         """
+        time.sleep(1)  # This ensures the new code is used.
         fto_path.write_text(optimized_code_new_attr, "utf-8")
         instrument_code(function_to_optimize, {})
         opt = Optimizer(
