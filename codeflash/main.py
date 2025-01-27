@@ -28,7 +28,7 @@ def main() -> None:
         init_sentry(not disable_telemetry, exclude_errors=True)
         posthog_cf.initialize_posthog(not disable_telemetry)
         args.func()
-    if args.verify_setup:
+    elif args.verify_setup:
         args = process_pyproject_config(args)
         init_sentry(not args.disable_telemetry, exclude_errors=True)
         posthog_cf.initialize_posthog(not args.disable_telemetry)
