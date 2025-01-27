@@ -19,6 +19,7 @@ class MyClass:
     expected = f"""
 from codeflash.verification.codeflash_capture import codeflash_capture
 
+
 class MyClass:
 
     @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
@@ -83,6 +84,7 @@ class MyClass(ParentClass):
     expected = f"""
 from codeflash.verification.codeflash_capture import codeflash_capture
 
+
 class MyClass(ParentClass):
 
     @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
@@ -124,6 +126,7 @@ class MyClass:
 
     expected = f"""
 from codeflash.verification.codeflash_capture import codeflash_capture
+
 
 class MyClass:
 
@@ -177,6 +180,7 @@ class HelperClass:
     expected = f"""
 from codeflash.verification.codeflash_capture import codeflash_capture
 from test_helper_file import HelperClass
+
 
 class MyClass:
 
@@ -261,7 +265,8 @@ class AnotherHelperClass:
     expected = f"""
 from codeflash.verification.codeflash_capture import codeflash_capture
 from helper_file_1 import HelperClass1
-from helper_file_2 import HelperClass2, AnotherHelperClass
+from helper_file_2 import AnotherHelperClass, HelperClass2
+
 
 class MyClass:
 
@@ -280,6 +285,7 @@ class MyClass:
     expected_helper1 = f"""
 from codeflash.verification.codeflash_capture import codeflash_capture
 
+
 class HelperClass1:
 
     @codeflash_capture(function_name='HelperClass1.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=False)
@@ -293,6 +299,7 @@ class HelperClass1:
     # Expected output for second helper file
     expected_helper2 = f"""
 from codeflash.verification.codeflash_capture import codeflash_capture
+
 
 class HelperClass2:
 
