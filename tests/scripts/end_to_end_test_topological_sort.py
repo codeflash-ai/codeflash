@@ -12,7 +12,7 @@ def run_test(expected_improvement_pct: int) -> bool:
         min_improvement_x=0.05,
         coverage_expectations=[
             CoverageExpectation(
-                function_name="Graph.topologicalSort", expected_coverage=100.0, expected_lines=[22, 23, 25, 26, 27, 29]
+                function_name="Graph.topologicalSort", expected_coverage=100.0, expected_lines=[24, 25, 26, 27, 28, 29]
             )
         ],
     )
