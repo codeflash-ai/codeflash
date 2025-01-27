@@ -178,8 +178,9 @@ class HelperClass:
         return 1
 """
     expected = f"""
-from codeflash.verification.codeflash_capture import codeflash_capture
 from test_helper_file import HelperClass
+
+from codeflash.verification.codeflash_capture import codeflash_capture
 
 
 class MyClass:
@@ -264,9 +265,10 @@ class AnotherHelperClass:
 
     # Expected output code with decorators
     expected = f"""
-from codeflash.verification.codeflash_capture import codeflash_capture
 from helper_file_1 import HelperClass1
 from helper_file_2 import AnotherHelperClass, HelperClass2
+
+from codeflash.verification.codeflash_capture import codeflash_capture
 
 
 class MyClass:
