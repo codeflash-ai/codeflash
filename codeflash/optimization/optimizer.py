@@ -982,22 +982,24 @@ class Optimizer:
 
             coverage_results = None
             # Instrument codeflash capture
-            instrument_code(function_to_optimize, file_path_to_helper_classes)
-            behavioral_results, coverage_results = self.run_and_parse_tests(
-                testing_type=TestingMode.BEHAVIOR,
-                test_env=test_env,
-                test_files=self.test_files,
-                optimization_iteration=0,
-                testing_time=TOTAL_LOOPING_TIME,
-                enable_coverage=test_framework == "pytest",
-                function_name=function_name,
-                source_file=function_file_path,
-                code_context=code_context,
-            )
-            # Remove codeflash capture
-            self.write_code_and_helpers(
-                function_file_path.read_text("utf-8"), original_helper_code, function_to_optimize.file_path
-            )
+            try:
+                instrument_code(function_to_optimize, file_path_to_helper_classes)
+                behavioral_results, coverage_results = self.run_and_parse_tests(
+                    testing_type=TestingMode.BEHAVIOR,
+                    test_env=test_env,
+                    test_files=self.test_files,
+                    optimization_iteration=0,
+                    testing_time=TOTAL_LOOPING_TIME,
+                    enable_coverage=test_framework == "pytest",
+                    function_name=function_name,
+                    source_file=function_file_path,
+                    code_context=code_context,
+                )
+            finally:
+                # Remove codeflash capture
+                self.write_code_and_helpers(
+                    function_file_path.read_text("utf-8"), original_helper_code, function_to_optimize.file_path
+                )
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
@@ -1113,19 +1115,20 @@ class Optimizer:
             candidate_helper_code = {}
             for module_abspath in original_helper_code:
                 candidate_helper_code[module_abspath] = Path(module_abspath).read_text("utf-8")
-            instrument_code(function_to_optimize, file_path_to_helper_classes)
+            try:
+                instrument_code(function_to_optimize, file_path_to_helper_classes)
 
-            candidate_behavior_results, _ = self.run_and_parse_tests(
-                testing_type=TestingMode.BEHAVIOR,
-                test_env=test_env,
-                test_files=self.test_files,
-                optimization_iteration=optimization_candidate_index,
-                testing_time=TOTAL_LOOPING_TIME,
-                enable_coverage=False,
-            )
-
+                candidate_behavior_results, _ = self.run_and_parse_tests(
+                    testing_type=TestingMode.BEHAVIOR,
+                    test_env=test_env,
+                    test_files=self.test_files,
+                    optimization_iteration=optimization_candidate_index,
+                    testing_time=TOTAL_LOOPING_TIME,
+                    enable_coverage=False,
+                )
             # Remove instrumentation
-            self.write_code_and_helpers(candidate_fto_code, candidate_helper_code, function_to_optimize.file_path)
+            finally:
+                self.write_code_and_helpers(candidate_fto_code, candidate_helper_code, function_to_optimize.file_path)
             console.print(
                 TestResults.report_to_tree(
                     candidate_behavior_results.get_test_pass_fail_report_by_type(),

@@ -3,6 +3,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import isort
+
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
@@ -15,7 +17,10 @@ def instrument_code(function_to_optimize: FunctionToOptimize, file_path_to_helpe
     else:
         return
     # Remove duplicate fto class from helper classes
-    if function_to_optimize.file_path in file_path_to_helper_class:
+    if (
+        function_to_optimize.file_path in file_path_to_helper_class
+        and class_parent.name in file_path_to_helper_class[function_to_optimize.file_path]
+    ):
         file_path_to_helper_class[function_to_optimize.file_path].remove(class_parent.name)
     # Instrument fto class
     with open(function_to_optimize.file_path) as f:
@@ -52,17 +57,14 @@ def add_codeflash_capture_to_init(
     target_classes: set[str], fto_name: str, tmp_dir_path: str, code: str, is_fto: bool = False
 ) -> str:
     """Add codeflash_capture decorator to __init__ function in the specified class."""
-    # Parse the code into an AST
     tree = ast.parse(code)
-
-    # Apply our transformation
     transformer = InitDecorator(target_classes, fto_name, tmp_dir_path, is_fto)
     modified_tree = transformer.visit(tree)
     if transformer.inserted_decorator:
         ast.fix_missing_locations(modified_tree)
 
     # Convert back to source code
-    return ast.unparse(modified_tree)
+    return isort.code(ast.unparse(modified_tree))
 
 
 class InitDecorator(ast.NodeTransformer):
