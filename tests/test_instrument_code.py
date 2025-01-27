@@ -194,6 +194,7 @@ class MyClass:
     expected_helper = f"""
 from codeflash.verification.codeflash_capture import codeflash_capture
 
+
 class HelperClass:
 
     @codeflash_capture(function_name='HelperClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=False)
