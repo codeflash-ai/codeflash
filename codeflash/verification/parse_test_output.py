@@ -21,7 +21,13 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.models.models import CoverageData, TestFiles
-from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults, VerificationType
+from codeflash.verification.test_results import (
+    FunctionTestInvocation,
+    InvocationId,
+    TestResults,
+    TestType,
+    VerificationType,
+)
 
 if TYPE_CHECKING:
     import subprocess
@@ -120,12 +126,15 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             test_function_name = val[2] if val[2] else None
             function_getting_tested = val[3]
             test_file_path = file_path_from_module_name(test_module_path, test_config.tests_project_rootdir)
-            test_type = (test_files.get_test_type_by_instrumented_file_path(test_file_path) or
-             test_files.get_test_type_by_original_file_path(test_file_path))
             loop_index = val[4]
             iteration_id = val[5]
             runtime = val[6]
             verification_type = val[8]
+            if verification_type in (VerificationType.INIT_STATE_FTO, VerificationType.INIT_STATE_HELPER):
+                test_type = TestType.INIT_STATE_TEST
+            else:
+                # TODO : this is because sqlite writes original file module path. Should make it consistent
+                test_type = test_files.get_test_type_by_original_file_path(test_file_path)
             try:
                 ret_val = (pickle.loads(val[7]) if loop_index == 1 else None,)
             except Exception:

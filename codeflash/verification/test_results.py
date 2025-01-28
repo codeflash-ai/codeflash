@@ -14,13 +14,6 @@ from codeflash.verification.comparator import comparator
 
 
 class VerificationType(str, Enum):
-    # FUNCTION_TO_OPTIMIZE = (
-    #     "function_test"  # Correctness verification for a test function, checks input values and output values
-    # )
-    # INSTANCE_STATE_FTO = "instance_state_fto"  # Correctness verification for fto class instance attributes after init
-    # INSTANCE_STATE_HELPER = (
-    #     "instance_state_helper"  # Correctness verification for helper class instance attributes after init
-    # )
     FUNCTION_CALL = (
         "function_call"  # Correctness verification for a test function, checks input values and output values)
     )
@@ -39,8 +32,11 @@ class TestType(Enum):
     GENERATED_REGRESSION = 3
     REPLAY_TEST = 4
     CONCOLIC_COVERAGE_TEST = 5
+    INIT_STATE_TEST = 6
 
     def to_name(self) -> str:
+        if self == TestType.INIT_STATE_TEST:
+            return ""
         names = {
             TestType.EXISTING_UNIT_TEST: "⚙️ Existing Unit Tests",
             TestType.INSPIRED_REGRESSION: "🎨 Inspired Regression Tests",

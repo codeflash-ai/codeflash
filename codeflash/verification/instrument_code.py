@@ -64,7 +64,7 @@ def add_codeflash_capture_to_init(
         ast.fix_missing_locations(modified_tree)
 
     # Convert back to source code
-    return isort.code(ast.unparse(modified_tree))
+    return isort.code(code=ast.unparse(modified_tree), float_to_top=True)
 
 
 class InitDecorator(ast.NodeTransformer):
