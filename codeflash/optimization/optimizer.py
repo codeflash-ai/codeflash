@@ -584,7 +584,7 @@ class Optimizer:
                             f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
                         )
                         tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
-                        tree.add(f"Speedup ratio: {perf_gain + 1:.1f}X")
+                        tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
                     console.print(tree)
                     console.rule()
 
