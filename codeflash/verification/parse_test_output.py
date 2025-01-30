@@ -49,7 +49,12 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
             if not len_next_bytes:
                 return test_results
             len_next = int.from_bytes(len_next_bytes, byteorder="big")
-            encoded_test_name = file.read(len_next).decode("ascii")
+            try:
+                encoded_test_name = file.read(len_next).decode("ascii")
+            except Exception as e:
+                if DEBUG_MODE:
+                    logger.exception(f"Failed to load test name. Exception: {e}")
+                return test_results
             duration_bytes = file.read(8)
             duration = int.from_bytes(duration_bytes, byteorder="big")
             len_next_bytes = file.read(4)
