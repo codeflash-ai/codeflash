@@ -47,7 +47,7 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
 """
 
 
-def test_function_codeflash_capture() -> None:
+def test_function_full_instrumentation() -> None:
     code = """from code_to_optimize.bubble_sort import sorter
 
 
@@ -98,6 +98,8 @@ def test_sort():
         Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_results_perf_temp.py"
     ).resolve()
+    fto_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
+    original_code = fto_path.read_text("utf-8")
     try:
         with test_path.open("w") as f:
             f.write(code)
@@ -106,7 +108,7 @@ def test_sort():
         project_root_path = (Path(__file__).parent / "..").resolve()
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
-        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path(fto_path))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
             test_path,
@@ -188,11 +190,12 @@ def test_sort():
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
     finally:
+        fto_path.write_text(original_code, "utf-8")
         test_path.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
 
 
-def test_class_method_behavior_results() -> None:
+def test_class_method_full_instrumentation() -> None:
     code = """from code_to_optimize.bubble_sort_method import BubbleSorter
 
 
@@ -398,7 +401,7 @@ class BubbleSorter:
         return arr
 
         """
-        time.sleep(1) # This ensures the new code is used.
+        time.sleep(1)  # This ensures the new code is used.
         fto_path.write_text(optimized_code, "utf-8")
         instrument_code(fto, {})
         opt = Optimizer(

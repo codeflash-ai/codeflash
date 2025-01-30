@@ -87,7 +87,7 @@ def codeflash_wrap(
 """
 
 
-def test_class_method_behavior_results() -> None:
+def test_class_method_test_instrumentation_only() -> None:
     test_source = """import pytest
     from code_to_optimize.bubble_sort import BubbleSorter
 
@@ -227,7 +227,7 @@ class BubbleSorter:
         test_path_perf.unlink(missing_ok=True)
 
 
-def test_class_method_behavior_results_with_codeflash_capture() -> None:
+def test_class_method_full_instrumentation() -> None:
     test_source = """import pytest
     from code_to_optimize.bubble_sort import BubbleSorter
 
