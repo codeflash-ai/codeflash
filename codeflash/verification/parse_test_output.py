@@ -348,22 +348,22 @@ def merge_test_results(
                 test_function_name = new_test_function_name
 
         grouped_xml_results[
-            result.id.test_module_path
+            (result.id.test_module_path or "")
             + ":"
             + (result.id.test_class_name or "")
             + ":"
-            + test_function_name
+            + (test_function_name or "")
             + ":"
             + str(result.loop_index)
         ].add(result)
 
     for result in bin_test_results:
         grouped_bin_results[
-            result.id.test_module_path
+            (result.id.test_module_path or "")
             + ":"
             + (result.id.test_class_name or "")
             + ":"
-            + result.id.test_function_name
+            + (result.id.test_function_name or "")
             + ":"
             + str(result.loop_index)
         ].add(result)

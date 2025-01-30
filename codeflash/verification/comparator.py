@@ -51,11 +51,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
         if type(orig) is not type(new):
             type_obj = type(orig)
             new_type_obj = type(new)
-            if (
-                type_obj.__name__ != new_type_obj.__name__
-                or type_obj.__qualname__ != new_type_obj.__qualname__
-                or type_obj.__bases__ != new_type_obj.__bases__
-            ):
+            if type_obj.__name__ != new_type_obj.__name__ or type_obj.__qualname__ != new_type_obj.__qualname__:
                 return False
         if isinstance(orig, (list, tuple)):
             if len(orig) != len(new):

@@ -1,5 +1,6 @@
 import sys
 
+from codeflash.cli_cmds.console import logger
 from codeflash.verification.comparator import comparator
 from codeflash.verification.test_results import TestResults, TestType, VerificationType
 
@@ -44,6 +45,16 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             superset_obj = True
         if not comparator(original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj):
             are_equal = False
+            logger.debug(
+                f"""
+                File Name: {original_test_result.file_name}
+                Test Type: {original_test_result.test_type}
+                Verification Type: {original_test_result.verification_type}
+                Invocation ID: {original_test_result.id}
+                Original return value: {original_test_result.return_value}
+                CDD return value: {cdd_test_result.return_value}
+                -------------------"""
+            )
             break
         if original_test_result.test_type in [TestType.EXISTING_UNIT_TEST, TestType.CONCOLIC_COVERAGE_TEST] and (
             cdd_test_result.did_pass != original_test_result.did_pass
