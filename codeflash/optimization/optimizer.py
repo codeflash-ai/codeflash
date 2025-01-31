@@ -981,6 +981,7 @@ class Optimizer:
                 test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
 
             coverage_results = None
+            original_fto_code = function_file_path.read_text("utf-8")
             # Instrument codeflash capture
             try:
                 instrument_code(function_to_optimize, file_path_to_helper_classes)
@@ -997,9 +998,7 @@ class Optimizer:
                 )
             finally:
                 # Remove codeflash capture
-                self.write_code_and_helpers(
-                    function_file_path.read_text("utf-8"), original_helper_code, function_to_optimize.file_path
-                )
+                self.write_code_and_helpers(original_fto_code, original_helper_code, function_to_optimize.file_path)
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
