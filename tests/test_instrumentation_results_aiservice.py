@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-import time
+import sys
 from argparse import Namespace
 from pathlib import Path
 
@@ -88,14 +88,6 @@ def codeflash_wrap(
 
 
 def test_class_method_test_instrumentation_only() -> None:
-    test_source = """import pytest
-    from code_to_optimize.bubble_sort import BubbleSorter
-
-    def test_single_element_list():
-        # Test that a single element list returns the same single element
-        obj = BubbleSorter()
-        codeflash_output = obj.sorter([42])
-        """
     instrumented_behavior_test_source = (
         behavior_logging_code
         + """
@@ -228,14 +220,6 @@ class BubbleSorter:
 
 
 def test_class_method_full_instrumentation() -> None:
-    test_source = """import pytest
-    from code_to_optimize.bubble_sort import BubbleSorter
-
-    def test_single_element_list():
-        # Test that a single element list returns the same single element
-        obj = BubbleSorter()
-        codeflash_output = obj.sorter([3,2,1])
-        """
     instrumented_behavior_test_source = (
         behavior_logging_code
         + """
@@ -275,8 +259,7 @@ def test_single_element_list():
     ).resolve()
     tests_root = Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
     project_root_path = (Path(__file__).parent / "..").resolve()
-    run_cwd = Path(__file__).parent.parent.resolve()
-    os.chdir(run_cwd)
+
     fto_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort_method.py").resolve()
     original_code = fto_path.read_text("utf-8")
     function_to_optimize = FunctionToOptimize("sorter", fto_path, [FunctionParent("BubbleSorter", "ClassDef")])
@@ -341,7 +324,6 @@ def test_single_element_list():
 
         # Check function return value
         assert test_results[1].return_value[2] == [1, 2, 3]
-
         # Replace with optimized code that mutated instance attribute
         optimized_code_mutated_attr = """
 class BubbleSorter:
@@ -358,8 +340,16 @@ class BubbleSorter:
                     arr[j + 1] = temp
         return arr
                         """
-        time.sleep(1)  # This ensures the new code is used.
         fto_path.write_text(optimized_code_mutated_attr, "utf-8")
+        # Force reload of module
+        import importlib
+
+        module_name = "code_to_optimize.bubble_sort_method"
+        if module_name not in sys.modules:
+            __import__(module_name)
+        importlib.reload(sys.modules[module_name])
+
+        # Add codeflash capture
         instrument_code(function_to_optimize, {})
         opt = Optimizer(
             Namespace(
@@ -404,8 +394,8 @@ class BubbleSorter:
                     arr[j + 1] = temp
         return arr
                         """
-        time.sleep(1)  # This ensures the new code is used.
         fto_path.write_text(optimized_code_new_attr, "utf-8")
+        importlib.reload(sys.modules[module_name])
         instrument_code(function_to_optimize, {})
         opt = Optimizer(
             Namespace(

@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
-import time
 from argparse import Namespace
 from pathlib import Path
 
@@ -216,7 +215,6 @@ import sqlite3
 import time
 
 import dill as pickle
-
 from code_to_optimize.bubble_sort_method import BubbleSorter
 
 
@@ -271,19 +269,17 @@ def test_sort():
     codeflash_con.close()
 """
     fto_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort_method.py").resolve()
+    original_code = fto_path.read_text("utf-8")
     fto = FunctionToOptimize(
         function_name="sorter", parents=[FunctionParent(name="BubbleSorter", type="ClassDef")], file_path=Path(fto_path)
     )
     with tempfile.NamedTemporaryFile(mode="w") as f:
         f.write(code)
         f.flush()
-        original_cwd = Path.cwd()
-        run_cwd = Path(__file__).parent.parent.resolve()
-        os.chdir(run_cwd)
+
         success, new_test = inject_profiling_into_existing_test(
             Path(f.name), [CodePosition(7, 13), CodePosition(12, 13)], fto, Path(f.name).parent, "pytest"
         )
-        os.chdir(original_cwd)
     assert success
     assert new_test.replace('"', "'") == expected.format(
         module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
@@ -296,13 +292,10 @@ def test_sort():
         Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/pytest/test_class_method_behavior_results_perf_temp.py"
     ).resolve()
+    tests_root = Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+    project_root_path = (Path(__file__).parent / "..").resolve()
+
     try:
-        with test_path.open("w") as f:
-            f.write(code)
-
-        tests_root = Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
-        project_root_path = (Path(__file__).parent / "..").resolve()
-
         new_test = expected.format(
             module_path="code_to_optimize.tests.pytest.test_class_method_behavior_results_temp",
             tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
@@ -312,7 +305,6 @@ def test_sort():
             f.write(new_test)
 
         # Add codeflash capture
-        original_code = fto_path.read_text("utf-8")
         instrument_code(fto, {})
 
         opt = Optimizer(
@@ -401,8 +393,18 @@ class BubbleSorter:
         return arr
 
         """
-        time.sleep(1)  # This ensures the new code is used.
+
         fto_path.write_text(optimized_code, "utf-8")
+
+        # Force reload of module
+        import importlib
+
+        module_name = "code_to_optimize.bubble_sort_method"
+        if module_name not in sys.modules:
+            __import__(module_name)
+        importlib.reload(sys.modules[module_name])
+
+        # Add codeflash capture
         instrument_code(fto, {})
         opt = Optimizer(
             Namespace(
