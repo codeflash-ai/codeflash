@@ -584,7 +584,7 @@ class Optimizer:
                     console.print(tree)
                     console.rule()
 
-                    if candidate_runtime_distribution and candidate_runtime_statistics:
+                    if candidate_runtime_distribution.any() and candidate_runtime_statistics:
                         speedup_stats = compare_function_runtime_distributions(
                             original_code_runtime_distribution, candidate_runtime_distribution
                         )
