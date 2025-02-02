@@ -1,3 +1,4 @@
+import ast
 import datetime
 import decimal
 import enum
@@ -5,7 +6,7 @@ import math
 import re
 import types
 from typing import Any
-import ast
+
 import sentry_sdk
 
 from codeflash.cli_cmds.console import logger
@@ -61,6 +62,7 @@ def comparator(orig: Any, new: Any) -> bool:
                 bool,
                 complex,
                 type(None),
+                type(Ellipsis),
                 decimal.Decimal,
                 set,
                 bytes,
@@ -77,8 +79,6 @@ def comparator(orig: Any, new: Any) -> bool:
                 return True
             return math.isclose(orig, new)
         if isinstance(orig, BaseException):
-            # if str(orig) != str(new):
-            #     return False
             # compare the attributes of the two exception objects to determine if they are equivalent.
             orig_dict = {k: v for k, v in orig.__dict__.items() if not k.startswith("_")}
             new_dict = {k: v for k, v in new.__dict__.items() if not k.startswith("_")}
@@ -204,8 +204,6 @@ def comparator(orig: Any, new: Any) -> bool:
         if type(orig) in [types.BuiltinFunctionType, types.BuiltinMethodType]:
             return new == orig
         if str(type(orig)) == "<class 'object'>":
-            return True
-        if orig is Ellipsis and new is Ellipsis:
             return True
         # TODO : Add other types here
         logger.warning(f"Unknown comparator input type: {type(orig)}")
