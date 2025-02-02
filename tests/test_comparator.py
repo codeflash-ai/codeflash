@@ -949,6 +949,10 @@ def test_exceptions_comparator():
     assert comparator(..., ...)
     assert comparator(Ellipsis, Ellipsis)
 
+    assert not comparator(..., None)
+
+    assert not comparator(Ellipsis, None)   
+
     code7 = "a = 1 + 2"
     module7 = ast.parse(code7)
     for node in ast.walk(module7):
@@ -956,3 +960,9 @@ def test_exceptions_comparator():
          child.parent = node # type: ignore
     module8 = copy.deepcopy(module7)
     assert comparator(module7, module8)
+
+    code2 = "a = 1 + 3"
+
+    module2 = ast.parse(code2)
+
+    assert not comparator(module7, module2)
