@@ -49,29 +49,45 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
             if not len_next_bytes:
                 return test_results
             len_next = int.from_bytes(len_next_bytes, byteorder="big")
-            try:
-                encoded_test_name = file.read(len_next).decode("ascii")
-            except Exception as e:
+            encoded_test_bytes = file.read(len_next)
+            if not encoded_test_bytes:
                 if DEBUG_MODE:
-                    logger.exception(f"Failed to load test name. Exception: {e}")
+                    logger.warning("Failed to load test name")
                 return test_results
+            encoded_test_name = encoded_test_bytes.decode("ascii")
             duration_bytes = file.read(8)
+            if not duration_bytes:
+                if DEBUG_MODE:
+                    logger.warning("Failed to load test duration")
+                return test_results
             duration = int.from_bytes(duration_bytes, byteorder="big")
             len_next_bytes = file.read(4)
             if not len_next_bytes:
                 return test_results
             len_next = int.from_bytes(len_next_bytes, byteorder="big")
-            try:
-                test_pickle_bin = file.read(len_next)
-            except Exception as e:
+            test_pickle_bin = file.read(len_next)
+            if not test_pickle_bin:
                 if DEBUG_MODE:
-                    logger.exception(f"Failed to load pickle file. Exception: {e}")
+                    logger.warning("Failed to load pickle file.")
                 return test_results
             loop_index_bytes = file.read(8)
+            if not loop_index_bytes:
+                if DEBUG_MODE:
+                    logger.warning("Failed to load loop index")
+                return test_results
             loop_index = int.from_bytes(loop_index_bytes, byteorder="big")
             len_next_bytes = file.read(4)
+            if not len_next_bytes:
+                if DEBUG_MODE:
+                    logger.warning("Failed to load invocation id")
+                return test_results
             len_next = int.from_bytes(len_next_bytes, byteorder="big")
-            invocation_id = file.read(len_next).decode("ascii")
+            invocation_id_bytes = file.read(len_next)
+            if not invocation_id_bytes:
+                if DEBUG_MODE:
+                    logger.warning("Failed to load invocation id bytes")
+                return test_results
+            invocation_id = invocation_id_bytes.decode("ascii")
 
             invocation_id_object = InvocationId.from_str_id(encoded_test_name, invocation_id)
             test_file_path = file_path_from_module_name(
