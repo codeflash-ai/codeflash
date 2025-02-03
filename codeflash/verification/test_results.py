@@ -18,7 +18,7 @@ from pydantic.dataclasses import dataclass
 from rich.tree import Tree
 
 from codeflash.cli_cmds.console import DEBUG_MODE, logger
-from codeflash.verification.bayesian_analysis import analyze_function_runtime_data
+from codeflash.verification.bayesian_analysis import analyze_function_runtime_sums_data
 from codeflash.verification.comparator import comparator
 
 
@@ -190,7 +190,9 @@ class TestResults(BaseModel):
     def bayesian_nonparametric_bootstrap_analysis(
         self, bootstrap_size: int
     ) -> tuple[npt.NDArray[np.float64], dict[str, np.float64]]:
-        return analyze_function_runtime_data(list(self.usable_runtime_data_by_test_case().values()), bootstrap_size)
+        return analyze_function_runtime_sums_data(
+            list(self.usable_runtime_data_by_test_case().values()), bootstrap_size
+        )
 
     def __iter__(self) -> Iterator[FunctionTestInvocation]:
         return iter(self.test_results)
