@@ -737,7 +737,6 @@ class Optimizer:
             did_update |= replace_function_definitions_in_module(
                 function_names=list(qualified_names),
                 optimized_code=optimized_code,
-                file_path_of_module_with_function_to_optimize=function_to_optimize_file_path,
                 module_abspath=module_abspath,
                 preexisting_objects=code_context.preexisting_objects,
                 project_root_path=self.args.project_root,
@@ -1004,13 +1003,13 @@ class Optimizer:
         )
 
     def establish_original_code_baseline(
-            self,
-            function_name: str,
-            function_file_path: Path,
-            code_context: CodeOptimizationContext,
-            function_to_optimize: FunctionToOptimize,
-            original_helper_code: dict[Path, str],
-            file_path_to_helper_classes: dict[Path, set[str]],
+        self,
+        function_name: str,
+        function_file_path: Path,
+        code_context: CodeOptimizationContext,
+        function_to_optimize: FunctionToOptimize,
+        original_helper_code: dict[Path, str],
+        file_path_to_helper_classes: dict[Path, set[str]],
     ) -> Result[tuple[OriginalCodeBaseline, npt.NDArray[np.float64], dict[str, np.float64], list[str]], str]:
         # For the original function - run the tests and get the runtime, plus coverage
         with progress_bar(f"Establishing original code baseline for {function_name}"):
