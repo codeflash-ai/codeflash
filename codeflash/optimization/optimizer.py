@@ -590,7 +590,7 @@ class Optimizer:
                         )
                         tree = Tree(f"Candidate #{candidate_index} - Bayesian Bootstrapping Nonparametric Analysis")
                         tree.add(
-                            f"Expected candidate runtime (95% Credible Interval) = ["
+                            f"Expected candidate summed runtime (95% Credible Interval) = ["
                             f"{humanize_runtime(round(candidate_runtime_statistics['credible_interval_lower_bound']))}"
                             f", "
                             f"{humanize_runtime(round(candidate_runtime_statistics['credible_interval_upper_bound']))}]"
@@ -1093,7 +1093,7 @@ class Optimizer:
             )
             logger.info(
                 f"Bayesian Bootstrapping Nonparametric Analysis"
-                f"\nExpected original code runtime (95% Credible Interval) = ["
+                f"\nExpected original code summed runtime (95% Credible Interval) = ["
                 f"{humanize_runtime(round(runtime_statistics['credible_interval_lower_bound']))}, "
                 f"{humanize_runtime(round(runtime_statistics['credible_interval_upper_bound']))}], "
                 f"\nmedian: {humanize_runtime(round(runtime_statistics['median']))}"
@@ -1208,7 +1208,7 @@ class Optimizer:
                     candidate_benchmarking_results.bayesian_nonparametric_bootstrap_analysis(100_000)
                 )
                 logger.debug(
-                    f"Overall code runtime (95% Credible Interval) = ["
+                    f"Overall code summed runtime (95% Credible Interval) = ["
                     f"{humanize_runtime(round(runtime_statistics['credible_interval_lower_bound']))}, "
                     f"{humanize_runtime(round(runtime_statistics['credible_interval_upper_bound']))}], median: "
                     f"{humanize_runtime(round(runtime_statistics['median']))}"
