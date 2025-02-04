@@ -1,3 +1,4 @@
+import ast
 import datetime
 import decimal
 import enum
@@ -47,7 +48,6 @@ except ImportError:
 def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
     """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
     try:
-        # if not type_comparator(orig, new):
         if type(orig) is not type(new):
             type_obj = type(orig)
             new_type_obj = type(new)
@@ -66,6 +66,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 bool,
                 complex,
                 type(None),
+                type(Ellipsis),
                 decimal.Decimal,
                 set,
                 bytes,
@@ -206,13 +207,16 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
             if superset_obj:
                 # allow new object to be a superset of the original object
                 return all(k in new_keys and comparator(v, new_keys[k], superset_obj) for k, v in orig_keys.items())
+
+            if isinstance(orig, ast.AST):
+                orig_keys = {k: v for k, v in orig.__dict__.items() if k != "parent"}
+                new_keys = {k: v for k, v in new.__dict__.items() if k != "parent"}
             return comparator(orig_keys, new_keys, superset_obj)
 
         if type(orig) in [types.BuiltinFunctionType, types.BuiltinMethodType]:
             return new == orig
         if str(type(orig)) == "<class 'object'>":
             return True
-
         # TODO : Add other types here
         logger.warning(f"Unknown comparator input type: {type(orig)}")
         return False
