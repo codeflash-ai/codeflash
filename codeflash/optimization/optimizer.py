@@ -551,10 +551,6 @@ class Optimizer:
                     )
                     speedup_ratios[candidate.optimization_id] = perf_gain
 
-                    speedup_stats = compare_function_runtime_distributions(
-                        original_code_runtime_distribution, candidate_runtime_distribution
-                    )
-
                     tree = Tree(f"Candidate #{candidate_index} - Sum of Minimum Runtimes")
                     if speedup_critic(
                         candidate_result, original_code_baseline.runtime, best_runtime_until_now
@@ -588,28 +584,33 @@ class Optimizer:
                     console.print(tree)
                     console.rule()
 
-                    tree = Tree(f"Candidate #{candidate_index} - Bayesian Bootstrapping Nonparametric Analysis")
-                    tree.add(
-                        f"Expected candidate runtime (95% Credible Interval) = ["
-                        f"{humanize_runtime(candidate_runtime_statistics['credible_interval_lower_bound'])}, "
-                        f"{humanize_runtime(candidate_runtime_statistics['credible_interval_upper_bound'])}], "
-                        f"\nmedian = {humanize_runtime(candidate_runtime_statistics['median'])}"
-                        f"\nSpeedup ratio of candidate vs original:"
-                        f"\n95% Credible Interval = [{speedup_stats['credible_interval_lower_bound']:.3f}X, "
-                        f"{speedup_stats['credible_interval_upper_bound']:.3f}X]"
-                        f"\nmedian = {speedup_stats['median']:.3f}X"
-                    )
-                    if speedup_stats["credible_interval_lower_bound"] > 1.0:
-                        tree.add("The candidate is faster than the original code with a 95% probability.")
-                        if speedup_stats["median"] > best_speedup_ratio_until_now:
-                            best_speedup_ratio_until_now = speedup_stats["median"]
-                            tree.add("This candidate is the best candidate so far.")
+                    if candidate_runtime_distribution.any() and candidate_runtime_statistics:
+                        speedup_stats = compare_function_runtime_distributions(
+                            original_code_runtime_distribution, candidate_runtime_distribution
+                        )
+                        tree = Tree(f"Candidate #{candidate_index} - Bayesian Bootstrapping Nonparametric Analysis")
+                        tree.add(
+                            f"Expected candidate summed runtime (95% Credible Interval) = ["
+                            f"{humanize_runtime(round(candidate_runtime_statistics['credible_interval_lower_bound']))}"
+                            f", "
+                            f"{humanize_runtime(round(candidate_runtime_statistics['credible_interval_upper_bound']))}]"
+                            f"\nMedian = {humanize_runtime(round(candidate_runtime_statistics['median']))}"
+                            f"\nSpeedup ratio of candidate vs original:"
+                            f"\n95% Credible Interval = [{speedup_stats['credible_interval_lower_bound']:.3f}X, "
+                            f"{speedup_stats['credible_interval_upper_bound']:.3f}X]"
+                            f"\nmedian = {speedup_stats['median']:.3f}X"
+                        )
+                        if speedup_stats["credible_interval_lower_bound"] > 1.0:
+                            tree.add("The candidate is faster than the original code with a 95% probability.")
+                            if speedup_stats["median"] > best_speedup_ratio_until_now:
+                                best_speedup_ratio_until_now = float(speedup_stats["median"])
+                                tree.add("This candidate is the best candidate so far.")
+                            else:
+                                tree.add("This candidate is not faster than the current fastest candidate.")
                         else:
-                            tree.add("This candidate is not faster than the current fastest candidate.")
-                    else:
-                        tree.add("It is inconclusive whether the candidate is faster than the original code.")
-                    console.print(tree)
-                    console.rule()
+                            tree.add("It is inconclusive whether the candidate is faster than the original code.")
+                        console.print(tree)
+                        console.rule()
 
                 self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
         except KeyboardInterrupt as e:
@@ -1054,9 +1055,6 @@ class Optimizer:
             console.rule()
 
             total_timing = benchmarking_results.total_passed_runtime()  # caution: doesn't handle the loop index
-            runtime_distribution, runtime_statistics = benchmarking_results.bayesian_nonparametric_bootstrap_analysis(
-                100_000
-            )
             functions_to_remove = [
                 result.id.test_function_name
                 for result in behavioral_results
@@ -1090,9 +1088,12 @@ class Optimizer:
             console.rule()
             logger.debug(f"Total original code summed runtime (ns): {total_timing}")
             console.rule()
+            runtime_distribution, runtime_statistics = benchmarking_results.bayesian_nonparametric_bootstrap_analysis(
+                100_000
+            )
             logger.info(
                 f"Bayesian Bootstrapping Nonparametric Analysis"
-                f"\nExpected original code runtime (95% Credible Interval) = ["
+                f"\nExpected original code summed runtime (95% Credible Interval) = ["
                 f"{humanize_runtime(round(runtime_statistics['credible_interval_lower_bound']))}, "
                 f"{humanize_runtime(round(runtime_statistics['credible_interval_upper_bound']))}], "
                 f"\nmedian: {humanize_runtime(round(runtime_statistics['median']))}"
@@ -1196,18 +1197,23 @@ class Optimizer:
             if (total_candidate_timing := candidate_benchmarking_results.total_passed_runtime()) == 0:
                 logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
                 console.rule()
-            runtime_distribution, runtime_statistics = (
-                candidate_benchmarking_results.bayesian_nonparametric_bootstrap_analysis(100_000)
-            )
-
-            logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
-            console.rule()
-            logger.debug(
-                f"Overall code runtime (95% Credible Interval) = ["
-                f"{humanize_runtime(round(runtime_statistics['credible_interval_lower_bound']))}, "
-                f"{humanize_runtime(round(runtime_statistics['credible_interval_upper_bound']))}], median: "
-                f"{humanize_runtime(round(runtime_statistics['median']))}"
-            )
+                runtime_distribution: npt.NDArray[np.float64] = np.array([])
+                runtime_statistics: dict[str, np.float64] = {}
+            else:
+                logger.debug(
+                    f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}"
+                )
+                console.rule()
+                runtime_distribution, runtime_statistics = (
+                    candidate_benchmarking_results.bayesian_nonparametric_bootstrap_analysis(100_000)
+                )
+                logger.debug(
+                    f"Overall code summed runtime (95% Credible Interval) = ["
+                    f"{humanize_runtime(round(runtime_statistics['credible_interval_lower_bound']))}, "
+                    f"{humanize_runtime(round(runtime_statistics['credible_interval_upper_bound']))}], median: "
+                    f"{humanize_runtime(round(runtime_statistics['median']))}"
+                )
+                console.rule()
             return Success(
                 (
                     OptimizedCandidateResult(
