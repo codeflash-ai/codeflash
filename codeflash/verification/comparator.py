@@ -1,3 +1,4 @@
+import ast
 import datetime
 import decimal
 import enum
@@ -61,6 +62,7 @@ def comparator(orig: Any, new: Any) -> bool:
                 bool,
                 complex,
                 type(None),
+                type(Ellipsis),
                 decimal.Decimal,
                 set,
                 bytes,
@@ -77,8 +79,6 @@ def comparator(orig: Any, new: Any) -> bool:
                 return True
             return math.isclose(orig, new)
         if isinstance(orig, BaseException):
-            # if str(orig) != str(new):
-            #     return False
             # compare the attributes of the two exception objects to determine if they are equivalent.
             orig_dict = {k: v for k, v in orig.__dict__.items() if not k.startswith("_")}
             new_dict = {k: v for k, v in new.__dict__.items() if not k.startswith("_")}
@@ -182,7 +182,6 @@ def comparator(orig: Any, new: Any) -> bool:
                 return orig == new
         except Exception:
             pass
-
         # For class objects
         if hasattr(orig, "__dict__") and hasattr(new, "__dict__"):
             orig_keys = orig.__dict__
@@ -196,13 +195,16 @@ def comparator(orig: Any, new: Any) -> bool:
                 orig_keys = {k: v for k, v in orig_keys.items() if not k.startswith("__")}
                 new_keys = {k: v for k, v in new_keys.items() if not k.startswith("__")}
 
+            if isinstance(orig, ast.AST):
+                orig_keys = {k: v for k, v in orig.__dict__.items() if k != "parent"}
+                new_keys = {k: v for k, v in new.__dict__.items() if k != "parent"}
+
             return comparator(orig_keys, new_keys)
 
         if type(orig) in [types.BuiltinFunctionType, types.BuiltinMethodType]:
             return new == orig
         if str(type(orig)) == "<class 'object'>":
             return True
-
         # TODO : Add other types here
         logger.warning(f"Unknown comparator input type: {type(orig)}")
         return False
