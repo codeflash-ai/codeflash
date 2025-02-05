@@ -22,14 +22,25 @@ from codeflash.verification.bayesian_analysis import analyze_function_runtime_su
 from codeflash.verification.comparator import comparator
 
 
+class VerificationType(str, Enum):
+    FUNCTION_CALL = (
+        "function_call"  # Correctness verification for a test function, checks input values and output values)
+    )
+    INIT_STATE_FTO = "init_state_fto"  # Correctness verification for fto class instance attributes after init
+    INIT_STATE_HELPER = "init_state_helper"  # Correctness verification for helper class instance attributes after init
+
+
 class TestType(Enum):
     EXISTING_UNIT_TEST = 1
     INSPIRED_REGRESSION = 2
     GENERATED_REGRESSION = 3
     REPLAY_TEST = 4
     CONCOLIC_COVERAGE_TEST = 5
+    INIT_STATE_TEST = 6
 
     def to_name(self) -> str:
+        if self == TestType.INIT_STATE_TEST:
+            return ""
         names = {
             TestType.EXISTING_UNIT_TEST: "⚙️ Existing Unit Tests",
             TestType.INSPIRED_REGRESSION: "🎨 Inspired Regression Tests",
@@ -44,7 +55,7 @@ class TestType(Enum):
 class InvocationId:
     test_module_path: str  # The fully qualified name of the test module
     test_class_name: Optional[str]  # The name of the class where the test is defined
-    test_function_name: str  # The name of the test_function. Does not include the components of the file_name
+    test_function_name: Optional[str]  # The name of the test_function. Does not include the components of the file_name
     function_getting_tested: str
     iteration_id: Optional[str]
 
@@ -83,6 +94,7 @@ class FunctionTestInvocation:
     test_type: TestType
     return_value: Optional[object]  # The return value of the function invocation
     timed_out: Optional[bool]
+    verification_type: Optional[str] = VerificationType.FUNCTION_CALL
 
     @property
     def unique_invocation_loop_id(self) -> str:

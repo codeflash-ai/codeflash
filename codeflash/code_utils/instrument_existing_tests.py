@@ -10,6 +10,7 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestingMode
+from codeflash.verification.test_results import VerificationType
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -251,7 +252,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                         ast.Constant(
                                             value="CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT,"
                                             " test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT,"
-                                            " loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB)"
+                                            " loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)"
                                         )
                                     ],
                                     keywords=[],
@@ -684,7 +685,7 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                             value=ast.Name(id="codeflash_cur", ctx=ast.Load()), attr="execute", ctx=ast.Load()
                         ),
                         args=[
-                            ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
+                            ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"),
                             ast.Tuple(
                                 elts=[
                                     ast.Name(id="test_module_name", ctx=ast.Load()),
@@ -695,6 +696,7 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                                     ast.Name(id="invocation_id", ctx=ast.Load()),
                                     ast.Name(id="codeflash_duration", ctx=ast.Load()),
                                     ast.Name(id="pickled_return_value", ctx=ast.Load()),
+                                    ast.Constant(value=VerificationType.FUNCTION_CALL.value),
                                 ],
                                 ctx=ast.Load(),
                             ),
