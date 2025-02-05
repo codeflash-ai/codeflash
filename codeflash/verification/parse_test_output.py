@@ -21,7 +21,13 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.models.models import CoverageData, TestFiles
-from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults
+from codeflash.verification.test_results import (
+    FunctionTestInvocation,
+    InvocationId,
+    TestResults,
+    TestType,
+    VerificationType,
+)
 
 if TYPE_CHECKING:
     import subprocess
@@ -113,6 +119,7 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
                     test_type=test_type,
                     return_value=test_pickle,
                     timed_out=False,
+                    verification_type=VerificationType.FUNCTION_CALL,
                 )
             )
     return test_results
@@ -129,17 +136,26 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
         cur = db.cursor()
         data = cur.execute(
             "SELECT test_module_path, test_class_name, test_function_name, "
-            "function_getting_tested, loop_index, iteration_id, runtime, return_value FROM test_results"
+            "function_getting_tested, loop_index, iteration_id, runtime, return_value,verification_type FROM test_results"
         ).fetchall()
     finally:
         db.close()
     for val in data:
         try:
             test_module_path = val[0]
+            test_class_name = val[1] if val[1] else None
+            test_function_name = val[2] if val[2] else None
+            function_getting_tested = val[3]
             test_file_path = file_path_from_module_name(test_module_path, test_config.tests_project_rootdir)
-            # TODO : this is because sqlite writes original file module path. Should make it consistent
-            test_type = test_files.get_test_type_by_original_file_path(test_file_path)
             loop_index = val[4]
+            iteration_id = val[5]
+            runtime = val[6]
+            verification_type = val[8]
+            if verification_type in (VerificationType.INIT_STATE_FTO, VerificationType.INIT_STATE_HELPER):
+                test_type = TestType.INIT_STATE_TEST
+            else:
+                # TODO : this is because sqlite writes original file module path. Should make it consistent
+                test_type = test_files.get_test_type_by_original_file_path(test_file_path)
             try:
                 ret_val = (pickle.loads(val[7]) if loop_index == 1 else None,)
             except Exception:
@@ -148,19 +164,20 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                 function_test_invocation=FunctionTestInvocation(
                     loop_index=loop_index,
                     id=InvocationId(
-                        test_module_path=val[0],
-                        test_class_name=val[1],
-                        test_function_name=val[2],
-                        function_getting_tested=val[3],
-                        iteration_id=val[5],
+                        test_module_path=test_module_path,
+                        test_class_name=test_class_name,
+                        test_function_name=test_function_name,
+                        function_getting_tested=function_getting_tested,
+                        iteration_id=iteration_id,
                     ),
                     file_name=test_file_path,
                     did_pass=True,
-                    runtime=val[6],
+                    runtime=runtime,
                     test_framework=test_config.test_framework,
                     test_type=test_type,
                     return_value=ret_val,
                     timed_out=False,
+                    verification_type=VerificationType(verification_type) if verification_type else None,
                 )
             )
         except Exception:
@@ -352,22 +369,22 @@ def merge_test_results(
                 test_function_name = new_test_function_name
 
         grouped_xml_results[
-            result.id.test_module_path
+            (result.id.test_module_path or "")
             + ":"
             + (result.id.test_class_name or "")
             + ":"
-            + test_function_name
+            + (test_function_name or "")
             + ":"
             + str(result.loop_index)
         ].add(result)
 
     for result in bin_test_results:
         grouped_bin_results[
-            result.id.test_module_path
+            (result.id.test_module_path or "")
             + ":"
             + (result.id.test_class_name or "")
             + ":"
-            + result.id.test_function_name
+            + (result.id.test_function_name or "")
             + ":"
             + str(result.loop_index)
         ].add(result)
@@ -395,6 +412,9 @@ def merge_test_results(
                         test_type=xml_result.test_type,
                         return_value=result_bin.return_value,
                         timed_out=xml_result.timed_out,
+                        verification_type=VerificationType(result_bin.verification_type)
+                        if result_bin.verification_type
+                        else None,
                     )
                 )
         elif xml_results.test_results[0].id.iteration_id is not None:
@@ -421,6 +441,9 @@ def merge_test_results(
                         timed_out=xml_result.timed_out
                         if bin_result.runtime is None
                         else False,  # If runtime was measured in the bin file, then the testcase did not time out
+                        verification_type=VerificationType(bin_result.verification_type)
+                        if bin_result.verification_type
+                        else None,
                     )
                 )
         else:
@@ -444,6 +467,9 @@ def merge_test_results(
                         test_type=bin_result.test_type,
                         return_value=bin_result.return_value,
                         timed_out=xml_result.timed_out,  # only the xml gets the timed_out flag
+                        verification_type=VerificationType(bin_result.verification_type)
+                        if bin_result.verification_type
+                        else None,
                     )
                 )
 

@@ -51,10 +51,13 @@ class OptimFunctionCollector(cst.CSTVisitor):
         self.new_functions: list[cst.FunctionDef] = []
         self.new_class_functions: dict[str, list[cst.FunctionDef]] = defaultdict(list)
         self.current_class = None
+        self.modified_init_functions: dict[str, cst.FunctionDef] = {}
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
         if (self.current_class, node.name.value) in self.function_names:
             self.modified_functions[(self.current_class, node.name.value)] = node
+        elif self.current_class and node.name.value == "__init__":
+            self.modified_init_functions[self.current_class] = node
         elif (
             self.preexisting_objects
             and (node.name.value, []) not in self.preexisting_objects
@@ -76,6 +79,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
                 and (child_node.name.value, parents) not in self.preexisting_objects
             ):
                 self.new_class_functions[node.name.value].append(child_node)
+
         return True
 
     def leave_ClassDef(self, node: cst.ClassDef) -> None:
@@ -89,11 +93,15 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         modified_functions: dict[tuple[str | None, str], cst.FunctionDef] = None,
         new_functions: list[cst.FunctionDef] = None,
         new_class_functions: dict[str, list[cst.FunctionDef]] = None,
+        modified_init_functions: dict[str, cst.FunctionDef] = None,
     ) -> None:
         super().__init__()
         self.modified_functions = modified_functions if modified_functions is not None else {}
         self.new_functions = new_functions if new_functions is not None else []
         self.new_class_functions = new_class_functions if new_class_functions is not None else defaultdict(list)
+        self.modified_init_functions: dict[str, cst.FunctionDef] = (
+            modified_init_functions if modified_init_functions is not None else {}
+        )
         self.current_class = None
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
@@ -103,6 +111,8 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         if (self.current_class, original_node.name.value) in self.modified_functions:
             node = self.modified_functions[(self.current_class, original_node.name.value)]
             return updated_node.with_changes(body=node.body, decorators=node.decorators)
+        if original_node.name.value == "__init__" and self.current_class in self.modified_init_functions:
+            return self.modified_init_functions[self.current_class]
 
         return updated_node
 
@@ -173,6 +183,7 @@ def replace_functions_in_file(
         modified_functions=visitor.modified_functions,
         new_functions=visitor.new_functions,
         new_class_functions=visitor.new_class_functions,
+        modified_init_functions=visitor.modified_init_functions,
     )
     original_module = cst.parse_module(source_code)
     modified_tree = original_module.visit(transformer)
@@ -183,7 +194,6 @@ def replace_functions_and_add_imports(
     source_code: str,
     function_names: list[str],
     optimized_code: str,
-    file_path_of_module_with_function_to_optimize: Path,
     module_abspath: Path,
     preexisting_objects: list[tuple[str, list[FunctionParent]]],
     project_root_path: Path,
@@ -191,7 +201,7 @@ def replace_functions_and_add_imports(
     return add_needed_imports_from_module(
         optimized_code,
         replace_functions_in_file(source_code, function_names, optimized_code, preexisting_objects),
-        file_path_of_module_with_function_to_optimize,
+        module_abspath,
         module_abspath,
         project_root_path,
     )
@@ -200,20 +210,13 @@ def replace_functions_and_add_imports(
 def replace_function_definitions_in_module(
     function_names: list[str],
     optimized_code: str,
-    file_path_of_module_with_function_to_optimize: Path,
     module_abspath: Path,
     preexisting_objects: list[tuple[str, list[FunctionParent]]],
     project_root_path: Path,
 ) -> bool:
     source_code: str = module_abspath.read_text(encoding="utf8")
     new_code: str = replace_functions_and_add_imports(
-        source_code,
-        function_names,
-        optimized_code,
-        file_path_of_module_with_function_to_optimize,
-        module_abspath,
-        preexisting_objects,
-        project_root_path,
+        source_code, function_names, optimized_code, module_abspath, preexisting_objects, project_root_path
     )
     if is_zero_diff(source_code, new_code):
         return False

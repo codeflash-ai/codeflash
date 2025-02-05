@@ -26,9 +26,11 @@ def get_code_optimization_context(
     helpers_of_fto, helpers_of_fto_fqn, helpers_of_fto_obj_list = get_file_path_to_helper_functions_dict(
         {function_to_optimize.file_path: {function_to_optimize.qualified_name}}, project_root_path
     )
+
     helpers_of_helpers, helpers_of_helpers_fqn, _ = get_file_path_to_helper_functions_dict(
         helpers_of_fto, project_root_path
     )
+
     # Add function to optimize
     helpers_of_fto[function_to_optimize.file_path].add(function_to_optimize.qualified_name)
     helpers_of_fto_fqn[function_to_optimize.file_path].add(
@@ -68,6 +70,7 @@ def get_code_optimization_context(
             read_only_context_code=read_only_code_markdown.markdown,
             helper_functions=helpers_of_fto_obj_list,
             preexisting_objects=preexisting_objects,
+
         )
 
     logger.debug("Code context has exceeded token limit, removing docstrings from read-only code")
@@ -167,19 +170,18 @@ def get_all_read_only_code_context(
         except ValueError as e:
             logger.debug(f"Error while getting read-only code: {e}")
             continue
-
-        read_only_code_with_imports = CodeString(
-            code=add_needed_imports_from_module(
-                src_module_code=original_code,
-                dst_module_code=read_only_code,
-                src_path=file_path,
-                dst_path=file_path,
-                project_root=project_root_path,
-                helper_functions_fqn=helpers_of_fto_fqn[file_path] | helpers_of_helpers_fqn[file_path],
-            ),
-            file_path=file_path.relative_to(project_root_path),
-        )
-        if read_only_code_with_imports.code:
+        if read_only_code.strip():
+            read_only_code_with_imports = CodeString(
+                code=add_needed_imports_from_module(
+                    src_module_code=original_code,
+                    dst_module_code=read_only_code,
+                    src_path=file_path,
+                    dst_path=file_path,
+                    project_root=project_root_path,
+                    helper_functions_fqn=helpers_of_fto_fqn[file_path] | helpers_of_helpers_fqn[file_path],
+                ),
+                file_path=file_path.relative_to(project_root_path),
+            )
             read_only_code_markdown.code_strings.append(read_only_code_with_imports)
 
     # Extract code from file paths containing helpers of helpers
@@ -197,18 +199,18 @@ def get_all_read_only_code_context(
             logger.debug(f"Error while getting read-only code: {e}")
             continue
 
-        read_only_code_with_imports = CodeString(
-            code=add_needed_imports_from_module(
-                src_module_code=original_code,
-                dst_module_code=read_only_code,
-                src_path=file_path,
-                dst_path=file_path,
-                project_root=project_root_path,
-                helper_functions_fqn=helpers_of_helpers_no_overlap_fqn[file_path],
-            ),
-            file_path=file_path.relative_to(project_root_path),
-        )
-        if read_only_code_with_imports.code:
+        if read_only_code.strip():
+            read_only_code_with_imports = CodeString(
+                code=add_needed_imports_from_module(
+                    src_module_code=original_code,
+                    dst_module_code=read_only_code,
+                    src_path=file_path,
+                    dst_path=file_path,
+                    project_root=project_root_path,
+                    helper_functions_fqn=helpers_of_helpers_no_overlap_fqn[file_path],
+                ),
+                file_path=file_path.relative_to(project_root_path),
+            )
             read_only_code_markdown.code_strings.append(read_only_code_with_imports)
     return read_only_code_markdown
 
@@ -327,9 +329,10 @@ def prune_cst_for_read_writable_code(
                 if qualified_name in target_functions:
                     new_body.append(stmt)
                     found_target = True
-
+                elif stmt.name.value == "__init__":
+                    new_body.append(stmt)  # enable __init__ optimizations
         # If no target functions found, remove the class entirely
-        if not new_body:
+        if not new_body or not found_target:
             return None, False
 
         return node.with_changes(body=cst.IndentedBlock(body=new_body)), found_target
@@ -408,7 +411,7 @@ def prune_cst_for_read_only_code(
         if qualified_name in target_functions:
             return None, True
         # Keep only dunder methods
-        if is_dunder_method(node.name.value):
+        if is_dunder_method(node.name.value) and node.name.value != "__init__":
             if remove_docstrings and isinstance(node.body, cst.IndentedBlock):
                 new_body = remove_docstring_from_body(node.body)
                 return node.with_changes(body=new_body), False

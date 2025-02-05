@@ -4,7 +4,6 @@ import tempfile
 from argparse import Namespace
 from collections import defaultdict
 from pathlib import Path
-from textwrap import dedent
 
 import pytest
 from codeflash.context.code_context_extractor import get_code_optimization_context
@@ -76,35 +75,28 @@ def test_code_replacement10() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
 
     expected_read_write_context = """
-    from __future__ import annotations
+from __future__ import annotations
 
-    class HelperClass:
+class HelperClass:
+    def __init__(self, name):
+        self.name = name
 
-        def helper_method(self):
-            return self.name
+    def helper_method(self):
+        return self.name
 
 
-    class MainClass:
-    
-        def main_method(self):
-            return HelperClass(self.name).helper_method()
+class MainClass:
+    def __init__(self, name):
+        self.name = name
+
+    def main_method(self):
+        return HelperClass(self.name).helper_method()
 """
-    expected_read_only_context = f"""
-    ```python:{file_path.relative_to(file_path.parent)}
-    from __future__ import annotations
-
-    class HelperClass:
-        def __init__(self, name):
-            self.name = name
-
-
-    class MainClass:
-        def __init__(self, name):
-            self.name = name
-    ```
+    expected_read_only_context = """
     """
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_class_method_dependencies() -> None:
@@ -122,8 +114,12 @@ def test_class_method_dependencies() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     expected_read_write_context = """
 from __future__ import annotations
+from collections import defaultdict
 
 class Graph:
+    def __init__(self, vertices):
+        self.graph = defaultdict(list)
+        self.V = vertices  # No. of vertices
 
     def topologicalSortUtil(self, v, visited, stack):
         visited[v] = True
@@ -146,19 +142,9 @@ class Graph:
         return stack
 
 """
-    expected_read_only_context = f"""
-    ```python:{file_path.relative_to(file_path.parent)}
-    from __future__ import annotations
-    from collections import defaultdict
-
-    class Graph:
-        def __init__(self, vertices):
-            self.graph = defaultdict(list)
-            self.V = vertices  # No. of vertices
-    ```
-    """
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    expected_read_only_context = ""
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_bubble_sort_helper() -> None:
@@ -200,8 +186,8 @@ def sort_from_another_file(arr):
 """
     expected_read_only_context = ""
 
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_flavio_typed_code_helper() -> None:
@@ -396,7 +382,9 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
         read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
         expected_read_write_context = """
-         class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
+class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
+
+    def __init__(self) -> None: ...
 
     def get_cache_or_call(
         self,
@@ -455,6 +443,16 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
 
 class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
 
+    def __init__(
+        self,
+        func: Callable[_P, _R],
+        duration: datetime.timedelta,
+    ) -> None:
+        self.__wrapped__ = func
+        self.__duration__ = duration
+        self.__backend__ = AbstractCacheBackend()
+        functools.update_wrapper(self, func)
+
     def __call__(self, *args: _P.args, **kwargs: _P.kwargs) -> _R:
         \"\"\"
         Calls the wrapped function, either using the cache or bypassing it based on environment variables.
@@ -487,8 +485,6 @@ _STORE_T = TypeVar("_STORE_T")
 class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
     """Interface for cache backends used by the persistent cache decorator."""
 
-    def __init__(self) -> None: ...
-    
     def hash_key(
         self,
         *,
@@ -508,7 +504,7 @@ class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
     def delete(self, *, key: tuple[str, _KEY_T]) -> None: ...
 
     def put(self, *, key: tuple[str, _KEY_T], data: _STORE_T) -> None: ...
-    
+
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
 _CacheBackendT = TypeVar("_CacheBackendT", bound=CacheBackend)
@@ -535,20 +531,10 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
     __wrapped__: Callable[_P, _R]
     __duration__: datetime.timedelta
     __backend__: _CacheBackendT
-
-    def __init__(
-        self,
-        func: Callable[_P, _R],
-        duration: datetime.timedelta,
-    ) -> None:
-        self.__wrapped__ = func
-        self.__duration__ = duration
-        self.__backend__ = AbstractCacheBackend()
-        functools.update_wrapper(self, func)
 ```
 '''
-        assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-        assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+        assert read_write_context.strip() == expected_read_write_context.strip()
+        assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_example_class() -> None:
@@ -598,10 +584,15 @@ class HelperClass:
         read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
         expected_read_write_context = """
 class MyClass:
+    def __init__(self):
+        self.x = 1
     def target_method(self):
         y = HelperClass().helper_method()
 
 class HelperClass:
+    def __init__(self):
+        \"\"\"Initialize the HelperClass.\"\"\"
+        self.x = 1
     def helper_method(self):
         return self.x
         """
@@ -609,21 +600,16 @@ class HelperClass:
 ```python:{file_path.relative_to(opt.args.project_root)}
 class MyClass:
     \"\"\"A class with a helper method.\"\"\"
-    def __init__(self):
-        self.x = 1
 
 class HelperClass:
     \"\"\"A helper class for MyClass.\"\"\"
-    def __init__(self):
-        \"\"\"Initialize the HelperClass.\"\"\"
-        self.x = 1
     def __repr__(self):
         \"\"\"Return a string representation of the HelperClass.\"\"\"
         return "HelperClass" + str(self.x)
 ```
 """
-        assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-        assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+        assert read_write_context.strip() == expected_read_write_context.strip()
+        assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_example_class_token_limit_1() -> None:
@@ -679,29 +665,31 @@ class HelperClass:
         # In this scenario, the read-only code context is too long, so the read-only docstrings are removed.
         expected_read_write_context = """
 class MyClass:
+    def __init__(self):
+        self.x = 1
     def target_method(self):
         \"\"\"Docstring for target method\"\"\"
         y = HelperClass().helper_method()
 
 class HelperClass:
+    def __init__(self):
+        \"\"\"Initialize the HelperClass.\"\"\"
+        self.x = 1
     def helper_method(self):
         return self.x
         """
         expected_read_only_context = f"""
 ```python:{file_path.relative_to(opt.args.project_root)}
 class MyClass:
-    def __init__(self):
-        self.x = 1
+    pass
 
 class HelperClass:
-    def __init__(self):
-        self.x = 1
     def __repr__(self):
         return "HelperClass" + str(self.x)
 ```
 """
-        assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-        assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+        assert read_write_context.strip() == expected_read_write_context.strip()
+        assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_example_class_token_limit_2() -> None:
@@ -757,17 +745,22 @@ class HelperClass:
         # In this scenario, the read-only code context is too long even after removing docstrings, hence we remove it completely.
         expected_read_write_context = """
 class MyClass:
+    def __init__(self):
+        self.x = 1
     def target_method(self):
         \"\"\"Docstring for target method\"\"\"
         y = HelperClass().helper_method()
 
 class HelperClass:
+    def __init__(self):
+        \"\"\"Initialize the HelperClass.\"\"\"
+        self.x = 1
     def helper_method(self):
         return self.x
         """
         expected_read_only_context = ""
-        assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-        assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+        assert read_write_context.strip() == expected_read_write_context.strip()
+        assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_example_class_token_limit_3() -> None:
@@ -836,11 +829,17 @@ def test_repo_helper() -> None:
     code_ctx = get_code_optimization_context(function_to_optimize, project_root)
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     expected_read_write_context = """
-     import requests
+import math
+import requests
 from globals import API_URL
 from utils import DataProcessor
 
 class DataProcessor:
+
+    def __init__(self, default_prefix: str = "PREFIX_"):
+        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
+        self.default_prefix = default_prefix
+        self.number += math.log(self.number)
 
     def process_data(self, raw_data: str) -> str:
         \"\"\"Process raw data by converting it to uppercase.\"\"\"
@@ -869,8 +868,6 @@ def fetch_and_process_data():
     """
     expected_read_only_context = f"""
 ```python:{path_to_utils.relative_to(project_root)}
-import math
-
 GLOBAL_VAR = 10
 
 
@@ -878,11 +875,6 @@ class DataProcessor:
     \"\"\"A class for processing data.\"\"\"
 
     number = 1
-
-    def __init__(self, default_prefix: str = "PREFIX_"):
-        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
-        self.default_prefix = default_prefix
-        self.number += math.log(self.number)
 
     def __repr__(self) -> str:
         \"\"\"Return a string representation of the DataProcessor.\"\"\"
@@ -894,8 +886,8 @@ if __name__ == "__main__":
     print("Processed data:", result)
 ```
 """
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_repo_helper_of_helper() -> None:
@@ -914,12 +906,18 @@ def test_repo_helper_of_helper() -> None:
     code_ctx = get_code_optimization_context(function_to_optimize, project_root)
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     expected_read_write_context = """
+import math
 from transform_utils import DataTransformer
 import requests
 from globals import API_URL
 from utils import DataProcessor
 
 class DataProcessor:
+
+    def __init__(self, default_prefix: str = "PREFIX_"):
+        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
+        self.default_prefix = default_prefix
+        self.number += math.log(self.number)
 
     def process_data(self, raw_data: str) -> str:
         \"\"\"Process raw data by converting it to uppercase.\"\"\"
@@ -947,8 +945,6 @@ def fetch_and_transform_data():
     """
     expected_read_only_context = f"""
 ```python:{path_to_utils.relative_to(project_root)}
-import math
-
 GLOBAL_VAR = 10
 
 
@@ -956,11 +952,6 @@ class DataProcessor:
     \"\"\"A class for processing data.\"\"\"
 
     number = 1
-
-    def __init__(self, default_prefix: str = "PREFIX_"):
-        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
-        self.default_prefix = default_prefix
-        self.number += math.log(self.number)
 
     def __repr__(self) -> str:
         \"\"\"Return a string representation of the DataProcessor.\"\"\"
@@ -973,8 +964,6 @@ if __name__ == "__main__":
 ```
 ```python:{path_to_transform_utils.relative_to(project_root)}
 class DataTransformer:
-    def __init__(self):
-        self.data = None
 
     def transform(self, data):
         self.data = data
@@ -982,8 +971,8 @@ class DataTransformer:
 ```
 """
 
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_repo_helper_of_helper_same_class() -> None:
@@ -1001,9 +990,12 @@ def test_repo_helper_of_helper_same_class() -> None:
     code_ctx = get_code_optimization_context(function_to_optimize, project_root)
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     expected_read_write_context = """
+import math
 from transform_utils import DataTransformer
 
 class DataTransformer:
+    def __init__(self):
+        self.data = None
 
     def transform_using_own_method(self, data):
         return self.transform(data)
@@ -1011,6 +1003,11 @@ class DataTransformer:
 
 
 class DataProcessor:
+
+    def __init__(self, default_prefix: str = "PREFIX_"):
+        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
+        self.default_prefix = default_prefix
+        self.number += math.log(self.number)
 
     def transform_data_own_method(self, data: str) -> str:
         \"\"\"Transform the processed data using own method\"\"\"
@@ -1020,16 +1017,12 @@ class DataProcessor:
     expected_read_only_context = f"""
 ```python:{path_to_transform_utils.relative_to(project_root)}
 class DataTransformer:
-    def __init__(self):
-        self.data = None
 
     def transform(self, data):
         self.data = data
         return self.data
 ```
 ```python:{path_to_utils.relative_to(project_root)}
-import math
-
 GLOBAL_VAR = 10
 
 
@@ -1038,11 +1031,6 @@ class DataProcessor:
 
     number = 1
 
-    def __init__(self, default_prefix: str = "PREFIX_"):
-        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
-        self.default_prefix = default_prefix
-        self.number += math.log(self.number)
-
     def __repr__(self) -> str:
         \"\"\"Return a string representation of the DataProcessor.\"\"\"
         return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
@@ -1050,8 +1038,8 @@ class DataProcessor:
 
 """
 
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_repo_helper_of_helper_same_file() -> None:
@@ -1069,9 +1057,12 @@ def test_repo_helper_of_helper_same_file() -> None:
     code_ctx = get_code_optimization_context(function_to_optimize, project_root)
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     expected_read_write_context = """
+import math
 from transform_utils import DataTransformer
 
 class DataTransformer:
+    def __init__(self):
+        self.data = None
 
     def transform_using_same_file_function(self, data):
         return update_data(data)
@@ -1080,23 +1071,21 @@ class DataTransformer:
 
 class DataProcessor:
 
+    def __init__(self, default_prefix: str = "PREFIX_"):
+        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
+        self.default_prefix = default_prefix
+        self.number += math.log(self.number)
+
     def transform_data_same_file_function(self, data: str) -> str:
         \"\"\"Transform the processed data using a function from the same file\"\"\"
         return DataTransformer().transform_using_same_file_function(data)
     """
     expected_read_only_context = f"""
 ```python:{path_to_transform_utils.relative_to(project_root)}
-class DataTransformer:
-    def __init__(self):
-        self.data = None
-
-
 def update_data(data):
     return data + " updated"
 ```
 ```python:{path_to_utils.relative_to(project_root)}
-import math
-
 GLOBAL_VAR = 10
 
 
@@ -1105,19 +1094,14 @@ class DataProcessor:
 
     number = 1
 
-    def __init__(self, default_prefix: str = "PREFIX_"):
-        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
-        self.default_prefix = default_prefix
-        self.number += math.log(self.number)
-
     def __repr__(self) -> str:
         \"\"\"Return a string representation of the DataProcessor.\"\"\"
         return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
 ```
 """
 
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_repo_helper_all_same_file() -> None:
@@ -1135,6 +1119,8 @@ def test_repo_helper_all_same_file() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     expected_read_write_context = """
 class DataTransformer:
+    def __init__(self):
+        self.data = None
 
     def transform_using_own_method(self, data):
         return self.transform(data)
@@ -1150,9 +1136,7 @@ def update_data(data):
     expected_read_only_context = f"""
 ```python:{path_to_transform_utils.relative_to(project_root)}
 class DataTransformer:
-    def __init__(self):
-        self.data = None
-    
+
     def transform(self, data):
         self.data = data
         return self.data
@@ -1160,8 +1144,8 @@ class DataTransformer:
 
 """
 
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_repo_helper_circular_dependency() -> None:
@@ -1179,10 +1163,16 @@ def test_repo_helper_circular_dependency() -> None:
     code_ctx = get_code_optimization_context(function_to_optimize, project_root)
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     expected_read_write_context = """
+import math
 from transform_utils import DataTransformer
 from code_to_optimize.code_directories.retriever.utils import DataProcessor
 
 class DataProcessor:
+
+    def __init__(self, default_prefix: str = "PREFIX_"):
+        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
+        self.default_prefix = default_prefix
+        self.number += math.log(self.number)
 
     def circular_dependency(self, data: str) -> str:
         \"\"\"Test circular dependency\"\"\"
@@ -1191,6 +1181,8 @@ class DataProcessor:
 
 
 class DataTransformer:
+    def __init__(self):
+        self.data = None
 
     def circular_dependency(self, data):
         return DataProcessor().circular_dependency(data)
@@ -1199,8 +1191,6 @@ class DataTransformer:
     """
     expected_read_only_context = f"""
 ```python:{path_to_utils.relative_to(project_root)}
-import math
-
 GLOBAL_VAR = 10
 
 
@@ -1209,22 +1199,12 @@ class DataProcessor:
 
     number = 1
 
-    def __init__(self, default_prefix: str = "PREFIX_"):
-        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
-        self.default_prefix = default_prefix
-        self.number += math.log(self.number)
-
     def __repr__(self) -> str:
         \"\"\"Return a string representation of the DataProcessor.\"\"\"
         return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
 ```
-```python:{path_to_transform_utils.relative_to(project_root)}
-class DataTransformer:
-    def __init__(self):
-        self.data = None
-```
 
 """
 
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()

@@ -40,8 +40,6 @@ def test_dunder_methods() -> None:
 
     expected = """
     class TestClass:
-        def __init__(self):
-            self.x = 42
 
         def __str__(self):
             return f"Value: {self.x}"
@@ -68,9 +66,7 @@ def test_dunder_methods_remove_docstring() -> None:
 
     expected = """
     class TestClass:
-        def __init__(self):
-            self.x = 42
-
+    
         def __str__(self):
             return f"Value: {self.x}"
     """
@@ -95,9 +91,7 @@ def test_class_remove_docstring() -> None:
 
     expected = """
     class TestClass:
-        def __init__(self):
-            self.x = 42
-
+    
         def __str__(self):
             return f"Value: {self.x}"
     """
@@ -124,9 +118,7 @@ def test_mixed_remove_docstring() -> None:
 
     expected = """
     class TestClass:
-        def __init__(self):
-            self.x = 42
-
+    
         def __str__(self):
             return f"Value: {self.x}"
     """
@@ -208,10 +200,6 @@ def test_multiple_top_level_targets() -> None:
     """
 
     expected = """
-    class TestClass:
-
-        def __init__(self):
-            self.x = 42
     """
 
     output = get_read_only_code(dedent(code), {"TestClass.target1", "TestClass.target2"}, set())
@@ -659,11 +647,6 @@ def test_simplified_complete_implementation() -> None:
     class DataProcessor:
         \"\"\"A simple data processing class.\"\"\"
 
-        def __init__(self, data: Dict[str, Any]) -> None:
-            self.data = data
-            self._processed = False
-            self.result = None
-
         def __repr__(self) -> str:
             return f"DataProcessor(processed={self._processed})"
 
@@ -672,17 +655,12 @@ def test_simplified_complete_implementation() -> None:
         processor = DataProcessor(sample_data)
 
         class ResultHandler:
-            def __init__(self, processor: DataProcessor):
-                self.processor = processor
-                self.cache = {}
-
+        
             def __str__(self) -> str:
                 return f"ResultHandler(cache_size={len(self.cache)})"
 
     except Exception as e:
-        class ResultHandler:
-            def __init__(self):
-                self.error = str(e)
+        pass
     """
 
     output = get_read_only_code(dedent(code), {"DataProcessor.target_method", "ResultHandler.target_method"}, set())
@@ -693,12 +671,6 @@ def test_simplified_complete_implementation_no_docstring() -> None:
     code = """
     class DataProcessor:
         \"\"\"A simple data processing class.\"\"\"
-
-        def __init__(self, data: Dict[str, Any]) -> None:
-            self.data = data
-            self._processed = False
-            self.result = None
-
         def __repr__(self) -> str:
             return f"DataProcessor(processed={self._processed})"
 
@@ -732,9 +704,6 @@ def test_simplified_complete_implementation_no_docstring() -> None:
         processor = DataProcessor(sample_data)
 
         class ResultHandler:
-            def __init__(self, processor: DataProcessor):
-                self.processor = processor
-                self.cache = {}
 
             def __str__(self) -> str:
                 return f"ResultHandler(cache_size={len(self.cache)})"
@@ -758,8 +727,6 @@ def test_simplified_complete_implementation_no_docstring() -> None:
 
     except Exception as e:
         class ResultHandler:
-            def __init__(self):
-                self.error = str(e)
 
             def target_method(self, key: str) -> None:
                 raise RuntimeError(f"Failed to initialize: {self.error}")
@@ -767,12 +734,6 @@ def test_simplified_complete_implementation_no_docstring() -> None:
 
     expected = """    
     class DataProcessor:
-
-        def __init__(self, data: Dict[str, Any]) -> None:
-            self.data = data
-            self._processed = False
-            self.result = None
-
         def __repr__(self) -> str:
             return f"DataProcessor(processed={self._processed})"
 
@@ -781,17 +742,12 @@ def test_simplified_complete_implementation_no_docstring() -> None:
         processor = DataProcessor(sample_data)
 
         class ResultHandler:
-            def __init__(self, processor: DataProcessor):
-                self.processor = processor
-                self.cache = {}
 
             def __str__(self) -> str:
                 return f"ResultHandler(cache_size={len(self.cache)})"
 
     except Exception as e:
-        class ResultHandler:
-            def __init__(self):
-                self.error = str(e)
+        pass
     """
 
     output = get_read_only_code(

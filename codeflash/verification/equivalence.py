@@ -1,7 +1,8 @@
 import sys
 
+from codeflash.cli_cmds.console import logger
 from codeflash.verification.comparator import comparator
-from codeflash.verification.test_results import TestResults, TestType
+from codeflash.verification.test_results import TestResults, TestType, VerificationType
 
 INCREASED_RECURSION_LIMIT = 5000
 
@@ -23,15 +24,42 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         cdd_test_result = candidate_results.get_by_unique_invocation_loop_id(test_id)
         if cdd_test_result is not None and original_test_result is None:
             continue
-
+        # If helper function instance_state verification is not present, that's ok. continue
+        if (
+            original_test_result.verification_type
+            and original_test_result.verification_type == VerificationType.INIT_STATE_HELPER
+            and cdd_test_result is None
+        ):
+            continue
         if original_test_result is None or cdd_test_result is None:
             are_equal = False
             break
         did_all_timeout = did_all_timeout and original_test_result.timed_out
         if original_test_result.timed_out:
             continue
-        if not comparator(original_test_result.return_value, cdd_test_result.return_value):
+        superset_obj = False
+        if original_test_result.verification_type and (
+            original_test_result.verification_type
+            in (VerificationType.INIT_STATE_HELPER, VerificationType.INIT_STATE_FTO)
+        ):
+            superset_obj = True
+        if not comparator(original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj):
             are_equal = False
+            logger.debug(
+                "File Name: %s\n"
+                "Test Type: %s\n"
+                "Verification Type: %s\n"
+                "Invocation ID: %s\n"
+                "Original return value: %s\n"
+                "Candidate return value: %s\n"
+                "-------------------",
+                original_test_result.file_name,
+                original_test_result.test_type,
+                original_test_result.verification_type,
+                original_test_result.id,
+                original_test_result.return_value,
+                cdd_test_result.return_value,
+            )
             break
         if original_test_result.test_type in [TestType.EXISTING_UNIT_TEST, TestType.CONCOLIC_COVERAGE_TEST] and (
             cdd_test_result.did_pass != original_test_result.did_pass

@@ -79,7 +79,6 @@ print("Hello world")
         source_code=original_code,
         function_names=[function_name],
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).resolve().parent.resolve(),
@@ -141,7 +140,6 @@ print("Hello world")
         source_code=original_code,
         function_names=[function_name],
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).resolve().parent.resolve(),
@@ -203,7 +201,6 @@ print("Salut monde")
         source_code=original_code,
         function_names=function_names,
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).resolve().parent.resolve(),
@@ -268,7 +265,6 @@ print("Salut monde")
         source_code=original_code,
         function_names=function_names,
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).resolve().parent.resolve(),
@@ -322,7 +318,6 @@ def supersort(doink):
         source_code=original_code,
         function_names=function_names,
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).resolve().parent.resolve(),
@@ -398,7 +393,6 @@ print("Not cool")
         source_code=original_code_main,
         function_names=["other_function"],
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).resolve().parent.resolve(),
@@ -409,7 +403,6 @@ print("Not cool")
         source_code=original_code_helper,
         function_names=["blob"],
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).resolve().parent.resolve(),
@@ -604,7 +597,6 @@ class CacheConfig(BaseConfig):
         source_code=original_code,
         function_names=function_names,
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).resolve().parent.resolve(),
@@ -675,7 +667,6 @@ def test_test_libcst_code_replacement8() -> None:
         source_code=original_code,
         function_names=function_names,
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).resolve().parent.resolve(),
@@ -729,7 +720,6 @@ print("Hello world")
         source_code=original_code,
         function_names=[function_name],
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).resolve().parent.resolve(),
@@ -894,6 +884,7 @@ def test_test_libcst_code_replacement13() -> None:
     original_code = """class NewClass:
     def __init__(self, name):
         self.name = name
+        self.new_attribute = "Sorry i modified a dunder method"
     def new_function(self, value):
         return other_function(self.name)
     def new_function2(value):
@@ -908,7 +899,6 @@ def test_test_libcst_code_replacement13() -> None:
         source_code=original_code,
         function_names=function_names,
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).resolve().parent.resolve(),
@@ -1095,7 +1085,6 @@ class TestResults(BaseModel):
         source_code=original_code,
         function_names=["TestResults.get_test_pass_fail_report_by_type"],
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).parent.resolve(),
@@ -1110,7 +1099,6 @@ class TestResults(BaseModel):
             source_code=new_code,
             function_names=list(qualified_names),
             optimized_code=optim_code,
-            file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
             module_abspath=module_abspath,
             preexisting_objects=preexisting_objects,
             project_root_path=Path(__file__).parent.resolve(),
@@ -1318,7 +1306,6 @@ def cosine_similarity_top_k(
         source_code=original_code,
         function_names=["cosine_similarity_top_k"],
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=(Path(__file__).parent / "code_to_optimize").resolve(),
         preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).parent.parent.resolve(),
@@ -1377,7 +1364,6 @@ def cosine_similarity_top_k(
             source_code=new_code,
             function_names=list(qualified_names),
             optimized_code=optim_code,
-            file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
             module_abspath=module_abspath,
             preexisting_objects=preexisting_objects,
             project_root_path=Path(__file__).parent.parent.resolve(),
@@ -1579,7 +1565,7 @@ print("Hello world")
 
 class NewClass:
     def __init__(self, name):
-        self.name = name
+        self.name = str(name)
     def __call__(self, value):
         return "I am still old"
     def new_function2(value):
@@ -1601,7 +1587,6 @@ print("Hello world")
         source_code=original_code,
         function_names=function_names,
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).resolve().parent.resolve(),
@@ -1638,7 +1623,6 @@ print("Hello world")
         source_code=original_code,
         function_names=function_names,
         optimized_code=optim_code,
-        file_path_of_module_with_function_to_optimize=Path(__file__).resolve(),
         module_abspath=Path(__file__).resolve(),
         preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).resolve().parent.resolve(),

@@ -69,6 +69,7 @@ from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.bayesian_analysis import compare_function_runtime_distributions
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
+from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestResults, TestType
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests
@@ -341,10 +342,22 @@ class Optimizer:
             function_to_optimize=function_to_optimize, function_to_tests=function_to_all_tests
         )
 
+        # Get a dict of file_path_to_classes of fto and helpers_of_fto
+        file_path_to_helper_classes = defaultdict(set)
+        for function_source in code_context.helper_functions:
+            if (
+                function_source.qualified_name != function_to_optimize.qualified_name
+                and "." in function_source.qualified_name
+            ):
+                file_path_to_helper_classes[function_source.file_path].add(function_source.qualified_name.split(".")[0])
+
         baseline_result = self.establish_original_code_baseline(  # this needs better typing
             function_name=function_to_optimize_qualified_name,
             function_file_path=function_to_optimize.file_path,
             code_context=code_context,
+            function_to_optimize=function_to_optimize,
+            original_helper_code=original_helper_code,
+            file_path_to_helper_classes=file_path_to_helper_classes,
         )
 
         console.rule()
@@ -383,6 +396,7 @@ class Optimizer:
                 original_code_runtime_distribution=original_code_runtime_distribution,
                 original_helper_code=original_helper_code,
                 function_trace_id=function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
+                file_path_to_helper_classes=file_path_to_helper_classes,
             )
             ph("cli-optimize-function-finished", {"function_trace_id": function_trace_id})
 
@@ -493,6 +507,7 @@ class Optimizer:
         original_code_runtime_distribution: npt.NDArray[np.float64],
         original_helper_code: dict[Path, str],
         function_trace_id: str,
+        file_path_to_helper_classes: dict[Path, set[str]],
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime
@@ -531,10 +546,16 @@ class Optimizer:
                     self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
                     continue
 
+                # Instrument codeflash capture
                 run_results = self.run_optimized_candidate(
-                    optimization_candidate_index=candidate_index, baseline_results=original_code_baseline
+                    optimization_candidate_index=candidate_index,
+                    baseline_results=original_code_baseline,
+                    function_to_optimize=function_to_optimize,
+                    original_helper_code=original_helper_code,
+                    file_path_to_helper_classes=file_path_to_helper_classes,
                 )
                 console.rule()
+
                 if not is_successful(run_results):
                     optimized_runtimes[candidate.optimization_id] = None
                     is_correct[candidate.optimization_id] = False
@@ -717,7 +738,6 @@ class Optimizer:
             did_update |= replace_function_definitions_in_module(
                 function_names=list(qualified_names),
                 optimized_code=optimized_code,
-                file_path_of_module_with_function_to_optimize=function_to_optimize_file_path,
                 module_abspath=module_abspath,
                 preexisting_objects=code_context.preexisting_objects,
                 project_root_path=self.args.project_root,
@@ -984,7 +1004,13 @@ class Optimizer:
         )
 
     def establish_original_code_baseline(
-        self, function_name: str, function_file_path: Path, code_context: CodeOptimizationContext
+        self,
+        function_name: str,
+        function_file_path: Path,
+        code_context: CodeOptimizationContext,
+        function_to_optimize: FunctionToOptimize,
+        original_helper_code: dict[Path, str],
+        file_path_to_helper_classes: dict[Path, set[str]],
     ) -> Result[tuple[OriginalCodeBaseline, npt.NDArray[np.float64], dict[str, np.float64], list[str]], str]:
         # For the original function - run the tests and get the runtime, plus coverage
         with progress_bar(f"Establishing original code baseline for {function_name}"):
@@ -1000,17 +1026,26 @@ class Optimizer:
                 test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
 
             coverage_results = None
-            behavioral_results, coverage_results = self.run_and_parse_tests(
-                testing_type=TestingMode.BEHAVIOR,
-                test_env=test_env,
-                test_files=self.test_files,
-                optimization_iteration=0,
-                testing_time=TOTAL_LOOPING_TIME,
-                enable_coverage=test_framework == "pytest",
-                function_name=function_name,
-                source_file=function_file_path,
-                code_context=code_context,
-            )
+            original_fto_code = function_file_path.read_text("utf-8")
+            # Instrument codeflash capture
+            try:
+                instrument_codeflash_capture(
+                    function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
+                )
+                behavioral_results, coverage_results = self.run_and_parse_tests(
+                    testing_type=TestingMode.BEHAVIOR,
+                    test_env=test_env,
+                    test_files=self.test_files,
+                    optimization_iteration=0,
+                    testing_time=TOTAL_LOOPING_TIME,
+                    enable_coverage=test_framework == "pytest",
+                    function_name=function_name,
+                    source_file=function_file_path,
+                    code_context=code_context,
+                )
+            finally:
+                # Remove codeflash capture
+                self.write_code_and_helpers(original_fto_code, original_helper_code, function_to_optimize.file_path)
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
@@ -1114,7 +1149,13 @@ class Optimizer:
             )
 
     def run_optimized_candidate(
-        self, *, optimization_candidate_index: int, baseline_results: OriginalCodeBaseline
+        self,
+        *,
+        optimization_candidate_index: int,
+        baseline_results: OriginalCodeBaseline,
+        function_to_optimize: FunctionToOptimize,
+        original_helper_code: dict[Path, str],
+        file_path_to_helper_classes: dict[Path, set[str]],
     ) -> Result[tuple[OptimizedCandidateResult, npt.NDArray[np.float64], dict[str, np.float64]], str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
@@ -1130,15 +1171,27 @@ class Optimizer:
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
 
-            candidate_behavior_results, _ = self.run_and_parse_tests(
-                testing_type=TestingMode.BEHAVIOR,
-                test_env=test_env,
-                test_files=self.test_files,
-                optimization_iteration=optimization_candidate_index,
-                testing_time=TOTAL_LOOPING_TIME,
-                enable_coverage=False,
-            )
+            # Instrument codeflash capture
+            candidate_fto_code = Path(function_to_optimize.file_path).read_text("utf-8")
+            candidate_helper_code = {}
+            for module_abspath in original_helper_code:
+                candidate_helper_code[module_abspath] = Path(module_abspath).read_text("utf-8")
+            try:
+                instrument_codeflash_capture(
+                    function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
+                )
 
+                candidate_behavior_results, _ = self.run_and_parse_tests(
+                    testing_type=TestingMode.BEHAVIOR,
+                    test_env=test_env,
+                    test_files=self.test_files,
+                    optimization_iteration=optimization_candidate_index,
+                    testing_time=TOTAL_LOOPING_TIME,
+                    enable_coverage=False,
+                )
+            # Remove instrumentation
+            finally:
+                self.write_code_and_helpers(candidate_fto_code, candidate_helper_code, function_to_optimize.file_path)
             console.print(
                 TestResults.report_to_tree(
                     candidate_behavior_results.get_test_pass_fail_report_by_type(),
