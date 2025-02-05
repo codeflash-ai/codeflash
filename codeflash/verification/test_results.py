@@ -29,11 +29,6 @@ class VerificationType(str, Enum):
     INIT_STATE_FTO = "init_state_fto"  # Correctness verification for fto class instance attributes after init
     INIT_STATE_HELPER = "init_state_helper"  # Correctness verification for helper class instance attributes after init
 
-    def __new__(cls, value: str) -> VerificationType | None:
-        obj = str.__new__(cls, value)
-        obj._value_ = value if value != "" else None
-        return obj
-
 
 class TestType(Enum):
     EXISTING_UNIT_TEST = 1
@@ -99,7 +94,7 @@ class FunctionTestInvocation:
     test_type: TestType
     return_value: Optional[object]  # The return value of the function invocation
     timed_out: Optional[bool]
-    verification_type: str = VerificationType.FUNCTION_CALL
+    verification_type: Optional[str] = VerificationType.FUNCTION_CALL
 
     @property
     def unique_invocation_loop_id(self) -> str:
