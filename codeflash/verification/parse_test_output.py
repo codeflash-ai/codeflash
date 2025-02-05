@@ -412,7 +412,9 @@ def merge_test_results(
                         test_type=xml_result.test_type,
                         return_value=result_bin.return_value,
                         timed_out=xml_result.timed_out,
-                        verification_type=VerificationType(result_bin.verification_type),
+                        verification_type=VerificationType(result_bin.verification_type)
+                        if result_bin.verification_type
+                        else None,
                     )
                 )
         elif xml_results.test_results[0].id.iteration_id is not None:
@@ -439,7 +441,9 @@ def merge_test_results(
                         timed_out=xml_result.timed_out
                         if bin_result.runtime is None
                         else False,  # If runtime was measured in the bin file, then the testcase did not time out
-                        verification_type=VerificationType(bin_result.verification_type),
+                        verification_type=VerificationType(bin_result.verification_type)
+                        if bin_result.verification_type
+                        else None,
                     )
                 )
         else:
@@ -463,7 +467,9 @@ def merge_test_results(
                         test_type=bin_result.test_type,
                         return_value=bin_result.return_value,
                         timed_out=xml_result.timed_out,  # only the xml gets the timed_out flag
-                        verification_type=VerificationType(bin_result.verification_type),
+                        verification_type=VerificationType(bin_result.verification_type)
+                        if bin_result.verification_type
+                        else None,
                     )
                 )
 

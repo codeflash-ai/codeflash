@@ -12,7 +12,7 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles, TestingMode
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.equivalence import compare_test_results
-from codeflash.verification.instrument_code import instrument_code
+from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.test_results import TestType
 
 # Used by cli instrumentation
@@ -103,7 +103,7 @@ def test_sort():
         with test_path.open("w") as f:
             f.write(code)
 
-        tests_root = Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+        tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/").resolve()
         project_root_path = (Path(__file__).parent / "..").resolve()
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
@@ -129,7 +129,7 @@ def test_sort():
             f.write(new_test)
 
         # add codeflash capture
-        instrument_code(func, {})
+        instrument_codeflash_capture(func, {}, tests_root)
 
         opt = Optimizer(
             Namespace(
@@ -285,15 +285,9 @@ def test_sort():
     assert new_test.replace('"', "'") == expected.format(
         module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
     ).replace('"', "'")
-
-    test_path = (
-        Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_class_method_behavior_results_temp.py"
-    ).resolve()
-    test_path_perf = (
-        Path(__file__).parent.resolve()
-        / "../code_to_optimize/tests/pytest/test_class_method_behavior_results_perf_temp.py"
-    ).resolve()
-    tests_root = Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+    tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/").resolve()
+    test_path = tests_root / "test_class_method_behavior_results_temp.py"
+    test_path_perf = tests_root / "test_class_method_behavior_results_perf_temp.py"
     project_root_path = (Path(__file__).parent / "..").resolve()
 
     try:
@@ -306,7 +300,7 @@ def test_sort():
             f.write(new_test)
 
         # Add codeflash capture
-        instrument_code(fto, {})
+        instrument_codeflash_capture(fto, {}, tests_root)
 
         opt = Optimizer(
             Namespace(
@@ -406,7 +400,7 @@ class BubbleSorter:
         importlib.reload(sys.modules[module_name])
 
         # Add codeflash capture
-        instrument_code(fto, {})
+        instrument_codeflash_capture(fto, {}, tests_root)
         opt = Optimizer(
             Namespace(
                 project_root=project_root_path,

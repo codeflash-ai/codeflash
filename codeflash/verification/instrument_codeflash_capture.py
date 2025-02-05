@@ -9,7 +9,9 @@ from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 
-def instrument_code(function_to_optimize: FunctionToOptimize, file_path_to_helper_class: dict[Path, set[str]]) -> None:
+def instrument_codeflash_capture(
+    function_to_optimize: FunctionToOptimize, file_path_to_helper_class: dict[Path, set[str]], tests_root: Path
+) -> None:
     """Instrument __init__ function with codeflash_capture decorator if it's in a class."""
     # Find the class parent
     if len(function_to_optimize.parents) == 1 and function_to_optimize.parents[0].type == "ClassDef":
@@ -23,42 +25,38 @@ def instrument_code(function_to_optimize: FunctionToOptimize, file_path_to_helpe
     ):
         file_path_to_helper_class[function_to_optimize.file_path].remove(class_parent.name)
     # Instrument fto class
-    with open(function_to_optimize.file_path) as f:
-        original_code = f.read()
-
+    original_code = function_to_optimize.file_path.read_text(encoding="utf-8")
     # Add decorator to init
     modified_code = add_codeflash_capture_to_init(
         target_classes={class_parent.name},
         fto_name=function_to_optimize.function_name,
         tmp_dir_path=str(get_run_tmp_file(Path("test_return_values"))),
         code=original_code,
+        tests_root=tests_root,
         is_fto=True,
     )
-
-    with open(function_to_optimize.file_path, "w") as f:
-        f.write(modified_code)
+    function_to_optimize.file_path.write_text(modified_code, encoding="utf-8")
 
     # Instrument helper classes
     for file_path, helper_classes in file_path_to_helper_class.items():
-        with open(file_path) as f:
-            original_code = f.read()
+        original_code = file_path.read_text(encoding="utf-8")
         modified_code = add_codeflash_capture_to_init(
             target_classes=helper_classes,
             fto_name=function_to_optimize.function_name,
             tmp_dir_path=str(get_run_tmp_file(Path("test_return_values"))),
             code=original_code,
+            tests_root=tests_root,
             is_fto=False,
         )
-        with open(file_path, "w") as f:
-            f.write(modified_code)
+        file_path.write_text(modified_code, encoding="utf-8")
 
 
 def add_codeflash_capture_to_init(
-    target_classes: set[str], fto_name: str, tmp_dir_path: str, code: str, is_fto: bool = False
+    target_classes: set[str], fto_name: str, tmp_dir_path: str, code: str, tests_root: Path, is_fto: bool = False
 ) -> str:
     """Add codeflash_capture decorator to __init__ function in the specified class."""
     tree = ast.parse(code)
-    transformer = InitDecorator(target_classes, fto_name, tmp_dir_path, is_fto)
+    transformer = InitDecorator(target_classes, fto_name, tmp_dir_path, tests_root, is_fto)
     modified_tree = transformer.visit(tree)
     if transformer.inserted_decorator:
         ast.fix_missing_locations(modified_tree)
@@ -70,12 +68,15 @@ def add_codeflash_capture_to_init(
 class InitDecorator(ast.NodeTransformer):
     """AST transformer that adds codeflash_capture decorator to specific class's __init__."""
 
-    def __init__(self, target_classes: set[str], fto_name: str, tmp_dir_path: str, is_fto=False) -> None:
+    def __init__(
+        self, target_classes: set[str], fto_name: str, tmp_dir_path: str, tests_root: Path, is_fto=False
+    ) -> None:
         self.target_classes = target_classes
         self.fto_name = fto_name
         self.tmp_dir_path = tmp_dir_path
         self.is_fto = is_fto
         self.has_import = False
+        self.tests_root = tests_root
         self.inserted_decorator = False
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> ast.ImportFrom:
@@ -110,12 +111,19 @@ class InitDecorator(ast.NodeTransformer):
             keywords=[
                 ast.keyword(arg="function_name", value=ast.Constant(value=".".join([node.name, "__init__"]))),
                 ast.keyword(arg="tmp_dir_path", value=ast.Constant(value=self.tmp_dir_path)),
+                ast.keyword(arg="tests_root", value=ast.Constant(value=str(self.tests_root))),
                 ast.keyword(arg="is_fto", value=ast.Constant(value=self.is_fto)),
             ],
         )
 
         for item in node.body:
-            if isinstance(item, ast.FunctionDef) and item.name == "__init__":
+            if (
+                isinstance(item, ast.FunctionDef)
+                and item.name == "__init__"
+                and item.args.args
+                and isinstance(item.args.args[0], ast.arg)
+                and item.args.args[0].arg == "self"
+            ):
                 has_init = True
 
                 # Add decorator at the start of the list if not already present

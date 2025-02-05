@@ -6,55 +6,81 @@ import inspect
 import os
 import sqlite3
 import time
+from pathlib import Path
 
 import dill as pickle
 
 from codeflash.verification.test_results import VerificationType
 
 
-def get_test_info_from_stack() -> tuple[str, str | None, str, str]:
-    """Extract test information from the call stack."""
-    stack = inspect.stack()
-
-    # Default values
+def get_test_info_from_stack(tests_root: str) -> tuple[str, str | None, str, str]:
+    """Extract test information by walking the call stack from the current frame."""
     test_module_name = ""
-    test_class_name = None
-    test_name = None
-    line_id = ""  # Note that the way this line_id is defined is from the line_id called in instrumentation
+    test_class_name: str | None = None
+    test_name: str | None = None
+    line_id = ""
 
-    # Search through stack for test information
-    for frame in stack:
-        if frame.function.startswith("test_"):  # May need a more robust way to find the test file
-            test_name = frame.function
-            test_module_name = inspect.getmodule(frame[0]).__name__
-            line_id = str(frame.lineno)
+    # Get current frame and skip our own function's frame
+    frame = inspect.currentframe()
+    if frame is not None:
+        frame = frame.f_back
+
+    # Walk the stack
+    while frame is not None:
+        function_name = frame.f_code.co_name
+        filename = frame.f_code.co_filename
+        lineno = frame.f_lineno
+
+        # Check if function name indicates a test (e.g., starts with "test_")
+        if function_name.startswith("test_"):
+            test_name = function_name
+            test_module = inspect.getmodule(frame)
+            if hasattr(test_module, "__name__"):
+                test_module_name = test_module.__name__
+            line_id = str(lineno)
+
             # Check if it's a method in a class
-            if "self" in frame.frame.f_locals:
-                test_class_name = frame.frame.f_locals["self"].__class__.__name__
+            if (
+                "self" in frame.f_locals
+                and hasattr(frame.f_locals["self"], "__class__")
+                and hasattr(frame.f_locals["self"].__class__, "__name__")
+            ):
+                test_class_name = frame.f_locals["self"].__class__.__name__
             break
-        # Check if module name starts with test
-        module_name = frame.frame.f_globals["__name__"]
-        if module_name and module_name.split(".")[-1].startswith("test_"):
-            test_module_name = module_name
-            line_id = str(frame.lineno)
-            if frame.function != "<module>":
-                test_name = frame.function  # Technically not a test, but save the info since there is no test function
-            # Check if it's in a class
-            if "self" in frame.frame.f_locals:
-                test_class_name = frame.frame.f_locals["self"].__class__.__name__
+
+        # Check for instantiation on the module level
+        if (
+            "__name__" in frame.f_globals
+            and frame.f_globals["__name__"].split(".")[-1].startswith("test_")
+            and Path(filename).resolve().is_relative_to(Path(tests_root))
+            and function_name == "<module>"
+        ):
+            test_module_name = frame.f_globals["__name__"]
+            line_id = str(lineno)
+
+            #     # Check if it's a method in a class
+            if (
+                "self" in frame.f_locals
+                and hasattr(frame.f_locals["self"], "__class__")
+                and hasattr(frame.f_locals["self"].__class__, "__name__")
+            ):
+                test_class_name = frame.f_locals["self"].__class__.__name__
             break
+
+        # Go to the previous frame
+        frame = frame.f_back
 
     return test_module_name, test_class_name, test_name, line_id
 
 
-def codeflash_capture(function_name: str, tmp_dir_path: str, is_fto: bool = False):
+def codeflash_capture(function_name: str, tmp_dir_path: str, tests_root: str, is_fto: bool = False):
     """Defines decorator to be instrumented onto the init function in the code. Collects info of the test that called this, and captures the state of the instance."""
 
     def decorator(wrapped):
         @functools.wraps(wrapped)
         def wrapper(*args, **kwargs):
             # Dynamic information retrieved from stack
-            test_module_name, test_class_name, test_name, line_id = get_test_info_from_stack()
+            test_module_name, test_class_name, test_name, line_id = get_test_info_from_stack(tests_root)
 
             # Get env variables
             loop_index = int(os.environ["CODEFLASH_LOOP_INDEX"])
@@ -98,7 +124,12 @@ def codeflash_capture(function_name: str, tmp_dir_path: str, is_fto: bool = Fals
                 gc.enable()
 
             # Capture instance state after initialization
-            instance_state = args[0].__dict__  # self is always the first argument
+            if hasattr(args[0], "__dict__"):
+                instance_state = args[
+                    0
+                ].__dict__  # self is always the first argument, this is ensured during instrumentation
+            else:
+                raise ValueError("Instance state could not be captured.")
             codeflash_cur.execute(
                 "CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)"
             )

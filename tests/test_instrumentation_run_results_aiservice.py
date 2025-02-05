@@ -12,7 +12,7 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.equivalence import compare_test_results
-from codeflash.verification.instrument_code import instrument_code
+from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.test_results import TestType, VerificationType
 
 # Used by aiservice instrumentation
@@ -118,14 +118,9 @@ def test_single_element_list():
     )
 
     # Init paths
-    test_path = (
-        Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_aiservice_behavior_results_temp.py"
-    ).resolve()
-    test_path_perf = (
-        Path(__file__).parent.resolve()
-        / "../code_to_optimize/tests/pytest/test_aiservice_behavior_results_perf_temp.py"
-    ).resolve()
-    tests_root = Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+    tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/").resolve()
+    test_path = tests_root / "test_aiservice_behavior_results_temp.py"
+    test_path_perf = tests_root / "test_aiservice_behavior_results_perf_temp.py"
     project_root_path = (Path(__file__).parent / "..").resolve()
     run_cwd = Path(__file__).parent.parent.resolve()
     os.chdir(run_cwd)
@@ -272,7 +267,7 @@ def test_single_element_list():
         with test_path.open("w") as f:
             f.write(instrumented_behavior_test_source)
         # Add codeflash capture decorator
-        instrument_code(function_to_optimize, {})
+        instrument_codeflash_capture(function_to_optimize, {}, tests_root)
         opt = Optimizer(
             Namespace(
                 project_root=project_root_path,
@@ -350,7 +345,7 @@ class BubbleSorter:
         importlib.reload(sys.modules[module_name])
 
         # Add codeflash capture
-        instrument_code(function_to_optimize, {})
+        instrument_codeflash_capture(function_to_optimize, {}, tests_root)
         opt = Optimizer(
             Namespace(
                 project_root=project_root_path,
@@ -396,7 +391,7 @@ class BubbleSorter:
                         """
         fto_path.write_text(optimized_code_new_attr, "utf-8")
         importlib.reload(sys.modules[module_name])
-        instrument_code(function_to_optimize, {})
+        instrument_codeflash_capture(function_to_optimize, {}, tests_root)
         opt = Optimizer(
             Namespace(
                 project_root=project_root_path,

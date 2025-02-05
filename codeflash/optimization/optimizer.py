@@ -69,7 +69,7 @@ from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.bayesian_analysis import compare_function_runtime_distributions
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
-from codeflash.verification.instrument_code import instrument_code
+from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestResults, TestType
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests
@@ -1029,7 +1029,9 @@ class Optimizer:
             original_fto_code = function_file_path.read_text("utf-8")
             # Instrument codeflash capture
             try:
-                instrument_code(function_to_optimize, file_path_to_helper_classes)
+                instrument_codeflash_capture(
+                    function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
+                )
                 behavioral_results, coverage_results = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,
@@ -1175,7 +1177,9 @@ class Optimizer:
             for module_abspath in original_helper_code:
                 candidate_helper_code[module_abspath] = Path(module_abspath).read_text("utf-8")
             try:
-                instrument_code(function_to_optimize, file_path_to_helper_classes)
+                instrument_codeflash_capture(
+                    function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
+                )
 
                 candidate_behavior_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,

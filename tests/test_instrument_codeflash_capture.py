@@ -3,7 +3,7 @@ from pathlib import Path
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
-from codeflash.verification.instrument_code import instrument_code
+from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 
 
 def test_add_codeflash_capture():
@@ -15,21 +15,20 @@ class MyClass:
     def target_function(self):
         return self.x + 1
 """
-
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
     expected = f"""
 from codeflash.verification.codeflash_capture import codeflash_capture
 
 
 class MyClass:
 
-    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
+    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=True)
     def __init__(self):
         self.x = 1
 
     def target_function(self):
         return self.x + 1
 """
-    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
     test_path.write_text(original_code)
 
     function = FunctionToOptimize(
@@ -37,7 +36,7 @@ class MyClass:
     )
 
     try:
-        instrument_code(function, {})
+        instrument_codeflash_capture(function, {}, test_path.parent)
         modified_code = test_path.read_text()
         assert modified_code.strip() == expected.strip()
 
@@ -65,7 +64,7 @@ class MyClass:
     function = FunctionToOptimize(function_name="target_function", file_path=test_path, parents=[])
 
     try:
-        instrument_code(function, {})
+        instrument_codeflash_capture(function, {}, test_path.parent)
         modified_code = test_path.read_text()
         assert modified_code.strip() == expected.strip()
     finally:
@@ -80,21 +79,20 @@ class MyClass(ParentClass):
     def target_function(self):
         return self.x + 1
 """
-
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
     expected = f"""
 from codeflash.verification.codeflash_capture import codeflash_capture
 
 
 class MyClass(ParentClass):
 
-    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
+    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=True)
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def target_function(self):
         return self.x + 1
 """
-    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
     test_path.write_text(original_code)
 
     function = FunctionToOptimize(
@@ -102,7 +100,7 @@ class MyClass(ParentClass):
     )
 
     try:
-        instrument_code(function, {})
+        instrument_codeflash_capture(function, {}, test_path.parent)
         modified_code = test_path.read_text()
         assert modified_code.strip() == expected.strip()
 
@@ -123,14 +121,14 @@ class MyClass:
     def helper(self):
         return self.x
 """
-
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
     expected = f"""
 from codeflash.verification.codeflash_capture import codeflash_capture
 
 
 class MyClass:
 
-    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
+    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=True)
     def __init__(self):
         self.x = 1
 
@@ -140,7 +138,7 @@ class MyClass:
     def helper(self):
         return self.x
 """
-    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+
     test_path.write_text(original_code)
 
     function = FunctionToOptimize(
@@ -148,8 +146,8 @@ class MyClass:
     )
 
     try:
-        instrument_code(
-            function, {test_path: {"MyClass"}}
+        instrument_codeflash_capture(
+            function, {test_path: {"MyClass"}}, test_path.parent
         )  # MyClass was removed from the file_path_to_helper_class as it shares class with FTO
         modified_code = test_path.read_text()
         assert modified_code.strip() == expected.strip()
@@ -177,6 +175,7 @@ class HelperClass:
     def helper(self):
         return 1
 """
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
     expected = f"""
 from test_helper_file import HelperClass
 
@@ -185,7 +184,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class MyClass:
 
-    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
+    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=True)
     def __init__(self):
         self.x = 1
 
@@ -198,14 +197,14 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class HelperClass:
 
-    @codeflash_capture(function_name='HelperClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=False)
+    @codeflash_capture(function_name='HelperClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=False)
     def __init__(self):
         self.y = 1
 
     def helper(self):
         return 1
 """
-    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+
     test_path.write_text(original_code)
     helper_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_helper_file.py").resolve()
     helper_path.write_text(original_helper)
@@ -215,7 +214,7 @@ class HelperClass:
     )
 
     try:
-        instrument_code(function, {helper_path: {"HelperClass"}})
+        instrument_codeflash_capture(function, {helper_path: {"HelperClass"}}, test_path.parent)
         modified_code = test_path.read_text()
         assert modified_code.strip() == expected.strip()
         assert helper_path.read_text().strip() == expected_helper.strip()
@@ -262,8 +261,7 @@ class AnotherHelperClass:
     def another_helper(self):
         return 3
 """
-
-    # Expected output code with decorators
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
     expected = f"""
 from helper_file_1 import HelperClass1
 from helper_file_2 import AnotherHelperClass, HelperClass2
@@ -273,7 +271,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class MyClass:
 
-    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=True)
+    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=True)
     def __init__(self):
         self.x = 1
 
@@ -291,7 +289,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class HelperClass1:
 
-    @codeflash_capture(function_name='HelperClass1.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=False)
+    @codeflash_capture(function_name='HelperClass1.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=False)
     def __init__(self):
         self.y = 1
 
@@ -306,7 +304,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class HelperClass2:
 
-    @codeflash_capture(function_name='HelperClass2.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=False)
+    @codeflash_capture(function_name='HelperClass2.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=False)
     def __init__(self):
         self.z = 2
 
@@ -315,7 +313,7 @@ class HelperClass2:
 
 class AnotherHelperClass:
 
-    @codeflash_capture(function_name='AnotherHelperClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', is_fto=False)
+    @codeflash_capture(function_name='AnotherHelperClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=False)
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -324,7 +322,6 @@ class AnotherHelperClass:
 """
 
     # Set up test files
-    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
     helper1_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/helper_file_1.py").resolve()
     helper2_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/helper_file_2.py").resolve()
 
@@ -341,7 +338,7 @@ class AnotherHelperClass:
     try:
         # Instrument code with multiple helper files
         helper_classes = {helper1_path: {"HelperClass1"}, helper2_path: {"HelperClass2", "AnotherHelperClass"}}
-        instrument_code(function, helper_classes)
+        instrument_codeflash_capture(function, helper_classes, test_path.parent)
 
         # Verify the modifications
         modified_code = test_path.read_text()

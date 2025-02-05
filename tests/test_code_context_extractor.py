@@ -4,7 +4,6 @@ import tempfile
 from argparse import Namespace
 from collections import defaultdict
 from pathlib import Path
-from textwrap import dedent
 
 import pytest
 from codeflash.context.code_context_extractor import get_code_optimization_context
@@ -76,28 +75,28 @@ def test_code_replacement10() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
 
     expected_read_write_context = """
-    from __future__ import annotations
+from __future__ import annotations
 
-    class HelperClass:
-        def __init__(self, name):
-            self.name = name
+class HelperClass:
+    def __init__(self, name):
+        self.name = name
 
-        def helper_method(self):
-            return self.name
+    def helper_method(self):
+        return self.name
 
 
-    class MainClass:
-        def __init__(self, name):
-            self.name = name
+class MainClass:
+    def __init__(self, name):
+        self.name = name
 
-        def main_method(self):
-            return HelperClass(self.name).helper_method()
+    def main_method(self):
+        return HelperClass(self.name).helper_method()
 """
     expected_read_only_context = """
     """
 
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_class_method_dependencies() -> None:
@@ -144,8 +143,8 @@ class Graph:
 
 """
     expected_read_only_context = ""
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_bubble_sort_helper() -> None:
@@ -187,8 +186,8 @@ def sort_from_another_file(arr):
 """
     expected_read_only_context = ""
 
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_flavio_typed_code_helper() -> None:
@@ -383,7 +382,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
         read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
         expected_read_write_context = """
-         class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
+class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
 
     def __init__(self) -> None: ...
 
@@ -505,7 +504,7 @@ class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
     def delete(self, *, key: tuple[str, _KEY_T]) -> None: ...
 
     def put(self, *, key: tuple[str, _KEY_T], data: _STORE_T) -> None: ...
-    
+
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
 _CacheBackendT = TypeVar("_CacheBackendT", bound=CacheBackend)
@@ -534,8 +533,8 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
     __backend__: _CacheBackendT
 ```
 '''
-        assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-        assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+        assert read_write_context.strip() == expected_read_write_context.strip()
+        assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_example_class() -> None:
@@ -609,8 +608,8 @@ class HelperClass:
         return "HelperClass" + str(self.x)
 ```
 """
-        assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-        assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+        assert read_write_context.strip() == expected_read_write_context.strip()
+        assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_example_class_token_limit_1() -> None:
@@ -689,8 +688,8 @@ class HelperClass:
         return "HelperClass" + str(self.x)
 ```
 """
-        assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-        assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+        assert read_write_context.strip() == expected_read_write_context.strip()
+        assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_example_class_token_limit_2() -> None:
@@ -745,23 +744,23 @@ class HelperClass:
         read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
         # In this scenario, the read-only code context is too long even after removing docstrings, hence we remove it completely.
         expected_read_write_context = """
-        class MyClass:
-            def __init__(self):
-                self.x = 1
-            def target_method(self):
-                \"\"\"Docstring for target method\"\"\"
-                y = HelperClass().helper_method()
+class MyClass:
+    def __init__(self):
+        self.x = 1
+    def target_method(self):
+        \"\"\"Docstring for target method\"\"\"
+        y = HelperClass().helper_method()
 
-        class HelperClass:
-            def __init__(self):
-                \"\"\"Initialize the HelperClass.\"\"\"
-                self.x = 1
-            def helper_method(self):
-                return self.x
-                """
+class HelperClass:
+    def __init__(self):
+        \"\"\"Initialize the HelperClass.\"\"\"
+        self.x = 1
+    def helper_method(self):
+        return self.x
+        """
         expected_read_only_context = ""
-        assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-        assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+        assert read_write_context.strip() == expected_read_write_context.strip()
+        assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_example_class_token_limit_3() -> None:
@@ -887,8 +886,8 @@ if __name__ == "__main__":
     print("Processed data:", result)
 ```
 """
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_repo_helper_of_helper() -> None:
@@ -972,8 +971,8 @@ class DataTransformer:
 ```
 """
 
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_repo_helper_of_helper_same_class() -> None:
@@ -1039,8 +1038,8 @@ class DataProcessor:
 
 """
 
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_repo_helper_of_helper_same_file() -> None:
@@ -1101,8 +1100,8 @@ class DataProcessor:
 ```
 """
 
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_repo_helper_all_same_file() -> None:
@@ -1145,8 +1144,8 @@ class DataTransformer:
 
 """
 
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
 
 
 def test_repo_helper_circular_dependency() -> None:
@@ -1207,5 +1206,5 @@ class DataProcessor:
 
 """
 
-    assert read_write_context.strip() == dedent(expected_read_write_context).strip()
-    assert read_only_context.strip() == dedent(expected_read_only_context).strip()
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
