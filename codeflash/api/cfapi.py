@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
@@ -12,11 +13,13 @@ from pydantic.json import pydantic_encoder
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
 from codeflash.code_utils.git_utils import get_repo_owner_and_name
+from codeflash.version import __version__
 
 if TYPE_CHECKING:
     from requests import Response
 
     from codeflash.github.PrComment import FileDiffContent, PrComment
+from packaging import version
 
 if os.environ.get("CODEFLASH_CFAPI_SERVER", default="prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
@@ -26,7 +29,9 @@ else:
     CFAPI_BASE_URL = "https://app.codeflash.ai"
 
 
-def make_cfapi_request(endpoint: str, method: str, payload: dict[str, Any] | None = None) -> Response:
+def make_cfapi_request(
+    endpoint: str, method: str, payload: dict[str, Any] | None = None, extra_headers: dict[str, str] | None = None
+) -> Response:
     """Make an HTTP request using the specified method, URL, headers, and JSON payload.
 
     :param endpoint: The endpoint URL to send the request to.
@@ -36,6 +41,8 @@ def make_cfapi_request(endpoint: str, method: str, payload: dict[str, Any] | Non
     """
     url = f"{CFAPI_BASE_URL}/cfapi{endpoint}"
     cfapi_headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
+    if extra_headers:
+        cfapi_headers.update(extra_headers)
     if method.upper() == "POST":
         json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
         cfapi_headers["Content-Type"] = "application/json"
@@ -54,9 +61,23 @@ def get_user_id() -> Optional[str]:
     if not ensure_codeflash_api_key():
         return None
 
-    response = make_cfapi_request(endpoint="/cli-get-user", method="GET")
+    response = make_cfapi_request(endpoint="/cli-get-user", method="GET", extra_headers={"cli_version": __version__})
     if response.status_code == 200:
-        return response.text
+        if "min_version" not in response.text:
+            return response.text
+        resp_json = response.json()
+        userid: str | None = resp_json.get("userId")
+        min_version: str | None = resp_json.get("min_version")
+        if userid:
+            if min_version and version.parse(min_version) > version.parse(__version__):
+                msg = "Your Codeflash CLI version is outdated. Please update to the latest version using `pip install --upgrade codeflash`."
+                console.print(f"[bold red]{msg}[/bold red]")
+                sys.exit(1)
+            return userid
+
+        logger.error("Failed to retrieve userid from the response.")
+        return None
+
     logger.error(f"Failed to look up your userid; is your CF API key valid? ({response.reason})")
     return None
 
