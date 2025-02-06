@@ -1,16 +1,33 @@
 from __future__ import annotations
 
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    import numpy as np
+    import numpy.typing as npt
+
 import sys
 from enum import Enum
-from pathlib import Path
-from typing import Iterator, Optional, cast
+from typing import Optional, cast
 
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 from rich.tree import Tree
 
 from codeflash.cli_cmds.console import DEBUG_MODE, logger
+from codeflash.verification.bayesian_analysis import analyze_function_runtime_sums_data
 from codeflash.verification.comparator import comparator
+
+
+class VerificationType(str, Enum):
+    FUNCTION_CALL = (
+        "function_call"  # Correctness verification for a test function, checks input values and output values)
+    )
+    INIT_STATE_FTO = "init_state_fto"  # Correctness verification for fto class instance attributes after init
+    INIT_STATE_HELPER = "init_state_helper"  # Correctness verification for helper class instance attributes after init
 
 
 class TestType(Enum):
@@ -19,8 +36,11 @@ class TestType(Enum):
     GENERATED_REGRESSION = 3
     REPLAY_TEST = 4
     CONCOLIC_COVERAGE_TEST = 5
+    INIT_STATE_TEST = 6
 
     def to_name(self) -> str:
+        if self == TestType.INIT_STATE_TEST:
+            return ""
         names = {
             TestType.EXISTING_UNIT_TEST: "⚙️ Existing Unit Tests",
             TestType.INSPIRED_REGRESSION: "🎨 Inspired Regression Tests",
@@ -35,7 +55,7 @@ class TestType(Enum):
 class InvocationId:
     test_module_path: str  # The fully qualified name of the test module
     test_class_name: Optional[str]  # The name of the class where the test is defined
-    test_function_name: str  # The name of the test_function. Does not include the components of the file_name
+    test_function_name: Optional[str]  # The name of the test_function. Does not include the components of the file_name
     function_getting_tested: str
     iteration_id: Optional[str]
 
@@ -74,6 +94,7 @@ class FunctionTestInvocation:
     test_type: TestType
     return_value: Optional[object]  # The return value of the function invocation
     timed_out: Optional[bool]
+    verification_type: Optional[str] = VerificationType.FUNCTION_CALL
 
     @property
     def unique_invocation_loop_id(self) -> str:
@@ -151,23 +172,38 @@ class TestResults(BaseModel):
             )
         return tree
 
+    def usable_runtime_data_by_test_case(self) -> dict[InvocationId, list[int]]:
+        for result in self.test_results:
+            if result.did_pass and not result.runtime:
+                logger.debug(
+                    f"Ignoring test case that passed but had no runtime -> {result.id}, Loop # {result.loop_index}"
+                )
+        usable_runtimes = [
+            (result.id, result.runtime) for result in self.test_results if result.did_pass and result.runtime
+        ]
+        return {
+            usable_id: [runtime[1] for runtime in usable_runtimes if runtime[0] == usable_id]
+            for usable_id in {runtime[0] for runtime in usable_runtimes}
+        }
+
     def total_passed_runtime(self) -> int:
         """Calculate the sum of runtimes of all test cases that passed, where a testcase runtime
         is the minimum value of all looped execution runtimes.
 
         :return: The runtime in nanoseconds.
         """
-        for result in self.test_results:
-            if result.did_pass and not result.runtime:
-                logger.debug(
-                    f"Ignoring test case that passed but had no runtime -> {result.id}, Loop # {result.loop_index}"
-                )
-        usable_results = [result for result in self.test_results if result.did_pass and result.runtime]
         return sum(
             [
-                min([result.runtime for result in usable_results if result.id == invocation_id])
-                for invocation_id in {result.id for result in usable_results}
+                min(usable_runtime_data)
+                for invocation_id, usable_runtime_data in self.usable_runtime_data_by_test_case().items()
             ]
+        )
+
+    def bayesian_nonparametric_bootstrap_analysis(
+        self, bootstrap_size: int
+    ) -> tuple[npt.NDArray[np.float64], dict[str, np.float64]]:
+        return analyze_function_runtime_sums_data(
+            list(self.usable_runtime_data_by_test_case().values()), bootstrap_size
         )
 
     def __iter__(self) -> Iterator[FunctionTestInvocation]:

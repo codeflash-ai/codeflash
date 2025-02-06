@@ -1,18 +1,24 @@
+import ast
+import copy
 import dataclasses
 import datetime
 import decimal
 import re
+import sys
 from enum import Enum, Flag, IntFlag, auto
+from pathlib import Path
 
 import pydantic
 import pytest
+from pathlib import Path
+
 from codeflash.either import Failure, Success
 from codeflash.verification.comparator import comparator
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults, TestType
 
 
-def test_basic_python_objects():
+def test_basic_python_objects() -> None:
     a = 5
     b = 5
     c = 6
@@ -120,40 +126,40 @@ def test_basic_python_objects():
     assert not comparator(a, c)
 
 
-def test_standard_python_library_objects():
-    a = datetime.datetime(2020, 2, 2, 2, 2, 2)
-    b = datetime.datetime(2020, 2, 2, 2, 2, 2)
-    c = datetime.datetime(2020, 2, 2, 2, 2, 3)
+def test_standard_python_library_objects() -> None:
+    a = datetime.datetime(2020, 2, 2, 2, 2, 2) # type: ignore
+    b = datetime.datetime(2020, 2, 2, 2, 2, 2) # type: ignore
+    c = datetime.datetime(2020, 2, 2, 2, 2, 3) # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
-    a = datetime.date(2020, 2, 2)
-    b = datetime.date(2020, 2, 2)
-    c = datetime.date(2020, 2, 3)
+    a = datetime.date(2020, 2, 2) # type: ignore
+    b = datetime.date(2020, 2, 2) # type: ignore
+    c = datetime.date(2020, 2, 3) # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
-    a = datetime.timedelta(days=1)
-    b = datetime.timedelta(days=1)
-    c = datetime.timedelta(days=2)
+    a = datetime.timedelta(days=1) # type: ignore
+    b = datetime.timedelta(days=1) # type: ignore
+    c = datetime.timedelta(days=2) # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
-    a = datetime.time(2, 2, 2)
-    b = datetime.time(2, 2, 2)
-    c = datetime.time(2, 2, 3)
+    a = datetime.time(2, 2, 2) # type: ignore
+    b = datetime.time(2, 2, 2) # type: ignore
+    c = datetime.time(2, 2, 3) # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
-    a = datetime.timezone.utc
-    b = datetime.timezone.utc
-    c = datetime.timezone(datetime.timedelta(hours=1))
+    a = datetime.timezone.utc # type: ignore
+    b = datetime.timezone.utc # type: ignore
+    c = datetime.timezone(datetime.timedelta(hours=1)) # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
-    a = decimal.Decimal(3.14)
-    b = decimal.Decimal(3.14)
-    c = decimal.Decimal(3.15)
+    a = decimal.Decimal(3.14) # type: ignore
+    b = decimal.Decimal(3.14) # type: ignore
+    c = decimal.Decimal(3.15) # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
@@ -167,15 +173,15 @@ def test_standard_python_library_objects():
         GREEN = auto()
         BLUE = auto()
 
-    a = Color.RED
-    b = Color.RED
-    c = Color.GREEN
+    a = Color.RED # type: ignore
+    b = Color.RED # type: ignore
+    c = Color.GREEN # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
-    a = Color2.RED
-    b = Color2.RED
-    c = Color2.GREEN
+    a = Color2.RED # type: ignore
+    b = Color2.RED # type: ignore
+    c = Color2.GREEN # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
@@ -184,9 +190,9 @@ def test_standard_python_library_objects():
         GREEN = auto()
         BLUE = auto()
 
-    a = Color4.RED
-    b = Color4.RED
-    c = Color4.GREEN
+    a = Color4.RED  # type: ignore
+    b = Color4.RED # type: ignore
+    c = Color4.GREEN # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
@@ -296,7 +302,7 @@ def test_numpy():
 
 def test_scipy():
     try:
-        import scipy as sp
+        import scipy as sp # type: ignore
     except ImportError:
         pytest.skip()
     a = sp.sparse.csr_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
@@ -466,7 +472,7 @@ def test_pandas():
 
 def test_pyrsistent():
     try:
-        from pyrsistent import PBag, PClass, PRecord, field, pdeque, pmap, pset, pvector
+        from pyrsistent import PBag, PClass, PRecord, field, pdeque, pmap, pset, pvector # type: ignore
     except ImportError:
         pytest.skip()
 
@@ -667,6 +673,92 @@ def test_custom_object():
     assert comparator(C, E)
 
 
+def test_custom_object_2():
+    fto_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort_method.py").resolve()
+    original_code = fto_path.read_text("utf-8")
+    from code_to_optimize.bubble_sort_method import BubbleSorter
+
+    a = BubbleSorter()
+    assert a.x == 0
+    try:
+        # Remove the module from sys.modules, to get the updated class
+        sys.modules.pop("code_to_optimize.bubble_sort_method", None)
+        from code_to_optimize.bubble_sort_method import BubbleSorter
+
+        b = BubbleSorter()
+        assert comparator(
+            a, b
+        )  # Note that type(a) != type(b) as the class type objects are different, even if the code is the same.
+
+        optimized_code_mutated_attr = """
+class BubbleSorter:
+    z = 0
+
+    def __init__(self, x=1):
+        self.x = x
+
+    def sorter(self, arr):
+        for i in range(len(arr)):
+            for j in range(len(arr) - 1):
+                if arr[j] > arr[j + 1]:
+                    temp = arr[j]
+                    arr[j] = arr[j + 1]
+                    arr[j + 1] = temp
+        return arr
+                                    """
+        fto_path.write_text(optimized_code_mutated_attr, "utf-8")
+        sys.modules.pop("code_to_optimize.bubble_sort_method", None)
+        from code_to_optimize.bubble_sort_method import BubbleSorter
+
+        c = BubbleSorter()
+        assert c.x == 1
+        assert not comparator(a, c)
+
+        optimized_code_new_attr = """
+class BubbleSorter:
+    z = 5
+
+    def __init__(self, x=0):
+        self.x = x
+
+    def sorter(self, arr):
+        for i in range(len(arr)):
+            for j in range(len(arr) - 1):
+                if arr[j] > arr[j + 1]:
+                    temp = arr[j]
+                    arr[j] = arr[j + 1]
+                    arr[j + 1] = temp
+        return arr
+                                            """
+        fto_path.write_text(optimized_code_new_attr, "utf-8")
+        sys.modules.pop("code_to_optimize.bubble_sort_method", None)
+        from code_to_optimize.bubble_sort_method import BubbleSorter
+
+        d = BubbleSorter()
+        assert d.x == 0
+        # Currently, we do not check if class variables are different, since the code replacer does not allow this.
+        # In the future, if this functionality is allowed, this assert should be false.
+        assert comparator(a, d)
+    finally:
+        fto_path.write_text(original_code, "utf-8")
+
+
+def test_superset():
+    class A:
+        def __init__(self):
+            self.a = 1
+
+    obj = A()
+    obj.x = 3
+
+    assert comparator(A(), obj, superset_obj=True)
+    assert not comparator(obj, A(), superset_obj=True)
+    assert not comparator(A(), obj)
+    assert not comparator(obj, A())
+    assert comparator(obj, obj, superset_obj=True)
+    assert comparator(obj, obj)
+
+
 def test_compare_results_fn():
     original_results = TestResults()
     original_results.add(
@@ -678,7 +770,7 @@ def test_compare_results_fn():
                 function_getting_tested="function_getting_tested",
                 iteration_id="0",
             ),
-            file_name="file_name",
+            file_name=Path("file_name"),
             did_pass=True,
             runtime=5,
             test_framework="unittest",
@@ -699,7 +791,7 @@ def test_compare_results_fn():
                 function_getting_tested="function_getting_tested",
                 iteration_id="0",
             ),
-            file_name="file_name",
+            file_name=Path("file_name"),
             did_pass=True,
             runtime=10,
             test_framework="unittest",
@@ -722,7 +814,7 @@ def test_compare_results_fn():
                 function_getting_tested="function_getting_tested",
                 iteration_id="0",
             ),
-            file_name="file_name",
+            file_name=Path("file_name"),
             did_pass=True,
             runtime=10,
             test_framework="unittest",
@@ -745,7 +837,7 @@ def test_compare_results_fn():
                 function_getting_tested="function_getting_tested",
                 iteration_id="0",
             ),
-            file_name="file_name",
+            file_name=Path("file_name"),
             did_pass=True,
             runtime=10,
             test_framework="unittest",
@@ -764,7 +856,7 @@ def test_compare_results_fn():
                 function_getting_tested="function_getting_tested",
                 iteration_id="2",
             ),
-            file_name="file_name",
+            file_name=Path("file_name"),
             did_pass=True,
             runtime=10,
             test_framework="unittest",
@@ -787,7 +879,7 @@ def test_compare_results_fn():
                 function_getting_tested="function_getting_tested",
                 iteration_id="0",
             ),
-            file_name="file_name",
+            file_name=Path("file_name"),
             did_pass=False,
             runtime=5,
             test_framework="unittest",
@@ -941,3 +1033,24 @@ def test_exceptions_comparator():
 
     zero_division_exc3 = ZeroDivisionError("Different message")
     assert comparator(zero_division_exc1, zero_division_exc3)
+
+    assert comparator(..., ...)
+    assert comparator(Ellipsis, Ellipsis)
+
+    assert not comparator(..., None)
+
+    assert not comparator(Ellipsis, None)   
+
+    code7 = "a = 1 + 2"
+    module7 = ast.parse(code7)
+    for node in ast.walk(module7):
+       for child in ast.iter_child_nodes(node):
+         child.parent = node # type: ignore
+    module8 = copy.deepcopy(module7)
+    assert comparator(module7, module8)
+
+    code2 = "a = 1 + 3"
+
+    module2 = ast.parse(code2)
+
+    assert not comparator(module7, module2)
