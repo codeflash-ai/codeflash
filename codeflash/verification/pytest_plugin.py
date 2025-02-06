@@ -137,6 +137,9 @@ class PyTest_Loops:
                     item._nodeid = self._set_nodeid(item._nodeid, count)
 
                 next_item: pytest.Item = session.items[index + 1] if index + 1 < len(session.items) else None
+
+                self._clear_lru_caches(item)
+
                 item.config.hook.pytest_runtest_protocol(item=item, nextitem=next_item)
                 if session.shouldfail:
                     raise session.Failed(session.shouldfail)
@@ -199,6 +202,7 @@ class PyTest_Loops:
                     pass
         except Exception:  # noqa: BLE001, S110
             pass
+
     def _set_nodeid(self, nodeid: str, count: int) -> str:
         """Set loop count when using duration.
 
