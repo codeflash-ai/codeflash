@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import importlib
+import inspect
+
 # System Imports
 import logging
 import os
 import re
 import time
 import warnings
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 from unittest import TestCase
 
 # PyTest Imports
@@ -133,6 +136,9 @@ class PyTest_Loops:
                     item._nodeid = self._set_nodeid(item._nodeid, count)
 
                 next_item: pytest.Item = session.items[index + 1] if index + 1 < len(session.items) else None
+
+                self._clear_lru_caches(next_item)
+
                 item.config.hook.pytest_runtest_protocol(item=item, nextitem=next_item)
                 if session.shouldfail:
                     raise session.Failed(session.shouldfail)
@@ -188,6 +194,72 @@ class PyTest_Loops:
             and time.time() - start_time > self._get_total_time(session)
         )
 
+    def _clear_lru_caches(self, item: pytest.Item) -> None:
+        processed_functions: set[Callable] = set()
+        cleared_caches = 0
+        protected_modules = {
+            "gc",
+            "inspect",
+            "os",
+            "sys",
+            "time",
+            "functools",
+            "pathlib",
+            "typing",
+            "dill",
+            "pytest",
+            "importlib",
+        }
+
+        def _clear_cache_for_object(obj: Any) -> None:
+            if obj in processed_functions:
+                return
+            processed_functions.add(obj)
+
+            try:
+                obj_module = inspect.getmodule(obj)
+                module_name = obj_module.__name__.split(".")[0] if obj_module is not None else None
+            except AttributeError:
+                module_name = None
+
+            if module_name in protected_modules:
+                return
+
+            if hasattr(obj, "cache_clear") and callable(obj.cache_clear):
+                try:
+                    obj.cache_clear()
+                    nonlocal cleared_caches
+                    cleared_caches += 1
+                    print(f"Cleared cache for: ^{obj.__name__}^")
+                except Exception:  # noqa: BLE001, S110
+                    pass
+
+            if callable(obj):
+                try:
+                    for name in obj.__globals__:
+                        nested_obj = obj.__globals__[name]
+                        if callable(nested_obj):
+                            _clear_cache_for_object(nested_obj)
+                except Exception:  # noqa: BLE001, S110
+                    pass
+
+        if hasattr(item, "function") and callable(item.function):
+            module_name = item.function.__module__
+            full_file_path = inspect.getfile(item.function)
+            try:
+                module = importlib.import_module(module_name)
+
+                for _, obj in inspect.getmembers(module):
+                    if callable(obj):
+                        _clear_cache_for_object(obj)
+
+                    if isinstance(obj, type):
+                        for _, class_method in inspect.getmembers(obj, predicate=inspect.isfunction):
+                            _clear_cache_for_object(class_method)
+
+            except Exception:  # noqa: BLE001, S110
+                pass
+
     @pytest.fixture
     def __pytest_loop_step_number(self, request: pytest.FixtureRequest) -> int:
         """Set step number for loop.
@@ -205,8 +277,7 @@ class PyTest_Loops:
                     warnings.warn("Repeating unittest class tests not supported")
                 else:
                     raise UnexpectedError(
-                        "This call couldn't work with pytest-loops. "
-                        "Please consider raising an issue with your usage."
+                        "This call couldn't work with pytest-loops. Please consider raising an issue with your usage."
                     )
         return count
 
@@ -226,7 +297,7 @@ class PyTest_Loops:
             metafunc.fixturenames.append("__pytest_loop_step_number")
 
             def make_progress_id(i: int, n: int = count) -> str:
-                return f"{n}/{i+1}"
+                return f"{n}/{i + 1}"
 
             scope = metafunc.config.option.codeflash_loops_scope
             metafunc.parametrize(
