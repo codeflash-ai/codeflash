@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import contextlib
+import inspect
+
 # System Imports
 import logging
 import os
 import re
+import sys
 import time
 import warnings
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 from unittest import TestCase
 
 # PyTest Imports
@@ -133,6 +137,9 @@ class PyTest_Loops:
                     item._nodeid = self._set_nodeid(item._nodeid, count)
 
                 next_item: pytest.Item = session.items[index + 1] if index + 1 < len(session.items) else None
+
+                self._clear_lru_caches(item)
+
                 item.config.hook.pytest_runtest_protocol(item=item, nextitem=next_item)
                 if session.shouldfail:
                     raise session.Failed(session.shouldfail)
@@ -142,6 +149,59 @@ class PyTest_Loops:
                 break  # exit loop
             time.sleep(self._get_delay_time(session))
         return True
+
+    def _clear_lru_caches(self, item: pytest.Item) -> None:
+        processed_functions: set[Callable] = set()
+        protected_modules = {
+            "gc",
+            "inspect",
+            "os",
+            "sys",
+            "time",
+            "functools",
+            "pathlib",
+            "typing",
+            "dill",
+            "pytest",
+            "importlib",
+        }
+
+        def _clear_cache_for_object(obj: Any) -> None:  # noqa: ANN401
+            if obj in processed_functions:
+                return
+            processed_functions.add(obj)
+
+            if hasattr(obj, "__wrapped__"):
+                module_name = obj.__wrapped__.__module__
+            else:
+                try:
+                    obj_module = inspect.getmodule(obj)
+                    module_name = obj_module.__name__.split(".")[0] if obj_module is not None else None
+                except Exception:  # noqa: BLE001
+                    module_name = None
+
+            if module_name in protected_modules:
+                return
+
+            if hasattr(obj, "cache_clear") and callable(obj.cache_clear):
+                with contextlib.suppress(Exception):
+                    obj.cache_clear()
+
+        _clear_cache_for_object(item.function)  # type: ignore[attr-defined]
+
+        try:
+            if hasattr(item.function, "__module__"):  # type: ignore[attr-defined]
+                module_name = item.function.__module__  # type: ignore[attr-defined]
+                try:
+                    module = sys.modules.get(module_name)
+                    if module:
+                        for _, obj in inspect.getmembers(module):
+                            if callable(obj):
+                                _clear_cache_for_object(obj)
+                except Exception:  # noqa: BLE001, S110
+                    pass
+        except Exception:  # noqa: BLE001, S110
+            pass
 
     def _set_nodeid(self, nodeid: str, count: int) -> str:
         """Set loop count when using duration.
@@ -205,8 +265,7 @@ class PyTest_Loops:
                     warnings.warn("Repeating unittest class tests not supported")
                 else:
                     raise UnexpectedError(
-                        "This call couldn't work with pytest-loops. "
-                        "Please consider raising an issue with your usage."
+                        "This call couldn't work with pytest-loops. Please consider raising an issue with your usage."
                     )
         return count
 
@@ -226,7 +285,7 @@ class PyTest_Loops:
             metafunc.fixturenames.append("__pytest_loop_step_number")
 
             def make_progress_id(i: int, n: int = count) -> str:
-                return f"{n}/{i+1}"
+                return f"{n}/{i + 1}"
 
             scope = metafunc.config.option.codeflash_loops_scope
             metafunc.parametrize(
