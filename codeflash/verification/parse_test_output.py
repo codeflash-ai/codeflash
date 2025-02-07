@@ -50,78 +50,56 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
         return test_results
 
     with file_location.open("rb") as file:
-        while file:
-            len_next_bytes = file.read(4)
-            if not len_next_bytes:
-                return test_results
-            len_next = int.from_bytes(len_next_bytes, byteorder="big")
-            encoded_test_bytes = file.read(len_next)
-            if not encoded_test_bytes:
-                if DEBUG_MODE:
-                    logger.warning("Failed to load test name")
-                return test_results
-            encoded_test_name = encoded_test_bytes.decode("ascii")
-            duration_bytes = file.read(8)
-            if not duration_bytes:
-                if DEBUG_MODE:
-                    logger.warning("Failed to load test duration")
-                return test_results
-            duration = int.from_bytes(duration_bytes, byteorder="big")
-            len_next_bytes = file.read(4)
-            if not len_next_bytes:
-                return test_results
-            len_next = int.from_bytes(len_next_bytes, byteorder="big")
-            test_pickle_bin = file.read(len_next)
-            if not test_pickle_bin:
-                if DEBUG_MODE:
-                    logger.warning("Failed to load pickle file.")
-                return test_results
-            loop_index_bytes = file.read(8)
-            if not loop_index_bytes:
-                if DEBUG_MODE:
-                    logger.warning("Failed to load loop index")
-                return test_results
-            loop_index = int.from_bytes(loop_index_bytes, byteorder="big")
-            len_next_bytes = file.read(4)
-            if not len_next_bytes:
-                if DEBUG_MODE:
-                    logger.warning("Failed to load invocation id")
-                return test_results
-            len_next = int.from_bytes(len_next_bytes, byteorder="big")
-            invocation_id_bytes = file.read(len_next)
-            if not invocation_id_bytes:
-                if DEBUG_MODE:
-                    logger.warning("Failed to load invocation id bytes")
-                return test_results
-            invocation_id = invocation_id_bytes.decode("ascii")
+        try:
+            while file:
+                len_next_bytes = file.read(4)
+                if not len_next_bytes:
+                    return test_results
+                len_next = int.from_bytes(len_next_bytes, byteorder="big")
+                encoded_test_bytes = file.read(len_next)
+                encoded_test_name = encoded_test_bytes.decode("ascii")
+                duration_bytes = file.read(8)
+                duration = int.from_bytes(duration_bytes, byteorder="big")
+                len_next_bytes = file.read(4)
+                len_next = int.from_bytes(len_next_bytes, byteorder="big")
+                test_pickle_bin = file.read(len_next)
+                loop_index_bytes = file.read(8)
+                loop_index = int.from_bytes(loop_index_bytes, byteorder="big")
+                len_next_bytes = file.read(4)
+                len_next = int.from_bytes(len_next_bytes, byteorder="big")
+                invocation_id_bytes = file.read(len_next)
+                invocation_id = invocation_id_bytes.decode("ascii")
 
-            invocation_id_object = InvocationId.from_str_id(encoded_test_name, invocation_id)
-            test_file_path = file_path_from_module_name(
-                invocation_id_object.test_module_path, test_config.tests_project_rootdir
-            )
-
-            test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
-            try:
-                test_pickle = pickle.loads(test_pickle_bin) if loop_index == 1 else None
-            except Exception as e:
-                if DEBUG_MODE:
-                    logger.exception(f"Failed to load pickle file for {encoded_test_name} Exception: {e}")
-                continue
-            assert test_type is not None, f"Test type not found for {test_file_path}"
-            test_results.add(
-                function_test_invocation=FunctionTestInvocation(
-                    loop_index=loop_index,
-                    id=invocation_id_object,
-                    file_name=test_file_path,
-                    did_pass=True,
-                    runtime=duration,
-                    test_framework=test_config.test_framework,
-                    test_type=test_type,
-                    return_value=test_pickle,
-                    timed_out=False,
-                    verification_type=VerificationType.FUNCTION_CALL,
+                invocation_id_object = InvocationId.from_str_id(encoded_test_name, invocation_id)
+                test_file_path = file_path_from_module_name(
+                    invocation_id_object.test_module_path, test_config.tests_project_rootdir
                 )
-            )
+
+                test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
+                try:
+                    test_pickle = pickle.loads(test_pickle_bin) if loop_index == 1 else None
+                except Exception as e:
+                    if DEBUG_MODE:
+                        logger.exception(f"Failed to load pickle file for {encoded_test_name} Exception: {e}")
+                    continue
+                assert test_type is not None, f"Test type not found for {test_file_path}"
+                test_results.add(
+                    function_test_invocation=FunctionTestInvocation(
+                        loop_index=loop_index,
+                        id=invocation_id_object,
+                        file_name=test_file_path,
+                        did_pass=True,
+                        runtime=duration,
+                        test_framework=test_config.test_framework,
+                        test_type=test_type,
+                        return_value=test_pickle,
+                        timed_out=False,
+                        verification_type=VerificationType.FUNCTION_CALL,
+                    )
+                )
+        except Exception as e:
+            logger.warning(f"Failed to parse test results from {file_location}. Exception: {e}")
+            return test_results
     return test_results
 
 
