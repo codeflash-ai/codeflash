@@ -962,7 +962,13 @@ class Optimizer:
         )
 
     def establish_original_code_baseline(
-        self, function_name: str, function_file_path: Path, code_context: CodeOptimizationContext
+        self,
+        function_name: str,
+        function_file_path: Path,
+        code_context: CodeOptimizationContext,
+        function_to_optimize: FunctionToOptimize,
+        original_helper_code: dict[Path, str],
+        file_path_to_helper_classes: dict[Path, set[str]],
     ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
         # For the original function - run the tests and get the runtime, plus coverage
         with progress_bar(f"Establishing original code baseline for {function_name}"):
@@ -1087,8 +1093,15 @@ class Optimizer:
             )
 
     def run_optimized_candidate(
-        self, *, optimization_candidate_index: int, baseline_results: OriginalCodeBaseline
+        self,
+        *,
+        optimization_candidate_index: int,
+        baseline_results: OriginalCodeBaseline,
+        function_to_optimize: FunctionToOptimize,
+        original_helper_code: dict[Path, str],
+        file_path_to_helper_classes: dict[Path, set[str]],
     ) -> Result[OptimizedCandidateResult, str]:
+
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
         with progress_bar("Testing optimization candidate"):
@@ -1240,13 +1253,13 @@ class Optimizer:
                 raise ValueError(f"Unexpected testing type: {testing_type}")
         except subprocess.TimeoutExpired:
             logger.exception(
-                f'Error running tests in {", ".join(str(f) for f in test_files.test_files)}.\nTimeout Error'
+                f"Error running tests in {', '.join(str(f) for f in test_files.test_files)}.\nTimeout Error"
             )
             return TestResults(), None
         if run_result.returncode != 0:
             logger.debug(
-                f'Nonzero return code {run_result.returncode} when running tests in '
-                f'{", ".join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n'
+                f"Nonzero return code {run_result.returncode} when running tests in "
+                f"{', '.join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n"
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
