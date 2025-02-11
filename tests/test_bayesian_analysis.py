@@ -1,6 +1,6 @@
 import numpy as np
 from codeflash.verification.bayesian_analysis import (
-    analyze_function_runtime_data,
+    analyse_function_runtime_data,
     compare_function_runtime_distributions,
 )
 
@@ -46,11 +46,13 @@ def test_bayesian_analysis() -> None:
     opt1 = [list(data[("opt1", i)]) for i in inputs]
     opt2 = [list(data[("opt2", i)]) for i in inputs]
 
-    original_distribution, original_stats = analyze_function_runtime_data(orig, 10000)
-    optimized_distribution1, optimized_stats1 = analyze_function_runtime_data(opt1, 10000)
-    optimized_distribution2, optimized_stats2 = analyze_function_runtime_data(opt2, 10000)
+    original_distribution, original_stats = analyse_function_runtime_data(orig, 10000)
+    optimized_distribution1, optimized_stats1 = analyse_function_runtime_data(opt1, 10000)
+    optimized_distribution2, optimized_stats2 = analyse_function_runtime_data(opt2, 10000)
 
-    speedup_stats1 = compare_function_runtime_distributions(original_distribution, optimized_distribution1)
+    speedup_stats1, faster_prob1 = compare_function_runtime_distributions(
+        original_distribution, optimized_distribution1
+    )
     assert (
         1.162
         < speedup_stats1["credible_interval_lower_bound"]
@@ -60,8 +62,11 @@ def test_bayesian_analysis() -> None:
         < speedup_stats1["credible_interval_upper_bound"]
         < 1.174
     )
+    assert faster_prob1 == 1.0
 
-    speedup_stats2 = compare_function_runtime_distributions(original_distribution, optimized_distribution2)
+    speedup_stats2, faster_prob2 = compare_function_runtime_distributions(
+        original_distribution, optimized_distribution2
+    )
     assert (
         1.046
         < speedup_stats2["credible_interval_lower_bound"]
@@ -71,3 +76,4 @@ def test_bayesian_analysis() -> None:
         < speedup_stats2["credible_interval_upper_bound"]
         < 1.057
     )
+    assert faster_prob1 == 1.0
