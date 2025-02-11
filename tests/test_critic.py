@@ -367,7 +367,7 @@ def test_coverage_critic() -> None:
 
     border_coverage = CoverageData(
         file_path=Path("test_file.py"),
-        coverage=50.0,
+        coverage=60.0,
         function_name="test_function",
         functions_being_tested=["function1", "function2"],
         graph={},
