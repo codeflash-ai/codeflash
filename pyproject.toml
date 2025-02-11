@@ -92,14 +92,6 @@ rich = ">=13.8.1"
 lxml = ">=5.3.0"
 crosshair-tool = ">=0.0.78"
 coverage = ">=7.6.4"
-numba = [
-    {version = ">=0.60.0", python = "<3.13"},
-    {version = "0.61.0rc2", python = ">=3.13"}
-]
-scipy = [
-    {version = ">=0.16", python = "<3.13"},
-    {version = ">=1.15.1", python = ">=3.13"}
-]
 [tool.poetry.group.dev]
 optional = true
 

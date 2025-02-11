@@ -1,16 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
-
-    import numpy as np
-    import numpy.typing as npt
-
 import sys
+from collections.abc import Iterator
 from enum import Enum
+from pathlib import Path
 from typing import Optional, cast
 
 from pydantic import BaseModel
@@ -18,7 +11,6 @@ from pydantic.dataclasses import dataclass
 from rich.tree import Tree
 
 from codeflash.cli_cmds.console import DEBUG_MODE, logger
-from codeflash.verification.bayesian_analysis import analyze_function_runtime_sums_data
 from codeflash.verification.comparator import comparator
 
 
@@ -197,13 +189,6 @@ class TestResults(BaseModel):
                 min(usable_runtime_data)
                 for invocation_id, usable_runtime_data in self.usable_runtime_data_by_test_case().items()
             ]
-        )
-
-    def bayesian_nonparametric_bootstrap_analysis(
-        self, bootstrap_size: int
-    ) -> tuple[npt.NDArray[np.float64], dict[str, np.float64]]:
-        return analyze_function_runtime_sums_data(
-            list(self.usable_runtime_data_by_test_case().values()), bootstrap_size
         )
 
     def __iter__(self) -> Iterator[FunctionTestInvocation]:

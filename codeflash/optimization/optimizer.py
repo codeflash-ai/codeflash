@@ -66,7 +66,6 @@ from codeflash.result.create_pr import check_create_pr, existing_tests_source_fo
 from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
-from codeflash.verification.bayesian_analysis import compare_function_runtime_distributions
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
@@ -78,9 +77,6 @@ from codeflash.verification.verifier import generate_tests
 
 if TYPE_CHECKING:
     from argparse import Namespace
-
-    import numpy as np
-    import numpy.typing as npt
 
     from codeflash.either import Result
     from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
@@ -369,12 +365,7 @@ class Optimizer:
             cleanup_paths(paths_to_cleanup)
             return Failure(baseline_result.failure())
 
-        (
-            original_code_baseline,
-            original_code_runtime_distribution,
-            original_code_runtime_statistics,
-            test_functions_to_remove,
-        ) = baseline_result.unwrap()
+        original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
         if isinstance(original_code_baseline, OriginalCodeBaseline) and not coverage_critic(
             original_code_baseline.coverage_results, self.args.test_framework
         ):
@@ -393,7 +384,6 @@ class Optimizer:
                 function_to_optimize=function_to_optimize,
                 original_code=validated_original_code[function_to_optimize.file_path].source_code,
                 original_code_baseline=original_code_baseline,
-                original_code_runtime_distribution=original_code_runtime_distribution,
                 original_helper_code=original_helper_code,
                 function_trace_id=function_trace_id[:-4] + f"EXP{u}" if should_run_experiment else function_trace_id,
                 file_path_to_helper_classes=file_path_to_helper_classes,
@@ -504,14 +494,12 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         original_code: str,
         original_code_baseline: OriginalCodeBaseline,
-        original_code_runtime_distribution: npt.NDArray[np.float64],
         original_helper_code: dict[Path, str],
         function_trace_id: str,
         file_path_to_helper_classes: dict[Path, set[str]],
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime
-        best_speedup_ratio_until_now = 1.0
 
         speedup_ratios: dict[str, float | None] = {}
         optimized_runtimes: dict[str, float | None] = {}
@@ -561,9 +549,7 @@ class Optimizer:
                     is_correct[candidate.optimization_id] = False
                     speedup_ratios[candidate.optimization_id] = None
                 else:
-                    candidate_result, candidate_runtime_distribution, candidate_runtime_statistics = (
-                        run_results.unwrap()
-                    )
+                    candidate_result: OptimizedCandidateResult = run_results.unwrap()
                     best_test_runtime = candidate_result.best_test_runtime
                     optimized_runtimes[candidate.optimization_id] = best_test_runtime
                     is_correct[candidate.optimization_id] = True
@@ -572,7 +558,7 @@ class Optimizer:
                     )
                     speedup_ratios[candidate.optimization_id] = perf_gain
 
-                    tree = Tree(f"Candidate #{candidate_index} - Sum of Minimum Runtimes")
+                    tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
                     if speedup_critic(
                         candidate_result, original_code_baseline.runtime, best_runtime_until_now
                     ) and quantity_of_tests_critic(candidate_result):
@@ -604,34 +590,6 @@ class Optimizer:
                         tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
                     console.print(tree)
                     console.rule()
-
-                    if candidate_runtime_distribution.any() and candidate_runtime_statistics:
-                        speedup_stats = compare_function_runtime_distributions(
-                            original_code_runtime_distribution, candidate_runtime_distribution
-                        )
-                        tree = Tree(f"Candidate #{candidate_index} - Bayesian Bootstrapping Nonparametric Analysis")
-                        tree.add(
-                            f"Expected candidate summed runtime (95% Credible Interval) = ["
-                            f"{humanize_runtime(round(candidate_runtime_statistics['credible_interval_lower_bound']))}"
-                            f", "
-                            f"{humanize_runtime(round(candidate_runtime_statistics['credible_interval_upper_bound']))}]"
-                            f"\nMedian = {humanize_runtime(round(candidate_runtime_statistics['median']))}"
-                            f"\nSpeedup ratio of candidate vs original:"
-                            f"\n95% Credible Interval = [{speedup_stats['credible_interval_lower_bound']:.3f}X, "
-                            f"{speedup_stats['credible_interval_upper_bound']:.3f}X]"
-                            f"\nmedian = {speedup_stats['median']:.3f}X"
-                        )
-                        if speedup_stats["credible_interval_lower_bound"] > 1.0:
-                            tree.add("The candidate is faster than the original code with a 95% probability.")
-                            if speedup_stats["median"] > best_speedup_ratio_until_now:
-                                best_speedup_ratio_until_now = float(speedup_stats["median"])
-                                tree.add("This candidate is the best candidate so far.")
-                            else:
-                                tree.add("This candidate is not faster than the current fastest candidate.")
-                        else:
-                            tree.add("It is inconclusive whether the candidate is faster than the original code.")
-                        console.print(tree)
-                        console.rule()
 
                 self.write_code_and_helpers(original_code, original_helper_code, function_to_optimize.file_path)
         except KeyboardInterrupt as e:
@@ -1011,7 +969,7 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
-    ) -> Result[tuple[OriginalCodeBaseline, npt.NDArray[np.float64], dict[str, np.float64], list[str]], str]:
+    ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
         # For the original function - run the tests and get the runtime, plus coverage
         with progress_bar(f"Establishing original code baseline for {function_name}"):
             assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
@@ -1121,19 +1079,7 @@ class Optimizer:
                 f"{humanize_runtime(total_timing)} per full loop"
             )
             console.rule()
-            logger.debug(f"Total original code summed runtime (ns): {total_timing}")
-            console.rule()
-            runtime_distribution, runtime_statistics = benchmarking_results.bayesian_nonparametric_bootstrap_analysis(
-                100_000
-            )
-            logger.info(
-                f"Bayesian Bootstrapping Nonparametric Analysis"
-                f"\nExpected original code summed runtime (95% Credible Interval) = ["
-                f"{humanize_runtime(round(runtime_statistics['credible_interval_lower_bound']))}, "
-                f"{humanize_runtime(round(runtime_statistics['credible_interval_upper_bound']))}], "
-                f"\nmedian: {humanize_runtime(round(runtime_statistics['median']))}"
-            )
-
+            logger.debug(f"Total original code runtime (ns): {total_timing}")
             return Success(
                 (
                     OriginalCodeBaseline(
@@ -1142,8 +1088,6 @@ class Optimizer:
                         runtime=total_timing,
                         coverage_results=coverage_results,
                     ),
-                    runtime_distribution,
-                    runtime_statistics,
                     functions_to_remove,
                 )
             )
@@ -1156,7 +1100,8 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
-    ) -> Result[tuple[OptimizedCandidateResult, npt.NDArray[np.float64], dict[str, np.float64]], str]:
+    ) -> Result[OptimizedCandidateResult, str]:
+
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
         with progress_bar("Testing optimization candidate"):
@@ -1250,35 +1195,16 @@ class Optimizer:
             if (total_candidate_timing := candidate_benchmarking_results.total_passed_runtime()) == 0:
                 logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
                 console.rule()
-                runtime_distribution: npt.NDArray[np.float64] = np.array([])
-                runtime_statistics: dict[str, np.float64] = {}
-            else:
-                logger.debug(
-                    f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}"
-                )
-                console.rule()
-                runtime_distribution, runtime_statistics = (
-                    candidate_benchmarking_results.bayesian_nonparametric_bootstrap_analysis(100_000)
-                )
-                logger.debug(
-                    f"Overall code summed runtime (95% Credible Interval) = ["
-                    f"{humanize_runtime(round(runtime_statistics['credible_interval_lower_bound']))}, "
-                    f"{humanize_runtime(round(runtime_statistics['credible_interval_upper_bound']))}], median: "
-                    f"{humanize_runtime(round(runtime_statistics['median']))}"
-                )
-                console.rule()
+
+            logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
             return Success(
-                (
-                    OptimizedCandidateResult(
-                        max_loop_count=loop_count,
-                        best_test_runtime=total_candidate_timing,
-                        behavior_test_results=candidate_behavior_results,
-                        benchmarking_test_results=candidate_benchmarking_results,
-                        optimization_candidate_index=optimization_candidate_index,
-                        total_candidate_timing=total_candidate_timing,
-                    ),
-                    runtime_distribution,
-                    runtime_statistics,
+                OptimizedCandidateResult(
+                    max_loop_count=loop_count,
+                    best_test_runtime=total_candidate_timing,
+                    behavior_test_results=candidate_behavior_results,
+                    benchmarking_test_results=candidate_benchmarking_results,
+                    optimization_candidate_index=optimization_candidate_index,
+                    total_candidate_timing=total_candidate_timing,
                 )
             )
 
@@ -1327,13 +1253,13 @@ class Optimizer:
                 raise ValueError(f"Unexpected testing type: {testing_type}")
         except subprocess.TimeoutExpired:
             logger.exception(
-                f'Error running tests in {", ".join(str(f) for f in test_files.test_files)}.\nTimeout Error'
+                f"Error running tests in {', '.join(str(f) for f in test_files.test_files)}.\nTimeout Error"
             )
             return TestResults(), None
         if run_result.returncode != 0:
             logger.debug(
-                f'Nonzero return code {run_result.returncode} when running tests in '
-                f'{", ".join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n'
+                f"Nonzero return code {run_result.returncode} when running tests in "
+                f"{', '.join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n"
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )

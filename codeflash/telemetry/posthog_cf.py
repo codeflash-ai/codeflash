@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from posthog import Posthog
 
@@ -12,6 +14,7 @@ _posthog = None
 
 def initialize_posthog(enabled: bool = True) -> None:
     """Enable or disable PostHog.
+
     :param enabled: Whether to enable PostHog.
     """
     if not enabled:
@@ -23,8 +26,9 @@ def initialize_posthog(enabled: bool = True) -> None:
     ph("cli-telemetry-enabled")
 
 
-def ph(event: str, properties: Optional[Dict[str, Any]] = None) -> None:
+def ph(event: str, properties: dict[str, Any] | None = None) -> None:
     """Log an event to PostHog.
+
     :param event: The name of the event.
     :param properties: A dictionary of properties to attach to the event.
     """
