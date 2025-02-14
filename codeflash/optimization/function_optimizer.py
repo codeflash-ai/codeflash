@@ -425,7 +425,7 @@ class FunctionOptimizer:
                     )
                     speedup_ratios[candidate.optimization_id] = perf_gain
 
-                    tree = Tree(f"Candidate #{candidate_index} - Sum of Minimum Runtimes")
+                    tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
                     if speedup_critic(
                         candidate_result, original_code_baseline.runtime, best_runtime_until_now
                     ) and quantity_of_tests_critic(candidate_result):
@@ -897,6 +897,7 @@ class FunctionOptimizer:
             )
             console.rule()
 
+
             total_timing = benchmarking_results.total_passed_runtime()  # caution: doesn't handle the loop index
             functions_to_remove = [
                 result.id.test_function_name
@@ -906,7 +907,7 @@ class FunctionOptimizer:
 
             if not behavioral_results:
                 logger.warning(
-                    f"Couldn't run any tests for original function {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
+                    f"Couldn't run any tests for original function {function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
                 )
                 console.rule()
                 success = False
@@ -929,19 +930,7 @@ class FunctionOptimizer:
                 f"{humanize_runtime(total_timing)} per full loop"
             )
             console.rule()
-            logger.debug(f"Total original code summed runtime (ns): {total_timing}")
-            console.rule()
-            runtime_distribution, runtime_statistics = benchmarking_results.bayesian_nonparametric_bootstrap_analysis(
-                100_000
-            )
-            logger.info(
-                f"Bayesian Bootstrapping Nonparametric Analysis"
-                f"\nExpected original code summed runtime (95% Credible Interval) = ["
-                f"{humanize_runtime(round(runtime_statistics['credible_interval_lower_bound']))}, "
-                f"{humanize_runtime(round(runtime_statistics['credible_interval_upper_bound']))}], "
-                f"\nmedian: {humanize_runtime(round(runtime_statistics['median']))}"
-            )
-
+            logger.debug(f"Total original code runtime (ns): {total_timing}")
             return Success(
                 (
                     OriginalCodeBaseline(
@@ -950,8 +939,6 @@ class FunctionOptimizer:
                         runtime=total_timing,
                         coverage_results=coverage_results,
                     ),
-                    runtime_distribution,
-                    runtime_statistics,
                     functions_to_remove,
                 )
             )
@@ -1167,10 +1154,3 @@ class FunctionOptimizer:
             )
         ]
 
-    @staticmethod
-    def write_code_and_helpers(original_code: str, original_helper_code: dict[Path, str], path: Path) -> None:
-        with path.open("w", encoding="utf8") as f:
-            f.write(original_code)
-        for module_abspath in original_helper_code:
-            with Path(module_abspath).open("w", encoding="utf8") as f:
-                f.write(original_helper_code[module_abspath])
