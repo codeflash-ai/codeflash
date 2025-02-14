@@ -38,7 +38,7 @@ def main():
             updated_license_text = date_pattern.sub(date_replacement, updated_license_text)
 
     # Write the updated LICENSE file
-    with open("codeflash/LICENSE", "w", encoding="utf8") as file:
+    with open(os.path.join(os.path.dirname(__file__), "LICENSE"), encoding="utf8") as file:
         file.write(updated_license_text)
 
 
