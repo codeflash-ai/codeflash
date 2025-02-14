@@ -29,7 +29,6 @@ jobs:
 
       - name: Install dependencies (CLI)
         run: |
-          cd ./codeflash
           uv tool install poetry
           uv venv
           source .venv/bin/activate
@@ -54,6 +53,5 @@ jobs:
       - name: Run Codeflash to optimize code
         id: optimize_code
         run: |
-          cd ./codeflash
           source .venv/bin/activate
           poetry run python tests/scripts/end_to_end_test_bubblesort_pytest.py
