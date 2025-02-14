@@ -907,7 +907,7 @@ class FunctionOptimizer:
 
             if not behavioral_results:
                 logger.warning(
-                    f"Couldn't run any tests for original function {function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
+                    f"Couldn't run any tests for original function {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
                 )
                 console.rule()
                 success = False
