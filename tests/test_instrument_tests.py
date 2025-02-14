@@ -5,7 +5,6 @@ import math
 import os
 import sys
 import tempfile
-from argparse import Namespace
 from pathlib import Path
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
@@ -15,8 +14,9 @@ from codeflash.code_utils.instrument_existing_tests import (
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles, TestingMode, TestsInFile
-from codeflash.optimization.optimizer import Optimizer
+from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.test_results import TestType
+from codeflash.verification.verification_utils import TestConfig
 
 codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
@@ -160,7 +160,7 @@ class TestPigLatin(unittest.TestCase):
     with tempfile.NamedTemporaryFile(mode="w") as f:
         f.write(code)
         f.flush()
-        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path(f.name))
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
         os.chdir(run_cwd)
@@ -351,12 +351,12 @@ def test_sort():
     try:
         with test_path.open("w") as f:
             f.write(code)
-
+        code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
         tests_root = Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
         project_root_path = (Path(__file__).parent / "..").resolve()
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
-        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
             test_path,
@@ -394,18 +394,14 @@ def test_sort():
 
         # Overwrite old test with new instrumented test
 
-        opt = Optimizer(
-            Namespace(
-                project_root=project_root_path,
-                disable_telemetry=True,
-                tests_root=tests_root,
-                test_framework="pytest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=project_root_path,
-            )
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="pytest",
+            pytest_cmd="pytest",
         )
-
+        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
@@ -420,7 +416,7 @@ def test_sort():
                 )
             ]
         )
-        test_results, coverage_data = opt.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -455,7 +451,7 @@ def test_sort():
         with test_path_perf.open("w") as f:
             f.write(new_perf_test)
 
-        test_results_perf, _ = opt.run_and_parse_tests(
+        test_results_perf, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
@@ -556,6 +552,7 @@ def test_sort_parametrized(input, expected_output):
     assert output == expected_output
 """
     )
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_parametrized_results_temp.py"
@@ -573,7 +570,7 @@ def test_sort_parametrized(input, expected_output):
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
 
-        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
             test_path, [CodePosition(14, 13)], func, project_root_path, "pytest", mode=TestingMode.BEHAVIOR
@@ -614,19 +611,15 @@ def test_sort_parametrized(input, expected_output):
                 )
             ]
         )
-
-        opt = Optimizer(
-            Namespace(
-                project_root=project_root_path,
-                disable_telemetry=True,
-                tests_root=tests_root,
-                test_framework="pytest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=project_root_path,
-            )
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="pytest",
+            pytest_cmd="pytest",
         )
-        test_results, coverage_data = opt.run_and_parse_tests(
+        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -668,7 +661,7 @@ def test_sort_parametrized(input, expected_output):
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
 
-        test_results_perf, coverage_data = opt.run_and_parse_tests(
+        test_results_perf, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
@@ -783,7 +776,7 @@ def test_sort_parametrized_loop(input, expected_output):
         assert output == expected_output
 """
     )
-
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_parametrized_loop_results_temp.py"
@@ -805,7 +798,7 @@ def test_sort_parametrized_loop(input, expected_output):
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
 
-        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
             test_path, [CodePosition(15, 17)], func, project_root_path, "pytest", mode=TestingMode.BEHAVIOR
@@ -857,18 +850,16 @@ def test_sort_parametrized_loop(input, expected_output):
                 )
             ]
         )
-        opt = Optimizer(
-            Namespace(
-                project_root=project_root_path,
-                disable_telemetry=True,
-                tests_root=tests_root,
-                test_framework="pytest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=project_root_path,
-            )
+
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="pytest",
+            pytest_cmd="pytest",
         )
-        test_results, coverage_data = opt.run_and_parse_tests(
+        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -944,7 +935,7 @@ def test_sort_parametrized_loop(input, expected_output):
         assert test_results[5].runtime > 0
         assert test_results[5].did_pass
 
-        test_results, _ = opt.run_and_parse_tests(
+        test_results, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
@@ -1097,7 +1088,7 @@ def test_sort():
         assert output == expected_output
 """
     )
-
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/pytest/test_perfinjector_bubble_sort_loop_results_temp.py"
@@ -1119,7 +1110,7 @@ def test_sort():
         run_cwd = Path(__file__).parent.parent.resolve()
         original_cwd = Path.cwd()
 
-        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(str(run_cwd))
         success, new_test_behavior = inject_profiling_into_existing_test(
             test_path, [CodePosition(11, 17)], func, project_root_path, "pytest", mode=TestingMode.BEHAVIOR
@@ -1169,18 +1160,15 @@ def test_sort():
             ]
         )
 
-        opt = Optimizer(
-            Namespace(
-                project_root=project_root_path,
-                disable_telemetry=True,
-                tests_root=tests_root,
-                test_framework="pytest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=project_root_path,
-            )
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="pytest",
+            pytest_cmd="pytest",
         )
-        test_results, coverage_data = opt.run_and_parse_tests(
+        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -1222,7 +1210,7 @@ def test_sort():
         )
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
-        test_results, coverage_data = opt.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
@@ -1358,7 +1346,7 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(output, list(range(50)))
 """
     )
-
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/unittest/test_perfinjector_bubble_sort_unittest_results_temp.py"
@@ -1380,7 +1368,7 @@ class TestPigLatin(unittest.TestCase):
         run_cwd = Path(__file__).parent.parent.resolve()
         original_cwd = Path.cwd()
 
-        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
             test_path,
@@ -1440,18 +1428,15 @@ class TestPigLatin(unittest.TestCase):
                 )
             ]
         )
-        opt = Optimizer(
-            Namespace(
-                project_root=project_root_path,
-                disable_telemetry=True,
-                tests_root=tests_root,
-                test_framework="unittest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=project_root_path,
-            )
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="unittest",
+            pytest_cmd="pytest",
         )
-        test_results, coverage_data = opt.run_and_parse_tests(
+        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -1493,7 +1478,7 @@ class TestPigLatin(unittest.TestCase):
         )
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
-        test_results, coverage_data = opt.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
@@ -1617,7 +1602,7 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(output, expected_output)
 """
     )
-
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/unittest/test_perfinjector_bubble_sort_unittest_parametrized_results_temp.py"
@@ -1638,7 +1623,7 @@ class TestPigLatin(unittest.TestCase):
         run_cwd = Path(__file__).parent.parent.resolve()
         original_cwd = Path.cwd()
 
-        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
             test_path, [CodePosition(16, 17)], func, project_root_path, "unittest", mode=TestingMode.BEHAVIOR
@@ -1690,18 +1675,15 @@ class TestPigLatin(unittest.TestCase):
                 )
             ]
         )
-        opt = Optimizer(
-            Namespace(
-                project_root=project_root_path,
-                disable_telemetry=True,
-                tests_root=tests_root,
-                test_framework="unittest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=project_root_path,
-            )
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="unittest",
+            pytest_cmd="pytest",
         )
-        test_results, coverage_data = opt.run_and_parse_tests(
+        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -1744,7 +1726,7 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
 
-        test_results, coverage_data = opt.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
@@ -1874,7 +1856,7 @@ class TestPigLatin(unittest.TestCase):
             self.assertEqual(output, expected_output)
 """
     )
-
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/unittest/test_perfinjector_bubble_sort_unittest_loop_results_temp.py"
@@ -1896,7 +1878,7 @@ class TestPigLatin(unittest.TestCase):
         run_cwd = Path(__file__).parent.parent.resolve()
         original_cwd = Path.cwd()
 
-        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path("module.py"))
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
             test_path, [CodePosition(14, 21)], func, project_root_path, "unittest", mode=TestingMode.BEHAVIOR
@@ -1944,19 +1926,15 @@ class TestPigLatin(unittest.TestCase):
                 )
             ]
         )
-
-        opt = Optimizer(
-            Namespace(
-                project_root=project_root_path,
-                disable_telemetry=True,
-                tests_root=tests_root,
-                test_framework="unittest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=project_root_path,
-            )
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="unittest",
+            pytest_cmd="pytest",
         )
-        test_results, coverage_data = opt.run_and_parse_tests(
+        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             test_env=test_env,
             testing_type=TestingMode.BEHAVIOR,
             test_files=test_files,
@@ -1999,7 +1977,7 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
 
-        test_results, coverage_data = opt.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             test_env=test_env,
             testing_type=TestingMode.PERFORMANCE,
             test_files=test_files,
@@ -2127,7 +2105,7 @@ class TestPigLatin(unittest.TestCase):
             self.assertEqual(output, expected_output)
 """
     )
-
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/unittest/test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp.py"
@@ -2148,7 +2126,7 @@ class TestPigLatin(unittest.TestCase):
         run_cwd = Path(__file__).parent.parent.resolve()
         original_cwd = Path.cwd()
 
-        f = FunctionToOptimize(function_name="sorter", file_path=Path("module.py"), parents=[])
+        f = FunctionToOptimize(function_name="sorter", file_path=code_path, parents=[])
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
             test_path, [CodePosition(17, 21)], f, project_root_path, "unittest", mode=TestingMode.BEHAVIOR
@@ -2197,18 +2175,15 @@ class TestPigLatin(unittest.TestCase):
                 )
             ]
         )
-        opt = Optimizer(
-            Namespace(
-                project_root=project_root_path,
-                disable_telemetry=True,
-                tests_root=tests_root,
-                test_framework="unittest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=project_root_path,
-            )
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="unittest",
+            pytest_cmd="pytest",
         )
-        test_results, coverage_data = opt.run_and_parse_tests(
+        func_optimizer = FunctionOptimizer(function_to_optimize=f, test_cfg=test_config)
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -2283,7 +2258,7 @@ class TestPigLatin(unittest.TestCase):
         )
         assert test_results[5].runtime > 0
         assert test_results[5].did_pass
-        test_results, coverage_data = opt.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
@@ -2776,7 +2751,7 @@ def test_code_replacement10() -> None:
         func = FunctionToOptimize(
             function_name="get_code_optimization_context",
             parents=[FunctionParent("Optimizer", "ClassDef")],
-            file_path=Path("module.py"),
+            file_path=Path(f.name),
         )
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
@@ -2824,7 +2799,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
     assert output == expected_total_sleep_time
 """
     )
-
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/sleeptime.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/pytest/test_time_correction_instrumentation_temp.py"
@@ -2837,7 +2812,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
         project_root_path = (Path(__file__).parent.resolve() / "../").resolve()
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
-        func = FunctionToOptimize(function_name="accurate_sleepfunc", parents=[], file_path=Path("module.py"))
+        func = FunctionToOptimize(function_name="accurate_sleepfunc", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
             test_path, [CodePosition(8, 13)], func, project_root_path, "pytest", mode=TestingMode.PERFORMANCE
@@ -2858,17 +2833,14 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
         with test_path.open("w") as f:
             f.write(new_test)
 
-        opt = Optimizer(
-            Namespace(
-                project_root=project_root_path,
-                disable_telemetry=True,
-                tests_root=tests_root,
-                test_framework="pytest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=project_root_path,
-            )
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="pytest",
+            pytest_cmd="pytest",
         )
+        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_files = TestFiles(
             test_files=[
                 TestFile(
@@ -2879,7 +2851,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
                 )
             ]
         )
-        test_results, coverage_data = opt.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
@@ -2946,7 +2918,7 @@ class TestPigLatin(unittest.TestCase):
         output = codeflash_wrap(accurate_sleepfunc, '{module_path}', 'TestPigLatin', 'test_sleepfunc_sequence_short', 'accurate_sleepfunc', '0', codeflash_loop_index, n)
 """
     )
-
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/sleeptime.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
         / "../code_to_optimize/tests/unittest/test_time_correction_instrumentation_unittest_temp.py"
@@ -2959,7 +2931,7 @@ class TestPigLatin(unittest.TestCase):
         project_root_path = (Path(__file__).parent.resolve() / "../").resolve()
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
-        func = FunctionToOptimize(function_name="accurate_sleepfunc", parents=[], file_path=Path("module.py"))
+        func = FunctionToOptimize(function_name="accurate_sleepfunc", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
             test_path, [CodePosition(12, 17)], func, project_root_path, "unittest", mode=TestingMode.PERFORMANCE
@@ -2980,17 +2952,6 @@ class TestPigLatin(unittest.TestCase):
         with test_path.open("w") as f:
             f.write(new_test)
 
-        opt = Optimizer(
-            Namespace(
-                project_root=project_root_path,
-                disable_telemetry=True,
-                tests_root=tests_root,
-                test_framework="unittest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=project_root_path,
-            )
-        )
         test_files = TestFiles(
             test_files=[
                 TestFile(
@@ -3009,7 +2970,15 @@ class TestPigLatin(unittest.TestCase):
                 )
             ]
         )
-        test_results, coverage_data = opt.run_and_parse_tests(
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="unittest",
+            pytest_cmd="pytest",
+        )
+        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
