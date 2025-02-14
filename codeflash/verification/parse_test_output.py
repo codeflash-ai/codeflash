@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 def parse_func(file_path: Path) -> XMLParser:
     """Parse the XML file with lxml.etree.XMLParser as the backend."""
     xml_parser = XMLParser(huge_tree=True)
-    return parse(file_path, xml_parser)
+    return parse(file_path, xml_parser)  # type: ignore  # noqa: PGH003, S320
 
 
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
@@ -259,6 +259,10 @@ def parse_test_xml(
                     message = testcase.result[0].message.lower()
                     if "timed out" in message:
                         timed_out = True
+
+            stdout = run_result.stdout if run_result and run_result.stdout else None
+            stderr = run_result.stderr if run_result and run_result.stderr else None
+
             matches = re.findall(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!", testcase.system_out or "")
             if not matches or not len(matches):
                 test_results.add(
@@ -278,9 +282,10 @@ def parse_test_xml(
                         test_type=test_type,
                         return_value=None,
                         timed_out=timed_out,
+                        stdout=stdout,
+                        stderr=stderr,
                     )
                 )
-
             else:
                 for match in matches:
                     split_val = match[5].split(":")
@@ -306,6 +311,8 @@ def parse_test_xml(
                             test_type=test_type,
                             return_value=None,
                             timed_out=timed_out,
+                            stdout=stdout,
+                            stderr=stderr,
                         )
                     )
 
@@ -313,14 +320,8 @@ def parse_test_xml(
         logger.info(
             f"Tests '{[test_file.original_file_path for test_file in test_files.test_files]}' failed to run, skipping"
         )
-        if run_result is not None:
-            stdout, stderr = "", ""
-            try:
-                stdout = run_result.stdout.decode()
-                stderr = run_result.stderr.decode()
-            except AttributeError:
-                stdout = run_result.stderr
-            logger.debug(f"Test log - STDOUT : {stdout} \n STDERR : {stderr}")
+        stdout, stderr = run_result.stdout, run_result.stderr
+        logger.debug(f"Test log - STDOUT : {stdout} \n STDERR : {stderr}")
     return test_results
 
 
@@ -335,7 +336,11 @@ def merge_test_results(
     # This is done to match the right iteration_id which might not be available in the xml
     for result in xml_test_results:
         if test_framework == "pytest":
-            if result.id.test_function_name.endswith("]") and "[" in result.id.test_function_name:  # parameterized test
+            if (
+                result.id.test_function_name
+                and result.id.test_function_name.endswith("]")
+                and "[" in result.id.test_function_name
+            ):  # parameterized test
                 test_function_name = result.id.test_function_name[: result.id.test_function_name.index("[")]
             else:
                 test_function_name = result.id.test_function_name
