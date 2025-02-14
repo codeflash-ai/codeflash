@@ -118,14 +118,9 @@ def test_single_element_list():
     )
 
     # Init paths
-    test_path = (
-        Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_aiservice_behavior_results_temp.py"
-    ).resolve()
-    test_path_perf = (
-        Path(__file__).parent.resolve()
-        / "../code_to_optimize/tests/pytest/test_aiservice_behavior_results_perf_temp.py"
-    ).resolve()
-    tests_root = Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+    tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/").resolve()
+    test_path = tests_root / "test_aiservice_behavior_results_temp.py"
+    test_path_perf = tests_root / "test_aiservice_behavior_results_perf_temp.py"
     project_root_path = (Path(__file__).parent / "..").resolve()
     run_cwd = Path(__file__).parent.parent.resolve()
     os.chdir(run_cwd)
@@ -166,9 +161,7 @@ def test_single_element_list():
             ]
         )
         a = BubbleSorter()
-        function_to_optimize = FunctionToOptimize("sorter", fto_path, [FunctionParent("BubbleSorter", "ClassDef")])
-        func_opt = opt.create_function_optimizer(function_to_optimize)
-        test_results, coverage_data = func_opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -201,8 +194,7 @@ class BubbleSorter:
         return arr
                         """
         fto_path.write_text(optimized_code_mutated_attr, "utf-8")
-        func_opt = opt.create_function_optimizer(function_to_optimize)
-        test_results_mutated_attr, coverage_data = func_opt.run_and_parse_tests(
+        test_results_mutated_attr, coverage_data = opt.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -301,8 +293,7 @@ def test_single_element_list():
                 )
             ]
         )
-        func_opt = opt.create_function_optimizer(function_to_optimize)
-        test_results, coverage_data = func_opt.run_and_parse_tests(
+        test_results, coverage_data = opt.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -366,8 +357,7 @@ class BubbleSorter:
                 test_project_root=project_root_path,
             )
         )
-        func_opt = opt.create_function_optimizer(function_to_optimize)
-        test_results_mutated_attr, coverage_data = func_opt.run_and_parse_tests(
+        test_results_mutated_attr, coverage_data = opt.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -413,8 +403,7 @@ class BubbleSorter:
                 test_project_root=project_root_path,
             )
         )
-        func_opt = opt.create_function_optimizer(function_to_optimize)
-        test_results_new_attr, coverage_data = func_opt.run_and_parse_tests(
+        test_results_new_attr, coverage_data = opt.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
