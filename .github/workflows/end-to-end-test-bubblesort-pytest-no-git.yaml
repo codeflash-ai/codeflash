@@ -9,8 +9,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CODEFLASH_AIS_SERVER: prod
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_AISERVER }}
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
       CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
       COLUMNS: 110

@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 
 from version import __version_tuple__
-
+import os
 
 def main():
     # Use the version tuple from version.py
@@ -16,7 +16,8 @@ def main():
     version_replacement = r"\g<1>" + major_minor_version + r".x"
 
     # Read the LICENSE file
-    with open("codeflash/LICENSE", encoding="utf8") as file:
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "codeflash", "LICENSE"),
+              encoding="utf8") as file:
         license_text = file.read()
 
     # Replace the version in the LICENSE file
