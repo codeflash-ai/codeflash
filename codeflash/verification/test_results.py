@@ -85,10 +85,8 @@ class FunctionTestInvocation:
     test_framework: str  # unittest or pytest
     test_type: TestType
     return_value: Optional[object]  # The return value of the function invocation
-    time_out: Optional[bool]
-    verification_type: Optional[VerificationType] = VerificationType.FUNCTION_CALL
-    stdout: Optional[str] = None
-    stderr: Optional[str] = None
+    timed_out: Optional[bool]
+    verification_type: Optional[str] = VerificationType.FUNCTION_CALL
 
     @property
     def unique_invocation_loop_id(self) -> str:

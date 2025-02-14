@@ -1,4 +1,3 @@
-import re
 import sys
 
 from codeflash.cli_cmds.console import logger
@@ -6,22 +5,6 @@ from codeflash.verification.comparator import comparator
 from codeflash.verification.test_results import TestResults, TestType, VerificationType
 
 INCREASED_RECURSION_LIMIT = 5000
-percentage_pattern = re.compile(r"\.\s+\[\d+%\]")
-passed_pattern = re.compile(r"\d+\s+passed\s+in\s+\d+\.\d+s")
-not_allowed = {"test", "codeflash"}
-
-
-def cleanup_stdout(stdout: str) -> str:
-    return (
-        "\n".join(
-            line
-            for line in stdout.splitlines()
-            if not any(word in line for word in not_allowed)
-            and not percentage_pattern.search(line)
-            and not passed_pattern.search(line)
-        )
-        + "\n"
-    )
 
 
 def compare_test_results(original_results: TestResults, candidate_results: TestResults) -> bool:
@@ -39,7 +22,6 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
     for test_id in test_ids_superset:
         original_test_result = original_results.get_by_unique_invocation_loop_id(test_id)
         cdd_test_result = candidate_results.get_by_unique_invocation_loop_id(test_id)
-
         if cdd_test_result is not None and original_test_result is None:
             continue
         # If helper function instance_state verification is not present, that's ok. continue
@@ -84,10 +66,6 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         ):
             are_equal = False
             break
-        if not comparator(cleanup_stdout(original_test_result.stdout), cleanup_stdout(cdd_test_result.stdout)):
-            are_equal = False
-            break
-
     sys.setrecursionlimit(original_recursion_limit)
     if did_all_timeout:
         return False

@@ -174,8 +174,7 @@ ignore = [
     "TD002",
     "TD003",
     "TD004",
-    "PLR2004",
-    "UP007" # remove once we drop 3.9 support.
+    "PLR2004"
 ]
 
 [tool.ruff.lint.flake8-type-checking]
