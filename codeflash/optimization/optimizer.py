@@ -53,7 +53,6 @@ class Optimizer:
         function_to_optimize_ast: ast.FunctionDef | None = None,
         function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
     ) -> FunctionOptimizer:
-        # TODO: Any validations should be done here
         return FunctionOptimizer(
             test_cfg=self.test_cfg,
             aiservice_client=self.aiservice_client,
