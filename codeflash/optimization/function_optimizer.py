@@ -94,7 +94,7 @@ class FunctionOptimizer:
         aiservice_client: AiServiceClient | None = None,
         args: Namespace | None = None,
     ) -> None:
-        self.project_root: str = str(test_cfg.project_root_path)
+        self.project_root = test_cfg.project_root_path
         self.test_cfg = test_cfg
         self.aiservice_client = aiservice_client if aiservice_client else AiServiceClient()
         self.function_to_optimize = function_to_optimize
@@ -858,6 +858,13 @@ class FunctionOptimizer:
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                 )
+            if not behavioral_results:
+                logger.warning(
+                    f"Couldn't run any tests for original function {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
+                )
+                console.rule()
+                return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
+
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
@@ -905,12 +912,6 @@ class FunctionOptimizer:
                 if (result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass)
             ]
 
-            if not behavioral_results:
-                logger.warning(
-                    f"Couldn't run any tests for original function {function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
-                )
-                console.rule()
-                success = False
             if total_timing == 0:
                 logger.warning(
                     "The overall summed benchmark runtime of the original function is 0, couldn't run tests."
@@ -1104,7 +1105,7 @@ class FunctionOptimizer:
                 f'Error running tests in {", ".join(str(f) for f in test_files.test_files)}.\nTimeout Error'
             )
             return TestResults(), None
-        if run_result.returncode != 0:
+        if run_result.returncode != 0 and testing_type == TestingMode.BEHAVIOR:
             logger.debug(
                 f'Nonzero return code {run_result.returncode} when running tests in '
                 f'{", ".join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n'
