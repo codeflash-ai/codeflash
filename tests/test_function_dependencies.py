@@ -1,4 +1,5 @@
 import pathlib
+from argparse import Namespace
 from dataclasses import dataclass
 
 import pytest
@@ -6,8 +7,7 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.either import is_successful
 from codeflash.models.models import FunctionParent
 from codeflash.optimization.function_context import get_function_variables_definitions
-from codeflash.optimization.function_optimizer import FunctionOptimizer
-from codeflash.verification.verification_utils import TestConfig
+from codeflash.optimization.optimizer import Optimizer
 
 
 def calculate_something(data):
@@ -184,7 +184,17 @@ class Graph:
 
 def test_class_method_dependencies() -> None:
     file_path = pathlib.Path(__file__).resolve()
-
+    opt = Optimizer(
+        Namespace(
+            project_root=file_path.parent.resolve(),
+            disable_telemetry=True,
+            tests_root="tests",
+            test_framework="pytest",
+            pytest_cmd="pytest",
+            experiment_id=None,
+            test_project_root=file_path.parent.resolve(),
+        )
+    )
     function_to_optimize = FunctionToOptimize(
         function_name="topologicalSort",
         file_path=str(file_path),
@@ -192,19 +202,9 @@ def test_class_method_dependencies() -> None:
         starting_line=None,
         ending_line=None,
     )
-    func_optimizer = FunctionOptimizer(
-        function_to_optimize=function_to_optimize,
-        test_cfg=TestConfig(
-            tests_root=file_path,
-            tests_project_rootdir=file_path.parent,
-            project_root_path=file_path.parent,
-            test_framework="pytest",
-            pytest_cmd="pytest",
-        ),
-    )
     with open(file_path) as f:
         original_code = f.read()
-    ctx_result = func_optimizer.get_code_optimization_context()
+    ctx_result = opt.get_code_optimization_context(function_to_optimize, opt.args.project_root, original_code)
     if not is_successful(ctx_result):
         pytest.fail()
     code_context = ctx_result.unwrap()
@@ -280,7 +280,17 @@ def test_decorator_dependencies() -> None:
 
 def test_recursive_function_context() -> None:
     file_path = pathlib.Path(__file__).resolve()
-
+    opt = Optimizer(
+        Namespace(
+            project_root=file_path.parent.resolve(),
+            disable_telemetry=True,
+            tests_root="tests",
+            test_framework="pytest",
+            pytest_cmd="pytest",
+            experiment_id=None,
+            test_project_root=file_path.parent.resolve(),
+        )
+    )
     function_to_optimize = FunctionToOptimize(
         function_name="recursive",
         file_path=str(file_path),
@@ -288,20 +298,9 @@ def test_recursive_function_context() -> None:
         starting_line=None,
         ending_line=None,
     )
-    func_optimizer = FunctionOptimizer(
-        function_to_optimize=function_to_optimize,
-        test_cfg=TestConfig(
-            tests_root=file_path,
-            tests_project_rootdir=file_path.parent,
-            project_root_path=file_path.parent,
-            test_framework="pytest",
-            pytest_cmd="pytest",
-        ),
-    )
     with open(file_path) as f:
         original_code = f.read()
-
-    ctx_result = func_optimizer.get_code_optimization_context()
+    ctx_result = opt.get_code_optimization_context(function_to_optimize, opt.args.project_root, original_code)
     if not is_successful(ctx_result):
         pytest.fail()
     code_context = ctx_result.unwrap()
