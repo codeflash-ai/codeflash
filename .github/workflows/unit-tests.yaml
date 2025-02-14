@@ -6,10 +6,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-defaults:
-  run:
-    working-directory: ./cli
-
 jobs:
   unit-tests:
     strategy:
