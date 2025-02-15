@@ -1,5 +1,7 @@
+import os
 import re
 from datetime import datetime
+from pathlib import Path
 
 from version import __version_tuple__
 
@@ -16,7 +18,7 @@ def main():
     version_replacement = r"\g<1>" + major_minor_version + r".x"
 
     # Read the LICENSE file
-    with open("codeflash/LICENSE", encoding="utf8") as file:
+    with (Path(__file__).parent / "LICENSE").open(encoding="utf8") as file:
         license_text = file.read()
 
     # Replace the version in the LICENSE file
@@ -37,7 +39,7 @@ def main():
             updated_license_text = date_pattern.sub(date_replacement, updated_license_text)
 
     # Write the updated LICENSE file
-    with open("codeflash/LICENSE", "w", encoding="utf8") as file:
+    with open(Path(__file__).parent / "LICENSE", "w", encoding="utf8") as file:
         file.write(updated_license_text)
 
 

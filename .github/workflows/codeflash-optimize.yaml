@@ -1,0 +1,45 @@
+name: CodeFlash
+
+on:
+  pull_request:
+    paths:
+      - "**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  optimize:
+    name: Optimize new code in this PR
+    if: ${{ github.actor != 'codeflash-ai[bot]' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      CODEFLASH_PR_NUMBER: ${{ github.event.number }}
+      COLUMNS: 110
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11 for CLI
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies (CLI)
+        run: |
+          uv tool install poetry
+          uv venv
+          source .venv/bin/activate
+          poetry install --with dev
+
+      - name: Run Codeflash to optimize code
+        id: optimize_code
+        run: |
+          source .venv/bin/activate
+          poetry run codeflash

@@ -1,0 +1,41 @@
+name: end-to-end-test
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  bubble-sort-optimization-unittest:
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: 300
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python 3.11 for CLI
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies (CLI)
+        run: |
+          uv tool install poetry
+          uv venv
+          source .venv/bin/activate
+          poetry install --with dev
+
+      - name: Run Codeflash to optimize code
+        id: optimize_code
+        run: |
+          source .venv/bin/activate
+          poetry run python tests/scripts/end_to_end_test_bubblesort_unittest.py

@@ -1,0 +1,31 @@
+name: Mypy Type Checking for CLI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  type-check-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.30"
+
+      - name: install poetry as a tool
+        run: uv tool install poetry
+
+      - name: install dependencies
+        run: uvx poetry install --with dev
+
+      - name: Run mypy on allowlist
+        run: uvx poetry run mypy --non-interactive --config-file pyproject.toml @mypy_allowlist.txt
