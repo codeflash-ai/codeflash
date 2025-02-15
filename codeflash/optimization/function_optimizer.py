@@ -237,12 +237,7 @@ class FunctionOptimizer:
             cleanup_paths(paths_to_cleanup)
             return Failure(baseline_result.failure())
 
-        (
-            original_code_baseline,
-            original_code_runtime_distribution,
-            original_code_runtime_statistics,
-            test_functions_to_remove,
-        ) = baseline_result.unwrap()
+        original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
         if isinstance(original_code_baseline, OriginalCodeBaseline) and not coverage_critic(
             original_code_baseline.coverage_results, self.args.test_framework
         ):
@@ -259,7 +254,6 @@ class FunctionOptimizer:
                 candidates=candidates,
                 code_context=code_context,
                 original_code_baseline=original_code_baseline,
-                original_code_runtime_distribution=original_code_runtime_distribution,
                 original_helper_code=original_helper_code,
                 file_path_to_helper_classes=file_path_to_helper_classes,
             )
@@ -360,7 +354,6 @@ class FunctionOptimizer:
         candidates: list[OptimizedCandidate],
         code_context: CodeOptimizationContext,
         original_code_baseline: OriginalCodeBaseline,
-        original_code_runtime_distribution: npt.NDArray[np.float64],
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
     ) -> BestOptimization | None:
@@ -414,9 +407,7 @@ class FunctionOptimizer:
                     is_correct[candidate.optimization_id] = False
                     speedup_ratios[candidate.optimization_id] = None
                 else:
-                    candidate_result, candidate_runtime_distribution, candidate_runtime_statistics = (
-                        run_results.unwrap()
-                    )
+                    candidate_result: OptimizedCandidateResult = run_results.unwrap()
                     best_test_runtime = candidate_result.best_test_runtime
                     optimized_runtimes[candidate.optimization_id] = best_test_runtime
                     is_correct[candidate.optimization_id] = True
@@ -824,7 +815,7 @@ class FunctionOptimizer:
         code_context: CodeOptimizationContext,
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
-    ) -> Result[tuple[OriginalCodeBaseline, npt.NDArray[np.float64], dict[str, np.float64], list[str]], str]:
+    ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
         # For the original function - run the tests and get the runtime, plus coverage
         with progress_bar(f"Establishing original code baseline for {self.function_to_optimize.function_name}"):
             assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
@@ -951,7 +942,7 @@ class FunctionOptimizer:
         baseline_results: OriginalCodeBaseline,
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
-    ) -> Result[tuple[OptimizedCandidateResult, npt.NDArray[np.float64], dict[str, np.float64]], str]:
+    ) -> Result[OptimizedCandidateResult, str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
 
         with progress_bar("Testing optimization candidate"):
