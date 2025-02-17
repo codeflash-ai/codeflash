@@ -166,8 +166,18 @@ class Optimizer:
                     function_optimizer = self.create_function_optimizer(
                         function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code[original_module_path].source_code
                     )
-                    best_optimization = function_optimizer.optimize_function()
-                    self.test_files = TestFiles(test_files=[])
+                    try:
+                        best_optimization = function_optimizer.optimize_function()
+                    finally:
+                        for test_file in function_optimizer.test_files.get_by_type(TestType.GENERATED_REGRESSION).test_files:
+                            test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
+                            test_file.benchmarking_file_path.unlink(missing_ok=True)
+                        for test_file in function_optimizer.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
+                            test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
+                            test_file.benchmarking_file_path.unlink(missing_ok=True)
+                        for test_file in function_optimizer.test_files.get_by_type(TestType.CONCOLIC_COVERAGE_TEST).test_files:
+                            test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
+
                     if is_successful(best_optimization):
                         optimizations_found += 1
                     else:
@@ -180,14 +190,6 @@ class Optimizer:
             elif self.args.all:
                 logger.info("✨ All functions have been optimized! ✨")
         finally:
-            for test_file in self.test_files.get_by_type(TestType.GENERATED_REGRESSION).test_files:
-                test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
-                test_file.benchmarking_file_path.unlink(missing_ok=True)
-            for test_file in self.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
-                test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
-                test_file.benchmarking_file_path.unlink(missing_ok=True)
-            for test_file in self.test_files.get_by_type(TestType.CONCOLIC_COVERAGE_TEST).test_files:
-                test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
             if self.test_cfg.concolic_test_root_dir:
