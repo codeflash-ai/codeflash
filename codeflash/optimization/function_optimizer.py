@@ -545,6 +545,10 @@ class FunctionOptimizer:
         for helper_function in code_context.helper_functions:
             if helper_function.jedi_definition.type != "class":
                 read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
+        logger.debug("Read writable functions by file path:")
+        logger.debug(read_writable_functions_by_file_path)
+        logger.debug("Optimized code:")
+        logger.debug(optimized_code)
         for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
             did_update |= replace_function_definitions_in_module(
                 function_names=list(qualified_names),
@@ -848,12 +852,12 @@ class FunctionOptimizer:
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                 )
-            # if not behavioral_results:
-            #     logger.warning(
-            #         f"Couldn't run any tests for original function {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
-            #     )
-            #     console.rule()
-            #     return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
+            if not behavioral_results:
+                logger.warning(
+                    f"Couldn't run any tests for original function {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
+                )
+                console.rule()
+                return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
 
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
@@ -901,12 +905,6 @@ class FunctionOptimizer:
                 for result in behavioral_results
                 if (result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass)
             ]
-            if not behavioral_results:
-                logger.warning(
-                    f"Couldn't run any tests for original function {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
-                )
-                console.rule()
-                success = False
             if total_timing == 0:
                 logger.warning(
                     "The overall summed benchmark runtime of the original function is 0, couldn't run tests."
@@ -962,6 +960,7 @@ class FunctionOptimizer:
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
 
             # Instrument codeflash capture
+            candidate_fto_code = Path(function_to_optimize.file_path).read_text("utf-8")
             candidate_helper_code = {}
             for module_abspath in original_helper_code:
                 candidate_helper_code[module_abspath] = Path(module_abspath).read_text("utf-8")
@@ -981,7 +980,7 @@ class FunctionOptimizer:
             # Remove instrumentation
             finally:
                 self.write_code_and_helpers(
-                    self.function_to_optimize_source_code, candidate_helper_code, self.function_to_optimize.file_path
+                    candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
                 )
             console.print(
                 TestResults.report_to_tree(
