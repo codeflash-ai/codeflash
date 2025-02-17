@@ -52,14 +52,17 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         function_to_optimize_ast: ast.FunctionDef | None = None,
         function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
+            function_to_optimize_source_code: str | None = None,
     ) -> FunctionOptimizer:
         return FunctionOptimizer(
-            test_cfg=self.test_cfg,
-            aiservice_client=self.aiservice_client,
             function_to_optimize=function_to_optimize,
-            function_to_optimize_ast=function_to_optimize_ast,
+            test_cfg=self.test_cfg,
+            function_to_optimize_source_code=function_to_optimize_source_code,
             function_to_tests=function_to_tests,
+            function_to_optimize_ast=function_to_optimize_ast,
+            aiservice_client=self.aiservice_client,
             args=self.args,
+
         )
 
     def run(self) -> None:
@@ -161,7 +164,7 @@ class Optimizer:
                         continue
 
                     function_optimizer = self.create_function_optimizer(
-                        function_to_optimize, function_to_optimize_ast, function_to_tests
+                        function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code[original_module_path].source_code
                     )
                     best_optimization = function_optimizer.optimize_function()
                     self.test_files = TestFiles(test_files=[])

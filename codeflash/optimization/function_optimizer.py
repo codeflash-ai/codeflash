@@ -211,7 +211,7 @@ class FunctionOptimizer:
             key: self.function_to_tests.get(key, []) + function_to_concolic_tests.get(key, [])
             for key in set(self.function_to_tests) | set(function_to_concolic_tests)
         }
-        instrumented_unittests_created_for_function = self.instrument_existing_tests()
+        instrumented_unittests_created_for_function = self.instrument_existing_tests(function_to_all_tests)
 
         # Get a dict of file_path_to_classes of fto and helpers_of_fto
         file_path_to_helper_classes = defaultdict(set)
@@ -623,19 +623,19 @@ class FunctionOptimizer:
         get_run_tmp_file(Path("test_return_values_0.bin")).unlink(missing_ok=True)
         get_run_tmp_file(Path("test_return_values_0.sqlite")).unlink(missing_ok=True)
 
-    def instrument_existing_tests(self) -> set[Path]:
+    def instrument_existing_tests(self, function_to_all_tests: dict[str, list[FunctionCalledInTest]]) -> set[Path]:
         existing_test_files_count = 0
         replay_test_files_count = 0
         concolic_coverage_test_files_count = 0
         unique_instrumented_test_files = set()
 
         func_qualname = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
-        if func_qualname not in self.function_to_tests:
+        if func_qualname not in function_to_all_tests:
             logger.info(f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.")
             console.rule()
         else:
             test_file_invocation_positions = defaultdict(list[FunctionCalledInTest])
-            for tests_in_file in self.function_to_tests.get(func_qualname):
+            for tests_in_file in function_to_all_tests.get(func_qualname):
                 test_file_invocation_positions[
                     (tests_in_file.tests_in_file.test_file, tests_in_file.tests_in_file.test_type)
                 ].append(tests_in_file)
