@@ -25,7 +25,18 @@ def extract_dependent_function(main_function: str, code_context: CodeOptimizatio
     if len(dependent_functions) != 1:
         return False
 
-    return dependent_functions.pop()
+    return build_fully_qualified_name(dependent_functions.pop(), code_context)
+
+
+def build_fully_qualified_name(function_name: str, code_context: CodeOptimizationContext) -> str:
+    full_name = function_name
+    for obj_name, parents in code_context.preexisting_objects:
+        if obj_name == function_name:
+            for parent in parents:
+                if parent.type == "ClassDef":
+                    full_name = f"{parent.name}.{full_name}"
+            break
+    return full_name
 
 
 def generate_candidates(source_code_path: Path) -> list[str]:
