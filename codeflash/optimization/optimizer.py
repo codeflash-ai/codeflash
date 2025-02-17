@@ -1060,6 +1060,7 @@ class Optimizer:
                 )
                 console.rule()
                 success = False
+
             if total_timing == 0:
                 logger.warning(
                     "The overall summed benchmark runtime of the original function is 0, couldn't run tests."
