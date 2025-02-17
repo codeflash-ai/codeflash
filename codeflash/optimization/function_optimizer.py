@@ -848,12 +848,12 @@ class FunctionOptimizer:
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                 )
-            if not behavioral_results:
-                logger.warning(
-                    f"Couldn't run any tests for original function {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
-                )
-                console.rule()
-                return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
+            # if not behavioral_results:
+            #     logger.warning(
+            #         f"Couldn't run any tests for original function {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
+            #     )
+            #     console.rule()
+            #     return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
 
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
@@ -901,7 +901,12 @@ class FunctionOptimizer:
                 for result in behavioral_results
                 if (result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass)
             ]
-
+            if not behavioral_results:
+                logger.warning(
+                    f"Couldn't run any tests for original function {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
+                )
+                console.rule()
+                success = False
             if total_timing == 0:
                 logger.warning(
                     "The overall summed benchmark runtime of the original function is 0, couldn't run tests."
@@ -1099,8 +1104,8 @@ class FunctionOptimizer:
             logger.debug(
                 f'Nonzero return code {run_result.returncode} when running tests in '
                 f'{", ".join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n'
-                f"stdout: {run_result.stdout}\n"
-                f"stderr: {run_result.stderr}\n"
+                # f"stdout: {run_result.stdout}\n"
+                # f"stderr: {run_result.stderr}\n"
             )
 
         results, coverage_results = parse_test_results(
