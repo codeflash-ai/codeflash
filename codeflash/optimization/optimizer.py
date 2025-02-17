@@ -71,7 +71,7 @@ class Optimizer:
         console.rule()
         if not env_utils.ensure_codeflash_api_key():
             return
-
+        function_optimizer = None
         file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
         num_optimizable_functions: int
         (file_to_funcs_to_optimize, num_optimizable_functions) = get_functions_to_optimize(
@@ -166,18 +166,7 @@ class Optimizer:
                     function_optimizer = self.create_function_optimizer(
                         function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code[original_module_path].source_code
                     )
-                    try:
-                        best_optimization = function_optimizer.optimize_function()
-                    finally:
-                        for test_file in function_optimizer.test_files.get_by_type(TestType.GENERATED_REGRESSION).test_files:
-                            test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
-                            test_file.benchmarking_file_path.unlink(missing_ok=True)
-                        for test_file in function_optimizer.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
-                            test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
-                            test_file.benchmarking_file_path.unlink(missing_ok=True)
-                        for test_file in function_optimizer.test_files.get_by_type(TestType.CONCOLIC_COVERAGE_TEST).test_files:
-                            test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
-
+                    best_optimization = function_optimizer.optimize_function()
                     if is_successful(best_optimization):
                         optimizations_found += 1
                     else:
@@ -190,10 +179,20 @@ class Optimizer:
             elif self.args.all:
                 logger.info("✨ All functions have been optimized! ✨")
         finally:
+            if function_optimizer:
+                for test_file in function_optimizer.test_files.get_by_type(TestType.GENERATED_REGRESSION).test_files:
+                    test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
+                    test_file.benchmarking_file_path.unlink(missing_ok=True)
+                for test_file in function_optimizer.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
+                    test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
+                    test_file.benchmarking_file_path.unlink(missing_ok=True)
+                for test_file in function_optimizer.test_files.get_by_type(TestType.CONCOLIC_COVERAGE_TEST).test_files:
+                    test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
+                if function_optimizer.test_cfg.concolic_test_root_dir:
+                    shutil.rmtree(function_optimizer.test_cfg.concolic_test_root_dir, ignore_errors=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
-            if self.test_cfg.concolic_test_root_dir:
-                shutil.rmtree(self.test_cfg.concolic_test_root_dir, ignore_errors=True)
+
 
 
 def run_with_args(args: Namespace) -> None:

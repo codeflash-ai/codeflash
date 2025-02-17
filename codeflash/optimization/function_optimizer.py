@@ -545,10 +545,6 @@ class FunctionOptimizer:
         for helper_function in code_context.helper_functions:
             if helper_function.jedi_definition.type != "class":
                 read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
-        logger.debug("Read writable functions by file path:")
-        logger.debug(read_writable_functions_by_file_path)
-        logger.debug("Optimized code:")
-        logger.debug(optimized_code)
         for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
             did_update |= replace_function_definitions_in_module(
                 function_names=list(qualified_names),
@@ -834,6 +830,7 @@ class FunctionOptimizer:
 
             coverage_results = None
             # Instrument codeflash capture
+            original_fto_code = Path(self.function_to_optimize.file_path).read_text("utf-8")
             try:
                 instrument_codeflash_capture(
                     self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
@@ -850,7 +847,7 @@ class FunctionOptimizer:
             finally:
                 # Remove codeflash capture
                 self.write_code_and_helpers(
-                    self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+                    original_fto_code, original_helper_code, self.function_to_optimize.file_path
                 )
             if not behavioral_results:
                 logger.warning(
@@ -858,7 +855,10 @@ class FunctionOptimizer:
                 )
                 console.rule()
                 return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
-
+            if not coverage_critic(
+            coverage_results, self.args.test_framework
+                ):
+                return Failure("The threshold for test coverage was not met.")
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
