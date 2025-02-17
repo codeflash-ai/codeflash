@@ -372,6 +372,19 @@ def install_github_actions() -> None:
         workflows_path = git_root / ".github" / "workflows"
         optimize_yaml_path = workflows_path / "codeflash.yaml"
 
+        # Check if the workflow file already exists
+        if optimize_yaml_path.exists():
+            confirm_overwrite = inquirer_wrapper(
+                inquirer.confirm,
+                message=f"⚡️ GitHub Actions workflow already exists at {optimize_yaml_path}. Overwrite?",
+                default=False,  # Don't overwrite by default
+            )
+            ph("cli-github-optimization-confirm-workflow-overwrite", {"confirm_overwrite": confirm_overwrite})
+            if not confirm_overwrite:
+                click.echo("⏩️ Skipping workflow creation.")
+                ph("cli-github-workflow-skipped")
+                return
+
         confirm_creation_yes = inquirer_wrapper(
             inquirer.confirm,
             message="⚡️Shall I set up a GitHub action that will continuously optimize all new code in GitHub PRs"
