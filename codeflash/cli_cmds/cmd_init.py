@@ -578,8 +578,20 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     formatter_cmds = []
     if formatter == "black":
         formatter_cmds.append("black $file")
+        print("checking if black exists")
+        try:
+            import black
+        except ImportError as e:
+            print("black not found, installing via pip")
+            subprocess.run(["pip", "install", "black"])
     elif formatter == "ruff":
         formatter_cmds.extend(["ruff check --exit-zero --fix $file", "ruff format $file"])
+        print("checking if ruff exists")
+        try:
+            import ruff
+        except ImportError as e:
+            print("ruff not found, installing via pip")
+            subprocess.run(["pip", "install", "ruff"])
     elif formatter == "other":
         formatter_cmds.append("your-formatter $file")
         click.echo(
