@@ -960,7 +960,7 @@ class FunctionOptimizer:
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
 
             # Instrument codeflash capture
-            candidate_fto_code = Path(function_to_optimize.file_path).read_text("utf-8")
+            candidate_fto_code = Path(self.function_to_optimize.file_path).read_text("utf-8")
             candidate_helper_code = {}
             for module_abspath in original_helper_code:
                 candidate_helper_code[module_abspath] = Path(module_abspath).read_text("utf-8")
