@@ -52,7 +52,7 @@ class Optimizer:
         function_to_optimize: FunctionToOptimize,
         function_to_optimize_ast: ast.FunctionDef | None = None,
         function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
-            function_to_optimize_source_code: str | None = None,
+        function_to_optimize_source_code: str | None = "",
     ) -> FunctionOptimizer:
         return FunctionOptimizer(
             function_to_optimize=function_to_optimize,
