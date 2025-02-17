@@ -359,7 +359,6 @@ class FunctionOptimizer:
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime
-        best_speedup_ratio_until_now = 1.0
 
         speedup_ratios: dict[str, float | None] = {}
         optimized_runtimes: dict[str, float | None] = {}
