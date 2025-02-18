@@ -11,11 +11,15 @@ def run_test(expected_improvement_pct: int) -> bool:
         test_framework="pytest",
         min_improvement_x=1.0,
         coverage_expectations=[
-            CoverageExpectation(function_name="sorter", expected_coverage=100.0, expected_lines=[2, 3, 4, 5, 6, 7, 8])
+            CoverageExpectation(
+                function_name="sorter", expected_coverage=100.0, expected_lines=[2, 3, 4, 5, 6, 7, 8, 9, 10]
+            )
         ],
     )
     cwd = (pathlib.Path(__file__).parent.parent.parent / "code_to_optimize").resolve()
-    return run_codeflash_command(cwd, config, expected_improvement_pct)
+    return run_codeflash_command(
+        cwd, config, expected_improvement_pct, ['print("codeflash stdout: Sorting list")', 'print(f"result: {arr}")']
+    )
 
 
 if __name__ == "__main__":
