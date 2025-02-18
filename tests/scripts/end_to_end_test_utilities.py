@@ -63,19 +63,21 @@ def validate_coverage(stdout: str, expectations: list[CoverageExpectation]) -> b
         assert coverage_match, f"Failed to find coverage data for {expect.function_name}"
 
         coverage = float(coverage_match.group(1))
-        assert (
-            coverage == expect.expected_coverage
-        ), f"Coverage was {coverage} instead of {expect.expected_coverage} for function: {expect.function_name}"
+        assert coverage == expect.expected_coverage, (
+            f"Coverage was {coverage} instead of {expect.expected_coverage} for function: {expect.function_name}"
+        )
 
         executed_lines = list(map(int, coverage_match.group(2).split(", ")))
-        assert (
-            executed_lines == expect.expected_lines
-        ), f"Executed lines were {executed_lines} instead of {expect.expected_lines} for function: {expect.function_name}"
+        assert executed_lines == expect.expected_lines, (
+            f"Executed lines were {executed_lines} instead of {expect.expected_lines} for function: {expect.function_name}"
+        )
 
     return True
 
 
-def run_codeflash_command(cwd: pathlib.Path, config: TestConfig, expected_improvement_pct: int) -> bool:
+def run_codeflash_command(
+    cwd: pathlib.Path, config: TestConfig, expected_improvement_pct: int, expected_in_stdout: list[str] = None
+) -> bool:
     logging.basicConfig(level=logging.INFO)
     if config.trace_mode:
         return run_trace_test(cwd, config, expected_improvement_pct)
@@ -97,12 +99,21 @@ def run_codeflash_command(cwd: pathlib.Path, config: TestConfig, expected_improv
     return_code = process.wait()
     stdout = "".join(output)
 
-    if not validate_output(stdout, return_code, expected_improvement_pct, config):
+    validated = validate_output(stdout, return_code, expected_improvement_pct, config)
+    if not validated:
         # Write original file contents back to file
         path_to_file.write_text(file_contents, "utf-8")
         logging.info("Codeflash run did not meet expected requirements for testing, reverting file changes.")
         return False
-    return True
+
+    if expected_in_stdout:
+        stdout_validated = validate_stdout_in_candidate(stdout, expected_in_stdout)
+        if not stdout_validated:
+            logging.error("Failed to find expected output in candidate output")
+            validated = False
+        logging.info(f"Success: Expected output found in candidate output")
+
+    return validated
 
 
 def build_command(cwd: pathlib.Path, config: TestConfig, test_root: pathlib.Path) -> list[str]:
@@ -162,6 +173,11 @@ def validate_output(stdout: str, return_code: int, expected_improvement_pct: int
 
     logging.info(f"Success: Performance improvement is {improvement_pct}%")
     return True
+
+
+def validate_stdout_in_candidate(stdout: str, expected_in_stdout: list[str]) -> bool:
+    candidate_output = stdout[stdout.find("INFO     Best candidate") : stdout.find("Best Candidate Explanation")]
+    return all(expected in candidate_output for expected in expected_in_stdout)
 
 
 def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_pct: int) -> bool:
