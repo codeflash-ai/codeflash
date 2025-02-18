@@ -268,7 +268,7 @@ def parse_test_xml(
             matches = matches_re.findall(sys_stdout)
 
             if sys_stdout:
-                sys_stdout = cleaner_re.sub("", sys_stdout)
+                sys_stdout = cleaner_re.sub("", sys_stdout).strip()
 
             if not matches or not len(matches):
                 test_results.add(
