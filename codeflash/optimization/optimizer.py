@@ -45,8 +45,6 @@ class Optimizer:
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
 
-        self.test_files = TestFiles(test_files=[])
-
     def create_function_optimizer(
         self,
         function_to_optimize: FunctionToOptimize,

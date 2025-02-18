@@ -823,6 +823,7 @@ class FunctionOptimizer:
             test_env = os.environ.copy()
             test_env["CODEFLASH_TEST_ITERATION"] = "0"
             test_env["CODEFLASH_TRACER_DISABLE"] = "1"
+            test_env["CODEFLASH_LOOP_INDEX"] = "0"
             if "PYTHONPATH" not in test_env:
                 test_env["PYTHONPATH"] = str(self.args.project_root)
             else:
@@ -830,7 +831,6 @@ class FunctionOptimizer:
 
             coverage_results = None
             # Instrument codeflash capture
-            original_fto_code = Path(self.function_to_optimize.file_path).read_text("utf-8")
             try:
                 instrument_codeflash_capture(
                     self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
@@ -847,7 +847,7 @@ class FunctionOptimizer:
             finally:
                 # Remove codeflash capture
                 self.write_code_and_helpers(
-                    original_fto_code, original_helper_code, self.function_to_optimize.file_path
+                    self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                 )
             if not behavioral_results:
                 logger.warning(
@@ -949,6 +949,7 @@ class FunctionOptimizer:
 
         with progress_bar("Testing optimization candidate"):
             test_env = os.environ.copy()
+            test_env["CODEFLASH_LOOP_INDEX"] = "0"
             test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_candidate_index)
             test_env["CODEFLASH_TRACER_DISABLE"] = "1"
             if "PYTHONPATH" not in test_env:
@@ -1103,8 +1104,8 @@ class FunctionOptimizer:
             logger.debug(
                 f'Nonzero return code {run_result.returncode} when running tests in '
                 f'{", ".join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n'
-                # f"stdout: {run_result.stdout}\n"
-                # f"stderr: {run_result.stderr}\n"
+                f"stdout: {run_result.stdout}\n"
+                f"stderr: {run_result.stderr}\n"
             )
 
         results, coverage_results = parse_test_results(
