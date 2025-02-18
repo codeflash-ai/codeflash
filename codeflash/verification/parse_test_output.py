@@ -42,6 +42,10 @@ def parse_func(file_path: Path) -> XMLParser:
     return parse(file_path, xml_parser)
 
 
+matches_re = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!")
+cleaner_re = re.compile(r"!######(.*?)######!")
+
+
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
     test_results = TestResults()
     if not file_location.exists():
@@ -259,7 +263,13 @@ def parse_test_xml(
                     message = testcase.result[0].message.lower()
                     if "timed out" in message:
                         timed_out = True
-            matches = re.findall(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!", testcase.system_out or "")
+
+            sys_stdout = testcase.system_out or ""
+            matches = matches_re.findall(sys_stdout)
+
+            if sys_stdout:
+                sys_stdout = cleaner_re.sub("", sys_stdout)
+
             if not matches or not len(matches):
                 test_results.add(
                     FunctionTestInvocation(
@@ -278,6 +288,7 @@ def parse_test_xml(
                         test_type=test_type,
                         return_value=None,
                         timed_out=timed_out,
+                        stdout=sys_stdout,
                     )
                 )
 
@@ -306,6 +317,7 @@ def parse_test_xml(
                             test_type=test_type,
                             return_value=None,
                             timed_out=timed_out,
+                            stdout=sys_stdout,
                         )
                     )
 
@@ -393,6 +405,7 @@ def merge_test_results(
                         verification_type=VerificationType(result_bin.verification_type)
                         if result_bin.verification_type
                         else None,
+                        stdout=xml_result.stdout,
                     )
                 )
         elif xml_results.test_results[0].id.iteration_id is not None:
@@ -422,6 +435,7 @@ def merge_test_results(
                         verification_type=VerificationType(bin_result.verification_type)
                         if bin_result.verification_type
                         else None,
+                        stdout=xml_result.stdout,
                     )
                 )
         else:
@@ -448,6 +462,7 @@ def merge_test_results(
                         verification_type=VerificationType(bin_result.verification_type)
                         if bin_result.verification_type
                         else None,
+                        stdout=xml_result.stdout,
                     )
                 )
 
