@@ -590,13 +590,8 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     if formatter in ["black", "ruff"]:
         try:
             result = subprocess.run([formatter], capture_output=True, check=False)
-            click.echo(f"✅ Formatter exists on system")
-            click.echo()
         except FileNotFoundError as e:
             click.echo(f"⚠️ Formatter not found: {formatter}")
-            click.echo()
-            # Not throwing an exception, letting the program proceed even though the formatter was not found, putting it on the user to install it later
-            # raise e from None
     codeflash_section["formatter-cmds"] = formatter_cmds
     # Add the 'codeflash' section, ensuring 'tool' section exists
     tool_section = pyproject_data.get("tool", tomlkit.table())
