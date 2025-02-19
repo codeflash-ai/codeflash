@@ -3,8 +3,11 @@ from __future__ import annotations
 import ast
 import concurrent.futures
 import os
+import re
+import shlex
 import shutil
 import subprocess
+import tempfile
 import time
 import uuid
 from collections import defaultdict
@@ -13,6 +16,7 @@ from typing import TYPE_CHECKING
 
 import isort
 import libcst as cst
+from crosshair.auditwall import SideEffectDetected
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -29,12 +33,14 @@ from codeflash.code_utils.code_utils import (
     get_run_tmp_file,
     module_name_from_file_path,
 )
+from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
     N_CANDIDATES,
     N_TESTS_TO_GENERATE,
     TOTAL_LOOPING_TIME,
 )
+from codeflash.code_utils.coverage_utils import prepare_coverage_files
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
@@ -63,12 +69,13 @@ from codeflash.result.create_pr import check_create_pr, existing_tests_source_fo
 from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
+from codeflash.verification.codeflash_auditwall import transform_code
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestResults, TestType
-from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests
+from codeflash.verification.test_runner import execute_test_subprocess, run_behavioral_tests, run_benchmarking_tests
 from codeflash.verification.verification_utils import get_test_file_path
 from codeflash.verification.verifier import generate_tests
 
@@ -149,12 +156,14 @@ class FunctionOptimizer:
                 self.args.project_root,
             )
 
+
         generated_test_paths = [
             get_test_file_path(
                 self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
             )
             for test_index in range(N_TESTS_TO_GENERATE)
         ]
+
         generated_perf_test_paths = [
             get_test_file_path(
                 self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="perf"
@@ -844,6 +853,8 @@ class FunctionOptimizer:
                     enable_coverage=test_framework == "pytest",
                     code_context=code_context,
                 )
+            except SideEffectDetected as e:
+                return Failure(f"Side effect detected in original code: {e}")
             finally:
                 # Remove codeflash capture
                 self.write_code_and_helpers(
@@ -855,9 +866,7 @@ class FunctionOptimizer:
                 )
                 console.rule()
                 return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
-            if not coverage_critic(
-            coverage_results, self.args.test_framework
-                ):
+            if not coverage_critic(coverage_results, self.args.test_framework):
                 return Failure("The threshold for test coverage was not met.")
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
@@ -897,7 +906,6 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
-
 
             total_timing = benchmarking_results.total_passed_runtime()  # caution: doesn't handle the loop index
             functions_to_remove = [
@@ -1097,13 +1105,13 @@ class FunctionOptimizer:
                 raise ValueError(f"Unexpected testing type: {testing_type}")
         except subprocess.TimeoutExpired:
             logger.exception(
-                f'Error running tests in {", ".join(str(f) for f in test_files.test_files)}.\nTimeout Error'
+                f"Error running tests in {', '.join(str(f) for f in test_files.test_files)}.\nTimeout Error"
             )
             return TestResults(), None
         if run_result.returncode != 0 and testing_type == TestingMode.BEHAVIOR:
             logger.debug(
-                f'Nonzero return code {run_result.returncode} when running tests in '
-                f'{", ".join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n'
+                f"Nonzero return code {run_result.returncode} when running tests in "
+                f"{', '.join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n"
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
@@ -1149,4 +1157,3 @@ class FunctionOptimizer:
                 zip(generated_test_paths, generated_perf_test_paths)
             )
         ]
-
