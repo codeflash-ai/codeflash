@@ -591,7 +591,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         try:
             result = subprocess.run([formatter], capture_output=True, check=False)
         except FileNotFoundError as e:
-            click.echo(f"⚠️ Formatter not found: {formatter}, please install via \'pip install {formatter}\'")
+            click.echo(f"⚠️ Formatter not found: {formatter}, please ensure it is installed")
     codeflash_section["formatter-cmds"] = formatter_cmds
     # Add the 'codeflash' section, ensuring 'tool' section exists
     tool_section = pyproject_data.get("tool", tomlkit.table())
