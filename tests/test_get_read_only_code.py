@@ -1,6 +1,7 @@
 from textwrap import dedent
 
 import pytest
+
 from codeflash.context.code_context_extractor import get_read_only_code
 
 
@@ -66,7 +67,7 @@ def test_dunder_methods_remove_docstring() -> None:
 
     expected = """
     class TestClass:
-    
+
         def __str__(self):
             return f"Value: {self.x}"
     """
@@ -91,7 +92,7 @@ def test_class_remove_docstring() -> None:
 
     expected = """
     class TestClass:
-    
+
         def __str__(self):
             return f"Value: {self.x}"
     """
@@ -118,7 +119,7 @@ def test_mixed_remove_docstring() -> None:
 
     expected = """
     class TestClass:
-    
+
         def __str__(self):
             return f"Value: {self.x}"
     """
@@ -655,7 +656,7 @@ def test_simplified_complete_implementation() -> None:
         processor = DataProcessor(sample_data)
 
         class ResultHandler:
-        
+
             def __str__(self) -> str:
                 return f"ResultHandler(cache_size={len(self.cache)})"
 

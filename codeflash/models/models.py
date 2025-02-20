@@ -16,7 +16,11 @@ from typing_extensions import Annotated
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_utils import validate_python_code
-from codeflash.code_utils.coverage_utils import extract_dependent_function, generate_candidates
+from codeflash.code_utils.coverage_utils import (
+    build_fully_qualified_name,
+    extract_dependent_function,
+    generate_candidates,
+)
 from codeflash.code_utils.env_utils import is_end_to_end
 from codeflash.verification.test_results import TestResults, TestType
 
@@ -322,18 +326,19 @@ class CoverageData:
         coverage_data: dict[str, dict[str, Any]],
         original_cov_data: dict[str, dict[str, Any]],
     ) -> tuple[FunctionCoverage, Union[FunctionCoverage, None]]:
+        resolved_name = build_fully_qualified_name(function_name, code_context)
         try:
             main_function_coverage = FunctionCoverage(
-                name=function_name,
-                coverage=coverage_data[function_name]["summary"]["percent_covered"],
-                executed_lines=coverage_data[function_name]["executed_lines"],
-                unexecuted_lines=coverage_data[function_name]["missing_lines"],
-                executed_branches=coverage_data[function_name]["executed_branches"],
-                unexecuted_branches=coverage_data[function_name]["missing_branches"],
+                name=resolved_name,
+                coverage=coverage_data[resolved_name]["summary"]["percent_covered"],
+                executed_lines=coverage_data[resolved_name]["executed_lines"],
+                unexecuted_lines=coverage_data[resolved_name]["missing_lines"],
+                executed_branches=coverage_data[resolved_name]["executed_branches"],
+                unexecuted_branches=coverage_data[resolved_name]["missing_branches"],
             )
         except KeyError:
             main_function_coverage = FunctionCoverage(
-                name=function_name,
+                name=resolved_name,
                 coverage=0,
                 executed_lines=[],
                 unexecuted_lines=[],

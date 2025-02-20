@@ -46,7 +46,7 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
 """
 
 
-def test_function_full_instrumentation() -> None:
+def test_bubble_sort_behavior_results() -> None:
     code = """from code_to_optimize.bubble_sort import sorter
 
 
@@ -147,7 +147,9 @@ def test_sort():
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
-        test_files = TestFiles(
+
+        func_optimizer = opt.create_function_optimizer(func)
+        func_optimizer.test_files = TestFiles(
             test_files=[
                 TestFile(
                     instrumented_behavior_file_path=test_path,
@@ -157,10 +159,10 @@ def test_sort():
                 )
             ]
         )
-        test_results, coverage_data = opt.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
-            test_files=test_files,
+            test_files=func_optimizer.test_files,
             optimization_iteration=0,
             pytest_min_loops=1,
             pytest_max_loops=1,
@@ -318,7 +320,8 @@ def test_sort():
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.EXISTING_UNIT_TEST
-        test_files = TestFiles(
+        func_optimizer = opt.create_function_optimizer(fto)
+        func_optimizer.test_files = TestFiles(
             test_files=[
                 TestFile(
                     instrumented_behavior_file_path=test_path,
@@ -328,10 +331,10 @@ def test_sort():
                 )
             ]
         )
-        test_results, coverage_data = opt.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
-            test_files=test_files,
+            test_files=func_optimizer.test_files,
             optimization_iteration=0,
             pytest_min_loops=1,
             pytest_max_loops=1,
@@ -412,11 +415,21 @@ class BubbleSorter:
                 test_project_root=project_root_path,
             )
         )
-
-        new_test_results, coverage_data = opt.run_and_parse_tests(
+        func_optimizer = opt.create_function_optimizer(fto)
+        func_optimizer.test_files = TestFiles(
+            test_files=[
+                TestFile(
+                    instrumented_behavior_file_path=test_path,
+                    test_type=test_type,
+                    original_file_path=test_path,
+                    benchmarking_file_path=test_path_perf,
+                )
+            ]
+        )
+        new_test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
-            test_files=test_files,
+            test_files=func_optimizer.test_files,
             optimization_iteration=0,
             pytest_min_loops=1,
             pytest_max_loops=1,
