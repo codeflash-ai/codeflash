@@ -220,19 +220,26 @@ def collect_setup_info() -> SetupInfo:
         carousel=True,
     )
 
+    git_remote = ""
     try:
         repo = Repo(str(module_root), search_parent_directories=True)
         git_remotes = get_git_remotes(repo)
-        if len(git_remotes) > 1:
-            git_remote = inquirer_wrapper(
-                inquirer.list_input,
-                message="What git remote do you want Codeflash to use for new Pull Requests? ",
-                choices=git_remotes,
-                default="origin",
-                carousel=True,
-            )
+        if git_remotes:  # Only proceed if there are remotes
+            if len(git_remotes) > 1:
+                git_remote = inquirer_wrapper(
+                    inquirer.list_input,
+                    message="What git remote do you want Codeflash to use for new Pull Requests? ",
+                    choices=git_remotes,
+                    default="origin",
+                    carousel=True,
+                )
+            else:
+                git_remote = git_remotes[0]
         else:
-            git_remote = git_remotes[0]
+            click.echo(
+                "No git remotes found. You can still use Codeflash locally, but you'll need to set up a remote "
+                "repository to use GitHub features."
+            )
     except InvalidGitRepositoryError:
         git_remote = ""
 
