@@ -87,7 +87,8 @@ def run_behavioral_tests(
                 env=pytest_test_env,
                 timeout=600,
             )
-            logger.debug(results)
+            logger.debug(
+                f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ''}""")
         else:
             results = execute_test_subprocess(
                 pytest_cmd_list + common_pytest_args + result_args + test_files,
@@ -95,12 +96,16 @@ def run_behavioral_tests(
                 env=pytest_test_env,
                 timeout=600,  # TODO: Make this dynamic
             )
+            logger.debug(
+                f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ''}""")
     elif test_framework == "unittest":
         if enable_coverage:
             raise ValueError("Coverage is not supported yet for unittest framework")
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_files = [file.instrumented_behavior_file_path for file in test_paths.test_files]
         result_file_path, results = run_unittest_tests(verbose, test_files, test_env, cwd)
+        logger.debug(
+            f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ''}""")
     else:
         raise ValueError(f"Unsupported test framework: {test_framework}")
 

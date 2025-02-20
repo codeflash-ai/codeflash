@@ -168,7 +168,7 @@ class TestResults(BaseModel):
         for result in self.test_results:
             if result.did_pass and not result.runtime:
                 logger.debug(
-                    f"Ignoring test case that passed but had no runtime -> {result.id}, Loop # {result.loop_index}"
+                    f"Ignoring test case that passed but had no runtime -> {result.id}, Loop # {result.loop_index}, Test Type: {result.test_type}, Verification Type: {result.verification_type}"
                 )
         usable_runtimes = [
             (result.id, result.runtime) for result in self.test_results if result.did_pass and result.runtime
