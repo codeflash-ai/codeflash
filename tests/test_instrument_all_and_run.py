@@ -168,8 +168,17 @@ def test_sort():
             pytest_max_loops=1,
             testing_time=0.1,
         )
-        assert "codeflash stdout: Sorting list" in test_results[0].stdout
-        assert "result: [0, 1, 2, 3, 4, 5]" in test_results[0].stdout
+
+        out_str = """--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+
+codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5]
+
+codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
+        assert out_str == test_results[0].stdout.strip()
         assert test_results[0].id.function_getting_tested == "sorter"
         assert test_results[0].id.iteration_id == "1_0"
         assert test_results[0].id.test_class_name is None
@@ -181,8 +190,8 @@ def test_sort():
         assert test_results[0].runtime > 0
         assert test_results[0].did_pass
         assert test_results[0].return_value == ([0, 1, 2, 3, 4, 5],)
-        assert "codeflash stdout: Sorting list" in test_results[1].stdout
-        assert "result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]" in test_results[1].stdout
+        assert out_str == test_results[1].stdout.strip()
+
         assert test_results[1].id.function_getting_tested == "sorter"
         assert test_results[1].id.iteration_id == "4_0"
         assert test_results[1].id.test_class_name is None

@@ -1,3 +1,6 @@
+import sys
+
+
 class BubbleSorter:
     def __init__(self, x=0):
         self.x = x
@@ -10,4 +13,5 @@ class BubbleSorter:
                     temp = arr[j]
                     arr[j] = arr[j + 1]
                     arr[j + 1] = temp
+        print("stderr test", file=sys.stderr)
         return arr

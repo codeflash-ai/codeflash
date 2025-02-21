@@ -187,6 +187,9 @@ def test_single_element_list():
 
         # Replace with optimized code that mutated instance attribute
         optimized_code_mutated_attr = """
+import sys
+
+
 class BubbleSorter:
 
     def __init__(self, x=1):
@@ -200,6 +203,7 @@ class BubbleSorter:
                     temp = arr[j]
                     arr[j] = arr[j + 1]
                     arr[j + 1] = temp
+        print("stderr test", file=sys.stderr)
         return arr
                         """
         fto_path.write_text(optimized_code_mutated_attr, "utf-8")
@@ -332,6 +336,9 @@ def test_single_element_list():
         assert test_results[1].return_value[2] == [1, 2, 3]
         # Replace with optimized code that mutated instance attribute
         optimized_code_mutated_attr = """
+import sys
+
+
 class BubbleSorter:
 
     def __init__(self, x=1):
@@ -345,6 +352,7 @@ class BubbleSorter:
                     temp = arr[j]
                     arr[j] = arr[j + 1]
                     arr[j + 1] = temp
+        print("stderr test", file=sys.stderr)
         return arr
                         """
         fto_path.write_text(optimized_code_mutated_attr, "utf-8")
@@ -388,6 +396,9 @@ class BubbleSorter:
         )  # The test should fail because the instance attribute was mutated
         # Replace with optimized code that did not mutate existing instance attribute, but added a new one
         optimized_code_new_attr = """
+import sys
+
+
 class BubbleSorter:
     def __init__(self, x=0):
         self.x = x
@@ -401,6 +412,7 @@ class BubbleSorter:
                     temp = arr[j]
                     arr[j] = arr[j + 1]
                     arr[j + 1] = temp
+        print("stderr test", file=sys.stderr)
         return arr
                         """
         fto_path.write_text(optimized_code_new_attr, "utf-8")
