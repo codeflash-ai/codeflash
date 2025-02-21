@@ -168,6 +168,8 @@ def test_sort():
             pytest_max_loops=1,
             testing_time=0.1,
         )
+        assert "codeflash stdout: Sorting list" in test_results[0].stdout
+        assert "result: [0, 1, 2, 3, 4, 5]" in test_results[0].stdout
         assert test_results[0].id.function_getting_tested == "sorter"
         assert test_results[0].id.iteration_id == "1_0"
         assert test_results[0].id.test_class_name is None
@@ -179,7 +181,8 @@ def test_sort():
         assert test_results[0].runtime > 0
         assert test_results[0].did_pass
         assert test_results[0].return_value == ([0, 1, 2, 3, 4, 5],)
-
+        assert "codeflash stdout: Sorting list" in test_results[1].stdout
+        assert "result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]" in test_results[1].stdout
         assert test_results[1].id.function_getting_tested == "sorter"
         assert test_results[1].id.iteration_id == "4_0"
         assert test_results[1].id.test_class_name is None
@@ -340,13 +343,11 @@ def test_sort():
             pytest_max_loops=1,
             testing_time=0.1,
         )
-
         assert len(test_results) == 4
         assert test_results[0].id.function_getting_tested == "BubbleSorter.__init__"
         assert test_results[0].id.test_function_name == "test_sort"
         assert test_results[0].did_pass
         assert test_results[0].return_value[0] == {"x": 0}
-
         assert test_results[1].id.function_getting_tested == "BubbleSorter.sorter"
         assert test_results[1].id.iteration_id == "2_0"
         assert test_results[1].id.test_class_name is None
@@ -358,7 +359,8 @@ def test_sort():
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
         assert test_results[1].return_value == ([0, 1, 2, 3, 4, 5],)
-
+        assert "codeflash stdout : BubbleSorter.sorter() called" in test_results[1].stdout
+        assert compare_test_results(test_results, test_results)
         assert test_results[2].id.function_getting_tested == "BubbleSorter.__init__"
         assert test_results[2].id.test_function_name == "test_sort"
         assert test_results[2].did_pass
