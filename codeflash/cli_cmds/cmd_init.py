@@ -20,6 +20,7 @@ from pydantic.dataclasses import dataclass
 from codeflash.api.cfapi import is_github_app_installed_on_repo
 from codeflash.cli_cmds.cli_common import apologize_and_exit, inquirer_wrapper, inquirer_wrapper_path
 from codeflash.cli_cmds.console import console, logger
+from codeflash.verification.test_runner import execute_subprocess
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import get_codeflash_api_key
@@ -589,7 +590,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         formatter_cmds.append("disabled")
     if formatter in ["black", "ruff"]:
         try:
-            result = subprocess.run([formatter], capture_output=True, check=False)
+            result = execute_subprocess([formatter], cwd=None, env=None)
         except FileNotFoundError as e:
             click.echo(f"⚠️ Formatter not found: {formatter}, please ensure it is installed")
     codeflash_section["formatter-cmds"] = formatter_cmds

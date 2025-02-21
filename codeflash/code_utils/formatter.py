@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import isort
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.verification.test_runner import execute_subprocess
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -27,7 +28,7 @@ def format_code(formatter_cmds: list[str], path: Path) -> str:
         formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
         formatter_cmd_list = [path.as_posix() if chunk == file_token else chunk for chunk in formatter_cmd_list]
         try:
-            result = subprocess.run(formatter_cmd_list, capture_output=True, check=False)
+            result = execute_subprocess(formatter_cmd_list, cwd=None, env=None)
             if result.returncode == 0:
                 console.rule(f"Formatted Successfully with: {formatter_name.replace('$file', path.name)}")
             else:

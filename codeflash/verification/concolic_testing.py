@@ -7,6 +7,7 @@ from argparse import Namespace
 from pathlib import Path
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.verification.test_runner import execute_subprocess
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.static_analysis import has_typed_parameters
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
@@ -25,7 +26,7 @@ def generate_concolic_tests(
         logger.info("Generating concolic opcode coverage tests for the original code…")
         console.rule()
         try:
-            cover_result = subprocess.run(
+            cover_result = execute_subprocess(
                 [
                     SAFE_SYS_EXECUTABLE,
                     "-m",

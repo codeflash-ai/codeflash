@@ -14,6 +14,7 @@ from pydantic.dataclasses import dataclass
 from pytest import ExitCode
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.verification.test_runner import execute_subprocess
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile
@@ -49,7 +50,7 @@ def discover_tests_pytest(
     project_root = cfg.project_root_path
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
-    result = subprocess.run(
+    result = execute_subprocess(
         [
             SAFE_SYS_EXECUTABLE,
             Path(__file__).parent / "pytest_new_process_discovery.py",

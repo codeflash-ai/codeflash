@@ -14,6 +14,7 @@ import inquirer
 from unidiff import PatchSet
 
 from codeflash.cli_cmds.cli_common import inquirer_wrapper
+from codeflash.verification.test_runner import execute_subprocess
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_consts import N_CANDIDATES
 
@@ -158,7 +159,9 @@ def create_git_worktrees(
         worktree_root = Path(tempfile.mkdtemp(dir=worktree_root_dir))
         worktrees = [Path(tempfile.mkdtemp(dir=worktree_root)) for _ in range(N_CANDIDATES + 1)]
         for worktree in worktrees:
-            subprocess.run(["git", "worktree", "add", "-d", worktree], cwd=module_root, check=True)
+            execute_subprocess(
+                ["git", "worktree", "add", "-d", worktree], cwd=module_root, env=None, capture_output=False
+            )
     else:
         worktree_root = None
         worktrees = []
@@ -168,7 +171,7 @@ def create_git_worktrees(
 def remove_git_worktrees(worktree_root: Path | None, worktrees: list[Path]) -> None:
     try:
         for worktree in worktrees:
-            subprocess.run(["git", "worktree", "remove", "-f", worktree], check=True)
+            execute_subprocess(["git", "worktree", "remove", "-f", worktree], cwd=None, env=None, capture_output=False)
     except subprocess.CalledProcessError as e:
         logger.warning(f"Error removing worktrees: {e}")
     if worktree_root:

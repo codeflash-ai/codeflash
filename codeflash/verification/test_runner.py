@@ -17,12 +17,14 @@ if TYPE_CHECKING:
     from codeflash.models.models import TestFiles
 
 
-def execute_test_subprocess(
-    cmd_list: list[str], cwd: Path, env: dict[str, str] | None, timeout: int = 600
+def execute_subprocess(
+    cmd_list: list[str], cwd: Path, env: dict[str, str] | None, timeout: int = 600, capture_output: bool = True
 ) -> subprocess.CompletedProcess:
     """Execute a subprocess with the given command list, working directory, environment variables, and timeout."""
-    logger.debug(f"executing test run with command: {' '.join(cmd_list)}")
-    return subprocess.run(cmd_list, capture_output=True, cwd=cwd, env=env, text=True, timeout=timeout, check=False)
+    logger.debug(f"Executing command: {' '.join(cmd_list)}")
+    return subprocess.run(
+        cmd_list, capture_output=capture_output, cwd=cwd, env=env, text=True, timeout=timeout, check=False
+    )
 
 
 def run_behavioral_tests(
@@ -71,13 +73,13 @@ def run_behavioral_tests(
         if enable_coverage:
             coverage_database_file, coveragercfile = prepare_coverage_files()
 
-            cov_erase = execute_test_subprocess(
+            cov_erase = execute_subprocess(
                 shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env
             )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any,
             # then the current run will be appended to the previous data, which skews the results
             logger.debug(cov_erase)
 
-            results = execute_test_subprocess(
+            results = execute_subprocess(
                 shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage run --rcfile={coveragercfile.as_posix()} -m")
                 + pytest_cmd_list
                 + common_pytest_args
@@ -88,16 +90,18 @@ def run_behavioral_tests(
                 timeout=600,
             )
             logger.debug(
-                f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ''}""")
+                f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
+            )
         else:
-            results = execute_test_subprocess(
+            results = execute_subprocess(
                 pytest_cmd_list + common_pytest_args + result_args + test_files,
                 cwd=cwd,
                 env=pytest_test_env,
                 timeout=600,  # TODO: Make this dynamic
             )
             logger.debug(
-                f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ''}""")
+                f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
+            )
     elif test_framework == "unittest":
         if enable_coverage:
             raise ValueError("Coverage is not supported yet for unittest framework")
@@ -105,7 +109,8 @@ def run_behavioral_tests(
         test_files = [file.instrumented_behavior_file_path for file in test_paths.test_files]
         result_file_path, results = run_unittest_tests(verbose, test_files, test_env, cwd)
         logger.debug(
-            f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ''}""")
+            f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
+        )
     else:
         raise ValueError(f"Unsupported test framework: {test_framework}")
 
@@ -154,7 +159,7 @@ def run_benchmarking_tests(
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
-        results = execute_test_subprocess(
+        results = execute_subprocess(
             pytest_cmd_list + pytest_args + result_args + test_files,
             cwd=cwd,
             env=pytest_test_env,
@@ -175,7 +180,7 @@ def run_unittest_tests(verbose: bool, test_file_paths: list[Path], test_env: dic
     files = [str(file) for file in test_file_paths]
     output_file = ["--output-file", str(result_file_path)]
 
-    results = execute_test_subprocess(
+    results = execute_subprocess(
         unittest_cmd_list + log_level + files + output_file, cwd=cwd, env=test_env, timeout=600
     )
     return result_file_path, results
