@@ -485,7 +485,6 @@ class MyClass:
         assert test_results[1].id.test_module_path == "code_to_optimize.tests.pytest.test_codeflash_capture_temp"
         assert test_results[1].id.function_getting_tested == "some_function"
         assert test_results[1].id.iteration_id == "11_0"
-
         assert test_results[2].did_pass
         assert test_results[2].return_value[0]["x"] == 2
         assert test_results[2].id.test_function_name == "test_example_test_3"
@@ -493,6 +492,17 @@ class MyClass:
         assert test_results[2].id.test_module_path == "code_to_optimize.tests.pytest.test_codeflash_capture_temp"
         assert test_results[2].id.function_getting_tested == "some_function"
         assert test_results[2].id.iteration_id == "16_0"
+
+        test_results2, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+        assert compare_test_results(test_results, test_results2)
 
     finally:
         test_path.unlink(missing_ok=True)
@@ -604,6 +614,18 @@ class MyClass(ParentClass):
         assert test_results[2].id.test_module_path == "code_to_optimize.tests.pytest.test_codeflash_capture_temp"
         assert test_results[2].id.function_getting_tested == "some_function"
         assert test_results[2].id.iteration_id == "16_0"
+
+        results2, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+
+        assert compare_test_results(test_results, results2)
 
     finally:
         test_path.unlink(missing_ok=True)
@@ -720,6 +742,17 @@ class MyClass:
         assert test_results[2].id.function_getting_tested == "some_function"
         assert test_results[2].id.iteration_id == "12_2"  # Third call
 
+        test_results2, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+
+        assert compare_test_results(test_results, test_results2)
     finally:
         test_path.unlink(missing_ok=True)
         sample_code_path.unlink(missing_ok=True)
@@ -855,6 +888,18 @@ class AnotherHelperClass:
         assert test_results[2].verification_type == VerificationType.INIT_STATE_HELPER
         assert test_results[3].id.function_getting_tested == "AnotherHelperClass.__init__"
         assert test_results[3].verification_type == VerificationType.INIT_STATE_HELPER
+
+        results2, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+
+        assert compare_test_results(test_results, results2)
 
     finally:
         test_path.unlink(missing_ok=True)
