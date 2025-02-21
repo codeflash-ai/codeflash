@@ -482,6 +482,8 @@ def test_sort():
         )
         assert test_results_perf[1].runtime > 0
         assert test_results_perf[1].did_pass
+        assert "codeflash stdout: Sorting list" in test_results_perf[1].stdout
+        assert "result: [0, 1, 2, 3, 4, 5]" in test_results_perf[1].stdout
     finally:
         test_path.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
@@ -692,6 +694,9 @@ def test_sort_parametrized(input, expected_output):
         )
         assert test_results_perf[1].runtime > 0
         assert test_results_perf[1].did_pass
+
+        assert "codeflash stdout: Sorting list" in test_results_perf[1].stdout
+        assert "result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]" in test_results_perf[1].stdout
 
         assert test_results_perf[2].id.function_getting_tested == "sorter"
         assert test_results_perf[2].id.iteration_id == "0_2"
@@ -1230,7 +1235,8 @@ def test_sort():
         assert test_results[0].runtime > 0
         assert test_results[0].did_pass
         assert test_results[0].return_value is None
-
+        assert "codeflash stdout: Sorting list" in test_results[0].stdout
+        assert "result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]" in test_results[0].stdout
         assert test_results[1].id.function_getting_tested == "sorter"
         assert test_results[1].id.iteration_id == "2_2_1"
         assert test_results[1].id.test_class_name is None
