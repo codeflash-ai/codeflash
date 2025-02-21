@@ -193,6 +193,7 @@ class BubbleSorter:
         self.x = x
 
     def sorter(self, arr):
+        print("codeflash stdout : BubbleSorter.sorter() called")
         for i in range(len(arr)):
             for j in range(len(arr) - 1):
                 if arr[j] > arr[j + 1]:
@@ -337,6 +338,7 @@ class BubbleSorter:
         self.x = x
 
     def sorter(self, arr):
+        print("codeflash stdout : BubbleSorter.sorter() called")
         for i in range(len(arr)):
             for j in range(len(arr) - 1):
                 if arr[j] > arr[j + 1]:
@@ -392,6 +394,7 @@ class BubbleSorter:
         self.y = 2
 
     def sorter(self, arr):
+        print("codeflash stdout : BubbleSorter.sorter() called")
         for i in range(len(arr)):
             for j in range(len(arr) - 1):
                 if arr[j] > arr[j + 1]:
