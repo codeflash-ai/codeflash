@@ -482,8 +482,16 @@ def test_sort():
         )
         assert test_results_perf[1].runtime > 0
         assert test_results_perf[1].did_pass
-        assert "codeflash stdout: Sorting list" in test_results_perf[1].stdout
-        assert "result: [0, 1, 2, 3, 4, 5]" in test_results_perf[1].stdout
+        out_str = """--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5]
+
+codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
+        assert out_str == test_results_perf[1].stdout
+
     finally:
         test_path.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
