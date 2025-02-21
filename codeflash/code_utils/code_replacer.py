@@ -336,3 +336,27 @@ def function_to_optimize_original_worktree_fqn(
         + "."
         + function_to_optimize.qualified_name
     )
+
+
+def clean_concolic_tests(test_suite_code: str) -> str:
+    try:
+        tree = ast.parse(test_suite_code)
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+                new_body = []
+                for stmt in node.body:
+                    if isinstance(stmt, ast.Assert):
+                        if isinstance(stmt.test, ast.Compare) and isinstance(stmt.test.left, ast.Call):
+                            new_body.append(ast.Expr(value=stmt.test.left))
+                        else:
+                            new_body.append(stmt)
+
+                    else:
+                        new_body.append(stmt)
+                node.body = new_body
+
+        return ast.unparse(tree).strip()
+    except SyntaxError:
+        logger.warning("Failed to parse and modify CrossHair generated tests.  Using original output.")
+        return test_suite_code
