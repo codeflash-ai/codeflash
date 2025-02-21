@@ -193,6 +193,18 @@ def test_sort():
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
+        results2, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+        assert "codeflash stdout: Sorting list" in results2[0].stdout
+        assert "result: [0, 1, 2, 3, 4, 5]" in results2[0].stdout
+        assert compare_test_results(test_results, results2)
     finally:
         fto_path.write_text(original_code, "utf-8")
         test_path.unlink(missing_ok=True)
@@ -376,6 +388,18 @@ def test_sort():
         )
         assert test_results[3].runtime > 0
         assert test_results[3].did_pass
+
+        results2, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+
+        assert compare_test_results(test_results, results2)
 
         # Replace with optimized code that mutated instance attribute
         optimized_code = """
