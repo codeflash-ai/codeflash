@@ -427,3 +427,17 @@ def test_calculate_tuple_sum(my_tuple: tuple[int, int, int]) -> None:
     calculate_tuple_sum((1, 2, 3))
 """
     assert cleaned_code == expected_cleaned_code.strip()
+
+    concolic_generated_repr_code = """from src.blib2to3.pgen2.grammar import Grammar
+
+def test_Grammar_copy():
+    assert Grammar.copy(Grammar()) == <src.blib2to3.pgen2.grammar.Grammar object at 0x104c30f50>
+"""
+    cleaned_code = clean_concolic_tests(concolic_generated_repr_code)
+    expected_cleaned_code = """
+from src.blib2to3.pgen2.grammar import Grammar
+
+def test_Grammar_copy():
+    Grammar.copy(Grammar())
+"""
+    assert cleaned_code == expected_cleaned_code.strip()

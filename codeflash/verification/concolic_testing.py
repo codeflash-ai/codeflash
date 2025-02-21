@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import difflib
 import subprocess
 import tempfile
 from argparse import Namespace
@@ -60,8 +59,8 @@ def generate_concolic_tests(
             return function_to_concolic_tests, concolic_test_suite_code
 
         if cover_result.returncode == 0:
-            original_code: str = cover_result.stdout
-            concolic_test_suite_code: str = clean_concolic_tests(original_code)
+            generated_concolic_test: str = cover_result.stdout
+            concolic_test_suite_code: str = clean_concolic_tests(generated_concolic_test)
             concolic_test_suite_dir = Path(tempfile.mkdtemp(dir=test_cfg.concolic_test_root_dir))
             concolic_test_suite_path = concolic_test_suite_dir / "test_concolic_coverage.py"
             concolic_test_suite_path.write_text(concolic_test_suite_code, encoding="utf8")
