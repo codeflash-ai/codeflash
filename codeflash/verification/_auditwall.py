@@ -19,6 +19,9 @@ def accept(event: str, args: tuple) -> None:
     pass
 
 
+args_allow_list = {".coverage", "matplotlib.rc", "codeflash"}
+
+
 def reject(event: str, args: tuple) -> None:
     msg = f'codeflash has detected: {event}{args}".'
     raise SideEffectDetectedError(msg)
@@ -40,7 +43,6 @@ def check_open(event: str, args: tuple) -> None:
 
 
 def check_msvcrt_open(event: str, args: tuple) -> None:
-    print(args)
     (handle, flags) = args
     if flags & _BLOCKED_OPEN_FLAGS:
         msg = f"codeflash has detected: {event}({', '.join(map(repr, args))})."
@@ -66,8 +68,18 @@ def check_subprocess(event: str, args: tuple) -> None:
         reject(event, args)
 
 
+def handle_os_remove(event: str, args: tuple) -> None:
+    filename = str(args[0])
+    if any(pattern in filename for pattern in args_allow_list):
+        accept(event, args)
+    else:
+        reject(event, args)
+
+
 def check_sqlite_connect(event: str, args: tuple) -> None:
-    if any("codeflash_" in arg for arg in args):
+    if (
+        event == "sqlite3.connect" and any(pattern in str(args[0]) for pattern in args_allow_list)
+    ) or event == "sqlite3.connect/handle":
         accept(event, args)
     else:
         reject(event, args)
@@ -79,6 +91,7 @@ _SPECIAL_HANDLERS = {
     "msvcrt.open_osfhandle": check_msvcrt_open,
     "sqlite3.connect": check_sqlite_connect,
     "sqlite3.connect/handle": check_sqlite_connect,
+    "os.remove": handle_os_remove,
 }
 
 
