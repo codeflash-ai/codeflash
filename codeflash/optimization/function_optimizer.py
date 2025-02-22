@@ -3,11 +3,8 @@ from __future__ import annotations
 import ast
 import concurrent.futures
 import os
-import re
-import shlex
 import shutil
 import subprocess
-import tempfile
 import time
 import uuid
 from collections import defaultdict
@@ -16,7 +13,6 @@ from typing import TYPE_CHECKING
 
 import isort
 import libcst as cst
-from crosshair.auditwall import SideEffectDetected
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -33,14 +29,12 @@ from codeflash.code_utils.code_utils import (
     get_run_tmp_file,
     module_name_from_file_path,
 )
-from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
     N_CANDIDATES,
     N_TESTS_TO_GENERATE,
     TOTAL_LOOPING_TIME,
 )
-from codeflash.code_utils.coverage_utils import prepare_coverage_files
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
@@ -69,13 +63,13 @@ from codeflash.result.create_pr import check_create_pr, existing_tests_source_fo
 from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
-from codeflash.verification.codeflash_auditwall import transform_code
+from codeflash.verification._auditwall import SideEffectDetectedError
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_results import TestResults, TestType
-from codeflash.verification.test_runner import execute_test_subprocess, run_behavioral_tests, run_benchmarking_tests
+from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests
 from codeflash.verification.verification_utils import get_test_file_path
 from codeflash.verification.verifier import generate_tests
 
@@ -853,8 +847,8 @@ class FunctionOptimizer:
                     enable_coverage=test_framework == "pytest",
                     code_context=code_context,
                 )
-            except SideEffectDetected as e:
-                return Failure(f"Side effect detected in original code: {e}")
+            except SideEffectDetectedError as e:
+                return Failure(f"Side effect detected in original code: {e}, skipping optimization.")
             finally:
                 # Remove codeflash capture
                 self.write_code_and_helpers(

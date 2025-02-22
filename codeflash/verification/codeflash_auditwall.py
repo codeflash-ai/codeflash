@@ -8,7 +8,9 @@ class AuditWallTransformer(ast.NodeTransformer):
             if isinstance(body_node, (ast.Import, ast.ImportFrom)):
                 last_import_index = i
 
-        new_import = ast.ImportFrom(module="crosshair.auditwall", names=[ast.alias(name="engage_auditwall")], level=0)
+        new_import = ast.ImportFrom(
+            module="codeflash.verification._auditwall", names=[ast.alias(name="engage_auditwall")], level=0
+        )
         function_call = ast.Expr(
             value=ast.Call(func=ast.Name(id="engage_auditwall", ctx=ast.Load()), args=[], keywords=[])
         )
