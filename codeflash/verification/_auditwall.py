@@ -23,9 +23,6 @@ args_allow_list = {".coverage", "matplotlib.rc", "codeflash_"}
 
 
 def reject(event: str, args: tuple) -> None:
-    print(args)
-    if any(arg in args_allow_list for arg in args):
-        return
     msg = f'codeflash has detected: {event}{args}".'
     raise SideEffectDetectedError(msg)
 
@@ -71,6 +68,13 @@ def check_subprocess(event: str, args: tuple) -> None:
     if not inside_module(modules_with_allowed_popen()):
         reject(event, args)
 
+def handle_os_remove(event: str, args: tuple) -> None:
+    print("os.remove", args)
+    if any(arg in args_allow_list for arg in args):
+        accept(event, args)
+    else:
+        reject(event, args)
+
 
 def check_sqlite_connect(event: str, args: tuple) -> None:
     if any("codeflash_" in arg for arg in args):
@@ -85,6 +89,7 @@ _SPECIAL_HANDLERS = {
     "msvcrt.open_osfhandle": check_msvcrt_open,
     "sqlite3.connect": check_sqlite_connect,
     "sqlite3.connect/handle": check_sqlite_connect,
+    "os.remove": handle_os_remove,
 }
 
 
