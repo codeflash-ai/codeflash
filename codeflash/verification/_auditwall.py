@@ -67,7 +67,7 @@ def check_subprocess(event: str, args: tuple) -> None:
 
 
 def check_sqlite_connect(event: str, args: tuple) -> None:
-    if "codeflash_" in args[0]:
+    if any("codeflash_" in arg for arg in args):
         accept(event, args)
     else:
         reject(event, args)
@@ -78,6 +78,7 @@ _SPECIAL_HANDLERS = {
     "subprocess.Popen": check_subprocess,
     "msvcrt.open_osfhandle": check_msvcrt_open,
     "sqlite3.connect": check_sqlite_connect,
+    "sqlite3.connect/handle": check_sqlite_connect,
 }
 
 

@@ -413,6 +413,7 @@ def test_sort():
                     test_type=test_type,
                     original_file_path=test_path,
                     benchmarking_file_path=test_path_perf,
+                    original_source=code,
                 )
             ]
         )
@@ -608,6 +609,7 @@ def test_sort_parametrized(input, expected_output):
                     test_type=test_type,
                     original_file_path=test_path,
                     benchmarking_file_path=test_path_perf,
+                    original_source=code,
                 )
             ]
         )
@@ -847,6 +849,7 @@ def test_sort_parametrized_loop(input, expected_output):
                             test_type=TestType.EXISTING_UNIT_TEST,
                         )
                     ],
+                    original_source=code,
                 )
             ]
         )
@@ -1156,6 +1159,7 @@ def test_sort():
                             test_type=TestType.EXISTING_UNIT_TEST,
                         )
                     ],
+                    original_source=code,
                 )
             ]
         )
@@ -1425,6 +1429,7 @@ class TestPigLatin(unittest.TestCase):
                             test_type=TestType.EXISTING_UNIT_TEST,
                         )
                     ],
+                    original_source=code,
                 )
             ]
         )
@@ -1672,6 +1677,7 @@ class TestPigLatin(unittest.TestCase):
                             test_type=TestType.EXISTING_UNIT_TEST,
                         )
                     ],
+                    original_source=code,
                 )
             ]
         )
@@ -1923,6 +1929,7 @@ class TestPigLatin(unittest.TestCase):
                             test_type=TestType.EXISTING_UNIT_TEST,
                         )
                     ],
+                    original_source=code,
                 )
             ]
         )
@@ -2172,6 +2179,7 @@ class TestPigLatin(unittest.TestCase):
                             test_type=TestType.EXISTING_UNIT_TEST,
                         )
                     ],
+                    original_source=code,
                 )
             ]
         )
