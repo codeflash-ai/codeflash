@@ -63,6 +63,7 @@ from codeflash.result.create_pr import check_create_pr, existing_tests_source_fo
 from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
+from codeflash.verification._auditwall import SideEffectDetectedError
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
@@ -149,12 +150,14 @@ class FunctionOptimizer:
                 self.args.project_root,
             )
 
+
         generated_test_paths = [
             get_test_file_path(
                 self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
             )
             for test_index in range(N_TESTS_TO_GENERATE)
         ]
+
         generated_perf_test_paths = [
             get_test_file_path(
                 self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="perf"
@@ -844,6 +847,8 @@ class FunctionOptimizer:
                     enable_coverage=test_framework == "pytest",
                     code_context=code_context,
                 )
+            except SideEffectDetectedError as e:
+                return Failure(f"Side effect detected in original code: {e}, skipping optimization.")
             finally:
                 # Remove codeflash capture
                 self.write_code_and_helpers(
@@ -855,9 +860,7 @@ class FunctionOptimizer:
                 )
                 console.rule()
                 return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
-            if not coverage_critic(
-            coverage_results, self.args.test_framework
-                ):
+            if not coverage_critic(coverage_results, self.args.test_framework):
                 return Failure("The threshold for test coverage was not met.")
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
@@ -897,7 +900,6 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
-
 
             total_timing = benchmarking_results.total_passed_runtime()  # caution: doesn't handle the loop index
             functions_to_remove = [
@@ -1097,13 +1099,13 @@ class FunctionOptimizer:
                 raise ValueError(f"Unexpected testing type: {testing_type}")
         except subprocess.TimeoutExpired:
             logger.exception(
-                f'Error running tests in {", ".join(str(f) for f in test_files.test_files)}.\nTimeout Error'
+                f"Error running tests in {', '.join(str(f) for f in test_files.test_files)}.\nTimeout Error"
             )
             return TestResults(), None
         if run_result.returncode != 0 and testing_type == TestingMode.BEHAVIOR:
             logger.debug(
-                f'Nonzero return code {run_result.returncode} when running tests in '
-                f'{", ".join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n'
+                f"Nonzero return code {run_result.returncode} when running tests in "
+                f"{', '.join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n"
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
@@ -1149,4 +1151,3 @@ class FunctionOptimizer:
                 zip(generated_test_paths, generated_perf_test_paths)
             )
         ]
-

@@ -36,7 +36,13 @@ class TestUnittestRunnerSorter(unittest.TestCase):
 
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_behavior_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
+            test_files=[
+                TestFile(
+                    instrumented_behavior_file_path=Path(fp.name),
+                    test_type=TestType.EXISTING_UNIT_TEST,
+                    original_source=code,
+                )
+            ]
         )
         fp.write(code.encode("utf-8"))
         fp.flush()
@@ -80,7 +86,13 @@ def test_sort():
 
     with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_behavior_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
+            test_files=[
+                TestFile(
+                    instrumented_behavior_file_path=Path(fp.name),
+                    test_type=TestType.EXISTING_UNIT_TEST,
+                    original_source=code,
+                )
+            ]
         )
         fp.write(code.encode("utf-8"))
         fp.flush()

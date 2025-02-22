@@ -162,6 +162,7 @@ def test_single_element_list():
                     test_type=test_type,
                     original_file_path=test_path,
                     benchmarking_file_path=test_path_perf,
+                    original_source=fto_path.read_text("utf-8"),
                 )
             ]
         )
@@ -298,6 +299,7 @@ def test_single_element_list():
                     test_type=test_type,
                     original_file_path=test_path,
                     benchmarking_file_path=test_path_perf,
+                    original_source=fto_path.read_text("utf-8"),
                 )
             ]
         )
