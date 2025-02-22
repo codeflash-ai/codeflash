@@ -19,7 +19,12 @@ def accept(event: str, args: tuple) -> None:
     pass
 
 
+args_allow_list = {".coverage", "matplotlib.rc"}
+
+
 def reject(event: str, args: tuple) -> None:
+    if any(arg in args_allow_list for arg in args):
+        return
     msg = f'codeflash has detected: {event}{args}".'
     raise SideEffectDetectedError(msg)
 
