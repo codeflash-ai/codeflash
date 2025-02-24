@@ -13,6 +13,7 @@
         "python.defaultInterpreterPath": "~/miniforge3/envs/codeflash312/bin/python",
         "python.terminal.activateEnvironment": true,
         "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["tests/", "-vv"],
     },
     "launch": {
         "version": "0.2.0",
