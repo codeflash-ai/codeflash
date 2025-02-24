@@ -149,6 +149,7 @@ class Optimizer:
                         f"Optimizing function {function_iterator_count} of {num_optimizable_functions}: "
                         f"{function_to_optimize.qualified_name}"
                     )
+                    console.rule()
 
                     if not (
                         function_to_optimize_ast := get_first_top_level_function_or_method_ast(
