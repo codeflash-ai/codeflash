@@ -43,7 +43,8 @@ def parse_func(file_path: Path) -> XMLParser:
 
 
 matches_re = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!")
-cleaner_re = re.compile(r"!######(.*?)######!")
+cleaner_re = re.compile(r"!######.*?######!|-+\s*Captured\s+(Log|Out)\s*-+\n?")
+
 
 
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
