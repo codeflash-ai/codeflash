@@ -169,11 +169,7 @@ def test_sort():
             testing_time=0.1,
         )
 
-        out_str = """--------------------------------- Captured Log ---------------------------------
-
---------------------------------- Captured Out ---------------------------------
-
-codeflash stdout: Sorting list
+        out_str = """codeflash stdout: Sorting list
 result: [0, 1, 2, 3, 4, 5]
 
 codeflash stdout: Sorting list

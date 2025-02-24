@@ -482,10 +482,7 @@ def test_sort():
         )
         assert test_results_perf[1].runtime > 0
         assert test_results_perf[1].did_pass
-        out_str = """--------------------------------- Captured Log ---------------------------------
-
---------------------------------- Captured Out ---------------------------------
-codeflash stdout: Sorting list
+        out_str = """codeflash stdout: Sorting list
 result: [0, 1, 2, 3, 4, 5]
 
 codeflash stdout: Sorting list
