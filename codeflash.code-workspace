@@ -19,7 +19,7 @@
         }
     ],
     "settings": {
-        "python.defaultInterpreterPath": "~/miniforge3/envs/dev/bin/python",
+        "python.defaultInterpreterPath": "~/miniforge3/envs/codeflash312/bin/python",
         "python.terminal.activateEnvironment": true
     },
     "launch": {
