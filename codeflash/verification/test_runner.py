@@ -50,9 +50,10 @@ def run_behavioral_tests(
                 )
             else:
                 test_files.append(str(file.instrumented_behavior_file_path))
+        pytest_cmd_list = shlex.split(
+            f"{SAFE_SYS_EXECUTABLE} -m pytest" if pytest_cmd == "pytest" else pytest_cmd, posix=IS_POSIX
+        )
         test_files = list(set(test_files))  # remove multiple calls in the same test function
-        pytest_cmd_list = shlex.split(pytest_cmd, posix=IS_POSIX)
-
         common_pytest_args = [
             "--capture=tee-sys",
             f"--timeout={pytest_timeout}",
@@ -81,13 +82,16 @@ def run_behavioral_tests(
             coverage_cmd = f"{SAFE_SYS_EXECUTABLE} -m coverage run --rcfile={coveragercfile.as_posix()} -m"
             results = execute_test_subprocess(
                 shlex.split(coverage_cmd) + pytest_cmd_list + common_pytest_args + result_args + test_files,
+                shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage run --rcfile={coveragercfile.as_posix()} -m pytest")
+                + common_pytest_args
+                + result_args
+                + test_files,
                 cwd=cwd,
                 env=pytest_test_env,
                 timeout=600,
             )
             logger.debug(
-                f"Result return code: {results.returncode}"
-                + (f", Result stderr: {results.stderr}" if results.stderr else "")
+                f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
             )
         else:
             results = execute_test_subprocess(
@@ -97,8 +101,7 @@ def run_behavioral_tests(
                 timeout=600,  # TODO: Make this dynamic
             )
             logger.debug(
-                f"Result return code: {results.returncode}"
-                + (f", Result stderr: {results.stderr}" if results.stderr else "")
+                f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
             )
     elif test_framework == "unittest":
         if enable_coverage:
@@ -110,8 +113,7 @@ def run_behavioral_tests(
             verbose=verbose, test_file_paths=test_files, test_env=test_env, cwd=cwd
         )
         logger.debug(
-            f"Result return code: {results.returncode}"
-            + (f", Result stderr: {results.stderr}" if results.stderr else "")
+            f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
         )
     else:
         msg = f"Unsupported test framework: {test_framework}"
@@ -134,7 +136,11 @@ def run_benchmarking_tests(
     pytest_max_loops: int = 100_000,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     if test_framework == "pytest":
-        pytest_cmd_list = shlex.split(pytest_cmd, posix=IS_POSIX)
+        pytest_cmd_list = (
+            shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
+            if pytest_cmd == "pytest"
+            else shlex.split(pytest_cmd)
+        )
         test_files: list[str] = []
         for file in test_paths.test_files:
             if file.test_type in [TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST] and file.tests_in_file:
