@@ -30,9 +30,6 @@ class TestType(Enum):
     CONCOLIC_COVERAGE_TEST = 5
     INIT_STATE_TEST = 6
 
-    def should_display(self) -> bool:
-        return self != TestType.INIT_STATE_TEST
-
     def to_name(self) -> str:
         if self == TestType.INIT_STATE_TEST:
             return ""

@@ -24,7 +24,7 @@ class PrComment:
         report_table = {
             test_type.to_name(): result
             for test_type, result in self.winning_behavioral_test_results.get_test_pass_fail_report_by_type().items()
-            if test_type.should_display_result()
+            if test_type.to_name()
         }
 
         return {
