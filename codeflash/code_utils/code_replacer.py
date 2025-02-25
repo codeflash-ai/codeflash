@@ -4,7 +4,7 @@ import ast
 import re
 from collections import defaultdict
 from functools import lru_cache
-from typing import TYPE_CHECKING, Optional, TypeVar
+from typing import TYPE_CHECKING, List, Optional, TypeVar
 
 import libcst as cst
 
@@ -342,33 +342,35 @@ def function_to_optimize_original_worktree_fqn(
 class AssertCleanup:
     def transform_asserts(self, code: str) -> str:
         lines = code.splitlines()
-        result_lines = []
+        result_lines: List[str] = []
+
+        append_result = result_lines.append
+        transform_line = self._transform_assert_line
 
         for line in lines:
-            transformed = self._transform_assert_line(line)
+            transformed = transform_line(line)
             if transformed is not None:
-                result_lines.append(transformed)
+                append_result(transformed)
             else:
-                result_lines.append(line)
+                append_result(line)
 
         return "\n".join(result_lines)
 
     def _transform_assert_line(self, line: str) -> Optional[str]:
         indent = line[: len(line) - len(line.lstrip())]
 
-        assert_match = re.match(r"\s*assert\s+(.*?)(?:\s*==\s*.*)?$", line)
+        assert_match = self.assert_pattern.match(line)
         if assert_match:
             expression = assert_match.group(1).strip()
             if expression.startswith("not "):
                 return f"{indent}{expression}"
 
-            expression = re.sub(r"[,;]\s*$", "", expression)
+            expression = expression.rstrip(",;")
             return f"{indent}{expression}"
 
-        unittest_match = re.match(r"(\s*)self\.assert([A-Za-z]+)\((.*)\)$", line)
+        unittest_match = self.unittest_pattern.match(line)
         if unittest_match:
-            indent, assert_method, args = unittest_match.groups()
-
+            indent, _, args = unittest_match.groups()
             if args:
                 arg_parts = self._split_top_level_args(args)
                 if arg_parts and arg_parts[0]:
@@ -398,6 +400,11 @@ class AssertCleanup:
             result.append("".join(current).strip())
 
         return result
+
+    def __init__(self):
+        # Compile the regular expressions once
+        self.assert_pattern = re.compile(r"\s*assert\s+(.*?)(?:\s*==\s*.*)?$")
+        self.unittest_pattern = re.compile(r"(\s*)self\.assert([A-Za-z]+)\((.*)\)$")
 
 
 def clean_concolic_tests(test_suite_code: str) -> str:
