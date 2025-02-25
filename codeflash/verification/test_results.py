@@ -29,6 +29,7 @@ class TestType(Enum):
     REPLAY_TEST = 4
     CONCOLIC_COVERAGE_TEST = 5
     INIT_STATE_TEST = 6
+    BENCHMARK_TEST = 7
 
     def to_name(self) -> str:
         if self == TestType.INIT_STATE_TEST:
@@ -39,6 +40,7 @@ class TestType(Enum):
             TestType.GENERATED_REGRESSION: "🌀 Generated Regression Tests",
             TestType.REPLAY_TEST: "⏪ Replay Tests",
             TestType.CONCOLIC_COVERAGE_TEST: "🔎 Concolic Coverage Tests",
+            TestType.BENCHMARK_TEST: "📏 Benchmark Tests",
         }
         return names[self]
 
@@ -66,6 +68,7 @@ class InvocationId:
         else:
             test_class_name = second_components[0]
             test_function_name = second_components[1]
+        # logger.debug(f"Invocation id info: test_module_path: {components[0]}, test_class_name: {test_class_name}, test_function_name: {test_function_name}, function_getting_tested: {components[2]}, iteration_id: {iteration_id if iteration_id else components[3]}")
         return InvocationId(
             test_module_path=components[0],
             test_class_name=test_class_name,
@@ -167,9 +170,10 @@ class TestResults(BaseModel):
     def usable_runtime_data_by_test_case(self) -> dict[InvocationId, list[int]]:
         for result in self.test_results:
             if result.did_pass and not result.runtime:
-                logger.debug(
-                    f"Ignoring test case that passed but had no runtime -> {result.id}, Loop # {result.loop_index}, Test Type: {result.test_type}, Verification Type: {result.verification_type}"
-                )
+                pass
+                # logger.debug(
+                #     f"Ignoring test case that passed but had no runtime -> {result.id}, Loop # {result.loop_index}, Test Type: {result.test_type}, Verification Type: {result.verification_type}"
+                # )
         usable_runtimes = [
             (result.id, result.runtime) for result in self.test_results if result.did_pass and result.runtime
         ]
