@@ -341,8 +341,7 @@ def function_to_optimize_original_worktree_fqn(
 
 class AssertCleanup:
     def transform_asserts(self, code: str) -> str:
-        lines = code.splitlines()
-        result_lines = []
+        for line in code.splitlines():
 
         for line in lines:
             transformed = self._transform_assert_line(line)
