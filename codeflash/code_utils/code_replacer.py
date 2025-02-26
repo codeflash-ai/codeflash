@@ -410,8 +410,6 @@ def clean_concolic_tests(test_suite_code: str) -> str:
     if not can_parse:
         return AssertCleanup().transform_asserts(test_suite_code)
 
-    tree = ast.parse(test_suite_code)
-
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
             new_body = []
