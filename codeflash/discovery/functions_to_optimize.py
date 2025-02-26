@@ -460,8 +460,8 @@ def filter_functions(
                 function
                 for function in functions
                 if not (
-                    Path(function.file_path).name in blocklist_funcs
-                    and function.qualified_name in blocklist_funcs[Path(function.file_path).name]
+                    function.file_path.name in blocklist_funcs
+                    and function.qualified_name in blocklist_funcs[function.file_path.name]
                 )
             ]
         filtered_modified_functions[file_path] = functions
