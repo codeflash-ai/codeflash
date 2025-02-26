@@ -33,7 +33,6 @@ jobs:
 
       - name: Unit tests
         run: uvx poetry run pytest tests/ --cov --cov-report=xml -vv
-        # run: uvx poetry run pytest tests/ -vv
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
