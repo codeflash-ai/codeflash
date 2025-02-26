@@ -1,3 +1,18 @@
+# Copyright 2024 CodeFlash Inc. All rights reserved.
+#
+# Licensed under the Business Source License version 1.1.
+# License source can be found in the LICENSE file.
+#
+# This file includes derived work covered by the following copyright and permission notices:
+#
+#  Copyright Python Software Foundation
+#  Licensed under the Apache License, Version 2.0 (the "License").
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+#  The PSF License Agreement
+#  https://docs.python.org/3/license.html#python-software-foundation-license-version-2
+#
+#
 import importlib
 import os
 import sys
