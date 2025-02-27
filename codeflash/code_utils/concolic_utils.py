@@ -22,16 +22,16 @@ class AssertCleanup:
     def _transform_assert_line(self, line: str) -> Optional[str]:
         indent = line[: len(line) - len(line.lstrip())]
 
-        assert_match = re.match(r"\s*assert\s+(.*?)(?:\s*==\s*.*)?$", line)
+        assert_match = self.assert_pattern.match(line)
         if assert_match:
             expression = assert_match.group(1).strip()
             if expression.startswith("not "):
                 return f"{indent}{expression}"
 
-            expression = re.sub(r"[,;]\s*$", "", expression)
+            expression = expression.rstrip(",;")
             return f"{indent}{expression}"
 
-        unittest_match = re.match(r"(\s*)self\.assert([A-Za-z]+)\((.*)\)$", line)
+        unittest_match = self.unittest_pattern.match(line)
         if unittest_match:
             indent, assert_method, args = unittest_match.groups()
 
@@ -46,24 +46,25 @@ class AssertCleanup:
         result = []
         current = []
         depth = 0
-
         for char in args_str:
             if char in "([{":
                 depth += 1
-                current.append(char)
             elif char in ")]}":
                 depth -= 1
-                current.append(char)
             elif char == "," and depth == 0:
                 result.append("".join(current).strip())
                 current = []
-            else:
-                current.append(char)
+                continue
+            current.append(char)
 
         if current:
             result.append("".join(current).strip())
 
         return result
+
+    def __init__(self):
+        self.assert_pattern = re.compile(r"\s*assert\s+(.*?)(?:\s*==\s*.*)?$")
+        self.unittest_pattern = re.compile(r"(\s*)self\.assert([A-Za-z]+)\((.*)\)$")
 
 
 def clean_concolic_tests(test_suite_code: str) -> str:
