@@ -207,8 +207,12 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
             pytest_max_loops=1,
             testing_time=0.1,
         )
-        assert "codeflash stdout: Sorting list" in results2[0].stdout
-        assert "result: [0, 1, 2, 3, 4, 5]" in results2[0].stdout
+        out_str = """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5]
+
+codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
+        assert out_str == results2[0].stdout.strip()
         assert compare_test_results(test_results, results2)
     finally:
         fto_path.write_text(original_code, "utf-8")
@@ -376,7 +380,12 @@ def test_sort():
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
         assert test_results[1].return_value == ([0, 1, 2, 3, 4, 5],)
-        assert "codeflash stdout : BubbleSorter.sorter() called" in test_results[1].stdout
+        out_str = """
+codeflash stdout : BubbleSorter.sorter() called
+
+
+codeflash stdout : BubbleSorter.sorter() called"""
+        assert test_results[1].stdout.strip() == out_str.strip()
         assert compare_test_results(test_results, test_results)
         assert test_results[2].id.function_getting_tested == "BubbleSorter.__init__"
         assert test_results[2].id.test_function_name == "test_sort"
