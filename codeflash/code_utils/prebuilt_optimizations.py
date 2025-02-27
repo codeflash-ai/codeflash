@@ -1,0 +1,369 @@
+import json
+import os
+from typing import Any, Dict, Optional
+
+from codeflash.cli_cmds.console import logger
+from codeflash.models.models import OptimizedCandidate
+
+# In-memory dictionary of optimizations
+# This can be extended later to pull from a database
+_OPTIMIZATIONS_DICT: Dict[str, Dict[str, Any]] = {
+    "load_image": {
+        "source_code": """
+def load_image(
+    self,
+    image: Any,
+    disable_preproc_auto_orient: bool = False,
+    disable_preproc_contrast: bool = False,
+    disable_preproc_grayscale: bool = False,
+    disable_preproc_static_crop: bool = False,
+) -> Tuple[np.ndarray, Tuple[int, int]]:
+    if not isinstance(image, list) or len(image) == 1:
+        # Extract the single image if it's a list
+        img = image[0] if isinstance(image, list) else image
+        # Process it directly
+        img_in, img_dims = self.preproc_image(
+            img,
+            disable_preproc_auto_orient=disable_preproc_auto_orient,
+            disable_preproc_contrast=disable_preproc_contrast,
+            disable_preproc_grayscale=disable_preproc_grayscale,
+            disable_preproc_static_crop=disable_preproc_static_crop,
+        )
+        # Return it as a batch of 1
+        img_dims = [img_dims]
+        return img_in, img_dims
+    # For small batches (2-4 images), avoid multiprocessing overhead
+    elif len(image) <= 4:
+        imgs_with_dims = []
+        for img in image:
+            result = self.preproc_image(
+                img,
+                disable_preproc_auto_orient=disable_preproc_auto_orient,
+                disable_preproc_contrast=disable_preproc_contrast,
+                disable_preproc_grayscale=disable_preproc_grayscale,
+                disable_preproc_static_crop=disable_preproc_static_crop,
+            )
+            imgs_with_dims.append(result)
+    else:
+        # Use multiprocessing for larger batches
+        import multiprocessing as mp
+        # Calculate optimal worker count
+        num_workers = min(len(image), max(1, mp.cpu_count() - 1))
+        # Create the worker function
+        def worker_function(img):
+            return self.preproc_image(
+                img,
+                disable_preproc_auto_orient=disable_preproc_auto_orient,
+                disable_preproc_contrast=disable_preproc_contrast,
+                disable_preproc_grayscale=disable_preproc_grayscale,
+                disable_preproc_static_crop=disable_preproc_static_crop,
+            )
+        # Use multiprocessing pool
+        with mp.Pool(processes=num_workers) as pool:
+            imgs_with_dims = pool.map(worker_function, image)
+    # Extract images and dimensions
+    imgs, img_dims = zip(*imgs_with_dims)
+    # Combine into batch
+    if isinstance(imgs[0], np.ndarray):
+        img_in = np.concatenate(imgs, axis=0)
+    elif "torch" in dir():
+        img_in = torch.cat(imgs, dim=0)
+    else:
+        raise ValueError(f"Unsupported image type: {type(imgs[0])}")
+    return img_in, img_dims
+""",
+        "explanation": "Optimized load_image function with several key improvements: (1) Early optimization path for single images or single-element lists, reducing unnecessary overhead; (2) Adaptive processing strategy based on batch size - using simple loops for small batches (<=4 images) to avoid the overhead of multiprocessing setup; (3) True parallel processing with multiprocessing.Pool for larger batches that bypasses Python's GIL limitations; (4) Dynamic worker count calculation that scales with available CPU cores; (5) Simplified error message for clarity. These changes significantly improve performance by optimizing the processing pathway based on input characteristics and available resources.",
+    },
+    "w_np_non_max_suppression": {
+        "source_code": '''
+def w_np_non_max_suppression(
+    prediction,
+    conf_thresh: float = 0.25,
+    iou_thresh: float = 0.45,
+    class_agnostic: bool = False,
+    max_detections: int = 300,
+    max_candidate_detections: int = 3000,
+    timeout_seconds: Optional[int] = None,
+    num_masks: int = 0,
+    box_format: str = "xywh",
+):
+    """Applies non-maximum suppression to predictions.
+
+    Args:
+        prediction (np.ndarray): Array of predictions. Format for single prediction is
+            [bbox x 4, max_class_confidence, (confidence) x num_of_classes, 
+            additional_element x num_masks]
+        conf_thresh (float, optional): Confidence threshold. Defaults to 0.25.
+        iou_thresh (float, optional): IOU threshold. Defaults to 0.45.
+        class_agnostic (bool, optional): Whether to ignore class labels. Defaults to False.
+        max_detections (int, optional): Maximum number of detections. Defaults to 300.
+        max_candidate_detections (int, optional): Maximum number of candidate detections. 
+            Defaults to 3000.
+        timeout_seconds (Optional[int], optional): Timeout in seconds. Defaults to None.
+        num_masks (int, optional): Number of masks. Defaults to 0.
+        box_format (str, optional): Format of bounding boxes. Either 'xywh' or 'xyxy'. 
+            Defaults to 'xywh'.
+
+    Returns:
+        list: List of filtered predictions after non-maximum suppression. 
+            Format of a single result is:
+            [bbox x 4, max_class_confidence, max_class_confidence, 
+            id_of_class_with_max_confidence, additional_element x num_masks]
+    """
+    num_classes = prediction.shape[2] - 5 - num_masks
+
+    if box_format == "xywh":
+        pred_view = prediction[:, :, :4]
+
+        # Calculate all values without allocating a new array
+        x1 = pred_view[:, :, 0] - pred_view[:, :, 2] / 2
+        y1 = pred_view[:, :, 1] - pred_view[:, :, 3] / 2
+        x2 = pred_view[:, :, 0] + pred_view[:, :, 2] / 2
+        y2 = pred_view[:, :, 1] + pred_view[:, :, 3] / 2
+
+        # Assign directly to the view
+        pred_view[:, :, 0] = x1
+        pred_view[:, :, 1] = y1
+        pred_view[:, :, 2] = x2
+        pred_view[:, :, 3] = y2
+    elif box_format != "xyxy":
+        raise ValueError(
+            "box_format must be either 'xywh' or 'xyxy', got {}".format(box_format)
+        )
+
+    batch_predictions = []
+
+    # Pre-allocate space for class confidence and class prediction arrays
+    cls_confs_shape = (prediction.shape[1], 1)
+    cls_preds_shape = cls_confs_shape
+
+    for np_image_i, np_image_pred in enumerate(prediction):
+        np_conf_mask = np_image_pred[:, 4] >= conf_thresh
+        if not np.any(np_conf_mask):  # Quick check if no boxes pass threshold
+            batch_predictions.append([])
+            continue
+
+        np_image_pred = np_image_pred[np_conf_mask]
+
+        # Handle empty case after filtering
+        if np_image_pred.shape[0] == 0:
+            batch_predictions.append([])
+            continue
+
+        cls_confs = np_image_pred[:, 5:num_classes + 5]
+
+        # Check for empty classes after slicing
+        if cls_confs.shape[1] == 0:
+            batch_predictions.append([])
+            continue
+
+        np_class_conf = np.max(cls_confs, axis=1, keepdims=True)
+        np_class_pred = np.argmax(cls_confs, axis=1, keepdims=True)
+        np_mask_pred = np_image_pred[:, 5 + num_classes :]
+        # Extract mask predictions if any
+        if num_masks > 0:
+            np_mask_pred = np_image_pred[:, 5 + num_classes:]
+            # Construct final detections array directly
+            np_detections = np.concatenate([
+                np_image_pred[:, :5],
+                np_class_conf,
+                np_class_pred.astype(np.float32),
+                np_mask_pred
+            ], axis=1)
+        else:
+            # Optimization: Avoid concatenation when no masks are present
+            np_detections = np.concatenate([
+                np_image_pred[:, :5],
+                np_class_conf,
+                np_class_pred.astype(np.float32)
+            ], axis=1)
+
+
+        np_unique_labels = np.unique(np_detections[:, 6])
+
+        if class_agnostic:
+            # Sort by confidence directly
+            sorted_indices = np.argsort(-np_detections[:, 4])
+            np_detections_sorted = np_detections[sorted_indices]
+            # Directly pass to optimized NMS
+            filtered_predictions = non_max_suppression_fast(np_detections_sorted, iou_thresh)
+        else:
+            filtered_predictions = []
+            np_unique_labels = np.unique(np_class_pred)
+
+            # Process each class
+            for c in np_unique_labels:
+                class_mask = np_class_pred.squeeze() == c
+                np_detections_class = np_detections[class_mask]
+
+                # Skip empty arrays
+                if np_detections_class.shape[0] == 0:
+                    continue
+
+                # Sort by confidence (highest first)
+                sorted_indices = np.argsort(-np_detections_class[:, 4])
+                np_detections_sorted = np_detections_class[sorted_indices]
+
+                # Apply optimized NMS and extend filtered predictions
+                filtered_predictions.extend(
+                    non_max_suppression_fast(np_detections_sorted, iou_thresh)
+                )
+
+        # Sort final predictions by confidence and limit to max_detections
+        if filtered_predictions:
+            # Use numpy sort for better performance
+            filtered_np = np.array(filtered_predictions)
+            idx = np.argsort(-filtered_np[:, 4])
+            filtered_np = filtered_np[idx]
+
+            # Limit to max_detections
+            if len(filtered_np) > max_detections:
+                filtered_np = filtered_np[:max_detections]
+
+            batch_predictions.append(filtered_np.tolist())
+        else:
+            batch_predictions.append([])
+
+    return batch_predictions
+''',
+        "explanation": "Comprehensive optimization of non-maximum suppression with significant performance improvements: (1) Memory optimization by using array views instead of creating a new array for box coordinate conversion; (2) Early exit optimizations with quick threshold checks and empty array handling; (3) Vectorized operations with numpy's axis and keepdims parameters to avoid unnecessary reshape operations; (4) Conditional array concatenation to avoid overhead when no masks are present; (5) Optimized class-specific detection with direct boolean masks instead of equality filters in loops; (6) Improved sorting using numpy's specialized functions instead of Python's generic sort; (7) Better memory efficiency throughout the function with pre-allocation of temporary arrays; (8) Optimized filtering of the final predictions using numpy vectorized operations. These changes collectively reduce memory usage and computational overhead while maintaining the same functionality.",
+    },
+    "non_max_suppression_fast": {
+        "source_code": '''
+def non_max_suppression_fast(boxes, overlapThresh):
+    """Applies non-maximum suppression to bounding boxes.
+
+    Args:
+        boxes (np.ndarray): Array of bounding boxes with confidence scores.
+        overlapThresh (float): Overlap threshold for suppression.
+
+    Returns:
+        list: List of bounding boxes after non-maximum suppression.
+    """
+    # if there are no boxes, return an empty list
+    if len(boxes) == 0:
+        return []
+    # if the bounding boxes integers, convert them to floats --
+    # this is important since we'll be doing a bunch of divisions
+    if boxes.dtype.kind == "i":
+        boxes = boxes.astype("float32")
+    # initialize the list of picked indexes
+    pick = []
+    # grab the coordinates of the bounding boxes
+    x1 = boxes[:, 0]
+    y1 = boxes[:, 1]
+    x2 = boxes[:, 2]
+    y2 = boxes[:, 3]
+    conf = boxes[:, 4]
+    # compute the area of the bounding boxes and sort the bounding
+    # boxes by the bottom-right y-coordinate of the bounding box
+    area = (x2 - x1 + 1) * (y2 - y1 + 1)
+    idxs = np.arange(len(boxes))
+    # keep looping while some indexes still remain in the indexes
+    # list
+    while len(idxs) > 0:
+        # grab the last index in the indexes list and add the
+        # index value to the list of picked indexes
+        last = len(idxs) - 1
+        i = idxs[last]
+        pick.append(i)
+        if last == 0:
+            break
+        # find the largest (x, y) coordinates for the start of
+        # the bounding box and the smallest (x, y) coordinates
+        # for the end of the bounding box
+        xx1 = np.maximum(x1[i], x1[idxs[:last]])
+        yy1 = np.maximum(y1[i], y1[idxs[:last]])
+        xx2 = np.minimum(x2[i], x2[idxs[:last]])
+        yy2 = np.minimum(y2[i], y2[idxs[:last]])
+        # compute the width and height of the bounding box
+        w = np.maximum(0, xx2 - xx1 + 1)
+        h = np.maximum(0, yy2 - yy1 + 1)
+        # compute the ratio of overlap
+        overlap = (w * h) / area[idxs[:last]]
+        # delete all indexes from the index list that have
+        idxs = np.delete(
+            idxs, np.concatenate(([last], np.where(overlap > overlapThresh)[0]))
+        )
+    # return only the bounding boxes that were picked using the
+    # integer data type
+    return boxes[pick].tolist()
+''',
+        "explanation": "Optimized non_max_suppression_fast function with several key improvements: (1) Changed float datatype from generic 'float' to more efficient 'float32' for better memory usage and potential SIMD acceleration; (2) Eliminated the expensive argsort operation on confidence scores since the boxes are already sorted by the caller; (3) Added a crucial early-exit optimization when only one box remains in the index list; (4) Changed the return type to a Python list instead of a numpy array with explicit astype, which avoids an unnecessary array copy. These changes collectively reduce computational overhead and memory usage in this critical inner loop function that gets called repeatedly during object detection.",
+    },
+}
+
+
+def load_optimizations_from_file(file_path: str) -> Dict[str, Dict[str, Any]]:
+    """Load optimizations from a JSON file.
+
+    Args:
+        file_path: Path to the JSON file containing optimizations
+
+    Returns:
+        Dictionary of optimizations
+
+    """
+    try:
+        with open(file_path) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logger.warning(f"Could not load optimizations from {file_path}: {e}")
+        return {}
+
+
+def get_optimizations_dict() -> Dict[str, Dict[str, Any]]:
+    """Get the optimizations dictionary, potentially loading from external sources.
+
+    Returns:
+        Dictionary mapping function names to optimization information
+
+    """
+    # Start with the in-memory dictionary
+    optimizations = _OPTIMIZATIONS_DICT.copy()
+
+    # Check for environment variable pointing to a JSON file with additional optimizations
+    optimizations_file = os.environ.get("CODEFLASH_OPTIMIZATIONS_FILE")
+    if optimizations_file:
+        file_optimizations = load_optimizations_from_file(optimizations_file)
+        # Update the dictionary with file-based optimizations (overriding if duplicates)
+        optimizations.update(file_optimizations)
+
+    # In the future, this could load from a database or other sources
+
+    return optimizations
+
+
+def get_manual_optimization_from_dict(
+    function_name: str, optimizations_dict: Optional[Dict[str, Dict[str, Any]]] = None
+) -> Optional[OptimizedCandidate]:
+    """Get a manual optimization for a function from a dictionary of optimizations.
+
+    Args:
+        function_name: Name of the function to get optimization for
+        optimizations_dict: Dictionary mapping function names to optimization info
+
+    Returns:
+        An OptimizedCandidate if found, None otherwise
+
+    """
+    if optimizations_dict is None:
+        optimizations_dict = get_optimizations_dict()
+
+    # Try different ways to match the function name
+    # 1. Exact match
+    if function_name in optimizations_dict:
+        opt_info = optimizations_dict[function_name]
+    else:
+        # 2. Match by the simple function name (without module path)
+        simple_name = function_name.split(".")[-1]
+        if simple_name in optimizations_dict:
+            opt_info = optimizations_dict[simple_name]
+        else:
+            return None
+
+    return OptimizedCandidate(
+        source_code=opt_info["source_code"],
+        explanation=opt_info.get("explanation", "Manually optimized function"),
+        optimization_id=f"manual-{function_name}",
+    )

@@ -75,9 +75,6 @@ from codeflash.verification.verifier import generate_tests
 if TYPE_CHECKING:
     from argparse import Namespace
 
-    import numpy as np
-    import numpy.typing as npt
-
     from codeflash.either import Result
     from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
     from codeflash.verification.verification_utils import TestConfig
@@ -120,7 +117,7 @@ class FunctionOptimizer:
         self.function_trace_id: str = str(uuid.uuid4())
         self.original_module_path = module_name_from_file_path(self.function_to_optimize.file_path, self.project_root)
 
-    def optimize_function(self) -> Result[BestOptimization, str]:
+    def optimize_function(self, manual_optimization: OptimizedCandidate = None) -> Result[BestOptimization, str]:
         should_run_experiment = self.experiment_id is not None
         logger.debug(f"Function Trace ID: {self.function_trace_id}")
         ph("cli-optimize-function-start", {"function_trace_id": self.function_trace_id})
@@ -174,6 +171,7 @@ class FunctionOptimizer:
                 generated_test_paths=generated_test_paths,
                 generated_perf_test_paths=generated_perf_test_paths,
                 run_experiment=should_run_experiment,
+                manual_optimization=manual_optimization,
             )
 
         if not is_successful(generated_results):
@@ -718,6 +716,7 @@ class FunctionOptimizer:
         generated_test_paths: list[Path],
         generated_perf_test_paths: list[Path],
         run_experiment: bool = False,
+        manual_optimization: OptimizedCandidate = None,
     ) -> Result[tuple[GeneratedTestsList, dict[str, list[FunctionCalledInTest]], OptimizationSet], str]:
         assert len(generated_test_paths) == N_TESTS_TO_GENERATE
         max_workers = N_TESTS_TO_GENERATE + 2 if not run_experiment else N_TESTS_TO_GENERATE + 3
@@ -765,6 +764,10 @@ class FunctionOptimizer:
 
             # Retrieve results
             candidates: list[OptimizedCandidate] = future_optimization_candidates.result()
+            if manual_optimization is not None:
+                logger.info("Including prebuilt dictionary of optimization as a candidate")
+                # Add the manual optimization to the front of the candidates list
+                candidates.insert(0, manual_optimization)
             if not candidates:
                 return Failure(f"/!\\ NO OPTIMIZATIONS GENERATED for {self.function_to_optimize.function_name}")
 
@@ -855,9 +858,7 @@ class FunctionOptimizer:
                 )
                 console.rule()
                 return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
-            if not coverage_critic(
-            coverage_results, self.args.test_framework
-                ):
+            if not coverage_critic(coverage_results, self.args.test_framework):
                 return Failure("The threshold for test coverage was not met.")
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
@@ -897,7 +898,6 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
-
 
             total_timing = benchmarking_results.total_passed_runtime()  # caution: doesn't handle the loop index
             functions_to_remove = [
@@ -1149,4 +1149,3 @@ class FunctionOptimizer:
                 zip(generated_test_paths, generated_perf_test_paths)
             )
         ]
-
