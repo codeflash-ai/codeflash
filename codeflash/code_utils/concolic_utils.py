@@ -8,16 +8,16 @@ from typing import Optional
 class AssertCleanup:
     def transform_asserts(self, code: str) -> str:
         lines = code.splitlines()
-        result_lines = []
+        transformed_lines = []
 
         for line in lines:
             transformed = self._transform_assert_line(line)
             if transformed is not None:
-                result_lines.append(transformed)
+                transformed_lines.append(transformed)
             else:
-                result_lines.append(line)
+                transformed_lines.append(line)
 
-        return "\n".join(result_lines)
+        return "\n".join(transformed_lines)
 
     def _transform_assert_line(self, line: str) -> Optional[str]:
         indent = line[: len(line) - len(line.lstrip())]
@@ -68,26 +68,25 @@ class AssertCleanup:
 
 def clean_concolic_tests(test_suite_code: str) -> str:
     try:
-        can_parse = True
         tree = ast.parse(test_suite_code)
+        can_parse = True
     except SyntaxError:
         can_parse = False
 
     if not can_parse:
         return AssertCleanup().transform_asserts(test_suite_code)
 
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
-            new_body = []
-            for stmt in node.body:
-                if isinstance(stmt, ast.Assert):
-                    if isinstance(stmt.test, ast.Compare) and isinstance(stmt.test.left, ast.Call):
-                        new_body.append(ast.Expr(value=stmt.test.left))
-                    else:
-                        new_body.append(stmt)
+    class AssertTransform(ast.NodeTransformer):
+        def visit_Assert(self, node):
+            if isinstance(node.test, ast.Compare) and isinstance(node.test.left, ast.Call):
+                return ast.Expr(value=node.test.left, lineno=node.lineno, col_offset=node.col_offset)
+            return node
 
-                else:
-                    new_body.append(stmt)
-            node.body = new_body
+        def visit_FunctionDef(self, node):
+            if node.name.startswith("test_"):
+                node.body = [self.visit(stmt) for stmt in node.body]
+            return node
 
+    transformer = AssertTransform()
+    transformer.visit(tree)
     return ast.unparse(tree).strip()
