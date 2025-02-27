@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from codeflash.code_utils.code_replacer import clean_concolic_tests
 from codeflash.code_utils.code_utils import (
     cleanup_paths,
     file_name_from_test_module_name,
@@ -19,6 +18,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
     path_belongs_to_site_packages,
 )
+from codeflash.code_utils.concolic_utils import clean_concolic_tests
 from codeflash.code_utils.coverage_utils import generate_candidates, prepare_coverage_files
 
 
