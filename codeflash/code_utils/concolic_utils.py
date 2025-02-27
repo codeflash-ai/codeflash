@@ -46,17 +46,16 @@ class AssertCleanup:
         result = []
         current = []
         depth = 0
+        delimiters = {",": 0, "(": 1, "[": 1, "{": 1, ")": -1, "]": -1, "}": -1}
 
         for char in args_str:
-            if char in "([{":
-                depth += 1
-                current.append(char)
-            elif char in ")]}":
-                depth -= 1
-                current.append(char)
-            elif char == "," and depth == 0:
-                result.append("".join(current).strip())
-                current = []
+            if char in delimiters:
+                depth += delimiters[char]
+                if char == "," and depth == 0:
+                    result.append("".join(current).strip())
+                    current = []
+                else:
+                    current.append(char)
             else:
                 current.append(char)
 
