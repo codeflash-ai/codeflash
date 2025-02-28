@@ -7,12 +7,13 @@ from collections.abc import Collection, Iterator
 from enum import Enum, IntEnum
 from pathlib import Path
 from re import Pattern
-from typing import Any, Optional, Union
+from typing import Annotated, Any, Optional, Union
 
+import sentry_sdk
+from coverage.exceptions import NoDataError
 from jedi.api.classes import Name
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from pydantic.dataclasses import dataclass
-from typing_extensions import Annotated
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_utils import validate_python_code
@@ -217,7 +218,7 @@ class CoverageData:
     graph: dict[str, dict[str, Collection[object]]]
     code_context: CodeOptimizationContext
     main_func_coverage: FunctionCoverage
-    dependent_func_coverage: Union[FunctionCoverage, None]
+    dependent_func_coverage: Optional[FunctionCoverage]
     status: CoverageStatus
     blank_re: Pattern[str] = re.compile(r"\s*(#|$)")
     else_re: Pattern[str] = re.compile(r"\s*else\s*:\s*(#|$)")
@@ -231,34 +232,21 @@ class CoverageData:
         from coverage.jsonreport import JsonReporter
 
         cov = Coverage(data_file=database_path, data_suffix=True, auto_data=True, branch=True)
+
         if not database_path.stat().st_size or not database_path.exists():
             logger.debug(f"Coverage database {database_path} is empty or does not exist")
-            return CoverageData(
-                file_path=source_code_path,
-                coverage=0.0,
-                function_name=function_name,
-                functions_being_tested=[],
-                graph={},
-                code_context=code_context,
-                main_func_coverage=FunctionCoverage(
-                    name=function_name,
-                    coverage=0.0,
-                    executed_lines=[],
-                    unexecuted_lines=[],
-                    executed_branches=[],
-                    unexecuted_branches=[],
-                ),
-                dependent_func_coverage=None,
-                status=CoverageStatus.NOT_FOUND,
-            )
-
+            sentry_sdk.capture_message(f"Coverage database {database_path} is empty or does not exist")
+            return CoverageData.create_empty(source_code_path, function_name, code_context)
         cov.load()
 
         reporter = JsonReporter(cov)
         temp_json_file = database_path.with_suffix(".report.json")
         with temp_json_file.open("w") as f:
-            reporter.report(morfs=[source_code_path.as_posix()], outfile=f)
-
+            try:
+                reporter.report(morfs=[source_code_path.as_posix()], outfile=f)
+            except NoDataError:
+                sentry_sdk.capture_message(f"No coverage data found for {function_name} in {source_code_path}")
+                return CoverageData.create_empty(source_code_path, function_name, code_context)
         with temp_json_file.open() as f:
             original_coverage_data = json.load(f)
 
@@ -460,6 +448,34 @@ class CoverageData:
             logger.debug(self.graph)
         if is_end_to_end():
             console.print(self)
+
+    @classmethod
+    def create_empty(cls, file_path: Path, function_name: str, code_context: CodeOptimizationContext) -> CoverageData:
+        return cls(
+            file_path=file_path,
+            coverage=0.0,
+            function_name=function_name,
+            functions_being_tested=[function_name],
+            graph={
+                function_name: {
+                    "executed_lines": set(),
+                    "unexecuted_lines": set(),
+                    "executed_branches": [],
+                    "unexecuted_branches": [],
+                }
+            },
+            code_context=code_context,
+            main_func_coverage=FunctionCoverage(
+                name=function_name,
+                coverage=0.0,
+                executed_lines=[],
+                unexecuted_lines=[],
+                executed_branches=[],
+                unexecuted_branches=[],
+            ),
+            dependent_func_coverage=None,
+            status=CoverageStatus.NOT_FOUND,
+        )
 
 
 @dataclass

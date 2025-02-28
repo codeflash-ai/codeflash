@@ -18,6 +18,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
     path_belongs_to_site_packages,
 )
+from codeflash.code_utils.concolic_utils import clean_concolic_tests
 from codeflash.code_utils.coverage_utils import generate_candidates, prepare_coverage_files
 
 
@@ -378,3 +379,65 @@ def test_prepare_coverage_files(mock_get_run_tmp_file: MagicMock) -> None:
     assert coverage_database_file == mock_coverage_file
     assert coveragercfile == mock_coveragerc_file
     mock_coveragerc_file.write_text.assert_called_once_with(f"[run]\n branch = True\ndata_file={mock_coverage_file}\n")
+
+
+def test_clean_concolic_tests() -> None:
+    original_code = """
+def test_add_numbers(x: int, y: int) -> None:
+    assert add_numbers(1, 2) == 3
+
+
+def test_concatenate_strings(s1: str, s2: str) -> None:
+    assert concatenate_strings("hello", "world") == "helloworld"
+
+
+def test_append_to_list(my_list: list[int], element: int) -> None:
+    assert append_to_list([1, 2, 3], 4) == [1, 2, 3, 4]
+
+
+def test_get_dict_value(my_dict: dict[str, int], key: str) -> None:
+    assert get_dict_value({"a": 1, "b": 2}, "a") == 1
+
+
+def test_union_sets(set1: set[int], set2: set[int]) -> None:
+    assert union_sets({1, 2, 3}, {3, 4, 5}) == {1, 2, 3, 4, 5}
+
+def test_calculate_tuple_sum(my_tuple: tuple[int, int, int]) -> None:
+    assert calculate_tuple_sum((1, 2, 3)) == 6
+"""
+
+    cleaned_code = clean_concolic_tests(original_code)
+    expected_cleaned_code = """
+def test_add_numbers(x: int, y: int) -> None:
+    add_numbers(1, 2)
+
+def test_concatenate_strings(s1: str, s2: str) -> None:
+    concatenate_strings('hello', 'world')
+
+def test_append_to_list(my_list: list[int], element: int) -> None:
+    append_to_list([1, 2, 3], 4)
+
+def test_get_dict_value(my_dict: dict[str, int], key: str) -> None:
+    get_dict_value({'a': 1, 'b': 2}, 'a')
+
+def test_union_sets(set1: set[int], set2: set[int]) -> None:
+    union_sets({1, 2, 3}, {3, 4, 5})
+
+def test_calculate_tuple_sum(my_tuple: tuple[int, int, int]) -> None:
+    calculate_tuple_sum((1, 2, 3))
+"""
+    assert cleaned_code == expected_cleaned_code.strip()
+
+    concolic_generated_repr_code = """from src.blib2to3.pgen2.grammar import Grammar
+
+def test_Grammar_copy():
+    assert Grammar.copy(Grammar()) == <src.blib2to3.pgen2.grammar.Grammar object at 0x104c30f50>
+"""
+    cleaned_code = clean_concolic_tests(concolic_generated_repr_code)
+    expected_cleaned_code = """
+from src.blib2to3.pgen2.grammar import Grammar
+
+def test_Grammar_copy():
+    Grammar.copy(Grammar())
+"""
+    assert cleaned_code == expected_cleaned_code.strip()

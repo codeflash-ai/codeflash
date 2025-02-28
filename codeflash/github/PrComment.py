@@ -20,6 +20,13 @@ class PrComment:
     winning_benchmarking_test_results: TestResults
 
     def to_json(self) -> dict[str, Union[dict[str, dict[str, int]], int, str]]:
+
+        report_table = {
+            test_type.to_name(): result
+            for test_type, result in self.winning_behavioral_test_results.get_test_pass_fail_report_by_type().items()
+            if test_type.to_name()
+        }
+
         return {
             "optimization_explanation": self.optimization_explanation,
             "best_runtime": humanize_runtime(self.best_runtime),
@@ -29,10 +36,7 @@ class PrComment:
             "speedup_x": self.speedup_x,
             "speedup_pct": self.speedup_pct,
             "loop_count": self.winning_benchmarking_test_results.number_of_loops(),
-            "report_table": {
-                test_type.to_name(): result
-                for test_type, result in self.winning_behavioral_test_results.get_test_pass_fail_report_by_type().items()
-            },
+            "report_table": report_table
         }
 
 

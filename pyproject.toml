@@ -67,7 +67,7 @@ exclude = [
 
 # Versions here the minimum required versions for the project. These should be as loose as possible.
 [tool.poetry.dependencies]
-python = "^3.9"
+python = ">=3.9"
 unidiff = ">=0.7.4"
 pytest = ">=7.0.0"
 gitpython = ">=3.1.31"
@@ -176,7 +176,7 @@ ignore = [
     "TD003",
     "TD004",
     "PLR2004",
-    "UP007" # remove once we drop 3.9 support.
+    "UP007"
 ]
 
 [tool.ruff.lint.flake8-type-checking]
