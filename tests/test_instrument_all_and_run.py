@@ -168,6 +168,13 @@ def test_sort():
             pytest_max_loops=1,
             testing_time=0.1,
         )
+
+        out_str = """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5]
+
+codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
+        assert out_str == test_results[0].stdout
         assert test_results[0].id.function_getting_tested == "sorter"
         assert test_results[0].id.iteration_id == "1_0"
         assert test_results[0].id.test_class_name is None
@@ -179,6 +186,7 @@ def test_sort():
         assert test_results[0].runtime > 0
         assert test_results[0].did_pass
         assert test_results[0].return_value == ([0, 1, 2, 3, 4, 5],)
+        assert out_str == test_results[1].stdout.strip()
 
         assert test_results[1].id.function_getting_tested == "sorter"
         assert test_results[1].id.iteration_id == "4_0"
@@ -190,6 +198,22 @@ def test_sort():
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
+        results2, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+        out_str = """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5]
+
+codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
+        assert out_str == results2[0].stdout.strip()
+        assert compare_test_results(test_results, results2)
     finally:
         fto_path.write_text(original_code, "utf-8")
         test_path.unlink(missing_ok=True)
@@ -340,13 +364,11 @@ def test_sort():
             pytest_max_loops=1,
             testing_time=0.1,
         )
-
         assert len(test_results) == 4
         assert test_results[0].id.function_getting_tested == "BubbleSorter.__init__"
         assert test_results[0].id.test_function_name == "test_sort"
         assert test_results[0].did_pass
         assert test_results[0].return_value[0] == {"x": 0}
-
         assert test_results[1].id.function_getting_tested == "BubbleSorter.sorter"
         assert test_results[1].id.iteration_id == "2_0"
         assert test_results[1].id.test_class_name is None
@@ -358,7 +380,9 @@ def test_sort():
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
         assert test_results[1].return_value == ([0, 1, 2, 3, 4, 5],)
-
+        out_str = """codeflash stdout : BubbleSorter.sorter() called\n\n\ncodeflash stdout : BubbleSorter.sorter() called"""
+        assert test_results[1].stdout == out_str
+        assert compare_test_results(test_results, test_results)
         assert test_results[2].id.function_getting_tested == "BubbleSorter.__init__"
         assert test_results[2].id.test_function_name == "test_sort"
         assert test_results[2].did_pass
@@ -374,6 +398,18 @@ def test_sort():
         )
         assert test_results[3].runtime > 0
         assert test_results[3].did_pass
+
+        results2, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+
+        assert compare_test_results(test_results, results2)
 
         # Replace with optimized code that mutated instance attribute
         optimized_code = """
