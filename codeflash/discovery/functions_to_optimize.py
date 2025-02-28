@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import os
 import random
 import warnings
@@ -156,9 +157,9 @@ def get_functions_to_optimize(
     project_root: Path,
     module_root: Path,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
-    assert (
-        sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1
-    ), "Only one of optimize_all, replay_test, or file should be provided"
+    assert sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1, (
+        "Only one of optimize_all, replay_test, or file should be provided"
+    )
     functions: dict[str, list[FunctionToOptimize]]
     with warnings.catch_warnings():
         warnings.simplefilter(action="ignore", category=SyntaxWarning)
@@ -434,9 +435,7 @@ def filter_functions(
             test_functions_removed_count += len(functions)
             continue
         if file_path in ignore_paths or any(
-            # file_path.startswith(ignore_path + os.sep) for ignore_path in ignore_paths if ignore_path
-            file_path.startswith(str(ignore_path) + os.sep)
-            for ignore_path in ignore_paths
+            file_path.startswith(str(ignore_path) + os.sep) for ignore_path in ignore_paths
         ):
             ignore_paths_removed_count += 1
             continue
@@ -457,15 +456,17 @@ def filter_functions(
             malformed_paths_count += 1
             continue
         if blocklist_funcs:
-            for function in functions.copy():
-                path = Path(function.file_path).name
-                if path in blocklist_funcs and function.function_name in blocklist_funcs[path]:
-                    functions.remove(function)
-                    logger.debug(f"Skipping {function.function_name} in {path} as it has already been optimized")
-                    continue
-
+            functions = [
+                function
+                for function in functions
+                if not (
+                    function.file_path.name in blocklist_funcs
+                    and function.qualified_name in blocklist_funcs[function.file_path.name]
+                )
+            ]
         filtered_modified_functions[file_path] = functions
         functions_count += len(functions)
+
     if not disable_logs:
         log_info = {
             f"{test_functions_removed_count} test function{'s' if test_functions_removed_count != 1 else ''}": test_functions_removed_count,
@@ -475,10 +476,11 @@ def filter_functions(
             f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths": ignore_paths_removed_count,
             f"{submodule_ignored_paths_count} file{'s' if submodule_ignored_paths_count != 1 else ''} from ignored submodules": submodule_ignored_paths_count,
         }
-        log_string: str
-        if log_string := "\n".join([k for k, v in log_info.items() if v > 0]):
+        log_string = "\n".join([k for k, v in log_info.items() if v > 0])
+        if log_string:
             logger.info(f"Ignoring: {log_string}")
             console.rule()
+
     return {Path(k): v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 
