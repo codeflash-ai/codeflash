@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
-from codeflash.cli_cmds.console import console, logger, progress_bar
+from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_replacer import normalize_code, normalize_node
 from codeflash.code_utils.code_utils import get_run_tmp_file
@@ -16,10 +17,12 @@ from codeflash.code_utils.static_analysis import analyze_imported_modules, get_f
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
 from codeflash.either import is_successful
-from codeflash.models.models import TestType, ValidCode
+from codeflash.models.models import TestFiles, ValidCode
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.telemetry.posthog_cf import ph
+from codeflash.verification.test_results import TestType
 from codeflash.verification.verification_utils import TestConfig
+from codeflash.benchmarking.get_trace_info import get_function_benchmark_timings, get_benchmark_timings
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -50,6 +53,8 @@ class Optimizer:
         function_to_optimize_ast: ast.FunctionDef | None = None,
         function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
         function_to_optimize_source_code: str | None = "",
+        function_benchmark_timings: dict[str, dict[str, float]] | None = None,
+        total_benchmark_timings: dict[str, float] | None = None,
     ) -> FunctionOptimizer:
         return FunctionOptimizer(
             function_to_optimize=function_to_optimize,
@@ -59,6 +64,8 @@ class Optimizer:
             function_to_optimize_ast=function_to_optimize_ast,
             aiservice_client=self.aiservice_client,
             args=self.args,
+            function_benchmark_timings=function_benchmark_timings if function_benchmark_timings else None,
+            total_benchmark_timings=total_benchmark_timings if total_benchmark_timings else None,
         )
 
     def run(self) -> None:
@@ -80,6 +87,23 @@ class Optimizer:
             project_root=self.args.project_root,
             module_root=self.args.module_root,
         )
+        if self.args.benchmark:
+            all_functions_to_optimize = [
+                function
+                for functions_list in file_to_funcs_to_optimize.values()
+                for function in functions_list
+            ]
+            logger.info(f"Tracing existing benchmarks for {len(all_functions_to_optimize)} functions")
+            trace_benchmarks_pytest(self.args.benchmarks_root, self.args.project_root, [fto.qualified_name_with_file_name for fto in all_functions_to_optimize])
+            logger.info("Finished tracing existing benchmarks")
+            trace_dir = Path(self.args.benchmarks_root) / ".codeflash_trace"
+            function_benchmark_timings = get_function_benchmark_timings(trace_dir, all_functions_to_optimize)
+            print(function_benchmark_timings)
+            total_benchmark_timings = get_benchmark_timings(trace_dir)
+            print("Total benchmark timings:")
+            print(total_benchmark_timings)
+            # for function in fully_qualified_function_names:
+
 
         optimizations_found: int = 0
         function_iterator_count: int = 0
@@ -93,6 +117,8 @@ class Optimizer:
                 logger.info("No functions found to optimize. Exiting…")
                 return
 
+            console.rule()
+            logger.info(f"Discovering existing unit tests in {self.test_cfg.tests_root}…")
             console.rule()
             function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
             num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
@@ -136,7 +162,6 @@ class Optimizer:
                     validated_original_code[analysis.file_path] = ValidCode(
                         source_code=callee_original_code, normalized_code=normalized_callee_original_code
                     )
-
                 if has_syntax_error:
                     continue
 
@@ -146,7 +171,7 @@ class Optimizer:
                         f"Optimizing function {function_iterator_count} of {num_optimizable_functions}: "
                         f"{function_to_optimize.qualified_name}"
                     )
-                    console.rule()
+
                     if not (
                         function_to_optimize_ast := get_first_top_level_function_or_method_ast(
                             function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
@@ -157,12 +182,17 @@ class Optimizer:
                             f"Skipping optimization."
                         )
                         continue
-                    function_optimizer = self.create_function_optimizer(
-                        function_to_optimize,
-                        function_to_optimize_ast,
-                        function_to_tests,
-                        validated_original_code[original_module_path].source_code,
-                    )
+                    if self.args.benchmark:
+
+                        function_optimizer = self.create_function_optimizer(
+                            function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code[original_module_path].source_code, function_benchmark_timings, total_benchmark_timings
+                        )
+                    else:
+                        function_optimizer = self.create_function_optimizer(
+                            function_to_optimize, function_to_optimize_ast, function_to_tests,
+                            validated_original_code[original_module_path].source_code
+                        )
+
                     best_optimization = function_optimizer.optimize_function()
                     if is_successful(best_optimization):
                         optimizations_found += 1
@@ -189,6 +219,7 @@ class Optimizer:
                     shutil.rmtree(function_optimizer.test_cfg.concolic_test_root_dir, ignore_errors=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
+
 
 
 def run_with_args(args: Namespace) -> None:

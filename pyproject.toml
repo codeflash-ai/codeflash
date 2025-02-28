@@ -69,7 +69,7 @@ exclude = [
 [tool.poetry.dependencies]
 python = ">=3.9"
 unidiff = ">=0.7.4"
-pytest = ">=7.0.0,<8.3.4"
+pytest = ">=7.0.0"
 gitpython = ">=3.1.31"
 libcst = ">=1.0.1"
 jedi = ">=0.19.1"
@@ -92,7 +92,6 @@ rich = ">=13.8.1"
 lxml = ">=5.3.0"
 crosshair-tool = ">=0.0.78"
 coverage = ">=7.6.4"
-line_profiler=">=4.2.0" #this is the minimum version which supports python 3.13
 [tool.poetry.group.dev]
 optional = true
 
@@ -120,7 +119,7 @@ types-gevent = "^24.11.0.20241230"
 types-greenlet = "^3.1.0.20241221"
 types-pexpect = "^4.9.0.20241208"
 types-unidiff = "^0.7.0.20240505"
-uv = ">=0.6.2"
+sqlalchemy = "^2.0.38"
 
 [tool.poetry.build]
 script = "codeflash/update_license_version.py"
@@ -152,7 +151,7 @@ warn_required_dynamic_aliases = true
 line-length = 120
 fix = true
 show-fixes = true
-exclude = ["code_to_optimize/", "pie_test_set/", "tests/"]
+exclude = ["code_to_optimize/", "pie_test_set/"]
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -164,11 +163,10 @@ ignore = [
     "D103",
     "D105",
     "D107",
-    "D203",  # incorrect-blank-line-before-class (incompatible with D211)
-    "D213",  # multi-line-summary-second-line (incompatible with D212)
     "S101",
     "S603",
     "S607",
+    "ANN101",
     "COM812",
     "FIX002",
     "PLR0912",
@@ -177,23 +175,19 @@ ignore = [
     "TD002",
     "TD003",
     "TD004",
-    "PLR2004",
-    "UP007" # remove once we drop 3.9 support.
+    "PLR2004"
 ]
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true
 runtime-evaluated-base-classes = ["pydantic.BaseModel"]
-runtime-evaluated-decorators = ["pydantic.validate_call", "pydantic.dataclasses.dataclass"]
+runtime-evaluated-decorators = ["pydantic.validate_call"]
 
 [tool.ruff.lint.pep8-naming]
 classmethod-decorators = [
     # Allow Pydantic's `@validator` decorator to trigger class method treatment.
     "pydantic.validator",
 ]
-
-[tool.ruff.lint.isort]
-split-on-trailing-comma = false
 
 [tool.ruff.format]
 docstring-code-format = true
@@ -217,13 +211,13 @@ initial-content = """
 
 
 [tool.codeflash]
-module-root = "codeflash"
-tests-root = "tests"
+# All paths are relative to this pyproject.toml's directory.
+module-root = "code_to_optimize"
+tests-root = "code_to_optimize/tests"
+benchmarks-root = "code_to_optimize/tests/pytest/benchmarks"
 test-framework = "pytest"
-formatter-cmds = [
-    "uvx ruff check --exit-zero --fix $file",
-    "uvx ruff format $file",
-]
+ignore-paths = []
+formatter-cmds = ["ruff check --exit-zero --fix $file", "ruff format $file"]
 
 
 [build-system]
