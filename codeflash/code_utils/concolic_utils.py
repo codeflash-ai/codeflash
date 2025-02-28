@@ -12,26 +12,23 @@ class AssertCleanup:
 
         for line in lines:
             transformed = self._transform_assert_line(line)
-            if transformed is not None:
-                result_lines.append(transformed)
-            else:
-                result_lines.append(line)
+            result_lines.append(transformed if transformed is not None else line)
 
         return "\n".join(result_lines)
 
     def _transform_assert_line(self, line: str) -> Optional[str]:
         indent = line[: len(line) - len(line.lstrip())]
 
-        assert_match = re.match(r"\s*assert\s+(.*?)(?:\s*==\s*.*)?$", line)
+        assert_match = self.assert_re.match(line)
         if assert_match:
             expression = assert_match.group(1).strip()
             if expression.startswith("not "):
                 return f"{indent}{expression}"
 
-            expression = re.sub(r"[,;]\s*$", "", expression)
+            expression = expression.rstrip(",;")
             return f"{indent}{expression}"
 
-        unittest_match = re.match(r"(\s*)self\.assert([A-Za-z]+)\((.*)\)$", line)
+        unittest_match = self.unittest_re.match(line)
         if unittest_match:
             indent, assert_method, args = unittest_match.groups()
 
@@ -64,6 +61,11 @@ class AssertCleanup:
             result.append("".join(current).strip())
 
         return result
+
+    def __init__(self):
+        # Pre-compiling regular expressions for faster execution
+        self.assert_re = re.compile(r"\s*assert\s+(.*?)(?:\s*==\s*.*)?$")
+        self.unittest_re = re.compile(r"(\s*)self\.assert([A-Za-z]+)\((.*)\)$")
 
 
 def clean_concolic_tests(test_suite_code: str) -> str:
