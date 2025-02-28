@@ -40,7 +40,9 @@ from codeflash.discovery.functions_to_optimize import filter_files_optimized
 from codeflash.tracing.replay_test import create_trace_replay_test
 from codeflash.tracing.tracing_utils import FunctionModules
 from codeflash.verification.verification_utils import get_test_file_path
-
+# import warnings
+# warnings.filterwarnings("ignore", category=dill.PickleWarning)
+# warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Debug this file by simply adding print statements. This file is not meant to be debugged by the debugger.
 class Tracer:
@@ -117,14 +119,15 @@ class Tracer:
     def __enter__(self) -> None:
         if self.disable:
             return
-        if getattr(Tracer, "used_once", False):
-            console.print(
-                "Codeflash: Tracer can only be used once per program run. "
-                "Please only enable the Tracer once. Skipping tracing this section."
-            )
-            self.disable = True
-            return
-        Tracer.used_once = True
+
+        # if getattr(Tracer, "used_once", False):
+        #     console.print(
+        #         "Codeflash: Tracer can only be used once per program run. "
+        #         "Please only enable the Tracer once. Skipping tracing this section."
+        #     )
+        #     self.disable = True
+        #     return
+        # Tracer.used_once = True
 
         if pathlib.Path(self.output_file).exists():
             console.print("Codeflash: Removing existing trace file")
@@ -149,6 +152,14 @@ class Tracer:
             return
         sys.setprofile(None)
         self.con.commit()
+        # Check if any functions were actually traced
+        if self.trace_count == 0:
+            self.con.close()
+            # Delete the trace file if no functions were traced
+            if self.output_file.exists():
+                self.output_file.unlink()
+            console.print("Codeflash: No functions were traced. Removing trace database.")
+            return
 
         self.create_stats()
 
@@ -193,7 +204,9 @@ class Tracer:
             test_framework=self.config["test_framework"],
             max_run_count=self.max_function_count,
         )
-        function_path = "_".join(self.functions) if self.functions else self.file_being_called_from
+        # Need a better way to store the replay test
+        # function_path = "_".join(self.functions) if self.functions else self.file_being_called_from
+        function_path = self.file_being_called_from
         test_file_path = get_test_file_path(
             test_dir=Path(self.config["tests_root"]), function_name=function_path, test_type="replay"
         )
@@ -224,9 +237,9 @@ class Tracer:
             return
         if not file_name.exists():
             return
-        if self.functions:
-            if code.co_name not in self.functions:
-                return
+        # if self.functions:
+        #     if code.co_name not in self.functions:
+        #         return
         class_name = None
         arguments = frame.f_locals
         try:
@@ -241,9 +254,13 @@ class Tracer:
         except:
             # someone can override the getattr method and raise an exception. I'm looking at you wrapt
             return
+
         function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
         if function_qualified_name in self.ignored_qualified_functions:
             return
+        if self.functions and function_qualified_name not in self.functions:
+            return
+
         if function_qualified_name not in self.function_count:
             # seeing this function for the first time
             self.function_count[function_qualified_name] = 0
@@ -476,7 +493,7 @@ class Tracer:
         # print in milliseconds.
         s = StringIO()
         stats_obj = pstats.Stats(copy(self), stream=s)
-        stats_obj.strip_dirs().sort_stats(*sort).print_stats(25)
+        stats_obj.strip_dirs().sort_stats(*sort).print_stats(100)
         self.total_tt = stats_obj.total_tt
         console.print("total_tt", self.total_tt)
         raw_stats = s.getvalue()
@@ -621,13 +638,16 @@ def main():
                 "__cached__": None,
             }
         try:
-            Tracer(
+            tracer = Tracer(
                 output=args.outfile,
                 functions=args.only_functions,
                 max_function_count=args.max_function_count,
                 timeout=args.tracer_timeout,
                 config_file_path=args.codeflash_config,
-            ).runctx(code, globs, None)
+            )
+
+            tracer.runctx(code, globs, None)
+            print(tracer.functions)
 
         except BrokenPipeError as exc:
             # Prevent "Exception ignored" during interpreter shutdown.

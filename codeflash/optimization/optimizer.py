@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
+from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_replacer import normalize_code, normalize_node
@@ -21,6 +22,7 @@ from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.test_results import TestType
 from codeflash.verification.verification_utils import TestConfig
+from codeflash.benchmarking.get_trace_info import get_function_benchmark_timings, get_benchmark_timings
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -51,6 +53,8 @@ class Optimizer:
         function_to_optimize_ast: ast.FunctionDef | None = None,
         function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
         function_to_optimize_source_code: str | None = "",
+        function_benchmark_timings: dict[str, dict[str, float]] | None = None,
+        total_benchmark_timings: dict[str, float] | None = None,
     ) -> FunctionOptimizer:
         return FunctionOptimizer(
             function_to_optimize=function_to_optimize,
@@ -60,7 +64,8 @@ class Optimizer:
             function_to_optimize_ast=function_to_optimize_ast,
             aiservice_client=self.aiservice_client,
             args=self.args,
-
+            function_benchmark_timings=function_benchmark_timings if function_benchmark_timings else None,
+            total_benchmark_timings=total_benchmark_timings if total_benchmark_timings else None,
         )
 
     def run(self) -> None:
@@ -82,6 +87,23 @@ class Optimizer:
             project_root=self.args.project_root,
             module_root=self.args.module_root,
         )
+        if self.args.benchmark:
+            all_functions_to_optimize = [
+                function
+                for functions_list in file_to_funcs_to_optimize.values()
+                for function in functions_list
+            ]
+            logger.info(f"Tracing existing benchmarks for {len(all_functions_to_optimize)} functions")
+            trace_benchmarks_pytest(self.args.benchmarks_root, self.args.project_root, [fto.qualified_name_with_file_name for fto in all_functions_to_optimize])
+            logger.info("Finished tracing existing benchmarks")
+            trace_dir = Path(self.args.benchmarks_root) / ".codeflash_trace"
+            function_benchmark_timings = get_function_benchmark_timings(trace_dir, all_functions_to_optimize)
+            print(function_benchmark_timings)
+            total_benchmark_timings = get_benchmark_timings(trace_dir)
+            print("Total benchmark timings:")
+            print(total_benchmark_timings)
+            # for function in fully_qualified_function_names:
+
 
         optimizations_found: int = 0
         function_iterator_count: int = 0
@@ -160,10 +182,17 @@ class Optimizer:
                             f"Skipping optimization."
                         )
                         continue
+                    if self.args.benchmark:
 
-                    function_optimizer = self.create_function_optimizer(
-                        function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code[original_module_path].source_code
-                    )
+                        function_optimizer = self.create_function_optimizer(
+                            function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code[original_module_path].source_code, function_benchmark_timings, total_benchmark_timings
+                        )
+                    else:
+                        function_optimizer = self.create_function_optimizer(
+                            function_to_optimize, function_to_optimize_ast, function_to_tests,
+                            validated_original_code[original_module_path].source_code
+                        )
+
                     best_optimization = function_optimizer.optimize_function()
                     if is_successful(best_optimization):
                         optimizations_found += 1

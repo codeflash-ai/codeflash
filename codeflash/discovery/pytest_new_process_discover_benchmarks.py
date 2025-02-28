@@ -23,7 +23,17 @@ def parse_pytest_collection_results(pytest_tests: list[Any]) -> list[dict[str, s
         test_class = None
         if test.cls:
             test_class = test.parent.name
-        test_results.append({"test_file": str(test.path), "test_class": test_class, "test_function": test.name})
+
+        # Determine if this is a benchmark test by checking for the benchmark fixture
+        is_benchmark = hasattr(test, 'fixturenames') and 'benchmark' in test.fixturenames
+        test_type = 'benchmark' if is_benchmark else 'regular'
+
+        test_results.append({
+            "test_file": str(test.path),
+            "test_class": test_class,
+            "test_function": test.name,
+            "test_type": test_type
+        })
     return test_results
 
 

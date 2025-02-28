@@ -3,6 +3,7 @@ import tempfile
 from pathlib import Path
 
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
+from codeflash.verification.test_results import TestType
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -21,7 +22,7 @@ def test_unit_test_discovery_pytest():
 
 def test_benchmark_test_discovery_pytest():
     project_path = Path(__file__).parent.parent.resolve() / "code_to_optimize"
-    tests_path = project_path / "tests" / "pytest"
+    tests_path = project_path / "tests" / "pytest" / "benchmarks" / "test_benchmark_bubble_sort.py"
     test_config = TestConfig(
         tests_root=tests_path,
         project_root_path=project_path,
@@ -29,9 +30,10 @@ def test_benchmark_test_discovery_pytest():
         tests_project_rootdir=tests_path.parent,
     )
     tests = discover_unit_tests(test_config)
-    print(tests)
     assert len(tests) > 0
-    # print(tests)
+    assert 'bubble_sort.sorter' in tests
+    benchmark_tests = sum(1 for test in tests['bubble_sort.sorter'] if test.tests_in_file.test_type == TestType.BENCHMARK_TEST)
+    assert benchmark_tests == 1
 
 
 def test_unit_test_discovery_unittest():

@@ -211,13 +211,13 @@ initial-content = """
 
 
 [tool.codeflash]
-module-root = "codeflash"
-tests-root = "tests"
+# All paths are relative to this pyproject.toml's directory.
+module-root = "code_to_optimize"
+tests-root = "code_to_optimize/tests"
+benchmarks-root = "code_to_optimize/tests/pytest/benchmarks"
 test-framework = "pytest"
-formatter-cmds = [
-    "poetry run ruff check --exit-zero --fix $file",
-    "poetry run ruff format $file",
-]
+ignore-paths = []
+formatter-cmds = ["ruff check --exit-zero --fix $file", "ruff format $file"]
 
 
 [build-system]

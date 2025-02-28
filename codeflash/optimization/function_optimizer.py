@@ -92,6 +92,8 @@ class FunctionOptimizer:
         function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
         function_to_optimize_ast: ast.FunctionDef | None = None,
         aiservice_client: AiServiceClient | None = None,
+        function_benchmark_timings: dict[str, dict[str, float]] | None = None,
+        total_benchmark_timings: dict[str, float] | None = None,
         args: Namespace | None = None,
     ) -> None:
         self.project_root = test_cfg.project_root_path
@@ -119,6 +121,9 @@ class FunctionOptimizer:
         self.args = args  # Check defaults for these
         self.function_trace_id: str = str(uuid.uuid4())
         self.original_module_path = module_name_from_file_path(self.function_to_optimize.file_path, self.project_root)
+
+        self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
+        self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
 
     def optimize_function(self) -> Result[BestOptimization, str]:
         should_run_experiment = self.experiment_id is not None
@@ -280,6 +285,20 @@ class FunctionOptimizer:
                     function_name=function_to_optimize_qualified_name,
                     file_path=self.function_to_optimize.file_path,
                 )
+                speedup = explanation.speedup # eg. 1.2 means 1.2x faster
+                if self.args.benchmark:
+                    fto_benchmark_timings = self.function_benchmark_timings[self.function_to_optimize.qualified_name_with_file_name]
+                    for benchmark_name, og_benchmark_timing in fto_benchmark_timings.items():
+                        print(f"Calculating speedup for benchmark {benchmark_name}")
+                        total_benchmark_timing = self.total_benchmark_timings[benchmark_name]
+                        # find out expected new benchmark timing, then calculate how much total benchmark was sped up. print out intermediate values
+                        expected_new_benchmark_timing = total_benchmark_timing - og_benchmark_timing + og_benchmark_timing / speedup
+                        print(f"Expected new benchmark timing: {expected_new_benchmark_timing}")
+                        print(f"Original benchmark timing: {total_benchmark_timing}")
+                        print(f"Benchmark speedup: {total_benchmark_timing / expected_new_benchmark_timing}")
+
+                        speedup = total_benchmark_timing / expected_new_benchmark_timing
+                        print(f"Speedup: {speedup}")
 
                 self.log_successful_optimization(explanation, generated_tests)
 
@@ -1107,7 +1126,7 @@ class FunctionOptimizer:
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
-
+        # print(test_files)
         results, coverage_results = parse_test_results(
             test_xml_path=result_file_path,
             test_files=test_files,
