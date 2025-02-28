@@ -119,7 +119,6 @@ types-gevent = "^24.11.0.20241230"
 types-greenlet = "^3.1.0.20241221"
 types-pexpect = "^4.9.0.20241208"
 types-unidiff = "^0.7.0.20240505"
-sqlalchemy = "^2.0.38"
 uv = ">=0.6.2"
 
 [tool.poetry.build]

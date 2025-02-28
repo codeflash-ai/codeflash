@@ -179,6 +179,7 @@ def test_single_element_list():
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
+        assert test_results[0].stdout == "codeflash stdout : BubbleSorter.sorter() called"
         assert test_results[0].id.test_function_name == "test_single_element_list"
         assert test_results[0].did_pass
         assert test_results[0].return_value[1]["arr"] == [42]
@@ -222,6 +223,7 @@ class BubbleSorter:
             test_results, test_results_mutated_attr
         )  # Without codeflash capture, the init state was not verified, and the results are verified as correct even with the attribute mutated
 
+        assert test_results_mutated_attr[0].stdout == "codeflash stdout : BubbleSorter.sorter() called"
     finally:
         fto_path.write_text(original_code, "utf-8")
         test_path.unlink(missing_ok=True)
@@ -322,6 +324,7 @@ def test_single_element_list():
         assert test_results[0].id.test_function_name == "test_single_element_list"
         assert test_results[0].did_pass
         assert test_results[0].return_value[0] == {"x": 0}
+        assert test_results[0].stdout == "codeflash stdout : BubbleSorter.sorter() called"
 
         # Verify function_to_optimize result
         assert test_results[1].id.function_getting_tested == "sorter"
@@ -391,6 +394,7 @@ class BubbleSorter:
         assert test_results_mutated_attr[0].id.function_getting_tested == "BubbleSorter.__init__"
         assert test_results_mutated_attr[0].return_value[0] == {"x": 1}
         assert test_results_mutated_attr[0].verification_type == VerificationType.INIT_STATE_FTO
+        assert test_results_mutated_attr[0].stdout == "codeflash stdout : BubbleSorter.sorter() called"
         assert not compare_test_results(
             test_results, test_results_mutated_attr
         )  # The test should fail because the instance attribute was mutated
@@ -442,6 +446,7 @@ class BubbleSorter:
         assert test_results_new_attr[0].id.function_getting_tested == "BubbleSorter.__init__"
         assert test_results_new_attr[0].return_value[0] == {"x": 0, "y": 2}
         assert test_results_new_attr[0].verification_type == VerificationType.INIT_STATE_FTO
+        assert test_results_new_attr[0].stdout == "codeflash stdout : BubbleSorter.sorter() called"
         # assert test_results_new_attr[1].return_value[1]["self"].x == 0 TODO: add self as input
         # assert test_results_new_attr[1].return_value[1]["self"].y == 2 TODO: add self as input
         assert compare_test_results(
