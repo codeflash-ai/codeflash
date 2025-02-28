@@ -764,6 +764,7 @@ class FunctionOptimizer:
 
             # Retrieve results
             candidates: list[OptimizedCandidate] = future_optimization_candidates.result()
+            candidates = candidates[:0]
             if manual_optimization is not None:
                 logger.info("Including prebuilt dictionary of optimization as a candidate")
                 # Add the manual optimization to the front of the candidates list
