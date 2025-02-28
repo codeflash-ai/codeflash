@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 import requests
@@ -26,6 +27,7 @@ class AiServiceClient:
         self.base_url = self.get_aiservice_base_url()
         self.headers = {"Authorization": f"Bearer {get_codeflash_api_key()}", "Connection": "close"}
 
+    @lru_cache(maxsize=1)
     def get_aiservice_base_url(self) -> str:
         if os.environ.get("CODEFLASH_AIS_SERVER", default="prod").lower() == "local":
             logger.info("Using local AI Service at http://localhost:8000")
@@ -197,10 +199,9 @@ class AiServiceClient:
         - Dict[str, str] | None: The generated regression tests and instrumented tests, or None if an error occurred.
 
         """
-        assert test_framework in [
-            "pytest",
-            "unittest",
-        ], f"Invalid test framework, got {test_framework} but expected 'pytest' or 'unittest'"
+        assert test_framework in ["pytest", "unittest"], (
+            f"Invalid test framework, got {test_framework} but expected 'pytest' or 'unittest'"
+        )
         payload = {
             "source_code_being_tested": source_code_being_tested,
             "function_to_optimize": function_to_optimize,
