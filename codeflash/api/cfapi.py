@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
@@ -19,7 +18,6 @@ if TYPE_CHECKING:
     from requests import Response
 
     from codeflash.github.PrComment import FileDiffContent, PrComment
-from packaging import version
 
 if os.environ.get("CODEFLASH_CFAPI_SERVER", default="prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
@@ -69,10 +67,10 @@ def get_user_id() -> Optional[str]:
         userid: str | None = resp_json.get("userId")
         min_version: str | None = resp_json.get("min_version")
         if userid:
-            if min_version and version.parse(min_version) > version.parse(__version__):
-                msg = "Your Codeflash CLI version is outdated. Please update to the latest version using `pip install --upgrade codeflash`."
-                console.print(f"[bold red]{msg}[/bold red]")
-                sys.exit(1)
+            # if min_version and version.parse(min_version) > version.parse(__version__):
+            #     msg = "Your Codeflash CLI version is outdated. Please update to the latest version using `pip install --upgrade codeflash`."
+            #     console.print(f"[bold red]{msg}[/bold red]")
+            #     sys.exit(1)
             return userid
 
         logger.error("Failed to retrieve userid from the response.")

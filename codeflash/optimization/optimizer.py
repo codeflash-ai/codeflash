@@ -162,6 +162,7 @@ class Optimizer:
                         continue
                     # Check if we have a manual optimization
                     function_name = function_to_optimize.qualified_name
+                    logger.info(f"Finding prebuilt optimization for {function_name}")
                     manual_optimization = get_manual_optimization_from_dict(function_name)
                     if manual_optimization:
                         logger.info(f"Using prebuilt optimization for {function_name}")

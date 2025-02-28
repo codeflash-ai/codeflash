@@ -105,6 +105,7 @@ def check_running_in_git_repo(module_root: str) -> bool:
 
 def confirm_proceeding_with_no_git_repo() -> str | bool:
     if sys.__stdin__.isatty():
+        return True
         return inquirer_wrapper(
             inquirer.confirm,
             message="WARNING: I did not find a git repository for your code. If you proceed with running codeflash, "
