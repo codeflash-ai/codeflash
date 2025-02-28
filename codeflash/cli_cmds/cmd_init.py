@@ -220,19 +220,26 @@ def collect_setup_info() -> SetupInfo:
         carousel=True,
     )
 
+    git_remote = ""
     try:
         repo = Repo(str(module_root), search_parent_directories=True)
         git_remotes = get_git_remotes(repo)
-        if len(git_remotes) > 1:
-            git_remote = inquirer_wrapper(
-                inquirer.list_input,
-                message="What git remote do you want Codeflash to use for new Pull Requests? ",
-                choices=git_remotes,
-                default="origin",
-                carousel=True,
-            )
+        if git_remotes:  # Only proceed if there are remotes
+            if len(git_remotes) > 1:
+                git_remote = inquirer_wrapper(
+                    inquirer.list_input,
+                    message="What git remote do you want Codeflash to use for new Pull Requests? ",
+                    choices=git_remotes,
+                    default="origin",
+                    carousel=True,
+                )
+            else:
+                git_remote = git_remotes[0]
         else:
-            git_remote = git_remotes[0]
+            click.echo(
+                "No git remotes found. You can still use Codeflash locally, but you'll need to set up a remote "
+                "repository to use GitHub features."
+            )
     except InvalidGitRepositoryError:
         git_remote = ""
 
@@ -371,6 +378,19 @@ def install_github_actions() -> None:
         git_root = Path(repo.git.rev_parse("--show-toplevel"))
         workflows_path = git_root / ".github" / "workflows"
         optimize_yaml_path = workflows_path / "codeflash.yaml"
+
+        # Check if the workflow file already exists
+        if optimize_yaml_path.exists():
+            confirm_overwrite = inquirer_wrapper(
+                inquirer.confirm,
+                message=f"⚡️ GitHub Actions workflow already exists at {optimize_yaml_path}. Overwrite?",
+                default=False,  # Don't overwrite by default
+            )
+            ph("cli-github-optimization-confirm-workflow-overwrite", {"confirm_overwrite": confirm_overwrite})
+            if not confirm_overwrite:
+                click.echo("⏩️ Skipping workflow creation.")
+                ph("cli-github-workflow-skipped")
+                return
 
         confirm_creation_yes = inquirer_wrapper(
             inquirer.confirm,
@@ -574,6 +594,11 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         )
     elif formatter == "don't use a formatter":
         formatter_cmds.append("disabled")
+    if formatter in ["black", "ruff"]:
+        try:
+            result = subprocess.run([formatter], capture_output=True, check=False)
+        except FileNotFoundError as e:
+            click.echo(f"⚠️ Formatter not found: {formatter}, please ensure it is installed")
     codeflash_section["formatter-cmds"] = formatter_cmds
     # Add the 'codeflash' section, ensuring 'tool' section exists
     tool_section = pyproject_data.get("tool", tomlkit.table())
