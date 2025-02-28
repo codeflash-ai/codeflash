@@ -156,6 +156,7 @@ def test_sort():
                     test_type=test_type,
                     original_file_path=test_path,
                     benchmarking_file_path=test_path_perf,
+                    original_source=code,
                 )
             ]
         )
@@ -328,6 +329,7 @@ def test_sort():
                     test_type=test_type,
                     original_file_path=test_path,
                     benchmarking_file_path=test_path_perf,
+                    original_source=code,
                 )
             ]
         )
@@ -423,6 +425,7 @@ class BubbleSorter:
                     test_type=test_type,
                     original_file_path=test_path,
                     benchmarking_file_path=test_path_perf,
+                    original_source=code,
                 )
             ]
         )

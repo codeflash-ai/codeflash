@@ -457,6 +457,7 @@ class MyClass:
                     test_type=test_type,
                     original_file_path=test_path,
                     benchmarking_file_path=test_path_perf,
+                    original_source=test_code,
                 )
             ]
         )
@@ -568,6 +569,7 @@ class MyClass(ParentClass):
                     test_type=test_type,
                     original_file_path=test_path,
                     benchmarking_file_path=test_path_perf,
+                    original_source=test_code,
                 )
             ]
         )
@@ -681,6 +683,7 @@ class MyClass:
                     test_type=test_type,
                     original_file_path=test_path,
                     benchmarking_file_path=test_path_perf,
+                    original_source=test_code,
                 )
             ]
         )
@@ -831,6 +834,7 @@ class AnotherHelperClass:
                     test_type=test_type,
                     original_file_path=test_path,
                     benchmarking_file_path=test_path_perf,
+                    original_source=test_code,
                 )
             ]
         )
@@ -967,6 +971,7 @@ class AnotherHelperClass:
                     test_type=test_type,
                     original_file_path=test_path,
                     benchmarking_file_path=test_path_perf,
+                    original_source=test_code,
                 )
             ]
         )

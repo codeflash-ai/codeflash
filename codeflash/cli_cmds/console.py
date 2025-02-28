@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from contextlib import contextmanager
 from itertools import cycle
-from typing import TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -13,6 +13,8 @@ from codeflash.cli_cmds.console_constants import SPINNER_TYPES
 from codeflash.cli_cmds.logging_config import BARE_LOGGING_FORMAT
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from rich.progress import TaskID
 
 DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
