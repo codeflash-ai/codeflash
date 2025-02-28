@@ -855,9 +855,7 @@ class FunctionOptimizer:
                 )
                 console.rule()
                 return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
-            if not coverage_critic(
-            coverage_results, self.args.test_framework
-                ):
+            if not coverage_critic(coverage_results, self.args.test_framework):
                 return Failure("The threshold for test coverage was not met.")
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
@@ -897,7 +895,6 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
-
 
             total_timing = benchmarking_results.total_passed_runtime()  # caution: doesn't handle the loop index
             functions_to_remove = [
@@ -1077,7 +1074,6 @@ class FunctionOptimizer:
                     cwd=self.project_root,
                     test_env=test_env,
                     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                    pytest_cmd=self.test_cfg.pytest_cmd,
                     verbose=True,
                     enable_coverage=enable_coverage,
                 )
@@ -1086,8 +1082,8 @@ class FunctionOptimizer:
                     test_files,
                     cwd=self.project_root,
                     test_env=test_env,
-                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     pytest_cmd=self.test_cfg.pytest_cmd,
+                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     pytest_target_runtime_seconds=testing_time,
                     pytest_min_loops=pytest_min_loops,
                     pytest_max_loops=pytest_max_loops,
@@ -1097,13 +1093,13 @@ class FunctionOptimizer:
                 raise ValueError(f"Unexpected testing type: {testing_type}")
         except subprocess.TimeoutExpired:
             logger.exception(
-                f'Error running tests in {", ".join(str(f) for f in test_files.test_files)}.\nTimeout Error'
+                f"Error running tests in {', '.join(str(f) for f in test_files.test_files)}.\nTimeout Error"
             )
             return TestResults(), None
         if run_result.returncode != 0 and testing_type == TestingMode.BEHAVIOR:
             logger.debug(
-                f'Nonzero return code {run_result.returncode} when running tests in '
-                f'{", ".join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n'
+                f"Nonzero return code {run_result.returncode} when running tests in "
+                f"{', '.join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n"
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
@@ -1149,4 +1145,3 @@ class FunctionOptimizer:
                 zip(generated_test_paths, generated_perf_test_paths)
             )
         ]
-
