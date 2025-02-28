@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import ast
+import re
 from collections import defaultdict
 from functools import lru_cache
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Optional, TypeVar
 
 import libcst as cst
 
