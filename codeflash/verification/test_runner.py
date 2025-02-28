@@ -50,8 +50,10 @@ def run_behavioral_tests(
                 )
             else:
                 test_files.append(str(file.instrumented_behavior_file_path))
-        pytest_cmd_list = shlex.split(
-            f"{SAFE_SYS_EXECUTABLE} -m pytest" if pytest_cmd == "pytest" else pytest_cmd, posix=IS_POSIX
+        pytest_cmd_list = (
+            shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
+            if pytest_cmd == "pytest"
+            else [SAFE_SYS_EXECUTABLE, "-m", *shlex.split(pytest_cmd, posix=IS_POSIX)]
         )
         test_files = list(set(test_files))  # remove multiple calls in the same test function
         common_pytest_args = [
@@ -78,17 +80,16 @@ def run_behavioral_tests(
             )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any,
             # then the current run will be appended to the previous data, which skews the results
             logger.debug(cov_erase)
+            coverage_cmd = [SAFE_SYS_EXECUTABLE, "-m", "coverage", "run", f"--rcfile={coveragercfile.as_posix()}", "-m"]
+
+            if pytest_cmd == "pytest":
+                coverage_cmd.extend(["pytest"])
+            else:
+                coverage_cmd.extend(shlex.split(pytest_cmd, posix=IS_POSIX)[1:])
 
             coverage_cmd = f"{SAFE_SYS_EXECUTABLE} -m coverage run --rcfile={coveragercfile.as_posix()} -m"
             results = execute_test_subprocess(
-                shlex.split(coverage_cmd) + pytest_cmd_list + common_pytest_args + result_args + test_files,
-                shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage run --rcfile={coveragercfile.as_posix()} -m pytest")
-                + common_pytest_args
-                + result_args
-                + test_files,
-                cwd=cwd,
-                env=pytest_test_env,
-                timeout=600,
+                coverage_cmd + common_pytest_args + result_args + test_files, cwd=cwd, env=pytest_test_env, timeout=600
             )
             logger.debug(
                 f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
