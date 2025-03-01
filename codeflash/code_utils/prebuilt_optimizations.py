@@ -231,8 +231,7 @@ class OnnxRoboflowInferenceModel(RoboflowInferenceModel):
                 disable_preproc_static_crop=disable_preproc_static_crop,
             )
             # Return it as a batch of 1
-            img_dims = [img_dims]
-            return img_in, img_dims
+            return img_in, ((img_dims[0], img_dims[1]),)
         # For small batches (2-4 images), avoid multiprocessing overhead
         elif len(image) <= 4:
             imgs_with_dims = []
