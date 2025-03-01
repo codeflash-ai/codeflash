@@ -243,7 +243,7 @@ class FunctionOptimizer:
 
         best_optimization = None
 
-        for u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
+        for _u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
             if candidates is None:
                 continue
 
@@ -1088,7 +1088,8 @@ class FunctionOptimizer:
                     test_framework=self.test_cfg.test_framework,
                 )
             else:
-                raise ValueError(f"Unexpected testing type: {testing_type}")
+                msg = f"Unexpected testing type: {testing_type}"
+                raise ValueError(msg)
         except subprocess.TimeoutExpired:
             logger.exception(
                 f"Error running tests in {', '.join(str(f) for f in test_files.test_files)}.\nTimeout Error"

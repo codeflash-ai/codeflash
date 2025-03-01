@@ -62,7 +62,7 @@ class AssertCleanup:
 
         return result
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Pre-compiling regular expressions for faster execution
         self.assert_re = re.compile(r"\s*assert\s+(.*?)(?:\s*==\s*.*)?$")
         self.unittest_re = re.compile(r"(\s*)self\.assert([A-Za-z]+)\((.*)\)$")

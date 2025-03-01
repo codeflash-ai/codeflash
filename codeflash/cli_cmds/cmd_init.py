@@ -462,7 +462,7 @@ def determine_dependency_manager(pyproject_data: dict[str, Any]) -> DependencyMa
         return DependencyManager.POETRY
 
     # Check for uv
-    if any(key.startswith("uv") for key in tool_section.keys()):
+    if any(key.startswith("uv") for key in tool_section):
         return DependencyManager.UV
 
     # Look for pip-specific markers
@@ -555,9 +555,8 @@ def customize_codeflash_yaml_content(
 
     # Add codeflash command
     codeflash_cmd = get_codeflash_github_action_command(dep_manager)
-    optimize_yml_content = optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
+    return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
 
-    return optimize_yml_content
 
 
 # Create or update the pyproject.toml file with the Codeflash dependency & configuration
@@ -596,7 +595,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         formatter_cmds.append("disabled")
     if formatter in ["black", "ruff"]:
         try:
-            result = subprocess.run([formatter], capture_output=True, check=False)
+            subprocess.run([formatter], capture_output=True, check=False)
         except FileNotFoundError:
             click.echo(f"⚠️ Formatter not found: {formatter}, please ensure it is installed")
     codeflash_section["formatter-cmds"] = formatter_cmds
