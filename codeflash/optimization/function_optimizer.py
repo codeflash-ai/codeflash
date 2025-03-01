@@ -28,6 +28,7 @@ from codeflash.code_utils.code_utils import (
     file_name_from_test_module_name,
     get_run_tmp_file,
     module_name_from_file_path,
+    has_any_async_functions,
 )
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
@@ -136,8 +137,8 @@ class FunctionOptimizer:
             with helper_function_path.open(encoding="utf8") as f:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
-
-        logger.info("Code to be optimized:")
+        if has_any_async_functions(code_context.code_to_optimize_with_helpers):
+            return Failure("Codeflash does not support async functions in the code to optimize.")
         code_print(code_context.read_writable_code)
 
         for module_abspath, helper_code_source in original_helper_code.items():
