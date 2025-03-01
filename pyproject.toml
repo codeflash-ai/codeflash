@@ -176,13 +176,14 @@ ignore = [
     "TD003",
     "TD004",
     "PLR2004",
-    "UP007"
+    "UP007",
+    "N802", # we use a lot of stdlib which follows this convention
 ]
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true
 runtime-evaluated-base-classes = ["pydantic.BaseModel"]
-runtime-evaluated-decorators = ["pydantic.validate_call"]
+runtime-evaluated-decorators = ["pydantic.validate_call", "pydantic.dataclasses.dataclass"]
 
 [tool.ruff.lint.pep8-naming]
 classmethod-decorators = [
