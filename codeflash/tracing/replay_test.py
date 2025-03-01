@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import sqlite3
 import textwrap
-from typing import Any, Generator, List, Optional
+from collections.abc import Generator
+from typing import Any, List, Optional
 
 from codeflash.discovery.functions_to_optimize import FunctionProperties, inspect_top_level_functions_or_methods
 from codeflash.tracing.tracing_utils import FunctionModules

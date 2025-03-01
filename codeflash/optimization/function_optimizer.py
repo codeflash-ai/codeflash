@@ -75,9 +75,6 @@ from codeflash.verification.verifier import generate_tests
 if TYPE_CHECKING:
     from argparse import Namespace
 
-    import numpy as np
-    import numpy.typing as npt
-
     from codeflash.either import Result
     from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
     from codeflash.verification.verification_utils import TestConfig

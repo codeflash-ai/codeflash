@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Generator
 from contextlib import contextmanager
 from itertools import cycle
-from typing import TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.logging import RichHandler
