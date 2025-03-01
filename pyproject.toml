@@ -163,10 +163,11 @@ ignore = [
     "D103",
     "D105",
     "D107",
+    "D203",  # incorrect-blank-line-before-class (incompatible with D211)
+    "D213",  # multi-line-summary-second-line (incompatible with D212)
     "S101",
     "S603",
     "S607",
-    "ANN101",
     "COM812",
     "FIX002",
     "PLR0912",
@@ -190,6 +191,9 @@ classmethod-decorators = [
     # Allow Pydantic's `@validator` decorator to trigger class method treatment.
     "pydantic.validator",
 ]
+
+[tool.ruff.lint.isort]
+split-on-trailing-comma = false
 
 [tool.ruff.format]
 docstring-code-format = true
