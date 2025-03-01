@@ -60,7 +60,7 @@ def run_behavioral_tests(
             "--codeflash_loops_scope=session",
             "--codeflash_min_loops=1",
             "--codeflash_max_loops=1",
-            f"--codeflash_seconds={pytest_target_runtime_seconds}",  # TODO : This is unnecessary, update the plugin to not ask for this
+            f"--codeflash_seconds={pytest_target_runtime_seconds}",  # TODO : This is unnecessary, update the plugin to not ask for this  # noqa: E501
         ]
 
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
@@ -87,7 +87,7 @@ def run_behavioral_tests(
             )
             logger.debug(
                 f"Result return code: {results.returncode}"
-                f"{', Result stderr:' + str(results.stderr) if results.stderr else ''}"
+                + (f", Result stderr: {results.stderr}" if results.stderr else "")
             )
         else:
             results = execute_test_subprocess(
@@ -98,7 +98,7 @@ def run_behavioral_tests(
             )
             logger.debug(
                 f"Result return code: {results.returncode}"
-                f"{', Result stderr:' + str(results.stderr) if results.stderr else ''}"
+                + (f", Result stderr: {results.stderr}" if results.stderr else "")
             )
     elif test_framework == "unittest":
         if enable_coverage:
@@ -106,10 +106,12 @@ def run_behavioral_tests(
             raise ValueError(msg)
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_files = [file.instrumented_behavior_file_path for file in test_paths.test_files]
-        result_file_path, results = run_unittest_tests(verbose, test_files, test_env, cwd)
+        result_file_path, results = run_unittest_tests(
+            verbose=verbose, test_file_paths=test_files, test_env=test_env, cwd=cwd
+        )
         logger.debug(
             f"Result return code: {results.returncode}"
-            f"{', Result stderr:' + str(results.stderr) if results.stderr else ''}"
+            + (f", Result stderr: {results.stderr}" if results.stderr else "")
         )
     else:
         msg = f"Unsupported test framework: {test_framework}"
