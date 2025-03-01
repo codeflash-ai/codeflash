@@ -28,17 +28,19 @@ def parse_pytest_collection_results(pytest_tests: list[Any]) -> list[dict[str, s
 
 
 if __name__ == "__main__":
+    from pathlib import Path
+
     import pytest
 
     try:
         exitcode = pytest.main(
             [tests_root, "-pno:logging", "--collect-only", "-m", "not skip"], plugins=[PytestCollectionPlugin()]
         )
-    except Exception as e:
-        print(f"Failed to collect tests: {e!s}")
+    except Exception as e:  # noqa: BLE001
+        print(f"Failed to collect tests: {e!s}")  # noqa: T201
         exitcode = -1
     tests = parse_pytest_collection_results(collected_tests)
     import pickle
 
-    with open(pickle_path, "wb") as f:
+    with Path(pickle_path).open("wb") as f:
         pickle.dump((exitcode, tests, pytest_rootdir), f, protocol=pickle.HIGHEST_PROTOCOL)

@@ -31,7 +31,8 @@ def get_next_arg_and_return(
         if event_type == "call":
             yield val[7]
         else:
-            raise ValueError("Invalid Trace event type")
+            msg = "Invalid Trace event type"
+            raise ValueError(msg)
 
 
 def get_function_alias(module: str, function_name: str) -> str:
@@ -39,7 +40,7 @@ def get_function_alias(module: str, function_name: str) -> str:
 
 
 def create_trace_replay_test(
-    trace_file: str, functions: List[FunctionModules], test_framework: str = "pytest", max_run_count=100
+    trace_file: str, functions: list[FunctionModules], test_framework: str = "pytest", max_run_count=100
 ) -> str:
     assert test_framework in ["pytest", "unittest"]
 
