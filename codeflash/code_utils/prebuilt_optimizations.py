@@ -284,7 +284,7 @@ class OnnxRoboflowInferenceModel(RoboflowInferenceModel):
                     "(https://github.com/roboflow/inference/issues) providing full context of the problem"
                 )
 
-        return img_in, list(img_dims)
+        return img_in, img_dims
 ''',
         "explanation": "Optimized load_image function with several key improvements: (1) Early optimization path for single images or single-element lists, reducing unnecessary overhead; (2) Adaptive processing strategy based on batch size - using simple loops for small batches (<=4 images) to avoid the overhead of multiprocessing setup; (3) True parallel processing with multiprocessing.Pool for larger batches that bypasses Python's GIL limitations; (4) Dynamic worker count calculation that scales with available CPU cores; (5) Simplified error message for clarity. These changes significantly improve performance by optimizing the processing pathway based on input characteristics and available resources.",
     },
