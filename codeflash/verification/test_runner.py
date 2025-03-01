@@ -30,6 +30,7 @@ def run_behavioral_tests(
     test_framework: str,
     test_env: dict[str, str],
     cwd: Path,
+    *,
     pytest_timeout: int | None = None,
     pytest_cmd: str = "pytest",
     verbose: bool = False,
@@ -59,7 +60,7 @@ def run_behavioral_tests(
             "--codeflash_loops_scope=session",
             "--codeflash_min_loops=1",
             "--codeflash_max_loops=1",
-            f"--codeflash_seconds={pytest_target_runtime_seconds}",  # TODO :This is unnecessary, update the plugin to not ask for this
+            f"--codeflash_seconds={pytest_target_runtime_seconds}",  # TODO : This is unnecessary, update the plugin to not ask for this
         ]
 
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
@@ -77,18 +78,16 @@ def run_behavioral_tests(
             # then the current run will be appended to the previous data, which skews the results
             logger.debug(cov_erase)
 
+            coverage_cmd = f"{SAFE_SYS_EXECUTABLE} -m coverage run --rcfile={coveragercfile.as_posix()} -m"
             results = execute_test_subprocess(
-                shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage run --rcfile={coveragercfile.as_posix()} -m")
-                + pytest_cmd_list
-                + common_pytest_args
-                + result_args
-                + test_files,
+                shlex.split(coverage_cmd) + pytest_cmd_list + common_pytest_args + result_args + test_files,
                 cwd=cwd,
                 env=pytest_test_env,
                 timeout=600,
             )
             logger.debug(
-                f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
+                f"Result return code: {results.returncode}"
+                f"{', Result stderr:' + str(results.stderr) if results.stderr else ''}"
             )
         else:
             results = execute_test_subprocess(
@@ -98,19 +97,23 @@ def run_behavioral_tests(
                 timeout=600,  # TODO: Make this dynamic
             )
             logger.debug(
-                f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
+                f"Result return code: {results.returncode}"
+                f"{', Result stderr:' + str(results.stderr) if results.stderr else ''}"
             )
     elif test_framework == "unittest":
         if enable_coverage:
-            raise ValueError("Coverage is not supported yet for unittest framework")
+            msg = "Coverage is not supported yet for unittest framework"
+            raise ValueError(msg)
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_files = [file.instrumented_behavior_file_path for file in test_paths.test_files]
         result_file_path, results = run_unittest_tests(verbose, test_files, test_env, cwd)
         logger.debug(
-            f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
+            f"Result return code: {results.returncode}"
+            f"{', Result stderr:' + str(results.stderr) if results.stderr else ''}"
         )
     else:
-        raise ValueError(f"Unsupported test framework: {test_framework}")
+        msg = f"Unsupported test framework: {test_framework}"
+        raise ValueError(msg)
 
     return result_file_path, results, coverage_database_file if enable_coverage else None
 
@@ -121,12 +124,13 @@ def run_benchmarking_tests(
     test_env: dict[str, str],
     cwd: Path,
     test_framework: str,
+    *,
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME,
     verbose: bool = False,
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,
     pytest_max_loops: int = 100_000,
-):
+) -> tuple[Path, subprocess.CompletedProcess]:
     if test_framework == "pytest":
         pytest_cmd_list = shlex.split(pytest_cmd, posix=IS_POSIX)
         test_files: list[str] = []
@@ -165,13 +169,18 @@ def run_benchmarking_tests(
         )
     elif test_framework == "unittest":
         test_files = [file.benchmarking_file_path for file in test_paths.test_files]
-        result_file_path, results = run_unittest_tests(verbose, test_files, test_env, cwd)
+        result_file_path, results = run_unittest_tests(
+            verbose=verbose, test_file_paths=test_files, test_env=test_env, cwd=cwd
+        )
     else:
-        raise ValueError(f"Unsupported test framework: {test_framework}")
+        msg = f"Unsupported test framework: {test_framework}"
+        raise ValueError(msg)
     return result_file_path, results
 
 
-def run_unittest_tests(verbose: bool, test_file_paths: list[Path], test_env: dict[str, str], cwd: Path):
+def run_unittest_tests(
+    *, verbose: bool, test_file_paths: list[Path], test_env: dict[str, str], cwd: Path
+) -> tuple[Path, subprocess.CompletedProcess]:
     result_file_path = get_run_tmp_file(Path("unittest_results.xml"))
     unittest_cmd_list = [SAFE_SYS_EXECUTABLE, "-m", "xmlrunner"]
     log_level = ["-v"] if verbose else []
