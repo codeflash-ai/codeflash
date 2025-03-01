@@ -392,17 +392,17 @@ def w_np_non_max_suppression(
                 np_class_pred.astype(np.float32)
             ], axis=1)
 
-
+        filtered_predictions = []
         np_unique_labels = np.unique(np_detections[:, 6])
-
         if class_agnostic:
             # Sort by confidence directly
             sorted_indices = np.argsort(-np_detections[:, 4])
             np_detections_sorted = np_detections[sorted_indices]
             # Directly pass to optimized NMS
-            filtered_predictions = non_max_suppression_fast(np_detections_sorted, iou_thresh)
+            filtered_predictions.extend(
+                non_max_suppression_fast(np_detections_sorted, iou_thresh)
+            )
         else:
-            filtered_predictions = []
             np_unique_labels = np.unique(np_class_pred)
 
             # Process each class
@@ -434,7 +434,7 @@ def w_np_non_max_suppression(
             if len(filtered_np) > max_detections:
                 filtered_np = filtered_np[:max_detections]
 
-            batch_predictions.append(filtered_np.tolist())
+            batch_predictions.append(list(filtered_np))
         else:
             batch_predictions.append([])
 
