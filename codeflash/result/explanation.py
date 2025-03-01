@@ -49,6 +49,5 @@ class Explanation:
             + f"{TestResults.report_to_string(self.winning_behavioral_test_results.get_test_pass_fail_report_by_type())}\n"
         )
 
-
     def explanation_message(self) -> str:
         return self.raw_explanation_message

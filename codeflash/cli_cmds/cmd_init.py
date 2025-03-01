@@ -558,7 +558,6 @@ def customize_codeflash_yaml_content(
     return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
 
 
-
 # Create or update the pyproject.toml file with the Codeflash dependency & configuration
 def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     toml_path = Path.cwd() / "pyproject.toml"
