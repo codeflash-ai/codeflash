@@ -115,8 +115,7 @@ def get_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str | Non
         or (functions_to_optimize[0].parents and functions_to_optimize[0].parents[0].type != "ClassDef")
         or (
             len(functions_to_optimize[0].parents) > 1
-            or ((len(functions_to_optimize) > 1)
-            and len({fn.parents[0] for fn in functions_to_optimize}) != 1)
+            or ((len(functions_to_optimize) > 1) and len({fn.parents[0] for fn in functions_to_optimize}) != 1)
         )
     ):
         return None, set()

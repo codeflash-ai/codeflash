@@ -60,7 +60,6 @@ class Optimizer:
             function_to_optimize_ast=function_to_optimize_ast,
             aiservice_client=self.aiservice_client,
             args=self.args,
-
         )
 
     def run(self) -> None:
@@ -162,7 +161,10 @@ class Optimizer:
                         continue
 
                     function_optimizer = self.create_function_optimizer(
-                        function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code[original_module_path].source_code
+                        function_to_optimize,
+                        function_to_optimize_ast,
+                        function_to_tests,
+                        validated_original_code[original_module_path].source_code,
                     )
                     best_optimization = function_optimizer.optimize_function()
                     if is_successful(best_optimization):
@@ -190,7 +192,6 @@ class Optimizer:
                     shutil.rmtree(function_optimizer.test_cfg.concolic_test_root_dir, ignore_errors=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
-
 
 
 def run_with_args(args: Namespace) -> None:
