@@ -87,12 +87,12 @@ def run_behavioral_tests(
             else:
                 coverage_cmd.extend(shlex.split(pytest_cmd, posix=IS_POSIX)[1:])
 
-            coverage_cmd = f"{SAFE_SYS_EXECUTABLE} -m coverage run --rcfile={coveragercfile.as_posix()} -m"
             results = execute_test_subprocess(
                 coverage_cmd + common_pytest_args + result_args + test_files, cwd=cwd, env=pytest_test_env, timeout=600
             )
             logger.debug(
-                f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
+                f"Result return code: {results.returncode}, "
+                f"{'Result stderr:' + str(results.stderr) if results.stderr else ''}"
             )
         else:
             results = execute_test_subprocess(
