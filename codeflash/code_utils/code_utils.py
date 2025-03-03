@@ -108,6 +108,14 @@ def validate_python_code(code: str) -> str:
     return code
 
 
+def has_any_async_functions(code: str) -> bool:
+    try:
+        module = ast.parse(code)
+    except SyntaxError:
+        return False
+    return any(isinstance(node, ast.AsyncFunctionDef) for node in ast.walk(module))
+
+
 def cleanup_paths(paths: list[Path]) -> None:
     for path in paths:
         path.unlink(missing_ok=True)

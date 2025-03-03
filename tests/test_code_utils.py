@@ -17,6 +17,7 @@ from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
     path_belongs_to_site_packages,
+    has_any_async_functions,
 )
 from codeflash.code_utils.concolic_utils import clean_concolic_tests
 from codeflash.code_utils.coverage_utils import generate_candidates, prepare_coverage_files
@@ -441,3 +442,27 @@ def test_Grammar_copy():
     Grammar.copy(Grammar())
 """
     assert cleaned_code == expected_cleaned_code.strip()
+
+
+def test_has_any_async_functions_with_async_code() -> None:
+    code = """
+def normal_function():
+    pass
+
+async def async_function():
+    pass
+"""
+    result = has_any_async_functions(code)
+    assert result is True
+
+
+def test_has_any_async_functions_without_async_code() -> None:
+    code = """
+def normal_function():
+    pass
+
+def another_function():
+    pass
+"""
+    result = has_any_async_functions(code)
+    assert result is False
