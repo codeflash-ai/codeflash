@@ -1,6 +1,8 @@
-from codeflash.models.models import CodeString
 import pytest
 from pydantic import ValidationError
+
+from codeflash.models.models import CodeString
+
 
 def test_python_string():
     code = CodeString(code="print('Hello, World!')")

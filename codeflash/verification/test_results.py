@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterator
 from enum import Enum
 from pathlib import Path
-from typing import Optional, cast
+from typing import TYPE_CHECKING, Optional, cast
 
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
@@ -12,6 +11,9 @@ from rich.tree import Tree
 
 from codeflash.cli_cmds.console import DEBUG_MODE, logger
 from codeflash.verification.comparator import comparator
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 class VerificationType(str, Enum):
@@ -53,7 +55,11 @@ class InvocationId:
 
     # test_module_path:TestSuiteClass.test_function_name:function_tested:iteration_id
     def id(self) -> str:
-        return f"{self.test_module_path}:{(self.test_class_name + '.' if self.test_class_name else '')}{self.test_function_name}:{self.function_getting_tested}:{self.iteration_id}"
+        class_prefix = f"{self.test_class_name}." if self.test_class_name else ""
+        return (
+            f"{self.test_module_path}:{class_prefix}{self.test_function_name}:"
+            f"{self.function_getting_tested}:{self.iteration_id}"
+        )
 
     @staticmethod
     def from_str_id(string_id: str, iteration_id: Optional[str] = None) -> InvocationId:
@@ -167,9 +173,13 @@ class TestResults(BaseModel):
     def usable_runtime_data_by_test_case(self) -> dict[InvocationId, list[int]]:
         for result in self.test_results:
             if result.did_pass and not result.runtime:
-                logger.debug(
-                    f"Ignoring test case that passed but had no runtime -> {result.id}, Loop # {result.loop_index}, Test Type: {result.test_type}, Verification Type: {result.verification_type}"
+                msg = (
+                    f"Ignoring test case that passed but had no runtime -> {result.id}, "
+                    f"Loop # {result.loop_index}, Test Type: {result.test_type}, "
+                    f"Verification Type: {result.verification_type}"
                 )
+                logger.debug(msg)
+
         usable_runtimes = [
             (result.id, result.runtime) for result in self.test_results if result.did_pass and result.runtime
         ]
@@ -179,16 +189,14 @@ class TestResults(BaseModel):
         }
 
     def total_passed_runtime(self) -> int:
-        """Calculate the sum of runtimes of all test cases that passed, where a testcase runtime
-        is the minimum value of all looped execution runtimes.
+        """Calculate the sum of runtimes of all test cases that passed.
+
+        A testcase runtime is the minimum value of all looped execution runtimes.
 
         :return: The runtime in nanoseconds.
         """
         return sum(
-            [
-                min(usable_runtime_data)
-                for invocation_id, usable_runtime_data in self.usable_runtime_data_by_test_case().items()
-            ]
+            [min(usable_runtime_data) for _, usable_runtime_data in self.usable_runtime_data_by_test_case().items()]
         )
 
     def __iter__(self) -> Iterator[FunctionTestInvocation]:

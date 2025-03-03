@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pydantic
 import pytest
-from pathlib import Path
 
 from codeflash.either import Failure, Success
 from codeflash.verification.comparator import comparator
@@ -302,7 +301,7 @@ def test_numpy():
 
 def test_scipy():
     try:
-        import scipy as sp # type: ignore
+        import scipy as sp  # type: ignore
     except ImportError:
         pytest.skip()
     a = sp.sparse.csr_matrix([[1, 0, 0], [0, 0, 3], [4, 0, 5]])
@@ -472,7 +471,7 @@ def test_pandas():
 
 def test_pyrsistent():
     try:
-        from pyrsistent import PBag, PClass, PRecord, field, pdeque, pmap, pset, pvector # type: ignore
+        from pyrsistent import PBag, PClass, PRecord, field, pdeque, pmap, pset, pvector  # type: ignore
     except ImportError:
         pytest.skip()
 
@@ -1039,7 +1038,7 @@ def test_exceptions_comparator():
 
     assert not comparator(..., None)
 
-    assert not comparator(Ellipsis, None)   
+    assert not comparator(Ellipsis, None)
 
     code7 = "a = 1 + 2"
     module7 = ast.parse(code7)

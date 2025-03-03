@@ -38,7 +38,7 @@ class Explanation:
         original_runtime_human = humanize_runtime(self.original_runtime_ns)
         best_runtime_human = humanize_runtime(self.best_runtime_ns)
 
-        explanation = (
+        return (
             f"Optimized {self.function_name} in {self.file_path}\n"
             f"{self.perf_improvement_line}\n"
             f"Runtime went down from {original_runtime_human} to {best_runtime_human} \n\n"
@@ -48,8 +48,6 @@ class Explanation:
             + "The new optimized code was tested for correctness. The results are listed below.\n"
             + f"{TestResults.report_to_string(self.winning_behavioral_test_results.get_test_pass_fail_report_by_type())}\n"
         )
-
-        return explanation
 
     def explanation_message(self) -> str:
         return self.raw_explanation_message

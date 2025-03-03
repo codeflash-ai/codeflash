@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import re
 from collections import defaultdict
 from functools import lru_cache
 from typing import TYPE_CHECKING, Optional, TypeVar
@@ -91,10 +90,10 @@ class OptimFunctionCollector(cst.CSTVisitor):
 class OptimFunctionReplacer(cst.CSTTransformer):
     def __init__(
         self,
-        modified_functions: dict[tuple[str | None, str], cst.FunctionDef] = None,
-        new_functions: list[cst.FunctionDef] = None,
-        new_class_functions: dict[str, list[cst.FunctionDef]] = None,
-        modified_init_functions: dict[str, cst.FunctionDef] = None,
+        modified_functions: Optional[dict[tuple[str | None, str], cst.FunctionDef]] = None,
+        new_functions: Optional[list[cst.FunctionDef]] = None,
+        new_class_functions: Optional[dict[str, list[cst.FunctionDef]]] = None,
+        modified_init_functions: Optional[dict[str, cst.FunctionDef]] = None,
     ) -> None:
         super().__init__()
         self.modified_functions = modified_functions if modified_functions is not None else {}

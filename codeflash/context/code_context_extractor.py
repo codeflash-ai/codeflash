@@ -70,7 +70,6 @@ def get_code_optimization_context(
             read_only_context_code=read_only_code_markdown.markdown,
             helper_functions=helpers_of_fto_obj_list,
             preexisting_objects=preexisting_objects,
-
         )
 
     logger.debug("Code context has exceeded token limit, removing docstrings from read-only code")

@@ -6,6 +6,7 @@ from argparse import Namespace
 from pathlib import Path
 
 import isort
+
 from code_to_optimize.bubble_sort_method import BubbleSorter
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize

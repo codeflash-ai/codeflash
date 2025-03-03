@@ -75,9 +75,6 @@ from codeflash.verification.verifier import generate_tests
 if TYPE_CHECKING:
     from argparse import Namespace
 
-    import numpy as np
-    import numpy.typing as npt
-
     from codeflash.either import Result
     from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
     from codeflash.verification.verification_utils import TestConfig
@@ -246,7 +243,7 @@ class FunctionOptimizer:
 
         best_optimization = None
 
-        for u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
+        for _u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
             if candidates is None:
                 continue
 
@@ -855,9 +852,7 @@ class FunctionOptimizer:
                 )
                 console.rule()
                 return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
-            if not coverage_critic(
-            coverage_results, self.args.test_framework
-                ):
+            if not coverage_critic(coverage_results, self.args.test_framework):
                 return Failure("The threshold for test coverage was not met.")
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
@@ -897,7 +892,6 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
-
 
             total_timing = benchmarking_results.total_passed_runtime()  # caution: doesn't handle the loop index
             functions_to_remove = [
@@ -1094,16 +1088,17 @@ class FunctionOptimizer:
                     test_framework=self.test_cfg.test_framework,
                 )
             else:
-                raise ValueError(f"Unexpected testing type: {testing_type}")
+                msg = f"Unexpected testing type: {testing_type}"
+                raise ValueError(msg)
         except subprocess.TimeoutExpired:
             logger.exception(
-                f'Error running tests in {", ".join(str(f) for f in test_files.test_files)}.\nTimeout Error'
+                f"Error running tests in {', '.join(str(f) for f in test_files.test_files)}.\nTimeout Error"
             )
             return TestResults(), None
         if run_result.returncode != 0 and testing_type == TestingMode.BEHAVIOR:
             logger.debug(
-                f'Nonzero return code {run_result.returncode} when running tests in '
-                f'{", ".join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n'
+                f"Nonzero return code {run_result.returncode} when running tests in "
+                f"{', '.join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n"
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
@@ -1149,4 +1144,3 @@ class FunctionOptimizer:
                 zip(generated_test_paths, generated_perf_test_paths)
             )
         ]
-

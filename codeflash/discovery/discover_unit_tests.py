@@ -59,8 +59,7 @@ def discover_tests_pytest(
         ],
         cwd=project_root,
         check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
     )
     try:
