@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
+from codeflash.benchmarking.utils import print_benchmark_table
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_replacer import normalize_code, normalize_node
@@ -23,7 +24,7 @@ from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.test_results import TestType
 from codeflash.verification.verification_utils import TestConfig
 from codeflash.benchmarking.get_trace_info import get_function_benchmark_timings, get_benchmark_timings
-
+from codeflash.benchmarking.utils import print_benchmark_table
 if TYPE_CHECKING:
     from argparse import Namespace
 
@@ -98,11 +99,8 @@ class Optimizer:
             logger.info("Finished tracing existing benchmarks")
             trace_dir = Path(self.args.benchmarks_root) / ".codeflash_trace"
             function_benchmark_timings = get_function_benchmark_timings(trace_dir, all_functions_to_optimize)
-            print(function_benchmark_timings)
             total_benchmark_timings = get_benchmark_timings(trace_dir)
-            print("Total benchmark timings:")
-            print(total_benchmark_timings)
-            # for function in fully_qualified_function_names:
+            print_benchmark_table(function_benchmark_timings, total_benchmark_timings)
 
 
         optimizations_found: int = 0
@@ -126,6 +124,7 @@ class Optimizer:
             logger.info(f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}")
             console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
+
 
             for original_module_path in file_to_funcs_to_optimize:
                 logger.info(f"Examining file {original_module_path!s}…")
@@ -217,6 +216,10 @@ class Optimizer:
                     test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
                 if function_optimizer.test_cfg.concolic_test_root_dir:
                     shutil.rmtree(function_optimizer.test_cfg.concolic_test_root_dir, ignore_errors=True)
+                if self.args.benchmark:
+                    trace_dir = Path(self.args.benchmarks_root) / "codeflash_replay_tests"
+                    if trace_dir.exists():
+                        shutil.rmtree(trace_dir, ignore_errors=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
 

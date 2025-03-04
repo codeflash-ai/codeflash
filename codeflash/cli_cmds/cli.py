@@ -113,6 +113,7 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     supported_keys = [
         "module_root",
         "tests_root",
+        "benchmarks_root",
         "test_framework",
         "ignore_paths",
         "pytest_cmd",

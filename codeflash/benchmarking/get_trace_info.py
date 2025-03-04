@@ -54,18 +54,20 @@ def get_function_benchmark_timings(trace_dir: Path, all_functions_to_optimize: l
             # Adjust query based on whether we have a class name
             if class_name:
                 cursor.execute(
-                    "SELECT total_time_ns FROM pstats WHERE filename LIKE ? AND function = ? AND class_name = ?",
+                    "SELECT cumulative_time_ns FROM pstats WHERE filename LIKE ? AND function = ? AND class_name = ?",
                     (f"%{filename}", function_name, class_name)
                 )
             else:
                 cursor.execute(
-                    "SELECT total_time_ns FROM pstats WHERE filename LIKE ? AND function = ? AND (class_name IS NULL OR class_name = '')",
+                    "SELECT cumulative_time_ns FROM pstats WHERE filename LIKE ? AND function = ? AND (class_name IS NULL OR class_name = '')",
                     (f"%{filename}", function_name)
                 )
 
-            result = cursor.fetchone()
+            result = cursor.fetchall()
+            if len(result) > 1:
+                print(f"Multiple results found for {qualified_name} in {benchmark_name}: {result}")
             if result:
-                time_ns = result[0]
+                time_ns = result[0][0]
                 function_benchmark_timings[qualified_name][benchmark_name] = time_ns / 1e6  # Convert to milliseconds
 
         conn.close()

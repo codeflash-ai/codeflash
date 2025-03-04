@@ -58,6 +58,7 @@ class Tracer:
         config_file_path: Path | None = None,
         max_function_count: int = 256,
         timeout: int | None = None,  # seconds
+        benchmark: bool = False,
     ) -> None:
         """:param output: The path to the output trace file
         :param functions: List of functions to trace. If None, trace all functions
@@ -95,7 +96,6 @@ class Tracer:
         self.max_function_count = max_function_count
         self.config, found_config_path = parse_config_file(config_file_path)
         self.project_root = project_root_from_module_root(Path(self.config["module_root"]), found_config_path)
-        print("project_root", self.project_root)
         self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>", "<module>"}
 
         self.file_being_called_from: str = str(Path(sys._getframe().f_back.f_code.co_filename).name).replace(".", "_")
@@ -105,6 +105,7 @@ class Tracer:
         self.next_insert = 1000
         self.trace_count = 0
 
+        self.benchmark = benchmark
         # Profiler variables
         self.bias = 0  # calibration constant
         self.timings = {}
@@ -184,18 +185,25 @@ class Tracer:
         cur.execute("INSERT INTO total_time VALUES (?)", (self.total_tt,))
         self.con.commit()
         self.con.close()
+        function_string = [str(function.file_name) + ":" + (function.class_name + ":" if function.class_name else "") + function.function_name for function in self.function_modules]
+        # print(function_string)
 
         # filter any functions where we did not capture the return
+        #     self.function_modules = [
+        #         function
+        #         for function in self.function_modules
+        #         if self.function_count[
+        #             str(function.file_name)
+        #             + ":"
+        #             + (function.class_name + ":" if function.class_name else "")
+        #             + function.function_name
+        #         ]
+        #         > 0
+        #     ]
         self.function_modules = [
             function
             for function in self.function_modules
-            if self.function_count[
-                str(function.file_name)
-                + ":"
-                + (function.class_name + ":" if function.class_name else "")
-                + function.function_name
-            ]
-            > 0
+            if str(str(function.file_name) + ":" + (function.class_name + ":" if function.class_name else "") + function.function_name) in self.function_count
         ]
 
         replay_test = create_trace_replay_test(
@@ -207,13 +215,21 @@ class Tracer:
         # Need a better way to store the replay test
         # function_path = "_".join(self.functions) if self.functions else self.file_being_called_from
         function_path = self.file_being_called_from
-        test_file_path = get_test_file_path(
-            test_dir=Path(self.config["tests_root"]), function_name=function_path, test_type="replay"
-        )
+        if self.benchmark and self.config["benchmarks_root"]:
+            # check if replay test dir exists, create
+            replay_test_dir = Path(self.config["benchmarks_root"]) / "codeflash_replay_tests"
+            if not replay_test_dir.exists():
+                replay_test_dir.mkdir(parents=True)
+            test_file_path = get_test_file_path(
+                test_dir=replay_test_dir, function_name=function_path, test_type="replay"
+            )
+        else:
+            test_file_path = get_test_file_path(
+                test_dir=Path(self.config["tests_root"]), function_name=function_path, test_type="replay"
+            )
         replay_test = isort.code(replay_test)
         with open(test_file_path, "w", encoding="utf8") as file:
             file.write(replay_test)
-
         console.print(
             f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}",
             crop=False,
