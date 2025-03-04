@@ -1072,7 +1072,6 @@ class FunctionOptimizer:
                     cwd=self.project_root,
                     test_env=test_env,
                     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                    pytest_cmd=self.test_cfg.pytest_cmd,
                     verbose=True,
                     enable_coverage=enable_coverage,
                 )
@@ -1081,8 +1080,8 @@ class FunctionOptimizer:
                     test_files,
                     cwd=self.project_root,
                     test_env=test_env,
-                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     pytest_cmd=self.test_cfg.pytest_cmd,
+                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     pytest_target_runtime_seconds=testing_time,
                     pytest_min_loops=pytest_min_loops,
                     pytest_max_loops=pytest_max_loops,
