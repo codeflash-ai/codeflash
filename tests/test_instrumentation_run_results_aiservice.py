@@ -179,6 +179,7 @@ def test_single_element_list():
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
+        assert test_results[0].stdout == "codeflash stdout : BubbleSorter.sorter() called"
         assert test_results[0].id.test_function_name == "test_single_element_list"
         assert test_results[0].did_pass
         assert test_results[0].return_value[1]["arr"] == [42]
@@ -187,18 +188,23 @@ def test_single_element_list():
 
         # Replace with optimized code that mutated instance attribute
         optimized_code_mutated_attr = """
+import sys
+
+
 class BubbleSorter:
 
     def __init__(self, x=1):
         self.x = x
 
     def sorter(self, arr):
+        print("codeflash stdout : BubbleSorter.sorter() called")
         for i in range(len(arr)):
             for j in range(len(arr) - 1):
                 if arr[j] > arr[j + 1]:
                     temp = arr[j]
                     arr[j] = arr[j + 1]
                     arr[j + 1] = temp
+        print("stderr test", file=sys.stderr)
         return arr
                         """
         fto_path.write_text(optimized_code_mutated_attr, "utf-8")
@@ -217,6 +223,7 @@ class BubbleSorter:
             test_results, test_results_mutated_attr
         )  # Without codeflash capture, the init state was not verified, and the results are verified as correct even with the attribute mutated
 
+        assert test_results_mutated_attr[0].stdout == "codeflash stdout : BubbleSorter.sorter() called"
     finally:
         fto_path.write_text(original_code, "utf-8")
         test_path.unlink(missing_ok=True)
@@ -317,6 +324,7 @@ def test_single_element_list():
         assert test_results[0].id.test_function_name == "test_single_element_list"
         assert test_results[0].did_pass
         assert test_results[0].return_value[0] == {"x": 0}
+        assert test_results[0].stdout == "codeflash stdout : BubbleSorter.sorter() called"
 
         # Verify function_to_optimize result
         assert test_results[1].id.function_getting_tested == "sorter"
@@ -331,18 +339,23 @@ def test_single_element_list():
         assert test_results[1].return_value[2] == [1, 2, 3]
         # Replace with optimized code that mutated instance attribute
         optimized_code_mutated_attr = """
+import sys
+
+
 class BubbleSorter:
 
     def __init__(self, x=1):
         self.x = x
 
     def sorter(self, arr):
+        print("codeflash stdout : BubbleSorter.sorter() called")
         for i in range(len(arr)):
             for j in range(len(arr) - 1):
                 if arr[j] > arr[j + 1]:
                     temp = arr[j]
                     arr[j] = arr[j + 1]
                     arr[j + 1] = temp
+        print("stderr test", file=sys.stderr)
         return arr
                         """
         fto_path.write_text(optimized_code_mutated_attr, "utf-8")
@@ -381,23 +394,29 @@ class BubbleSorter:
         assert test_results_mutated_attr[0].id.function_getting_tested == "BubbleSorter.__init__"
         assert test_results_mutated_attr[0].return_value[0] == {"x": 1}
         assert test_results_mutated_attr[0].verification_type == VerificationType.INIT_STATE_FTO
+        assert test_results_mutated_attr[0].stdout == "codeflash stdout : BubbleSorter.sorter() called"
         assert not compare_test_results(
             test_results, test_results_mutated_attr
         )  # The test should fail because the instance attribute was mutated
         # Replace with optimized code that did not mutate existing instance attribute, but added a new one
         optimized_code_new_attr = """
+import sys
+
+
 class BubbleSorter:
     def __init__(self, x=0):
         self.x = x
         self.y = 2
 
     def sorter(self, arr):
+        print("codeflash stdout : BubbleSorter.sorter() called")
         for i in range(len(arr)):
             for j in range(len(arr) - 1):
                 if arr[j] > arr[j + 1]:
                     temp = arr[j]
                     arr[j] = arr[j + 1]
                     arr[j + 1] = temp
+        print("stderr test", file=sys.stderr)
         return arr
                         """
         fto_path.write_text(optimized_code_new_attr, "utf-8")
@@ -427,6 +446,7 @@ class BubbleSorter:
         assert test_results_new_attr[0].id.function_getting_tested == "BubbleSorter.__init__"
         assert test_results_new_attr[0].return_value[0] == {"x": 0, "y": 2}
         assert test_results_new_attr[0].verification_type == VerificationType.INIT_STATE_FTO
+        assert test_results_new_attr[0].stdout == "codeflash stdout : BubbleSorter.sorter() called"
         # assert test_results_new_attr[1].return_value[1]["self"].x == 0 TODO: add self as input
         # assert test_results_new_attr[1].return_value[1]["self"].y == 2 TODO: add self as input
         assert compare_test_results(
