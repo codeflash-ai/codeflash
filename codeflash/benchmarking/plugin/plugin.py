@@ -68,7 +68,8 @@ class CodeFlashPlugin:
                 tracer = Tracer(
                     output=str(output_path),  # Convert Path to string for Tracer
                     functions=trace_functions,
-                    max_function_count=256
+                    max_function_count=256,
+                    benchmark=True
                 )
 
                 with tracer:

@@ -193,6 +193,35 @@ class TestResults(BaseModel):
             ]
         )
 
+    def usable_replay_runtime_data_by_test_case(self) -> dict[InvocationId, list[int]]:
+        """Collect runtime data for replay tests that passed and have runtime information.
+
+        :return: A dictionary mapping invocation IDs to lists of runtime values.
+        """
+        usable_runtimes = [
+            (result.id, result.runtime)
+            for result in self.test_results
+            if result.did_pass and result.runtime and result.test_type == TestType.REPLAY_TEST
+        ]
+
+        return {
+            usable_id: [runtime[1] for runtime in usable_runtimes if runtime[0] == usable_id]
+            for usable_id in {runtime[0] for runtime in usable_runtimes}
+        }
+
+    def total_replay_test_runtime(self) -> int:
+        """Calculate the sum of runtimes of replay test cases that passed, where a testcase runtime
+        is the minimum value of all looped execution runtimes.
+
+        :return: The runtime in nanoseconds.
+        """
+        replay_runtime_data = self.usable_replay_runtime_data_by_test_case()
+
+        return sum([
+            min(runtimes)
+            for invocation_id, runtimes in replay_runtime_data.items()
+        ]) if replay_runtime_data else 0
+
     def __iter__(self) -> Iterator[FunctionTestInvocation]:
         return iter(self.test_results)
 

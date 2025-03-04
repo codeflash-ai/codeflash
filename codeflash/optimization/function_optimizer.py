@@ -117,7 +117,6 @@ class FunctionOptimizer:
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.test_files = TestFiles(test_files=[])
-
         self.args = args  # Check defaults for these
         self.function_trace_id: str = str(uuid.uuid4())
         self.original_module_path = module_name_from_file_path(self.function_to_optimize.file_path, self.project_root)
@@ -285,20 +284,22 @@ class FunctionOptimizer:
                     function_name=function_to_optimize_qualified_name,
                     file_path=self.function_to_optimize.file_path,
                 )
-                speedup = explanation.speedup # eg. 1.2 means 1.2x faster
+                speedup = explanation.speedup #
                 if self.args.benchmark:
+                    original_replay_timing = original_code_baseline.benchmarking_test_results.total_replay_test_runtime()
                     fto_benchmark_timings = self.function_benchmark_timings[self.function_to_optimize.qualified_name_with_file_name]
                     for benchmark_name, og_benchmark_timing in fto_benchmark_timings.items():
                         print(f"Calculating speedup for benchmark {benchmark_name}")
                         total_benchmark_timing = self.total_benchmark_timings[benchmark_name]
                         # find out expected new benchmark timing, then calculate how much total benchmark was sped up. print out intermediate values
-                        expected_new_benchmark_timing = total_benchmark_timing - og_benchmark_timing + og_benchmark_timing / speedup
+                        replay_speedup = original_replay_timing / best_optimization.replay_runtime - 1
+                        print(f"Replay speedup: {replay_speedup}")
+                        expected_new_benchmark_timing = total_benchmark_timing - og_benchmark_timing + 1 / (replay_speedup + 1) * og_benchmark_timing
                         print(f"Expected new benchmark timing: {expected_new_benchmark_timing}")
                         print(f"Original benchmark timing: {total_benchmark_timing}")
-                        print(f"Benchmark speedup: {total_benchmark_timing / expected_new_benchmark_timing}")
-
-                        speedup = total_benchmark_timing / expected_new_benchmark_timing
-                        print(f"Speedup: {speedup}")
+                        benchmark_speedup_ratio = total_benchmark_timing / expected_new_benchmark_timing
+                        benchmark_speedup_percent = (benchmark_speedup_ratio - 1) * 100
+                        print(f"Benchmark speedup: {benchmark_speedup_percent:.2f}%")
 
                 self.log_successful_optimization(explanation, generated_tests)
 
@@ -447,13 +448,30 @@ class FunctionOptimizer:
                         )
                         tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
                         tree.add(f"Speedup ratio: {perf_gain + 1:.1f}X")
-
+                        if self.args.benchmark:
+                            original_code_replay_runtime = original_code_baseline.benchmarking_test_results.total_replay_test_runtime()
+                            candidate_replay_runtime = candidate_result.benchmarking_test_results.total_replay_test_runtime()
+                            replay_perf_gain = performance_gain(
+                                original_runtime_ns=original_code_replay_runtime,
+                                optimized_runtime_ns=candidate_replay_runtime,
+                            )
+                            tree.add("Replay Benchmarking： ")
+                            tree.add(f"Original summed runtime: {humanize_runtime(original_code_replay_runtime)}")
+                            tree.add(
+                                f"Best summed runtime: {humanize_runtime(candidate_replay_runtime)} "
+                                f"(measured over {candidate_result.max_loop_count} "
+                                f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                            )
+                            tree.add(f"Speedup percentage: {replay_perf_gain * 100:.1f}%")
+                            tree.add(f"Speedup ratio: {replay_perf_gain + 1:.1f}X")
                         best_optimization = BestOptimization(
                             candidate=candidate,
                             helper_functions=code_context.helper_functions,
                             runtime=best_test_runtime,
+                            replay_runtime=candidate_replay_runtime if self.args.benchmark else None,
                             winning_behavioral_test_results=candidate_result.behavior_test_results,
                             winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
+                            winning_replay_benchmarking_test_results=candidate_result.benchmarking_test_results,
                         )
                         best_runtime_until_now = best_test_runtime
                     else:
@@ -664,6 +682,7 @@ class FunctionOptimizer:
                     existing_test_files_count += 1
                 elif test_type == TestType.REPLAY_TEST:
                     replay_test_files_count += 1
+                    print("Replay test found")
                 elif test_type == TestType.CONCOLIC_COVERAGE_TEST:
                     concolic_coverage_test_files_count += 1
                 else:
@@ -708,6 +727,7 @@ class FunctionOptimizer:
 
                 unique_instrumented_test_files.add(new_behavioral_test_path)
                 unique_instrumented_test_files.add(new_perf_test_path)
+
                 if not self.test_files.get_by_original_file_path(path_obj_test_file):
                     self.test_files.add(
                         TestFile(
@@ -719,6 +739,7 @@ class FunctionOptimizer:
                             tests_in_file=[t.tests_in_file for t in tests_in_file_list],
                         )
                     )
+
             logger.info(
                 f"Discovered {existing_test_files_count} existing unit test file"
                 f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
@@ -888,7 +909,6 @@ class FunctionOptimizer:
                     enable_coverage=False,
                     code_context=code_context,
                 )
-
             else:
                 benchmarking_results = TestResults()
                 start_time: float = time.time()
@@ -917,7 +937,6 @@ class FunctionOptimizer:
             )
             console.rule()
 
-
             total_timing = benchmarking_results.total_passed_runtime()  # caution: doesn't handle the loop index
             functions_to_remove = [
                 result.id.test_function_name
@@ -944,6 +963,9 @@ class FunctionOptimizer:
             )
             console.rule()
             logger.debug(f"Total original code runtime (ns): {total_timing}")
+
+            if self.args.benchmark:
+                logger.info(f"Total replay test runtime: {humanize_runtime(benchmarking_results.total_replay_test_runtime())}")
             return Success(
                 (
                     OriginalCodeBaseline(
@@ -1062,6 +1084,15 @@ class FunctionOptimizer:
                 console.rule()
 
             logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
+            if self.args.benchmark:
+                total_candidate_replay_timing = (
+                    candidate_benchmarking_results.total_replay_test_runtime()
+                    if candidate_benchmarking_results
+                    else 0
+                )
+                logger.debug(
+                    f"Total optimized code {optimization_candidate_index} replay benchmark runtime (ns): {total_candidate_replay_timing}"
+                )
             return Success(
                 OptimizedCandidateResult(
                     max_loop_count=loop_count,
