@@ -72,6 +72,11 @@ def run_behavioral_tests(
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
 
+        # TODO: figure out the command to run line_profiler here
+        # TODO: see if line profiler is compaitble qwith coverage run, if so see if the profiling info changes if run along side coverage compared to without it
+        # If that is not satisfied then we can run it sas a speareate step. then add one more execute_test_subprocess call with line_profiler or the else branch below
+        # parse the line profiler output and then in the parse_test_results function, add the line profiler results to the test results
+
         if enable_coverage:
             coverage_database_file, coveragercfile = prepare_coverage_files()
 
