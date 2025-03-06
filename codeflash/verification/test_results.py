@@ -30,8 +30,11 @@ class TestType(Enum):
     GENERATED_REGRESSION = 3
     REPLAY_TEST = 4
     CONCOLIC_COVERAGE_TEST = 5
+    INIT_STATE_TEST = 6
 
     def to_name(self) -> str:
+        if self is TestType.INIT_STATE_TEST:
+            return ""
         names = {
             TestType.EXISTING_UNIT_TEST: "⚙️ Existing Unit Tests",
             TestType.INSPIRED_REGRESSION: "🎨 Inspired Regression Tests",
@@ -141,6 +144,8 @@ class TestResults(BaseModel):
     def get_test_pass_fail_report_by_type(self) -> dict[TestType, dict[str, int]]:
         report = {}
         for test_type in TestType:
+            if test_type == TestType.INIT_STATE_TEST:
+                continue
             report[test_type] = {"passed": 0, "failed": 0}
         for test_result in self.test_results:
             if test_result.loop_index == 1:
