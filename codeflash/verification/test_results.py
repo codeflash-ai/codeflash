@@ -144,8 +144,6 @@ class TestResults(BaseModel):
     def get_test_pass_fail_report_by_type(self) -> dict[TestType, dict[str, int]]:
         report = {}
         for test_type in TestType:
-            if test_type == TestType.INIT_STATE_TEST:
-                continue
             report[test_type] = {"passed": 0, "failed": 0}
         for test_result in self.test_results:
             if test_result.loop_index == 1:
@@ -168,7 +166,7 @@ class TestResults(BaseModel):
     def report_to_tree(report: dict[TestType, dict[str, int]], title: str) -> Tree:
         tree = Tree(title)
         for test_type in TestType:
-            if test_type == TestType.INIT_STATE_TEST:
+            if test_type is TestType.INIT_STATE_TEST:
                 continue
             tree.add(
                 f"{test_type.to_name()} - Passed: {report[test_type]['passed']}, Failed: {report[test_type]['failed']}"
