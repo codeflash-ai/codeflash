@@ -1,4 +1,3 @@
-import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -6,7 +5,7 @@ from pathlib import Path
 from version import __version_tuple__
 
 
-def main():
+def main() -> None:
     # Use the version tuple from version.py
     version = __version_tuple__
 

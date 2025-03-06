@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import sqlite3
 import textwrap
-from typing import Any, Generator, List, Optional
+from collections.abc import Generator
+from typing import Any, List, Optional
 
 from codeflash.discovery.functions_to_optimize import FunctionProperties, inspect_top_level_functions_or_methods
 from codeflash.tracing.tracing_utils import FunctionModules
@@ -30,7 +31,8 @@ def get_next_arg_and_return(
         if event_type == "call":
             yield val[7]
         else:
-            raise ValueError("Invalid Trace event type")
+            msg = "Invalid Trace event type"
+            raise ValueError(msg)
 
 
 def get_function_alias(module: str, function_name: str) -> str:
@@ -38,7 +40,7 @@ def get_function_alias(module: str, function_name: str) -> str:
 
 
 def create_trace_replay_test(
-    trace_file: str, functions: List[FunctionModules], test_framework: str = "pytest", max_run_count=100
+    trace_file: str, functions: list[FunctionModules], test_framework: str = "pytest", max_run_count=100
 ) -> str:
     assert test_framework in ["pytest", "unittest"]
 

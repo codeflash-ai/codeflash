@@ -8,6 +8,7 @@ from pathlib import Path
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
+from codeflash.code_utils.concolic_utils import clean_concolic_tests
 from codeflash.code_utils.static_analysis import has_typed_parameters
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -21,7 +22,11 @@ def generate_concolic_tests(
 ) -> tuple[dict[str, list[FunctionCalledInTest]], str]:
     function_to_concolic_tests = {}
     concolic_test_suite_code = ""
-    if test_cfg.concolic_test_root_dir and has_typed_parameters(function_to_optimize_ast, function_to_optimize.parents):
+    if (
+        test_cfg.concolic_test_root_dir
+        and isinstance(function_to_optimize_ast, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and has_typed_parameters(function_to_optimize_ast, function_to_optimize.parents)
+    ):
         logger.info("Generating concolic opcode coverage tests for the original code…")
         console.rule()
         try:
@@ -54,7 +59,8 @@ def generate_concolic_tests(
             return function_to_concolic_tests, concolic_test_suite_code
 
         if cover_result.returncode == 0:
-            concolic_test_suite_code: str = cover_result.stdout
+            generated_concolic_test: str = cover_result.stdout
+            concolic_test_suite_code: str = clean_concolic_tests(generated_concolic_test)
             concolic_test_suite_dir = Path(tempfile.mkdtemp(dir=test_cfg.concolic_test_root_dir))
             concolic_test_suite_path = concolic_test_suite_dir / "test_concolic_coverage.py"
             concolic_test_suite_path.write_text(concolic_test_suite_code, encoding="utf8")

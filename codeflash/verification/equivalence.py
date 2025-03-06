@@ -1,6 +1,7 @@
+import difflib
 import sys
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.verification.comparator import comparator
 from codeflash.verification.test_results import TestResults, TestType, VerificationType
 
@@ -61,6 +62,12 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
                 cdd_test_result.return_value,
             )
             break
+        if (original_test_result.stdout and cdd_test_result.stdout) and not comparator(
+            original_test_result.stdout, cdd_test_result.stdout
+        ):
+            are_equal = False
+            break
+
         if original_test_result.test_type in [TestType.EXISTING_UNIT_TEST, TestType.CONCOLIC_COVERAGE_TEST] and (
             cdd_test_result.did_pass != original_test_result.did_pass
         ):

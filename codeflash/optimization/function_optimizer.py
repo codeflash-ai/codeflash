@@ -28,6 +28,7 @@ from codeflash.code_utils.code_utils import (
     file_name_from_test_module_name,
     get_run_tmp_file,
     module_name_from_file_path,
+    has_any_async_functions,
 )
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
@@ -74,9 +75,6 @@ from codeflash.verification.verifier import generate_tests
 
 if TYPE_CHECKING:
     from argparse import Namespace
-
-    import numpy as np
-    import numpy.typing as npt
 
     from codeflash.either import Result
     from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
@@ -136,8 +134,8 @@ class FunctionOptimizer:
             with helper_function_path.open(encoding="utf8") as f:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
-
-        logger.info("Code to be optimized:")
+        if has_any_async_functions(code_context.code_to_optimize_with_helpers):
+            return Failure("Codeflash does not support async functions in the code to optimize.")
         code_print(code_context.read_writable_code)
 
         # for module_abspath, helper_code_source in original_helper_code.items():
@@ -246,7 +244,7 @@ class FunctionOptimizer:
 
         best_optimization = None
 
-        for u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
+        for _u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
             if candidates is None:
                 continue
 
@@ -856,9 +854,7 @@ class FunctionOptimizer:
                 )
                 console.rule()
                 return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
-            if not coverage_critic(
-            coverage_results, self.args.test_framework
-                ):
+            if not coverage_critic(coverage_results, self.args.test_framework):
                 return Failure("The threshold for test coverage was not met.")
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
@@ -898,7 +894,6 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
-
 
             total_timing = benchmarking_results.total_passed_runtime()  # caution: doesn't handle the loop index
             functions_to_remove = [
@@ -1078,7 +1073,6 @@ class FunctionOptimizer:
                     cwd=self.project_root,
                     test_env=test_env,
                     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                    pytest_cmd=self.test_cfg.pytest_cmd,
                     verbose=True,
                     enable_coverage=enable_coverage,
                 )
@@ -1087,24 +1081,25 @@ class FunctionOptimizer:
                     test_files,
                     cwd=self.project_root,
                     test_env=test_env,
-                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     pytest_cmd=self.test_cfg.pytest_cmd,
+                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     pytest_target_runtime_seconds=testing_time,
                     pytest_min_loops=pytest_min_loops,
                     pytest_max_loops=pytest_max_loops,
                     test_framework=self.test_cfg.test_framework,
                 )
             else:
-                raise ValueError(f"Unexpected testing type: {testing_type}")
+                msg = f"Unexpected testing type: {testing_type}"
+                raise ValueError(msg)
         except subprocess.TimeoutExpired:
             logger.exception(
-                f'Error running tests in {", ".join(str(f) for f in test_files.test_files)}.\nTimeout Error'
+                f"Error running tests in {', '.join(str(f) for f in test_files.test_files)}.\nTimeout Error"
             )
             return TestResults(), None
         if run_result.returncode != 0 and testing_type == TestingMode.BEHAVIOR:
             logger.debug(
-                f'Nonzero return code {run_result.returncode} when running tests in '
-                f'{", ".join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n'
+                f"Nonzero return code {run_result.returncode} when running tests in "
+                f"{', '.join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n"
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
@@ -1150,4 +1145,3 @@ class FunctionOptimizer:
                 zip(generated_test_paths, generated_perf_test_paths)
             )
         ]
-

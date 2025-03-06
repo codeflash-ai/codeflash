@@ -81,10 +81,9 @@ def parse_config_file(config_file_path: Path | None = None) -> tuple[dict[str, A
         else:  # Default to empty list
             config[key] = []
 
-    assert config["test-framework"] in [
-        "pytest",
-        "unittest",
-    ], "In pyproject.toml, Codeflash only supports the 'test-framework' as pytest and unittest."
+    assert config["test-framework"] in ["pytest", "unittest"], (
+        "In pyproject.toml, Codeflash only supports the 'test-framework' as pytest and unittest."
+    )
     if len(config["formatter-cmds"]) > 0:
         assert config["formatter-cmds"][0] != "your-formatter $file", (
             "The formatter command is not set correctly in pyproject.toml. Please set the "

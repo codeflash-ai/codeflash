@@ -16,7 +16,7 @@ from codeflash.code_utils.static_analysis import analyze_imported_modules, get_f
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
 from codeflash.either import is_successful
-from codeflash.models.models import TestFiles, ValidCode
+from codeflash.models.models import ValidCode
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.test_results import TestType
@@ -60,7 +60,6 @@ class Optimizer:
             function_to_optimize_ast=function_to_optimize_ast,
             aiservice_client=self.aiservice_client,
             args=self.args,
-
         )
 
     def run(self) -> None:
@@ -140,6 +139,7 @@ class Optimizer:
                     validated_original_code[analysis.file_path] = ValidCode(
                         source_code=callee_original_code, normalized_code=normalized_callee_original_code
                     )
+
                 if has_syntax_error:
                     continue
 
@@ -149,7 +149,7 @@ class Optimizer:
                         f"Optimizing function {function_iterator_count} of {num_optimizable_functions}: "
                         f"{function_to_optimize.qualified_name}"
                     )
-
+                    console.rule()
                     if not (
                         function_to_optimize_ast := get_first_top_level_function_or_method_ast(
                             function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
@@ -160,9 +160,11 @@ class Optimizer:
                             f"Skipping optimization."
                         )
                         continue
-
                     function_optimizer = self.create_function_optimizer(
-                        function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code[original_module_path].source_code
+                        function_to_optimize,
+                        function_to_optimize_ast,
+                        function_to_tests,
+                        validated_original_code[original_module_path].source_code,
                     )
                     best_optimization = function_optimizer.optimize_function()
                     if is_successful(best_optimization):
@@ -190,7 +192,6 @@ class Optimizer:
                     shutil.rmtree(function_optimizer.test_cfg.concolic_test_root_dir, ignore_errors=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
-
 
 
 def run_with_args(args: Namespace) -> None:

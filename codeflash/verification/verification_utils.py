@@ -6,6 +6,8 @@ from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
+from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
+
 
 def get_test_file_path(test_dir: Path, function_name: str, iteration: int = 0, test_type: str = "unit") -> Path:
     assert test_type in ["unit", "inspired", "replay", "perf"]
@@ -31,33 +33,34 @@ def delete_multiple_if_name_main(test_ast: ast.Module) -> ast.Module:
 
 
 class ModifyInspiredTests(ast.NodeTransformer):
-    """This isn't being used right now"""
+    """Transformer for modifying inspired test classes.
 
-    def __init__(self, import_list, test_framework):
+    Class is currently not in active use.
+    """
+
+    def __init__(self, import_list: list[ast.AST], test_framework: str) -> None:
         self.import_list = import_list
         self.test_framework = test_framework
 
-    def visit_Import(self, node: ast.Import):
+    def visit_Import(self, node: ast.Import) -> None:
         self.import_list.append(node)
 
-    def visit_ImportFrom(self, node: ast.ImportFrom):
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         self.import_list.append(node)
 
-    def visit_ClassDef(self, node: ast.ClassDef):
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
         if self.test_framework != "unittest":
             return node
         found = False
         if node.bases:
             for base in node.bases:
-                if isinstance(base, ast.Attribute):
-                    if base.attr == "TestCase" and base.value.id == "unittest":
-                        found = True
-                        break
-                if isinstance(base, ast.Name):
-                    # TODO: Possibility that this is not a unittest.TestCase
-                    if base.id == "TestCase":
-                        found = True
-                        break
+                if isinstance(base, ast.Attribute) and base.attr == "TestCase" and base.value.id == "unittest":
+                    found = True
+                    break
+                # TODO: Check if this is actually a unittest.TestCase
+                if isinstance(base, ast.Name) and base.id == "TestCase":
+                    found = True
+                    break
         if not found:
             return node
         node.name = node.name + "Inspired"

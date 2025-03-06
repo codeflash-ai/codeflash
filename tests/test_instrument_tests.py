@@ -482,6 +482,13 @@ def test_sort():
         )
         assert test_results_perf[1].runtime > 0
         assert test_results_perf[1].did_pass
+        out_str = """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5]
+
+codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
+        assert out_str == test_results_perf[1].stdout
+
     finally:
         test_path.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
@@ -692,6 +699,10 @@ def test_sort_parametrized(input, expected_output):
         )
         assert test_results_perf[1].runtime > 0
         assert test_results_perf[1].did_pass
+
+        out_str = """codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
+        assert out_str == test_results_perf[1].stdout
 
         assert test_results_perf[2].id.function_getting_tested == "sorter"
         assert test_results_perf[2].id.iteration_id == "0_2"
@@ -1230,7 +1241,15 @@ def test_sort():
         assert test_results[0].runtime > 0
         assert test_results[0].did_pass
         assert test_results[0].return_value is None
+        out_str = """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5]
 
+codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+
+codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49]"""
+        assert test_results[1].stdout == out_str
         assert test_results[1].id.function_getting_tested == "sorter"
         assert test_results[1].id.iteration_id == "2_2_1"
         assert test_results[1].id.test_class_name is None

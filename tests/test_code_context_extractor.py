@@ -6,6 +6,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import pytest
+
 from codeflash.context.code_context_extractor import get_code_optimization_context
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
