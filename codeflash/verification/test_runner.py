@@ -36,6 +36,7 @@ def run_behavioral_tests(
     verbose: bool = False,
     pytest_target_runtime_seconds: int = TOTAL_LOOPING_TIME,
     enable_coverage: bool = False,
+    enable_profiler: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None]:
     if test_framework == "pytest":
         test_files: list[str] = []
@@ -72,6 +73,11 @@ def run_behavioral_tests(
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
 
+        # TODO: figure out the command to run line_profiler here
+        # TODO: see if line profiler is compaitble qwith coverage run, if so see if the profiling info changes if run along side coverage compared to without it
+        # If that is not satisfied then we can run it sas a speareate step. then add one more execute_test_subprocess call with line_profiler or the else branch below
+        # parse the line profiler output and then in the parse_test_results function, add the line profiler results to the test results
+
         if enable_coverage:
             coverage_database_file, coveragercfile = prepare_coverage_files()
 
@@ -104,6 +110,28 @@ def run_behavioral_tests(
             logger.debug(
                 f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
             )
+        if enable_profiler:
+            coverage_database_file, coveragercfile = prepare_coverage_files()
+
+            cov_erase = execute_test_subprocess(
+                shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env
+            )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any,
+            # then the current run will be appended to the previous data, which skews the results
+            logger.debug(cov_erase)
+            coverage_cmd = [SAFE_SYS_EXECUTABLE, "-m", "coverage", "run", f"--rcfile={coveragercfile.as_posix()}", "-m"]
+
+            if pytest_cmd == "pytest":
+                coverage_cmd.extend(["pytest"])
+            else:
+                coverage_cmd.extend(shlex.split(pytest_cmd, posix=IS_POSIX)[1:])
+
+            results = execute_test_subprocess(
+                coverage_cmd + common_pytest_args + result_args + test_files, cwd=cwd, env=pytest_test_env, timeout=600
+            )
+            logger.debug(
+                f"Result return code: {results.returncode}, "
+                f"{'Result stderr:' + str(results.stderr) if results.stderr else ''}"
+            )
     elif test_framework == "unittest":
         if enable_coverage:
             msg = "Coverage is not supported yet for unittest framework"
@@ -121,7 +149,6 @@ def run_behavioral_tests(
         raise ValueError(msg)
 
     return result_file_path, results, coverage_database_file if enable_coverage else None
-
 
 def run_benchmarking_tests(
     test_paths: TestFiles,
