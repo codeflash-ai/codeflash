@@ -741,7 +741,7 @@ class HelperClass:
             ending_line=None,
         )
 
-        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root, 8000, 100000)
         read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
         # In this scenario, the read-only code context is too long even after removing docstrings, hence we remove it completely.
         expected_read_write_context = """
@@ -814,6 +814,57 @@ class HelperClass:
         with pytest.raises(ValueError, match="Read-writable code has exceeded token limit, cannot proceed"):
             code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
 
+def test_example_class_token_limit_4() -> None:
+    string_filler = " ".join(
+        ["This is a long string that will be used to fill up the token limit." for _ in range(1000)]
+    )
+    code = f"""
+class MyClass:
+    \"\"\"A class with a helper method. \"\"\"
+    def __init__(self):
+        self.x = 1
+    def target_method(self):
+        \"\"\"Docstring for target method\"\"\"
+        y = HelperClass().helper_method()
+x = '{string_filler}'
+
+class HelperClass:
+    \"\"\"A helper class for MyClass.\"\"\"
+    def __init__(self):
+        \"\"\"Initialize the HelperClass.\"\"\"
+        self.x = 1
+    def __repr__(self):
+        \"\"\"Return a string representation of the HelperClass.\"\"\"
+        return "HelperClass" + str(self.x)
+    def helper_method(self):
+        return self.x
+"""
+    with tempfile.NamedTemporaryFile(mode="w") as f:
+        f.write(code)
+        f.flush()
+        file_path = Path(f.name).resolve()
+        opt = Optimizer(
+            Namespace(
+                project_root=file_path.parent.resolve(),
+                disable_telemetry=True,
+                tests_root="tests",
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=Path().resolve(),
+            )
+        )
+        function_to_optimize = FunctionToOptimize(
+            function_name="target_method",
+            file_path=file_path,
+            parents=[FunctionParent(name="MyClass", type="ClassDef")],
+            starting_line=None,
+            ending_line=None,
+        )
+
+        # In this scenario, the testgen code context is too long, so we abort.
+        with pytest.raises(ValueError, match="Testgen code context has exceeded token limit, cannot proceed"):
+            code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
 
 def test_repo_helper() -> None:
     project_root = Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever"
