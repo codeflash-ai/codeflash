@@ -239,13 +239,37 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
             pytest.fail()
         code_context = ctx_result.unwrap()
         assert code_context.helper_functions[0].qualified_name == "AbstractCacheBackend.get_cache_or_call"
-
         assert (
-                code_context.code_to_optimize_with_helpers
-                == '''_R = TypeVar("_R")
-
+                code_context.testgen_context_code
+                == f'''```python:{file_path.name}
+_P = ParamSpec("_P")
+_KEY_T = TypeVar("_KEY_T")
+_STORE_T = TypeVar("_STORE_T")
 class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
+    """Interface for cache backends used by the persistent cache decorator."""
+
     def __init__(self) -> None: ...
+
+    def hash_key(
+        self,
+        *,
+        func: Callable[_P, Any],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> tuple[str, _KEY_T]: ...
+
+    def encode(self, *, data: Any) -> _STORE_T:  # noqa: ANN401
+        ...
+
+    def decode(self, *, data: _STORE_T) -> Any:  # noqa: ANN401
+        ...
+
+    def get(self, *, key: tuple[str, _KEY_T]) -> tuple[datetime.datetime, _STORE_T] | None: ...
+
+    def delete(self, *, key: tuple[str, _KEY_T]) -> None: ...
+
+    def put(self, *, key: tuple[str, _KEY_T], data: _STORE_T) -> None: ...
+
     def get_cache_or_call(
         self,
         *,
@@ -300,7 +324,33 @@ class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
         # If encoding fails, we should still return the result.
         return result
 
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+_CacheBackendT = TypeVar("_CacheBackendT", bound=CacheBackend)
+
+
 class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
+    """
+    A decorator class that provides persistent caching functionality for a function.
+
+    Args:
+    ----
+        func (Callable[_P, _R]): The function to be decorated.
+        duration (datetime.timedelta): The duration for which the cached results should be considered valid.
+        backend (_backend): The backend storage for the cached results.
+
+    Attributes:
+    ----------
+        __wrapped__ (Callable[_P, _R]): The wrapped function.
+        __duration__ (datetime.timedelta): The duration for which the cached results should be considered valid.
+        __backend__ (_backend): The backend storage for the cached results.
+
+    """  # noqa: E501
+
+    __wrapped__: Callable[_P, _R]
+    __duration__: datetime.timedelta
+    __backend__: _CacheBackendT
+
     def __init__(
         self,
         func: Callable[_P, _R],
@@ -310,6 +360,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         self.__duration__ = duration
         self.__backend__ = AbstractCacheBackend()
         functools.update_wrapper(self, func)
+
     def __call__(self, *args: _P.args, **kwargs: _P.kwargs) -> _R:
         """
         Calls the wrapped function, either using the cache or bypassing it based on environment variables.
@@ -333,7 +384,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
             kwargs=kwargs,
             lifespan=self.__duration__,
         )
-'''
+```'''
         )
 
 
@@ -358,14 +409,20 @@ def test_bubble_sort_deps() -> None:
         pytest.fail()
     code_context = ctx_result.unwrap()
     assert (
-            code_context.code_to_optimize_with_helpers
-            == """def dep1_comparer(arr, j: int) -> bool:
+            code_context.testgen_context_code
+            == """```python:code_to_optimize/bubble_sort_dep1_helper.py
+def dep1_comparer(arr, j: int) -> bool:
     return arr[j] > arr[j + 1]
-
+```
+```python:code_to_optimize/bubble_sort_dep2_swap.py
 def dep2_swap(arr, j):
     temp = arr[j]
     arr[j] = arr[j + 1]
     arr[j + 1] = temp
+```
+```python:code_to_optimize/bubble_sort_deps.py
+from code_to_optimize.bubble_sort_dep1_helper import dep1_comparer
+from code_to_optimize.bubble_sort_dep2_swap import dep2_swap
 
 def sorter_deps(arr):
     for i in range(len(arr)):
@@ -373,7 +430,7 @@ def sorter_deps(arr):
             if dep1_comparer(arr, j):
                 dep2_swap(arr, j)
     return arr
-"""
+```"""
     )
     assert len(code_context.helper_functions) == 2
     assert (

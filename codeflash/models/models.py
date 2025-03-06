@@ -72,6 +72,7 @@ class CodeStringsMarkdown(BaseModel):
 
     @property
     def markdown(self) -> str:
+        """Returns the markdown representation of the code, including the file path where possible."""
         return "\n".join(
             [
                 f"```python{':' + str(code_string.file_path) if code_string.file_path else ''}\n{code_string.code.strip()}\n```"
@@ -81,11 +82,17 @@ class CodeStringsMarkdown(BaseModel):
 
 
 class CodeOptimizationContext(BaseModel):
-    code_to_optimize_with_helpers: str
+    # code_to_optimize_with_helpers: str
+    testgen_context_code: str = ""
     read_writable_code: str = Field(min_length=1)
     read_only_context_code: str = ""
     helper_functions: list[FunctionSource]
     preexisting_objects: list[tuple[str, list[FunctionParent]]]
+
+class CodeContextType(str, Enum):
+    READ_WRITABLE = "READ_WRITABLE"
+    READ_ONLY = "READ_ONLY"
+    TESTGEN = "TESTGEN"
 
 
 class OptimizedCandidateResult(BaseModel):

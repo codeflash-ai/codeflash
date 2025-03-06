@@ -15,12 +15,13 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
 from codeflash.code_utils.code_utils import get_qualified_name, path_belongs_to_site_packages
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeOptimizationContext, CodeString, CodeStringsMarkdown, FunctionSource
+from codeflash.models.models import CodeOptimizationContext, CodeString, CodeStringsMarkdown, FunctionSource, \
+    CodeContextType
 from codeflash.optimization.function_context import belongs_to_function_qualified
 
 
 def get_code_optimization_context(
-    function_to_optimize: FunctionToOptimize, project_root_path: Path, token_limit: int = 8000
+    function_to_optimize: FunctionToOptimize, project_root_path: Path, optim_token_limit: int = 8000, testgen_token_limit: int = 8000
 ) -> CodeOptimizationContext:
     # Get qualified names and fully qualified names(fqn) of helpers
     helpers_of_fto, helpers_of_fto_fqn, helpers_of_fto_obj_list = get_file_path_to_helper_functions_dict(
@@ -37,21 +38,22 @@ def get_code_optimization_context(
         function_to_optimize.qualified_name_with_modules_from_root(project_root_path)
     )
 
-    # Extract code
-    final_read_writable_code = get_all_read_writable_code(helpers_of_fto, helpers_of_fto_fqn, project_root_path).code
-    read_only_code_markdown = get_all_read_only_code_context(
+    # Extract code context for optimization
+    final_read_writable_code = extract_code_string_context_from_files(helpers_of_fto, helpers_of_fto_fqn, project_root_path).code
+    read_only_code_markdown = extract_code_markdown_context_from_files(
         helpers_of_fto,
         helpers_of_fto_fqn,
         helpers_of_helpers,
         helpers_of_helpers_fqn,
         project_root_path,
         remove_docstrings=False,
+        code_context_type=CodeContextType.READ_ONLY,
     )
 
     # Handle token limits
     tokenizer = tiktoken.encoding_for_model("gpt-4o")
     final_read_writable_tokens = len(tokenizer.encode(final_read_writable_code))
-    if final_read_writable_tokens > token_limit:
+    if final_read_writable_tokens > optim_token_limit:
         raise ValueError("Read-writable code has exceeded token limit, cannot proceed")
 
     # Setup preexisting objects for code replacer TODO: should remove duplicates
@@ -61,53 +63,82 @@ def get_code_optimization_context(
             *(find_preexisting_objects(codestring.code) for codestring in read_only_code_markdown.code_strings),
         )
     )
-    read_only_code_markdown_tokens = len(tokenizer.encode(read_only_code_markdown.markdown))
+    read_only_context_code = read_only_code_markdown.markdown
+
+    read_only_code_markdown_tokens = len(tokenizer.encode(read_only_context_code))
     total_tokens = final_read_writable_tokens + read_only_code_markdown_tokens
-    if total_tokens <= token_limit:
-        return CodeOptimizationContext(
-            code_to_optimize_with_helpers="",
-            read_writable_code=CodeString(code=final_read_writable_code).code,
-            read_only_context_code=read_only_code_markdown.markdown,
-            helper_functions=helpers_of_fto_obj_list,
-            preexisting_objects=preexisting_objects,
-
+    if total_tokens > optim_token_limit:
+        logger.debug("Code context has exceeded token limit, removing docstrings from read-only code")
+        # Extract read only code without docstrings
+        read_only_code_no_docstring_markdown = extract_code_markdown_context_from_files(
+            helpers_of_fto,
+            helpers_of_fto_fqn,
+            helpers_of_helpers,
+            helpers_of_helpers_fqn,
+            project_root_path,
+            remove_docstrings=True,
         )
-
-    logger.debug("Code context has exceeded token limit, removing docstrings from read-only code")
-
-    # Extract read only code without docstrings
-    read_only_code_no_docstring_markdown = get_all_read_only_code_context(
+        read_only_context_code = read_only_code_no_docstring_markdown.markdown
+        read_only_code_no_docstring_markdown_tokens = len(tokenizer.encode(read_only_context_code))
+        total_tokens = final_read_writable_tokens + read_only_code_no_docstring_markdown_tokens
+        if total_tokens > optim_token_limit:
+            logger.debug("Code context has exceeded token limit, removing read-only code")
+            read_only_context_code = ""
+    # Extract code context for testgen
+    testgen_code_markdown = extract_code_markdown_context_from_files(
         helpers_of_fto,
         helpers_of_fto_fqn,
         helpers_of_helpers,
         helpers_of_helpers_fqn,
         project_root_path,
-        remove_docstrings=True,
+        remove_docstrings=False,
+        code_context_type=CodeContextType.TESTGEN,
     )
-    read_only_code_no_docstring_markdown_tokens = len(tokenizer.encode(read_only_code_no_docstring_markdown.markdown))
-    total_tokens = final_read_writable_tokens + read_only_code_no_docstring_markdown_tokens
-    if total_tokens <= token_limit:
-        return CodeOptimizationContext(
-            code_to_optimize_with_helpers="",
-            read_writable_code=CodeString(code=final_read_writable_code).code,
-            read_only_context_code=read_only_code_no_docstring_markdown.markdown,
-            helper_functions=helpers_of_fto_obj_list,
-            preexisting_objects=preexisting_objects,
+    testgen_context_code = testgen_code_markdown.markdown
+    testgen_context_code_tokens = len(tokenizer.encode(testgen_context_code))
+    if testgen_context_code_tokens > testgen_token_limit:
+        testgen_code_markdown = extract_code_markdown_context_from_files(
+            helpers_of_fto,
+            helpers_of_fto_fqn,
+            helpers_of_helpers,
+            helpers_of_helpers_fqn,
+            project_root_path,
+            remove_docstrings=True,
+            code_context_type=CodeContextType.TESTGEN,
         )
+        testgen_context_code = testgen_code_markdown.markdown
+        testgen_context_code_tokens = len(tokenizer.encode(testgen_context_code))
+        if testgen_context_code_tokens > testgen_token_limit:
+            raise ValueError("Testgen code context has exceeded token limit, cannot proceed")
 
-    logger.debug("Code context has exceeded token limit, removing read-only code")
     return CodeOptimizationContext(
-        code_to_optimize_with_helpers="",
+        testgen_context_code = testgen_context_code,
         read_writable_code=CodeString(code=final_read_writable_code).code,
-        read_only_context_code="",
+        read_only_context_code=read_only_context_code,
         helper_functions=helpers_of_fto_obj_list,
         preexisting_objects=preexisting_objects,
     )
 
 
-def get_all_read_writable_code(
+def extract_code_string_context_from_files(
     helpers_of_fto: dict[Path, set[str]], helpers_of_fto_fqn: dict[Path, set[str]], project_root_path: Path
 ) -> CodeString:
+    """Extract read-writable code context from files containing target functions and their helpers.
+
+    This function iterates through each file path that contains functions to optimize (fto) or
+    their first-degree helpers, reads the original code, extracts relevant parts using CST parsing,
+    and adds necessary imports from the original modules.
+
+    Args:
+        helpers_of_fto: Dictionary mapping file paths to sets of qualified function names
+        helpers_of_fto_fqn: Dictionary mapping file paths to sets of fully qualified names of functions
+        project_root_path: Root path of the project for resolving relative imports
+
+    Returns:
+        CodeString object containing the consolidated read-writable code with all necessary
+        imports for the target functions and their helpers
+
+    """
     final_read_writable_code = ""
     # Extract code from file paths that contain fto and first degree helpers
     for file_path, qualified_function_names in helpers_of_fto.items():
@@ -117,7 +148,7 @@ def get_all_read_writable_code(
             logger.exception(f"Error while parsing {file_path}: {e}")
             continue
         try:
-            read_writable_code = get_read_writable_code(original_code, qualified_function_names)
+            read_writable_code = parse_code_and_prune_cst(original_code, CodeContextType.READ_WRITABLE, qualified_function_names)
         except ValueError as e:
             logger.debug(f"Error while getting read-writable code: {e}")
             continue
@@ -133,16 +164,38 @@ def get_all_read_writable_code(
                 helper_functions_fqn=helpers_of_fto_fqn[file_path],
             )
     return CodeString(code=final_read_writable_code)
-
-
-def get_all_read_only_code_context(
+def extract_code_markdown_context_from_files(
     helpers_of_fto: dict[Path, set[str]],
     helpers_of_fto_fqn: dict[Path, set[str]],
     helpers_of_helpers: dict[Path, set[str]],
     helpers_of_helpers_fqn: dict[Path, set[str]],
     project_root_path: Path,
     remove_docstrings: bool = False,
+    code_context_type: CodeContextType = CodeContextType.READ_ONLY,
 ) -> CodeStringsMarkdown:
+    """Extract code context from files containing target functions and their helpers, formatting them as markdown.
+
+    This function processes two sets of files:
+    1. Files containing the function to optimize (fto) and their first-degree helpers
+    2. Files containing only helpers of helpers (with no overlap with the first set)
+
+    For each file, it extracts relevant code based on the specified context type, adds necessary
+    imports, and combines them into a structured markdown format.
+
+    Args:
+        helpers_of_fto: Dictionary mapping file paths to sets of function names to be optimized
+        helpers_of_fto_fqn: Dictionary mapping file paths to sets of fully qualified names of functions to be optimized
+        helpers_of_helpers: Dictionary mapping file paths to sets of helper function names
+        helpers_of_helpers_fqn: Dictionary mapping file paths to sets of fully qualified names of helper functions
+        project_root_path: Root path of the project
+        remove_docstrings: Whether to remove docstrings from the extracted code
+        code_context_type: Type of code context to extract (READ_ONLY, READ_WRITABLE, or TESTGEN)
+
+    Returns:
+        CodeStringsMarkdown containing the extracted code context with necessary imports,
+        formatted for inclusion in markdown
+
+    """
     # Rearrange to remove overlaps, so we only access each file path once
     helpers_of_helpers_no_overlap = defaultdict(set)
     helpers_of_helpers_no_overlap_fqn = defaultdict(set)
@@ -155,7 +208,7 @@ def get_all_read_only_code_context(
             helpers_of_helpers_no_overlap[file_path] = helpers_of_helpers[file_path]
             helpers_of_helpers_no_overlap_fqn[file_path] = helpers_of_helpers_fqn[file_path]
 
-    read_only_code_markdown = CodeStringsMarkdown()
+    code_context_markdown = CodeStringsMarkdown()
     # Extract code from file paths that contain fto and first degree helpers. helpers of helpers may also be included if they are in the same files
     for file_path, qualified_function_names in helpers_of_fto.items():
         try:
@@ -164,17 +217,18 @@ def get_all_read_only_code_context(
             logger.exception(f"Error while parsing {file_path}: {e}")
             continue
         try:
-            read_only_code = get_read_only_code(
-                original_code, qualified_function_names, helpers_of_helpers.get(file_path, set()), remove_docstrings
+            code_context = parse_code_and_prune_cst(
+                original_code,  code_context_type, qualified_function_names, helpers_of_helpers.get(file_path, set()), remove_docstrings
             )
+
         except ValueError as e:
             logger.debug(f"Error while getting read-only code: {e}")
             continue
-        if read_only_code.strip():
-            read_only_code_with_imports = CodeString(
+        if code_context.strip():
+            code_context_with_imports = CodeString(
                 code=add_needed_imports_from_module(
                     src_module_code=original_code,
-                    dst_module_code=read_only_code,
+                    dst_module_code=code_context,
                     src_path=file_path,
                     dst_path=file_path,
                     project_root=project_root_path,
@@ -182,7 +236,7 @@ def get_all_read_only_code_context(
                 ),
                 file_path=file_path.relative_to(project_root_path),
             )
-            read_only_code_markdown.code_strings.append(read_only_code_with_imports)
+            code_context_markdown.code_strings.append(code_context_with_imports)
 
     # Extract code from file paths containing helpers of helpers
     for file_path, qualified_helper_function_names in helpers_of_helpers_no_overlap.items():
@@ -192,18 +246,18 @@ def get_all_read_only_code_context(
             logger.exception(f"Error while parsing {file_path}: {e}")
             continue
         try:
-            read_only_code = get_read_only_code(
-                original_code, set(), qualified_helper_function_names, remove_docstrings
+            code_context = parse_code_and_prune_cst(
+                original_code, code_context_type, set(), qualified_helper_function_names,  remove_docstrings
             )
         except ValueError as e:
             logger.debug(f"Error while getting read-only code: {e}")
             continue
 
-        if read_only_code.strip():
-            read_only_code_with_imports = CodeString(
+        if code_context.strip():
+            code_context_with_imports = CodeString(
                 code=add_needed_imports_from_module(
                     src_module_code=original_code,
-                    dst_module_code=read_only_code,
+                    dst_module_code=code_context,
                     src_path=file_path,
                     dst_path=file_path,
                     project_root=project_root_path,
@@ -211,8 +265,8 @@ def get_all_read_only_code_context(
                 ),
                 file_path=file_path.relative_to(project_root_path),
             )
-            read_only_code_markdown.code_strings.append(read_only_code_with_imports)
-    return read_only_code_markdown
+            code_context_markdown.code_strings.append(code_context_with_imports)
+    return code_context_markdown
 
 
 def get_file_path_to_helper_functions_dict(
@@ -221,11 +275,11 @@ def get_file_path_to_helper_functions_dict(
     file_path_to_helper_function_qualified_names = defaultdict(set)
     file_path_to_helper_function_fqn = defaultdict(set)
     function_source_list: list[FunctionSource] = []
-    for file_path in file_path_to_qualified_function_names:
+    for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
         script = jedi.Script(path=file_path, project=jedi.Project(path=project_root_path))
         file_refs = script.get_names(all_scopes=True, definitions=False, references=True)
 
-        for qualified_function_name in file_path_to_qualified_function_names[file_path]:
+        for qualified_function_name in qualified_function_names:
             names = [
                 ref
                 for ref in file_refs
@@ -291,6 +345,29 @@ def remove_docstring_from_body(indented_block: cst.IndentedBlock) -> cst.CSTNode
         return indented_block.with_changes(body=indented_block.body[1:])
     return indented_block
 
+def parse_code_and_prune_cst(
+    code: str, code_context_type: CodeContextType, target_functions: set[str], helpers_of_helper_functions: set[str] = {}, remove_docstrings: bool = False
+) -> str:
+    """Create a read-only version of the code by parsing and filtering the code to keep only class contextual information, and other module scoped variables. """
+    module = cst.parse_module(code)
+    if code_context_type == CodeContextType.READ_WRITABLE:
+        filtered_node, found_target = prune_cst_for_read_writable_code(module, target_functions)
+    elif code_context_type == CodeContextType.READ_ONLY:
+        filtered_node, found_target = prune_cst_for_read_only_code(
+            module, target_functions, helpers_of_helper_functions, remove_docstrings=remove_docstrings
+        )
+    elif code_context_type == CodeContextType.TESTGEN:
+        filtered_node, found_target = prune_cst_for_testgen_code(
+            module, target_functions, helpers_of_helper_functions, remove_docstrings=remove_docstrings
+        )
+    else:
+        raise ValueError(f"Unknown code_context_type: {code_context_type}")
+
+    if not found_target:
+        raise ValueError("No target functions found in the provided code")
+    if filtered_node and isinstance(filtered_node, cst.Module):
+        return str(filtered_node.code)
+    return ""
 
 def prune_cst_for_read_writable_code(
     node: cst.CSTNode, target_functions: set[str], prefix: str = ""
@@ -370,20 +447,6 @@ def prune_cst_for_read_writable_code(
         return None, False
 
     return (node.with_changes(**updates) if updates else node), True
-
-
-def get_read_writable_code(code: str, target_functions: set[str]) -> str:
-    """Creates a read-writable code string by parsing and filtering the code to keep only
-    target functions and the minimal surrounding structure.
-    """
-    module = cst.parse_module(code)
-    filtered_node, found_target = prune_cst_for_read_writable_code(module, target_functions)
-    if not found_target:
-        raise ValueError("No target functions found in the provided code")
-    if filtered_node and isinstance(filtered_node, cst.Module):
-        return str(filtered_node.code)
-    return ""
-
 
 def prune_cst_for_read_only_code(
     node: cst.CSTNode,
@@ -489,18 +552,107 @@ def prune_cst_for_read_only_code(
     return None, False
 
 
-def get_read_only_code(
-    code: str, target_functions: set[str], helpers_of_helper_functions: set[str], remove_docstrings: bool = False
-) -> str:
-    """Creates a read-only version of the code by parsing and filtering the code to keep only
-    class contextual information, and other module scoped variables.
+
+def prune_cst_for_testgen_code(
+    node: cst.CSTNode,
+    target_functions: set[str],
+    helpers_of_helper_functions: set[str],
+    prefix: str = "",
+    remove_docstrings: bool = False,
+) -> tuple[cst.CSTNode | None, bool]:
+    """Recursively filter the node for testgen context:
+
+    Returns:
+        (filtered_node, found_target):
+          filtered_node: The modified CST node or None if it should be removed.
+          found_target: True if a target function was found in this node's subtree.
+
     """
-    module = cst.parse_module(code)
-    filtered_node, found_target = prune_cst_for_read_only_code(
-        module, target_functions, helpers_of_helper_functions, remove_docstrings=remove_docstrings
-    )
-    if not found_target:
-        raise ValueError("No target functions found in the provided code")
-    if filtered_node and isinstance(filtered_node, cst.Module):
-        return str(filtered_node.code)
-    return ""
+    if isinstance(node, (cst.Import, cst.ImportFrom)):
+        return None, False
+
+    if isinstance(node, cst.FunctionDef):
+        qualified_name = f"{prefix}.{node.name.value}" if prefix else node.name.value
+        # If it's a target function, remove it but mark found_target = True
+        if qualified_name in helpers_of_helper_functions or qualified_name in target_functions:
+            if remove_docstrings and isinstance(node.body, cst.IndentedBlock):
+                new_body = remove_docstring_from_body(node.body)
+                return node.with_changes(body=new_body), True
+            return node, True
+        # Keep all dunder methods
+        if is_dunder_method(node.name.value):
+            if remove_docstrings and isinstance(node.body, cst.IndentedBlock):
+                new_body = remove_docstring_from_body(node.body)
+                return node.with_changes(body=new_body), False
+            return node, False
+        return None, False
+
+    if isinstance(node, cst.ClassDef):
+        # Do not recurse into nested classes
+        if prefix:
+            return None, False
+        # Assuming always an IndentedBlock
+        if not isinstance(node.body, cst.IndentedBlock):
+            raise ValueError("ClassDef body is not an IndentedBlock")
+
+        class_prefix = f"{prefix}.{node.name.value}" if prefix else node.name.value
+
+        # First pass: detect if there is a target function in the class
+        found_in_class = False
+        new_class_body: list[CSTNode] = []
+        for stmt in node.body.body:
+            filtered, found_target = prune_cst_for_testgen_code(
+                stmt, target_functions, helpers_of_helper_functions, class_prefix, remove_docstrings=remove_docstrings
+            )
+            found_in_class |= found_target
+            if filtered:
+                new_class_body.append(filtered)
+
+        if not found_in_class:
+            return None, False
+
+        if remove_docstrings:
+            return node.with_changes(
+                body=remove_docstring_from_body(node.body.with_changes(body=new_class_body))
+            ) if new_class_body else None, True
+        return node.with_changes(body=node.body.with_changes(body=new_class_body)) if new_class_body else None, True
+
+    # For other nodes, keep the node and recursively filter children
+    section_names = get_section_names(node)
+    if not section_names:
+        return node, False
+
+    updates: dict[str, list[cst.CSTNode] | cst.CSTNode] = {}
+    found_any_target = False
+
+    for section in section_names:
+        original_content = getattr(node, section, None)
+        if isinstance(original_content, (list, tuple)):
+            new_children = []
+            section_found_target = False
+            for child in original_content:
+                filtered, found_target = prune_cst_for_testgen_code(
+                    child, target_functions, helpers_of_helper_functions, prefix, remove_docstrings=remove_docstrings
+                )
+                if filtered:
+                    new_children.append(filtered)
+                section_found_target |= found_target
+
+            if section_found_target or new_children:
+                found_any_target |= section_found_target
+                updates[section] = new_children
+        elif original_content is not None:
+            filtered, found_target = prune_cst_for_testgen_code(
+                original_content,
+                target_functions,
+                helpers_of_helper_functions,
+                prefix,
+                remove_docstrings=remove_docstrings,
+            )
+            found_any_target |= found_target
+            if filtered:
+                updates[section] = filtered
+    if updates:
+        return (node.with_changes(**updates), found_any_target)
+
+    return None, False

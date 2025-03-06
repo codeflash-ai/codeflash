@@ -747,24 +747,28 @@ class MainClass:
 
 
 def test_code_replacement10() -> None:
-    get_code_output = """from __future__ import annotations
+    get_code_output = """```python:test_code_replacement.py
+from __future__ import annotations
+import os
+
+os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
+
 
 class HelperClass:
     def __init__(self, name):
         self.name = name
 
-    def innocent_bystander(self):
-        pass
-
     def helper_method(self):
         return self.name
+
 
 class MainClass:
     def __init__(self, name):
         self.name = name
+
     def main_method(self):
         return HelperClass(self.name).helper_method()
-"""
+```"""
     file_path = Path(__file__).resolve()
     func_top_optimize = FunctionToOptimize(
         function_name="main_method", file_path=file_path, parents=[FunctionParent("MainClass", "ClassDef")]
@@ -778,7 +782,7 @@ class MainClass:
     )
     func_optimizer = FunctionOptimizer(function_to_optimize=func_top_optimize, test_cfg=test_config)
     code_context = func_optimizer.get_code_optimization_context().unwrap()
-    assert code_context.code_to_optimize_with_helpers == get_code_output
+    assert code_context.testgen_context_code == get_code_output
 
 
 def test_code_replacement11() -> None:
