@@ -217,6 +217,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         f.write(code)
         f.flush()
         file_path = Path(f.name).resolve()
+        project_root_path = file_path.parent.resolve()
         function_to_optimize = FunctionToOptimize(
             function_name="__call__",
             file_path=file_path,
@@ -227,7 +228,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         test_config = TestConfig(
             tests_root="tests",
             tests_project_rootdir=Path.cwd(),
-            project_root_path=file_path.parent.resolve(),
+            project_root_path=project_root_path,
             test_framework="pytest",
             pytest_cmd="pytest",
         )
@@ -241,7 +242,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         assert code_context.helper_functions[0].qualified_name == "AbstractCacheBackend.get_cache_or_call"
         assert (
                 code_context.testgen_context_code
-                == f'''```python:{file_path.name}
+                == f'''```python:{file_path.relative_to(project_root_path)}
 _P = ParamSpec("_P")
 _KEY_T = TypeVar("_KEY_T")
 _STORE_T = TypeVar("_STORE_T")

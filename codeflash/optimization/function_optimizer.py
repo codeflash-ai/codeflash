@@ -134,7 +134,7 @@ class FunctionOptimizer:
             with helper_function_path.open(encoding="utf8") as f:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
-        if has_any_async_functions(code_context.code_to_optimize_with_helpers):
+        if has_any_async_functions(code_context.read_writable_code):
             return Failure("Codeflash does not support async functions in the code to optimize.")
         code_print(code_context.read_writable_code)
 
