@@ -89,7 +89,7 @@ class Optimizer:
                 tempfile.mkdtemp(dir=self.args.tests_root, prefix="codeflash_concolic_")
             )
         try:
-            ph('cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
+            ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
             if num_optimizable_functions == 0:
                 logger.info("No functions found to optimize. Exiting…")
                 return
@@ -102,7 +102,7 @@ class Optimizer:
             console.rule()
             logger.info(f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}")
             console.rule()
-            ph('cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
+            ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
 
             for original_module_path in file_to_funcs_to_optimize:
                 logger.info(f"Examining file {original_module_path!s}…")

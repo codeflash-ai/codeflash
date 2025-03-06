@@ -841,7 +841,7 @@ class FunctionOptimizer:
                     optimization_iteration=0,
                     testing_time=TOTAL_LOOPING_TIME,
                     enable_coverage=test_framework == "pytest",
-                    enable_profiler=test_framework == "pytest",
+                    enable_lprofiler=test_framework == "pytest",
                     code_context=code_context,
                 )
             finally:
@@ -1060,7 +1060,7 @@ class FunctionOptimizer:
         testing_time: float = TOTAL_LOOPING_TIME,
         *,
         enable_coverage: bool = False,
-        enable_profiler: bool = False,
+        enable_lprofiler: bool = False,
         pytest_min_loops: int = 5,
         pytest_max_loops: int = 100_000,
         code_context: CodeOptimizationContext | None = None,
@@ -1077,7 +1077,7 @@ class FunctionOptimizer:
                     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     verbose=True,
                     enable_coverage=enable_coverage,
-                    enable_profiler=enable_profiler,
+                    enable_lprofiler=enable_lprofiler,
                 )
             elif testing_type == TestingMode.PERFORMANCE:
                 result_file_path, run_result = run_benchmarking_tests(
