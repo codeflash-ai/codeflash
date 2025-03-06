@@ -8,6 +8,7 @@ import isort
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
+from codeflash.code_utils.with_pytest_remover import remove_pytest_raises
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestingMode
 from codeflash.verification.test_results import VerificationType
@@ -91,6 +92,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                             if self.mode == TestingMode.BEHAVIOR
                             else []
                         ),
+                        ast.Constant(value=False),
                         *call_node.args,
                     ]
                     node.keywords = call_node.keywords
@@ -116,6 +118,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                 if self.mode == TestingMode.BEHAVIOR
                                 else []
                             ),
+                            ast.Constant(value=False),
                             *call_node.args,
                         ]
                         node.keywords = call_node.keywords
@@ -334,6 +337,9 @@ def inject_profiling_into_existing_test(
         test_code = f.read()
     try:
         tree = ast.parse(test_code)
+        # Remove pytest.raises blocks if we're using pytest
+        if test_framework == "pytest":
+            tree = remove_pytest_raises(tree)
     except SyntaxError:
         logger.exception(f"Syntax error in code in file - {test_path}")
         return False, None
@@ -721,11 +727,19 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
         ),
         ast.If(
             test=ast.Name(id="exception", ctx=ast.Load()),
-            body=[ast.Raise(exc=ast.Name(id="exception", ctx=ast.Load()), cause=None, lineno=lineno + 22)],
-            orelse=[],
+            body=[
+                ast.If(
+                    test=ast.Name(id="reraise_exception", ctx=ast.Load()),
+                    body=[ast.Raise(exc=ast.Name(id="exception", ctx=ast.Load()), cause=None, lineno=lineno + 22)],
+                    orelse=[],
+                    lineno=lineno + 22,
+                )
+            ],
+            orelse=[
+                ast.Return(value=ast.Name(id="return_value", ctx=ast.Load()), lineno=lineno + 19)
+            ],
             lineno=lineno + 22,
-        ),
-        ast.Return(value=ast.Name(id="return_value", ctx=ast.Load()), lineno=lineno + 19),
+        )
     ]
     return ast.FunctionDef(
         name="codeflash_wrap",
@@ -740,13 +754,14 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                 ast.arg(arg="loop_index", annotation=None),
                 *([ast.arg(arg="codeflash_cur", annotation=None)] if mode == TestingMode.BEHAVIOR else []),
                 *([ast.arg(arg="codeflash_con", annotation=None)] if mode == TestingMode.BEHAVIOR else []),
+                *([ast.arg(arg="reraise_exception", annotation=None)]),
             ],
             vararg=ast.arg(arg="args"),
             kwarg=ast.arg(arg="kwargs"),
             posonlyargs=[],
             kwonlyargs=[],
             kw_defaults=[],
-            defaults=[],
+            defaults=[*([ast.Constant(value=False)])],
         ),
         body=wrapper_body,
         lineno=lineno,
