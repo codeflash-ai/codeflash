@@ -168,6 +168,8 @@ class TestResults(BaseModel):
     def report_to_tree(report: dict[TestType, dict[str, int]], title: str) -> Tree:
         tree = Tree(title)
         for test_type in TestType:
+            if test_type == TestType.INIT_STATE_TEST:
+                continue
             tree.add(
                 f"{test_type.to_name()} - Passed: {report[test_type]['passed']}, Failed: {report[test_type]['failed']}"
             )
