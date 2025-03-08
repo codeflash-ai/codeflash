@@ -12,16 +12,16 @@
 </p>
 
 [Codeflash](https://www.codeflash.ai) is a general purpose optimizer for Python that automatically improves the performance of your Python code while maintaining its correctness.
-It uses advanced LLMs to generate multiple optimization ideas for your code, tests them to be correct and benchmarks them for performance. It then opens merge ready Pull Requests with the best optimization it found that you can review and merge.
+It uses advanced LLMs to generate multiple optimization ideas for your code, tests them to be correct and benchmarks them for performance. It then creates merge-ready pull requests containing the best optimization found, which you can review and merge.
 
 How to use Codeflash -
 - Optimize an entire existing codebase by running `codeflash --all`
 - Automate optimizing all __future__ code you will write by installing Codeflash as a GitHub action.
-- Optimize a Python workflow end-to-end by Tracing the workflow.
+- Optimize a Python workflow end-to-end by tracing the workflow.
 
 Codeflash is used by top engineering teams at [Pydantic](https://github.com/pydantic/pydantic/pulls?q=is%3Apr+author%3Amisrasaurabh1+is%3Amerged), [Langflow](https://github.com/langflow-ai/langflow/issues?q=state%3Aclosed%20is%3Apr%20author%3Amisrasaurabh1), [Albumentations](https://github.com/albumentations-team/albumentations/issues?q=state%3Amerged%20is%3Apr%20author%3Akrrt7%20OR%20state%3Amerged%20is%3Apr%20author%3Aaseembits93%20) and many others to ship performant, expert level code.
 
-Codeflash is great at optimizing AI Agents, Computer vision algorithms, numerical code, backend code or anything else you might write with Python.
+Codeflash is great at optimizing AI Agents, Computer Vision algorithms, numerical code, backend code or anything else you might write with Python.
 
 
 ## Installation
@@ -57,7 +57,7 @@ For detailed installation and usage instructions, visit our documentation at [do
 ## Demo
 
 
-- Optimizing the performance of new code for a Pull Request through GitHub actions. This way you can ship new code quickly, and make it all performant too.
+- Optimizing the performance of new code for a Pull Request through GitHub Actions. This lets you ship code quickly while ensuring it remains performant.
 
 https://github.com/user-attachments/assets/38f44f4e-be1c-4f84-8db9-63d5ee3e61e5
 
