@@ -26,6 +26,7 @@ from collections import defaultdict
 from copy import copy
 from io import StringIO
 from pathlib import Path
+import threading
 from types import FrameType
 from typing import Any, ClassVar, List
 
@@ -143,11 +144,13 @@ class Tracer:
         self.dispatch["call"](self, frame, 0)
         self.start_time = time.time()
         sys.setprofile(self.trace_callback)
+        threading.setprofile(self.trace_callback)
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         if self.disable:
             return
         sys.setprofile(None)
+        threading.setprofile(None)
         self.con.commit()
 
         self.create_stats()
