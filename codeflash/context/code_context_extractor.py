@@ -399,7 +399,7 @@ def remove_docstring_from_body(indented_block: cst.IndentedBlock) -> cst.CSTNode
     return indented_block
 
 def parse_code_and_prune_cst(
-    code: str, code_context_type: CodeContextType, target_functions: set[str], helpers_of_helper_functions: set[str] = {}, remove_docstrings: bool = False
+    code: str, code_context_type: CodeContextType, target_functions: set[str], helpers_of_helper_functions: set[str] = set(), remove_docstrings: bool = False
 ) -> str:
     """Create a read-only version of the code by parsing and filtering the code to keep only class contextual information, and other module scoped variables. """
     module = cst.parse_module(code)
