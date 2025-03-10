@@ -40,7 +40,7 @@ class TestUnittestRunnerSorter(unittest.TestCase):
         )
         fp.write(code.encode("utf-8"))
         fp.flush()
-        result_file, process, coverage_pct = run_behavioral_tests(
+        result_file, process, _, _ = run_behavioral_tests(
             test_files,
             test_framework=config.test_framework,
             cwd=Path(config.project_root_path),
@@ -84,7 +84,7 @@ def test_sort():
         )
         fp.write(code.encode("utf-8"))
         fp.flush()
-        result_file, process, coverage_pct = run_behavioral_tests(
+        result_file, process, _, _ = run_behavioral_tests(
             test_files,
             test_framework=config.test_framework,
             cwd=Path(config.project_root_path),
