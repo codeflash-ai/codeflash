@@ -36,7 +36,7 @@ def run_behavioral_tests(
     verbose: bool = False,
     pytest_target_runtime_seconds: int = TOTAL_LOOPING_TIME,
     enable_coverage: bool = False,
-) -> tuple[Path, subprocess.CompletedProcess, Path | None]:
+) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
     if test_framework == "pytest":
         test_files: list[str] = []
         for file in test_paths.test_files:
@@ -73,14 +73,14 @@ def run_behavioral_tests(
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
 
         if enable_coverage:
-            coverage_database_file, coveragercfile = prepare_coverage_files()
+            coverage_database_file, coverage_config_file = prepare_coverage_files()
 
             cov_erase = execute_test_subprocess(
                 shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env
             )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any,
             # then the current run will be appended to the previous data, which skews the results
             logger.debug(cov_erase)
-            coverage_cmd = [SAFE_SYS_EXECUTABLE, "-m", "coverage", "run", f"--rcfile={coveragercfile.as_posix()}", "-m"]
+            coverage_cmd = [SAFE_SYS_EXECUTABLE, "-m", "coverage", "run", f"--rcfile={coverage_config_file.as_posix()}", "-m"]
 
             if pytest_cmd == "pytest":
                 coverage_cmd.extend(["pytest"])
@@ -120,7 +120,7 @@ def run_behavioral_tests(
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
 
-    return result_file_path, results, coverage_database_file if enable_coverage else None
+    return result_file_path, results, coverage_database_file if enable_coverage else None, coverage_config_file if enable_coverage else None
 
 
 def run_benchmarking_tests(

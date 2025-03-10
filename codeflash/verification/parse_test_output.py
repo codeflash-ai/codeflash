@@ -478,6 +478,7 @@ def parse_test_results(
     function_name: str | None,
     source_file: Path | None,
     coverage_database_file: Path | None,
+    coverage_config_file: Path | None,
     code_context: CodeOptimizationContext | None = None,
     run_result: subprocess.CompletedProcess | None = None,
     unittest_loop_index: int | None = None,
@@ -523,6 +524,7 @@ def parse_test_results(
         all_args = True
         coverage = CoverageData.load_from_sqlite_database(
             database_path=coverage_database_file,
+            config_path=coverage_config_file,
             source_code_path=source_file,
             code_context=code_context,
             function_name=function_name,

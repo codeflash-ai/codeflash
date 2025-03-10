@@ -1064,9 +1064,10 @@ class FunctionOptimizer:
         unittest_loop_index: int | None = None,
     ) -> tuple[TestResults, CoverageData | None]:
         coverage_database_file = None
+        coverage_config_file = None
         try:
             if testing_type == TestingMode.BEHAVIOR:
-                result_file_path, run_result, coverage_database_file = run_behavioral_tests(
+                result_file_path, run_result, coverage_database_file, coverage_config_file = run_behavioral_tests(
                     test_files,
                     test_framework=self.test_cfg.test_framework,
                     cwd=self.project_root,
@@ -1114,6 +1115,7 @@ class FunctionOptimizer:
             source_file=self.function_to_optimize.file_path,
             code_context=code_context,
             coverage_database_file=coverage_database_file,
+            coverage_config_file=coverage_config_file,
         )
         return results, coverage_results
 
