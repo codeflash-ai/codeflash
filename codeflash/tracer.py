@@ -16,38 +16,65 @@ import io
 import json
 import marshal
 import os
-import pathlib
 import pickle
-import re
+import shutil
 import sqlite3
 import sys
-import time
-from collections import defaultdict
-from copy import copy
-from io import StringIO
-from pathlib import Path
+import tempfile
 import threading
-from types import FrameType
-from typing import Any, ClassVar, List
+import time
+import uuid
+from argparse import ArgumentParser
+from collections import defaultdict
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, ClassVar
 
 import dill
 import isort
+from rich.align import Align
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.cli_cmds.console import console
-from codeflash.code_utils.code_utils import module_name_from_file_path
+from codeflash.code_utils.code_utils import cleanup_paths, module_name_from_file_path
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.discovery.functions_to_optimize import filter_files_optimized
 from codeflash.tracing.replay_test import create_trace_replay_test
 from codeflash.tracing.tracing_utils import FunctionModules
 from codeflash.verification.verification_utils import get_test_file_path
 
+if TYPE_CHECKING:
+    from types import FrameType, TracebackType
+
+
+class fake_code:  # noqa: N801
+    def __init__(self, filename: str, line: int, name: str) -> None:
+        self.co_filename = filename
+        self.co_line = line
+        self.co_name = name
+        self.co_firstlineno = 0
+
+    def __repr__(self) -> str:
+        return repr((self.co_filename, self.co_line, self.co_name, None))
+
+
+class fake_frame:  # noqa: N801
+    def __init__(self, code: fake_code, prior: fake_frame | None) -> None:
+        self.f_code = code
+        self.f_back = prior
+        self.f_locals = {}
+
 
 # Debug this file by simply adding print statements. This file is not meant to be debugged by the debugger.
 class Tracer:
-    """Use this class as a 'with' context manager to trace a function call,
-    input arguments, and profiling info.
+    """Use this class as a 'with' context manager to trace a function call.
+
+    Traces function calls, input arguments, and profiling info.
     """
+
+    used_once: ClassVar[bool] = False  # Class variable to track if Tracer has been used
 
     def __init__(
         self,
@@ -58,14 +85,7 @@ class Tracer:
         max_function_count: int = 256,
         timeout: int | None = None,  # seconds
     ) -> None:
-        """:param output: The path to the output trace file
-        :param functions: List of functions to trace. If None, trace all functions
-        :param disable: Disable the tracer if True
-        :param config_file_path: Path to the pyproject.toml file, if None then it will be auto-discovered
-        :param max_function_count: Maximum number of times to trace one function
-        :param timeout: Timeout in seconds for the tracer, if the traced code takes more than this time, then tracing
-                    stops and normal execution continues. If this is None then no timeout applies
-        """
+        """Initialize Tracer."""
         if functions is None:
             functions = []
         if os.environ.get("CODEFLASH_TRACER_DISABLE", "0") == "1":
@@ -81,8 +101,14 @@ class Tracer:
             )
             self.disable = True
             return
-        self.con = None
+
+        # Setup output paths
         self.output_file = Path(output).resolve()
+        self.output_dir = self.output_file.parent
+        self.output_base = self.output_file.stem
+        self.output_ext = self.output_file.suffix
+        self.thread_db_files: dict[int, Path] = {}  # Thread ID to DB file path
+
         self.functions = functions
         self.function_modules: list[FunctionModules] = []
         self.function_count = defaultdict(int)
@@ -94,90 +120,321 @@ class Tracer:
         self.max_function_count = max_function_count
         self.config, found_config_path = parse_config_file(config_file_path)
         self.project_root = project_root_from_module_root(Path(self.config["module_root"]), found_config_path)
-        print("project_root", self.project_root)
+        console.print("project_root", self.project_root)
         self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>", "<module>"}
 
-        self.file_being_called_from: str = str(Path(sys._getframe().f_back.f_code.co_filename).name).replace(".", "_")
+        self.file_being_called_from: str = str(Path(sys._getframe().f_back.f_code.co_filename).name).replace(".", "_")  # noqa: SLF001
 
         assert timeout is None or timeout > 0, "Timeout should be greater than 0"
         self.timeout = timeout
         self.next_insert = 1000
         self.trace_count = 0
 
+        self.db_lock = threading.RLock()
+        self.thread_local = threading.local()
+
+        # Ensure output directory exists
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
         # Profiler variables
         self.bias = 0  # calibration constant
-        self.timings = {}
-        self.cur = None
-        self.start_time = None
+        self.timings: dict[Any, Any] = {}
+        self.cur: Any = None
+        self.start_time: float | None = None
         self.timer = time.process_time_ns
         self.total_tt = 0
         self.simulate_call("profiler")
         assert "test_framework" in self.config, "Please specify 'test-framework' in pyproject.toml config file"
         self.t = self.timer()
+        self.main_db_created = False  # Flag to track main DB creation
+
+    def get_thread_db_path(self) -> Path:
+        """Get the database path for the current thread."""
+        thread_id = threading.get_ident()
+        if thread_id not in self.thread_db_files:
+            # Create a unique filename for this thread
+            unique_id = uuid.uuid4().hex[:8]
+            db_path = self.output_dir / f"{self.output_base}_{thread_id}_{unique_id}{self.output_ext}"
+            self.thread_db_files[thread_id] = db_path
+        return self.thread_db_files[thread_id]
+
+    def get_connection(self) -> sqlite3.Connection:
+        """Get a dedicated connection for the current thread."""
+        if not hasattr(self.thread_local, "con"):
+            db_path = self.get_thread_db_path()
+            self.thread_local.con = sqlite3.connect(db_path)
+            # Create the necessary tables if they don't exist
+            cur = self.thread_local.con.cursor()
+            cur.execute("""PRAGMA synchronous = OFF""")
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS function_calls(type TEXT, function TEXT, classname TEXT, "
+                "filename TEXT, line_number INTEGER, last_frame_address INTEGER, time_ns INTEGER, args BLOB)"
+            )
+            self.thread_local.con.commit()
+        return self.thread_local.con
+
+    def _create_main_db_if_not_exists(self) -> None:
+        """Create the main output database if it doesn't exist."""
+        if not self.main_db_created:  # Use flag to prevent redundant checks
+            if not self.output_file.exists():
+                try:
+                    main_con = sqlite3.connect(self.output_file)
+                    main_cur = main_con.cursor()
+                    main_cur.execute("""PRAGMA synchronous = OFF""")  # Added pragma for main db too
+                    main_cur.execute(
+                        "CREATE TABLE IF NOT EXISTS function_calls(type TEXT, function TEXT, classname TEXT, "
+                        "filename TEXT, line_number INTEGER, last_frame_address INTEGER, time_ns INTEGER, args BLOB)"
+                    )
+                    main_con.commit()
+                    main_con.close()
+                    self.main_db_created = True  # Set flag after successful creation
+                except Exception as e:  # noqa: BLE001
+                    console.print(f"Error creating main database: {e}")
+            else:
+                self.main_db_created = True  # Main DB already exists
 
     def __enter__(self) -> None:
         if self.disable:
             return
-        if getattr(Tracer, "used_once", False):
+        if Tracer.used_once:
             console.print(
                 "Codeflash: Tracer can only be used once per program run. "
                 "Please only enable the Tracer once. Skipping tracing this section."
             )
             self.disable = True
             return
-        Tracer.used_once = True
+        Tracer.used_once = True  # Mark Tracer as used at the start of __enter__
 
-        if pathlib.Path(self.output_file).exists():
+        # Clean up any existing trace files
+        if self.output_file.exists():
             console.print("Codeflash: Removing existing trace file")
-        pathlib.Path(self.output_file).unlink(missing_ok=True)
+            cleanup_paths([self.output_file])
 
-        self.con = sqlite3.connect(self.output_file)
-        cur = self.con.cursor()
-        cur.execute("""PRAGMA synchronous = OFF""")
-        # TODO: Check out if we need to export the function test name as well
-        cur.execute(
-            "CREATE TABLE function_calls(type TEXT, function TEXT, classname TEXT, filename TEXT, "
-            "line_number INTEGER, last_frame_address INTEGER, time_ns INTEGER, args BLOB)"
-        )
+        self._create_main_db_if_not_exists()
+        self.con = sqlite3.connect(self.output_file)  # Keep connection open during tracing
         console.print("Codeflash: Tracing started!")
-        frame = sys._getframe(0)  # Get this frame and simulate a call to it
+        console.rule("Program Output Begin", style="bold blue")
+        frame = sys._getframe(0)  # Get this frame and simulate a call to it  # noqa: SLF001
         self.dispatch["call"](self, frame, 0)
         self.start_time = time.time()
         sys.setprofile(self.trace_callback)
         threading.setprofile(self.trace_callback)
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    def _close_thread_connection(self) -> None:
+        """Close thread-local connection and handle potential errors."""
+        if hasattr(self.thread_local, "con") and self.thread_local.con:
+            try:
+                self.thread_local.con.commit()
+                self.thread_local.con.close()
+                del self.thread_local.con
+            except Exception as e:  # noqa: BLE001
+                console.print(f"Error closing current thread's connection: {e}")
+
+    def _merge_thread_dbs(self) -> int:
+        total_rows_copied = 0
+        processed_files: list[Path] = []
+
+        for thread_id, db_path in self.thread_db_files.items():
+            if not db_path.exists():
+                console.print(f"Thread database for thread {thread_id} not found, skipping.")
+                continue
+
+            rows_copied = self._process_thread_db(thread_id, db_path)
+            if rows_copied >= 0:  # _process_thread_db returns -1 on failure
+                total_rows_copied += rows_copied
+                processed_files.append(db_path)
+            else:
+                console.print(f"Failed to merge from thread database {thread_id}")
+
+        for thread_id, db_path in self.thread_db_files.items():
+            if db_path in processed_files or not db_path.exists():
+                continue
+
+            rows_copied = self._process_thread_db_with_copy(thread_id, db_path)
+            if rows_copied >= 0:
+                total_rows_copied += rows_copied
+                processed_files.append(db_path)
+            else:
+                console.print(f"Failed to merge from thread database {thread_id} even with copy approach.")
+
+        return total_rows_copied
+
+    def _process_thread_db(self, thread_id: int, db_path: Path) -> int:
+        try:
+            thread_con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2.0)
+            thread_cur = thread_con.cursor()
+
+            thread_cur.execute("SELECT * FROM function_calls")
+            main_cur = self.con.cursor()
+
+            self.con.execute("BEGIN TRANSACTION")
+
+            batch_size = 100
+            batch = thread_cur.fetchmany(batch_size)
+            rows_processed = 0
+
+            while batch:
+                for row in batch:
+                    try:
+                        main_cur.execute("INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)", row)
+                        rows_processed += 1
+                    except sqlite3.Error as e:  # noqa: PERF203
+                        console.print(f"Error inserting row {rows_processed} from thread {thread_id}: {e}")
+                batch = thread_cur.fetchmany(batch_size)
+
+            self.con.commit()
+            thread_con.close()
+
+        except sqlite3.Error as e:
+            console.print(f"Could not open thread database {thread_id} directly: {e}")
+            return -1
+        else:
+            return rows_processed
+
+    def _process_thread_db_with_copy(self, thread_id: int, db_path: Path) -> int:
+        console.print(f"Attempting file copy approach for thread {thread_id}...")
+
+        temp_dir = tempfile.gettempdir()
+        temp_db_path = Path(temp_dir) / f"codeflash_temp_{uuid.uuid4().hex}.trace"
+        rows_processed = 0
+
+        try:
+            shutil.copy2(db_path, temp_db_path)
+
+            temp_con = sqlite3.connect(temp_db_path)
+            temp_cur = temp_con.cursor()
+
+            temp_cur.execute("SELECT COUNT(*) FROM function_calls")
+            row_count = temp_cur.fetchone()[0]
+
+            if row_count > 0:
+                temp_cur.execute("SELECT * FROM function_calls")
+                main_cur = self.con.cursor()
+
+                self.con.execute("BEGIN TRANSACTION")
+                batch_size = 100
+                batch = temp_cur.fetchmany(batch_size)
+
+                while batch:
+                    for row in batch:
+                        try:
+                            main_cur.execute("INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)", row)
+                            rows_processed += 1
+                        except sqlite3.Error as e:
+                            console.print(f"Error inserting row from thread {thread_id} copy: {e}")
+
+                        batch = temp_cur.fetchmany(batch_size)
+
+                self.con.commit()
+
+            temp_con.close()
+            cleanup_paths([temp_db_path])
+            console.print(f"Successfully merged {rows_processed} rows from thread {thread_id} (via copy)")
+        except Exception as e:  # noqa: BLE001
+            console.print(f"Error with file copy approach for thread {thread_id}: {e}")
+            cleanup_paths([temp_db_path])
+            return -1
+
+        else:
+            return rows_processed
+
+    def _generate_stats_and_replay_test(self) -> None:
+        """Generate statistics, pstats compatible data, print stats and create replay test."""
+        try:
+            self.create_stats()
+
+            try:
+                main_cur = self.con.cursor()
+                main_cur.execute(
+                    "CREATE TABLE pstats (filename TEXT, line_number INTEGER, function TEXT, class_name TEXT, "
+                    "call_count_nonrecursive INTEGER, num_callers INTEGER, total_time_ns INTEGER, "
+                    "cumulative_time_ns INTEGER, callers BLOB)"
+                )
+
+                for func, (cc, nc, tt, ct, callers) in self.stats.items():
+                    remapped_callers = [{"key": k, "value": v} for k, v in callers.items()]
+                    main_cur.execute(
+                        "INSERT INTO pstats VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            str(Path(func[0]).resolve()),
+                            func[1],
+                            func[2],
+                            func[3],
+                            cc,
+                            nc,
+                            tt,
+                            ct,
+                            json.dumps(remapped_callers),
+                        ),
+                    )
+
+                self.con.commit()  # Use main DB connection
+
+                self.make_pstats_compatible()
+                self.print_stats("tottime")
+
+                main_cur.execute("CREATE TABLE total_time (time_ns INTEGER)")
+                main_cur.execute("INSERT INTO total_time VALUES (?)", (self.total_tt,))
+                self.con.commit()  # Use main DB connection
+
+            except Exception as e:  # noqa: BLE001
+                console.print(f"Error generating stats tables: {e}")
+                import traceback
+
+                traceback.print_exc()
+
+        except Exception as e:  # noqa: BLE001
+            console.print(f"Error during stats generation: {e}")
+            console.print_exception()
+
+        # Generate the replay test
+        try:
+            replay_test = create_trace_replay_test(
+                trace_file=self.output_file,
+                functions=self.function_modules,
+                test_framework=self.config["test_framework"],
+                max_run_count=self.max_function_count,
+            )
+            function_path = "_".join(self.functions) if self.functions else self.file_being_called_from
+            test_file_path = get_test_file_path(
+                test_dir=Path(self.config["tests_root"]), function_name=function_path, test_type="replay"
+            )
+            replay_test = isort.code(replay_test)
+
+            with test_file_path.open("w", encoding="utf8") as file:
+                file.write(replay_test)
+
+            console.print(
+                f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}",
+                crop=False,
+                soft_wrap=False,
+                overflow="ignore",
+            )
+        except Exception as e:  # noqa: BLE001
+            console.print(f"Error creating replay test: {e}")
+            console.print_exception()
+
+    def __exit__(
+        self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: TracebackType | None
+    ) -> None:
         if self.disable:
             return
+        console.rule("Program Output End", style="bold blue")
         sys.setprofile(None)
         threading.setprofile(None)
-        self.con.commit()
 
-        self.create_stats()
+        self._close_thread_connection()
 
-        cur = self.con.cursor()
-        cur.execute(
-            "CREATE TABLE pstats (filename TEXT, line_number INTEGER, function TEXT, class_name TEXT, "
-            "call_count_nonrecursive INTEGER, num_callers INTEGER, total_time_ns INTEGER, "
-            "cumulative_time_ns INTEGER, callers BLOB)"
-        )
-        for func, (cc, nc, tt, ct, callers) in self.stats.items():
-            remapped_callers = [{"key": k, "value": v} for k, v in callers.items()]
-            cur.execute(
-                "INSERT INTO pstats VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (str(Path(func[0]).resolve()), func[1], func[2], func[3], cc, nc, tt, ct, json.dumps(remapped_callers)),
-            )
-        self.con.commit()
+        # Give threads time to complete their database operations
+        time.sleep(1)
 
-        self.make_pstats_compatible()
-        self.print_stats("tottime")
-        cur = self.con.cursor()
-        cur.execute("CREATE TABLE total_time (time_ns INTEGER)")
-        cur.execute("INSERT INTO total_time VALUES (?)", (self.total_tt,))
-        self.con.commit()
-        self.con.close()
+        self._merge_thread_dbs()
+        self._generate_stats_and_replay_test()
 
-        # filter any functions where we did not capture the return
+        all_db_paths = list(self.thread_db_files.values())
+        cleanup_paths(all_db_paths)
+
+        # Filter any functions where we did not capture the return - moved to replay test generation for clarity
         self.function_modules = [
             function
             for function in self.function_modules
@@ -190,26 +447,9 @@ class Tracer:
             > 0
         ]
 
-        replay_test = create_trace_replay_test(
-            trace_file=self.output_file,
-            functions=self.function_modules,
-            test_framework=self.config["test_framework"],
-            max_run_count=self.max_function_count,
-        )
-        function_path = "_".join(self.functions) if self.functions else self.file_being_called_from
-        test_file_path = get_test_file_path(
-            test_dir=Path(self.config["tests_root"]), function_name=function_path, test_type="replay"
-        )
-        replay_test = isort.code(replay_test)
-        with open(test_file_path, "w", encoding="utf8") as file:
-            file.write(replay_test)
-
-        console.print(
-            f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}",
-            crop=False,
-            soft_wrap=False,
-            overflow="ignore",
-        )
+        if self.con:
+            self.con.close()
+            self.con = None
 
     def tracer_logic(self, frame: FrameType, event: str) -> None:
         if event != "call":
@@ -239,9 +479,10 @@ class Tracer:
                 class_name = arguments["self"].__class__.__name__
             elif "cls" in arguments and hasattr(arguments["cls"], "__name__"):
                 class_name = arguments["cls"].__name__
-        except:
+        except:  # noqa: E722
             # someone can override the getattr method and raise an exception. I'm looking at you wrapt
             return
+
         function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
         if function_qualified_name in self.ignored_qualified_functions:
             return
@@ -273,9 +514,9 @@ class Tracer:
                 self.ignored_qualified_functions.add(function_qualified_name)
                 return
 
-        # TODO: Also check if this function arguments are unique from the values logged earlier
-
-        cur = self.con.cursor()
+        # Get thread-specific connection
+        conn = self.get_connection()
+        cur = conn.cursor()
 
         t_ns = time.perf_counter_ns()
         original_recursion_limit = sys.getrecursionlimit()
@@ -300,26 +541,34 @@ class Tracer:
                 # give up
                 self.function_count[function_qualified_name] -= 1
                 return
-        cur.execute(
-            "INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                event,
-                code.co_name,
-                class_name,
-                str(file_name),
-                frame.f_lineno,
-                frame.f_back.__hash__(),
-                t_ns,
-                local_vars,
-            ),
-        )
-        self.trace_count += 1
-        self.next_insert -= 1
-        if self.next_insert == 0:
-            self.next_insert = 1000
-            self.con.commit()
+        try:
+            cur.execute(
+                "INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    event,
+                    code.co_name,
+                    class_name,
+                    str(file_name),
+                    frame.f_lineno,
+                    frame.f_back.__hash__(),
+                    t_ns,
+                    local_vars,
+                ),
+            )
 
-    def trace_callback(self, frame: FrameType, event: str, arg: Any) -> None:
+            # Add thread-safe counter increment for trace_count
+            with self.db_lock:
+                self.trace_count += 1
+
+            self.next_insert -= 1
+            if self.next_insert == 0:
+                self.next_insert = 1000
+                conn.commit()
+        except sqlite3.Error as e:
+            thread_id = threading.get_ident()
+            console.print(f"SQLite error in tracer (thread {thread_id}): {e}")
+
+    def trace_callback(self, frame: FrameType, event: str, arg: str | None) -> None:
         # profiler section
         timer = self.timer
         t = timer() - self.t - self.bias
@@ -335,45 +584,60 @@ class Tracer:
         else:
             self.t = timer() - t  # put back unrecorded delta
 
-    def trace_dispatch_call(self, frame, t) -> int:
-        if self.cur and frame.f_back is not self.cur[-2]:
-            rpt, rit, ret, rfn, rframe, rcur = self.cur
-            if not isinstance(rframe, Tracer.fake_frame):
-                assert rframe.f_back is frame.f_back, ("Bad call", rfn, rframe, rframe.f_back, frame, frame.f_back)
-                self.trace_dispatch_return(rframe, 0)
-                assert self.cur is None or frame.f_back is self.cur[-2], ("Bad call", self.cur[-3])
-        fcode = frame.f_code
-        arguments = frame.f_locals
-        class_name = None
+    def trace_dispatch_call(self, frame: FrameType, t: int) -> int:
+        """Handle call events in the profiler."""
         try:
-            if (
-                "self" in arguments
-                and hasattr(arguments["self"], "__class__")
-                and hasattr(arguments["self"].__class__, "__name__")
-            ):
-                class_name = arguments["self"].__class__.__name__
-            elif "cls" in arguments and hasattr(arguments["cls"], "__name__"):
-                class_name = arguments["cls"].__name__
-        except:
-            pass
-        fn = (fcode.co_filename, fcode.co_firstlineno, fcode.co_name, class_name)
-        self.cur = (t, 0, 0, fn, frame, self.cur)
-        timings = self.timings
-        if fn in timings:
-            cc, ns, tt, ct, callers = timings[fn]
-            timings[fn] = cc, ns + 1, tt, ct, callers
-        else:
-            timings[fn] = 0, 0, 0, 0, {}
-        return 1
+            # In multi-threaded contexts, we need to be more careful about frame comparisons
+            if self.cur and frame.f_back is not self.cur[-2]:
+                # This happens when we're in a different thread
+                rpt, rit, ret, rfn, rframe, rcur = self.cur
 
-    def trace_dispatch_exception(self, frame, t):
+                # Only attempt to handle the frame mismatch if we have a valid rframe
+                if (
+                    not isinstance(rframe, Tracer.fake_frame)
+                    and hasattr(rframe, "f_back")
+                    and hasattr(frame, "f_back")
+                    and rframe.f_back is frame.f_back
+                ):
+                    self.trace_dispatch_return(rframe, 0)
+
+            # Get function information
+            fcode = frame.f_code
+            arguments = frame.f_locals
+            class_name = None
+            try:
+                if (
+                    "self" in arguments
+                    and hasattr(arguments["self"], "__class__")
+                    and hasattr(arguments["self"].__class__, "__name__")
+                ):
+                    class_name = arguments["self"].__class__.__name__
+                elif "cls" in arguments and hasattr(arguments["cls"], "__name__"):
+                    class_name = arguments["cls"].__name__
+            except Exception:  # noqa: BLE001, S110
+                pass
+
+            fn = (fcode.co_filename, fcode.co_firstlineno, fcode.co_name, class_name)
+            self.cur = (t, 0, 0, fn, frame, self.cur)
+            timings = self.timings
+            if fn in timings:
+                cc, ns, tt, ct, callers = timings[fn]
+                timings[fn] = cc, ns + 1, tt, ct, callers
+            else:
+                timings[fn] = 0, 0, 0, 0, {}
+            return 1  # noqa: TRY300
+        except Exception:  # noqa: BLE001
+            # Handle any errors gracefully
+            return 0
+
+    def trace_dispatch_exception(self, frame: FrameType, t: int) -> int:
         rpt, rit, ret, rfn, rframe, rcur = self.cur
         if (rframe is not frame) and rcur:
             return self.trace_dispatch_return(rframe, t)
         self.cur = rpt, rit + t, ret, rfn, rframe, rcur
         return 1
 
-    def trace_dispatch_c_call(self, frame, t) -> int:
+    def trace_dispatch_c_call(self, frame: FrameType, t: int) -> int:
         fn = ("", 0, self.c_func_name, None)
         self.cur = (t, 0, 0, fn, frame, self.cur)
         timings = self.timings
@@ -384,44 +648,57 @@ class Tracer:
             timings[fn] = 0, 0, 0, 0, {}
         return 1
 
-    def trace_dispatch_return(self, frame, t) -> int:
-        if frame is not self.cur[-2]:
-            assert frame is self.cur[-2].f_back, ("Bad return", self.cur[-3])
-            self.trace_dispatch_return(self.cur[-2], 0)
+    def trace_dispatch_return(self, frame: FrameType, t: int) -> int:
+        """Handle return events in the profiler."""
+        try:
+            # Check if we have a valid current frame
+            if not self.cur or not self.cur[-2]:
+                return 0
 
-        # Prefix "r" means part of the Returning or exiting frame.
-        # Prefix "p" means part of the Previous or Parent or older frame.
+            # In multi-threaded environments, frames can get mismatched
+            if frame is not self.cur[-2]:
+                # Don't assert in threaded environments - frames can legitimately differ
+                if hasattr(frame, "f_back") and hasattr(self.cur[-2], "f_back") and frame is self.cur[-2].f_back:
+                    self.trace_dispatch_return(self.cur[-2], 0)
+                else:
+                    # We're in a different thread or context, can't continue with this frame
+                    return 0
 
-        rpt, rit, ret, rfn, frame, rcur = self.cur
-        rit = rit + t
-        frame_total = rit + ret
+            rpt, rit, ret, rfn, frame, rcur = self.cur
+            rit = rit + t
+            frame_total = rit + ret
 
-        ppt, pit, pet, pfn, pframe, pcur = rcur
-        self.cur = ppt, pit + rpt, pet + frame_total, pfn, pframe, pcur
+            # Guard against invalid rcur (w threading)
+            if not rcur:
+                return 0
 
-        timings = self.timings
-        cc, ns, tt, ct, callers = timings[rfn]
-        if not ns:
-            # This is the only occurrence of the function on the stack.
-            # Else this is a (directly or indirectly) recursive call, and
-            # its cumulative time will get updated when the topmost call to
-            # it returns.
-            ct = ct + frame_total
-            cc = cc + 1
+            ppt, pit, pet, pfn, pframe, pcur = rcur
+            self.cur = ppt, pit + rpt, pet + frame_total, pfn, pframe, pcur
 
-        if pfn in callers:
-            callers[pfn] = callers[pfn] + 1  # hack: gather more
-            # stats such as the amount of time added to ct courtesy
-            # of this specific call, and the contribution to cc
-            # courtesy of this call.
-        else:
-            callers[pfn] = 1
+            timings = self.timings
+            if rfn not in timings:
+                # w threading, rfn can be missing
+                timings[rfn] = 0, 0, 0, 0, {}
 
-        timings[rfn] = cc, ns - 1, tt + rit, ct, callers
+            cc, ns, tt, ct, callers = timings[rfn]
+            if not ns:
+                # This is the only occurrence of the function on the stack.
+                ct = ct + frame_total
+                cc = cc + 1
 
-        return 1
+            if pfn in callers:
+                callers[pfn] = callers[pfn] + 1
+            else:
+                callers[pfn] = 1
 
-    dispatch: ClassVar[dict[str, callable]] = {
+            timings[rfn] = cc, ns - 1, tt + rit, ct, callers
+
+            return 1
+        except Exception:
+            # Handle errors gracefully
+            return 0
+
+    dispatch: ClassVar[dict[str, Callable[[Tracer, FrameType, int], int]]] = {
         "call": trace_dispatch_call,
         "exception": trace_dispatch_exception,
         "return": trace_dispatch_return,
@@ -430,26 +707,10 @@ class Tracer:
         "c_return": trace_dispatch_return,
     }
 
-    class fake_code:
-        def __init__(self, filename, line, name) -> None:
-            self.co_filename = filename
-            self.co_line = line
-            self.co_name = name
-            self.co_firstlineno = 0
-
-        def __repr__(self) -> str:
-            return repr((self.co_filename, self.co_line, self.co_name, None))
-
-    class fake_frame:
-        def __init__(self, code, prior) -> None:
-            self.f_code = code
-            self.f_back = prior
-            self.f_locals = {}
-
     def simulate_call(self, name) -> None:
-        code = self.fake_code("profiler", 0, name)
+        code = fake_code("profiler", 0, name)
         pframe = self.cur[-2] if self.cur else None
-        frame = self.fake_frame(code, pframe)
+        frame = fake_frame(code, pframe)
         self.dispatch["call"](self, frame, 0)
 
     def simulate_cmd_complete(self) -> None:
@@ -462,58 +723,172 @@ class Tracer:
             t = 0
         self.t = get_time() - t
 
-    def print_stats(self, sort=-1) -> None:
-        import pstats
+    def print_stats(self, sort: str | int | tuple = -1) -> None:
+        if not self.stats:
+            console.print("Codeflash: No stats available to print")
+            self.total_tt = 0
+            return
 
         if not isinstance(sort, tuple):
             sort = (sort,)
-        # The following code customizes the default printing behavior to
-        # print in milliseconds.
-        s = StringIO()
-        stats_obj = pstats.Stats(copy(self), stream=s)
-        stats_obj.strip_dirs().sort_stats(*sort).print_stats(25)
-        self.total_tt = stats_obj.total_tt
-        console.print("total_tt", self.total_tt)
-        raw_stats = s.getvalue()
-        m = re.search(r"function calls?.*in (\d+)\.\d+ (seconds?)", raw_stats)
-        total_time = None
-        if m:
-            total_time = int(m.group(1))
-        if total_time is None:
-            console.print("Failed to get total time from stats")
-        total_time_ms = total_time / 1e6
-        raw_stats = re.sub(
-            r"(function calls?.*)in (\d+)\.\d+ (seconds?)", rf"\1 in {total_time_ms:.3f} milliseconds", raw_stats
-        )
-        match_pattern = r"^ *[\d\/]+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +"
-        m = re.findall(match_pattern, raw_stats, re.MULTILINE)
-        ms_times = []
-        for tottime, percall, cumtime, percall_cum in m:
-            tottime_ms = int(tottime) / 1e6
-            percall_ms = int(percall) / 1e6
-            cumtime_ms = int(cumtime) / 1e6
-            percall_cum_ms = int(percall_cum) / 1e6
-            ms_times.append([tottime_ms, percall_ms, cumtime_ms, percall_cum_ms])
-        split_stats = raw_stats.split("\n")
-        new_stats = []
 
-        replace_pattern = r"^( *[\d\/]+) +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(\d+)\.\d+ +(.*)"
-        times_index = 0
-        for line in split_stats:
-            if times_index >= len(ms_times):
-                replaced = line
-            else:
-                replaced, n = re.subn(
-                    replace_pattern,
-                    rf"\g<1>{ms_times[times_index][0]:8.3f} {ms_times[times_index][1]:8.3f} {ms_times[times_index][2]:8.3f} {ms_times[times_index][3]:8.3f} \g<6>",
-                    line,
-                    count=1,
+        # First, convert stats to make them pstats-compatible
+        try:
+            # Initialize empty collections for pstats
+            self.files = []
+            self.top_level = []
+
+            # Create entirely new dictionaries instead of modifying existing ones
+            new_stats = {}
+            new_timings = {}
+
+            # Convert stats dictionary
+            stats_items = list(self.stats.items())
+            for func, stats_data in stats_items:
+                try:
+                    # Make sure we have 5 elements in stats_data
+                    if len(stats_data) != 5:
+                        console.print(f"Skipping malformed stats data for {func}: {stats_data}")
+                        continue
+
+                    cc, nc, tt, ct, callers = stats_data
+
+                    if len(func) == 4:
+                        file_name, line_num, func_name, class_name = func
+                        new_func_name = f"{class_name}.{func_name}" if class_name else func_name
+                        new_func = (file_name, line_num, new_func_name)
+                    else:
+                        new_func = func  # Keep as is if already in correct format
+
+                    new_callers = {}
+                    callers_items = list(callers.items())
+                    for caller_func, count in callers_items:
+                        if isinstance(caller_func, tuple):
+                            if len(caller_func) == 4:
+                                caller_file, caller_line, caller_name, caller_class = caller_func
+                                caller_new_name = f"{caller_class}.{caller_name}" if caller_class else caller_name
+                                new_caller_func = (caller_file, caller_line, caller_new_name)
+                            else:
+                                new_caller_func = caller_func
+                        else:
+                            console.print(f"Unexpected caller format: {caller_func}")
+                            new_caller_func = str(caller_func)
+
+                        new_callers[new_caller_func] = count
+
+                    # Store with new format
+                    new_stats[new_func] = (cc, nc, tt, ct, new_callers)
+                except Exception as e:  # noqa: BLE001
+                    console.print(f"Error converting stats for {func}: {e}")
+                    continue
+
+            timings_items = list(self.timings.items())
+            for func, timing_data in timings_items:
+                try:
+                    if len(timing_data) != 5:
+                        console.print(f"Skipping malformed timing data for {func}: {timing_data}")
+                        continue
+
+                    cc, ns, tt, ct, callers = timing_data
+
+                    if len(func) == 4:
+                        file_name, line_num, func_name, class_name = func
+                        new_func_name = f"{class_name}.{func_name}" if class_name else func_name
+                        new_func = (file_name, line_num, new_func_name)
+                    else:
+                        new_func = func
+
+                    new_callers = {}
+                    callers_items = list(callers.items())
+                    for caller_func, count in callers_items:
+                        if isinstance(caller_func, tuple):
+                            if len(caller_func) == 4:
+                                caller_file, caller_line, caller_name, caller_class = caller_func
+                                caller_new_name = f"{caller_class}.{caller_name}" if caller_class else caller_name
+                                new_caller_func = (caller_file, caller_line, caller_new_name)
+                            else:
+                                new_caller_func = caller_func
+                        else:
+                            console.print(f"Unexpected caller format: {caller_func}")
+                            new_caller_func = str(caller_func)
+
+                        new_callers[new_caller_func] = count
+
+                    new_timings[new_func] = (cc, ns, tt, ct, new_callers)
+                except Exception as e:  # noqa: BLE001
+                    console.print(f"Error converting timings for {func}: {e}")
+                    continue
+
+            self.stats = new_stats
+            self.timings = new_timings
+
+            self.total_tt = sum(tt for _, _, tt, _, _ in self.stats.values())
+
+            total_calls = sum(cc for cc, _, _, _, _ in self.stats.values())
+            total_primitive = sum(nc for _, nc, _, _, _ in self.stats.values())
+
+            summary = Text.assemble(
+                f"{total_calls:,} function calls ",
+                ("(" + f"{total_primitive:,} primitive calls" + ")", "dim"),
+                f" in {self.total_tt / 1e6:.3f}milliseconds",
+            )
+
+            console.print(Align.center(Panel(summary, border_style="blue", width=80, padding=(0, 2), expand=False)))
+
+            table = Table(
+                show_header=True,
+                header_style="bold magenta",
+                border_style="blue",
+                title="[bold]Function Profile[/bold] (ordered by internal time)",
+                title_style="cyan",
+                caption=f"Showing top 25 of {len(self.stats)} functions",
+            )
+
+            table.add_column("Calls", justify="right", style="green", width=10)
+            table.add_column("Time (ms)", justify="right", style="cyan", width=10)
+            table.add_column("Per Call", justify="right", style="cyan", width=10)
+            table.add_column("Cum (ms)", justify="right", style="yellow", width=10)
+            table.add_column("Cum/Call", justify="right", style="yellow", width=10)
+            table.add_column("Function", style="blue")
+
+            sorted_stats = sorted(
+                ((func, stats) for func, stats in self.stats.items() if isinstance(func, tuple) and len(func) == 3),
+                key=lambda x: x[1][2],  # Sort by tt (internal time)
+                reverse=True,
+            )[:25]  # Limit to top 25
+
+            # Format and add each row to the table
+            for func, (cc, nc, tt, ct, _) in sorted_stats:
+                filename, lineno, funcname = func
+
+                # Format calls - show recursive format if different
+                calls_str = f"{cc}/{nc}" if cc != nc else f"{cc:,}"
+
+                # Convert to milliseconds
+                tt_ms = tt / 1e6
+                ct_ms = ct / 1e6
+
+                # Calculate per-call times
+                per_call = tt_ms / cc if cc > 0 else 0
+                cum_per_call = ct_ms / nc if nc > 0 else 0
+                base_filename = Path(filename).name
+                file_link = f"[link=file://{filename}]{base_filename}[/link]"
+
+                table.add_row(
+                    calls_str,
+                    f"{tt_ms:.3f}",
+                    f"{per_call:.3f}",
+                    f"{ct_ms:.3f}",
+                    f"{cum_per_call:.3f}",
+                    f"{funcname} [dim]({file_link}:{lineno})[/dim]",
                 )
-                if n > 0:
-                    times_index += 1
-            new_stats.append(replaced)
 
-        console.print("\n".join(new_stats))
+            console.print(Align.center(table))
+
+        except Exception as e:  # noqa: BLE001
+            console.print(f"[bold red]Error in stats processing:[/bold red] {e}")
+            console.print(f"Traced {self.trace_count:,} function calls")
+            self.total_tt = 0
 
     def make_pstats_compatible(self) -> None:
         # delete the extra class_name item from the function tuple
@@ -530,8 +905,8 @@ class Tracer:
         self.stats = new_stats
         self.timings = new_timings
 
-    def dump_stats(self, file) -> None:
-        with open(file, "wb") as f:
+    def dump_stats(self, file: str) -> None:
+        with Path(file).open("wb") as f:
             self.create_stats()
             marshal.dump(self.stats, f)
 
@@ -541,25 +916,23 @@ class Tracer:
 
     def snapshot_stats(self) -> None:
         self.stats = {}
-        for func, (cc, _ns, tt, ct, callers) in self.timings.items():
-            callers = callers.copy()
+        for func, (cc, _ns, tt, ct, caller_dict) in self.timings.items():
+            callers = caller_dict.copy()
             nc = 0
             for callcnt in callers.values():
                 nc += callcnt
             self.stats[func] = cc, nc, tt, ct, callers
 
-    def runctx(self, cmd, globals, locals):
+    def runctx(self, cmd: str, global_vars: dict[str, Any], local_vars: dict[str, Any]) -> Tracer | None:
         self.__enter__()
         try:
-            exec(cmd, globals, locals)
+            exec(cmd, global_vars, local_vars)  # noqa: S102
         finally:
             self.__exit__(None, None, None)
         return self
 
 
-def main():
-    from argparse import ArgumentParser
-
+def main() -> ArgumentParser:
     parser = ArgumentParser(allow_abbrev=False)
     parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", required=True)
     parser.add_argument("--only-functions", help="Trace only these functions", nargs="+", default=None)
