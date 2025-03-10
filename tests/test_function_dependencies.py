@@ -162,8 +162,7 @@ def test_class_method_dependencies() -> None:
     assert code_context.helper_functions[0].qualified_name == "Graph.topologicalSortUtil"
     assert (
         code_context.testgen_context_code
-        == """```python:test_function_dependencies.py
-from collections import defaultdict
+        == """from collections import defaultdict
 
 class Graph:
     def __init__(self, vertices):
@@ -188,8 +187,7 @@ class Graph:
                 self.topologicalSortUtil(i, visited, stack)
 
         # Print contents of stack
-        return stack
-```"""
+        return stack"""
     )
 
 def test_recursive_function_context() -> None:
@@ -224,8 +222,7 @@ def test_recursive_function_context() -> None:
     assert code_context.helper_functions[1].fully_qualified_name == "test_function_dependencies.C.recursive"
     assert (
         code_context.testgen_context_code
-        == """```python:test_function_dependencies.py
-class C:
+        == """class C:
     def calculate_something_3(self, num):
         return num + 1
 
@@ -233,6 +230,5 @@ class C:
         if num == 0:
             return 0
         num_1 = self.calculate_something_3(num)
-        return self.recursive(num) + num_1
-```"""
+        return self.recursive(num) + num_1"""
     )

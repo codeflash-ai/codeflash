@@ -747,8 +747,7 @@ class MainClass:
 
 
 def test_code_replacement10() -> None:
-    get_code_output = """```python:test_code_replacement.py
-from __future__ import annotations
+    get_code_output = """from __future__ import annotations
 import os
 
 os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
@@ -768,7 +767,7 @@ class MainClass:
 
     def main_method(self):
         return HelperClass(self.name).helper_method()
-```"""
+"""
     file_path = Path(__file__).resolve()
     func_top_optimize = FunctionToOptimize(
         function_name="main_method", file_path=file_path, parents=[FunctionParent("MainClass", "ClassDef")]

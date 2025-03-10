@@ -39,7 +39,7 @@ def get_code_optimization_context(
     )
 
     # Extract code context for optimization
-    final_read_writable_code = extract_code_string_context_from_files(helpers_of_fto, helpers_of_fto_fqn, project_root_path).code
+    final_read_writable_code = extract_code_string_context_from_files(helpers_of_fto, helpers_of_fto_fqn, {}, {}, project_root_path, remove_docstrings=False, code_context_type=CodeContextType.READ_WRITABLE).code
     read_only_code_markdown = extract_code_markdown_context_from_files(
         helpers_of_fto,
         helpers_of_fto_fqn,
@@ -85,7 +85,7 @@ def get_code_optimization_context(
             logger.debug("Code context has exceeded token limit, removing read-only code")
             read_only_context_code = ""
     # Extract code context for testgen
-    testgen_code_markdown = extract_code_markdown_context_from_files(
+    testgen_code_markdown = extract_code_string_context_from_files(
         helpers_of_fto,
         helpers_of_fto_fqn,
         helpers_of_helpers,
@@ -94,10 +94,10 @@ def get_code_optimization_context(
         remove_docstrings=False,
         code_context_type=CodeContextType.TESTGEN,
     )
-    testgen_context_code = testgen_code_markdown.markdown
+    testgen_context_code = testgen_code_markdown.code
     testgen_context_code_tokens = len(tokenizer.encode(testgen_context_code))
     if testgen_context_code_tokens > testgen_token_limit:
-        testgen_code_markdown = extract_code_markdown_context_from_files(
+        testgen_code_markdown = extract_code_string_context_from_files(
             helpers_of_fto,
             helpers_of_fto_fqn,
             helpers_of_helpers,
@@ -106,41 +106,64 @@ def get_code_optimization_context(
             remove_docstrings=True,
             code_context_type=CodeContextType.TESTGEN,
         )
-        testgen_context_code = testgen_code_markdown.markdown
+        testgen_context_code = testgen_code_markdown.code
         testgen_context_code_tokens = len(tokenizer.encode(testgen_context_code))
         if testgen_context_code_tokens > testgen_token_limit:
             raise ValueError("Testgen code context has exceeded token limit, cannot proceed")
 
     return CodeOptimizationContext(
         testgen_context_code = testgen_context_code,
-        read_writable_code=CodeString(code=final_read_writable_code).code,
+        read_writable_code=final_read_writable_code,
         read_only_context_code=read_only_context_code,
         helper_functions=helpers_of_fto_obj_list,
         preexisting_objects=preexisting_objects,
     )
 
-
 def extract_code_string_context_from_files(
-    helpers_of_fto: dict[Path, set[str]], helpers_of_fto_fqn: dict[Path, set[str]], project_root_path: Path
+    helpers_of_fto: dict[Path, set[str]],
+    helpers_of_fto_fqn: dict[Path, set[str]],
+    helpers_of_helpers: dict[Path, set[str]],
+    helpers_of_helpers_fqn: dict[Path, set[str]],
+    project_root_path: Path,
+    remove_docstrings: bool = False,
+    code_context_type: CodeContextType = CodeContextType.READ_ONLY,
 ) -> CodeString:
-    """Extract read-writable code context from files containing target functions and their helpers.
+    """Extract code context from files containing target functions and their helpers, formatting them as markdown.
 
-    This function iterates through each file path that contains functions to optimize (fto) or
-    their first-degree helpers, reads the original code, extracts relevant parts using CST parsing,
-    and adds necessary imports from the original modules.
+    This function processes two sets of files:
+    1. Files containing the function to optimize (fto) and their first-degree helpers
+    2. Files containing only helpers of helpers (with no overlap with the first set)
+
+    For each file, it extracts relevant code based on the specified context type, adds necessary
+    imports, and combines them
 
     Args:
-        helpers_of_fto: Dictionary mapping file paths to sets of qualified function names
-        helpers_of_fto_fqn: Dictionary mapping file paths to sets of fully qualified names of functions
-        project_root_path: Root path of the project for resolving relative imports
+        helpers_of_fto: Dictionary mapping file paths to sets of function names to be optimized
+        helpers_of_fto_fqn: Dictionary mapping file paths to sets of fully qualified names of functions to be optimized
+        helpers_of_helpers: Dictionary mapping file paths to sets of helper function names
+        helpers_of_helpers_fqn: Dictionary mapping file paths to sets of fully qualified names of helper functions
+        project_root_path: Root path of the project
+        remove_docstrings: Whether to remove docstrings from the extracted code
+        code_context_type: Type of code context to extract (READ_ONLY, READ_WRITABLE, or TESTGEN)
 
     Returns:
-        CodeString object containing the consolidated read-writable code with all necessary
-        imports for the target functions and their helpers
+        CodeString containing the extracted code context with necessary imports
 
     """
-    final_read_writable_code = ""
-    # Extract code from file paths that contain fto and first degree helpers
+    # Rearrange to remove overlaps, so we only access each file path once
+    helpers_of_helpers_no_overlap = defaultdict(set)
+    helpers_of_helpers_no_overlap_fqn = defaultdict(set)
+    for file_path in helpers_of_helpers:
+        if file_path in helpers_of_fto:
+            # Remove duplicates, in case a helper of helper is also a helper of fto
+            helpers_of_helpers[file_path] -= helpers_of_fto[file_path]
+            helpers_of_helpers_fqn[file_path] -= helpers_of_fto_fqn[file_path]
+        else:
+            helpers_of_helpers_no_overlap[file_path] = helpers_of_helpers[file_path]
+            helpers_of_helpers_no_overlap_fqn[file_path] = helpers_of_helpers_fqn[file_path]
+
+    final_code_string_context = ""
+    # Extract code from file paths that contain fto and first degree helpers. helpers of helpers may also be included if they are in the same files
     for file_path, qualified_function_names in helpers_of_fto.items():
         try:
             original_code = file_path.read_text("utf8")
@@ -148,22 +171,52 @@ def extract_code_string_context_from_files(
             logger.exception(f"Error while parsing {file_path}: {e}")
             continue
         try:
-            read_writable_code = parse_code_and_prune_cst(original_code, CodeContextType.READ_WRITABLE, qualified_function_names)
+            code_context = parse_code_and_prune_cst(
+                original_code,  code_context_type, qualified_function_names, helpers_of_helpers.get(file_path, set()), remove_docstrings
+            )
+
         except ValueError as e:
-            logger.debug(f"Error while getting read-writable code: {e}")
+            logger.debug(f"Error while getting read-only code: {e}")
+            continue
+        if code_context.strip():
+            final_code_string_context += f"\n{code_context}"
+            final_code_string_context = add_needed_imports_from_module(
+                    src_module_code=original_code,
+                    dst_module_code=final_code_string_context,
+                    src_path=file_path,
+                    dst_path=file_path,
+                    project_root=project_root_path,
+                    helper_functions_fqn=helpers_of_fto_fqn.get(file_path, set()) | helpers_of_helpers_fqn.get(file_path, set()),
+            )
+    if code_context_type == CodeContextType.READ_WRITABLE:
+        return CodeString(code=final_code_string_context)
+    # Extract code from file paths containing helpers of helpers
+    for file_path, qualified_helper_function_names in helpers_of_helpers_no_overlap.items():
+        try:
+            original_code = file_path.read_text("utf8")
+        except Exception as e:
+            logger.exception(f"Error while parsing {file_path}: {e}")
+            continue
+        try:
+            code_context = parse_code_and_prune_cst(
+                original_code, code_context_type, set(), qualified_helper_function_names,  remove_docstrings
+            )
+        except ValueError as e:
+            logger.debug(f"Error while getting read-only code: {e}")
             continue
 
-        if read_writable_code:
-            final_read_writable_code += f"\n{read_writable_code}"
-            final_read_writable_code = add_needed_imports_from_module(
-                src_module_code=original_code,
-                dst_module_code=final_read_writable_code,
-                src_path=file_path,
-                dst_path=file_path,
-                project_root=project_root_path,
-                helper_functions_fqn=helpers_of_fto_fqn[file_path],
+        if code_context.strip():
+            final_code_string_context += f"\n{code_context}"
+            final_code_string_context = add_needed_imports_from_module(
+                    src_module_code=original_code,
+                    dst_module_code=final_code_string_context,
+                    src_path=file_path,
+                    dst_path=file_path,
+                    project_root=project_root_path,
+                    helper_functions_fqn=helpers_of_helpers_no_overlap_fqn.get(file_path, set()),
             )
-    return CodeString(code=final_read_writable_code)
+    return CodeString(code=final_code_string_context)
+
 def extract_code_markdown_context_from_files(
     helpers_of_fto: dict[Path, set[str]],
     helpers_of_fto_fqn: dict[Path, set[str]],

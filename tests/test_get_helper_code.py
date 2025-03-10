@@ -242,8 +242,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         assert code_context.helper_functions[0].qualified_name == "AbstractCacheBackend.get_cache_or_call"
         assert (
                 code_context.testgen_context_code
-                == f'''```python:{file_path.relative_to(project_root_path)}
-_P = ParamSpec("_P")
+                == f'''_P = ParamSpec("_P")
 _KEY_T = TypeVar("_KEY_T")
 _STORE_T = TypeVar("_STORE_T")
 class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
@@ -385,7 +384,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
             kwargs=kwargs,
             lifespan=self.__duration__,
         )
-```'''
+'''
         )
 
 
@@ -411,19 +410,18 @@ def test_bubble_sort_deps() -> None:
     code_context = ctx_result.unwrap()
     assert (
             code_context.testgen_context_code
-            == """```python:code_to_optimize/bubble_sort_dep1_helper.py
+            == """from code_to_optimize.bubble_sort_dep1_helper import dep1_comparer
+from code_to_optimize.bubble_sort_dep2_swap import dep2_swap
+
 def dep1_comparer(arr, j: int) -> bool:
     return arr[j] > arr[j + 1]
-```
-```python:code_to_optimize/bubble_sort_dep2_swap.py
+
 def dep2_swap(arr, j):
     temp = arr[j]
     arr[j] = arr[j + 1]
     arr[j + 1] = temp
-```
-```python:code_to_optimize/bubble_sort_deps.py
-from code_to_optimize.bubble_sort_dep1_helper import dep1_comparer
-from code_to_optimize.bubble_sort_dep2_swap import dep2_swap
+
+
 
 def sorter_deps(arr):
     for i in range(len(arr)):
@@ -431,7 +429,8 @@ def sorter_deps(arr):
             if dep1_comparer(arr, j):
                 dep2_swap(arr, j)
     return arr
-```"""
+
+"""
     )
     assert len(code_context.helper_functions) == 2
     assert (
