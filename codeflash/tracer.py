@@ -22,9 +22,10 @@ import sqlite3
 import sys
 import threading
 import time
+from argparse import ArgumentParser
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, Callable, ClassVar
 
 import dill
 import isort
@@ -44,6 +45,24 @@ from codeflash.verification.verification_utils import get_test_file_path
 
 if TYPE_CHECKING:
     from types import FrameType, TracebackType
+
+
+class FakeCode:
+    def __init__(self, filename: str, line: int, name: str) -> None:
+        self.co_filename = filename
+        self.co_line = line
+        self.co_name = name
+        self.co_firstlineno = 0
+
+    def __repr__(self) -> str:
+        return repr((self.co_filename, self.co_line, self.co_name, None))
+
+
+class FakeFrame:
+    def __init__(self, code: FakeCode, prior: FakeFrame | None) -> None:
+        self.f_code = code
+        self.f_back = prior
+        self.f_locals: dict = {}
 
 
 # Debug this file by simply adding print statements. This file is not meant to be debugged by the debugger.
@@ -75,7 +94,9 @@ class Tracer:
         if functions is None:
             functions = []
         if os.environ.get("CODEFLASH_TRACER_DISABLE", "0") == "1":
-            console.rule("Codeflash: Tracer disabled by environment variable CODEFLASH_TRACER_DISABLE", style="bold red")
+            console.rule(
+                "Codeflash: Tracer disabled by environment variable CODEFLASH_TRACER_DISABLE", style="bold red"
+            )
             disable = True
         self.disable = disable
         if self.disable:
@@ -210,7 +231,8 @@ class Tracer:
             test_dir=Path(self.config["tests_root"]), function_name=function_path, test_type="replay"
         )
         replay_test = isort.code(replay_test)
-        with open(test_file_path, "w", encoding="utf8") as file:
+
+        with Path(test_file_path).open("w", encoding="utf8") as file:
             file.write(replay_test)
 
         console.print(
@@ -248,7 +270,7 @@ class Tracer:
                 class_name = arguments["self"].__class__.__name__
             elif "cls" in arguments and hasattr(arguments["cls"], "__name__"):
                 class_name = arguments["cls"].__name__
-        except:
+        except:  # noqa: E722
             # someone can override the getattr method and raise an exception. I'm looking at you wrapt
             return
         function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
@@ -354,7 +376,7 @@ class Tracer:
 
                 # Only attempt to handle the frame mismatch if we have a valid rframe
                 if (
-                    not isinstance(rframe, Tracer.fake_frame)
+                    not isinstance(rframe, FakeFrame)
                     and hasattr(rframe, "f_back")
                     and hasattr(frame, "f_back")
                     and rframe.f_back is frame.f_back
@@ -460,7 +482,7 @@ class Tracer:
 
         return 1
 
-    dispatch: ClassVar[dict[str, callable]] = {
+    dispatch: ClassVar[dict[str, Callable[[Tracer, FrameType, int], int]]] = {
         "call": trace_dispatch_call,
         "exception": trace_dispatch_exception,
         "return": trace_dispatch_return,
@@ -469,26 +491,10 @@ class Tracer:
         "c_return": trace_dispatch_return,
     }
 
-    class fake_code:
-        def __init__(self, filename, line, name) -> None:
-            self.co_filename = filename
-            self.co_line = line
-            self.co_name = name
-            self.co_firstlineno = 0
-
-        def __repr__(self) -> str:
-            return repr((self.co_filename, self.co_line, self.co_name, None))
-
-    class fake_frame:
-        def __init__(self, code, prior) -> None:
-            self.f_code = code
-            self.f_back = prior
-            self.f_locals = {}
-
-    def simulate_call(self, name) -> None:
-        code = self.fake_code("profiler", 0, name)
+    def simulate_call(self, name: str) -> None:
+        code = FakeCode("profiler", 0, name)
         pframe = self.cur[-2] if self.cur else None
-        frame = self.fake_frame(code, pframe)
+        frame = FakeFrame(code, pframe)
         self.dispatch["call"](self, frame, 0)
 
     def simulate_cmd_complete(self) -> None:
@@ -709,9 +715,7 @@ class Tracer:
         return self
 
 
-def main():
-    from argparse import ArgumentParser
-
+def main() -> ArgumentParser:
     parser = ArgumentParser(allow_abbrev=False)
     parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", required=True)
     parser.add_argument("--only-functions", help="Trace only these functions", nargs="+", default=None)
