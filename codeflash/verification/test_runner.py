@@ -100,6 +100,11 @@ def run_behavioral_tests(
                 f"Result return code: {results.returncode}, "
                 f"{'Result stderr:' + str(results.stderr) if results.stderr else ''}"
             )
+        elif enable_lprofiler:
+            # TODO : add decroator to the test function to profile it
+            # Run pytest with the env var
+            # confirm the right data files are created
+            pass
         else:
             results = execute_test_subprocess(
                 pytest_cmd_list + common_pytest_args + result_args + test_files,
@@ -110,30 +115,7 @@ def run_behavioral_tests(
             logger.debug(
                 f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
             )
-        if enable_lprofiler:
-            # TODO : add decroator to the test function to profile it
-            # Run pytest with the env var
-            # confirm the right data files are created
-            lprofiler_file = prepare_coverage_files()
-            # cov_erase = execute_test_subprocess(
-            #     shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env
-            # )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any,
-            # # then the current run will be appended to the previous data, which skews the results
-            # logger.debug(cov_erase)
-            coverage_cmd = [SAFE_SYS_EXECUTABLE, "-m", "coverage", "run", f"--rcfile={coveragercfile.as_posix()}", "-m"]
 
-            if pytest_cmd == "pytest":
-                coverage_cmd.extend(["pytest"])
-            else:
-                coverage_cmd.extend(shlex.split(pytest_cmd, posix=IS_POSIX)[1:])
-
-            results = execute_test_subprocess(
-                coverage_cmd + common_pytest_args + result_args + test_files, cwd=cwd, env=pytest_test_env, timeout=600
-            )
-            logger.debug(
-                f"Result return code: {results.returncode}, "
-                f"{'Result stderr:' + str(results.stderr) if results.stderr else ''}"
-            )
     elif test_framework == "unittest":
         if enable_coverage:
             msg = "Coverage is not supported yet for unittest framework"

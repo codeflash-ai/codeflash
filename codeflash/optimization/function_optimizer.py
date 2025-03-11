@@ -841,7 +841,7 @@ class FunctionOptimizer:
                     optimization_iteration=0,
                     testing_time=TOTAL_LOOPING_TIME,
                     enable_coverage=test_framework == "pytest",
-                    enable_lprofiler=test_framework == "pytest",
+                    enable_lprofiler=False,
                     code_context=code_context,
                 )
             finally:
@@ -857,6 +857,22 @@ class FunctionOptimizer:
                 return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
             if not coverage_critic(coverage_results, self.args.test_framework):
                 return Failure("The threshold for test coverage was not met.")
+            #Running lprof now
+            try:
+               behavioral_results, coverage_results = self.run_and_parse_tests(
+                    testing_type=TestingMode.BEHAVIOR,
+                    test_env=test_env,
+                    test_files=self.test_files,
+                    optimization_iteration=0,
+                    testing_time=TOTAL_LOOPING_TIME,
+                    enable_coverage=False,
+                    enable_lprofiler=test_framework == "pytest",
+                    code_context=code_context,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to run lprof for {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION.")
+                console.rule()
+                return Failure("Failed to establish a baseline for the original code - lprof failed.")
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
