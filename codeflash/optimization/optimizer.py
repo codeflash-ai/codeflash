@@ -78,6 +78,8 @@ class Optimizer:
         function_optimizer = None
         file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
         num_optimizable_functions: int
+        # if self.args.benchmark:
+        # discover functions
         (file_to_funcs_to_optimize, num_optimizable_functions) = get_functions_to_optimize(
             optimize_all=self.args.all,
             replay_test=self.args.replay_test,

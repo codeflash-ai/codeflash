@@ -216,8 +216,9 @@ initial-content = """
 
 
 [tool.codeflash]
-module-root = "codeflash"
-tests-root = "tests"
+module-root = "code_to_optimize"
+tests-root = "code_to_optimize/tests"
+benchmarks-root = "code_to_optimize/tests/pytest/benchmarks"
 test-framework = "pytest"
 formatter-cmds = [
     "uvx ruff check --exit-zero --fix $file",
