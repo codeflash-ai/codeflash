@@ -22,7 +22,7 @@ from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code
-from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
+from codeflash.code_utils.code_replacer import replace_function_definitions_in_module, add_decorator_imports
 from codeflash.code_utils.code_utils import (
     cleanup_paths,
     file_name_from_test_module_name,
@@ -859,6 +859,13 @@ class FunctionOptimizer:
                 return Failure("The threshold for test coverage was not met.")
             #Running lprof now
             try:
+               #add decorator here and import too
+               files_to_instrument = [self.function_to_optimize.file_path]
+               fns_to_instrument = [self.function_to_optimize.function_name]
+               for helper_obj in code_context.helper_functions:
+                   files_to_instrument.append(helper_obj.file_path)
+                   fns_to_instrument.append(helper_obj.qualified_name)
+               add_decorator_imports(files_to_instrument,fns_to_instrument)
                behavioral_results, coverage_results = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,
@@ -872,7 +879,13 @@ class FunctionOptimizer:
             except Exception as e:
                 logger.warning(f"Failed to run lprof for {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION.")
                 console.rule()
-                return Failure("Failed to establish a baseline for the original code - lprof failed.")
+                console.print(f"Failed to run lprof for {self.function_to_optimize.function_name}")
+                console.rule()
+            finally:
+                # Remove decorators and lineprof import
+                self.write_code_and_helpers(
+                    self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+                )
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
