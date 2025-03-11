@@ -10,7 +10,7 @@ def run_test(expected_improvement_pct: int) -> bool:
         min_improvement_x=0.1,
         expected_unit_tests=1,
         coverage_expectations=[
-            CoverageExpectation(function_name="funcA", expected_coverage=100.0, expected_lines=[2, 3, 4, 6, 9]),
+            CoverageExpectation(function_name="funcA", expected_coverage=100.0, expected_lines=[3, 4, 5, 7, 10]),
         ],
     )
     cwd = (
