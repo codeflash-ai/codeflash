@@ -168,7 +168,7 @@ class Tracer:
             "CREATE TABLE function_calls(type TEXT, function TEXT, classname TEXT, filename TEXT, "
             "line_number INTEGER, last_frame_address INTEGER, time_ns INTEGER, args BLOB)"
         )
-        console.rule("Program Output Begin", style="bold blue")
+        console.rule("Codeflash: Traced Program Output Begin", style="bold blue")
         frame = sys._getframe(0)  # Get this frame and simulate a call to it  # noqa: SLF001
         self.dispatch["call"](self, frame, 0)
         self.start_time = time.time()
@@ -182,7 +182,7 @@ class Tracer:
             return
         sys.setprofile(None)
         self.con.commit()
-        console.rule("Program Output End", style="bold blue")
+        console.rule("Codeflash: Traced Program Output End", style="bold blue")
         self.create_stats()
 
         cur = self.con.cursor()
