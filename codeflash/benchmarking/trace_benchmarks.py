@@ -3,13 +3,12 @@ from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from pathlib import Path
 import subprocess
 
-def trace_benchmarks_pytest(benchmarks_root: Path, project_root: Path, function_list: list[str] = []) -> None:
+def trace_benchmarks_pytest(benchmarks_root: Path, project_root: Path) -> None:
     result = subprocess.run(
         [
             SAFE_SYS_EXECUTABLE,
             Path(__file__).parent / "pytest_new_process_trace_benchmarks.py",
-            str(benchmarks_root),
-            ",".join(function_list)
+            benchmarks_root,
         ],
         cwd=project_root,
         check=False,
