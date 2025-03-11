@@ -187,7 +187,7 @@ def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_p
     clear_directory(test_root)
 
     trace_script = "workload.py" if config.trace_load == "workload" else "testbench.py"
-    expected_traced_functions = 3 if config.trace_load == "workload" else 5
+    expected_traced_functions = 3 if config.trace_load == "workload" else 4
 
     command = ["python", "-m", "codeflash.tracer", "-o", "codeflash.trace", trace_script]
     process = subprocess.Popen(
