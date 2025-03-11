@@ -25,7 +25,6 @@ class TestConfig:
     expected_unit_tests: Optional[int] = None
     min_improvement_x: float = 0.1
     trace_mode: bool = False
-    trace_load: str = "workload"
     coverage_expectations: list[CoverageExpectation] = field(default_factory=list)
 
 
@@ -185,11 +184,7 @@ def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_p
     # First command: Run the tracer
     test_root = cwd / "tests" / (config.test_framework or "")
     clear_directory(test_root)
-
-    trace_script = "workload.py" if config.trace_load == "workload" else "testbench.py"
-    expected_traced_functions = 3 if config.trace_load == "workload" else 4
-
-    command = ["python", "-m", "codeflash.tracer", "-o", "codeflash.trace", trace_script]
+    command = ["python", "-m", "codeflash.tracer", "-o", "codeflash.trace", "workload.py"]
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
     )
@@ -207,8 +202,8 @@ def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_p
         return False
 
     functions_traced = re.search(r"Traced (\d+) function calls successfully and replay test created at - (.*)$", stdout)
-    if not functions_traced or int(functions_traced.group(1)) != expected_traced_functions:
-        logging.error(f"Expected {expected_traced_functions} traced functions")
+    if not functions_traced or int(functions_traced.group(1)) != 3:
+        logging.error("Expected 3 traced functions")
         return False
 
     replay_test_path = pathlib.Path(functions_traced.group(2))
