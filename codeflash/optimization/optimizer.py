@@ -25,6 +25,7 @@ from codeflash.verification.test_results import TestType
 from codeflash.verification.verification_utils import TestConfig
 from codeflash.benchmarking.get_trace_info import get_function_benchmark_timings, get_benchmark_timings
 from codeflash.benchmarking.utils import print_benchmark_table
+from collections import defaultdict
 if TYPE_CHECKING:
     from argparse import Namespace
 
@@ -91,18 +92,28 @@ class Optimizer:
             module_root=self.args.module_root,
         )
         if self.args.benchmark:
-            all_functions_to_optimize = [
-                function
-                for functions_list in file_to_funcs_to_optimize.values()
-                for function in functions_list
-            ]
-            logger.info(f"Tracing existing benchmarks for {len(all_functions_to_optimize)} functions")
-            trace_benchmarks_pytest(self.args.benchmarks_root, self.args.project_root, [fto.qualified_name_with_file_name for fto in all_functions_to_optimize])
-            logger.info("Finished tracing existing benchmarks")
-            trace_dir = Path(self.args.benchmarks_root) / ".codeflash_trace"
-            function_benchmark_timings = get_function_benchmark_timings(trace_dir, all_functions_to_optimize)
-            total_benchmark_timings = get_benchmark_timings(trace_dir)
-            print_benchmark_table(function_benchmark_timings, total_benchmark_timings)
+            # Insert decorator
+            file_path_to_source_code = defaultdict(str)
+            for file in file_to_funcs_to_optimize:
+                with file.open("r", encoding="utf8") as f:
+                    file_path_to_source_code[file] = f.read()
+            try:
+                for functions_to_optimize in file_to_funcs_to_optimize.values():
+                    for fto in functions_to_optimize:
+                        pass
+                        #instrument_codeflash_trace_decorator(fto)
+                trace_benchmarks_pytest(self.args.project_root) # Simply run all tests that use pytest-benchmark
+                logger.info("Finished tracing existing benchmarks")
+            finally:
+                # Restore original source code
+                for file in file_path_to_source_code:
+                    with file.open("w", encoding="utf8") as f:
+                        f.write(file_path_to_source_code[file])
+
+            # trace_dir = Path(self.args.benchmarks_root) / ".codeflash_trace"
+            # function_benchmark_timings = get_function_benchmark_timings(trace_dir, all_functions_to_optimize)
+            # total_benchmark_timings = get_benchmark_timings(trace_dir)
+            # print_benchmark_table(function_benchmark_timings, total_benchmark_timings)
 
 
         optimizations_found: int = 0
