@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import shlex
 import subprocess
 from pathlib import Path
@@ -125,7 +124,6 @@ def run_behavioral_tests(
             logger.debug(
                 f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
             )
-
     elif test_framework == "unittest":
         if enable_coverage:
             msg = "Coverage is not supported yet for unittest framework"
@@ -143,6 +141,7 @@ def run_behavioral_tests(
         raise ValueError(msg)
 
     return result_file_path, results, coverage_database_file if enable_coverage else None
+
 
 def run_benchmarking_tests(
     test_paths: TestFiles,
