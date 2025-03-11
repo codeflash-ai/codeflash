@@ -6,7 +6,6 @@ import pytest
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.either import is_successful
 from codeflash.models.models import FunctionParent
-# from codeflash.optimization.function_context import get_function_variables_definitions
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 

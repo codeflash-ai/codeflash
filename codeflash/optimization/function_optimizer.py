@@ -48,7 +48,6 @@ from codeflash.models.models import (
     BestOptimization,
     CodeOptimizationContext,
     FunctionCalledInTest,
-    FunctionParent,
     GeneratedTests,
     GeneratedTestsList,
     OptimizationSet,
@@ -58,7 +57,6 @@ from codeflash.models.models import (
     TestFiles,
     TestingMode,
 )
-# from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
 from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.result.explanation import Explanation
