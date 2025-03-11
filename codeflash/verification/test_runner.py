@@ -73,20 +73,15 @@ def run_behavioral_tests(
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
 
-        # TODO: figure out the command to run line_profiler here
-        # TODO: see if line profiler is compaitble qwith coverage run, if so see if the profiling info changes if run along side coverage compared to without it
-        # If that is not satisfied then we can run it sas a speareate step. then add one more execute_test_subprocess call with line_profiler or the else branch below
-        # parse the line profiler output and then in the parse_test_results function, add the line profiler results to the test results
-
         if enable_coverage:
-            coverage_database_file, coveragercfile = prepare_coverage_files()
+            coverage_database_file, coverage_config_file = prepare_coverage_files()
 
             cov_erase = execute_test_subprocess(
                 shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env
             )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any,
             # then the current run will be appended to the previous data, which skews the results
             logger.debug(cov_erase)
-            coverage_cmd = [SAFE_SYS_EXECUTABLE, "-m", "coverage", "run", f"--rcfile={coveragercfile.as_posix()}", "-m"]
+            coverage_cmd = [SAFE_SYS_EXECUTABLE, "-m", "coverage", "run", f"--rcfile={coverage_config_file.as_posix()}", "-m"]
 
             if pytest_cmd == "pytest":
                 coverage_cmd.extend(["pytest"])
@@ -140,7 +135,7 @@ def run_behavioral_tests(
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
 
-    return result_file_path, results, coverage_database_file if enable_coverage else None
+    return result_file_path, results, coverage_database_file if enable_coverage else None, coverage_config_file if enable_coverage else None
 
 
 def run_benchmarking_tests(
