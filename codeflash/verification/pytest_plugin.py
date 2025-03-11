@@ -97,10 +97,10 @@ def pytest_addoption(parser: Parser) -> None:
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config: Config) -> None:
     config.addinivalue_line("markers", "loops(n): run the given test function `n` times.")
-    config.pluginmanager.register(PyTest_Loops(config), PyTest_Loops.name)
+    config.pluginmanager.register(PytestLoops(config), PytestLoops.name)
 
 
-class PyTest_Loops:
+class PytestLoops:
     name: str = "pytest-loops"
 
     def __init__(self, config: Config) -> None:
@@ -113,9 +113,8 @@ class PyTest_Loops:
     def pytest_runtestloop(self, session: Session) -> bool:
         """Reimplement the test loop but loop for the user defined amount of time."""
         if session.testsfailed and not session.config.option.continue_on_collection_errors:
-            raise session.Interrupted(
-                "%d error%s during collection" % (session.testsfailed, "s" if session.testsfailed != 1 else "")
-            )
+            msg = "{} error{} during collection".format(session.testsfailed, "s" if session.testsfailed != 1 else "")
+            raise session.Interrupted(msg)
 
         if session.config.option.collectonly:
             return True
@@ -130,11 +129,11 @@ class PyTest_Loops:
             total_time = self._get_total_time(session)
 
             for index, item in enumerate(session.items):
-                item: pytest.Item = item
-                item._report_sections.clear()  # clear reports for new test
+                item: pytest.Item = item  # noqa: PLW0127, PLW2901
+                item._report_sections.clear()  # clear reports for new test  # noqa: SLF001
 
                 if total_time > SHORTEST_AMOUNT_OF_TIME:
-                    item._nodeid = self._set_nodeid(item._nodeid, count)
+                    item._nodeid = self._set_nodeid(item._nodeid, count)  # noqa: SLF001
 
                 next_item: pytest.Item = session.items[index + 1] if index + 1 < len(session.items) else None
 
@@ -234,7 +233,8 @@ class PyTest_Loops:
         seconds = session.config.option.codeflash_seconds
         total_time = hours_in_seconds + minutes_in_seconds + seconds
         if total_time < SHORTEST_AMOUNT_OF_TIME:
-            raise InvalidTimeParameterError(f"Total time cannot be less than: {SHORTEST_AMOUNT_OF_TIME}!")
+            msg = f"Total time cannot be less than: {SHORTEST_AMOUNT_OF_TIME}!"
+            raise InvalidTimeParameterError(msg)
         return total_time
 
     def _timed_out(self, session: Session, start_time: float, count: int) -> bool:
@@ -262,11 +262,10 @@ class PyTest_Loops:
                 return request.param
             except AttributeError:
                 if issubclass(request.cls, TestCase):
-                    warnings.warn("Repeating unittest class tests not supported")
+                    warnings.warn("Repeating unittest class tests not supported", stacklevel=2)
                 else:
-                    raise UnexpectedError(
-                        "This call couldn't work with pytest-loops. Please consider raising an issue with your usage."
-                    )
+                    msg = "This call couldn't work with pytest-loops. Please consider raising an issue with your usage."
+                    raise UnexpectedError(msg) from None
         return count
 
     @pytest.hookimpl(trylast=True)

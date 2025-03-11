@@ -86,7 +86,7 @@ class Tracer:
         self.con = None
         self.output_file = Path(output).resolve()
         self.functions = functions
-        self.function_modules: List[FunctionModules] = []
+        self.function_modules: list[FunctionModules] = []
         self.function_count = defaultdict(int)
         self.current_file_path = Path(__file__).resolve()
         self.ignored_qualified_functions = {
@@ -96,6 +96,7 @@ class Tracer:
         self.max_function_count = max_function_count
         self.config, found_config_path = parse_config_file(config_file_path)
         self.project_root = project_root_from_module_root(Path(self.config["module_root"]), found_config_path)
+        print("project_root", self.project_root)
         self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>", "<module>"}
 
         self.file_being_called_from: str = str(Path(sys._getframe().f_back.f_code.co_filename).name).replace(".", "_")
@@ -237,14 +238,13 @@ class Tracer:
             overflow="ignore",
         )
 
-    def tracer_logic(self, frame: FrameType, event: str):
+    def tracer_logic(self, frame: FrameType, event: str) -> None:
         if event != "call":
             return
-        if self.timeout is not None:
-            if (time.time() - self.start_time) > self.timeout:
-                sys.setprofile(None)
-                console.print(f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds.")
-                return
+        if self.timeout is not None and (time.time() - self.start_time) > self.timeout:
+            sys.setprofile(None)
+            console.print(f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds.")
+            return
         code = frame.f_code
         file_name = Path(code.co_filename).resolve()
         # TODO : It currently doesn't log the last return call from the first function
@@ -358,10 +358,7 @@ class Tracer:
         if event == "c_call":
             self.c_func_name = arg.__name__
 
-        if self.dispatch[event](self, frame, t):
-            prof_success = True
-        else:
-            prof_success = False
+        prof_success = bool(self.dispatch[event](self, frame, t))
         # tracer section
         self.tracer_logic(frame, event)
         # measure the time as the last thing before return
@@ -370,7 +367,7 @@ class Tracer:
         else:
             self.t = timer() - t  # put back unrecorded delta
 
-    def trace_dispatch_call(self, frame, t):
+    def trace_dispatch_call(self, frame, t) -> int:
         if self.cur and frame.f_back is not self.cur[-2]:
             rpt, rit, ret, rfn, rframe, rcur = self.cur
             if not isinstance(rframe, Tracer.fake_frame):
@@ -408,7 +405,7 @@ class Tracer:
         self.cur = rpt, rit + t, ret, rfn, rframe, rcur
         return 1
 
-    def trace_dispatch_c_call(self, frame, t):
+    def trace_dispatch_c_call(self, frame, t) -> int:
         fn = ("", 0, self.c_func_name, None)
         self.cur = (t, 0, 0, fn, frame, self.cur)
         timings = self.timings
@@ -419,7 +416,7 @@ class Tracer:
             timings[fn] = 0, 0, 0, 0, {}
         return 1
 
-    def trace_dispatch_return(self, frame, t):
+    def trace_dispatch_return(self, frame, t) -> int:
         if frame is not self.cur[-2]:
             assert frame is self.cur[-2].f_back, ("Bad return", self.cur[-3])
             self.trace_dispatch_return(self.cur[-2], 0)
@@ -466,31 +463,28 @@ class Tracer:
     }
 
     class fake_code:
-        def __init__(self, filename, line, name):
+        def __init__(self, filename, line, name) -> None:
             self.co_filename = filename
             self.co_line = line
             self.co_name = name
             self.co_firstlineno = 0
 
-        def __repr__(self):
+        def __repr__(self) -> str:
             return repr((self.co_filename, self.co_line, self.co_name, None))
 
     class fake_frame:
-        def __init__(self, code, prior):
+        def __init__(self, code, prior) -> None:
             self.f_code = code
             self.f_back = prior
             self.f_locals = {}
 
-    def simulate_call(self, name):
+    def simulate_call(self, name) -> None:
         code = self.fake_code("profiler", 0, name)
-        if self.cur:
-            pframe = self.cur[-2]
-        else:
-            pframe = None
+        pframe = self.cur[-2] if self.cur else None
         frame = self.fake_frame(code, pframe)
         self.dispatch["call"](self, frame, 0)
 
-    def simulate_cmd_complete(self):
+    def simulate_cmd_complete(self) -> None:
         get_time = self.timer
         t = get_time() - self.t
         while self.cur[-1]:
@@ -500,7 +494,7 @@ class Tracer:
             t = 0
         self.t = get_time() - t
 
-    def print_stats(self, sort=-1):
+    def print_stats(self, sort=-1) -> None:
         import pstats
 
         if not isinstance(sort, tuple):
@@ -553,7 +547,7 @@ class Tracer:
 
         console.print("\n".join(new_stats))
 
-    def make_pstats_compatible(self):
+    def make_pstats_compatible(self) -> None:
         # delete the extra class_name item from the function tuple
         self.files = []
         self.top_level = []
@@ -568,18 +562,18 @@ class Tracer:
         self.stats = new_stats
         self.timings = new_timings
 
-    def dump_stats(self, file):
+    def dump_stats(self, file) -> None:
         with open(file, "wb") as f:
             self.create_stats()
             marshal.dump(self.stats, f)
 
-    def create_stats(self):
+    def create_stats(self) -> None:
         self.simulate_cmd_complete()
         self.snapshot_stats()
 
-    def snapshot_stats(self):
+    def snapshot_stats(self) -> None:
         self.stats = {}
-        for func, (cc, ns, tt, ct, callers) in self.timings.items():
+        for func, (cc, _ns, tt, ct, callers) in self.timings.items():
             callers = callers.copy()
             nc = 0
             for callcnt in callers.values():

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterator
 from enum import Enum
 from pathlib import Path
-from typing import Optional, cast
+from typing import TYPE_CHECKING, Optional, cast
 
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
@@ -12,6 +11,9 @@ from rich.tree import Tree
 
 from codeflash.cli_cmds.console import DEBUG_MODE, logger
 from codeflash.verification.comparator import comparator
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 class VerificationType(str, Enum):
@@ -31,7 +33,7 @@ class TestType(Enum):
     INIT_STATE_TEST = 6
 
     def to_name(self) -> str:
-        if self == TestType.INIT_STATE_TEST:
+        if self is TestType.INIT_STATE_TEST:
             return ""
         names = {
             TestType.EXISTING_UNIT_TEST: "⚙️ Existing Unit Tests",
@@ -53,7 +55,11 @@ class InvocationId:
 
     # test_module_path:TestSuiteClass.test_function_name:function_tested:iteration_id
     def id(self) -> str:
-        return f"{self.test_module_path}:{(self.test_class_name + '.' if self.test_class_name else '')}{self.test_function_name}:{self.function_getting_tested}:{self.iteration_id}"
+        class_prefix = f"{self.test_class_name}." if self.test_class_name else ""
+        return (
+            f"{self.test_module_path}:{class_prefix}{self.test_function_name}:"
+            f"{self.function_getting_tested}:{self.iteration_id}"
+        )
 
     @staticmethod
     def from_str_id(string_id: str, iteration_id: Optional[str] = None) -> InvocationId:
@@ -66,7 +72,6 @@ class InvocationId:
         else:
             test_class_name = second_components[0]
             test_function_name = second_components[1]
-        # logger.debug(f"Invocation id info: test_module_path: {components[0]}, test_class_name: {test_class_name}, test_function_name: {test_function_name}, function_getting_tested: {components[2]}, iteration_id: {iteration_id if iteration_id else components[3]}")
         return InvocationId(
             test_module_path=components[0],
             test_class_name=test_class_name,
@@ -88,6 +93,7 @@ class FunctionTestInvocation:
     return_value: Optional[object]  # The return value of the function invocation
     timed_out: Optional[bool]
     verification_type: Optional[str] = VerificationType.FUNCTION_CALL
+    stdout: Optional[str] = None
 
     @property
     def unique_invocation_loop_id(self) -> str:
@@ -160,6 +166,8 @@ class TestResults(BaseModel):
     def report_to_tree(report: dict[TestType, dict[str, int]], title: str) -> Tree:
         tree = Tree(title)
         for test_type in TestType:
+            if test_type is TestType.INIT_STATE_TEST:
+                continue
             tree.add(
                 f"{test_type.to_name()} - Passed: {report[test_type]['passed']}, Failed: {report[test_type]['failed']}"
             )
@@ -168,10 +176,13 @@ class TestResults(BaseModel):
     def usable_runtime_data_by_test_case(self) -> dict[InvocationId, list[int]]:
         for result in self.test_results:
             if result.did_pass and not result.runtime:
-                pass
-                # logger.debug(
-                #     f"Ignoring test case that passed but had no runtime -> {result.id}, Loop # {result.loop_index}, Test Type: {result.test_type}, Verification Type: {result.verification_type}"
-                # )
+                msg = (
+                    f"Ignoring test case that passed but had no runtime -> {result.id}, "
+                    f"Loop # {result.loop_index}, Test Type: {result.test_type}, "
+                    f"Verification Type: {result.verification_type}"
+                )
+                logger.debug(msg)
+
         usable_runtimes = [
             (result.id, result.runtime) for result in self.test_results if result.did_pass and result.runtime
         ]
@@ -181,16 +192,14 @@ class TestResults(BaseModel):
         }
 
     def total_passed_runtime(self) -> int:
-        """Calculate the sum of runtimes of all test cases that passed, where a testcase runtime
-        is the minimum value of all looped execution runtimes.
+        """Calculate the sum of runtimes of all test cases that passed.
+
+        A testcase runtime is the minimum value of all looped execution runtimes.
 
         :return: The runtime in nanoseconds.
         """
         return sum(
-            [
-                min(usable_runtime_data)
-                for invocation_id, usable_runtime_data in self.usable_runtime_data_by_test_case().items()
-            ]
+            [min(usable_runtime_data) for _, usable_runtime_data in self.usable_runtime_data_by_test_case().items()]
         )
 
     def usable_replay_runtime_data_by_test_case(self) -> dict[InvocationId, list[int]]:

@@ -71,7 +71,7 @@ def merge_unit_tests(unit_test_source: str, inspired_unit_tests: str, test_frame
     except SyntaxError as e:
         logger.exception(f"Syntax error in code: {e}")
         return unit_test_source
-    import_list: list[ast.stmt] = list()
+    import_list: list[ast.stmt] = []
     modified_ast = ModifyInspiredTests(import_list, test_framework).visit(inspired_unit_tests_ast)
     if test_framework == "pytest":
         # Because we only want to modify the top level test functions

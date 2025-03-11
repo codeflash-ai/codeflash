@@ -12,7 +12,8 @@ from codeflash.cli_cmds.console import logger
 
 def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
     if not full_qualified_name:
-        raise ValueError("full_qualified_name cannot be empty")
+        msg = "full_qualified_name cannot be empty"
+        raise ValueError(msg)
     if not full_qualified_name.startswith(module_name):
         msg = f"{full_qualified_name} does not start with {module_name}"
         raise ValueError(msg)
@@ -46,9 +47,9 @@ def file_name_from_test_module_name(test_module_name: str, base_dir: Path) -> Pa
 def get_imports_from_file(
     file_path: Path | None = None, file_string: str | None = None, file_ast: ast.AST | None = None
 ) -> list[ast.Import | ast.ImportFrom]:
-    assert (
-        sum([file_path is not None, file_string is not None, file_ast is not None]) == 1
-    ), "Must provide exactly one of file_path, file_string, or file_ast"
+    assert sum([file_path is not None, file_string is not None, file_ast is not None]) == 1, (
+        "Must provide exactly one of file_path, file_string, or file_ast"
+    )
     if file_path:
         with file_path.open(encoding="utf8") as file:
             file_string = file.read()
@@ -105,6 +106,14 @@ def validate_python_code(code: str) -> str:
         msg = f"Invalid Python code: {e.msg} (line {e.lineno}, column {e.offset})"
         raise ValueError(msg) from e
     return code
+
+
+def has_any_async_functions(code: str) -> bool:
+    try:
+        module = ast.parse(code)
+    except SyntaxError:
+        return False
+    return any(isinstance(node, ast.AsyncFunctionDef) for node in ast.walk(module))
 
 
 def cleanup_paths(paths: list[Path]) -> None:

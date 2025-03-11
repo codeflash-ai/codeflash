@@ -8,7 +8,7 @@ from codeflash.cli_cmds.console import logger
 
 
 class ProfileStats(pstats.Stats):
-    def __init__(self, trace_file_path: str, time_unit: str = "ns"):
+    def __init__(self, trace_file_path: str, time_unit: str = "ns") -> None:
         assert Path(trace_file_path).is_file(), f"Trace file {trace_file_path} does not exist"
         assert time_unit in ["ns", "us", "ms", "s"], f"Invalid time unit {time_unit}"
         self.trace_file_path = trace_file_path
@@ -16,7 +16,7 @@ class ProfileStats(pstats.Stats):
         logger.debug(hasattr(self, "create_stats"))
         super().__init__(copy(self))
 
-    def create_stats(self):
+    def create_stats(self) -> None:
         self.con = sqlite3.connect(self.trace_file_path)
         cur = self.con.cursor()
         pdata = cur.execute("SELECT * FROM pstats").fetchall()
@@ -57,7 +57,7 @@ class ProfileStats(pstats.Stats):
         if self.total_calls != self.prim_calls:
             print("(%d primitive calls)" % self.prim_calls, end=" ", file=self.stream)
         time_unit = {"ns": "nanoseconds", "us": "microseconds", "ms": "milliseconds", "s": "seconds"}[self.time_unit]
-        print("in %.3f %s" % (self.total_tt, time_unit), file=self.stream)
+        print(f"in {self.total_tt:.3f} {time_unit}", file=self.stream)
         print(file=self.stream)
         width, list = self.get_print_list(amount)
         if list:
