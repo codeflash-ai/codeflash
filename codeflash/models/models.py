@@ -54,6 +54,18 @@ class FunctionSource:
     source_code: str
     jedi_definition: Name
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, FunctionSource):
+            return False
+        return (self.file_path == other.file_path and
+                self.qualified_name == other.qualified_name and
+                self.fully_qualified_name == other.fully_qualified_name and
+                self.only_function_name == other.only_function_name and
+                self.source_code == other.source_code)
+
+    def __hash__(self) -> int:
+        return hash((self.file_path, self.qualified_name, self.fully_qualified_name,
+                     self.only_function_name, self.source_code))
 
 class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
@@ -83,7 +95,6 @@ class CodeStringsMarkdown(BaseModel):
 
 
 class CodeOptimizationContext(BaseModel):
-    # code_to_optimize_with_helpers: str
     testgen_context_code: str = ""
     read_writable_code: str = Field(min_length=1)
     read_only_context_code: str = ""

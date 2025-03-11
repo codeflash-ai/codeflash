@@ -21,7 +21,6 @@ from rich.tree import Tree
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     cleanup_paths,
@@ -545,50 +544,6 @@ class FunctionOptimizer:
         return did_update
 
     def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
-        # code_to_optimize, contextual_dunder_methods = extract_code([self.function_to_optimize])
-        # if code_to_optimize is None:
-        #     return Failure("Could not find function to optimize.")
-        # (helper_code, helper_functions, helper_dunder_methods) = get_constrained_function_context_and_helper_functions(
-        #     self.function_to_optimize, self.project_root, code_to_optimize
-        # )
-        # if self.function_to_optimize.parents:
-        #     function_class = self.function_to_optimize.parents[0].name
-        #     same_class_helper_methods = [
-        #         df
-        #         for df in helper_functions
-        #         if df.qualified_name.count(".") > 0 and df.qualified_name.split(".")[0] == function_class
-        #     ]
-        #     optimizable_methods = [
-        #         FunctionToOptimize(
-        #             df.qualified_name.split(".")[-1],
-        #             df.file_path,
-        #             [FunctionParent(df.qualified_name.split(".")[0], "ClassDef")],
-        #             None,
-        #             None,
-        #         )
-        #         for df in same_class_helper_methods
-        #     ] + [self.function_to_optimize]
-        #     dedup_optimizable_methods = []
-        #     added_methods = set()
-        #     for method in reversed(optimizable_methods):
-        #         if f"{method.file_path}.{method.qualified_name}" not in added_methods:
-        #             dedup_optimizable_methods.append(method)
-        #             added_methods.add(f"{method.file_path}.{method.qualified_name}")
-        #     if len(dedup_optimizable_methods) > 1:
-        #         code_to_optimize, contextual_dunder_methods = extract_code(list(reversed(dedup_optimizable_methods)))
-        #         if code_to_optimize is None:
-        #             return Failure("Could not find function to optimize.")
-        # code_to_optimize_with_helpers = helper_code + "\n" + code_to_optimize
-        #
-        # code_to_optimize_with_helpers_and_imports = add_needed_imports_from_module(
-        #     self.function_to_optimize_source_code,
-        #     code_to_optimize_with_helpers,
-        #     self.function_to_optimize.file_path,
-        #     self.function_to_optimize.file_path,
-        #     self.project_root,
-        #     helper_functions,
-        # )
-
         try:
             new_code_ctx = code_context_extractor.get_code_optimization_context(
                 self.function_to_optimize, self.project_root
@@ -598,7 +553,6 @@ class FunctionOptimizer:
 
         return Success(
             CodeOptimizationContext(
-                # code_to_optimize_with_helpers=new_code_ctx.testgen_context_code, # Outdated, fix this!
                 testgen_context_code=new_code_ctx.testgen_context_code,
                 read_writable_code=new_code_ctx.read_writable_code,
                 read_only_context_code=new_code_ctx.read_only_context_code,
