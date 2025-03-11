@@ -81,10 +81,7 @@ def run_codeflash_command(
 ) -> bool:
     logging.basicConfig(level=logging.INFO)
     if config.trace_mode:
-        if config.trace_load == "workload":
-            return run_trace_test(cwd, config, expected_improvement_pct)
-        if config.trace_load == "testbench":
-            return run_trace_test2(cwd, config, expected_improvement_pct)
+        return run_trace_test(cwd, config, expected_improvement_pct)
 
     path_to_file = cwd / config.file_path
     file_contents = path_to_file.read_text("utf-8")
@@ -188,7 +185,11 @@ def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_p
     # First command: Run the tracer
     test_root = cwd / "tests" / (config.test_framework or "")
     clear_directory(test_root)
-    command = ["python", "-m", "codeflash.tracer", "-o", "codeflash.trace", "workload.py"]
+
+    trace_script = "workload.py" if config.trace_load == "workload" else "testbench.py"
+    expected_traced_functions = 3 if config.trace_load == "workload" else 5
+
+    command = ["python", "-m", "codeflash.tracer", "-o", "codeflash.trace", trace_script]
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
     )
@@ -206,56 +207,8 @@ def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_p
         return False
 
     functions_traced = re.search(r"Traced (\d+) function calls successfully and replay test created at - (.*)$", stdout)
-    if not functions_traced or int(functions_traced.group(1)) != 3:
-        logging.error("Expected 3 traced functions")
-        return False
-
-    replay_test_path = pathlib.Path(functions_traced.group(2))
-    if not replay_test_path.exists():
-        logging.error(f"Replay test file missing at {replay_test_path}")
-        return False
-
-    # Second command: Run optimization
-    command = ["python", "../../../codeflash/main.py", "--replay-test", str(replay_test_path), "--no-pr"]
-    process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
-    )
-
-    output = []
-    for line in process.stdout:
-        logging.info(line.strip())
-        output.append(line)
-
-    return_code = process.wait()
-    stdout = "".join(output)
-
-    return validate_output(stdout, return_code, expected_improvement_pct, config)
-
-
-def run_trace_test2(cwd: pathlib.Path, config: TestConfig, expected_improvement_pct: int) -> bool:
-    # First command: Run the tracer
-    test_root = cwd / "tests" / (config.test_framework or "")
-    clear_directory(test_root)
-    command = ["python", "-m", "codeflash.tracer", "-o", "codeflash.trace", "testbench.py"]
-    process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
-    )
-
-    output = []
-    for line in process.stdout:
-        logging.info(line.strip())
-        output.append(line)
-
-    return_code = process.wait()
-    stdout = "".join(output)
-
-    if return_code != 0:
-        logging.error(f"Tracer command returned exit code {return_code}")
-        return False
-
-    functions_traced = re.search(r"Traced (\d+) function calls successfully and replay test created at - (.*)$", stdout)
-    if not functions_traced or int(functions_traced.group(1)) != 5:
-        logging.error("Expected 5 traced functions")
+    if not functions_traced or int(functions_traced.group(1)) != expected_traced_functions:
+        logging.error(f"Expected {expected_traced_functions} traced functions")
         return False
 
     replay_test_path = pathlib.Path(functions_traced.group(2))
