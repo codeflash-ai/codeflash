@@ -7,7 +7,6 @@ from end_to_end_test_utilities import CoverageExpectation, TestConfig, run_codef
 def run_test(expected_improvement_pct: int) -> bool:
     config = TestConfig(
         trace_mode=True,
-        trace_load="workload",
         min_improvement_x=0.1,
         expected_unit_tests=1,
         coverage_expectations=[
