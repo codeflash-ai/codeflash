@@ -14,10 +14,10 @@ class CodeflashTrace:
     def __init__(self) -> None:
         self.function_calls_data = []
 
-    def __enter__(self) -> None:
-        # Initialize for context manager use
-        self.function_calls_data = []
-        return self
+    # def __enter__(self) -> None:
+    #     # Initialize for context manager use
+    #     self.function_calls_data = []
+    #     return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         # Cleanup is optional here
@@ -82,7 +82,7 @@ class CodeflashTrace:
         if not self.function_calls_data:
             print("No function call data to write")
             return
-
+        self.db_path = output_file
         try:
             # Connect to the database
             con = sqlite3.connect(output_file)
@@ -118,5 +118,65 @@ class CodeflashTrace:
         except Exception as e:
             print(f"Error writing function calls to database: {e}")
 
+    def print_codeflash_db(self, limit: int = None) -> None:
+        """
+        Print the contents of a CodeflashTrace SQLite database.
+
+        Args:
+            db_path: Path to the SQLite database file
+            limit: Maximum number of records to print (None for all)
+        """
+        try:
+            # Connect to the database
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            # Get the count of records
+            cursor.execute("SELECT COUNT(*) FROM function_calls")
+            total_records = cursor.fetchone()[0]
+            print(f"Found {total_records} function call records in {self.db_path}")
+
+            # Build the query with optional limit
+            query = "SELECT * FROM function_calls"
+            if limit:
+                query += f" LIMIT {limit}"
+
+            # Execute the query
+            cursor.execute(query)
+
+            # Print column names
+            columns = [desc[0] for desc in cursor.description]
+            print("\nColumns:", columns)
+            print("\n" + "=" * 80 + "\n")
+
+            # Print each row
+            for i, row in enumerate(cursor.fetchall()):
+                print(f"Record #{i + 1}:")
+                print(f"  Function: {row[0]}")
+                print(f"  Module: {row[1]}")
+                print(f"  File: {row[2]}")
+                print(f"  Benchmark Function: {row[3] or 'N/A'}")
+                print(f"  Benchmark File: {row[4] or 'N/A'}")
+                print(f"  Execution Time: {row[5]:.6f} seconds")
+                print(f"  Overhead Time: {row[6]:.6f} seconds")
+
+                # Unpickle and print args and kwargs
+                try:
+                    args = pickle.loads(row[7])
+                    kwargs = pickle.loads(row[8])
+
+                    print(f"  Args: {args}")
+                    print(f"  Kwargs: {kwargs}")
+                except Exception as e:
+                    print(f"  Error unpickling args/kwargs: {e}")
+                    print(f"  Raw args: {row[7]}")
+                    print(f"  Raw kwargs: {row[8]}")
+
+                print("\n" + "-" * 40 + "\n")
+
+            conn.close()
+
+        except Exception as e:
+            print(f"Error reading database: {e}")
 # Create a singleton instance
 codeflash_trace = CodeflashTrace()

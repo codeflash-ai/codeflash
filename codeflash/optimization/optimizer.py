@@ -25,7 +25,10 @@ from codeflash.verification.test_results import TestType
 from codeflash.verification.verification_utils import TestConfig
 from codeflash.benchmarking.get_trace_info import get_function_benchmark_timings, get_benchmark_timings
 from codeflash.benchmarking.utils import print_benchmark_table
+from codeflash.benchmarking.codeflash_trace import codeflash_trace
+
 from collections import defaultdict
+
 if TYPE_CHECKING:
     from argparse import Namespace
 
@@ -104,12 +107,16 @@ class Optimizer:
                         #instrument_codeflash_trace_decorator(fto)
                 trace_benchmarks_pytest(self.args.project_root) # Simply run all tests that use pytest-benchmark
                 logger.info("Finished tracing existing benchmarks")
+            except Exception as e:
+                logger.info(f"Error while tracing existing benchmarks: {e}")
+                logger.info(f"Information on existing benchmarks will not be available for this run.")
             finally:
                 # Restore original source code
                 for file in file_path_to_source_code:
                     with file.open("w", encoding="utf8") as f:
                         f.write(file_path_to_source_code[file])
 
+            codeflash_trace.print_trace_info()
             # trace_dir = Path(self.args.benchmarks_root) / ".codeflash_trace"
             # function_benchmark_timings = get_function_benchmark_timings(trace_dir, all_functions_to_optimize)
             # total_benchmark_timings = get_benchmark_timings(trace_dir)
