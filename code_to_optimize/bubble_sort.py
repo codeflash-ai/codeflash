@@ -1,5 +1,5 @@
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
-@codeflash_trace("bubble_sort.trace")
+@codeflash_trace
 def sorter(arr):
     for i in range(len(arr)):
         for j in range(len(arr) - 1):
