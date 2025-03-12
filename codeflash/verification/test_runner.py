@@ -96,14 +96,11 @@ def run_behavioral_tests(
                 f"{'Result stderr:' + str(results.stderr) if results.stderr else ''}"
             )
         elif enable_lprofiler:
-            # Run pytest with the env var
-            # confirm the right data files are created
-            #add_decorator adds 'from line_profiler import profile' and 'profile' to the test function and its helpers
-            #
             pytest_test_env["LINE_PROFILE"]="1"
             cmd = [SAFE_SYS_EXECUTABLE,"-m","pytest"]
+
             results = execute_test_subprocess(
-                cmd+test_files, cwd=cwd, env=pytest_test_env, timeout=60000000
+                cmd+test_files, cwd=cwd, env=pytest_test_env, timeout=600
             )
             logger.debug(
                 f"Result return code: {results.returncode}, "

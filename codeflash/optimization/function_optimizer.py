@@ -79,7 +79,7 @@ if TYPE_CHECKING:
     from codeflash.either import Result
     from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
     from codeflash.verification.verification_utils import TestConfig
-
+from codeflash.code_utils.coverage_utils import prepare_lprofiler_files
 
 class FunctionOptimizer:
     def __init__(
@@ -860,12 +860,14 @@ class FunctionOptimizer:
             #Running lprof now
             try:
                #add decorator here and import too
+               lprofiler_database_file = prepare_lprofiler_files("baseline")
+               #add decorator config to file, need to delete afterwards
                files_to_instrument = [self.function_to_optimize.file_path]
                fns_to_instrument = [self.function_to_optimize.function_name]
                for helper_obj in code_context.helper_functions:
                    files_to_instrument.append(helper_obj.file_path)
                    fns_to_instrument.append(helper_obj.qualified_name)
-               add_decorator_imports(files_to_instrument,fns_to_instrument)
+               add_decorator_imports(files_to_instrument,fns_to_instrument, lprofiler_database_file)
                behavioral_results, coverage_results = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,

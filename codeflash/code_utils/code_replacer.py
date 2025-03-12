@@ -359,7 +359,7 @@ def add_decorator_cst(module_node, function_name, decorator_name):
     updated_module = module_node.visit(transformer)
     return updated_module
 
-def add_decorator_imports(file_paths, fn_list):
+def add_decorator_imports(file_paths, fn_list, db_file):
     """Adds a decorator to a function in a Python file."""
     for file_path, fn_name in zip(file_paths, fn_list):
         #open file
@@ -380,8 +380,17 @@ def add_decorator_imports(file_paths, fn_list):
         # write to file
         with open(file_path, "w", encoding="utf-8") as file:
             file.write(modified_code)
-        pass
-    pass
+    #do this only for the main file and not the helper files, can use libcst but will go just with some simple string manipulation
+    with open(file_paths[0],'r') as f:
+        file_contents = f.readlines()
+    for idx, line in enumerate(file_contents):
+        if 'from line_profiler import profile' in line:
+            file_contents.insert(idx+1, f"profile.enable(output_prefix='{db_file}')\n")
+            break
+    with open(file_paths[0],'w') as f:
+        f.writelines(file_contents)
+
+
 
 
 class ImportAdder(cst.CSTTransformer):
