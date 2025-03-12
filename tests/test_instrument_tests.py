@@ -2693,13 +2693,13 @@ def test_code_replacement10() -> None:
             project_root=str(file_path.parent),
             original_source_code=original_code,
         ).unwrap()
-        assert code_context.code_to_optimize_with_helpers == get_code_output
+        assert code_context.testgen_context_code == get_code_output
         code_context = opt.get_code_optimization_context(
             function_to_optimize=func_top_optimize,
             project_root=str(file_path.parent),
             original_source_code=original_code,
         )
-        assert code_context.code_to_optimize_with_helpers == get_code_output
+        assert code_context.testgen_context_code == get_code_output
     """
 
     expected = """import gc
@@ -2758,9 +2758,9 @@ def test_code_replacement10() -> None:
     with open(file_path) as f:
         original_code = f.read()
         code_context = codeflash_wrap(opt.get_code_optimization_context, '{module_path}', None, 'test_code_replacement10', 'Optimizer.get_code_optimization_context', '4_1', codeflash_loop_index, codeflash_cur, codeflash_con, function_to_optimize=func_top_optimize, project_root=str(file_path.parent), original_source_code=original_code).unwrap()
-        assert code_context.code_to_optimize_with_helpers == get_code_output
+        assert code_context.testgen_context_code == get_code_output
         code_context = codeflash_wrap(opt.get_code_optimization_context, '{module_path}', None, 'test_code_replacement10', 'Optimizer.get_code_optimization_context', '4_3', codeflash_loop_index, codeflash_cur, codeflash_con, function_to_optimize=func_top_optimize, project_root=str(file_path.parent), original_source_code=original_code)
-        assert code_context.code_to_optimize_with_helpers == get_code_output
+        assert code_context.testgen_context_code == get_code_output
     codeflash_con.close()
 """
 
