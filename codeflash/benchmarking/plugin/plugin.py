@@ -1,6 +1,6 @@
 import pytest
 import time
-
+import os
 class CodeFlashPlugin:
     @staticmethod
     def pytest_addoption(parser):
@@ -35,9 +35,11 @@ class CodeFlashPlugin:
 
         class Benchmark:
             def __call__(self, func, *args, **kwargs):
-                start = time.time_ns()
+                os.environ["CODEFLASH_BENCHMARK_FUNCTION_NAME"] = request.node.name
+                os.environ["CODEFLASH_BENCHMARK_FILE_NAME"] = request.node.fspath.basename
+                start = time.process_time_ns()
                 result = func(*args, **kwargs)
-                end = time.time_ns()
+                end = time.process_time_ns()
                 print(f"Benchmark: {func.__name__} took {end - start} ns")
                 return result
 
