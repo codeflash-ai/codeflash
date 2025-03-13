@@ -21,7 +21,6 @@ from rich.tree import Tree
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     cleanup_paths,
@@ -49,7 +48,6 @@ from codeflash.models.models import (
     BestOptimization,
     CodeOptimizationContext,
     FunctionCalledInTest,
-    FunctionParent,
     GeneratedTests,
     GeneratedTestsList,
     OptimizationSet,
@@ -59,7 +57,6 @@ from codeflash.models.models import (
     TestFiles,
     TestingMode,
 )
-from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
 from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.result.explanation import Explanation
@@ -134,18 +131,9 @@ class FunctionOptimizer:
             with helper_function_path.open(encoding="utf8") as f:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
-        if has_any_async_functions(code_context.code_to_optimize_with_helpers):
+        if has_any_async_functions(code_context.read_writable_code):
             return Failure("Codeflash does not support async functions in the code to optimize.")
         code_print(code_context.read_writable_code)
-
-        for module_abspath, helper_code_source in original_helper_code.items():
-            code_context.code_to_optimize_with_helpers = add_needed_imports_from_module(
-                helper_code_source,
-                code_context.code_to_optimize_with_helpers,
-                module_abspath,
-                self.function_to_optimize.file_path,
-                self.args.project_root,
-            )
 
         generated_test_paths = [
             get_test_file_path(
@@ -165,7 +153,7 @@ class FunctionOptimizer:
             transient=True,
         ):
             generated_results = self.generate_tests_and_optimizations(
-                code_to_optimize_with_helpers=code_context.code_to_optimize_with_helpers,
+                testgen_context_code=code_context.testgen_context_code,
                 read_writable_code=code_context.read_writable_code,
                 read_only_context_code=code_context.read_only_context_code,
                 helper_functions=code_context.helper_functions,
@@ -554,50 +542,6 @@ class FunctionOptimizer:
         return did_update
 
     def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
-        code_to_optimize, contextual_dunder_methods = extract_code([self.function_to_optimize])
-        if code_to_optimize is None:
-            return Failure("Could not find function to optimize.")
-        (helper_code, helper_functions, helper_dunder_methods) = get_constrained_function_context_and_helper_functions(
-            self.function_to_optimize, self.project_root, code_to_optimize
-        )
-        if self.function_to_optimize.parents:
-            function_class = self.function_to_optimize.parents[0].name
-            same_class_helper_methods = [
-                df
-                for df in helper_functions
-                if df.qualified_name.count(".") > 0 and df.qualified_name.split(".")[0] == function_class
-            ]
-            optimizable_methods = [
-                FunctionToOptimize(
-                    df.qualified_name.split(".")[-1],
-                    df.file_path,
-                    [FunctionParent(df.qualified_name.split(".")[0], "ClassDef")],
-                    None,
-                    None,
-                )
-                for df in same_class_helper_methods
-            ] + [self.function_to_optimize]
-            dedup_optimizable_methods = []
-            added_methods = set()
-            for method in reversed(optimizable_methods):
-                if f"{method.file_path}.{method.qualified_name}" not in added_methods:
-                    dedup_optimizable_methods.append(method)
-                    added_methods.add(f"{method.file_path}.{method.qualified_name}")
-            if len(dedup_optimizable_methods) > 1:
-                code_to_optimize, contextual_dunder_methods = extract_code(list(reversed(dedup_optimizable_methods)))
-                if code_to_optimize is None:
-                    return Failure("Could not find function to optimize.")
-        code_to_optimize_with_helpers = helper_code + "\n" + code_to_optimize
-
-        code_to_optimize_with_helpers_and_imports = add_needed_imports_from_module(
-            self.function_to_optimize_source_code,
-            code_to_optimize_with_helpers,
-            self.function_to_optimize.file_path,
-            self.function_to_optimize.file_path,
-            self.project_root,
-            helper_functions,
-        )
-
         try:
             new_code_ctx = code_context_extractor.get_code_optimization_context(
                 self.function_to_optimize, self.project_root
@@ -607,7 +551,7 @@ class FunctionOptimizer:
 
         return Success(
             CodeOptimizationContext(
-                code_to_optimize_with_helpers=code_to_optimize_with_helpers_and_imports,
+                testgen_context_code=new_code_ctx.testgen_context_code,
                 read_writable_code=new_code_ctx.read_writable_code,
                 read_only_context_code=new_code_ctx.read_only_context_code,
                 helper_functions=new_code_ctx.helper_functions,  # only functions that are read writable
@@ -709,7 +653,7 @@ class FunctionOptimizer:
 
     def generate_tests_and_optimizations(
         self,
-        code_to_optimize_with_helpers: str,
+        testgen_context_code: str,
         read_writable_code: str,
         read_only_context_code: str,
         helper_functions: list[FunctionSource],
@@ -724,7 +668,7 @@ class FunctionOptimizer:
             # Submit the test generation task as future
             future_tests = self.generate_and_instrument_tests(
                 executor,
-                code_to_optimize_with_helpers,
+                testgen_context_code,
                 [definition.fully_qualified_name for definition in helper_functions],
                 generated_test_paths,
                 generated_perf_test_paths,
