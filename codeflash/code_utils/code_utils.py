@@ -11,6 +11,14 @@ from tempfile import TemporaryDirectory
 from codeflash.cli_cmds.console import logger
 
 
+def has_any_async_functions(code: str) -> bool:
+    try:
+        module = ast.parse(code)
+    except SyntaxError:
+        return False
+    return any(isinstance(node, ast.AsyncFunctionDef) for node in ast.walk(module))
+
+
 def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
     if not full_qualified_name:
         msg = "full_qualified_name cannot be empty"
