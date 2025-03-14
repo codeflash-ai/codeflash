@@ -51,6 +51,10 @@ class CodeflashTrace:
             overhead_time = 0
 
             try:
+                # Check if currently in pytest benchmark fixture
+                if os.environ.get("CODEFLASH_BENCHMARKING", "False") == "False":
+                    return result
+
                 # Pickle the arguments
                 pickled_args = pickle.dumps(args, protocol=pickle.HIGHEST_PROTOCOL)
                 pickled_kwargs = pickle.dumps(kwargs, protocol=pickle.HIGHEST_PROTOCOL)
@@ -58,6 +62,7 @@ class CodeflashTrace:
                 # Get benchmark info from environment
                 benchmark_function_name = os.environ.get("CODEFLASH_BENCHMARK_FUNCTION_NAME", "")
                 benchmark_file_name = os.environ.get("CODEFLASH_BENCHMARK_FILE_NAME", "")
+                benchmark_line_number = os.environ.get("CODEFLASH_BENCHMARK_LINE_NUMBER", "")
 
                 # Calculate overhead time
                 overhead_end_time = time.time()
@@ -69,7 +74,7 @@ class CodeflashTrace:
                     class_name = qualname.split(".")[0]
                 self.function_calls_data.append(
                     (func.__name__, class_name, func.__module__, func.__code__.co_filename,
-                     benchmark_function_name, benchmark_file_name, execution_time,
+                     benchmark_function_name, benchmark_file_name, benchmark_line_number, execution_time,
                      overhead_time, pickled_args, pickled_kwargs)
                 )
 
@@ -100,7 +105,7 @@ class CodeflashTrace:
             cur.execute(
                 "CREATE TABLE IF NOT EXISTS function_calls("
                 "function_name TEXT, class_name TEXT,  module_name TEXT, file_name TEXT,"
-                "benchmark_function_name TEXT, benchmark_file_name TEXT, "
+                "benchmark_function_name TEXT, benchmark_file_name TEXT, benchmark_line_number INTEGER,"
                 "time_ns INTEGER, overhead_time_ns INTEGER, args BLOB, kwargs BLOB)"
             )
 
@@ -108,8 +113,8 @@ class CodeflashTrace:
             cur.executemany(
                 "INSERT INTO function_calls "
                 "(function_name, class_name, module_name, file_name, benchmark_function_name, "
-                "benchmark_file_name, time_ns, overhead_time_ns, args, kwargs) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "benchmark_file_name, benchmark_line_number, time_ns, overhead_time_ns, args, kwargs) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 self.function_calls_data
             )
 
@@ -165,13 +170,14 @@ class CodeflashTrace:
                 print(f"  File: {row[3]}")
                 print(f"  Benchmark Function: {row[4] or 'N/A'}")
                 print(f"  Benchmark File: {row[5] or 'N/A'}")
-                print(f"  Execution Time: {row[6]:.6f} seconds")
-                print(f"  Overhead Time: {row[7]:.6f} seconds")
+                print(f"  Benchmark Line: {row[6] or 'N/A'}")
+                print(f"  Execution Time: {row[7]:.6f} seconds")
+                print(f"  Overhead Time: {row[8]:.6f} seconds")
 
                 # Unpickle and print args and kwargs
                 try:
-                    args = pickle.loads(row[8])
-                    kwargs = pickle.loads(row[9])
+                    args = pickle.loads(row[9])
+                    kwargs = pickle.loads(row[10])
 
                     print(f"  Args: {args}")
                     print(f"  Kwargs: {kwargs}")
@@ -187,90 +193,6 @@ class CodeflashTrace:
         except Exception as e:
             print(f"Error reading database: {e}")
 
-    def generate_replay_test(self, output_dir: str = None, project_root: str = "", test_framework: str = "pytest",
-                             max_run_count: int = 100) -> None:
-        """
-        Generate multiple replay tests from the traced function calls, grouping by benchmark name.
-
-        Args:
-            output_dir: Directory to write the generated tests (if None, only returns the code)
-            project_root: Root directory of the project for module imports
-            test_framework: 'pytest' or 'unittest'
-            max_run_count: Maximum number of runs to include per function
-
-        Returns:
-            Dictionary mapping benchmark names to generated test code
-        """
-        import isort
-        from codeflash.verification.verification_utils import get_test_file_path
-
-        if not self.db_path:
-            print("No database path set. Call write_to_db first or set db_path manually.")
-            return {}
-
-        try:
-            # Import the function here to avoid circular imports
-            from codeflash.benchmarking.replay_test import create_trace_replay_test
-
-            print("connecting to: ", self.db_path)
-            # Connect to the database
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-
-            # Get distinct benchmark names
-            cursor.execute(
-                "SELECT DISTINCT benchmark_function_name, benchmark_file_name FROM function_calls"
-            )
-            benchmarks = cursor.fetchall()
-
-            # Generate a test for each benchmark
-            for benchmark in benchmarks:
-                benchmark_function_name, benchmark_file_name = benchmark
-                # Get functions associated with this benchmark
-                cursor.execute(
-                    "SELECT DISTINCT function_name, class_name, module_name, file_name FROM function_calls "
-                    "WHERE benchmark_function_name = ? AND benchmark_file_name = ?",
-                    (benchmark_function_name, benchmark_file_name)
-                )
-
-                functions_data = []
-                for func_row in cursor.fetchall():
-                    function_name, class_name, module_name, file_name = func_row
-
-                    # Add this function to our list
-                    functions_data.append({
-                        "function_name": function_name,
-                        "class_name": class_name,
-                        "file_name": file_name,
-                        "module_name": module_name
-                    })
-
-                if not functions_data:
-                    print(f"No functions found for benchmark {benchmark_function_name} in {benchmark_file_name}")
-                    continue
-
-                # Generate the test code for this benchmark
-                test_code = create_trace_replay_test(
-                    trace_file=self.db_path,
-                    functions_data=functions_data,
-                    test_framework=test_framework,
-                    max_run_count=max_run_count,
-                )
-                test_code = isort.code(test_code)
-
-                # Write to file if requested
-                if output_dir:
-                    output_file = get_test_file_path(
-                        test_dir=Path(output_dir), function_name=f"{benchmark_file_name[5:]}_{benchmark_function_name}", test_type="replay"
-                    )
-                    with open(output_file, 'w') as f:
-                        f.write(test_code)
-                    print(f"Replay test for benchmark `{benchmark_function_name}` in {benchmark_file_name} written to {output_file}")
-
-            conn.close()
-
-        except Exception as e:
-            print(f"Error generating replay tests: {e}")
 
 # Create a singleton instance
 codeflash_trace = CodeflashTrace()
