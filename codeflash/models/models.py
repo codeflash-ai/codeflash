@@ -99,7 +99,7 @@ class CodeOptimizationContext(BaseModel):
     read_writable_code: str = Field(min_length=1)
     read_only_context_code: str = ""
     helper_functions: list[FunctionSource]
-    preexisting_objects: list[tuple[str, list[FunctionParent]]]
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]]
 
 class CodeContextType(str, Enum):
     READ_WRITABLE = "READ_WRITABLE"
