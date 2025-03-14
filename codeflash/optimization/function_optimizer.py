@@ -137,8 +137,10 @@ class FunctionOptimizer:
                 original_helper_code[helper_function_path] = helper_code
         if has_any_async_functions(code_context.read_writable_code):
             return Failure("Codeflash does not support async functions in the code to optimize.")
-        code_print(code_context.read_writable_code)
 
+        code_print(code_context.read_writable_code)
+        logger.info("Read only code")
+        code_print(code_context.read_only_context_code)
         generated_test_paths = [
             get_test_file_path(
                 self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
