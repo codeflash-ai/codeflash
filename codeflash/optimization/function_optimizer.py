@@ -42,7 +42,6 @@ from codeflash.code_utils.remove_generated_tests import remove_functions_from_ge
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.either import Failure, Success, is_successful
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
@@ -66,6 +65,7 @@ from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
+from codeflash.verification.hypothesis_testing import generate_hypothesis_tests
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.parse_line_profile_test_output import parse_line_profile_results
 from codeflash.verification.parse_test_output import parse_test_results
@@ -76,6 +76,7 @@ from codeflash.verification.verifier import generate_tests
 if TYPE_CHECKING:
     from argparse import Namespace
 
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.either import Result
     from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
     from codeflash.verification.verification_utils import TestConfig
@@ -169,10 +170,45 @@ class FunctionOptimizer:
             return Failure(generated_results.failure())
         generated_tests: GeneratedTestsList
         optimizations_set: OptimizationSet
-        generated_tests, function_to_concolic_tests, concolic_test_str, optimizations_set = generated_results.unwrap()
+        (
+            generated_tests,
+            function_to_concolic_tests,
+            concolic_test_str,
+            function_to_hypothesis_tests,
+            hypothesis_test_str,
+            dirs_to_remove,
+            optimizations_set,
+        ) = generated_results.unwrap()
+        count_tests = len(generated_tests.generated_tests)
         count_tests = len(generated_tests.generated_tests)
         if concolic_test_str:
             count_tests += 1
+        if hypothesis_test_str:
+            count_tests += 1
+        for i, generated_test in enumerate(generated_tests.generated_tests):
+            with generated_test.behavior_file_path.open("w", encoding="utf8") as f:
+                f.write(generated_test.instrumented_behavior_test_source)
+            with generated_test.perf_file_path.open("w", encoding="utf8") as f:
+                f.write(generated_test.instrumented_perf_test_source)
+            self.test_files.add(
+                TestFile(
+                    instrumented_behavior_file_path=generated_test.behavior_file_path,
+                    benchmarking_file_path=generated_test.perf_file_path,
+                    original_file_path=None,
+                    original_source=generated_test.generated_original_test_source,
+                    test_type=TestType.GENERATED_REGRESSION,
+                    tests_in_file=None,  # This is currently unused. We can discover the tests in the file if needed.
+                )
+            )
+            logger.info(f"Generated test {i + 1}/{count_tests}:")
+            code_print(generated_test.generated_original_test_source)
+        if concolic_test_str:
+            logger.info(f"Generated test {count_tests}/{count_tests}:")
+            code_print(concolic_test_str)
+
+        if hypothesis_test_str:
+            logger.info(f"Generated test {count_tests}/{count_tests}:")
+            code_print(hypothesis_test_str)
 
         for i, generated_test in enumerate(generated_tests.generated_tests):
             with generated_test.behavior_file_path.open("w", encoding="utf8") as f:
@@ -197,8 +233,10 @@ class FunctionOptimizer:
 
         function_to_optimize_qualified_name = self.function_to_optimize.qualified_name
         function_to_all_tests = {
-            key: self.function_to_tests.get(key, []) + function_to_concolic_tests.get(key, [])
-            for key in set(self.function_to_tests) | set(function_to_concolic_tests)
+            key: self.function_to_tests.get(key, [])
+            + function_to_concolic_tests.get(key, [])
+            + function_to_hypothesis_tests.get(key, [])
+            for key in set(self.function_to_tests) | set(function_to_concolic_tests) | set(function_to_hypothesis_tests)
         }
         instrumented_unittests_created_for_function = self.instrument_existing_tests(function_to_all_tests)
 
@@ -211,7 +249,7 @@ class FunctionOptimizer:
             ):
                 file_path_to_helper_classes[function_source.file_path].add(function_source.qualified_name.split(".")[0])
 
-        baseline_result = self.establish_original_code_baseline(  # this needs better typing
+        baseline_result = self.establish_original_code_baseline(
             code_context=code_context,
             original_helper_code=original_helper_code,
             file_path_to_helper_classes=file_path_to_helper_classes,
@@ -219,9 +257,12 @@ class FunctionOptimizer:
 
         console.rule()
         paths_to_cleanup = (
-            generated_test_paths + generated_perf_test_paths + list(instrumented_unittests_created_for_function)
+            generated_test_paths
+            + generated_perf_test_paths
+            + list(instrumented_unittests_created_for_function)
         )
-
+        if isinstance(dirs_to_remove, list):
+            paths_to_cleanup += dirs_to_remove
         if not is_successful(baseline_result):
             cleanup_paths(paths_to_cleanup)
             return Failure(baseline_result.failure())
@@ -602,6 +643,7 @@ class FunctionOptimizer:
         existing_test_files_count = 0
         replay_test_files_count = 0
         concolic_coverage_test_files_count = 0
+        hypothesis_test_files_count = 0
         unique_instrumented_test_files = set()
 
         func_qualname = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
@@ -620,6 +662,8 @@ class FunctionOptimizer:
                     existing_test_files_count += 1
                 elif test_type == TestType.REPLAY_TEST:
                     replay_test_files_count += 1
+                elif test_type == TestType.HYPOTHESIS_TEST:
+                    hypothesis_test_files_count += 1
                 elif test_type == TestType.CONCOLIC_COVERAGE_TEST:
                     concolic_coverage_test_files_count += 1
                 else:
@@ -680,8 +724,10 @@ class FunctionOptimizer:
                 f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
                 f"{'s' if replay_test_files_count != 1 else ''}, and "
                 f"{concolic_coverage_test_files_count} concolic coverage test file"
-                f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
+                f"{'s' if concolic_coverage_test_files_count != 1 else ''}"
+                f", and {hypothesis_test_files_count} hypothesis test file for {func_qualname}"
             )
+            console.rule()
         return unique_instrumented_test_files
 
     def generate_tests_and_optimizations(
@@ -693,7 +739,18 @@ class FunctionOptimizer:
         generated_test_paths: list[Path],
         generated_perf_test_paths: list[Path],
         run_experiment: bool = False,
-    ) -> Result[tuple[GeneratedTestsList, dict[str, list[FunctionCalledInTest]], OptimizationSet], str]:
+    ) -> Result[
+         tuple[
+             GeneratedTestsList,
+             dict[str, list[FunctionCalledInTest]],
+             str,
+             dict[str, list[FunctionCalledInTest]],
+             str,
+             list[Path],
+             OptimizationSet,
+         ],
+         str,
+     ]:
         assert len(generated_test_paths) == N_TESTS_TO_GENERATE
         max_workers = N_TESTS_TO_GENERATE + 2 if not run_experiment else N_TESTS_TO_GENERATE + 3
         console.rule()
@@ -723,7 +780,10 @@ class FunctionOptimizer:
                 self.function_to_optimize,
                 self.function_to_optimize_ast,
             )
-            futures = [*future_tests, future_optimization_candidates, future_concolic_tests]
+            futures_hypothesis_tests = executor.submit(
+                generate_hypothesis_tests, self.test_cfg, self.args, self.function_to_optimize, self.function_to_optimize_ast
+            )
+            futures = [*future_tests, future_optimization_candidates, future_concolic_tests, futures_hypothesis_tests]
             if run_experiment:
                 future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
@@ -770,7 +830,16 @@ class FunctionOptimizer:
             if not tests:
                 logger.warning(f"Failed to generate and instrument tests for {self.function_to_optimize.function_name}")
                 return Failure(f"/!\\ NO TESTS GENERATED for {self.function_to_optimize.function_name}")
-            function_to_concolic_tests, concolic_test_str = future_concolic_tests.result()
+            function_to_concolic_tests, concolic_test_str, concolic_dir_to_remove = future_concolic_tests.result()
+            function_to_hypothesis_tests, hypothesis_test_str, hypothesis_dir_to_remove = (
+                futures_hypothesis_tests.result()
+            )
+            dirs_to_remove = []
+            if concolic_dir_to_remove:
+                dirs_to_remove.append(concolic_dir_to_remove)
+            if hypothesis_dir_to_remove:
+                dirs_to_remove.append(hypothesis_dir_to_remove)
+
             logger.info(f"Generated {len(tests)} tests for {self.function_to_optimize.function_name}")
             console.rule()
             generated_tests = GeneratedTestsList(generated_tests=tests)
@@ -780,6 +849,9 @@ class FunctionOptimizer:
                 generated_tests,
                 function_to_concolic_tests,
                 concolic_test_str,
+                function_to_hypothesis_tests,
+                hypothesis_test_str,
+                dirs_to_remove,
                 OptimizationSet(control=candidates, experiment=candidates_experiment),
             )
         )
