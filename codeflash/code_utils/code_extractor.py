@@ -235,9 +235,9 @@ def extract_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str |
     return edited_code, contextual_dunder_methods
 
 
-def find_preexisting_objects(source_code: str) -> list[tuple[str, list[FunctionParent]]]:
-    """Find all preexisting functions, classes or class methods in the source code"""
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = []
+def find_preexisting_objects(source_code: str) -> set[tuple[str, tuple[FunctionParent, ...]]]:
+    """Find all preexisting functions, classes or class methods in the source code."""
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = set()
     try:
         module_node: ast.Module = ast.parse(source_code)
     except SyntaxError:
@@ -245,10 +245,10 @@ def find_preexisting_objects(source_code: str) -> list[tuple[str, list[FunctionP
         return preexisting_objects
     for node in module_node.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            preexisting_objects.append((node.name, []))
+            preexisting_objects.add((node.name, ()))
         elif isinstance(node, ast.ClassDef):
-            preexisting_objects.append((node.name, []))
+            preexisting_objects.add((node.name, ()))
             for cnode in node.body:
                 if isinstance(cnode, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    preexisting_objects.append((cnode.name, [FunctionParent(node.name, "ClassDef")]))
+                    preexisting_objects.add((cnode.name, (FunctionParent(node.name, "ClassDef"),)))
     return preexisting_objects
