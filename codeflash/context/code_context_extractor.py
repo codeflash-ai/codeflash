@@ -65,13 +65,13 @@ def get_code_optimization_context(
     if final_read_writable_tokens > optim_token_limit:
         raise ValueError("Read-writable code has exceeded token limit, cannot proceed")
 
-    # Setup preexisting objects for code replacer TODO: should remove duplicates
-    preexisting_objects = list(
+    # Setup preexisting objects for code replacer
+    preexisting_objects = list(set(
         chain(
             find_preexisting_objects(final_read_writable_code),
             *(find_preexisting_objects(codestring.code) for codestring in read_only_code_markdown.code_strings),
         )
-    )
+    ))
     read_only_context_code = read_only_code_markdown.markdown
 
     read_only_code_markdown_tokens = len(tokenizer.encode(read_only_context_code))

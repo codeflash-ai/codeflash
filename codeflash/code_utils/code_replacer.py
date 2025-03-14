@@ -38,11 +38,11 @@ class OptimFunctionCollector(cst.CSTVisitor):
 
     def __init__(
         self,
-        preexisting_objects: list[tuple[str, list[FunctionParent]]] | None = None,
+        preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] | None = None,
         function_names: set[tuple[str | None, str]] | None = None,
     ) -> None:
         super().__init__()
-        self.preexisting_objects = preexisting_objects if preexisting_objects is not None else []
+        self.preexisting_objects = preexisting_objects if preexisting_objects is not None else set()
 
         self.function_names = function_names  # set of (class_name, function_name)
         self.modified_functions: dict[
@@ -60,7 +60,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
             self.modified_init_functions[self.current_class] = node
         elif (
             self.preexisting_objects
-            and (node.name.value, []) not in self.preexisting_objects
+            and (node.name.value, ()) not in self.preexisting_objects
             and self.current_class is None
         ):
             self.new_functions.append(node)
@@ -71,7 +71,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
             return False  # If already in a class, do not recurse deeper
         self.current_class = node.name.value
 
-        parents = [FunctionParent(name=node.name.value, type="ClassDef")]
+        parents = (FunctionParent(name=node.name.value, type="ClassDef"),)
         for child_node in node.body.body:
             if (
                 self.preexisting_objects
@@ -159,7 +159,7 @@ def replace_functions_in_file(
     source_code: str,
     original_function_names: list[str],
     optimized_code: str,
-    preexisting_objects: list[tuple[str, list[FunctionParent]]],
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]],
 ) -> str:
     parsed_function_names = []
     for original_function_name in original_function_names:
@@ -195,7 +195,7 @@ def replace_functions_and_add_imports(
     function_names: list[str],
     optimized_code: str,
     module_abspath: Path,
-    preexisting_objects: list[tuple[str, list[FunctionParent]]],
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]],
     project_root_path: Path,
 ) -> str:
     return add_needed_imports_from_module(
@@ -211,7 +211,7 @@ def replace_function_definitions_in_module(
     function_names: list[str],
     optimized_code: str,
     module_abspath: Path,
-    preexisting_objects: list[tuple[str, list[FunctionParent]]],
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]],
     project_root_path: Path,
 ) -> bool:
     source_code: str = module_abspath.read_text(encoding="utf8")
