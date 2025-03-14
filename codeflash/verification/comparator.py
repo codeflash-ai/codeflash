@@ -43,7 +43,12 @@ try:
     HAS_PYRSISTENT = True
 except ImportError:
     HAS_PYRSISTENT = False
+try:
+    import torch
 
+    HAS_TORCH = True
+except ImportError:
+    HAS_TORCH = False
 
 def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
     """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
@@ -162,6 +167,18 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 return np.isinf(new)
         except Exception:
             pass
+
+        if HAS_TORCH and isinstance(orig, torch.Tensor):
+            if orig.dtype != new.dtype:
+                return False
+            if orig.shape != new.shape:
+                return False
+            if orig.requires_grad != new.requires_grad:
+                return False
+            if orig.device != new.device:
+                return False
+            return torch.allclose(orig, new, equal_nan=True)
+
 
         if HAS_PYRSISTENT and isinstance(
             orig,
