@@ -583,6 +583,43 @@ def test_torch():
     assert comparator(r, s)  # NaN == NaN
     assert not comparator(r, t)
 
+    # Test tensors with infinity values
+    u = torch.tensor([1.0, float('inf'), 3.0])
+    v = torch.tensor([1.0, float('inf'), 3.0])
+    w = torch.tensor([1.0, float('-inf'), 3.0])
+    assert comparator(u, v)
+    assert not comparator(u, w)
+
+    # Test tensors with different devices (if CUDA is available)
+    if torch.cuda.is_available():
+        x = torch.tensor([1, 2, 3]).cuda()
+        y = torch.tensor([1, 2, 3]).cuda()
+        z = torch.tensor([1, 2, 3])
+        assert comparator(x, y)
+        assert not comparator(x, z)
+
+    # Test tensors with requires_grad
+    aa = torch.tensor([1., 2., 3.], requires_grad=True)
+    bb = torch.tensor([1., 2., 3.], requires_grad=True)
+    cc = torch.tensor([1., 2., 3.], requires_grad=False)
+    assert comparator(aa, bb)
+    assert not comparator(aa, cc)
+
+    # Test complex tensors
+    dd = torch.tensor([1+2j, 3+4j])
+    ee = torch.tensor([1+2j, 3+4j])
+    ff = torch.tensor([1+2j, 3+5j])
+    assert comparator(dd, ee)
+    assert not comparator(dd, ff)
+
+    # Test boolean tensors
+    gg = torch.tensor([True, False, True])
+    hh = torch.tensor([True, False, True])
+    ii = torch.tensor([True, True, True])
+    assert comparator(gg, hh)
+    assert not comparator(gg, ii)
+
+
 def test_returns():
     a = Success(5)
     b = Success(5)

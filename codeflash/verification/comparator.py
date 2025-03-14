@@ -173,7 +173,12 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 return False
             if orig.shape != new.shape:
                 return False
+            if orig.requires_grad != new.requires_grad:
+                return False
+            if orig.device != new.device:
+                return False
             return torch.allclose(orig, new, equal_nan=True)
+
 
         if HAS_PYRSISTENT and isinstance(
             orig,
