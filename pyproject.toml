@@ -5,7 +5,6 @@ version = "0.0.0" # Determined by poetry-dynamic-versioning during `poetry build
 description = "Client for codeflash.ai - automatic code performance optimization, powered by AI"
 license = "BSL-1.1"
 authors = ["CodeFlash Inc. <contact@codeflash.ai>"]
-homepage = "https://codeflash.ai"
 readme = "README.md"
 packages = [{ include = "codeflash", format = ["sdist"] }]
 keywords = [
@@ -64,6 +63,12 @@ exclude = [
     "venv",
     "env",
 ]
+
+[project.urls]
+Homepage = "https://codeflash.ai"
+Changelog = "https://github.com/codeflash-ai/codeflash/releases"
+Repository = "https://github.com/codeflash-ai/codeflash"
+Documentation = "https://docs.codeflash.ai/"
 
 # Versions here the minimum required versions for the project. These should be as loose as possible.
 [tool.poetry.dependencies]
