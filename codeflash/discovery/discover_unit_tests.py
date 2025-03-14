@@ -69,7 +69,8 @@ def discover_tests_pytest(
         ],
         cwd=project_root,
         check=False,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
     )
     try:
@@ -107,6 +108,8 @@ def discover_tests_pytest(
             test_type = TestType.REPLAY_TEST
         elif "test_concolic_coverage" in test["test_file"]:
             test_type = TestType.CONCOLIC_COVERAGE_TEST
+        elif "test_hypothesis" in test["test_file"]:
+            test_type = TestType.HYPOTHESIS_TEST
         else:
             test_type = TestType.EXISTING_UNIT_TEST
 
@@ -152,13 +155,13 @@ def discover_tests_unittest(
             test_type = TestType.REPLAY_TEST
         elif "test_concolic_coverage" in str(_test_module_path):
             test_type = TestType.CONCOLIC_COVERAGE_TEST
+        elif "test_hypothesis" in str(_test_module_path):
+            test_type = TestType.HYPOTHESIS_TEST
         else:
             test_type = TestType.EXISTING_UNIT_TEST
+
         return TestsInFile(
-            test_file=str(_test_module_path),
-            test_function=_test_function,
-            test_type=test_type,
-            test_class=_test_suite_name,
+            test_file=_test_module_path, test_function=_test_function, test_type=test_type, test_class=_test_suite_name
         )
 
     for _test_suite in tests._tests:
@@ -357,16 +360,16 @@ def process_test_files(
                                 scope_test_function += "[" + scope_parameters + "]"
                             if test_framework == "unittest":
                                 scope_test_function += "_" + scope_parameters
-
-                        full_name_without_module_prefix = definition[
-                            0
-                        ].full_name.replace(definition[0].module_name + ".", "", 1)
+                        full_name_without_module_prefix = definition[0].full_name.replace(
+                            definition[0].module_name + ".", "", 1
+                        )
+                        assert definition[0].module_path is not None
                         qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
 
                         function_to_test_map[qualified_name_with_modules_from_root].add(
                             FunctionCalledInTest(
                                 tests_in_file=TestsInFile(
-                                    test_file=test_file,
+                                    test_file=Path(test_file),
                                     test_class=scope_test_class,
                                     test_function=scope_test_function,
                                     test_type=test_type,

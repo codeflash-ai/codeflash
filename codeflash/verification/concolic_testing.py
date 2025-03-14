@@ -8,7 +8,6 @@ from pathlib import Path
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
-from codeflash.code_utils.concolic_utils import clean_concolic_tests
 from codeflash.code_utils.static_analysis import has_typed_parameters
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -19,14 +18,12 @@ from codeflash.verification.verification_utils import TestConfig
 
 def generate_concolic_tests(
     test_cfg: TestConfig, args: Namespace, function_to_optimize: FunctionToOptimize, function_to_optimize_ast: ast.AST
-) -> tuple[dict[str, list[FunctionCalledInTest]], str]:
+) -> tuple[dict[str, list[FunctionCalledInTest]], str, Path | None]:
     function_to_concolic_tests = {}
     concolic_test_suite_code = ""
-    if (
-        test_cfg.concolic_test_root_dir
-        and isinstance(function_to_optimize_ast, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and has_typed_parameters(function_to_optimize_ast, function_to_optimize.parents)
-    ):
+    concolic_test_suite_dir = None
+    if test_cfg.concolic_test_root_dir and has_typed_parameters(function_to_optimize_ast, function_to_optimize.parents):
+        console.rule()
         logger.info("Generating concolic opcode coverage tests for the original code…")
         console.rule()
         try:
@@ -56,7 +53,7 @@ def generate_concolic_tests(
             )
         except subprocess.TimeoutExpired:
             logger.debug("CrossHair Cover test generation timed out")
-            return function_to_concolic_tests, concolic_test_suite_code
+            return function_to_concolic_tests, concolic_test_suite_code, concolic_test_suite_dir
 
         if cover_result.returncode == 0:
             generated_concolic_test: str = cover_result.stdout
@@ -84,4 +81,4 @@ def generate_concolic_tests(
         else:
             logger.debug(f"Error running CrossHair Cover {': ' + cover_result.stderr if cover_result.stderr else '.'}")
             console.rule()
-    return function_to_concolic_tests, concolic_test_suite_code
+    return function_to_concolic_tests, concolic_test_suite_code, concolic_test_suite_dir

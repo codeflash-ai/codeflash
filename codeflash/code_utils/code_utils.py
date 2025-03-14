@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import os
+import shutil
 import site
 from functools import lru_cache
 from pathlib import Path
@@ -78,9 +79,11 @@ def get_all_function_names(code: str) -> tuple[bool, list[str]]:
     return True, function_names
 
 
-def get_run_tmp_file(file_path: Path) -> Path:
+def get_run_tmp_file(file_path: str | Path) -> Path:
     if not hasattr(get_run_tmp_file, "tmpdir"):
         get_run_tmp_file.tmpdir = TemporaryDirectory(prefix="codeflash_")
+    if isinstance(file_path, str):
+        file_path = Path(file_path)
     return Path(get_run_tmp_file.tmpdir.name) / file_path
 
 
@@ -108,14 +111,10 @@ def validate_python_code(code: str) -> str:
     return code
 
 
-def has_any_async_functions(code: str) -> bool:
-    try:
-        module = ast.parse(code)
-    except SyntaxError:
-        return False
-    return any(isinstance(node, ast.AsyncFunctionDef) for node in ast.walk(module))
-
 
 def cleanup_paths(paths: list[Path]) -> None:
     for path in paths:
-        path.unlink(missing_ok=True)
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+        else:
+            path.unlink(missing_ok=True)
