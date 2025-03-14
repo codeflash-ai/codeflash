@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from codeflash.benchmarking.instrument_codeflash_trace import add_codeflash_decorator_to_code
+
+from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 
 
 def test_add_decorator_to_normal_function() -> None:
@@ -10,9 +14,15 @@ def normal_function():
     return "Hello, World!"
 """
 
+    fto = FunctionToOptimize(
+        function_name="normal_function",
+        file_path=Path("dummy_path.py"),
+        parents=[]
+    )
+
     modified_code = add_codeflash_decorator_to_code(
         code=code,
-        function_name="normal_function"
+        function_to_optimize=fto
     )
 
     expected_code = """
@@ -31,10 +41,15 @@ class TestClass:
         return "Hello from method"
 """
 
+    fto = FunctionToOptimize(
+        function_name="normal_method",
+        file_path=Path("dummy_path.py"),
+        parents=[FunctionParent(name="TestClass", type="ClassDef")]
+    )
+
     modified_code = add_codeflash_decorator_to_code(
         code=code,
-        function_name="normal_method",
-        class_name="TestClass"
+        function_to_optimize=fto
     )
 
     expected_code = """
@@ -55,10 +70,15 @@ class TestClass:
         return "Hello from classmethod"
 """
 
+    fto = FunctionToOptimize(
+        function_name="class_method",
+        file_path=Path("dummy_path.py"),
+        parents=[FunctionParent(name="TestClass", type="ClassDef")]
+    )
+
     modified_code = add_codeflash_decorator_to_code(
         code=code,
-        function_name="class_method",
-        class_name="TestClass"
+        function_to_optimize=fto
     )
 
     expected_code = """
@@ -80,10 +100,15 @@ class TestClass:
         return "Hello from staticmethod"
 """
 
+    fto = FunctionToOptimize(
+        function_name="static_method",
+        file_path=Path("dummy_path.py"),
+        parents=[FunctionParent(name="TestClass", type="ClassDef")]
+    )
+
     modified_code = add_codeflash_decorator_to_code(
         code=code,
-        function_name="static_method",
-        class_name="TestClass"
+        function_to_optimize=fto
     )
 
     expected_code = """
@@ -104,10 +129,15 @@ class TestClass:
         self.value = value
 """
 
+    fto = FunctionToOptimize(
+        function_name="__init__",
+        file_path=Path("dummy_path.py"),
+        parents=[FunctionParent(name="TestClass", type="ClassDef")]
+    )
+
     modified_code = add_codeflash_decorator_to_code(
         code=code,
-        function_name="__init__",
-        class_name="TestClass"
+        function_to_optimize=fto
     )
 
     expected_code = """
@@ -129,10 +159,15 @@ class TestClass:
         return self._value
 """
 
+    fto = FunctionToOptimize(
+        function_name="property_method",
+        file_path=Path("dummy_path.py"),
+        parents=[FunctionParent(name="TestClass", type="ClassDef")]
+    )
+
     modified_code = add_codeflash_decorator_to_code(
         code=code,
-        function_name="property_method",
-        class_name="TestClass"
+        function_to_optimize=fto
     )
 
     expected_code = """
@@ -158,10 +193,15 @@ class OtherClass:
         return "This should NOT get decorated"
 """
 
+    fto = FunctionToOptimize(
+        function_name="test_method",
+        file_path=Path("dummy_path.py"),
+        parents=[FunctionParent(name="TestClass", type="ClassDef")]
+    )
+
     modified_code = add_codeflash_decorator_to_code(
         code=code,
-        function_name="test_method",
-        class_name="TestClass"
+        function_to_optimize=fto
     )
 
     expected_code = """
@@ -184,9 +224,15 @@ def existing_function():
     return "This exists"
 """
 
+    fto = FunctionToOptimize(
+        function_name="nonexistent_function",
+        file_path=Path("dummy_path.py"),
+        parents=[]
+    )
+
     modified_code = add_codeflash_decorator_to_code(
         code=code,
-        function_name="nonexistent_function"
+        function_to_optimize=fto
     )
 
     # Code should remain unchanged

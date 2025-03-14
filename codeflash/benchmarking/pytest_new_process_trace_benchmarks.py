@@ -20,7 +20,7 @@ if __name__ == "__main__":
         )
         codeflash_trace.write_to_db(output_file)
         codeflash_trace.print_codeflash_db()
-        codeflash_trace.generate_replay_test(tests_root, project_root, test_framework="pytest")
+
     except Exception as e:
         print(f"Failed to collect tests: {e!s}")
         exitcode = -1
