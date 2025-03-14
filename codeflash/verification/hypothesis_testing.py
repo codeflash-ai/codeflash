@@ -128,8 +128,23 @@ def generate_hypothesis_tests(
         console.rule()
 
         try:
+            logger.info("Running Hypothesis write with the following command:")
             hypothesis_result = subprocess.run(
-                ["hypothesis", "write", function_to_optimize.file_path.stem],
+                [
+                    "hypothesis",
+                    "write",
+                    ".".join(
+                        [
+                            function_to_optimize.file_path.relative_to(
+                                args.project_root
+                            )
+                            .with_suffix("")
+                            .as_posix()
+                            .replace("/", "."),
+                            function_to_optimize.qualified_name,
+                        ]
+                    ),
+                ],
                 capture_output=True,
                 text=True,
                 cwd=args.project_root,
