@@ -532,6 +532,57 @@ def test_pyrsistent():
     assert not comparator(v, x)
 
 
+def test_torch():
+    try:
+        import torch  # type: ignore
+    except ImportError:
+        pytest.skip()
+
+    a = torch.tensor([1, 2, 3])
+    b = torch.tensor([1, 2, 3])
+    c = torch.tensor([1, 2, 4])
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    d = torch.tensor([[1, 2, 3], [4, 5, 6]])
+    e = torch.tensor([[1, 2, 3], [4, 5, 6]])
+    f = torch.tensor([[1, 2, 3], [4, 5, 7]])
+    assert comparator(d, e)
+    assert not comparator(d, f)
+
+    # Test tensors with different data types
+    g = torch.tensor([1, 2, 3], dtype=torch.float32)
+    h = torch.tensor([1, 2, 3], dtype=torch.float32)
+    i = torch.tensor([1, 2, 3], dtype=torch.int64)
+    assert comparator(g, h)
+    assert not comparator(g, i)
+
+    # Test 3D tensors
+    j = torch.tensor([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
+    k = torch.tensor([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
+    l = torch.tensor([[[1, 2], [3, 4]], [[5, 6], [7, 9]]])
+    assert comparator(j, k)
+    assert not comparator(j, l)
+
+    # Test tensors with different shapes
+    m = torch.tensor([1, 2, 3])
+    n = torch.tensor([[1, 2, 3]])
+    assert not comparator(m, n)
+
+    # Test empty tensors
+    o = torch.tensor([])
+    p = torch.tensor([])
+    q = torch.tensor([1])
+    assert comparator(o, p)
+    assert not comparator(o, q)
+
+    # Test tensors with NaN values
+    r = torch.tensor([1.0, float('nan'), 3.0])
+    s = torch.tensor([1.0, float('nan'), 3.0])
+    t = torch.tensor([1.0, 2.0, 3.0])
+    assert comparator(r, s)  # NaN == NaN
+    assert not comparator(r, t)
+
 def test_returns():
     a = Success(5)
     b = Success(5)
