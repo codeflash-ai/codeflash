@@ -140,19 +140,12 @@ class FunctionOptimizer:
             with helper_function_path.open(encoding="utf8") as f:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
+        if has_any_async_functions(code_context.read_writable_code):
+            return Failure("Codeflash does not support async functions in the code to optimize.")
 
-        logger.info("Code to be optimized:")
         code_print(code_context.read_writable_code)
-
-        for module_abspath, helper_code_source in original_helper_code.items():
-            code_context.code_to_optimize_with_helpers = add_needed_imports_from_module(
-                helper_code_source,
-                code_context.code_to_optimize_with_helpers,
-                module_abspath,
-                self.function_to_optimize.file_path,
-                self.args.project_root,
-            )
-
+        logger.info("Read only code")
+        code_print(code_context.read_only_context_code)
         generated_test_paths = [
             get_test_file_path(
                 self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"

@@ -1,6 +1,6 @@
 import pytest
 
-from code_to_optimize.bubble_sort import sorter
+from code_to_optimize.bubble_sort_codeflash_trace import sorter
 
 
 def test_sort(benchmark):
