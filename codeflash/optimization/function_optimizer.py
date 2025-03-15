@@ -245,6 +245,7 @@ class FunctionOptimizer:
             cleanup_paths(paths_to_cleanup)
             return Failure(baseline_result.failure())
 
+
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
         if isinstance(original_code_baseline, OriginalCodeBaseline) and not coverage_critic(
             original_code_baseline.coverage_results, self.args.test_framework
@@ -344,14 +345,11 @@ class FunctionOptimizer:
             generated_perf_test_path.unlink(missing_ok=True)
         for test_paths in instrumented_unittests_created_for_function:
             test_paths.unlink(missing_ok=True)
-        for fn in function_to_concolic_tests:
-            for test in function_to_concolic_tests[fn]:
-                if not test.tests_in_file.test_file.parent.exists():
-                    logger.warning(
-                        f"Concolic test directory {test.tests_in_file.test_file.parent} does not exist so could not be deleted."
-                    )
-                shutil.rmtree(test.tests_in_file.test_file.parent, ignore_errors=True)
-                break  # need to delete only one test directory
+        for dir_path in dirs_to_remove:
+            if dir_path.exists():
+                shutil.rmtree(dir_path, ignore_errors=True)
+            else:
+                logger.warning(f"Directory {dir_path} doesn't exist so could not be deleted.")
 
         if not best_optimization:
             return Failure(f"No best optimizations found for function {self.function_to_optimize.qualified_name}")
