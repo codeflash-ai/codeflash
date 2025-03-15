@@ -74,7 +74,7 @@ print("Hello world")
 """
 
     function_name: str = "NewClass.new_function"
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=[function_name],
@@ -135,7 +135,7 @@ print("Hello world")
 """
 
     function_name: str = "NewClass.new_function"
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=[function_name],
@@ -196,7 +196,7 @@ print("Salut monde")
 """
 
     function_names: list[str] = ["other_function"]
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -260,7 +260,7 @@ print("Salut monde")
 """
 
     function_names: list[str] = ["yet_another_function", "other_function"]
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -313,7 +313,7 @@ def supersort(doink):
 """
 
     function_names: list[str] = ["sorter_deps"]
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -388,7 +388,7 @@ def blab(st):
 
 print("Not cool")
 """
-    preexisting_objects = find_preexisting_objects(original_code_main) + find_preexisting_objects(original_code_helper)
+    preexisting_objects = find_preexisting_objects(original_code_main) | find_preexisting_objects(original_code_helper)
     new_main_code: str = replace_functions_and_add_imports(
         source_code=original_code_main,
         function_names=["other_function"],
@@ -591,7 +591,7 @@ class CacheConfig(BaseConfig):
             )
 """
     function_names: list[str] = ["CacheSimilarityEvalConfig.from_config"]
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
 
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -662,7 +662,7 @@ def test_test_libcst_code_replacement8() -> None:
         return np.sum(a != b) / a.size
 '''
     function_names: list[str] = ["_EmbeddingDistanceChainMixin._hamming_distance"]
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -715,7 +715,7 @@ def totally_new_function(value: Optional[str]):
 print("Hello world")
 """
     function_name: str = "NewClass.__init__"
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=[function_name],
@@ -814,8 +814,8 @@ def test_code_replacement11() -> None:
 '''
 
     function_name: str = "Fu.foo"
-    parents = [FunctionParent("Fu", "ClassDef")]
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = [("foo", parents), ("real_bar", parents)]
+    parents = (FunctionParent("Fu", "ClassDef"),)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = {("foo", parents), ("real_bar", parents)}
     new_code: str = replace_functions_in_file(
         source_code=original_code,
         original_function_names=[function_name],
@@ -854,7 +854,7 @@ def test_code_replacement12() -> None:
         pass
 '''
 
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = []
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = []
     new_code: str = replace_functions_in_file(
         source_code=original_code,
         original_function_names=["Fu.real_bar"],
@@ -891,7 +891,7 @@ def test_test_libcst_code_replacement13() -> None:
 """
 
     function_names: list[str] = ["yet_another_function", "other_function"]
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = []
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = []
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -1278,7 +1278,7 @@ def cosine_similarity_top_k(
 
     return ret_idxs, scores
 '''
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
 
     helper_functions = [
         FakeFunctionSource(
@@ -1579,7 +1579,7 @@ print("Hello world")
         "NewClass.new_function2",
         "NestedClass.nested_function",
     ]  # Nested classes should be ignored, even if provided as target
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -1615,7 +1615,7 @@ print("Hello world")
 """
 
     function_names: list[str] = ["NewClass.__init__", "NewClass.__call__", "NewClass.new_function2"]
-    preexisting_objects: list[tuple[str, list[FunctionParent]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,

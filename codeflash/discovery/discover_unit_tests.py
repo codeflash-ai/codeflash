@@ -186,15 +186,19 @@ def process_test_files(
     jedi_project = jedi.Project(path=project_root_path)
 
     for test_file, functions in file_to_test_map.items():
-        script = jedi.Script(path=test_file, project=jedi_project)
-        test_functions = set()
+        try:
+            script = jedi.Script(path=test_file, project=jedi_project)
+            test_functions = set()
 
-        all_names = script.get_names(all_scopes=True, references=True)
-        all_defs = script.get_names(all_scopes=True, definitions=True)
-        all_names_top = script.get_names(all_scopes=True)
+            all_names = script.get_names(all_scopes=True, references=True)
+            all_defs = script.get_names(all_scopes=True, definitions=True)
+            all_names_top = script.get_names(all_scopes=True)
 
-        top_level_functions = {name.name: name for name in all_names_top if name.type == "function"}
-        top_level_classes = {name.name: name for name in all_names_top if name.type == "class"}
+            top_level_functions = {name.name: name for name in all_names_top if name.type == "function"}
+            top_level_classes = {name.name: name for name in all_names_top if name.type == "class"}
+        except Exception as e:
+            logger.debug(f"Failed to get jedi script for {test_file}: {e}")
+            continue
 
         if test_framework == "pytest":
             for function in functions:

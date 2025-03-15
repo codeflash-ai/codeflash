@@ -30,17 +30,24 @@ def get_code_optimization_context(
 ) -> CodeOptimizationContext:
     # Get FunctionSource representation of helpers of FTO
     helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi({function_to_optimize.file_path: {function_to_optimize.qualified_name}}, project_root_path)
+
+    # Add function to optimize into helpers of FTO dict, as they'll be processed together
+    fto_as_function_source = get_function_to_optimize_as_function_source(function_to_optimize, project_root_path)
+    helpers_of_fto_dict[function_to_optimize.file_path].add(fto_as_function_source)
+
+    # Format data to search for helpers of helpers using get_function_sources_from_jedi
     helpers_of_fto_qualified_names_dict = {
         file_path: {source.qualified_name for source in sources}
         for file_path, sources in helpers_of_fto_dict.items()
     }
 
+    # __init__ functions are automatically considered as helpers of FTO, so we add them to the dict (regardless of whether they exist)
+    # This helps us to search for helpers of __init__ functions of classes that contain helpers of FTO
+    for qualified_names in helpers_of_fto_qualified_names_dict.values():
+         qualified_names.update({f"{qn.rsplit('.', 1)[0]}.__init__" for qn in qualified_names if '.' in qn})
+
     # Get FunctionSource representation of helpers of helpers of FTO
     helpers_of_helpers_dict, helpers_of_helpers_list = get_function_sources_from_jedi(helpers_of_fto_qualified_names_dict, project_root_path)
-
-    # Add function to optimize into helpers of FTO dict, as they'll be processed together
-    fto_as_function_source = get_function_to_optimize_as_function_source(function_to_optimize, project_root_path)
-    helpers_of_fto_dict[function_to_optimize.file_path].add(fto_as_function_source)
 
     # Extract code context for optimization
     final_read_writable_code = extract_code_string_context_from_files(helpers_of_fto_dict,{}, project_root_path, remove_docstrings=False, code_context_type=CodeContextType.READ_WRITABLE).code
@@ -58,8 +65,8 @@ def get_code_optimization_context(
     if final_read_writable_tokens > optim_token_limit:
         raise ValueError("Read-writable code has exceeded token limit, cannot proceed")
 
-    # Setup preexisting objects for code replacer TODO: should remove duplicates
-    preexisting_objects = list(
+    # Setup preexisting objects for code replacer
+    preexisting_objects = set(
         chain(
             find_preexisting_objects(final_read_writable_code),
             *(find_preexisting_objects(codestring.code) for codestring in read_only_code_markdown.code_strings),

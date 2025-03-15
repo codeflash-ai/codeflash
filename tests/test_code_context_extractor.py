@@ -99,7 +99,6 @@ class MainClass:
     assert read_write_context.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
 
-
 def test_class_method_dependencies() -> None:
     file_path = Path(__file__).resolve()
 
@@ -1260,3 +1259,57 @@ class DataProcessor:
 
     assert read_write_context.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
+
+def test_indirect_init_helper() -> None:
+    code = """
+class MyClass:
+    def __init__(self):
+        self.x = 1
+        self.y = outside_method()
+    def target_method(self):
+        return self.x + self.y
+
+def outside_method():
+    return 1
+"""
+    with tempfile.NamedTemporaryFile(mode="w") as f:
+        f.write(code)
+        f.flush()
+        file_path = Path(f.name).resolve()
+        opt = Optimizer(
+            Namespace(
+                project_root=file_path.parent.resolve(),
+                disable_telemetry=True,
+                tests_root="tests",
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=Path().resolve(),
+            )
+        )
+        function_to_optimize = FunctionToOptimize(
+            function_name="target_method",
+            file_path=file_path,
+            parents=[FunctionParent(name="MyClass", type="ClassDef")],
+            starting_line=None,
+            ending_line=None,
+        )
+
+        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+        read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
+        expected_read_write_context = """
+class MyClass:
+    def __init__(self):
+        self.x = 1
+        self.y = outside_method()
+    def target_method(self):
+        return self.x + self.y
+"""
+        expected_read_only_context = f"""
+```python:{file_path.relative_to(opt.args.project_root)}
+def outside_method():
+    return 1
+```
+"""
+        assert read_write_context.strip() == expected_read_write_context.strip()
+        assert read_only_context.strip() == expected_read_only_context.strip()
