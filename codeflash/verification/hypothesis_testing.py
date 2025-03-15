@@ -179,9 +179,10 @@ def generate_hypothesis_tests(
 
             class TestFunctionRemover(ast.NodeTransformer):
                 def visit_FunctionDef(self, node):  # noqa: ANN001, ANN202, N802
-                    if function_to_optimize.function_name not in node.name:
-                        return None
-                    return node
+                    if function_to_optimize.function_name in node.name:
+                        node.name = f"{node.name}_hypothesis"
+                        return node
+                    return None
 
             modified_tree = TestFunctionRemover().visit(tree)
             ast.fix_missing_locations(modified_tree)

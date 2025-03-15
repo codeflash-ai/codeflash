@@ -180,7 +180,6 @@ class FunctionOptimizer:
             optimizations_set,
         ) = generated_results.unwrap()
         count_tests = len(generated_tests.generated_tests)
-        count_tests = len(generated_tests.generated_tests)
         if concolic_test_str:
             count_tests += 1
         if hypothesis_test_str:
@@ -209,27 +208,6 @@ class FunctionOptimizer:
         if hypothesis_test_str:
             logger.info(f"Generated test {count_tests}/{count_tests}:")
             code_print(hypothesis_test_str)
-
-        for i, generated_test in enumerate(generated_tests.generated_tests):
-            with generated_test.behavior_file_path.open("w", encoding="utf8") as f:
-                f.write(generated_test.instrumented_behavior_test_source)
-            with generated_test.perf_file_path.open("w", encoding="utf8") as f:
-                f.write(generated_test.instrumented_perf_test_source)
-            self.test_files.add(
-                TestFile(
-                    instrumented_behavior_file_path=generated_test.behavior_file_path,
-                    benchmarking_file_path=generated_test.perf_file_path,
-                    original_file_path=None,
-                    original_source=generated_test.generated_original_test_source,
-                    test_type=TestType.GENERATED_REGRESSION,
-                    tests_in_file=None,  # This is currently unused. We can discover the tests in the file if needed.
-                )
-            )
-            logger.info(f"Generated test {i + 1}/{count_tests}:")
-            code_print(generated_test.generated_original_test_source)
-        if concolic_test_str:
-            logger.info(f"Generated test {count_tests}/{count_tests}:")
-            code_print(concolic_test_str)
 
         function_to_optimize_qualified_name = self.function_to_optimize.qualified_name
         function_to_all_tests = {
