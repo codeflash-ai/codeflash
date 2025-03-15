@@ -155,6 +155,8 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
 
         if HAS_PANDAS and isinstance(orig, (pandas.CategoricalDtype, pandas.Interval, pandas.Period)):
             return orig == new
+        if HAS_PANDAS and pandas.isna(orig) and pandas.isna(new):
+            return True
 
         # This should be at the end of all numpy checking
         try:
