@@ -36,7 +36,8 @@ def run_behavioral_tests(
     verbose: bool = False,
     pytest_target_runtime_seconds: int = TOTAL_LOOPING_TIME,
     enable_coverage: bool = False,
-) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
+    enable_lprofiler: bool = False,
+) -> tuple[Path, subprocess.CompletedProcess, Path | None]:
     if test_framework == "pytest":
         test_files: list[str] = []
         for file in test_paths.test_files:
@@ -94,6 +95,17 @@ def run_behavioral_tests(
                 f"Result return code: {results.returncode}, "
                 f"{'Result stderr:' + str(results.stderr) if results.stderr else ''}"
             )
+        elif enable_lprofiler:
+            pytest_test_env["LINE_PROFILE"]="1"
+            cmd = [SAFE_SYS_EXECUTABLE,"-m","pytest"]
+
+            results = execute_test_subprocess(
+                cmd+test_files, cwd=cwd, env=pytest_test_env, timeout=600
+            )
+            logger.debug(
+                f"Result return code: {results.returncode}, "
+                f"{'Result stderr:' + str(results.stderr) if results.stderr else ''}"
+            )
         else:
             results = execute_test_subprocess(
                 pytest_cmd_list + common_pytest_args + result_args + test_files,
@@ -119,7 +131,8 @@ def run_behavioral_tests(
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
-
+    if enable_lprofiler:
+        pass
     return result_file_path, results, coverage_database_file if enable_coverage else None, coverage_config_file if enable_coverage else None
 
 
