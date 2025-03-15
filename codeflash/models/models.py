@@ -218,6 +218,7 @@ class OriginalCodeBaseline(BaseModel):
     benchmarking_test_results: TestResults
     runtime: int
     coverage_results: Optional[CoverageData]
+    lprof_results: str
 
 
 class CoverageStatus(Enum):

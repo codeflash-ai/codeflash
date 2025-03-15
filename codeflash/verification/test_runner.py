@@ -131,7 +131,8 @@ def run_behavioral_tests(
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
-
+    if enable_lprofiler:
+        pass
     return result_file_path, results, coverage_database_file if enable_coverage else None, coverage_config_file if enable_coverage else None
 
 
