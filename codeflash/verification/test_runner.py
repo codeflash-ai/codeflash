@@ -90,17 +90,18 @@ def run_behavioral_tests(
             env=pytest_test_env,
             timeout=600,
         )
+        logger.info(auditing_res.stdout)
         if auditing_res.returncode != 0:
             line_co = next(
                 (
                     line
                     for line in auditing_res.stderr.splitlines() + auditing_res.stdout.splitlines()
-                    if "codeflash.verification._auditwall.SideEffectDetectedError" in line
+                    if "auditwall.core.SideEffectDetected" in line
                 ),
                 None,
             )
             if line_co:
-                match = re.search(r"codeflash has detected: (.+).", line_co)
+                match = re.search(r"auditwall.core.SideEffectDetected: A (.+).", line_co)
                 if match:
                     msg = match.group(1)
                     raise SideEffectDetected(msg)
