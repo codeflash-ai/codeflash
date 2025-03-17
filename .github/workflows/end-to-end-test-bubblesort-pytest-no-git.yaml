@@ -22,17 +22,17 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python 3.11 for CLI
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: 3.11.6
+      # - name: Set up Python 3.11 for CLI
+      #   uses: astral-sh/setup-uv@v5
+      #   with:
+      #     python-version: 3.11.6
 
-      - name: Install dependencies (CLI)
-        run: |
-          uv tool install poetry
-          uv venv
-          source .venv/bin/activate
-          poetry install --with dev
+      # - name: Install dependencies (CLI)
+      #   run: |
+      #     uv tool install poetry
+      #     uv venv
+      #     source .venv/bin/activate
+      #     poetry install --with dev
 
       - name: Remove .git
         run: |
@@ -53,5 +53,4 @@ jobs:
       - name: Run Codeflash to optimize code
         id: optimize_code
         run: |
-          source .venv/bin/activate
-          poetry run python tests/scripts/end_to_end_test_bubblesort_pytest.py
+          uv run -p 3.11 python tests/scripts/end_to_end_test_bubblesort_pytest.py
