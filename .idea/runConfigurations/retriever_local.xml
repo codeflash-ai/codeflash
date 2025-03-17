@@ -8,13 +8,13 @@
       <env name="PYTHONUNBUFFERED" value="1" />
     </envs>
     <option name="SDK_HOME" value="" />
-    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/code_to_optimize/code_directories/" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
     <option name="IS_MODULE_SDK" value="true" />
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/codeflash/main.py" />
-    <option name="PARAMETERS" value="--file $PROJECT_DIR$/code_to_optimize/code_directories/retriever/main.py --function fetch_and_transform_data --module-root $PROJECT_DIR$/code_to_optimize/code_directories/retriever/ --test-framework pytest --tests-root $PROJECT_DIR$/code_to_optimize/tests/pytest --no-pr --verbose" />
+    <option name="PARAMETERS" value="--file $PROJECT_DIR$/code_to_optimize/retriever_main.py --function fetch_and_process_data --module-root $PROJECT_DIR$ --test-framework pytest --tests-root $PROJECT_DIR$/code_to_optimize/tests/pytest --no-pr --verbose" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
