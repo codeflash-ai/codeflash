@@ -18,14 +18,6 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
-        with:
-          version: "0.5.30"
-
-      - name: install poetry as a tool
-        run: uv tool install poetry
-
-      - name: install dependencies
-        run: uvx poetry install --with dev
 
       - name: Run mypy on allowlist
-        run: uvx poetry run mypy --non-interactive --config-file pyproject.toml @mypy_allowlist.txt
+        run: uv run --all-groups mypy --non-interactive --config-file pyproject.toml @mypy_allowlist.txt
