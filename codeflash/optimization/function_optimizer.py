@@ -231,21 +231,25 @@ class FunctionOptimizer:
             return Failure("The threshold for test coverage was not met.")
 
         best_optimization = None
+        lprof_generated_results = []
         logger.info(f"Adding more candidates based on lineprof info, calling ai service")
         with progress_bar(
             f"Generating new optimizations for function {self.function_to_optimize.function_name} with line profiler information",
             transient=True,
         ):
             pass
-            lprof_generated_results = self.aiservice_client.optimize_python_code_line_profiler(
-
-            source_code=code_context.read_writable_code,
-            dependency_code=code_context.read_only_context_code,
-            trace_id=self.function_trace_id,
-            line_profiler_results=original_code_baseline.lprof_results,
-            num_candidates = 10,
-            experiment_metadata = None)
-
+            with concurrent.futures.ThreadPoolExecutor(max_workers= N_TESTS_TO_GENERATE + 2) as executor:
+                future_optimization_candidates_lp = executor.submit(self.aiservice_client.optimize_python_code_line_profiler,
+                source_code=code_context.read_writable_code,
+                dependency_code=code_context.read_only_context_code,
+                trace_id=self.function_trace_id,
+                line_profiler_results=original_code_baseline.lprof_results,
+                num_candidates = 10,
+                experiment_metadata = None)
+                future = [future_optimization_candidates_lp]
+            pass
+            concurrent.futures.wait(future)
+            lprof_generated_results = future[0].result()
         if len(lprof_generated_results)==0:
             logger.info(f"Generated tests with line profiler failed.")
         else:
