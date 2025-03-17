@@ -244,3 +244,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
         logger.error(f"RecursionError while comparing objects: {e}")
         sentry_sdk.capture_exception(e)
         return False
+    except Exception as e:
+        logger.error(f"Error while comparing objects: {e}")
+        sentry_sdk.capture_exception(e)
+        return False
