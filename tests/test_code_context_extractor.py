@@ -356,10 +356,9 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
             lifespan=self.__duration__,
         )
 '''
-    with tempfile.NamedTemporaryFile(mode="w") as f:
-        f.write(code)
-        f.flush()
-        file_path = Path(f.name).resolve()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        file_path = Path(temp_dir) / "test.py"
+        file_path.write_text(code)
         opt = Optimizer(
             Namespace(
                 project_root=file_path.parent.resolve(),
@@ -368,7 +367,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
                 test_framework="pytest",
                 pytest_cmd="pytest",
                 experiment_id=None,
-                test_project_root=Path().resolve(),
+                test_project_root=Path.cwd(),
             )
         )
         function_to_optimize = FunctionToOptimize(
@@ -557,10 +556,9 @@ class HelperClass:
     def helper_method(self):
         return self.x
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
-        f.write(code)
-        f.flush()
-        file_path = Path(f.name).resolve()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        file_path = Path(temp_dir) / "test.py"
+        file_path.write_text(code)
         opt = Optimizer(
             Namespace(
                 project_root=file_path.parent.resolve(),
@@ -569,7 +567,7 @@ class HelperClass:
                 test_framework="pytest",
                 pytest_cmd="pytest",
                 experiment_id=None,
-                test_project_root=Path().resolve(),
+                test_project_root=Path.cwd(),
             )
         )
         function_to_optimize = FunctionToOptimize(
@@ -637,10 +635,9 @@ class HelperClass:
     def helper_method(self):
         return self.x
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
-        f.write(code)
-        f.flush()
-        file_path = Path(f.name).resolve()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        file_path = Path(temp_dir) / "test.py"
+        file_path.write_text(code)
         opt = Optimizer(
             Namespace(
                 project_root=file_path.parent.resolve(),
@@ -649,7 +646,7 @@ class HelperClass:
                 test_framework="pytest",
                 pytest_cmd="pytest",
                 experiment_id=None,
-                test_project_root=Path().resolve(),
+                test_project_root=Path.cwd(),
             )
         )
         function_to_optimize = FunctionToOptimize(
@@ -717,10 +714,9 @@ class HelperClass:
     def helper_method(self):
         return self.x
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
-        f.write(code)
-        f.flush()
-        file_path = Path(f.name).resolve()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        file_path = Path(temp_dir) / "test.py"
+        file_path.write_text(code)
         opt = Optimizer(
             Namespace(
                 project_root=file_path.parent.resolve(),
@@ -729,7 +725,7 @@ class HelperClass:
                 test_framework="pytest",
                 pytest_cmd="pytest",
                 experiment_id=None,
-                test_project_root=Path().resolve(),
+                test_project_root=Path.cwd(),
             )
         )
         function_to_optimize = FunctionToOptimize(
@@ -787,10 +783,9 @@ class HelperClass:
     def helper_method(self):
         return self.x
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
-        f.write(code)
-        f.flush()
-        file_path = Path(f.name).resolve()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        file_path = Path(temp_dir) / "test.py"
+        file_path.write_text(code)
         opt = Optimizer(
             Namespace(
                 project_root=file_path.parent.resolve(),
@@ -838,10 +833,9 @@ class HelperClass:
     def helper_method(self):
         return self.x
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
-        f.write(code)
-        f.flush()
-        file_path = Path(f.name).resolve()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        file_path = Path(temp_dir) / "test.py"
+        file_path.write_text(code)
         opt = Optimizer(
             Namespace(
                 project_root=file_path.parent.resolve(),
@@ -1272,10 +1266,9 @@ class MyClass:
 def outside_method():
     return 1
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
-        f.write(code)
-        f.flush()
-        file_path = Path(f.name).resolve()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        file_path = Path(temp_dir) / "test.py"
+        file_path.write_text(code)
         opt = Optimizer(
             Namespace(
                 project_root=file_path.parent.resolve(),

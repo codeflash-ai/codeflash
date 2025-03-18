@@ -33,10 +33,10 @@ def test_sorting_imports():
 
 def test_sort_imports_without_formatting():
     """Test that imports are sorted when formatting is disabled and should_sort_imports is True."""
-    with tempfile.NamedTemporaryFile() as tmp:
-        tmp.write(b"import sys\nimport unittest\nimport os\n")
-        tmp.flush()
-        tmp_path = Path(tmp.name)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir) / "test.py"
+        with tmp_path.open("w") as tmp:
+            tmp.write("import sys\nimport unittest\nimport os\n")
 
         new_code = format_code(formatter_cmds=["disabled"], path=tmp_path)
         assert new_code is not None
@@ -105,10 +105,10 @@ test-framework = "pytest"
 ignore-paths = []
 """
 
-    with tempfile.NamedTemporaryFile(suffix=".toml", delete=False) as tmp:
-        tmp.write(config_data.encode())
-        tmp.flush()
-        tmp_path = Path(tmp.name)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir) / "pyproject.toml"
+        with tmp_path.open("w") as tmp:
+            tmp.write(config_data)
 
     try:
         config, _ = parse_config_file(tmp_path)
@@ -133,10 +133,11 @@ import sys
 def foo():
     return os.path.join(sys.path[0], "bar")
 """
-    with tempfile.NamedTemporaryFile() as tmp:
-        tmp.write(original_code)
-        tmp.flush()
-        tmp_path = tmp.name
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir) / "test.py"
+        with tmp_path.open("wb") as tmp:
+            tmp.write(original_code)
+            tmp.flush()
 
         actual = format_code(formatter_cmds=["black $file"], path=Path(tmp_path))
         assert actual == expected
@@ -159,10 +160,11 @@ import sys
 def foo():
     return os.path.join(sys.path[0], "bar")
 """
-    with tempfile.NamedTemporaryFile() as tmp:
-        tmp.write(original_code)
-        tmp.flush()
-        tmp_path = tmp.name
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir) / "test.py"
+        with tmp_path.open("wb") as tmp:
+            tmp.write(original_code)
+            tmp.flush()
 
         actual = format_code(formatter_cmds=["black $file"], path=Path(tmp_path))
         assert actual == expected
@@ -185,10 +187,11 @@ import sys
 def foo():
     return os.path.join(sys.path[0], "bar")
 """
-    with tempfile.NamedTemporaryFile(suffix=".py") as tmp:
-        tmp.write(original_code)
-        tmp.flush()
-        tmp_path = tmp.name
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir) / "test.py"
+        with tmp_path.open("wb") as tmp:
+            tmp.write(original_code)
+            tmp.flush()
 
         actual = format_code(
             formatter_cmds=["ruff check --exit-zero --fix $file", "ruff format $file"], path=Path(tmp_path)
@@ -203,9 +206,10 @@ import sys
 def foo():
     return os.path.join(sys.path[0], 'bar')"""
     expected = original_code
-    with tempfile.NamedTemporaryFile("w") as tmp:
-        tmp.write(original_code)
-        tmp.flush()
-        tmp_path = tmp.name
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir) / "test.py"
+        with tmp_path.open("w") as tmp:
+            tmp.write(original_code)
+
         with pytest.raises(FileNotFoundError):
-            format_code(formatter_cmds=["exit 1"], path=Path(tmp_path))
+            format_code(formatter_cmds=["exit 1"], path=tmp_path)
