@@ -139,7 +139,7 @@ def foo():
             tmp.write(original_code)
             tmp.flush()
 
-        actual = format_code(formatter_cmds=["black $file"], path=Path(tmp_path))
+        actual = format_code(formatter_cmds=["black $file"], path=tmp_path.resolve())
         assert actual == expected
 
 
@@ -212,4 +212,4 @@ def foo():
             tmp.write(original_code)
 
         with pytest.raises(FileNotFoundError):
-            format_code(formatter_cmds=["exit 1"], path=tmp_path)
+            format_code(formatter_cmds=["exit 1"], path=tmp_path.resolve())
