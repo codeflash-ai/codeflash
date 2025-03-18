@@ -26,6 +26,7 @@ def normal_function():
     )
 
     expected_code = """
+from codeflash.benchmarking.codeflash_trace import codeflash_trace
 @codeflash_trace
 def normal_function():
     return "Hello, World!"
@@ -53,6 +54,7 @@ class TestClass:
     )
 
     expected_code = """
+from codeflash.benchmarking.codeflash_trace import codeflash_trace
 class TestClass:
     @codeflash_trace
     def normal_method(self):
@@ -82,6 +84,7 @@ class TestClass:
     )
 
     expected_code = """
+from codeflash.benchmarking.codeflash_trace import codeflash_trace
 class TestClass:
     @classmethod
     @codeflash_trace
@@ -112,6 +115,7 @@ class TestClass:
     )
 
     expected_code = """
+from codeflash.benchmarking.codeflash_trace import codeflash_trace
 class TestClass:
     @staticmethod
     @codeflash_trace
@@ -141,6 +145,7 @@ class TestClass:
     )
 
     expected_code = """
+from codeflash.benchmarking.codeflash_trace import codeflash_trace
 class TestClass:
     @codeflash_trace
     def __init__(self, value):
@@ -171,6 +176,7 @@ class TestClass:
     )
 
     expected_code = """
+from codeflash.benchmarking.codeflash_trace import codeflash_trace
 class TestClass:
     @property
     @other_decorator
@@ -205,6 +211,7 @@ class OtherClass:
     )
 
     expected_code = """
+from codeflash.benchmarking.codeflash_trace import codeflash_trace
 class TestClass:
     @codeflash_trace
     def test_method(self):

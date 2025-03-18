@@ -3,7 +3,8 @@ import sys
 import pytest
 import time
 import os
-class CodeFlashPlugin:
+class CodeFlashBenchmarkPlugin:
+    benchmark_timings = []
     @staticmethod
     def pytest_addoption(parser):
         parser.addoption(
@@ -38,15 +39,20 @@ class CodeFlashPlugin:
         class Benchmark:
 
             def __call__(self, func, *args, **kwargs):
-                os.environ["CODEFLASH_BENCHMARK_FUNCTION_NAME"] = request.node.name
-                os.environ["CODEFLASH_BENCHMARK_FILE_NAME"] = request.node.fspath.basename
-                os.environ["CODEFLASH_BENCHMARK_LINE_NUMBER"] = str(sys._getframe(1).f_lineno) # 1 frame up in the call stack
+                benchmark_file_name = request.node.fspath.basename
+                benchmark_function_name = request.node.name
+                line_number = str(sys._getframe(1).f_lineno)  # 1 frame up in the call stack
+                os.environ["CODEFLASH_BENCHMARK_FUNCTION_NAME"] = benchmark_function_name
+                os.environ["CODEFLASH_BENCHMARK_FILE_NAME"] = benchmark_file_name
+                os.environ["CODEFLASH_BENCHMARK_LINE_NUMBER"] = line_number
                 os.environ["CODEFLASH_BENCHMARKING"] = "True"
-                start = time.process_time_ns()
+
+                start = time.perf_counter_ns()
                 result = func(*args, **kwargs)
-                end = time.process_time_ns()
+                end = time.perf_counter_ns()
+
                 os.environ["CODEFLASH_BENCHMARKING"] = "False"
-                print(f"Benchmark: {func.__name__} took {end - start} ns")
+                CodeFlashBenchmarkPlugin.benchmark_timings.append((benchmark_file_name, benchmark_function_name, line_number, end - start))
                 return result
 
         return Benchmark()

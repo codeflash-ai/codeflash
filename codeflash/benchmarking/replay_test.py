@@ -270,8 +270,9 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
                 output_file = get_test_file_path(
                     test_dir=Path(output_dir), function_name=f"{benchmark_file_name[5:]}_{benchmark_function_name}", test_type="replay"
                 )
-                with open(output_file, 'w') as f:
-                    f.write(test_code)
+                # Write test code to file, parents = true
+                output_dir.mkdir(parents=True, exist_ok=True)
+                output_file.write_text(test_code, "utf-8")
                 print(f"Replay test for benchmark `{benchmark_function_name}` in {benchmark_file_name} written to {output_file}")
 
         conn.close()

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
+from codeflash.benchmarking.replay_test import generate_replay_test
 from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
 from codeflash.benchmarking.utils import print_benchmark_table
 from codeflash.cli_cmds.console import console, logger
@@ -25,7 +26,8 @@ from codeflash.verification.test_results import TestType
 from codeflash.verification.verification_utils import TestConfig
 from codeflash.benchmarking.get_trace_info import get_function_benchmark_timings, get_benchmark_timings
 from codeflash.benchmarking.utils import print_benchmark_table
-from codeflash.benchmarking.codeflash_trace import codeflash_trace
+from codeflash.benchmarking.instrument_codeflash_trace import instrument_codeflash_trace_decorator
+
 
 from collections import defaultdict
 
@@ -94,6 +96,8 @@ class Optimizer:
             project_root=self.args.project_root,
             module_root=self.args.module_root,
         )
+        all_functions_to_optimize = [
+            fto for functions_to_optimize in file_to_funcs_to_optimize.values() for fto in functions_to_optimize]
         if self.args.benchmark:
             # Insert decorator
             file_path_to_source_code = defaultdict(str)
@@ -103,9 +107,14 @@ class Optimizer:
             try:
                 for functions_to_optimize in file_to_funcs_to_optimize.values():
                     for fto in functions_to_optimize:
-                        pass
-                        #instrument_codeflash_trace_decorator(fto)
-                trace_benchmarks_pytest(self.args.project_root) # Simply run all tests that use pytest-benchmark
+                        instrument_codeflash_trace_decorator(fto)
+                trace_file = Path(self.args.benchmarks_root) / "benchmarks.trace"
+                trace_benchmarks_pytest(self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file) # Simply run all tests that use pytest-benchmark
+                generate_replay_test(trace_file, Path(self.args.tests_root) / "codeflash_replay_tests" )
+                function_benchmark_timings = get_function_benchmark_timings(trace_file)
+                total_benchmark_timings = get_benchmark_timings(trace_file)
+                print(function_benchmark_timings)
+                print(total_benchmark_timings)
                 logger.info("Finished tracing existing benchmarks")
             except Exception as e:
                 logger.info(f"Error while tracing existing benchmarks: {e}")
@@ -116,13 +125,13 @@ class Optimizer:
                     with file.open("w", encoding="utf8") as f:
                         f.write(file_path_to_source_code[file])
 
-            codeflash_trace.print_trace_info()
+
             # trace_dir = Path(self.args.benchmarks_root) / ".codeflash_trace"
             # function_benchmark_timings = get_function_benchmark_timings(trace_dir, all_functions_to_optimize)
             # total_benchmark_timings = get_benchmark_timings(trace_dir)
             # print_benchmark_table(function_benchmark_timings, total_benchmark_timings)
 
-
+        # return
         optimizations_found: int = 0
         function_iterator_count: int = 0
         if self.args.test_framework == "pytest":
@@ -207,6 +216,10 @@ class Optimizer:
                         function_optimizer = self.create_function_optimizer(
                             function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code[original_module_path].source_code, function_benchmark_timings, total_benchmark_timings
                         )
+                        # function_optimizer = self.create_function_optimizer(
+                        #     function_to_optimize, function_to_optimize_ast, function_to_tests,
+                        #     validated_original_code[original_module_path].source_code
+                        # )
                     else:
                         function_optimizer = self.create_function_optimizer(
                             function_to_optimize, function_to_optimize_ast, function_to_tests,
