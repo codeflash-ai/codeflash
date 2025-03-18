@@ -14,10 +14,10 @@ from codeflash.code_utils.code_utils import (
     get_imports_from_file,
     get_qualified_name,
     get_run_tmp_file,
+    has_any_async_functions,
     is_class_defined_in_file,
     module_name_from_file_path,
     path_belongs_to_site_packages,
-    has_any_async_functions,
 )
 from codeflash.code_utils.concolic_utils import clean_concolic_tests
 from codeflash.code_utils.coverage_utils import generate_candidates, prepare_coverage_files
@@ -254,7 +254,7 @@ def test_get_run_tmp_file_reuses_temp_directory() -> None:
 
 
 def test_path_belongs_to_site_packages_with_site_package_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    site_packages = [Path("/usr/local/lib/python3.9/site-packages")]
+    site_packages = [Path("/usr/local/lib/python3.9/site-packages").resolve()]
     monkeypatch.setattr(site, "getsitepackages", lambda: site_packages)
 
     file_path = Path("/usr/local/lib/python3.9/site-packages/some_package")
