@@ -280,16 +280,23 @@ class FunctionOptimizer:
                 speedup = explanation.speedup #
                 if self.args.benchmark:
                     original_replay_timing = original_code_baseline.benchmarking_test_results.total_replay_test_runtime()
-                    fto_benchmark_timings = self.function_benchmark_timings[self.function_to_optimize.qualified_name_with_file_name]
-                    for benchmark_name, og_benchmark_timing in fto_benchmark_timings.items():
-                        print(f"Calculating speedup for benchmark {benchmark_name}")
-                        total_benchmark_timing = self.total_benchmark_timings[benchmark_name]
+                    fto_benchmark_timings = self.function_benchmark_timings[self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)]
+                    for benchmark_key, og_benchmark_timing in fto_benchmark_timings.items():
+                        # benchmark key is benchmark filename :: benchmark test function :: line number
+                        try:
+                            benchmark_file_name, benchmark_test_function, line_number = benchmark_key.split("::")
+                        except ValueError:
+                            print(f"Benchmark key {benchmark_key} is not in the expected format.")
+                            continue
+                        print(f"Calculating speedup for benchmark {benchmark_key}")
+                        total_benchmark_timing = self.total_benchmark_timings[benchmark_key]
                         # find out expected new benchmark timing, then calculate how much total benchmark was sped up. print out intermediate values
+                        print(f"Original benchmark timing: {total_benchmark_timing}")
                         replay_speedup = original_replay_timing / best_optimization.replay_runtime - 1
                         print(f"Replay speedup: {replay_speedup}")
                         expected_new_benchmark_timing = total_benchmark_timing - og_benchmark_timing + 1 / (replay_speedup + 1) * og_benchmark_timing
                         print(f"Expected new benchmark timing: {expected_new_benchmark_timing}")
-                        print(f"Original benchmark timing: {total_benchmark_timing}")
+
                         benchmark_speedup_ratio = total_benchmark_timing / expected_new_benchmark_timing
                         benchmark_speedup_percent = (benchmark_speedup_ratio - 1) * 100
                         print(f"Benchmark speedup: {benchmark_speedup_percent:.2f}%")

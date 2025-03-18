@@ -1,3 +1,4 @@
+import isort
 import libcst as cst
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -9,6 +10,7 @@ class AddDecoratorTransformer(cst.CSTTransformer):
         self.function_name = function_name
         self.class_name = class_name
         self.in_target_class = (class_name is None)  # If no class name, always "in target class"
+        self.added_codeflash_trace = False
 
     def leave_ClassDef(self, original_node, updated_node):
         if self.class_name and original_node.name.value == self.class_name:
@@ -31,12 +33,39 @@ class AddDecoratorTransformer(cst.CSTTransformer):
 
         # Add the new decorator after any existing decorators
         updated_decorators = list(updated_node.decorators) + [decorator]
-
+        self.added_codeflash_trace = True
         # Return the updated node with the new decorator
         return updated_node.with_changes(
             decorators=updated_decorators
         )
 
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
+        # Create import statement for codeflash_trace
+        if not self.added_codeflash_trace:
+            return updated_node
+        import_stmt = cst.SimpleStatementLine(
+            body=[
+                cst.ImportFrom(
+                    module=cst.Attribute(
+                        value=cst.Attribute(
+                            value=cst.Name(value="codeflash"),
+                            attr=cst.Name(value="benchmarking")
+                        ),
+                        attr=cst.Name(value="codeflash_trace")
+                    ),
+                    names=[
+                        cst.ImportAlias(
+                            name=cst.Name(value="codeflash_trace")
+                        )
+                    ]
+                )
+            ]
+        )
+
+        # Insert at the beginning of the file
+        new_body = [import_stmt, *list(updated_node.body)]
+
+        return updated_node.with_changes(body=new_body)
 
 def add_codeflash_decorator_to_code(code: str, function_to_optimize: FunctionToOptimize) -> str:
     """Add codeflash_trace to a function.
@@ -63,7 +92,7 @@ def add_codeflash_decorator_to_code(code: str, function_to_optimize: FunctionToO
     return modified_module.code
 
 
-def instrument_codeflash_trace(
+def instrument_codeflash_trace_decorator(
         function_to_optimize: FunctionToOptimize
 ) -> None:
     """Instrument __init__ function with codeflash_trace decorator if it's in a class."""
@@ -71,10 +100,10 @@ def instrument_codeflash_trace(
     original_code = function_to_optimize.file_path.read_text(encoding="utf-8")
 
     # Modify the code
-    modified_code = add_codeflash_decorator_to_code(
+    modified_code = isort.code(add_codeflash_decorator_to_code(
         original_code,
         function_to_optimize
-    )
+    ))
 
     # Write the modified code back to the file
     function_to_optimize.file_path.write_text(modified_code, encoding="utf-8")

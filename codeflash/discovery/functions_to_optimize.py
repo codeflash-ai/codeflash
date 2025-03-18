@@ -143,11 +143,11 @@ class FunctionToOptimize:
 
     def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
-
-    @property
-    def qualified_name_with_file_name(self) -> str:
-        class_name = self.parents[0].name if self.parents else None
-        return f"{self.file_path}:{(class_name + ':' if class_name else '')}{self.function_name}"
+    #
+    # @property
+    # def qualified_name_with_file_name(self) -> str:
+    #     class_name = self.parents[0].name if self.parents else None
+    #     return f"{self.file_path}:{(class_name + ':' if class_name else '')}{self.function_name}"
 
 
 def get_functions_to_optimize(
@@ -363,23 +363,28 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
                         for decorator in body_node.decorator_list
                     ):
                         self.is_classmethod = True
-                    return
-        else:
-            # search if the class has a staticmethod with the same name and on the same line number
-            for body_node in node.body:
-                if (
-                    isinstance(body_node, ast.FunctionDef)
-                    and body_node.name == self.function_name
-                    and body_node.lineno in {self.line_no, self.line_no + 1}
-                    and any(
+                    elif any(
                         isinstance(decorator, ast.Name) and decorator.id == "staticmethod"
                         for decorator in body_node.decorator_list
-                    )
-                ):
-                    self.is_staticmethod = True
-                    self.is_top_level = True
-                    self.class_name = node.name
+                    ):
+                        self.is_staticmethod = True
                     return
+        # else:
+        #     # search if the class has a staticmethod with the same name and on the same line number
+        #     for body_node in node.body:
+        #         if (
+        #             isinstance(body_node, ast.FunctionDef)
+        #             and body_node.name == self.function_name
+        #             # and body_node.lineno in {self.line_no, self.line_no + 1}
+        #             and any(
+        #                 isinstance(decorator, ast.Name) and decorator.id == "staticmethod"
+        #                 for decorator in body_node.decorator_list
+        #             )
+        #         ):
+        #             self.is_staticmethod = True
+        #             self.is_top_level = True
+        #             self.class_name = node.name
+        #             return
 
         return
 
