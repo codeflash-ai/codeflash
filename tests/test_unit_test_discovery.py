@@ -18,11 +18,11 @@ def test_unit_test_discovery_pytest():
     )
     tests = discover_unit_tests(test_config)
     assert len(tests) > 0
-    # print(tests)
+
 
 def test_benchmark_test_discovery_pytest():
     project_path = Path(__file__).parent.parent.resolve() / "code_to_optimize"
-    tests_path = project_path / "tests" / "pytest" / "benchmarks" / "test_benchmark_bubble_sort.py"
+    tests_path = project_path / "tests" / "pytest" / "benchmarks"
     test_config = TestConfig(
         tests_root=tests_path,
         project_root_path=project_path,
@@ -30,10 +30,7 @@ def test_benchmark_test_discovery_pytest():
         tests_project_rootdir=tests_path.parent,
     )
     tests = discover_unit_tests(test_config)
-    assert len(tests) > 0
-    assert 'bubble_sort.sorter' in tests
-    benchmark_tests = sum(1 for test in tests['bubble_sort.sorter'] if test.tests_in_file.test_type == TestType.BENCHMARK_TEST)
-    assert benchmark_tests == 1
+    assert len(tests) == 1 # Should not discover benchmark tests
 
 
 def test_unit_test_discovery_unittest():

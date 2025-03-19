@@ -363,23 +363,25 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
                         for decorator in body_node.decorator_list
                     ):
                         self.is_staticmethod = True
+                        print(f"static method found: {self.function_name}")
                     return
-        # else:
-        #     # search if the class has a staticmethod with the same name and on the same line number
-        #     for body_node in node.body:
-        #         if (
-        #             isinstance(body_node, ast.FunctionDef)
-        #             and body_node.name == self.function_name
-        #             # and body_node.lineno in {self.line_no, self.line_no + 1}
-        #             and any(
-        #                 isinstance(decorator, ast.Name) and decorator.id == "staticmethod"
-        #                 for decorator in body_node.decorator_list
-        #             )
-        #         ):
-        #             self.is_staticmethod = True
-        #             self.is_top_level = True
-        #             self.class_name = node.name
-        #             return
+        elif self.line_no:
+            # If we have line number info, check if class has a static method with the same line number
+            # This way, if we don't have the class name, we can still find the static method
+            for body_node in node.body:
+                if (
+                    isinstance(body_node, ast.FunctionDef)
+                    and body_node.name == self.function_name
+                    and body_node.lineno in {self.line_no, self.line_no + 1}
+                    and any(
+                        isinstance(decorator, ast.Name) and decorator.id == "staticmethod"
+                        for decorator in body_node.decorator_list
+                    )
+                ):
+                    self.is_staticmethod = True
+                    self.is_top_level = True
+                    self.class_name = node.name
+                    return
 
         return
 
