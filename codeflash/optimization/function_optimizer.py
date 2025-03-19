@@ -785,7 +785,7 @@ class FunctionOptimizer:
         with progress_bar(f"Establishing original code baseline for {self.function_to_optimize.function_name}"):
             assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
             success = True
-
+            lprof_results = ''
             test_env = os.environ.copy()
             test_env["CODEFLASH_TEST_ITERATION"] = "0"
             test_env["CODEFLASH_TRACER_DISABLE"] = "1"
