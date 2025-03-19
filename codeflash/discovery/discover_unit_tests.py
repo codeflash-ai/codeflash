@@ -109,6 +109,8 @@ def discover_tests_pytest(
             continue
         file_to_test_map[test_obj.test_file].append(test_obj)
     # Within these test files, find the project functions they are referring to and return their names/locations
+    if len(file_to_test_map) < 25: #default to single-threaded if there aren't that many files
+        return process_test_files_single_threaded(file_to_test_map, cfg)
     return process_test_files(file_to_test_map, cfg)
 
 
@@ -166,6 +168,9 @@ def discover_tests_unittest(
                     details = get_test_details(test)
                     if details is not None:
                         file_to_test_map[str(details.test_file)].append(details)
+
+    if len(file_to_test_map) < 25: #default to single-threaded if there aren't that many files
+        return process_test_files_single_threaded(file_to_test_map, cfg)
     return process_test_files(file_to_test_map, cfg)
 
 
@@ -356,6 +361,144 @@ def process_file_worker(args_tuple):
             'test_file': test_file,
             'results': {}
         }
+
+def process_test_files_single_threaded(
+    file_to_test_map: dict[str, list[TestsInFile]], cfg: TestConfig
+) -> dict[str, list[FunctionCalledInTest]]:
+    project_root_path = cfg.project_root_path
+    test_framework = cfg.test_framework
+    function_to_test_map = defaultdict(list)
+    jedi_project = jedi.Project(path=project_root_path)
+
+    for test_file, functions in file_to_test_map.items():
+        try:
+            script = jedi.Script(path=test_file, project=jedi_project)
+            test_functions = set()
+
+            all_names = script.get_names(all_scopes=True, references=True)
+            all_defs = script.get_names(all_scopes=True, definitions=True)
+            all_names_top = script.get_names(all_scopes=True)
+
+            top_level_functions = {name.name: name for name in all_names_top if name.type == "function"}
+            top_level_classes = {name.name: name for name in all_names_top if name.type == "class"}
+        except Exception as e:
+            logger.debug(f"Failed to get jedi script for {test_file}: {e}")
+            continue
+
+        if test_framework == "pytest":
+            for function in functions:
+                if "[" in function.test_function:
+                    function_name = re.split(r"[\[\]]", function.test_function)[0]
+                    parameters = re.split(r"[\[\]]", function.test_function)[1]
+                    if function_name in top_level_functions:
+                        test_functions.add(
+                            TestFunction(function_name, function.test_class, parameters, function.test_type)
+                        )
+                elif function.test_function in top_level_functions:
+                    test_functions.add(
+                        TestFunction(function.test_function, function.test_class, None, function.test_type)
+                    )
+                elif re.match(r"^test_\w+_\d+(?:_\w+)*", function.test_function):
+                    # Try to match parameterized unittest functions here, although we can't get the parameters.
+                    # Extract base name by removing the numbered suffix and any additional descriptions
+                    base_name = re.sub(r"_\d+(?:_\w+)*$", "", function.test_function)
+                    if base_name in top_level_functions:
+                        test_functions.add(
+                            TestFunction(
+                                function_name=base_name,
+                                test_class=function.test_class,
+                                parameters=function.test_function,
+                                test_type=function.test_type,
+                            )
+                        )
+
+        elif test_framework == "unittest":
+            functions_to_search = [elem.test_function for elem in functions]
+            test_suites = [elem.test_class for elem in functions]
+
+            matching_names = test_suites & top_level_classes.keys()
+            for matched_name in matching_names:
+                for def_name in all_defs:
+                    if (
+                        def_name.type == "function"
+                        and def_name.full_name is not None
+                        and f".{matched_name}." in def_name.full_name
+                    ):
+                        for function in functions_to_search:
+                            (is_parameterized, new_function, parameters) = discover_parameters_unittest(function)
+
+                            if is_parameterized and new_function == def_name.name:
+                                test_functions.add(
+                                    TestFunction(
+                                        function_name=def_name.name,
+                                        test_class=matched_name,
+                                        parameters=parameters,
+                                        test_type=functions[0].test_type,
+                                    )  # A test file must not have more than one test type
+                                )
+                            elif function == def_name.name:
+                                test_functions.add(
+                                    TestFunction(
+                                        function_name=def_name.name,
+                                        test_class=matched_name,
+                                        parameters=None,
+                                        test_type=functions[0].test_type,
+                                    )
+                                )
+
+        test_functions_list = list(test_functions)
+        test_functions_raw = [elem.function_name for elem in test_functions_list]
+
+        for name in all_names:
+            if name.full_name is None:
+                continue
+            m = re.search(r"([^.]+)\." + f"{name.name}$", name.full_name)
+            if not m:
+                continue
+            scope = m.group(1)
+            indices = [i for i, x in enumerate(test_functions_raw) if x == scope]
+            for index in indices:
+                scope_test_function = test_functions_list[index].function_name
+                scope_test_class = test_functions_list[index].test_class
+                scope_parameters = test_functions_list[index].parameters
+                test_type = test_functions_list[index].test_type
+                try:
+                    definition = name.goto(follow_imports=True, follow_builtin_imports=False)
+                except Exception as e:
+                    logger.debug(str(e))
+                    continue
+                if definition and definition[0].type == "function":
+                    definition_path = str(definition[0].module_path)
+                    # The definition is part of this project and not defined within the original function
+                    if (
+                        definition_path.startswith(str(project_root_path) + os.sep)
+                        and definition[0].module_name != name.module_name
+                        and definition[0].full_name is not None
+                    ):
+                        if scope_parameters is not None:
+                            if test_framework == "pytest":
+                                scope_test_function += "[" + scope_parameters + "]"
+                            if test_framework == "unittest":
+                                scope_test_function += "_" + scope_parameters
+                        full_name_without_module_prefix = definition[0].full_name.replace(
+                            definition[0].module_name + ".", "", 1
+                        )
+                        qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
+                        function_to_test_map[qualified_name_with_modules_from_root].append(
+                            FunctionCalledInTest(
+                                tests_in_file=TestsInFile(
+                                    test_file=test_file,
+                                    test_class=scope_test_class,
+                                    test_function=scope_test_function,
+                                    test_type=test_type,
+                                ),
+                                position=CodePosition(line_no=name.line, col_no=name.column),
+                            )
+                        )
+    deduped_function_to_test_map = {}
+    for function, tests in function_to_test_map.items():
+        deduped_function_to_test_map[function] = list(set(tests))
+    return deduped_function_to_test_map
 
 
 def process_test_files(
