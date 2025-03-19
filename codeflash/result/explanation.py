@@ -41,7 +41,7 @@ class Explanation:
         original_runtime_human = humanize_runtime(self.original_runtime_ns)
         best_runtime_human = humanize_runtime(self.best_runtime_ns)
         benchmark_info = ""
-        if self.replay_performance_gain:
+        if self.replay_performance_gain and self.fto_benchmark_timings and self.total_benchmark_timings:
             benchmark_info += "Benchmark Performance Details:\n"
             for benchmark_key, og_benchmark_timing in self.fto_benchmark_timings.items():
                 # benchmark key is benchmark filename :: benchmark test function :: line number
@@ -57,7 +57,7 @@ class Explanation:
                 replay_speedup = self.replay_performance_gain
                 expected_new_benchmark_timing = total_benchmark_timing - og_benchmark_timing + 1 / (
                         replay_speedup + 1) * og_benchmark_timing
-                benchmark_info += f"Expected new timing for {benchmark_file_name}::{benchmark_test_function}: {humanize_runtime(expected_new_benchmark_timing)}\n"
+                benchmark_info += f"Expected new timing for {benchmark_file_name}::{benchmark_test_function}: {humanize_runtime(int(expected_new_benchmark_timing))}\n"
 
                 benchmark_speedup_ratio = total_benchmark_timing / expected_new_benchmark_timing
                 benchmark_speedup_percent = (benchmark_speedup_ratio - 1) * 100
