@@ -155,6 +155,8 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
 
         if HAS_PANDAS and isinstance(orig, (pandas.CategoricalDtype, pandas.Interval, pandas.Period)):
             return orig == new
+        if HAS_PANDAS and pandas.isna(orig) and pandas.isna(new):
+            return True
 
         # This should be at the end of all numpy checking
         try:
@@ -240,5 +242,9 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
         return False
     except RecursionError as e:
         logger.error(f"RecursionError while comparing objects: {e}")
+        sentry_sdk.capture_exception(e)
+        return False
+    except Exception as e:
+        logger.error(f"Error while comparing objects: {e}")
         sentry_sdk.capture_exception(e)
         return False
