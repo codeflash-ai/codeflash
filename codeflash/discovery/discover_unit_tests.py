@@ -535,7 +535,7 @@ def process_test_files(
         process_inputs.append((str(test_file), serializable_functions, config_dict))
 
     # Determine optimal number of processes
-    max_processes = min(cpu_count() * 2, len(process_inputs), 16)
+    max_processes = min(cpu_count() * 2, len(process_inputs), 32)
     logger.info(f"Using {max_processes} processes for parallel test file processing")
 
     # Create a Pool and process the files
