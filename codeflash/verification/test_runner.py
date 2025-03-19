@@ -59,6 +59,7 @@ def run_behavioral_tests(
         )
         test_files = list(set(test_files))  # remove multiple calls in the same test function
         common_pytest_args = [
+            "--benchmark-skip",
             "--capture=tee-sys",
             f"--timeout={pytest_timeout}",
             "-q",
@@ -240,6 +241,7 @@ def run_benchmarking_tests(
                 test_files.append(str(file.benchmarking_file_path))
         test_files = list(set(test_files))  # remove multiple calls in the same test function
         pytest_args = [
+            "--benchmark-skip",
             "--capture=tee-sys",
             f"--timeout={pytest_timeout}",
             "-q",

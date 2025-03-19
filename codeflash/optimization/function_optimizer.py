@@ -92,8 +92,8 @@ class FunctionOptimizer:
         function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
         function_to_optimize_ast: ast.FunctionDef | None = None,
         aiservice_client: AiServiceClient | None = None,
-        function_benchmark_timings: dict[str, dict[str, float]] | None = None,
-        total_benchmark_timings: dict[str, float] | None = None,
+        function_benchmark_timings: dict[str, dict[str, int]] | None = None,
+        total_benchmark_timings: dict[str, int] | None = None,
         args: Namespace | None = None,
     ) -> None:
         self.project_root = test_cfg.project_root_path
@@ -276,30 +276,10 @@ class FunctionOptimizer:
                     best_runtime_ns=best_optimization.runtime,
                     function_name=function_to_optimize_qualified_name,
                     file_path=self.function_to_optimize.file_path,
+                    replay_performance_gain=best_optimization.replay_performance_gain if self.args.benchmark else None,
+                    fto_benchmark_timings = self.function_benchmark_timings[self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)] if self.args.benchmark else None,
+                    total_benchmark_timings = self.total_benchmark_timings if self.args.benchmark else None,
                 )
-                speedup = explanation.speedup #
-                if self.args.benchmark:
-                    original_replay_timing = original_code_baseline.benchmarking_test_results.total_replay_test_runtime()
-                    fto_benchmark_timings = self.function_benchmark_timings[self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)]
-                    for benchmark_key, og_benchmark_timing in fto_benchmark_timings.items():
-                        # benchmark key is benchmark filename :: benchmark test function :: line number
-                        try:
-                            benchmark_file_name, benchmark_test_function, line_number = benchmark_key.split("::")
-                        except ValueError:
-                            print(f"Benchmark key {benchmark_key} is not in the expected format.")
-                            continue
-                        print(f"Calculating speedup for benchmark {benchmark_key}")
-                        total_benchmark_timing = self.total_benchmark_timings[benchmark_key]
-                        # find out expected new benchmark timing, then calculate how much total benchmark was sped up. print out intermediate values
-                        print(f"Original benchmark timing: {total_benchmark_timing}")
-                        replay_speedup = original_replay_timing / best_optimization.replay_runtime - 1
-                        print(f"Replay speedup: {replay_speedup}")
-                        expected_new_benchmark_timing = total_benchmark_timing - og_benchmark_timing + 1 / (replay_speedup + 1) * og_benchmark_timing
-                        print(f"Expected new benchmark timing: {expected_new_benchmark_timing}")
-
-                        benchmark_speedup_ratio = total_benchmark_timing / expected_new_benchmark_timing
-                        benchmark_speedup_percent = (benchmark_speedup_ratio - 1) * 100
-                        print(f"Benchmark speedup: {benchmark_speedup_percent:.2f}%")
 
                 self.log_successful_optimization(explanation, generated_tests)
 
@@ -455,21 +435,21 @@ class FunctionOptimizer:
                                 original_runtime_ns=original_code_replay_runtime,
                                 optimized_runtime_ns=candidate_replay_runtime,
                             )
-                            tree.add("Replay Benchmarking： ")
-                            tree.add(f"Original summed runtime: {humanize_runtime(original_code_replay_runtime)}")
+                            tree.add(f"Original benchmark replay runtime: {humanize_runtime(original_code_replay_runtime)}")
                             tree.add(
-                                f"Best summed runtime: {humanize_runtime(candidate_replay_runtime)} "
+                                f"Best benchmark replay runtime: {humanize_runtime(candidate_replay_runtime)} "
                                 f"(measured over {candidate_result.max_loop_count} "
                                 f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
                             )
-                            tree.add(f"Speedup percentage: {replay_perf_gain * 100:.1f}%")
-                            tree.add(f"Speedup ratio: {replay_perf_gain + 1:.1f}X")
+                            tree.add(f"Speedup percentage for benchmark replay test: {replay_perf_gain * 100:.1f}%")
+                            tree.add(f"Speedup ratio for benchmark replay test: {replay_perf_gain + 1:.1f}X")
                         best_optimization = BestOptimization(
                             candidate=candidate,
                             helper_functions=code_context.helper_functions,
                             runtime=best_test_runtime,
                             replay_runtime=candidate_replay_runtime if self.args.benchmark else None,
                             winning_behavioral_test_results=candidate_result.behavior_test_results,
+                            replay_performance_gain=replay_perf_gain if self.args.benchmark else None,
                             winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
                             winning_replay_benchmarking_test_results=candidate_result.benchmarking_test_results,
                         )
@@ -525,7 +505,8 @@ class FunctionOptimizer:
             )
 
             console.print(Group(explanation_panel, tests_panel))
-        console.print(explanation_panel)
+        else:
+            console.print(explanation_panel)
 
         ph(
             "cli-optimize-success",
@@ -682,7 +663,6 @@ class FunctionOptimizer:
                     existing_test_files_count += 1
                 elif test_type == TestType.REPLAY_TEST:
                     replay_test_files_count += 1
-                    print("Replay test found")
                 elif test_type == TestType.CONCOLIC_COVERAGE_TEST:
                     concolic_coverage_test_files_count += 1
                 else:
@@ -1157,7 +1137,6 @@ class FunctionOptimizer:
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
-        # print(test_files)
         results, coverage_results = parse_test_results(
             test_xml_path=result_file_path,
             test_files=test_files,

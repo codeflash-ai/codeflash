@@ -20,13 +20,14 @@ if __name__ == "__main__":
         db.setup()
         exitcode = pytest.main(
             [benchmarks_root, "--codeflash-trace", "-p", "no:benchmark", "-s", "-o", "addopts="], plugins=[CodeFlashBenchmarkPlugin()]
-        )
+        ) # Errors will be printed to stdout, not stderr
         db.write_function_timings(codeflash_trace.function_calls_data)
         db.write_benchmark_timings(CodeFlashBenchmarkPlugin.benchmark_timings)
-        db.print_function_timings()
-        db.print_benchmark_timings()
+        # db.print_function_timings()
+        # db.print_benchmark_timings()
         db.close()
 
     except Exception as e:
-        print(f"Failed to collect tests: {e!s}")
+        print(f"Failed to collect tests: {e!s}", file=sys.stderr)
         exitcode = -1
+    sys.exit(exitcode)
