@@ -178,14 +178,19 @@ def discover_parameters_unittest(function_name: str) -> tuple[bool, str, str | N
 
 
 def process_test_files(
-    file_to_test_map: dict[str, list[TestsInFile]], cfg: TestConfig
+        file_to_test_map: dict[str, list[TestsInFile]], cfg: TestConfig
 ) -> dict[str, list[FunctionCalledInTest]]:
+    from concurrent.futures import ThreadPoolExecutor
+    import os
+
     project_root_path = cfg.project_root_path
     test_framework = cfg.test_framework
     function_to_test_map = defaultdict(list)
     jedi_project = jedi.Project(path=project_root_path)
 
-    for test_file, functions in file_to_test_map.items():
+    # Define a function to process a single test file
+    def process_single_file(test_file, functions):
+        local_results = defaultdict(list)
         try:
             script = jedi.Script(path=test_file, project=jedi_project)
             test_functions = set()
@@ -198,7 +203,7 @@ def process_test_files(
             top_level_classes = {name.name: name for name in all_names_top if name.type == "class"}
         except Exception as e:
             logger.debug(f"Failed to get jedi script for {test_file}: {e}")
-            continue
+            return local_results
 
         if test_framework == "pytest":
             for function in functions:
@@ -229,15 +234,15 @@ def process_test_files(
 
         elif test_framework == "unittest":
             functions_to_search = [elem.test_function for elem in functions]
-            test_suites = [elem.test_class for elem in functions]
+            test_suites = {elem.test_class for elem in functions}
 
             matching_names = test_suites & top_level_classes.keys()
             for matched_name in matching_names:
                 for def_name in all_defs:
                     if (
-                        def_name.type == "function"
-                        and def_name.full_name is not None
-                        and f".{matched_name}." in def_name.full_name
+                            def_name.type == "function"
+                            and def_name.full_name is not None
+                            and f".{matched_name}." in def_name.full_name
                     ):
                         for function in functions_to_search:
                             (is_parameterized, new_function, parameters) = discover_parameters_unittest(function)
@@ -286,9 +291,9 @@ def process_test_files(
                     definition_path = str(definition[0].module_path)
                     # The definition is part of this project and not defined within the original function
                     if (
-                        definition_path.startswith(str(project_root_path) + os.sep)
-                        and definition[0].module_name != name.module_name
-                        and definition[0].full_name is not None
+                            definition_path.startswith(str(project_root_path) + os.sep)
+                            and definition[0].module_name != name.module_name
+                            and definition[0].full_name is not None
                     ):
                         if scope_parameters is not None:
                             if test_framework == "pytest":
@@ -299,7 +304,7 @@ def process_test_files(
                             definition[0].module_name + ".", "", 1
                         )
                         qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
-                        function_to_test_map[qualified_name_with_modules_from_root].append(
+                        local_results[qualified_name_with_modules_from_root].append(
                             FunctionCalledInTest(
                                 tests_in_file=TestsInFile(
                                     test_file=test_file,
@@ -310,7 +315,31 @@ def process_test_files(
                                 position=CodePosition(line_no=name.line, col_no=name.column),
                             )
                         )
+        return local_results
+
+    # Determine number of workers (threads) - use fewer than processes since these are I/O bound
+    max_workers = min(os.cpu_count() * 2 or 8, len(file_to_test_map), 16)
+
+    # Process files in parallel using threads (shared memory)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(process_single_file, test_file, functions): test_file
+            for test_file, functions in file_to_test_map.items()
+        }
+
+        # Collect results
+        for future in futures:
+            try:
+                file_results = future.result()
+                # Merge results
+                for function, tests in file_results.items():
+                    function_to_test_map[function].extend(tests)
+            except Exception as e:
+                logger.warning(f"Error processing file {futures[future]}: {e}")
+
+    # Deduplicate results
     deduped_function_to_test_map = {}
     for function, tests in function_to_test_map.items():
         deduped_function_to_test_map[function] = list(set(tests))
+
     return deduped_function_to_test_map
