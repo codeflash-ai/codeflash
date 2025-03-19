@@ -64,7 +64,7 @@ from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
-from codeflash.verification.parse_test_output import parse_test_results
+from codeflash.verification.parse_test_output import parse_test_results, parse_lprof_results
 from codeflash.verification.test_results import TestResults, TestType
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests
 from codeflash.verification.verification_utils import get_test_file_path
@@ -237,7 +237,6 @@ class FunctionOptimizer:
             f"Generating new optimizations for function {self.function_to_optimize.function_name} with line profiler information",
             transient=True,
         ):
-            pass
             with concurrent.futures.ThreadPoolExecutor(max_workers= N_TESTS_TO_GENERATE + 2) as executor:
                 future_optimization_candidates_lp = executor.submit(self.aiservice_client.optimize_python_code_line_profiler,
                 source_code=code_context.read_writable_code,
@@ -247,7 +246,6 @@ class FunctionOptimizer:
                 num_candidates = 10,
                 experiment_metadata = None)
                 future = [future_optimization_candidates_lp]
-            pass
             concurrent.futures.wait(future)
             lprof_generated_results = future[0].result()
         if len(lprof_generated_results)==0:
@@ -838,7 +836,8 @@ class FunctionOptimizer:
                    files_to_instrument.append(helper_obj.file_path)
                    fns_to_instrument.append(helper_obj.qualified_name)
                add_decorator_imports(files_to_instrument,fns_to_instrument, lprofiler_database_file)
-               lprof_results, _ = self.run_and_parse_tests(
+               #output doesn't matter, just need to run it
+               lprof_cmd_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,
                     test_files=self.test_files,
@@ -849,7 +848,8 @@ class FunctionOptimizer:
                     code_context=code_context,
                     lprofiler_database_file=lprofiler_database_file,
                )
-               pass
+               #real magic happens here
+               lprof_results = parse_lprof_results(lprofiler_database_file)
             except Exception as e:
                 logger.warning(f"Failed to run lprof for {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION.")
                 console.rule()
@@ -1126,11 +1126,10 @@ class FunctionOptimizer:
                 coverage_database_file=coverage_database_file,
                 coverage_config_file=coverage_config_file,
             )
+            return results, coverage_results
         else:
-            pass
-            file_contents = Path(str(lprofiler_database_file)+".txt").read_text("utf-8")
-            return file_contents, None
-        return results, coverage_results
+            return result_file_path, None
+
 
     def generate_and_instrument_tests(
         self,
