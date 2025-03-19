@@ -84,9 +84,5 @@ class CodeflashTrace:
             return result
         return wrapper
 
-
-
-
-
 # Create a singleton instance
 codeflash_trace = CodeflashTrace()

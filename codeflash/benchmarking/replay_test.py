@@ -142,8 +142,6 @@ trace_file_path = r"{trace_file}"
         class_name = func.get("class_name")
         file_name = func.get("file_name")
         function_properties = func.get("function_properties")
-        print(f"Class: {class_name}, Function: {function_name}")
-        print(function_properties)
         if not class_name:
             alias = get_function_alias(module_name, function_name)
             test_body = test_function_body.format(
@@ -197,7 +195,7 @@ trace_file_path = r"{trace_file}"
 
     return imports + "\n" + metadata + "\n" + test_template
 
-def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework: str = "pytest", max_run_count: int = 100) -> None:
+def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework: str = "pytest", max_run_count: int = 100) -> int:
     """Generate multiple replay tests from the traced function calls, grouping by benchmark name.
 
     Args:
@@ -211,6 +209,7 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
         Dictionary mapping benchmark names to generated test code
 
     """
+    count = 0
     try:
         # Connect to the database
         conn = sqlite3.connect(trace_file_path.as_posix())
@@ -253,7 +252,7 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
                 })
 
             if not functions_data:
-                print(f"No functions found for benchmark {benchmark_function_name} in {benchmark_file_name}")
+                logger.info(f"No functions found for benchmark {benchmark_function_name} in {benchmark_file_name}")
                 continue
 
             # Generate the test code for this benchmark
@@ -273,9 +272,11 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
                 # Write test code to file, parents = true
                 output_dir.mkdir(parents=True, exist_ok=True)
                 output_file.write_text(test_code, "utf-8")
-                print(f"Replay test for benchmark `{benchmark_function_name}` in {benchmark_file_name} written to {output_file}")
+                count += 1
+                logger.info(f"Replay test for benchmark `{benchmark_function_name}` in {benchmark_file_name} written to {output_file}")
 
         conn.close()
 
     except Exception as e:
-        print(f"Error generating replay tests: {e}")
+        logger.info(f"Error generating replay tests: {e}")
+    return count

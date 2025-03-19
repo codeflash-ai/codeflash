@@ -4,13 +4,11 @@ from pathlib import Path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 
-def get_function_benchmark_timings(trace_path: Path) -> dict[str, dict[str, float]]:
+def get_function_benchmark_timings(trace_path: Path) -> dict[str, dict[str, int]]:
     """Process the trace file and extract timing data for all functions.
 
     Args:
         trace_path: Path to the trace file
-        all_functions_to_optimize: List of FunctionToOptimize objects (not used directly,
-                                  but kept for backward compatibility)
 
     Returns:
         A nested dictionary where:
@@ -30,8 +28,7 @@ def get_function_benchmark_timings(trace_path: Path) -> dict[str, dict[str, floa
         # Query the function_calls table for all function calls
         cursor.execute(
             "SELECT module_name, class_name, function_name, "
-            "benchmark_file_name, benchmark_function_name, benchmark_line_number, "
-            "(time_ns - overhead_time_ns) as actual_time_ns "
+            "benchmark_file_name, benchmark_function_name, benchmark_line_number, time_ns "
             "FROM function_calls"
         )
 
@@ -66,7 +63,7 @@ def get_function_benchmark_timings(trace_path: Path) -> dict[str, dict[str, floa
     return result
 
 
-def get_benchmark_timings(trace_path: Path) -> dict[str, float]:
+def get_benchmark_timings(trace_path: Path) -> dict[str, int]:
     """Extract total benchmark timings from trace files.
 
     Args:
@@ -75,32 +72,47 @@ def get_benchmark_timings(trace_path: Path) -> dict[str, float]:
     Returns:
         A dictionary mapping where:
         - Keys are benchmark filename :: benchmark test function :: line number
-        - Values are total benchmark timing in milliseconds
+        - Values are total benchmark timing in milliseconds (with overhead subtracted)
 
     """
     # Initialize the result dictionary
     result = {}
+    overhead_by_benchmark = {}
 
     # Connect to the SQLite database
     connection = sqlite3.connect(trace_path)
     cursor = connection.cursor()
 
     try:
-        # Query the benchmark_timings table
+        # Query the function_calls table to get total overhead for each benchmark
+        cursor.execute(
+            "SELECT benchmark_file_name, benchmark_function_name, benchmark_line_number, SUM(overhead_time_ns) "
+            "FROM function_calls "
+            "GROUP BY benchmark_file_name, benchmark_function_name, benchmark_line_number"
+        )
+
+        # Process overhead information
+        for row in cursor.fetchall():
+            benchmark_file, benchmark_func, benchmark_line, total_overhead_ns = row
+            benchmark_key = f"{benchmark_file}::{benchmark_func}::{benchmark_line}"
+            overhead_by_benchmark[benchmark_key] = total_overhead_ns or 0  # Handle NULL sum case
+
+        # Query the benchmark_timings table for total times
         cursor.execute(
             "SELECT benchmark_file_name, benchmark_function_name, benchmark_line_number, time_ns "
             "FROM benchmark_timings"
         )
 
-        # Process each row
+        # Process each row and subtract overhead
         for row in cursor.fetchall():
             benchmark_file, benchmark_func, benchmark_line, time_ns = row
 
             # Create the benchmark key (file::function::line)
             benchmark_key = f"{benchmark_file}::{benchmark_func}::{benchmark_line}"
 
-            # Store the timing
-            result[benchmark_key] = time_ns
+            # Subtract overhead from total time
+            overhead = overhead_by_benchmark.get(benchmark_key, 0)
+            result[benchmark_key] = time_ns - overhead
 
     finally:
         # Close the connection

@@ -1,7 +1,12 @@
-def print_benchmark_table(function_benchmark_timings, total_benchmark_timings):
+def print_benchmark_table(function_benchmark_timings: dict[str,dict[str,int]], total_benchmark_timings: dict[str,int]):
+    # Define column widths
+    benchmark_col_width = 50
+    time_col_width = 15
+
     # Print table header
-    print(f"{'Benchmark Test':<50} | {'Total Time (s)':<15} | {'Function Time (s)':<15} | {'Percentage (%)':<15}")
-    print("-" * 100)
+    header = f"{'Benchmark Test':{benchmark_col_width}} | {'Total Time (ms)':{time_col_width}} | {'Function Time (ms)':{time_col_width}} | {'Percentage (%)':{time_col_width}}"
+    print(header)
+    print("-" * len(header))
 
     # Process each function's benchmark data
     for func_path, test_times in function_benchmark_timings.items():
@@ -14,13 +19,16 @@ def print_benchmark_table(function_benchmark_timings, total_benchmark_timings):
             total_time = total_benchmark_timings.get(test_name, 0)
             if total_time > 0:
                 percentage = (func_time / total_time) * 100
-                sorted_tests.append((test_name, total_time, func_time, percentage))
+                # Convert nanoseconds to milliseconds
+                func_time_ms = func_time / 1_000_000
+                total_time_ms = total_time / 1_000_000
+                sorted_tests.append((test_name, total_time_ms, func_time_ms, percentage))
 
         sorted_tests.sort(key=lambda x: x[3], reverse=True)
 
         # Print each test's data
         for test_name, total_time, func_time, percentage in sorted_tests:
-            print(f"{test_name:<50} | {total_time:<15.3f} | {func_time:<15.3f} | {percentage:<15.2f}")
-
-# Usage
-
+            benchmark_file, benchmark_func, benchmark_line = test_name.split("::")
+            benchmark_name = f"{benchmark_file}::{benchmark_func}"
+            print(f"{benchmark_name:{benchmark_col_width}} | {total_time:{time_col_width}.3f} | {func_time:{time_col_width}.3f} | {percentage:{time_col_width}.2f}")
+    print()

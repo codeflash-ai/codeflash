@@ -106,7 +106,7 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
 class FunctionToOptimize:
-    """Represents a function that is a candidate for optimization.
+    """Represent a function that is a candidate for optimization.
 
     Attributes
     ----------
@@ -121,6 +121,7 @@ class FunctionToOptimize:
     method extends this with the module name from the project root.
 
     """
+
     function_name: str
     file_path: Path
     parents: list[FunctionParent]  # list[ClassDef | FunctionDef | AsyncFunctionDef]
@@ -143,12 +144,6 @@ class FunctionToOptimize:
 
     def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
-    #
-    # @property
-    # def qualified_name_with_file_name(self) -> str:
-    #     class_name = self.parents[0].name if self.parents else None
-    #     return f"{self.file_path}:{(class_name + ':' if class_name else '')}{self.function_name}"
-
 
 def get_functions_to_optimize(
     optimize_all: str | None,

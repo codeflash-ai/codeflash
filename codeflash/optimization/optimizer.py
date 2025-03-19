@@ -11,8 +11,9 @@ from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.benchmarking.replay_test import generate_replay_test
 from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
 from codeflash.benchmarking.utils import print_benchmark_table
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
+from codeflash.code_utils.code_extractor import add_needed_imports_from_module
 from codeflash.code_utils.code_replacer import normalize_code, normalize_node
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.static_analysis import analyze_imported_modules, get_first_top_level_function_or_method_ast
@@ -96,42 +97,43 @@ class Optimizer:
             project_root=self.args.project_root,
             module_root=self.args.module_root,
         )
-        all_functions_to_optimize = [
-            fto for functions_to_optimize in file_to_funcs_to_optimize.values() for fto in functions_to_optimize]
+        function_benchmark_timings = None
+        total_benchmark_timings = None
         if self.args.benchmark:
-            # Insert decorator
-            file_path_to_source_code = defaultdict(str)
-            for file in file_to_funcs_to_optimize:
-                with file.open("r", encoding="utf8") as f:
-                    file_path_to_source_code[file] = f.read()
-            try:
-                for functions_to_optimize in file_to_funcs_to_optimize.values():
-                    for fto in functions_to_optimize:
-                        instrument_codeflash_trace_decorator(fto)
-                trace_file = Path(self.args.benchmarks_root) / "benchmarks.trace"
-                trace_benchmarks_pytest(self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file) # Simply run all tests that use pytest-benchmark
-                generate_replay_test(trace_file, Path(self.args.tests_root) / "codeflash_replay_tests" )
-                function_benchmark_timings = get_function_benchmark_timings(trace_file)
-                total_benchmark_timings = get_benchmark_timings(trace_file)
-                print(function_benchmark_timings)
-                print(total_benchmark_timings)
-                logger.info("Finished tracing existing benchmarks")
-            except Exception as e:
-                logger.info(f"Error while tracing existing benchmarks: {e}")
-                logger.info(f"Information on existing benchmarks will not be available for this run.")
-            finally:
-                # Restore original source code
-                for file in file_path_to_source_code:
-                    with file.open("w", encoding="utf8") as f:
-                        f.write(file_path_to_source_code[file])
+            with progress_bar(
+                    f"Running benchmarks in {self.args.benchmarks_root}",
+                    transient=True,
+            ):
+                # Insert decorator
+                file_path_to_source_code = defaultdict(str)
+                for file in file_to_funcs_to_optimize:
+                    with file.open("r", encoding="utf8") as f:
+                        file_path_to_source_code[file] = f.read()
+                try:
+                    for functions_to_optimize in file_to_funcs_to_optimize.values():
+                        for fto in functions_to_optimize:
+                            instrument_codeflash_trace_decorator(fto)
+                    trace_file = Path(self.args.benchmarks_root) / "benchmarks.trace"
+                    replay_tests_dir = Path(self.args.tests_root) / "codeflash_replay_tests"
+                    trace_benchmarks_pytest(self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file) # Simply run all tests that use pytest-benchmark
+                    replay_count = generate_replay_test(trace_file, replay_tests_dir)
+                    if replay_count == 0:
+                        logger.info(f"No valid benchmarks found in {self.args.benchmarks_root} for functions to optimize, continuing optimization")
+                    else:
+                        function_benchmark_timings = get_function_benchmark_timings(trace_file)
+                        total_benchmark_timings = get_benchmark_timings(trace_file)
 
+                        print_benchmark_table(function_benchmark_timings, total_benchmark_timings)
+                        logger.info("Finished tracing existing benchmarks")
+                except Exception as e:
+                    logger.info(f"Error while tracing existing benchmarks: {e}")
+                    logger.info(f"Information on existing benchmarks will not be available for this run.")
+                finally:
+                    # Restore original source code
+                    for file in file_path_to_source_code:
+                        with file.open("w", encoding="utf8") as f:
+                            f.write(file_path_to_source_code[file])
 
-            # trace_dir = Path(self.args.benchmarks_root) / ".codeflash_trace"
-            # function_benchmark_timings = get_function_benchmark_timings(trace_dir, all_functions_to_optimize)
-            # total_benchmark_timings = get_benchmark_timings(trace_dir)
-            # print_benchmark_table(function_benchmark_timings, total_benchmark_timings)
-
-        # return
         optimizations_found: int = 0
         function_iterator_count: int = 0
         if self.args.test_framework == "pytest":
@@ -211,15 +213,10 @@ class Optimizer:
                             f"Skipping optimization."
                         )
                         continue
-                    if self.args.benchmark:
-
+                    if self.args.benchmark and function_benchmark_timings and total_benchmark_timings:
                         function_optimizer = self.create_function_optimizer(
                             function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code[original_module_path].source_code, function_benchmark_timings, total_benchmark_timings
                         )
-                        # function_optimizer = self.create_function_optimizer(
-                        #     function_to_optimize, function_to_optimize_ast, function_to_tests,
-                        #     validated_original_code[original_module_path].source_code
-                        # )
                     else:
                         function_optimizer = self.create_function_optimizer(
                             function_to_optimize, function_to_optimize_ast, function_to_tests,
@@ -251,9 +248,9 @@ class Optimizer:
                 if function_optimizer.test_cfg.concolic_test_root_dir:
                     shutil.rmtree(function_optimizer.test_cfg.concolic_test_root_dir, ignore_errors=True)
                 if self.args.benchmark:
-                    trace_dir = Path(self.args.benchmarks_root) / "codeflash_replay_tests"
-                    if trace_dir.exists():
-                        shutil.rmtree(trace_dir, ignore_errors=True)
+                    if replay_tests_dir.exists():
+                        shutil.rmtree(replay_tests_dir, ignore_errors=True)
+                    trace_file.unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
 
