@@ -76,11 +76,11 @@ class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
     helper_functions: list[FunctionSource]
     runtime: int
-    replay_runtime: int | None
-    replay_performance_gain: float | None
+    replay_runtime: Optional[int] = None
+    replay_performance_gain: Optional[float] = None
     winning_behavioral_test_results: TestResults
     winning_benchmarking_test_results: TestResults
-    winning_replay_benchmarking_test_results : TestResults | None = None
+    winning_replay_benchmarking_test_results : Optional[TestResults] = None
 
 
 class CodeString(BaseModel):
@@ -227,7 +227,7 @@ class OriginalCodeBaseline(BaseModel):
     benchmarking_test_results: TestResults
     line_profile_results: dict
     runtime: int
-    coverage_results: CoverageData | None
+    coverage_results: Optional[CoverageData]
 
 
 class CoverageStatus(Enum):
