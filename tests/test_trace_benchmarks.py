@@ -150,5 +150,5 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_sorter():
         assert test_sort_path.read_text("utf-8").strip()==test_sort_code.strip()
     finally:
         # cleanup
-        shutil.rmtree(tests_root)
-        pass
+        if tests_root.exists():
+            shutil.rmtree(tests_root, ignore_errors=True)
