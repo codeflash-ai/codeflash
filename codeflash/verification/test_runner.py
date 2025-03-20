@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from codeflash.models.models import TestFiles
 
 BEHAVIORAL_BLOCKLISTED_PLUGINS = ["benchmark"]
-BENCHMARKING_BLOCKLISTED_PLUGINS = ["cov", "benchmark", "profiling"]
+BENCHMARKING_BLOCKLISTED_PLUGINS = ["codspeed", "cov", "benchmark", "profiling"]
 
 def execute_test_subprocess(
     cmd_list: list[str], cwd: Path, env: dict[str, str] | None, timeout: int = 600
