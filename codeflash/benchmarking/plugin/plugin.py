@@ -5,6 +5,29 @@ import time
 import os
 class CodeFlashBenchmarkPlugin:
     benchmark_timings = []
+
+    class Benchmark:
+        def __init__(self, request):
+            self.request = request
+
+        def __call__(self, func, *args, **kwargs):
+            benchmark_file_name = self.request.node.fspath.basename
+            benchmark_function_name = self.request.node.name
+            line_number = str(sys._getframe(1).f_lineno)  # 1 frame up in the call stack
+
+            os.environ["CODEFLASH_BENCHMARK_FUNCTION_NAME"] = benchmark_function_name
+            os.environ["CODEFLASH_BENCHMARK_FILE_NAME"] = benchmark_file_name
+            os.environ["CODEFLASH_BENCHMARK_LINE_NUMBER"] = line_number
+            os.environ["CODEFLASH_BENCHMARKING"] = "True"
+
+            start = time.perf_counter_ns()
+            result = func(*args, **kwargs)
+            end = time.perf_counter_ns()
+
+            os.environ["CODEFLASH_BENCHMARKING"] = "False"
+            CodeFlashBenchmarkPlugin.benchmark_timings.append(
+                (benchmark_file_name, benchmark_function_name, line_number, end - start))
+            return result
     @staticmethod
     def pytest_addoption(parser):
         parser.addoption(
@@ -36,23 +59,4 @@ class CodeFlashBenchmarkPlugin:
         if not request.config.getoption("--codeflash-trace"):
             return None
 
-        class Benchmark:
-
-            def __call__(self, func, *args, **kwargs):
-                benchmark_file_name = request.node.fspath.basename
-                benchmark_function_name = request.node.name
-                line_number = str(sys._getframe(1).f_lineno)  # 1 frame up in the call stack
-                os.environ["CODEFLASH_BENCHMARK_FUNCTION_NAME"] = benchmark_function_name
-                os.environ["CODEFLASH_BENCHMARK_FILE_NAME"] = benchmark_file_name
-                os.environ["CODEFLASH_BENCHMARK_LINE_NUMBER"] = line_number
-                os.environ["CODEFLASH_BENCHMARKING"] = "True"
-
-                start = time.perf_counter_ns()
-                result = func(*args, **kwargs)
-                end = time.perf_counter_ns()
-
-                os.environ["CODEFLASH_BENCHMARKING"] = "False"
-                CodeFlashBenchmarkPlugin.benchmark_timings.append((benchmark_file_name, benchmark_function_name, line_number, end - start))
-                return result
-
-        return Benchmark()
+        return CodeFlashBenchmarkPlugin.Benchmark(request)
