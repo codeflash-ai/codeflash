@@ -1,17 +1,23 @@
-def print_benchmark_table(function_benchmark_timings: dict[str,dict[str,int]], total_benchmark_timings: dict[str,int]):
-    # Define column widths
-    benchmark_col_width = 50
-    time_col_width = 15
+from rich.console import Console
+from rich.table import Table
 
-    # Print table header
-    header = f"{'Benchmark Test':{benchmark_col_width}} | {'Total Time (ms)':{time_col_width}} | {'Function Time (ms)':{time_col_width}} | {'Percentage (%)':{time_col_width}}"
-    print(header)
-    print("-" * len(header))
+
+def print_benchmark_table(function_benchmark_timings: dict[str, dict[str, int]],
+                          total_benchmark_timings: dict[str, int]):
+    console = Console()
 
     # Process each function's benchmark data
     for func_path, test_times in function_benchmark_timings.items():
         function_name = func_path.split(":")[-1]
-        print(f"\n== Function: {function_name} ==")
+
+        # Create a table for this function
+        table = Table(title=f"Function: {function_name}", border_style="blue")
+
+        # Add columns
+        table.add_column("Benchmark Test", style="cyan", no_wrap=True)
+        table.add_column("Total Time (ms)", justify="right", style="green")
+        table.add_column("Function Time (ms)", justify="right", style="yellow")
+        table.add_column("Percentage (%)", justify="right", style="red")
 
         # Sort by percentage (highest first)
         sorted_tests = []
@@ -26,9 +32,16 @@ def print_benchmark_table(function_benchmark_timings: dict[str,dict[str,int]], t
 
         sorted_tests.sort(key=lambda x: x[3], reverse=True)
 
-        # Print each test's data
+        # Add rows to the table
         for test_name, total_time, func_time, percentage in sorted_tests:
             benchmark_file, benchmark_func, benchmark_line = test_name.split("::")
             benchmark_name = f"{benchmark_file}::{benchmark_func}"
-            print(f"{benchmark_name:{benchmark_col_width}} | {total_time:{time_col_width}.3f} | {func_time:{time_col_width}.3f} | {percentage:{time_col_width}.2f}")
-    print()
+            table.add_row(
+                benchmark_name,
+                f"{total_time:.3f}",
+                f"{func_time:.3f}",
+                f"{percentage:.2f}"
+            )
+
+        # Print the table
+        console.print(table)
