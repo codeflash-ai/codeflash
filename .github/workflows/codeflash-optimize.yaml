@@ -1,45 +1,48 @@
-name: CodeFlash
+name: Codeflash
 
 on:
   pull_request:
     paths:
-      - "**"
+      # So that this workflow only runs when code within the target module is modified
+      - "skyvern/**"
   workflow_dispatch:
 
 concurrency:
+  # Any new push to the PR will cancel the previous run, so that only the latest code is optimized
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   optimize:
-    name: Optimize new code in this PR
+    name: Optimize new Python code in this PR
+    # Don't run codeflash on codeflash-ai[bot] commits, prevent duplicate optimizations
     if: ${{ github.actor != 'codeflash-ai[bot]' }}
     runs-on: ubuntu-latest
     env:
-      CODEFLASH_AIS_SERVER: prod
-      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
       CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
       CODEFLASH_PR_NUMBER: ${{ github.event.number }}
-      COLUMNS: 110
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Set up Python 3.11 for CLI
-        uses: astral-sh/setup-uv@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.11.6
-
-      - name: Install dependencies (CLI)
+          python-version: "3.11"
+      - name: Install Project Dependencies
         run: |
-          uv tool install poetry
-          uv venv
-          source .venv/bin/activate
-          poetry install --with dev
-
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry install --all-extras
+          poetry add codeflash
+      - name: create test dir
+        run: |
+          mkdir -p codeflash-tests
       - name: Run Codeflash to optimize code
-        id: optimize_code
         run: |
-          source .venv/bin/activate
+          poetry env use python
           poetry run codeflash
+      - name: remove test dir
+        run: |
+          rm -rf codeflash-tests
