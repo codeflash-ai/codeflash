@@ -37,7 +37,7 @@ def run_behavioral_tests(
     pytest_target_runtime_seconds: int = TOTAL_LOOPING_TIME,
     enable_coverage: bool = False,
     enable_lprofiler: bool = False,
-) -> tuple[Path, subprocess.CompletedProcess, Path | None]:
+) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
     if test_framework == "pytest":
         test_files: list[str] = []
         for file in test_paths.test_files:
@@ -131,6 +131,7 @@ def run_behavioral_tests(
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
+
     return result_file_path, results, coverage_database_file if enable_coverage else None, coverage_config_file if enable_coverage else None
 
 

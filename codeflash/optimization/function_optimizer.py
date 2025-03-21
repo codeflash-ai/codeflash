@@ -21,7 +21,7 @@ from rich.tree import Tree
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_replacer import replace_function_definitions_in_module, add_decorator_imports
+from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     cleanup_paths,
     file_name_from_test_module_name,
@@ -40,6 +40,7 @@ from codeflash.code_utils.instrument_existing_tests import inject_profiling_into
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
+from codeflash.code_utils.lprof_utils import add_decorator_imports, prepare_lprofiler_files
 from codeflash.context import code_context_extractor
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.either import Failure, Success, is_successful
@@ -64,7 +65,8 @@ from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
-from codeflash.verification.parse_test_output import parse_test_results, parse_lprof_results
+from codeflash.verification.parse_test_output import parse_test_results
+from codeflash.verification.parse_lprof_test_output import parse_lprof_results
 from codeflash.verification.test_results import TestResults, TestType
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests
 from codeflash.verification.verification_utils import get_test_file_path
@@ -76,7 +78,7 @@ if TYPE_CHECKING:
     from codeflash.either import Result
     from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
     from codeflash.verification.verification_utils import TestConfig
-from codeflash.code_utils.coverage_utils import prepare_lprofiler_files
+from collections import deque
 
 class FunctionOptimizer:
     def __init__(
@@ -207,7 +209,6 @@ class FunctionOptimizer:
                 and "." in function_source.qualified_name
             ):
                 file_path_to_helper_classes[function_source.file_path].add(function_source.qualified_name.split(".")[0])
-        pass
         baseline_result = self.establish_original_code_baseline(  # this needs better typing
             code_context=code_context,
             original_helper_code=original_helper_code,
@@ -233,28 +234,24 @@ class FunctionOptimizer:
         best_optimization = None
         lprof_generated_results = []
         logger.info(f"Adding more candidates based on lineprof info, calling ai service")
-        with progress_bar(
-            f"Generating new optimizations for function {self.function_to_optimize.function_name} with line profiler information",
-            transient=True,
-        ):
-            with concurrent.futures.ThreadPoolExecutor(max_workers= N_TESTS_TO_GENERATE + 2) as executor:
-                future_optimization_candidates_lp = executor.submit(self.aiservice_client.optimize_python_code_line_profiler,
-                source_code=code_context.read_writable_code,
-                dependency_code=code_context.read_only_context_code,
-                trace_id=self.function_trace_id,
-                line_profiler_results=original_code_baseline.lprof_results,
-                num_candidates = 10,
-                experiment_metadata = None)
-                future = [future_optimization_candidates_lp]
-            concurrent.futures.wait(future)
-            lprof_generated_results = future[0].result()
+        with concurrent.futures.ThreadPoolExecutor(max_workers= N_TESTS_TO_GENERATE + 2) as executor:
+            future_optimization_candidates_lp = executor.submit(self.aiservice_client.optimize_python_code_line_profiler,
+            source_code=code_context.read_writable_code,
+            dependency_code=code_context.read_only_context_code,
+            trace_id=self.function_trace_id,
+            line_profiler_results=original_code_baseline.lprof_results,
+            num_candidates = 10,
+            experiment_metadata = None)
+            future = [future_optimization_candidates_lp]
+        concurrent.futures.wait(future)
+        lprof_generated_results = future[0].result()
         if len(lprof_generated_results)==0:
             logger.info(f"Generated tests with line profiler failed.")
         else:
             logger.info(f"Generated tests with line profiler succeeded. Appending to optimization candidates.")
-            print("initial optimization candidates",len(optimizations_set.control))
+            logger.info(f"initial optimization candidates: {len(optimizations_set.control)}")
             optimizations_set.control.extend(lprof_generated_results)
-            print("after adding optimization candidates",len(optimizations_set.control))
+            logger.info(f"After adding optimization candidates: {len(optimizations_set.control)}")
             #append to optimization candidates
         for _u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
             if candidates is None:
@@ -870,7 +867,6 @@ class FunctionOptimizer:
                     enable_coverage=False,
                     code_context=code_context,
                 )
-
             else:
                 benchmarking_results = TestResults()
                 start_time: float = time.time()
@@ -1128,7 +1124,8 @@ class FunctionOptimizer:
             )
             return results, coverage_results
         else:
-            return result_file_path, None
+            #maintaining the function signature for the lprofiler
+            return TestResults(), None
 
 
     def generate_and_instrument_tests(

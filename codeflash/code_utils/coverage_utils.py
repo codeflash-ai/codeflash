@@ -59,8 +59,3 @@ def prepare_coverage_files() -> tuple[Path, Path]:
     coveragerc_content = f"[run]\n branch = True\ndata_file={coverage_database_file}\n"
     coveragercfile.write_text(coveragerc_content)
     return coverage_database_file, coveragercfile
-
-def prepare_lprofiler_files(prefix="") -> tuple[Path]:
-    """Prepare line profiler output file."""
-    lprofiler_database_file = get_run_tmp_file(prefix)
-    return lprofiler_database_file
