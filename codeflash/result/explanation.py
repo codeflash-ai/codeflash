@@ -18,8 +18,8 @@ class Explanation:
     function_name: str
     file_path: Path
     replay_performance_gain: Optional[float]
-    fto_benchmark_timings: Optional[Union[dict, int]]
-    total_benchmark_timings: Optional[Union[dict, int]]
+    fto_benchmark_timings: Optional[dict[str, int]]
+    total_benchmark_timings: Optional[dict[str, int]]
 
     @property
     def perf_improvement_line(self) -> str:
