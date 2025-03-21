@@ -25,16 +25,7 @@ jobs:
         with:
           python-version: 3.11.6
 
-      - name: Install dependencies (CLI)
-        run: |
-          uv tool install poetry
-          uv venv
-          source .venv/bin/activate
-          poetry install --with dev
-          poetry add black  # my-best-repo in end_to_end_test_coverage.py is configured to use black
-
       - name: Run Codeflash to optimize code
         id: optimize_code
         run: |
-          source .venv/bin/activate
-          poetry run python tests/scripts/end_to_end_test_coverage.py
+          uv run --with black -p 3.11 python tests/scripts/end_to_end_test_coverage.py
