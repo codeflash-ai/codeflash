@@ -1,4 +1,6 @@
+from __future__ import annotations
 from pathlib import Path
+from typing import Optional, Union
 
 from pydantic.dataclasses import dataclass
 
@@ -15,9 +17,9 @@ class Explanation:
     best_runtime_ns: int
     function_name: str
     file_path: Path
-    replay_performance_gain: float | None
-    fto_benchmark_timings: dict[str, int] | None
-    total_benchmark_timings: dict[str, int] | None
+    replay_performance_gain: Optional[float]
+    fto_benchmark_timings: Optional[Union[dict, int]]
+    total_benchmark_timings: Optional[Union[dict, int]]
 
     @property
     def perf_improvement_line(self) -> str:
