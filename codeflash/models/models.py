@@ -71,8 +71,11 @@ class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
     helper_functions: list[FunctionSource]
     runtime: int
+    replay_runtime: Optional[int] = None
+    replay_performance_gain: Optional[float] = None
     winning_behavioral_test_results: TestResults
     winning_benchmarking_test_results: TestResults
+    winning_replay_benchmarking_test_results : Optional[TestResults] = None
 
 
 class CodeString(BaseModel):
