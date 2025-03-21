@@ -3,7 +3,6 @@ import tempfile
 from pathlib import Path
 
 import line_profiler
-
 from codeflash.models.models import TestFile, TestFiles
 from codeflash.verification.parse_test_output import parse_test_xml
 from codeflash.verification.test_results import TestType
