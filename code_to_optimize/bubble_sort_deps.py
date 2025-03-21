@@ -8,3 +8,4 @@ def sorter_deps(arr):
             if dep1_comparer(arr, j):
                 dep2_swap(arr, j)
     return arr
+
