@@ -38,6 +38,7 @@ def run_behavioral_tests(
     verbose: bool = False,
     pytest_target_runtime_seconds: int = TOTAL_LOOPING_TIME,
     enable_coverage: bool = False,
+    enable_lprofiler: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
     if test_framework == "pytest":
         test_files: list[str] = []
@@ -92,6 +93,17 @@ def run_behavioral_tests(
             blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS if plugin != "cov"]
             results = execute_test_subprocess(
                 coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files, cwd=cwd, env=pytest_test_env, timeout=600
+            )
+            logger.debug(
+                f"Result return code: {results.returncode}, "
+                f"{'Result stderr:' + str(results.stderr) if results.stderr else ''}"
+            )
+        elif enable_lprofiler:
+            pytest_test_env["LINE_PROFILE"]="1"
+            cmd = [SAFE_SYS_EXECUTABLE,"-m","pytest"]
+
+            results = execute_test_subprocess(
+                cmd+test_files, cwd=cwd, env=pytest_test_env, timeout=600
             )
             logger.debug(
                 f"Result return code: {results.returncode}, "

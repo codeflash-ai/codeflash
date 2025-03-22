@@ -40,6 +40,7 @@ from codeflash.code_utils.instrument_existing_tests import inject_profiling_into
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
+from codeflash.code_utils.lprof_utils import add_decorator_imports, prepare_lprofiler_files
 from codeflash.context import code_context_extractor
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.either import Failure, Success, is_successful
@@ -65,6 +66,7 @@ from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.parse_test_output import parse_test_results
+from codeflash.verification.parse_lprof_test_output import parse_lprof_results
 from codeflash.verification.test_results import TestResults, TestType
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests
 from codeflash.verification.verification_utils import get_test_file_path
@@ -76,7 +78,7 @@ if TYPE_CHECKING:
     from codeflash.either import Result
     from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
     from codeflash.verification.verification_utils import TestConfig
-
+from collections import deque
 
 class FunctionOptimizer:
     def __init__(
@@ -207,7 +209,6 @@ class FunctionOptimizer:
                 and "." in function_source.qualified_name
             ):
                 file_path_to_helper_classes[function_source.file_path].add(function_source.qualified_name.split(".")[0])
-
         baseline_result = self.establish_original_code_baseline(  # this needs better typing
             code_context=code_context,
             original_helper_code=original_helper_code,
@@ -231,7 +232,27 @@ class FunctionOptimizer:
             return Failure("The threshold for test coverage was not met.")
 
         best_optimization = None
-
+        lprof_generated_results = []
+        logger.info(f"Adding more candidates based on lineprof info, calling ai service")
+        with concurrent.futures.ThreadPoolExecutor(max_workers= N_TESTS_TO_GENERATE + 2) as executor:
+            future_optimization_candidates_lp = executor.submit(self.aiservice_client.optimize_python_code_line_profiler,
+            source_code=code_context.read_writable_code,
+            dependency_code=code_context.read_only_context_code,
+            trace_id=self.function_trace_id,
+            line_profiler_results=original_code_baseline.lprof_results,
+            num_candidates = 10,
+            experiment_metadata = None)
+            future = [future_optimization_candidates_lp]
+        concurrent.futures.wait(future)
+        lprof_generated_results = future[0].result()
+        if len(lprof_generated_results)==0:
+            logger.info(f"Generated tests with line profiler failed.")
+        else:
+            logger.info(f"Generated tests with line profiler succeeded. Appending to optimization candidates.")
+            logger.info(f"initial optimization candidates: {len(optimizations_set.control)}")
+            optimizations_set.control.extend(lprof_generated_results)
+            logger.info(f"After adding optimization candidates: {len(optimizations_set.control)}")
+            #append to optimization candidates
         for _u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
             if candidates is None:
                 continue
@@ -761,7 +782,7 @@ class FunctionOptimizer:
         with progress_bar(f"Establishing original code baseline for {self.function_to_optimize.function_name}"):
             assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
             success = True
-
+            lprof_results = ''
             test_env = os.environ.copy()
             test_env["CODEFLASH_TEST_ITERATION"] = "0"
             test_env["CODEFLASH_TRACER_DISABLE"] = "1"
@@ -772,6 +793,7 @@ class FunctionOptimizer:
                 test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
 
             coverage_results = None
+            lprofiler_results = None
             # Instrument codeflash capture
             try:
                 instrument_codeflash_capture(
@@ -784,6 +806,7 @@ class FunctionOptimizer:
                     optimization_iteration=0,
                     testing_time=TOTAL_LOOPING_TIME,
                     enable_coverage=test_framework == "pytest",
+                    enable_lprofiler=False,
                     code_context=code_context,
                 )
             finally:
@@ -799,6 +822,41 @@ class FunctionOptimizer:
                 return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
             if not coverage_critic(coverage_results, self.args.test_framework):
                 return Failure("The threshold for test coverage was not met.")
+            #Running lprof now
+            try:
+               #add decorator here and import too
+               lprofiler_database_file = prepare_lprofiler_files("baseline")
+               #add decorator config to file, need to delete afterwards
+               files_to_instrument = [self.function_to_optimize.file_path]
+               fns_to_instrument = [self.function_to_optimize.function_name]
+               for helper_obj in code_context.helper_functions:
+                   files_to_instrument.append(helper_obj.file_path)
+                   fns_to_instrument.append(helper_obj.qualified_name)
+               add_decorator_imports(files_to_instrument,fns_to_instrument, lprofiler_database_file)
+               #output doesn't matter, just need to run it
+               lprof_cmd_results, _ = self.run_and_parse_tests(
+                    testing_type=TestingMode.BEHAVIOR,
+                    test_env=test_env,
+                    test_files=self.test_files,
+                    optimization_iteration=0,
+                    testing_time=TOTAL_LOOPING_TIME,
+                    enable_coverage=False,
+                    enable_lprofiler=test_framework == "pytest",
+                    code_context=code_context,
+                    lprofiler_database_file=lprofiler_database_file,
+               )
+               #real magic happens here
+               lprof_results = parse_lprof_results(lprofiler_database_file)
+            except Exception as e:
+                logger.warning(f"Failed to run lprof for {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION.")
+                console.rule()
+                console.print(f"Failed to run lprof for {self.function_to_optimize.function_name}")
+                console.rule()
+            finally:
+                # Remove decorators and lineprof import
+                self.write_code_and_helpers(
+                    self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+                )
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
@@ -809,7 +867,6 @@ class FunctionOptimizer:
                     enable_coverage=False,
                     code_context=code_context,
                 )
-
             else:
                 benchmarking_results = TestResults()
                 start_time: float = time.time()
@@ -871,6 +928,7 @@ class FunctionOptimizer:
                         benchmarking_test_results=benchmarking_results,
                         runtime=total_timing,
                         coverage_results=coverage_results,
+                        lprof_results=lprof_results,
                     ),
                     functions_to_remove,
                 )
@@ -1002,10 +1060,12 @@ class FunctionOptimizer:
         testing_time: float = TOTAL_LOOPING_TIME,
         *,
         enable_coverage: bool = False,
+        enable_lprofiler: bool = False,
         pytest_min_loops: int = 5,
         pytest_max_loops: int = 100_000,
         code_context: CodeOptimizationContext | None = None,
         unittest_loop_index: int | None = None,
+        lprofiler_database_file: str | None = None,
     ) -> tuple[TestResults, CoverageData | None]:
         coverage_database_file = None
         coverage_config_file = None
@@ -1019,6 +1079,7 @@ class FunctionOptimizer:
                     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     verbose=True,
                     enable_coverage=enable_coverage,
+                    enable_lprofiler=enable_lprofiler,
                 )
             elif testing_type == TestingMode.PERFORMANCE:
                 result_file_path, run_result = run_benchmarking_tests(
@@ -1047,21 +1108,25 @@ class FunctionOptimizer:
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
+        if not enable_lprofiler:
+            results, coverage_results = parse_test_results(
+                test_xml_path=result_file_path,
+                test_files=test_files,
+                test_config=self.test_cfg,
+                optimization_iteration=optimization_iteration,
+                run_result=run_result,
+                unittest_loop_index=unittest_loop_index,
+                function_name=self.function_to_optimize.function_name,
+                source_file=self.function_to_optimize.file_path,
+                code_context=code_context,
+                coverage_database_file=coverage_database_file,
+                coverage_config_file=coverage_config_file,
+            )
+            return results, coverage_results
+        else:
+            #maintaining the function signature for the lprofiler
+            return TestResults(), None
 
-        results, coverage_results = parse_test_results(
-            test_xml_path=result_file_path,
-            test_files=test_files,
-            test_config=self.test_cfg,
-            optimization_iteration=optimization_iteration,
-            run_result=run_result,
-            unittest_loop_index=unittest_loop_index,
-            function_name=self.function_to_optimize.function_name,
-            source_file=self.function_to_optimize.file_path,
-            code_context=code_context,
-            coverage_database_file=coverage_database_file,
-            coverage_config_file=coverage_config_file,
-        )
-        return results, coverage_results
 
     def generate_and_instrument_tests(
         self,
