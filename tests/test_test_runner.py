@@ -8,6 +8,7 @@ from codeflash.verification.parse_test_output import parse_test_xml
 from codeflash.verification.test_results import TestType
 from codeflash.verification.test_runner import run_behavioral_tests
 from codeflash.verification.verification_utils import TestConfig
+import dill as pickle
 
 
 def test_unittest_runner():
@@ -144,11 +145,18 @@ def test_sort():
             pytest_target_runtime_seconds=1,
             enable_lprofiler=True,
         )
-        with open(tmpdir.name+os.sep+"/baseline.txt", "r") as f:
-            output = f.read()
-        expected_output = "Timer unit: 1e-09 s\n\nTotal time: 0 s\nFile: {}\nFunction: sorter at line 4\n\nLine #      Hits         Time  Per Hit   % Time  Line Contents\n==============================================================\n     4                                           @profile\n     5                                           def sorter(arr):\n     6         1          0.0      0.0               arr.sort()\n     7         1          0.0      0.0               return arr\n\n".format(fp.name)
+        try:
+            #todo write a test for the pickle parsing code, right now it's a simplistic test
+            with open(tmpdir.name+os.sep+"baseline.lprof", "rb") as f:
+                output = pickle.load(f)
+            #get lprof instead and compare the hits
+            output_set = set(list(output.timings.values())[0])
+            output_set = {(x,y) for x,y,z in output_set}
+            expected_set = {(6, 1), (7, 1)}
+        except Exception as e:
+            print(e)
+            assert False, "Test failed"
 
-
-    assert output == expected_output, "Test passed"
+    assert expected_set == output_set, "Test passed"
     result_file.unlink(missing_ok=True)
 
