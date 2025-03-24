@@ -54,16 +54,18 @@ class Explanation:
                     continue
 
                 total_benchmark_timing = self.total_benchmark_timings[benchmark_key]
-                # find out expected new benchmark timing, then calculate how much total benchmark was sped up. print out intermediate values
-                benchmark_info += f"Original timing for {benchmark_file_name}::{benchmark_test_function}: {humanize_runtime(total_benchmark_timing)}\n"
-                replay_speedup = self.replay_performance_gain
-                expected_new_benchmark_timing = total_benchmark_timing - og_benchmark_timing + 1 / (
-                        replay_speedup + 1) * og_benchmark_timing
-                benchmark_info += f"Expected new timing for {benchmark_file_name}::{benchmark_test_function}: {humanize_runtime(int(expected_new_benchmark_timing))}\n"
-
-                benchmark_speedup_ratio = total_benchmark_timing / expected_new_benchmark_timing
-                benchmark_speedup_percent = (benchmark_speedup_ratio - 1) * 100
-                benchmark_info += f"Benchmark speedup for {benchmark_file_name}::{benchmark_test_function}: {benchmark_speedup_percent:.2f}%\n\n"
+                if total_benchmark_timing == 0:
+                    benchmark_info += f"Benchmark timing for {benchmark_file_name}::{benchmark_test_function} was improved, but the speedup cannot be estimated.\n"
+                else:
+                    # find out expected new benchmark timing, then calculate how much total benchmark was sped up. print out intermediate values
+                    benchmark_info += f"Original timing for {benchmark_file_name}::{benchmark_test_function}: {humanize_runtime(total_benchmark_timing)}\n"
+                    replay_speedup = self.replay_performance_gain
+                    expected_new_benchmark_timing = total_benchmark_timing - og_benchmark_timing + 1 / (
+                            replay_speedup + 1) * og_benchmark_timing
+                    benchmark_info += f"Expected new timing for {benchmark_file_name}::{benchmark_test_function}: {humanize_runtime(int(expected_new_benchmark_timing))}\n"
+                    benchmark_speedup_ratio = total_benchmark_timing / expected_new_benchmark_timing
+                    benchmark_speedup_percent = (benchmark_speedup_ratio - 1) * 100
+                    benchmark_info += f"Benchmark speedup for {benchmark_file_name}::{benchmark_test_function}: {benchmark_speedup_percent:.2f}%\n\n"
 
         return (
                 f"Optimized {self.function_name} in {self.file_path}\n"

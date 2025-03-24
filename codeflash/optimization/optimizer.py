@@ -10,10 +10,9 @@ from typing import TYPE_CHECKING
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.benchmarking.replay_test import generate_replay_test
 from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
-from codeflash.benchmarking.utils import print_benchmark_table
+from codeflash.benchmarking.utils import print_benchmark_table, validate_and_format_benchmark_table
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module
 from codeflash.code_utils.code_replacer import normalize_code, normalize_node
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.static_analysis import analyze_imported_modules, get_first_top_level_function_or_method_ast
@@ -115,15 +114,15 @@ class Optimizer:
                             instrument_codeflash_trace_decorator(fto)
                     trace_file = Path(self.args.benchmarks_root) / "benchmarks.trace"
                     replay_tests_dir = Path(self.args.tests_root) / "codeflash_replay_tests"
-                    trace_benchmarks_pytest(self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file) # Simply run all tests that use pytest-benchmark
+                    trace_benchmarks_pytest(self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file) # Run all tests that use pytest-benchmark
                     replay_count = generate_replay_test(trace_file, replay_tests_dir)
                     if replay_count == 0:
                         logger.info(f"No valid benchmarks found in {self.args.benchmarks_root} for functions to optimize, continuing optimization")
                     else:
                         function_benchmark_timings = get_function_benchmark_timings(trace_file)
                         total_benchmark_timings = get_benchmark_timings(trace_file)
-
-                        print_benchmark_table(function_benchmark_timings, total_benchmark_timings)
+                        function_to_results = validate_and_format_benchmark_table(function_benchmark_timings, total_benchmark_timings)
+                        print_benchmark_table(function_to_results)
                         logger.info("Finished tracing existing benchmarks")
                 except Exception as e:
                     logger.info(f"Error while tracing existing benchmarks: {e}")
@@ -213,9 +212,12 @@ class Optimizer:
                             f"Skipping optimization."
                         )
                         continue
-                    if self.args.benchmark and function_benchmark_timings and total_benchmark_timings:
+                    qualified_name_w_module = function_to_optimize.qualified_name_with_modules_from_root(
+                        self.args.project_root
+                    )
+                    if self.args.benchmark and function_benchmark_timings and qualified_name_w_module in function_benchmark_timings and total_benchmark_timings:
                         function_optimizer = self.create_function_optimizer(
-                            function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code[original_module_path].source_code, function_benchmark_timings, total_benchmark_timings
+                            function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code[original_module_path].source_code, function_benchmark_timings[qualified_name_w_module], total_benchmark_timings
                         )
                     else:
                         function_optimizer = self.create_function_optimizer(
