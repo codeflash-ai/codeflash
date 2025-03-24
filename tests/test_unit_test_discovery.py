@@ -34,6 +34,48 @@ def test_unit_test_discovery_unittest():
     # assert len(tests) > 0
     # Unittest discovery within a pytest environment does not work
 
+def test_benchmark_unit_test_discovery_pytest():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # Create a dummy test file
+        test_file_path = Path(tmpdirname) / "test_dummy.py"
+        test_file_content = """
+from bubble_sort import sorter
+
+def test_benchmark_sort(benchmark):
+     benchmark(sorter, [5, 4, 3, 2, 1, 0])
+
+def test_normal_test():
+    assert sorter(list(reversed(range(100)))) == list(range(100))
+
+def test_normal_test2():
+    assert sorter(list(reversed(range(100)))) == list(range(100))"""
+        test_file_path.write_text(test_file_content)
+        path_obj_tempdirname = Path(tmpdirname)
+
+        # Create a file that the test file is testing
+        code_file_path = path_obj_tempdirname / "bubble_sort.py"
+        code_file_content = """
+def sorter(arr):
+    return sorted(arr)"""
+        code_file_path.write_text(code_file_content)
+
+        # Create a TestConfig with the temporary directory as the root
+        test_config = TestConfig(
+            tests_root=path_obj_tempdirname,
+            project_root_path=path_obj_tempdirname,
+            test_framework="pytest",
+            tests_project_rootdir=path_obj_tempdirname.parent,
+        )
+
+        # Discover tests
+        tests = discover_unit_tests(test_config)
+        assert len(tests) == 1
+        assert 'bubble_sort.sorter' in tests
+        assert len(tests['bubble_sort.sorter']) == 2
+        functions = [test.tests_in_file.test_function for test in tests['bubble_sort.sorter']]
+        assert 'test_normal_test' in functions
+        assert 'test_normal_test2' in functions
+        assert 'test_benchmark_sort' not in functions
 
 def test_discover_tests_pytest_with_temp_dir_root():
     with tempfile.TemporaryDirectory() as tmpdirname:
