@@ -504,11 +504,11 @@ def get_dependency_manager_installation_string(dep_manager: DependencyManager) -
     py_version = sys.version_info
     python_version_string = f"'{py_version.major}.{py_version.minor}'"
     if dep_manager == DependencyManager.UV:
-        return """name: Setup UV
+        return """name: 🐍 Setup UV
         uses: astral-sh/setup-uv@v4
         with:
           enable-cache: true"""
-    return f"""name: Set up Python
+    return f"""name: 🐍 Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: {python_version_string}"""
