@@ -1,9 +1,12 @@
 import sqlite3
 
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
+from codeflash.benchmarking.get_trace_info import get_function_benchmark_timings, get_benchmark_timings
 from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
 from codeflash.benchmarking.replay_test import generate_replay_test
 from pathlib import Path
+
+from codeflash.benchmarking.utils import print_benchmark_table, validate_and_format_benchmark_table
 from codeflash.code_utils.code_utils import get_run_tmp_file
 import shutil
 
@@ -11,7 +14,7 @@ import shutil
 def test_trace_benchmarks():
     # Test the trace_benchmarks function
     project_root = Path(__file__).parent.parent / "code_to_optimize"
-    benchmarks_root = project_root / "tests" / "pytest" / "benchmarks"
+    benchmarks_root = project_root / "tests" / "pytest" / "benchmarks_test"
     tests_root = project_root / "tests" / "test_trace_benchmarks"
     tests_root.mkdir(parents=False, exist_ok=False)
     output_file = (tests_root / Path("test_trace_benchmarks.trace")).resolve()
@@ -150,6 +153,62 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_sorter():
 
 """
         assert test_sort_path.read_text("utf-8").strip()==test_sort_code.strip()
+    finally:
+        # cleanup
+        shutil.rmtree(tests_root)
+        pass
+
+def test_trace_multithreaded_benchmark() -> None:
+    project_root = Path(__file__).parent.parent / "code_to_optimize"
+    benchmarks_root = project_root / "tests" / "pytest" / "benchmarks_multithread"
+    tests_root = project_root / "tests" / "test_trace_benchmarks"
+    tests_root.mkdir(parents=False, exist_ok=False)
+    output_file = (tests_root / Path("test_trace_benchmarks.trace")).resolve()
+    trace_benchmarks_pytest(benchmarks_root, tests_root, project_root, output_file)
+    assert output_file.exists()
+    try:
+        # check contents of trace file
+        # connect to database
+        conn = sqlite3.connect(output_file.as_posix())
+        cursor = conn.cursor()
+
+        # Get the count of records
+        # Get all records
+        cursor.execute(
+            "SELECT function_name, class_name, module_name, file_name, benchmark_function_name, benchmark_file_name, benchmark_line_number FROM function_calls ORDER BY benchmark_file_name, benchmark_function_name, function_name")
+        function_calls = cursor.fetchall()
+
+        # Assert the length of function calls
+        assert len(function_calls) == 10, f"Expected 10 function calls, but got {len(function_calls)}"
+        function_benchmark_timings = get_function_benchmark_timings(output_file)
+        total_benchmark_timings = get_benchmark_timings(output_file)
+        # This will throw an error if summed function timings exceed total benchmark timing
+        function_to_results = validate_and_format_benchmark_table(function_benchmark_timings, total_benchmark_timings)
+        assert "code_to_optimize.bubble_sort_codeflash_trace.sorter" in function_to_results
+
+        test_name, total_time, function_time, percent = function_to_results["code_to_optimize.bubble_sort_codeflash_trace.sorter"][0]
+        assert total_time > 0.0
+        assert function_time > 0.0
+        assert percent > 0.0
+
+        bubble_sort_path = (project_root / "bubble_sort_codeflash_trace.py").as_posix()
+        # Expected function calls
+        expected_calls = [
+            ("sorter", "", "code_to_optimize.bubble_sort_codeflash_trace",
+             f"{bubble_sort_path}",
+             "test_benchmark_sort", "test_multithread_sort.py", 4),
+        ]
+        for idx, (actual, expected) in enumerate(zip(function_calls, expected_calls)):
+            assert actual[0] == expected[0], f"Mismatch at index {idx} for function_name"
+            assert actual[1] == expected[1], f"Mismatch at index {idx} for class_name"
+            assert actual[2] == expected[2], f"Mismatch at index {idx} for module_name"
+            assert Path(actual[3]).name == Path(expected[3]).name, f"Mismatch at index {idx} for file_name"
+            assert actual[4] == expected[4], f"Mismatch at index {idx} for benchmark_function_name"
+            assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_file_name"
+            assert actual[6] == expected[6], f"Mismatch at index {idx} for benchmark_line_number"
+        # Close connection
+        conn.close()
+
     finally:
         # cleanup
         shutil.rmtree(tests_root)

@@ -92,7 +92,7 @@ class FunctionOptimizer:
         function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
         function_to_optimize_ast: ast.FunctionDef | None = None,
         aiservice_client: AiServiceClient | None = None,
-        function_benchmark_timings: dict[str, dict[str, int]] | None = None,
+        function_benchmark_timings: dict[str, int] | None = None,
         total_benchmark_timings: dict[str, int] | None = None,
         args: Namespace | None = None,
     ) -> None:
@@ -277,7 +277,7 @@ class FunctionOptimizer:
                     function_name=function_to_optimize_qualified_name,
                     file_path=self.function_to_optimize.file_path,
                     replay_performance_gain=best_optimization.replay_performance_gain if self.args.benchmark else None,
-                    fto_benchmark_timings = self.function_benchmark_timings[self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)] if self.args.benchmark else None,
+                    fto_benchmark_timings = self.function_benchmark_timings if self.args.benchmark else None,
                     total_benchmark_timings = self.total_benchmark_timings if self.args.benchmark else None,
                 )
 

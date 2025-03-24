@@ -15,11 +15,6 @@ class CodeflashTrace:
     def __init__(self) -> None:
         self.function_calls_data = []
 
-    # def __enter__(self) -> None:
-    #     # Initialize for context manager use
-    #     self.function_calls_data = []
-    #     return self
-
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         # Cleanup is optional here
         pass
@@ -37,15 +32,14 @@ class CodeflashTrace:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             # Measure execution time
-            start_time = time.perf_counter_ns()
+            start_time = time.thread_time_ns()
             result = func(*args, **kwargs)
-            end_time = time.perf_counter_ns()
-
+            end_time = time.thread_time_ns()
             # Calculate execution time
             execution_time = end_time - start_time
 
             # Measure overhead
-            overhead_start_time = time.perf_counter_ns()
+            overhead_start_time = time.thread_time_ns()
 
             try:
                 # Check if currently in pytest benchmark fixture
@@ -66,7 +60,7 @@ class CodeflashTrace:
                 if "." in qualname:
                     class_name = qualname.split(".")[0]
                 # Calculate overhead time
-                overhead_end_time = time.perf_counter_ns()
+                overhead_end_time = time.thread_time_ns()
                 overhead_time = overhead_end_time - overhead_start_time
 
 
@@ -75,7 +69,7 @@ class CodeflashTrace:
                      benchmark_function_name, benchmark_file_name, benchmark_line_number, execution_time,
                      overhead_time, pickled_args, pickled_kwargs)
                 )
-
+                print("appended")
             except Exception as e:
                 print(f"Error in codeflash_trace: {e}")
 
