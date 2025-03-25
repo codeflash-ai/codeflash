@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
+from codeflash.benchmarking.benchmark_database_utils import BenchmarkDatabaseUtils
 from codeflash.benchmarking.replay_test import generate_replay_test
 from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
 from codeflash.benchmarking.utils import print_benchmark_table, validate_and_format_benchmark_table
@@ -24,7 +25,6 @@ from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.test_results import TestType
 from codeflash.verification.verification_utils import TestConfig
-from codeflash.benchmarking.get_trace_info import get_function_benchmark_timings, get_benchmark_timings
 from codeflash.benchmarking.utils import print_benchmark_table
 from codeflash.benchmarking.instrument_codeflash_trace import instrument_codeflash_trace_decorator
 
@@ -119,8 +119,8 @@ class Optimizer:
                     if replay_count == 0:
                         logger.info(f"No valid benchmarks found in {self.args.benchmarks_root} for functions to optimize, continuing optimization")
                     else:
-                        function_benchmark_timings = get_function_benchmark_timings(trace_file)
-                        total_benchmark_timings = get_benchmark_timings(trace_file)
+                        function_benchmark_timings = BenchmarkDatabaseUtils.get_function_benchmark_timings(trace_file)
+                        total_benchmark_timings = BenchmarkDatabaseUtils.get_benchmark_timings(trace_file)
                         function_to_results = validate_and_format_benchmark_table(function_benchmark_timings, total_benchmark_timings)
                         print_benchmark_table(function_to_results)
                         logger.info("Finished tracing existing benchmarks")
