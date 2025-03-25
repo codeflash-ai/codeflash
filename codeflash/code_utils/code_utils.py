@@ -9,6 +9,7 @@ from tempfile import TemporaryDirectory
 
 from codeflash.cli_cmds.console import logger
 
+_tmpdir = TemporaryDirectory(prefix="codeflash_")
 
 def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
     if not full_qualified_name:
@@ -78,10 +79,12 @@ def get_all_function_names(code: str) -> tuple[bool, list[str]]:
     return True, function_names
 
 
-def get_run_tmp_file(file_path: Path) -> Path:
+def get_run_tmp_file(file_path: Path | str) -> Path:
     if not hasattr(get_run_tmp_file, "tmpdir"):
-        get_run_tmp_file.tmpdir = TemporaryDirectory(prefix="codeflash_")
-    return Path(get_run_tmp_file.tmpdir.name) / file_path
+        get_run_tmp_file.tmpdir = _tmpdir
+    if isinstance(file_path, str):
+        file_path = Path(file_path)
+    return (Path(get_run_tmp_file.tmpdir.name) / file_path).resolve()
 
 
 def path_belongs_to_site_packages(file_path: Path) -> bool:
