@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_replacer import normalize_code, normalize_node
 from codeflash.code_utils.code_utils import get_run_tmp_file
@@ -95,9 +95,8 @@ class Optimizer:
                 return
 
             console.rule()
-            logger.info(f"Discovering existing unit tests in {self.test_cfg.tests_root}…")
-            console.rule()
-            function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
+            with progress_bar(f"Discovering existing unit tests in {self.test_cfg.tests_root}…", transient=True):
+                function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
             num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
             console.rule()
             logger.info(f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}")

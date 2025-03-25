@@ -13,7 +13,7 @@ import jedi
 from pydantic.dataclasses import dataclass
 from pytest import ExitCode
 
-from codeflash.cli_cmds.console import console, logger, progress_bar
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile
@@ -49,8 +49,8 @@ def discover_unit_tests(
     if not strategy:
         error_message = f"Unsupported test framework: {cfg.test_framework}"
         raise ValueError(error_message)
-    with progress_bar("Discovering unit tests…", transient=True):
-        return strategy(cfg, discover_only_these_tests)
+
+    return strategy(cfg, discover_only_these_tests)
 
 
 def discover_tests_pytest(
