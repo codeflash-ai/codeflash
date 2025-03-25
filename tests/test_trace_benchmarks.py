@@ -1,13 +1,11 @@
 import sqlite3
 
-from codeflash.benchmarking.codeflash_trace import codeflash_trace
-from codeflash.benchmarking.get_trace_info import get_function_benchmark_timings, get_benchmark_timings
+from codeflash.benchmarking.benchmark_database_utils import BenchmarkDatabaseUtils
 from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
 from codeflash.benchmarking.replay_test import generate_replay_test
 from pathlib import Path
 
 from codeflash.benchmarking.utils import print_benchmark_table, validate_and_format_benchmark_table
-from codeflash.code_utils.code_utils import get_run_tmp_file
 import shutil
 
 
@@ -180,9 +178,8 @@ def test_trace_multithreaded_benchmark() -> None:
 
         # Assert the length of function calls
         assert len(function_calls) == 10, f"Expected 10 function calls, but got {len(function_calls)}"
-        function_benchmark_timings = get_function_benchmark_timings(output_file)
-        total_benchmark_timings = get_benchmark_timings(output_file)
-        # This will throw an error if summed function timings exceed total benchmark timing
+        function_benchmark_timings = BenchmarkDatabaseUtils.get_function_benchmark_timings(output_file)
+        total_benchmark_timings = BenchmarkDatabaseUtils.get_benchmark_timings(output_file)
         function_to_results = validate_and_format_benchmark_table(function_benchmark_timings, total_benchmark_timings)
         assert "code_to_optimize.bubble_sort_codeflash_trace.sorter" in function_to_results
 
