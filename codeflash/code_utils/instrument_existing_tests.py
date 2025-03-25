@@ -213,7 +213,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                                     args=[
                                         ast.JoinedStr(
                                             values=[
-                                                ast.Constant(value=get_run_tmp_file("test_return_values_").as_posix()),
+                                                ast.Constant(value=get_run_tmp_file("test_return_values_").resolve().as_posix()),
                                                 ast.FormattedValue(
                                                     value=ast.Name(id="codeflash_iteration", ctx=ast.Load()),
                                                     conversion=-1,
