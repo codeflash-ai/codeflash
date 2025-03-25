@@ -11,12 +11,18 @@
   </a>
 </p>
 
-[Codeflash](https://www.codeflash.ai) is a general purpose optimizer for Python that automatically improves the performance of your Python code while maintaining its correctness.
-It uses advanced LLMs to generate multiple optimization ideas for your code, tests them to be correct and benchmarks them for performance. It then creates merge-ready pull requests containing the best optimization found, which you can review and merge.
+[Codeflash](https://www.codeflash.ai) is a general purpose optimizer for Python that automatically improves the performance of your Python code while maintaining its correctness. 
 
-How to use Codeflash -
-- Optimize an entire existing codebase by running `codeflash --all`
-- Automate optimizing all __future__ code you will write by installing Codeflash as a GitHub action.
+How Codeflash works:
+1. LLMs generate multiple optimization candidates for your code
+2. Codeflash tests the optimization candidates for correctness
+3. Codeflash benchmarks the optimization candidates for performance
+
+Should the optimization be valid and faster than the original code, Codeflash will create a pull request with the optimized code. You can now review and merge the code to make your codebase faster!
+
+Ways to use Codeflash:
+- Optimize an entire codebase by running `codeflash --all`
+- Automatically optimize all __future__ code written by installing Codeflash as a GitHub action. Codeflash will try to optimize your new code before you merge it into the codebase.
 - Optimize a Python workflow end-to-end by tracing the workflow.
 
 Codeflash is used by top engineering teams at [Pydantic](https://github.com/pydantic/pydantic/pulls?q=is%3Apr+author%3Amisrasaurabh1+is%3Amerged), [Langflow](https://github.com/langflow-ai/langflow/issues?q=state%3Aclosed%20is%3Apr%20author%3Amisrasaurabh1), [Albumentations](https://github.com/albumentations-team/albumentations/issues?q=state%3Amerged%20is%3Apr%20author%3Akrrt7%20OR%20state%3Amerged%20is%3Apr%20author%3Aaseembits93%20) and many others to ship performant, expert level code.
@@ -35,21 +41,26 @@ Add codeflash as a development time dependency if you are using package managers
 ## Quick Start
 
 
-1. To configure Codeflash for a project, at the root directory of your project where the pyproject.toml file is located, run:
+1. Run the following command at the root directory of your project where the pyproject.toml file is located
    ```
    codeflash init
    ```
-   - It will ask you a few questions about your project like the location of your code and tests
-   - Ask you to generate an [API Key](https://app.codeflash.ai/app/apikeys) to access Codeflash's LLMs
-   - Install a [GitHub app](https://github.com/apps/codeflash-ai/installations/select_target) to open Pull Requests on GitHub.
-   - Ask if you want to setup a GitHub actions which will optimize all your future code.
-   - The codeflash config is then saved in the pyproject.toml file.
-   
-2. Optimize your entire codebase:
+   This will set up basic configurations for your project, eg:
+   - Input a Codeflash API key (for access to LLMs)
+   - Enable a [GitHub app](https://github.com/apps/codeflash-ai/installations/select_target) to open Pull Requests on the repo
+   - [Optional] Setup a GitHub actions which will optimize all your future code.
+
+
+
+2. Optimize a file:
+
+   ```   
+   codeflash --file <path/to/file.py>
    ```
+3. Optimize your entire codebase: (This will run for a while and open PRs as it finds optimizations)
+   ```   
    codeflash --all
    ```
-   This can take a while to run for a large codebase, but it will keep opening PRs as it finds optimizations.
 
 ## Documentation
 For detailed installation and usage instructions, visit our documentation at [docs.codeflash.ai](https://docs.codeflash.ai)
