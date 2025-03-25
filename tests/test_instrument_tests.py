@@ -164,24 +164,25 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, codeflash_cur, codeflash_con, input), list(range(5000)))
         codeflash_con.close()
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
-        f.write(code)
-        f.flush()
-        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path(f.name))
+    with tempfile.TemporaryDirectory() as tempdir:
+        temp_file_path = Path(tempdir) / "temp_test.py"
+        with temp_file_path.open("w") as f:
+            f.write(code)
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=temp_file_path)
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            Path(f.name),
+            temp_file_path,
             [CodePosition(9, 17), CodePosition(13, 17), CodePosition(17, 17)],
             func,
-            Path(f.name).parent,
+            temp_file_path.parent,
             "unittest",
         )
         os.chdir(original_cwd)
     assert success
     assert new_test == expected.format(
-        module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
+        module_path="temp_test", tmp_dir_path=get_run_tmp_file("test_return_values").as_posix()
     )
 
 
