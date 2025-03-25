@@ -31,6 +31,13 @@ class TestFunction:
     test_type: TestType
 
 
+ERROR_PATTERN = re.compile(r"={3,}\s*ERRORS\s*={3,}\n([\s\S]*?)(?:={3,}|$)")
+PYTEST_PARAMETERIZED_TEST_NAME_REGEX = re.compile(r"[\[\]]")
+UNITTEST_PARAMETERIZED_TEST_NAME_REGEX = re.compile(r"^test_\w+_\d+(?:_\w+)*")
+UNITTEST_STRIP_NUMBERED_SUFFIX_REGEX = re.compile(r"_\d+(?:_\w+)*$")
+FUNCTION_NAME_REGEX = re.compile(r"([^.]+)\.([a-zA-Z0-9_]+)$")
+
+
 def discover_unit_tests(
     cfg: TestConfig, discover_only_these_tests: list[Path] | None = None
 ) -> dict[str, list[FunctionCalledInTest]]:
@@ -76,8 +83,7 @@ def discover_tests_pytest(
     if exitcode != 0:
         if exitcode == 2 and "ERROR collecting" in result.stdout:
             # Pattern matches "===== ERRORS =====" (any number of =) and captures everything after
-            error_pattern = r"={3,}\s*ERRORS\s*={3,}\n([\s\S]*?)(?:={3,}|$)"
-            match = re.search(error_pattern, result.stdout)
+            match = ERROR_PATTERN.search(result.stdout)
             error_section = match.group(1) if match else result.stdout
 
             logger.warning(
@@ -219,8 +225,12 @@ def process_test_files(
         if test_framework == "pytest":
             for function in functions:
                 if "[" in function.test_function:
-                    function_name = re.split(r"[\[\]]", function.test_function)[0]
-                    parameters = re.split(r"[\[\]]", function.test_function)[1]
+                    function_name = PYTEST_PARAMETERIZED_TEST_NAME_REGEX.split(
+                        function.test_function
+                    )[0]
+                    parameters = PYTEST_PARAMETERIZED_TEST_NAME_REGEX.split(
+                        function.test_function
+                    )[1]
                     if function_name in top_level_functions:
                         test_functions.add(
                             TestFunction(
@@ -239,10 +249,14 @@ def process_test_files(
                             function.test_type,
                         )
                     )
-                elif re.match(r"^test_\w+_\d+(?:_\w+)*", function.test_function):
+                elif UNITTEST_PARAMETERIZED_TEST_NAME_REGEX.match(
+                    function.test_function
+                ):
                     # Try to match parameterized unittest functions here, although we can't get the parameters.
                     # Extract base name by removing the numbered suffix and any additional descriptions
-                    base_name = re.sub(r"_\d+(?:_\w+)*$", "", function.test_function)
+                    base_name = UNITTEST_STRIP_NUMBERED_SUFFIX_REGEX.sub(
+                        "", function.test_function
+                    )
                     if base_name in top_level_functions:
                         test_functions.add(
                             TestFunction(
@@ -299,7 +313,7 @@ def process_test_files(
         for name in all_names:
             if name.full_name is None:
                 continue
-            m = re.search(r"([^.]+)\." + f"{name.name}$", name.full_name)
+            m = FUNCTION_NAME_REGEX.search(name.full_name)
             if not m:
                 continue
 
