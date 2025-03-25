@@ -98,12 +98,12 @@ def instrument_codeflash_trace_decorator(
     """Instrument __init__ function with codeflash_trace decorator if it's in a class."""
     # Instrument fto class
     original_code = function_to_optimize.file_path.read_text(encoding="utf-8")
-
-    # Modify the code
-    modified_code = isort.code(add_codeflash_decorator_to_code(
+    new_code = add_codeflash_decorator_to_code(
         original_code,
         function_to_optimize
-    ))
+    )
+    # Modify the code
+    modified_code = isort.code(code=new_code, float_to_top=True)
 
     # Write the modified code back to the file
     function_to_optimize.file_path.write_text(modified_code, encoding="utf-8")
