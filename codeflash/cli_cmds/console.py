@@ -27,7 +27,8 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger("rich")
-logging.getLogger('parso').setLevel(logging.WARNING)
+logging.getLogger("parso").setLevel(logging.WARNING)
+
 
 def paneled_text(
     text: str, panel_args: dict[str, str | bool] | None = None, text_args: dict[str, str] | None = None

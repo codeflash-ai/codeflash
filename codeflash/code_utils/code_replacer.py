@@ -159,7 +159,7 @@ def replace_functions_in_file(
     source_code: str,
     original_function_names: list[str],
     optimized_code: str,
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]],
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]],
 ) -> str:
     parsed_function_names = []
     for original_function_name in original_function_names:
@@ -195,7 +195,7 @@ def replace_functions_and_add_imports(
     function_names: list[str],
     optimized_code: str,
     module_abspath: Path,
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]],
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]],
     project_root_path: Path,
 ) -> str:
     return add_needed_imports_from_module(
@@ -211,7 +211,7 @@ def replace_function_definitions_in_module(
     function_names: list[str],
     optimized_code: str,
     module_abspath: Path,
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]],
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]],
     project_root_path: Path,
 ) -> bool:
     source_code: str = module_abspath.read_text(encoding="utf8")

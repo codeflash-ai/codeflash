@@ -128,14 +128,22 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     assert args.tests_root is not None, "--tests-root must be specified"
     assert Path(args.tests_root).is_dir(), f"--tests-root {args.tests_root} must be a valid directory"
 
-    assert not (env_utils.get_pr_number() is not None and not env_utils.ensure_codeflash_api_key()), (
-        "Codeflash API key not found. When running in a Github Actions Context, provide the "
-        "'CODEFLASH_API_KEY' environment variable as a secret.\n"
-        "You can add a secret by going to your repository's settings page, then clicking 'Secrets' in the left sidebar.\n"
-        "Then, click 'New repository secret' and add your api key with the variable name CODEFLASH_API_KEY.\n"
-        f"Here's a direct link: {get_github_secrets_page_url()}\n"
-        "Exiting..."
-    )
+    if env_utils.get_pr_number() is not None:
+        assert env_utils.ensure_codeflash_api_key(), (
+            "Codeflash API key not found. When running in a Github Actions Context, provide the "
+            "'CODEFLASH_API_KEY' environment variable as a secret.\n"
+            "You can add a secret by going to your repository's settings page, then clicking 'Secrets' in the left sidebar.\n"
+            "Then, click 'New repository secret' and add your api key with the variable name CODEFLASH_API_KEY.\n"
+            f"Here's a direct link: {get_github_secrets_page_url()}\n"
+            "Exiting..."
+        )
+
+        repo = git.Repo(search_parent_directories=True)
+
+        owner, repo_name = get_repo_owner_and_name(repo)
+
+        require_github_app_or_exit(owner, repo_name)
+
     if hasattr(args, "ignore_paths") and args.ignore_paths is not None:
         normalized_ignore_paths = []
         for path in args.ignore_paths:

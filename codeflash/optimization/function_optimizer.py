@@ -26,8 +26,8 @@ from codeflash.code_utils.code_utils import (
     cleanup_paths,
     file_name_from_test_module_name,
     get_run_tmp_file,
-    module_name_from_file_path,
     has_any_async_functions,
+    module_name_from_file_path,
 )
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,

@@ -1,7 +1,6 @@
-import difflib
 import sys
 
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import logger
 from codeflash.verification.comparator import comparator
 from codeflash.verification.test_results import TestResults, TestType, VerificationType
 
