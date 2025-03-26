@@ -1,7 +1,12 @@
+from __future__ import annotations
+from typing import Optional
+
 from rich.console import Console
 from rich.table import Table
 
 from codeflash.cli_cmds.console import logger
+from codeflash.code_utils.time_utils import humanize_runtime
+from codeflash.models.models import ProcessedBenchmarkInfo, BenchmarkDetail
 
 
 def validate_and_format_benchmark_table(function_benchmark_timings: dict[str, dict[str, int]],
@@ -62,3 +67,57 @@ def print_benchmark_table(function_to_results: dict[str, list[tuple[str, float, 
 
         # Print the table
         console.print(table)
+
+
+def process_benchmark_data(
+        replay_performance_gain: float,
+        fto_benchmark_timings: dict[str, int],
+        total_benchmark_timings: dict[str, int]
+) -> Optional[ProcessedBenchmarkInfo]:
+    """Process benchmark data and generate detailed benchmark information.
+
+    Args:
+        replay_performance_gain: The performance gain from replay
+        fto_benchmark_timings: Function to optimize benchmark timings
+        total_benchmark_timings: Total benchmark timings
+
+    Returns:
+        ProcessedBenchmarkInfo containing processed benchmark details
+
+    """
+    if not replay_performance_gain or not fto_benchmark_timings or not total_benchmark_timings:
+        return None
+
+    benchmark_details = []
+
+    for benchmark_key, og_benchmark_timing in fto_benchmark_timings.items():
+        try:
+            benchmark_file_name, benchmark_test_function, line_number = benchmark_key.split("::")
+        except ValueError:
+            continue  # Skip malformed benchmark keys
+
+        total_benchmark_timing = total_benchmark_timings.get(benchmark_key, 0)
+
+        if total_benchmark_timing == 0:
+            continue  # Skip benchmarks with zero timing
+
+        # Calculate expected new benchmark timing
+        expected_new_benchmark_timing = total_benchmark_timing - og_benchmark_timing + (
+                1 / (replay_performance_gain + 1)
+        ) * og_benchmark_timing
+
+        # Calculate speedup
+        benchmark_speedup_ratio = total_benchmark_timing / expected_new_benchmark_timing
+        benchmark_speedup_percent = (benchmark_speedup_ratio - 1) * 100
+
+        benchmark_details.append(
+            BenchmarkDetail(
+                benchmark_name=benchmark_file_name,
+                test_function=benchmark_test_function,
+                original_timing=humanize_runtime(int(total_benchmark_timing)),
+                expected_new_timing=humanize_runtime(int(expected_new_benchmark_timing)),
+                speedup_percent=benchmark_speedup_percent
+            )
+        )
+
+    return ProcessedBenchmarkInfo(benchmark_details=benchmark_details)

@@ -19,6 +19,7 @@ from rich.syntax import Syntax
 from rich.tree import Tree
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
+from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code
@@ -268,6 +269,13 @@ class FunctionOptimizer:
                         best_optimization.candidate.explanation, title="Best Candidate Explanation", border_style="blue"
                     )
                 )
+                processed_benchmark_info = None
+                if self.args.benchmark:
+                    processed_benchmark_info = process_benchmark_data(
+                        replay_performance_gain=best_optimization.replay_performance_gain,
+                        fto_benchmark_timings=self.function_benchmark_timings,
+                        total_benchmark_timings=self.total_benchmark_timings
+                    )
                 explanation = Explanation(
                     raw_explanation_message=best_optimization.candidate.explanation,
                     winning_behavioral_test_results=best_optimization.winning_behavioral_test_results,
@@ -276,9 +284,7 @@ class FunctionOptimizer:
                     best_runtime_ns=best_optimization.runtime,
                     function_name=function_to_optimize_qualified_name,
                     file_path=self.function_to_optimize.file_path,
-                    replay_performance_gain=best_optimization.replay_performance_gain if self.args.benchmark else None,
-                    fto_benchmark_timings = self.function_benchmark_timings if self.args.benchmark else None,
-                    total_benchmark_timings = self.total_benchmark_timings if self.args.benchmark else None,
+                    benchmark_details=processed_benchmark_info.benchmark_details if processed_benchmark_info else None
                 )
 
                 self.log_successful_optimization(explanation, generated_tests)

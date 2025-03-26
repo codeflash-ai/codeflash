@@ -5,7 +5,8 @@ from typing import Optional, Union
 from pydantic.dataclasses import dataclass
 
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.models.models import TestResults
+from codeflash.models.models import BenchmarkDetail
+from codeflash.verification.test_results import TestResults
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
@@ -17,9 +18,7 @@ class Explanation:
     best_runtime_ns: int
     function_name: str
     file_path: Path
-    replay_performance_gain: Optional[float]
-    fto_benchmark_timings: Optional[dict[str, int]]
-    total_benchmark_timings: Optional[dict[str, int]]
+    benchmark_details: Optional[list[BenchmarkDetail]] = None
 
     @property
     def perf_improvement_line(self) -> str:
@@ -43,29 +42,13 @@ class Explanation:
         original_runtime_human = humanize_runtime(self.original_runtime_ns)
         best_runtime_human = humanize_runtime(self.best_runtime_ns)
         benchmark_info = ""
-        if self.replay_performance_gain and self.fto_benchmark_timings and self.total_benchmark_timings:
-            benchmark_info += "Benchmark Performance Details:\n"
-            for benchmark_key, og_benchmark_timing in self.fto_benchmark_timings.items():
-                # benchmark key is benchmark filename :: benchmark test function :: line number
-                try:
-                    benchmark_file_name, benchmark_test_function, line_number = benchmark_key.split("::")
-                except ValueError:
-                    benchmark_info += f"Benchmark key {benchmark_key} is not in the expected format.\n"
-                    continue
 
-                total_benchmark_timing = self.total_benchmark_timings[benchmark_key]
-                if total_benchmark_timing == 0:
-                    benchmark_info += f"Benchmark timing for {benchmark_file_name}::{benchmark_test_function} was improved, but the speedup cannot be estimated.\n"
-                else:
-                    # find out expected new benchmark timing, then calculate how much total benchmark was sped up. print out intermediate values
-                    benchmark_info += f"Original timing for {benchmark_file_name}::{benchmark_test_function}: {humanize_runtime(total_benchmark_timing)}\n"
-                    replay_speedup = self.replay_performance_gain
-                    expected_new_benchmark_timing = total_benchmark_timing - og_benchmark_timing + 1 / (
-                            replay_speedup + 1) * og_benchmark_timing
-                    benchmark_info += f"Expected new timing for {benchmark_file_name}::{benchmark_test_function}: {humanize_runtime(int(expected_new_benchmark_timing))}\n"
-                    benchmark_speedup_ratio = total_benchmark_timing / expected_new_benchmark_timing
-                    benchmark_speedup_percent = (benchmark_speedup_ratio - 1) * 100
-                    benchmark_info += f"Benchmark speedup for {benchmark_file_name}::{benchmark_test_function}: {benchmark_speedup_percent:.2f}%\n\n"
+        if self.benchmark_details:
+            benchmark_info += "Benchmark Performance Details:\n"
+            for detail in self.benchmark_details:
+                benchmark_info += f"Original timing for {detail.benchmark_name}::{detail.test_function}: {detail.original_timing}\n"
+                benchmark_info += f"Expected new timing for {detail.benchmark_name}::{detail.test_function}: {detail.expected_new_timing}\n"
+                benchmark_info += f"Benchmark speedup for {detail.benchmark_name}::{detail.test_function}: {detail.speedup_percent:.2f}%\n\n"
 
         return (
                 f"Optimized {self.function_name} in {self.file_path}\n"

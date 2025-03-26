@@ -1,10 +1,12 @@
-from typing import Union
+from __future__ import annotations
+from typing import Union, Optional
 
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.models.models import TestResults
+from codeflash.models.models import BenchmarkDetail
+from codeflash.verification.test_results import TestResults
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
@@ -18,15 +20,16 @@ class PrComment:
     speedup_pct: str
     winning_behavioral_test_results: TestResults
     winning_benchmarking_test_results: TestResults
+    benchmark_details: Optional[list[BenchmarkDetail]] = None
 
-    def to_json(self) -> dict[str, Union[dict[str, dict[str, int]], int, str]]:
+    def to_json(self) -> dict[str, Union[dict[str, dict[str, int]], int, str, Optional[list[dict[str, any]]]]]:
         report_table = {
             test_type.to_name(): result
             for test_type, result in self.winning_behavioral_test_results.get_test_pass_fail_report_by_type().items()
             if test_type.to_name()
         }
 
-        return {
+        result = {
             "optimization_explanation": self.optimization_explanation,
             "best_runtime": humanize_runtime(self.best_runtime),
             "original_runtime": humanize_runtime(self.original_runtime),
@@ -37,6 +40,12 @@ class PrComment:
             "loop_count": self.winning_benchmarking_test_results.number_of_loops(),
             "report_table": report_table,
         }
+
+        # Add benchmark details if available
+        if self.benchmark_details:
+            result["benchmark_details"] = self.benchmark_details
+
+        return result
 
 
 class FileDiffContent(BaseModel):
