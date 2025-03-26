@@ -22,6 +22,7 @@ class PytestCollectionPlugin:
             if "benchmark" in item.fixturenames:
                 item.add_marker(skip_benchmark)
 
+
 def parse_pytest_collection_results(pytest_tests: list[Any]) -> list[dict[str, str]]:
     test_results = []
     for test in pytest_tests:
@@ -39,7 +40,7 @@ if __name__ == "__main__":
 
     try:
         exitcode = pytest.main(
-            [tests_root, "-p no:logging", "--collect-only", "-m", "not skip",], plugins=[PytestCollectionPlugin()]
+            [tests_root, "-p no:logging", "--collect-only", "-m", "not skip"], plugins=[PytestCollectionPlugin()]
         )
     except Exception as e:  # noqa: BLE001
         print(f"Failed to collect tests: {e!s}")  # noqa: T201

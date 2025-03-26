@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from jedi.api.classes import Name
-
 from codeflash.code_utils.code_utils import get_qualified_name
 
 
