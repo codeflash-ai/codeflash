@@ -12,7 +12,6 @@ import time
 import warnings
 from typing import TYPE_CHECKING, Any, Callable
 from unittest import TestCase
-import line_profiler
 
 # PyTest Imports
 import pytest

@@ -21,6 +21,7 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.models.models import CoverageData, TestFiles
+from codeflash.verification.parse_lprof_test_output import parse_lprof_results
 from codeflash.verification.test_results import (
     FunctionTestInvocation,
     InvocationId,

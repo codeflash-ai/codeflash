@@ -107,4 +107,4 @@ def parse_lprof_results(lprofiler_database_file: Path | None) -> str:
     else:
         with open(lprofiler_database_file,'rb') as f:
             stats = pickle.load(f)
-        return show_text(stats)
+        return show_text(stats), None

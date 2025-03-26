@@ -3,21 +3,59 @@ import libcst as cst
 from pathlib import Path
 from codeflash.code_utils.code_utils import get_run_tmp_file
 
-def add_decorator_cst(module_node, function_name, decorator_name):
-    """Adds a decorator to a function definition in a LibCST module node."""
+def add_decorator_cst(module_node, function_path, decorator_name):
+    """
+    Adds a decorator to a function or method definition in a LibCST module node.
+
+    Args:
+        module_node: LibCST module node
+        function_path: String path to the function (e.g., 'function_name' or 'ClassName.method_name')
+        decorator_name: Name of the decorator to add
+    """
+    path_parts = function_path.split('.')
 
     class AddDecoratorTransformer(cst.CSTTransformer):
-        def leave_FunctionDef(self, original_node, updated_node):
-            if original_node.name.value == function_name:
-                new_decorator = cst.Decorator(
-                    decorator=cst.Name(value=decorator_name)
-                )
+        def __init__(self):
+            super().__init__()
+            self.current_class = None
 
-                updated_decorators = list(updated_node.decorators)
-                updated_decorators.insert(0, new_decorator)
+        def visit_ClassDef(self, node):
+            # Track when we enter a class that matches our path
+            if len(path_parts) > 1 and node.name.value == path_parts[0]:
+                self.current_class = node.name.value
+            return True
 
-                return updated_node.with_changes(decorators=updated_decorators)
+        def leave_ClassDef(self, original_node, updated_node):
+            # Reset class tracking when leaving a class node
+            if self.current_class == original_node.name.value:
+                self.current_class = None
             return updated_node
+
+        def leave_FunctionDef(self, original_node, updated_node):
+            # Handle standalone functions
+            if len(path_parts) == 1 and original_node.name.value == path_parts[0] and self.current_class is None:
+                return self._add_decorator(updated_node)
+            # Handle class methods
+            elif len(path_parts) == 2 and self.current_class == path_parts[0] and original_node.name.value == path_parts[1]:
+                return self._add_decorator(updated_node)
+            return updated_node
+
+        def _add_decorator(self, node):
+            # Create and add the decorator
+            new_decorator = cst.Decorator(
+                decorator=cst.Name(value=decorator_name)
+            )
+
+            # Check if this decorator already exists
+            for decorator in node.decorators:
+                if (isinstance(decorator.decorator, cst.Name) and
+                        decorator.decorator.value == decorator_name):
+                    return node  # Decorator already exists
+
+            updated_decorators = list(node.decorators)
+            updated_decorators.insert(0, new_decorator)
+
+            return node.with_changes(decorators=updated_decorators)
 
     transformer = AddDecoratorTransformer()
     updated_module = module_node.visit(transformer)
@@ -83,13 +121,23 @@ class ImportAdder(cst.CSTTransformer):
                     self.has_import = True
 
 
-def add_decorator_imports(file_paths, fn_list, db_file):
+def add_decorator_imports(function_to_optimize, code_context):
+    #self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
+    #todo change function signature to get filepaths of fn, helpers and db
+    # modify libcst parser to visit with qualified name
+    file_paths = list()
+    fn_list = list()
+    db_file = get_run_tmp_file(Path("baseline"))
+    file_paths.append(function_to_optimize.file_path)
+    fn_list.append(function_to_optimize.qualified_name)
+    for elem in code_context.helper_functions:
+        file_paths.append(elem.file_path)
+        fn_list.append(elem.qualified_name)
     """Adds a decorator to a function in a Python file."""
     for file_path, fn_name in zip(file_paths, fn_list):
         #open file
         with open(file_path, "r", encoding="utf-8") as file:
             file_contents = file.read()
-
         # parse to cst
         module_node = cst.parse_module(file_contents)
         # add decorator
@@ -97,7 +145,6 @@ def add_decorator_imports(file_paths, fn_list, db_file):
         # add imports
         # Create a transformer to add the import
         transformer = ImportAdder("from line_profiler import profile")
-
         # Apply the transformer to add the import
         module_node = module_node.visit(transformer)
         modified_code = isort.code(module_node.code, float_to_top=True)
@@ -110,6 +157,7 @@ def add_decorator_imports(file_paths, fn_list, db_file):
     modified_code = add_profile_enable(file_contents,db_file)
     with open(file_paths[0],'w') as f:
         f.write(modified_code)
+    return db_file
 
 
 def prepare_lprofiler_files(prefix: str = "") -> tuple[Path]:
