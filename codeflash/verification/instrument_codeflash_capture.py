@@ -30,9 +30,9 @@ def instrument_codeflash_capture(
     modified_code = add_codeflash_capture_to_init(
         target_classes={class_parent.name},
         fto_name=function_to_optimize.function_name,
-        tmp_dir_path=str(get_run_tmp_file(Path("test_return_values"))),
+        tmp_dir_path=get_run_tmp_file("test_return_values").as_posix(),
         code=original_code,
-        tests_root=tests_root,
+        tests_root=tests_root.as_posix(),
         is_fto=True,
     )
     function_to_optimize.file_path.write_text(modified_code, encoding="utf-8")
@@ -43,9 +43,9 @@ def instrument_codeflash_capture(
         modified_code = add_codeflash_capture_to_init(
             target_classes=helper_classes,
             fto_name=function_to_optimize.function_name,
-            tmp_dir_path=str(get_run_tmp_file(Path("test_return_values"))),
+            tmp_dir_path=get_run_tmp_file("test_return_values").as_posix(),
             code=original_code,
-            tests_root=tests_root,
+            tests_root=tests_root.as_posix(),
             is_fto=False,
         )
         file_path.write_text(modified_code, encoding="utf-8")
