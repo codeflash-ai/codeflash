@@ -22,14 +22,14 @@ class PrComment:
     winning_benchmarking_test_results: TestResults
     benchmark_details: Optional[list[BenchmarkDetail]] = None
 
-    def to_json(self) -> dict[str, Union[dict[str, dict[str, int]], int, str, Optional[list[dict[str, any]]]]]:
+    def to_json(self) -> dict[str, Union[dict[str, dict[str, int]], int, str, Optional[list[BenchmarkDetail]]]]:
         report_table = {
             test_type.to_name(): result
             for test_type, result in self.winning_behavioral_test_results.get_test_pass_fail_report_by_type().items()
             if test_type.to_name()
         }
 
-        result = {
+        return {
             "optimization_explanation": self.optimization_explanation,
             "best_runtime": humanize_runtime(self.best_runtime),
             "original_runtime": humanize_runtime(self.original_runtime),
@@ -39,13 +39,8 @@ class PrComment:
             "speedup_pct": self.speedup_pct,
             "loop_count": self.winning_benchmarking_test_results.number_of_loops(),
             "report_table": report_table,
+            "benchmark_details": self.benchmark_details if self.benchmark_details else None,
         }
-
-        # Add benchmark details if available
-        if self.benchmark_details:
-            result["benchmark_details"] = self.benchmark_details
-
-        return result
 
 
 class FileDiffContent(BaseModel):
