@@ -5,7 +5,6 @@ from pathlib import Path
 
 import git
 
-from codeflash.api.cfapi import is_github_app_installed_on_repo
 from codeflash.cli_cmds import logging_config
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions
