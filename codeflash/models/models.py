@@ -23,6 +23,7 @@ from codeflash.code_utils.coverage_utils import (
     generate_candidates,
 )
 from codeflash.code_utils.env_utils import is_end_to_end
+from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.verification.test_results import TestResults, TestType
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
@@ -77,7 +78,47 @@ class BestOptimization(BaseModel):
     winning_benchmarking_test_results: TestResults
     winning_replay_benchmarking_test_results : Optional[TestResults] = None
 
+@dataclass
+class BenchmarkDetail:
+    benchmark_name: str
+    test_function: str
+    original_timing: str
+    expected_new_timing: str
+    speedup_percent: float
 
+    def to_string(self) -> str:
+        return (
+            f"Original timing for {self.benchmark_name}::{self.test_function}: {self.original_timing}\n"
+            f"Expected new timing for {self.benchmark_name}::{self.test_function}: {self.expected_new_timing}\n"
+            f"Benchmark speedup for {self.benchmark_name}::{self.test_function}: {self.speedup_percent:.2f}%\n"
+        )
+
+    def to_dict(self) -> dict[str, any]:
+        return {
+            "benchmark_name": self.benchmark_name,
+            "test_function": self.test_function,
+            "original_timing": self.original_timing,
+            "expected_new_timing": self.expected_new_timing,
+            "speedup_percent": self.speedup_percent
+        }
+
+@dataclass
+class ProcessedBenchmarkInfo:
+    benchmark_details: list[BenchmarkDetail]
+
+    def to_string(self) -> str:
+        if not self.benchmark_details:
+            return ""
+
+        result = "Benchmark Performance Details:\n"
+        for detail in self.benchmark_details:
+            result += detail.to_string() + "\n"
+        return result
+
+    def to_dict(self) -> dict[str, list[dict[str, any]]]:
+        return {
+            "benchmark_details": [detail.to_dict() for detail in self.benchmark_details]
+        }
 class CodeString(BaseModel):
     code: Annotated[str, AfterValidator(validate_python_code)]
     file_path: Optional[Path] = None
