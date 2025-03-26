@@ -1,6 +1,6 @@
 import functools
 import os
-import pickle
+import dill as pickle
 import time
 from typing import Callable
 
@@ -63,13 +63,11 @@ class CodeflashTrace:
                 overhead_end_time = time.thread_time_ns()
                 overhead_time = overhead_end_time - overhead_start_time
 
-
                 self.function_calls_data.append(
                     (func.__name__, class_name, func.__module__, func.__code__.co_filename,
                      benchmark_function_name, benchmark_file_name, benchmark_line_number, execution_time,
                      overhead_time, pickled_args, pickled_kwargs)
                 )
-                print("appended")
             except Exception as e:
                 print(f"Error in codeflash_trace: {e}")
 
