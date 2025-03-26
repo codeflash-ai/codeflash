@@ -95,8 +95,7 @@ class Optimizer:
                 return
 
             console.rule()
-            with progress_bar(f"Discovering existing unit tests in {self.test_cfg.tests_root}…", transient=True):
-                function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
+            function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
             num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
             console.rule()
             logger.info(f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}")
