@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 import requests
+import sentry_sdk
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
@@ -182,9 +183,13 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
     internal_server_error = 500
 
     owner, repo = get_repo_owner_and_name()
-    information = {"pr_number": pr_number, "repo_owner": owner, "repo_name": repo}
+    information = {"pr_number": pr_number, "repo_owner": owner, "repo_name": repo, "userId": get_user_id()}
     try:
-        req = make_cfapi_request(endpoint="/verify-existing-optimizations", method="POST", payload=information)
+        req = make_cfapi_request(
+            endpoint="/verify-existing-optimizations",
+            method="POST",
+            payload=information,
+        )
         if req.status_code == not_found:
             logger.debug(req.json()["message"])
             return {}
@@ -194,7 +199,11 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
         req.raise_for_status()
         content: dict[str, list[str]] = req.json()
     except Exception as e:
-        logger.error(f"Error getting blocklisted functions: {e}", exc_info=True)
+        logger.error(f"Error getting blocklisted functions: {e}")
+        sentry_sdk.capture_exception(e)
         return {}
 
-    return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
+    return {
+        Path(k).name: {v.replace("()", "") for v in values}
+        for k, values in content.items()
+    }
