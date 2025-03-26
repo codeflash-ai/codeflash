@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from jedi.api.classes import Name
-from codeflash.code_utils.code_utils import (
-    get_qualified_name,
 
-)
+from codeflash.code_utils.code_utils import get_qualified_name
+
 
 def belongs_to_method(name: Name, class_name: str, method_name: str) -> bool:
     """Check if the given name belongs to the specified method."""

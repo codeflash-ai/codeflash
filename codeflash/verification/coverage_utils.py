@@ -26,13 +26,17 @@ class CoverageUtils:
 
     @staticmethod
     def load_from_sqlite_database(
-        database_path: Path, config_path: Path, function_name: str, code_context: CodeOptimizationContext, source_code_path: Path
+        database_path: Path,
+        config_path: Path,
+        function_name: str,
+        code_context: CodeOptimizationContext,
+        source_code_path: Path,
     ) -> CoverageData:
         """Load coverage data from an SQLite database, mimicking the behavior of load_from_coverage_file."""
         from coverage import Coverage
         from coverage.jsonreport import JsonReporter
 
-        cov = Coverage(data_file=database_path,config_file=config_path, data_suffix=True, auto_data=True, branch=True)
+        cov = Coverage(data_file=database_path, config_file=config_path, data_suffix=True, auto_data=True, branch=True)
 
         if not database_path.stat().st_size or not database_path.exists():
             logger.debug(f"Coverage database {database_path} is empty or does not exist")
@@ -226,4 +230,3 @@ class CoverageUtils:
             executed_branches=[],
             unexecuted_branches=[],
         )
-

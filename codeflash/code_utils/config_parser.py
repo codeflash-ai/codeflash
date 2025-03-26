@@ -31,7 +31,9 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
     raise ValueError(msg)
 
 
-def parse_config_file(config_file_path: Path | None = None, override_formatter_check: bool=False) -> tuple[dict[str, Any], Path]:
+def parse_config_file(
+    config_file_path: Path | None = None, override_formatter_check: bool = False
+) -> tuple[dict[str, Any], Path]:
     config_file_path = find_pyproject_toml(config_file_path)
     try:
         with config_file_path.open("rb") as f:

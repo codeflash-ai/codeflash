@@ -15,7 +15,7 @@ from collections.abc import Collection, Iterator
 from enum import Enum, IntEnum
 from pathlib import Path
 from re import Pattern
-from typing import Annotated, Any, Optional, Union, cast
+from typing import Annotated, Optional, cast
 
 from jedi.api.classes import Name
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
@@ -58,15 +58,19 @@ class FunctionSource:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, FunctionSource):
             return False
-        return (self.file_path == other.file_path and
-                self.qualified_name == other.qualified_name and
-                self.fully_qualified_name == other.fully_qualified_name and
-                self.only_function_name == other.only_function_name and
-                self.source_code == other.source_code)
+        return (
+            self.file_path == other.file_path
+            and self.qualified_name == other.qualified_name
+            and self.fully_qualified_name == other.fully_qualified_name
+            and self.only_function_name == other.only_function_name
+            and self.source_code == other.source_code
+        )
 
     def __hash__(self) -> int:
-        return hash((self.file_path, self.qualified_name, self.fully_qualified_name,
-                     self.only_function_name, self.source_code))
+        return hash(
+            (self.file_path, self.qualified_name, self.fully_qualified_name, self.only_function_name, self.source_code)
+        )
+
 
 class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
@@ -100,7 +104,8 @@ class CodeOptimizationContext(BaseModel):
     read_writable_code: str = Field(min_length=1)
     read_only_context_code: str = ""
     helper_functions: list[FunctionSource]
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]]
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]]
+
 
 class CodeContextType(str, Enum):
     READ_WRITABLE = "READ_WRITABLE"
@@ -292,6 +297,7 @@ class CoverageData:
             dependent_func_coverage=None,
             status=CoverageStatus.NOT_FOUND,
         )
+
 
 @dataclass
 class FunctionCoverage:
