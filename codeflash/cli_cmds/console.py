@@ -109,7 +109,6 @@ def test_files_progress_bar(
         MofNCompleteColumn(),
         TimeElapsedColumn(),
         TimeRemainingColumn(),
-        console=console,
         transient=True,
     ) as progress:
         task_id = progress.add_task(description, total=total)
