@@ -1,65 +1,109 @@
 import isort
 import libcst as cst
 from pathlib import Path
+from typing import Union
+
 from codeflash.code_utils.code_utils import get_run_tmp_file
 
-def add_decorator_cst(module_node, function_path, decorator_name):
-    """
-    Adds a decorator to a function or method definition in a LibCST module node.
 
-    Args:
-        module_node: LibCST module node
-        function_path: String path to the function (e.g., 'function_name' or 'ClassName.method_name')
-        decorator_name: Name of the decorator to add
-    """
-    path_parts = function_path.split('.')
+class DecoratorAdder(cst.CSTTransformer):
+    """Transformer that adds a decorator to a function with a specific qualified name."""
 
-    class AddDecoratorTransformer(cst.CSTTransformer):
-        def __init__(self):
-            super().__init__()
-            self.current_class = None
+    def __init__(self, qualified_name: str, decorator_name: str):
+        """
+        Initialize the transformer.
 
-        def visit_ClassDef(self, node):
-            # Track when we enter a class that matches our path
-            if len(path_parts) > 1 and node.name.value == path_parts[0]:
-                self.current_class = node.name.value
-            return True
+        Args:
+            qualified_name: The fully qualified name of the function to add the decorator to (e.g., "MyClass.nested_func.target_func").
+            decorator_name: The name of the decorator to add.
+        """
+        super().__init__()
+        self.qualified_name_parts = qualified_name.split(".")
+        self.decorator_name = decorator_name
 
-        def leave_ClassDef(self, original_node, updated_node):
-            # Reset class tracking when leaving a class node
-            if self.current_class == original_node.name.value:
-                self.current_class = None
-            return updated_node
+        # Track our current context path
+        self.context_stack = []
 
-        def leave_FunctionDef(self, original_node, updated_node):
-            # Handle standalone functions
-            if len(path_parts) == 1 and original_node.name.value == path_parts[0] and self.current_class is None:
-                return self._add_decorator(updated_node)
-            # Handle class methods
-            elif len(path_parts) == 2 and self.current_class == path_parts[0] and original_node.name.value == path_parts[1]:
-                return self._add_decorator(updated_node)
-            return updated_node
+    def visit_ClassDef(self, node: cst.ClassDef) -> None:
+        # Track when we enter a class
+        self.context_stack.append(node.name.value)
 
-        def _add_decorator(self, node):
-            # Create and add the decorator
-            new_decorator = cst.Decorator(
-                decorator=cst.Name(value=decorator_name)
+    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:
+        # Pop the context when we leave a class
+        self.context_stack.pop()
+        return updated_node
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
+        # Track when we enter a function
+        self.context_stack.append(node.name.value)
+
+    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
+        function_name = original_node.name.value
+
+        # Check if the current context path matches our target qualified name
+        if self._matches_qualified_path():
+            # Check if the decorator is already present
+            has_decorator = any(
+                self._is_target_decorator(decorator.decorator)
+                for decorator in original_node.decorators
             )
 
-            # Check if this decorator already exists
-            for decorator in node.decorators:
-                if (isinstance(decorator.decorator, cst.Name) and
-                        decorator.decorator.value == decorator_name):
-                    return node  # Decorator already exists
+            # Only add the decorator if it's not already there
+            if not has_decorator:
+                new_decorator = cst.Decorator(
+                    decorator=cst.Name(value=self.decorator_name)
+                )
 
-            updated_decorators = list(node.decorators)
-            updated_decorators.insert(0, new_decorator)
+                # Add our new decorator to the existing decorators
+                updated_decorators = [new_decorator] + list(updated_node.decorators)
+                updated_node = updated_node.with_changes(
+                    decorators=tuple(updated_decorators)
+                )
 
-            return node.with_changes(decorators=updated_decorators)
+        # Pop the context when we leave a function
+        self.context_stack.pop()
+        return updated_node
 
-    transformer = AddDecoratorTransformer()
-    updated_module = module_node.visit(transformer)
-    return updated_module
+    def _matches_qualified_path(self) -> bool:
+        """Check if the current context stack matches the qualified name."""
+        if len(self.context_stack) != len(self.qualified_name_parts):
+            return False
+
+        for i, name in enumerate(self.qualified_name_parts):
+            if self.context_stack[i] != name:
+                return False
+
+        return True
+
+    def _is_target_decorator(self, decorator_node: Union[cst.Name, cst.Attribute, cst.Call]) -> bool:
+        """Check if a decorator matches our target decorator name."""
+        if isinstance(decorator_node, cst.Name):
+            return decorator_node.value == self.decorator_name
+        elif isinstance(decorator_node, cst.Call) and isinstance(decorator_node.func, cst.Name):
+            return decorator_node.func.value == self.decorator_name
+        return False
+
+
+def add_decorator_to_qualified_function(module, qualified_name, decorator_name):
+    """
+    Add a decorator to a function with the exact qualified name in the source code.
+
+    Args:
+        module: The Python source code as a string.
+        qualified_name: The fully qualified name of the function to add the decorator to (e.g., "MyClass.nested_func.target_func").
+        decorator_name: The name of the decorator to add.
+
+    Returns:
+        The modified source code as a string.
+    """
+    # Parse the source code into a CST
+
+    # Apply our transformer
+    transformer = DecoratorAdder(qualified_name, decorator_name)
+    modified_module = module.visit(transformer)
+
+    # Convert the modified CST back to source code
+    return modified_module
 
 def add_profile_enable(original_code: str, db_file: str) -> str:
     module = cst.parse_module(original_code)
@@ -141,7 +185,7 @@ def add_decorator_imports(function_to_optimize, code_context):
         # parse to cst
         module_node = cst.parse_module(file_contents)
         # add decorator
-        module_node = add_decorator_cst(module_node, fn_name, 'profile')
+        module_node = add_decorator_to_qualified_function(module_node, fn_name, 'profile')
         # add imports
         # Create a transformer to add the import
         transformer = ImportAdder("from line_profiler import profile")
