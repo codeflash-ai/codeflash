@@ -2,11 +2,13 @@ import os
 import tempfile
 from pathlib import Path
 
+import line_profiler
 from codeflash.models.models import TestFile, TestFiles
 from codeflash.verification.parse_test_output import parse_test_xml
 from codeflash.verification.test_results import TestType
 from codeflash.verification.test_runner import run_behavioral_tests
 from codeflash.verification.verification_utils import TestConfig
+import dill as pickle
 
 
 def test_unittest_runner():
@@ -97,3 +99,64 @@ def test_sort():
         )
     assert results[0].did_pass, "Test did not pass as expected"
     result_file.unlink(missing_ok=True)
+
+def test_pytest_runner_lprof_process():
+    tmpdir = tempfile.TemporaryDirectory()
+    prefix = "from line_profiler import profile\nprofile.enable(output_prefix=\""+tmpdir.name+os.sep+"baseline\""+")\n"
+    code = prefix + """
+@profile
+def sorter(arr):
+    arr.sort()
+    return arr
+
+def test_sort():
+    arr = [5, 4, 3, 2, 1, 0]
+    output = sorter(arr)
+    assert output == [0, 1, 2, 3, 4, 5]
+"""
+    cur_dir_path = Path(__file__).resolve().parent
+    config = TestConfig(
+        tests_root=cur_dir_path,
+        project_root_path=cur_dir_path,
+        test_framework="pytest",
+        tests_project_rootdir=cur_dir_path.parent,
+    )
+
+    test_env = os.environ.copy()
+    test_env["CODEFLASH_TEST_ITERATION"] = "0"
+    test_env["CODEFLASH_TRACER_DISABLE"] = "1"
+    if "PYTHONPATH" not in test_env:
+        test_env["PYTHONPATH"] = str(config.project_root_path)
+    else:
+        test_env["PYTHONPATH"] += os.pathsep + str(config.project_root_path)
+
+    with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
+        test_files = TestFiles(
+            test_files=[TestFile(instrumented_behavior_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
+        )
+        fp.write(code.encode("utf-8"))
+        fp.flush()
+        result_file, process, _, _ = run_behavioral_tests(
+            test_files,
+            test_framework=config.test_framework,
+            cwd=Path(config.project_root_path),
+            test_env=test_env,
+            pytest_timeout=1,
+            pytest_target_runtime_seconds=1,
+            enable_lprofiler=True,
+        )
+        try:
+            #todo write a test for the pickle parsing code, right now it's a simplistic test
+            with open(tmpdir.name+os.sep+"baseline.lprof", "rb") as f:
+                output = pickle.load(f)
+            #get lprof instead and compare the hits
+            output_set = set(list(output.timings.values())[0])
+            output_set = {(x,y) for x,y,z in output_set}
+            expected_set = {(6, 1), (7, 1)}
+        except Exception as e:
+            print(e)
+            assert False, "Test failed"
+
+    assert expected_set == output_set, "Test passed"
+    result_file.unlink(missing_ok=True)
+

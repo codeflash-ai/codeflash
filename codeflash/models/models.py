@@ -216,6 +216,7 @@ class FunctionParent:
 class OriginalCodeBaseline(BaseModel):
     behavioral_test_results: TestResults
     benchmarking_test_results: TestResults
+    lprofiler_test_results: str
     runtime: int
     coverage_results: Optional[CoverageData]
 
@@ -511,3 +512,4 @@ class FunctionCoverage:
 class TestingMode(enum.Enum):
     BEHAVIOR = "behavior"
     PERFORMANCE = "performance"
+    LPROF = "lprof"
