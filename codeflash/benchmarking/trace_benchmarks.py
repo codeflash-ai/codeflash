@@ -9,7 +9,7 @@ from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from pathlib import Path
 import subprocess
 
-def trace_benchmarks_pytest(benchmarks_root: Path, tests_root:Path, project_root: Path, trace_file: Path) -> None:
+def trace_benchmarks_pytest(benchmarks_root: Path, tests_root:Path, project_root: Path, trace_file: Path, timeout:int = 300) -> None:
     result = subprocess.run(
         [
             SAFE_SYS_EXECUTABLE,
@@ -23,6 +23,7 @@ def trace_benchmarks_pytest(benchmarks_root: Path, tests_root:Path, project_root
         capture_output=True,
         text=True,
         env={"PYTHONPATH": str(project_root)},
+        timeout=timeout,
     )
     if result.returncode != 0:
         if "ERROR collecting" in result.stdout:
@@ -38,5 +39,5 @@ def trace_benchmarks_pytest(benchmarks_root: Path, tests_root:Path, project_root
         else:
             error_section = result.stdout
         logger.warning(
-            f"Error collecting benchmarks - Pytest Exit code: {result.returncode}={ExitCode(result.returncode).name}\n {error_section}"
+            f"Error collecting benchmarks - Pytest Exit code: {result.returncode}, {error_section}"
         )

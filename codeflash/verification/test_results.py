@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from collections import defaultdict
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, cast
@@ -124,6 +125,15 @@ class TestResults(BaseModel):
                 raise ValueError(msg)
             self.test_result_idx[k] = v + original_len
 
+    def filter(self, test_type: TestType) -> TestResults:
+        filtered_test_results = []
+        filtered_test_results_idx = {}
+        for test_result in self.test_results:
+            if test_result.test_type == test_type:
+                filtered_test_results_idx[test_result.unique_invocation_loop_id] = len(filtered_test_results)
+                filtered_test_results.append(test_result)
+        return TestResults(test_results=filtered_test_results, test_result_idx=filtered_test_results_idx)
+
     def get_by_unique_invocation_loop_id(self, unique_invocation_loop_id: str) -> FunctionTestInvocation | None:
         try:
             return self.test_results[self.test_result_idx[unique_invocation_loop_id]]
@@ -174,22 +184,21 @@ class TestResults(BaseModel):
         return tree
 
     def usable_runtime_data_by_test_case(self) -> dict[InvocationId, list[int]]:
+        usable_runtime_by_id = defaultdict(list)
         for result in self.test_results:
-            if result.did_pass and not result.runtime:
-                msg = (
-                    f"Ignoring test case that passed but had no runtime -> {result.id}, "
-                    f"Loop # {result.loop_index}, Test Type: {result.test_type}, "
-                    f"Verification Type: {result.verification_type}"
-                )
-                logger.debug(msg)
+            if result.did_pass:
+                if not result.runtime:
+                    msg = (
+                        f"Ignoring test case that passed but had no runtime -> {result.id}, "
+                        f"Loop # {result.loop_index}, Test Type: {result.test_type}, "
+                        f"Verification Type: {result.verification_type}"
+                    )
+                    logger.debug(msg)
+                else:
+                    usable_runtime_by_id[result.id].append(result.runtime)
 
-        usable_runtimes = [
-            (result.id, result.runtime) for result in self.test_results if result.did_pass and result.runtime
-        ]
-        return {
-            usable_id: [runtime[1] for runtime in usable_runtimes if runtime[0] == usable_id]
-            for usable_id in {runtime[0] for runtime in usable_runtimes}
-        }
+        return usable_runtime_by_id
+
 
     def total_passed_runtime(self) -> int:
         """Calculate the sum of runtimes of all test cases that passed.
@@ -201,35 +210,6 @@ class TestResults(BaseModel):
         return sum(
             [min(usable_runtime_data) for _, usable_runtime_data in self.usable_runtime_data_by_test_case().items()]
         )
-
-    def usable_replay_runtime_data_by_test_case(self) -> dict[InvocationId, list[int]]:
-        """Collect runtime data for replay tests that passed and have runtime information.
-
-        :return: A dictionary mapping invocation IDs to lists of runtime values.
-        """
-        usable_runtimes = [
-            (result.id, result.runtime)
-            for result in self.test_results
-            if result.did_pass and result.runtime and result.test_type == TestType.REPLAY_TEST
-        ]
-
-        return {
-            usable_id: [runtime[1] for runtime in usable_runtimes if runtime[0] == usable_id]
-            for usable_id in {runtime[0] for runtime in usable_runtimes}
-        }
-
-    def total_replay_test_runtime(self) -> int:
-        """Calculate the sum of runtimes of replay test cases that passed, where a testcase runtime
-        is the minimum value of all looped execution runtimes.
-
-        :return: The runtime in nanoseconds.
-        """
-        replay_runtime_data = self.usable_replay_runtime_data_by_test_case()
-
-        return sum([
-            min(runtimes)
-            for invocation_id, runtimes in replay_runtime_data.items()
-        ]) if replay_runtime_data else 0
 
     def __iter__(self) -> Iterator[FunctionTestInvocation]:
         return iter(self.test_results)

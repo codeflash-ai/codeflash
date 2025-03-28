@@ -13,7 +13,7 @@ from codeflash.verification.verification_utils import get_test_file_path
 from pathlib import Path
 
 def get_next_arg_and_return(
-        trace_file: str, function_name: str, file_name: str, class_name: str | None = None, num_to_get: int = 25
+        trace_file: str, function_name: str, file_name: str, class_name: str | None = None, num_to_get: int = 256
 ) -> Generator[Any]:
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
@@ -21,12 +21,12 @@ def get_next_arg_and_return(
 
     if class_name is not None:
         cursor = cur.execute(
-            "SELECT * FROM function_calls WHERE function_name = ? AND file_name = ? AND class_name = ? ORDER BY time_ns ASC LIMIT ?",
+            "SELECT * FROM benchmark_function_timings WHERE function_name = ? AND file_name = ? AND class_name = ? LIMIT ?",
             (function_name, file_name, class_name, limit),
         )
     else:
         cursor = cur.execute(
-            "SELECT * FROM function_calls WHERE function_name = ? AND file_name = ? AND class_name = '' ORDER BY time_ns ASC LIMIT ?",
+            "SELECT * FROM benchmark_function_timings WHERE function_name = ? AND file_name = ? AND class_name = '' LIMIT ?",
             (function_name, file_name, limit),
         )
 
@@ -42,7 +42,7 @@ def create_trace_replay_test_code(
         trace_file: str,
         functions_data: list[dict[str, Any]],
         test_framework: str = "pytest",
-        max_run_count=100
+        max_run_count=256
 ) -> str:
     """Create a replay test for functions based on trace data.
 
@@ -217,7 +217,7 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
 
         # Get distinct benchmark names
         cursor.execute(
-            "SELECT DISTINCT benchmark_function_name, benchmark_file_name FROM function_calls"
+            "SELECT DISTINCT benchmark_function_name, benchmark_file_name FROM benchmark_function_timings"
         )
         benchmarks = cursor.fetchall()
 
@@ -226,7 +226,7 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
             benchmark_function_name, benchmark_file_name = benchmark
             # Get functions associated with this benchmark
             cursor.execute(
-                "SELECT DISTINCT function_name, class_name, module_name, file_name, benchmark_line_number FROM function_calls "
+                "SELECT DISTINCT function_name, class_name, module_name, file_name, benchmark_line_number FROM benchmark_function_timings "
                 "WHERE benchmark_function_name = ? AND benchmark_file_name = ?",
                 (benchmark_function_name, benchmark_file_name)
             )

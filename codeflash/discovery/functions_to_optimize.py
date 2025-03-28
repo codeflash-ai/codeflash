@@ -363,7 +363,6 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
                         for decorator in body_node.decorator_list
                     ):
                         self.is_staticmethod = True
-                        print(f"static method found: {self.function_name}")
                     return
         elif self.line_no:
             # If we have line number info, check if class has a static method with the same line number
