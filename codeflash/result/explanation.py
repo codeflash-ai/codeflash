@@ -5,7 +5,7 @@ from typing import Optional, Union
 from pydantic.dataclasses import dataclass
 
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.models.models import BenchmarkDetail
+from codeflash.models.models import BenchmarkDetail, TestResults
 from codeflash.verification.test_results import TestResults
 
 

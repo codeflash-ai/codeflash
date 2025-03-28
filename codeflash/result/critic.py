@@ -3,9 +3,7 @@ from __future__ import annotations
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.config_consts import COVERAGE_THRESHOLD, MIN_IMPROVEMENT_THRESHOLD
-from codeflash.models.models import CoverageData, OptimizedCandidateResult
-from codeflash.verification.test_results import TestType
-
+from codeflash.models.models import CoverageData, OptimizedCandidateResult, TestType
 
 def performance_gain(*, original_runtime_ns: int, optimized_runtime_ns: int) -> float:
     """Calculate the performance gain of an optimized code over the original code.

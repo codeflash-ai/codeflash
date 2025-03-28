@@ -20,10 +20,9 @@ from codeflash.code_utils.static_analysis import analyze_imported_modules, get_f
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
 from codeflash.either import is_successful
-from codeflash.models.models import ValidCode, BenchmarkKey
+from codeflash.models.models import ValidCode, TestType, BenchmarkKey
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.telemetry.posthog_cf import ph
-from codeflash.verification.test_results import TestType
 from codeflash.verification.verification_utils import TestConfig
 from codeflash.benchmarking.utils import print_benchmark_table
 from codeflash.benchmarking.instrument_codeflash_trace import instrument_codeflash_trace_decorator
