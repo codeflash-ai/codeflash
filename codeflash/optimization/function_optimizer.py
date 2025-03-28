@@ -88,8 +88,8 @@ class FunctionOptimizer:
         function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
         function_to_optimize_ast: ast.FunctionDef | None = None,
         aiservice_client: AiServiceClient | None = None,
-        function_benchmark_timings: dict[str, int] | None = None,
-        total_benchmark_timings: dict[str, int] | None = None,
+        function_benchmark_timings: dict[BenchmarkKey, int] | None = None,
+        total_benchmark_timings: dict[BenchmarkKey, int] | None = None,
         args: Namespace | None = None,
     ) -> None:
         self.project_root = test_cfg.project_root_path
@@ -428,20 +428,24 @@ class FunctionOptimizer:
                         tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
                         tree.add(f"Speedup ratio: {perf_gain + 1:.1f}X")
                         if self.args.benchmark:
-                            original_code_replay_runtime = original_code_baseline.replay_benchmarking_test_results.total_passed_runtime()
-                            candidate_replay_runtime = candidate_result.replay_benchmarking_test_results.total_passed_runtime()
-                            replay_perf_gain = performance_gain(
-                                original_runtime_ns=original_code_replay_runtime,
-                                optimized_runtime_ns=candidate_replay_runtime,
-                            )
-                            tree.add(f"Original benchmark replay runtime: {humanize_runtime(original_code_replay_runtime)}")
-                            tree.add(
-                                f"Best benchmark replay runtime: {humanize_runtime(candidate_replay_runtime)} "
-                                f"(measured over {candidate_result.max_loop_count} "
-                                f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
-                            )
-                            tree.add(f"Speedup percentage for benchmark replay test: {replay_perf_gain * 100:.1f}%")
-                            tree.add(f"Speedup ratio for benchmark replay test: {replay_perf_gain + 1:.1f}X")
+
+                            benchmark_keys = {(benchmark.file_name, benchmark.function_name) for benchmark in self.total_benchmark_timings}
+                            test_results_by_benchmark = candidate_result.benchmarking_test_results.group_by_benchmark(benchmark_keys)
+                            for benchmark_key, test_results in test_results_by_benchmark.items():
+                                original_code_replay_runtime = original_code_baseline.replay_benchmarking_test_results[benchmark_key].total_passed_runtime()
+                                candidate_replay_runtime = candidate_result.replay_benchmarking_test_results.total_passed_runtime()
+                                replay_perf_gain = performance_gain(
+                                    original_runtime_ns=original_code_replay_runtime,
+                                    optimized_runtime_ns=candidate_replay_runtime,
+                                )
+                                tree.add(f"Original benchmark replay runtime: {humanize_runtime(original_code_replay_runtime)}")
+                                tree.add(
+                                    f"Best benchmark replay runtime: {humanize_runtime(candidate_replay_runtime)} "
+                                    f"(measured over {candidate_result.max_loop_count} "
+                                    f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                                )
+                                tree.add(f"Speedup percentage for benchmark replay test: {replay_perf_gain * 100:.1f}%")
+                                tree.add(f"Speedup ratio for benchmark replay test: {replay_perf_gain + 1:.1f}X")
                         best_optimization = BestOptimization(
                             candidate=candidate,
                             helper_functions=code_context.helper_functions,
@@ -898,7 +902,7 @@ class FunctionOptimizer:
             logger.debug(f"Total original code runtime (ns): {total_timing}")
 
             if self.args.benchmark:
-                replay_benchmarking_test_results = benchmarking_results.filter(TestType.REPLAY_TEST)
+                replay_benchmarking_test_results = benchmarking_results.filter_by_test_type(TestType.REPLAY_TEST)
                 logger.info(f"Total replay test runtime: {humanize_runtime(replay_benchmarking_test_results.total_passed_runtime())}")
             return Success(
                 (
@@ -1020,7 +1024,7 @@ class FunctionOptimizer:
 
             logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
             if self.args.benchmark:
-                candidate_replay_benchmarking_results = candidate_benchmarking_results.filter(TestType.REPLAY_TEST)
+                candidate_replay_benchmarking_results = candidate_benchmarking_results.filter_by_test_type(TestType.REPLAY_TEST)
                 logger.debug(
                     f"Total optimized code {optimization_candidate_index} replay benchmark runtime (ns): {candidate_replay_benchmarking_results.total_passed_runtime()}"
                 )

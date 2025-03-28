@@ -82,10 +82,9 @@ class BestOptimization(BaseModel):
 class BenchmarkKey:
     file_name: str
     function_name: str
-    line_number: int
 
     def __str__(self) -> str:
-        return f"{self.file_name}::{self.function_name}::{self.line_number}"
+        return f"{self.file_name}::{self.function_name}"
 
 @dataclass
 class BenchmarkDetail:
@@ -270,7 +269,7 @@ class FunctionParent:
 class OriginalCodeBaseline(BaseModel):
     behavioral_test_results: TestResults
     benchmarking_test_results: TestResults
-    replay_benchmarking_test_results: Optional[TestResults] = None
+    replay_benchmarking_test_results: Optional[dict[BenchmarkKey, TestResults]] = None
     runtime: int
     coverage_results: Optional[CoverageData]
 

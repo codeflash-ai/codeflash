@@ -101,8 +101,7 @@ class CodeFlashBenchmarkPlugin:
                     qualified_name = f"{module_name}.{function_name}"
 
                 # Create the benchmark key (file::function::line)
-                benchmark_key = f"{benchmark_file}::{benchmark_func}::{benchmark_line}"
-                benchmark_key = BenchmarkKey(file_name=benchmark_file, function_name=benchmark_func, line_number=benchmark_line)
+                benchmark_key = BenchmarkKey(file_name=benchmark_file, function_name=benchmark_func)
                 # Initialize the inner dictionary if needed
                 if qualified_name not in result:
                     result[qualified_name] = {}
@@ -152,8 +151,7 @@ class CodeFlashBenchmarkPlugin:
             # Process overhead information
             for row in cursor.fetchall():
                 benchmark_file, benchmark_func, benchmark_line, total_overhead_ns = row
-                benchmark_key = f"{benchmark_file}::{benchmark_func}::{benchmark_line}"
-                benchmark_key = BenchmarkKey(file_name=benchmark_file, function_name=benchmark_func, line_number=benchmark_line)
+                benchmark_key = BenchmarkKey(file_name=benchmark_file, function_name=benchmark_func)
                 overhead_by_benchmark[benchmark_key] = total_overhead_ns or 0  # Handle NULL sum case
 
             # Query the benchmark_timings table for total times
@@ -167,8 +165,7 @@ class CodeFlashBenchmarkPlugin:
                 benchmark_file, benchmark_func, benchmark_line, time_ns = row
 
                 # Create the benchmark key (file::function::line)
-                benchmark_key = f"{benchmark_file}::{benchmark_func}::{benchmark_line}"
-                benchmark_key = BenchmarkKey(file_name=benchmark_file, function_name=benchmark_func, line_number=benchmark_line)
+                benchmark_key = BenchmarkKey(file_name=benchmark_file, function_name=benchmark_func)
                 # Subtract overhead from total time
                 overhead = overhead_by_benchmark.get(benchmark_key, 0)
                 result[benchmark_key] = time_ns - overhead
@@ -239,7 +236,7 @@ class CodeFlashBenchmarkPlugin:
                 The return value of the function
 
             """
-            benchmark_file_name = self.request.node.fspath.basename
+            benchmark_file_name = self.request.node.fspath
             benchmark_function_name = self.request.node.name
             line_number = int(str(sys._getframe(1).f_lineno))  # 1 frame up in the call stack
 
