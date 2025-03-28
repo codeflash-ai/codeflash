@@ -196,12 +196,11 @@ trace_file_path = r"{trace_file}"
     return imports + "\n" + metadata + "\n" + test_template
 
 def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework: str = "pytest", max_run_count: int = 100) -> int:
-    """Generate multiple replay tests from the traced function calls, grouping by benchmark name.
+    """Generate multiple replay tests from the traced function calls, grouped by benchmark.
 
     Args:
         trace_file_path: Path to the SQLite database file
         output_dir: Directory to write the generated tests (if None, only returns the code)
-        project_root: Root directory of the project for module imports
         test_framework: 'pytest' or 'unittest'
         max_run_count: Maximum number of runs to include per function
 
@@ -267,7 +266,7 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
             # Write to file if requested
             if output_dir:
                 output_file = get_test_file_path(
-                    test_dir=Path(output_dir), function_name=f"{benchmark_file_name[5:]}_{benchmark_function_name}", test_type="replay"
+                    test_dir=Path(output_dir), function_name=f"{benchmark_file_name}_{benchmark_function_name}", test_type="replay"
                 )
                 # Write test code to file, parents = true
                 output_dir.mkdir(parents=True, exist_ok=True)

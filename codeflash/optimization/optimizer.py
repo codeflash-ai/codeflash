@@ -60,8 +60,8 @@ class Optimizer:
         function_to_optimize_ast: ast.FunctionDef | None = None,
         function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
         function_to_optimize_source_code: str | None = "",
-        function_benchmark_timings: dict[str, dict[str, float]] | None = None,
-        total_benchmark_timings: dict[str, float] | None = None,
+        function_benchmark_timings: dict[str, dict[BenchmarkKey, float]] | None = None,
+        total_benchmark_timings: dict[BenchmarkKey, float] | None = None,
     ) -> FunctionOptimizer:
         return FunctionOptimizer(
             function_to_optimize=function_to_optimize,
@@ -111,7 +111,10 @@ class Optimizer:
                 try:
                     instrument_codeflash_trace_decorator(file_to_funcs_to_optimize)
                     trace_file = Path(self.args.benchmarks_root) / "benchmarks.trace"
-                    replay_tests_dir = Path(self.args.tests_root) / "codeflash_replay_tests"
+                    if trace_file.exists():
+                        trace_file.unlink()
+
+                    replay_tests_dir = Path(self.args.tests_root)
                     trace_benchmarks_pytest(self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file) # Run all tests that use pytest-benchmark
                     replay_count = generate_replay_test(trace_file, replay_tests_dir)
                     if replay_count == 0:

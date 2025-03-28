@@ -125,7 +125,7 @@ class TestResults(BaseModel):
                 raise ValueError(msg)
             self.test_result_idx[k] = v + original_len
 
-    def filter(self, test_type: TestType) -> TestResults:
+    def filter_by_test_type(self, test_type: TestType) -> TestResults:
         filtered_test_results = []
         filtered_test_results_idx = {}
         for test_result in self.test_results:
@@ -133,6 +133,24 @@ class TestResults(BaseModel):
                 filtered_test_results_idx[test_result.unique_invocation_loop_id] = len(filtered_test_results)
                 filtered_test_results.append(test_result)
         return TestResults(test_results=filtered_test_results, test_result_idx=filtered_test_results_idx)
+
+    def group_by_benchmark(self, benchmark_key_set:set[tuple[str,str]]) -> dict[tuple[str,str],TestResults]:
+        """Group TestResults by benchmark key.
+
+        For now, use a tuple of (file_path, function_name) as the benchmark key. Can't import BenchmarkKey because of circular import.
+
+        Args:
+            benchmark_key_set (set[tuple[str,str]]): A set of tuples of (file_path, function_name)
+
+        Returns:
+            TestResults: A new TestResults object with the test results grouped by benchmark key.
+
+        """
+        test_result_by_benchmark = defaultdict(TestResults)
+        for test_result in self.test_results:
+            if test_result.test_type == TestType.REPLAY_TEST and (test_result.id.test_module_path,test_result.id.test_function_name) in benchmark_key_set:
+                test_result_by_benchmark[(test_result.id.test_module_path,test_result.id.test_function_name)].add(test_result)
+        return test_result_by_benchmark
 
     def get_by_unique_invocation_loop_id(self, unique_invocation_loop_id: str) -> FunctionTestInvocation | None:
         try:

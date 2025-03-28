@@ -93,7 +93,7 @@ def process_benchmark_data(
 
     for benchmark_key, og_benchmark_timing in fto_benchmark_timings.items():
         try:
-            benchmark_file_name, benchmark_test_function, line_number = benchmark_key.split("::")
+            benchmark_file_name, benchmark_test_function = benchmark_key.split("::")
         except ValueError:
             continue  # Skip malformed benchmark keys
 
