@@ -26,8 +26,8 @@ from codeflash.code_utils.code_utils import (
     cleanup_paths,
     file_name_from_test_module_name,
     get_run_tmp_file,
-    module_name_from_file_path,
     has_any_async_functions,
+    module_name_from_file_path,
 )
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
@@ -57,7 +57,7 @@ from codeflash.models.models import (
     TestFiles,
     TestingMode,
     TestResults,
-    TestType
+    TestType,
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
 from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic

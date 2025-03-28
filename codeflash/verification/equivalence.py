@@ -1,9 +1,8 @@
-import difflib
 import sys
 
-from codeflash.cli_cmds.console import console, logger
-from codeflash.verification.comparator import comparator
+from codeflash.cli_cmds.console import logger
 from codeflash.models.models import TestResults, TestType, VerificationType
+from codeflash.verification.comparator import comparator
 
 INCREASED_RECURSION_LIMIT = 5000
 
