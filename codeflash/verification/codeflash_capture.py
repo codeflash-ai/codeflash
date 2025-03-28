@@ -10,7 +10,7 @@ from pathlib import Path
 
 import dill as pickle
 
-from codeflash.verification.test_results import VerificationType
+from codeflash.models.models import VerificationType
 
 
 def get_test_info_from_stack(tests_root: str) -> tuple[str, str | None, str, str]:
