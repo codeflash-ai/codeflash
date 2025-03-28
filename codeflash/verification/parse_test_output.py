@@ -20,21 +20,13 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
-from codeflash.models.models import (
-    CoverageData,
-    TestFiles,
-    FunctionTestInvocation,
-    InvocationId,
-    TestResults,
-    TestType,
-    VerificationType,
-)
+from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType, VerificationType
 from codeflash.verification.coverage_utils import CoverageUtils
 
 if TYPE_CHECKING:
     import subprocess
 
-    from codeflash.models.models import CodeOptimizationContext
+    from codeflash.models.models import CodeOptimizationContext, CoverageData, TestFiles
     from codeflash.verification.verification_utils import TestConfig
 
 

@@ -1,23 +1,24 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, cast
-
-
 import json
-from collections.abc import Collection, Iterator
-from pathlib import Path
-from typing import Annotated, Any, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Union
 
 import sentry_sdk
 from coverage.exceptions import NoDataError
 
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.coverage_utils import (
     build_fully_qualified_name,
     extract_dependent_function,
     generate_candidates,
 )
-from codeflash.models.models import CoverageData, CodeOptimizationContext, CoverageStatus, FunctionCoverage
+from codeflash.models.models import CoverageData, CoverageStatus, FunctionCoverage
+
+if TYPE_CHECKING:
+    from collections.abc import Collection
+    from pathlib import Path
+
+    from codeflash.models.models import CodeOptimizationContext
 
 
 class CoverageUtils:

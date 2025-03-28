@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING
 
 from rich.tree import Tree
 
-from codeflash.cli_cmds.console import DEBUG_MODE, logger
+from codeflash.cli_cmds.console import DEBUG_MODE
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 import enum
-import json
 import re
 import sys
 from collections.abc import Collection, Iterator
@@ -18,19 +17,12 @@ from pathlib import Path
 from re import Pattern
 from typing import Annotated, Any, Optional, Union, cast
 
-import sentry_sdk
-from coverage.exceptions import NoDataError
 from jedi.api.classes import Name
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_utils import validate_python_code
-from codeflash.code_utils.coverage_utils import (
-    build_fully_qualified_name,
-    extract_dependent_function,
-    generate_candidates,
-)
 from codeflash.code_utils.env_utils import is_end_to_end
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.verification.test_results import TestResults, TestType
