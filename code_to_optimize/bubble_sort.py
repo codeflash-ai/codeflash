@@ -1,10 +1,10 @@
 def sorter(arr):
+    # Informing about the sort operation
     print("codeflash stdout: Sorting list")
-    for i in range(len(arr)):
-        for j in range(len(arr) - 1):
-            if arr[j] > arr[j + 1]:
-                temp = arr[j]
-                arr[j] = arr[j + 1]
-                arr[j + 1] = temp
+
+    # Using Python's built-in timsort for efficiency
+    arr.sort()
+
+    # Displaying the sorted list
     print(f"result: {arr}")
     return arr
