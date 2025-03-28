@@ -9,8 +9,7 @@ import isort
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionParent, TestingMode
-from codeflash.verification.test_results import VerificationType
+from codeflash.models.models import FunctionParent, TestingMode, VerificationType
 
 if TYPE_CHECKING:
     from collections.abc import Iterable

@@ -1,5 +1,5 @@
+from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType
 from codeflash.verification.parse_test_output import merge_test_results
-from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults, TestType
 
 
 def test_merge_test_results_1():
