@@ -1,33 +1,195 @@
-import sys
-
-import pytest
-import time
+from __future__ import annotations
 import os
+import sqlite3
+import sys
+import time
+from pathlib import Path
+import pytest
+from codeflash.benchmarking.codeflash_trace import codeflash_trace
+from codeflash.models.models import BenchmarkKey
+
+
 class CodeFlashBenchmarkPlugin:
-    benchmark_timings = []
+    def __init__(self) -> None:
+        self._trace_path = None
+        self._connection = None
+        self.benchmark_timings = []
 
-    class Benchmark:
-        def __init__(self, request):
-            self.request = request
+    def setup(self, trace_path:str) -> None:
+        try:
+            # Open connection
+            self._trace_path = trace_path
+            self._connection = sqlite3.connect(self._trace_path)
+            cur = self._connection.cursor()
+            cur.execute("PRAGMA synchronous = OFF")
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS benchmark_timings("
+                "benchmark_file_name TEXT, benchmark_function_name TEXT, benchmark_line_number INTEGER,"
+                "benchmark_time_ns INTEGER)"
+            )
+            self._connection.commit()
+            self.close() # Reopen only at the end of pytest session
+        except Exception as e:
+            print(f"Database setup error: {e}")
+            if self._connection:
+                self._connection.close()
+                self._connection = None
+            raise
 
-        def __call__(self, func, *args, **kwargs):
-            benchmark_file_name = self.request.node.fspath.basename
-            benchmark_function_name = self.request.node.name
-            line_number = str(sys._getframe(1).f_lineno)  # 1 frame up in the call stack
+    def write_benchmark_timings(self) -> None:
+        if not self.benchmark_timings:
+            return  # No data to write
 
-            os.environ["CODEFLASH_BENCHMARK_FUNCTION_NAME"] = benchmark_function_name
-            os.environ["CODEFLASH_BENCHMARK_FILE_NAME"] = benchmark_file_name
-            os.environ["CODEFLASH_BENCHMARK_LINE_NUMBER"] = line_number
-            os.environ["CODEFLASH_BENCHMARKING"] = "True"
+        if self._connection is None:
+            self._connection = sqlite3.connect(self._trace_path)
 
-            start = time.perf_counter_ns()
-            result = func(*args, **kwargs)
-            end = time.perf_counter_ns()
+        try:
+            cur = self._connection.cursor()
+            # Insert data into the benchmark_timings table
+            cur.executemany(
+                "INSERT INTO benchmark_timings (benchmark_file_name, benchmark_function_name, benchmark_line_number, benchmark_time_ns) VALUES (?, ?, ?, ?)",
+                self.benchmark_timings
+            )
+            self._connection.commit()
+            self.benchmark_timings = [] # Clear the benchmark timings list
+        except Exception as e:
+            print(f"Error writing to benchmark timings database: {e}")
+            self._connection.rollback()
+            raise
+    def close(self) -> None:
+        if self._connection:
+            self._connection.close()
+            self._connection = None
 
-            os.environ["CODEFLASH_BENCHMARKING"] = "False"
-            CodeFlashBenchmarkPlugin.benchmark_timings.append(
-                (benchmark_file_name, benchmark_function_name, line_number, end - start))
-            return result
+    @staticmethod
+    def get_function_benchmark_timings(trace_path: Path) -> dict[str, dict[BenchmarkKey, int]]:
+        """Process the trace file and extract timing data for all functions.
+
+        Args:
+            trace_path: Path to the trace file
+
+        Returns:
+            A nested dictionary where:
+            - Outer keys are module_name.qualified_name (module.class.function)
+            - Inner keys are of type BenchmarkKey
+            - Values are function timing in milliseconds
+
+        """
+        # Initialize the result dictionary
+        result = {}
+
+        # Connect to the SQLite database
+        connection = sqlite3.connect(trace_path)
+        cursor = connection.cursor()
+
+        try:
+            # Query the function_calls table for all function calls
+            cursor.execute(
+                "SELECT module_name, class_name, function_name, "
+                "benchmark_file_name, benchmark_function_name, benchmark_line_number, function_time_ns "
+                "FROM benchmark_function_timings"
+            )
+
+            # Process each row
+            for row in cursor.fetchall():
+                module_name, class_name, function_name, benchmark_file, benchmark_func, benchmark_line, time_ns = row
+
+                # Create the function key (module_name.class_name.function_name)
+                if class_name:
+                    qualified_name = f"{module_name}.{class_name}.{function_name}"
+                else:
+                    qualified_name = f"{module_name}.{function_name}"
+
+                # Create the benchmark key (file::function::line)
+                benchmark_key = f"{benchmark_file}::{benchmark_func}::{benchmark_line}"
+                benchmark_key = BenchmarkKey(file_name=benchmark_file, function_name=benchmark_func, line_number=benchmark_line)
+                # Initialize the inner dictionary if needed
+                if qualified_name not in result:
+                    result[qualified_name] = {}
+
+                # If multiple calls to the same function in the same benchmark,
+                # add the times together
+                if benchmark_key in result[qualified_name]:
+                    result[qualified_name][benchmark_key] += time_ns
+                else:
+                    result[qualified_name][benchmark_key] = time_ns
+
+        finally:
+            # Close the connection
+            connection.close()
+
+        return result
+
+    @staticmethod
+    def get_benchmark_timings(trace_path: Path) -> dict[BenchmarkKey, int]:
+        """Extract total benchmark timings from trace files.
+
+        Args:
+            trace_path: Path to the trace file
+
+        Returns:
+            A dictionary mapping where:
+            - Keys are of type BenchmarkKey
+            - Values are total benchmark timing in milliseconds (with overhead subtracted)
+
+        """
+        # Initialize the result dictionary
+        result = {}
+        overhead_by_benchmark = {}
+
+        # Connect to the SQLite database
+        connection = sqlite3.connect(trace_path)
+        cursor = connection.cursor()
+
+        try:
+            # Query the benchmark_function_timings table to get total overhead for each benchmark
+            cursor.execute(
+                "SELECT benchmark_file_name, benchmark_function_name, benchmark_line_number, SUM(overhead_time_ns) "
+                "FROM benchmark_function_timings "
+                "GROUP BY benchmark_file_name, benchmark_function_name, benchmark_line_number"
+            )
+
+            # Process overhead information
+            for row in cursor.fetchall():
+                benchmark_file, benchmark_func, benchmark_line, total_overhead_ns = row
+                benchmark_key = f"{benchmark_file}::{benchmark_func}::{benchmark_line}"
+                benchmark_key = BenchmarkKey(file_name=benchmark_file, function_name=benchmark_func, line_number=benchmark_line)
+                overhead_by_benchmark[benchmark_key] = total_overhead_ns or 0  # Handle NULL sum case
+
+            # Query the benchmark_timings table for total times
+            cursor.execute(
+                "SELECT benchmark_file_name, benchmark_function_name, benchmark_line_number, benchmark_time_ns "
+                "FROM benchmark_timings"
+            )
+
+            # Process each row and subtract overhead
+            for row in cursor.fetchall():
+                benchmark_file, benchmark_func, benchmark_line, time_ns = row
+
+                # Create the benchmark key (file::function::line)
+                benchmark_key = f"{benchmark_file}::{benchmark_func}::{benchmark_line}"
+                benchmark_key = BenchmarkKey(file_name=benchmark_file, function_name=benchmark_func, line_number=benchmark_line)
+                # Subtract overhead from total time
+                overhead = overhead_by_benchmark.get(benchmark_key, 0)
+                result[benchmark_key] = time_ns - overhead
+
+        finally:
+            # Close the connection
+            connection.close()
+
+        return result
+
+    # Pytest hooks
+    @pytest.hookimpl
+    def pytest_sessionfinish(self, session, exitstatus):
+        """Execute after whole test run is completed."""
+        # Write any remaining benchmark timings to the database
+        codeflash_trace.close()
+        if self.benchmark_timings:
+            self.write_benchmark_timings()
+        # Close the database connection
+        self.close()
+
     @staticmethod
     def pytest_addoption(parser):
         parser.addoption(
@@ -39,11 +201,13 @@ class CodeFlashBenchmarkPlugin:
 
     @staticmethod
     def pytest_plugin_registered(plugin, manager):
+        # Not necessary since run with -p no:benchmark, but just in case
         if hasattr(plugin, "name") and plugin.name == "pytest-benchmark":
             manager.unregister(plugin)
 
     @staticmethod
     def pytest_collection_modifyitems(config, items):
+        # Skip tests that don't have the benchmark fixture
         if not config.getoption("--codeflash-trace"):
             return
 
@@ -53,6 +217,56 @@ class CodeFlashBenchmarkPlugin:
                 continue
             item.add_marker(skip_no_benchmark)
 
+    # Benchmark fixture
+    class Benchmark:
+        def __init__(self, request):
+            self.request = request
+
+        def __call__(self, func, *args, **kwargs):
+            """Handle behaviour for the benchmark fixture in pytest.
+
+            For example,
+
+            def test_something(benchmark):
+                benchmark(sorter, [3,2,1])
+
+            Args:
+                func: The function to benchmark (e.g. sorter)
+                args: The arguments to pass to the function (e.g. [3,2,1])
+                kwargs: The keyword arguments to pass to the function
+
+            Returns:
+                The return value of the function
+
+            """
+            benchmark_file_name = self.request.node.fspath.basename
+            benchmark_function_name = self.request.node.name
+            line_number = int(str(sys._getframe(1).f_lineno))  # 1 frame up in the call stack
+
+            # Set env vars so codeflash decorator can identify what benchmark its being run in
+            os.environ["CODEFLASH_BENCHMARK_FUNCTION_NAME"] = benchmark_function_name
+            os.environ["CODEFLASH_BENCHMARK_FILE_NAME"] = benchmark_file_name
+            os.environ["CODEFLASH_BENCHMARK_LINE_NUMBER"] = str(line_number)
+            os.environ["CODEFLASH_BENCHMARKING"] = "True"
+
+        # Run the function
+            start = time.perf_counter_ns()
+            result = func(*args, **kwargs)
+            end = time.perf_counter_ns()
+
+            # Reset the environment variable
+            os.environ["CODEFLASH_BENCHMARKING"] = "False"
+
+            # Write function calls
+            codeflash_trace.write_function_timings()
+            # Reset function call count after a benchmark is run
+            codeflash_trace.function_call_count = 0
+            # Add to the benchmark timings buffer
+            codeflash_benchmark_plugin.benchmark_timings.append(
+                (benchmark_file_name, benchmark_function_name, line_number, end - start))
+
+            return result
+
     @staticmethod
     @pytest.fixture
     def benchmark(request):
@@ -60,3 +274,5 @@ class CodeFlashBenchmarkPlugin:
             return None
 
         return CodeFlashBenchmarkPlugin.Benchmark(request)
+
+codeflash_benchmark_plugin = CodeFlashBenchmarkPlugin()

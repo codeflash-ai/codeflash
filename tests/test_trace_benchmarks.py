@@ -1,6 +1,6 @@
 import sqlite3
 
-from codeflash.benchmarking.benchmark_database_utils import BenchmarkDatabaseUtils
+from codeflash.benchmarking.plugin.plugin import codeflash_benchmark_plugin
 from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
 from codeflash.benchmarking.replay_test import generate_replay_test
 from pathlib import Path
@@ -27,7 +27,7 @@ def test_trace_benchmarks():
         # Get the count of records
         # Get all records
         cursor.execute(
-            "SELECT function_name, class_name, module_name, file_name, benchmark_function_name, benchmark_file_name, benchmark_line_number FROM function_calls ORDER BY benchmark_file_name, benchmark_function_name, function_name")
+            "SELECT function_name, class_name, module_name, file_name, benchmark_function_name, benchmark_file_name, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_file_name, benchmark_function_name, function_name")
         function_calls = cursor.fetchall()
 
         # Assert the length of function calls
@@ -154,7 +154,6 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_sorter():
     finally:
         # cleanup
         shutil.rmtree(tests_root)
-        pass
 
 def test_trace_multithreaded_benchmark() -> None:
     project_root = Path(__file__).parent.parent / "code_to_optimize"
@@ -173,13 +172,13 @@ def test_trace_multithreaded_benchmark() -> None:
         # Get the count of records
         # Get all records
         cursor.execute(
-            "SELECT function_name, class_name, module_name, file_name, benchmark_function_name, benchmark_file_name, benchmark_line_number FROM function_calls ORDER BY benchmark_file_name, benchmark_function_name, function_name")
+            "SELECT function_name, class_name, module_name, file_name, benchmark_function_name, benchmark_file_name, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_file_name, benchmark_function_name, function_name")
         function_calls = cursor.fetchall()
 
         # Assert the length of function calls
         assert len(function_calls) == 10, f"Expected 10 function calls, but got {len(function_calls)}"
-        function_benchmark_timings = BenchmarkDatabaseUtils.get_function_benchmark_timings(output_file)
-        total_benchmark_timings = BenchmarkDatabaseUtils.get_benchmark_timings(output_file)
+        function_benchmark_timings = codeflash_benchmark_plugin.get_function_benchmark_timings(output_file)
+        total_benchmark_timings = codeflash_benchmark_plugin.get_benchmark_timings(output_file)
         function_to_results = validate_and_format_benchmark_table(function_benchmark_timings, total_benchmark_timings)
         assert "code_to_optimize.bubble_sort_codeflash_trace.sorter" in function_to_results
 
@@ -209,4 +208,3 @@ def test_trace_multithreaded_benchmark() -> None:
     finally:
         # cleanup
         shutil.rmtree(tests_root)
-        pass

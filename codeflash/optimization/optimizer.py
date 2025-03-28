@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
-from codeflash.benchmarking.benchmark_database_utils import BenchmarkDatabaseUtils
+from codeflash.benchmarking.plugin.plugin import CodeFlashBenchmarkPlugin
 from codeflash.benchmarking.replay_test import generate_replay_test
 from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
 from codeflash.benchmarking.utils import print_benchmark_table, validate_and_format_benchmark_table
@@ -20,7 +20,7 @@ from codeflash.code_utils.static_analysis import analyze_imported_modules, get_f
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
 from codeflash.either import is_successful
-from codeflash.models.models import TestFiles, ValidCode
+from codeflash.models.models import ValidCode, BenchmarkKey
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.test_results import TestType
@@ -96,8 +96,8 @@ class Optimizer:
             project_root=self.args.project_root,
             module_root=self.args.module_root,
         )
-        function_benchmark_timings = None
-        total_benchmark_timings = None
+        function_benchmark_timings: dict[str, dict[BenchmarkKey, int]] = {}
+        total_benchmark_timings: dict[BenchmarkKey, int] = {}
         if self.args.benchmark:
             with progress_bar(
                     f"Running benchmarks in {self.args.benchmarks_root}",
@@ -109,9 +109,7 @@ class Optimizer:
                     with file.open("r", encoding="utf8") as f:
                         file_path_to_source_code[file] = f.read()
                 try:
-                    for functions_to_optimize in file_to_funcs_to_optimize.values():
-                        for fto in functions_to_optimize:
-                            instrument_codeflash_trace_decorator(fto)
+                    instrument_codeflash_trace_decorator(file_to_funcs_to_optimize)
                     trace_file = Path(self.args.benchmarks_root) / "benchmarks.trace"
                     replay_tests_dir = Path(self.args.tests_root) / "codeflash_replay_tests"
                     trace_benchmarks_pytest(self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file) # Run all tests that use pytest-benchmark
@@ -119,8 +117,8 @@ class Optimizer:
                     if replay_count == 0:
                         logger.info(f"No valid benchmarks found in {self.args.benchmarks_root} for functions to optimize, continuing optimization")
                     else:
-                        function_benchmark_timings = BenchmarkDatabaseUtils.get_function_benchmark_timings(trace_file)
-                        total_benchmark_timings = BenchmarkDatabaseUtils.get_benchmark_timings(trace_file)
+                        function_benchmark_timings = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(trace_file)
+                        total_benchmark_timings = CodeFlashBenchmarkPlugin.get_benchmark_timings(trace_file)
                         function_to_results = validate_and_format_benchmark_table(function_benchmark_timings, total_benchmark_timings)
                         print_benchmark_table(function_to_results)
                         logger.info("Finished tracing existing benchmarks")
@@ -191,6 +189,7 @@ class Optimizer:
                     validated_original_code[analysis.file_path] = ValidCode(
                         source_code=callee_original_code, normalized_code=normalized_callee_original_code
                     )
+
                 if has_syntax_error:
                     continue
 
@@ -200,7 +199,7 @@ class Optimizer:
                         f"Optimizing function {function_iterator_count} of {num_optimizable_functions}: "
                         f"{function_to_optimize.qualified_name}"
                     )
-
+                    console.rule()
                     if not (
                         function_to_optimize_ast := get_first_top_level_function_or_method_ast(
                             function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
@@ -254,7 +253,6 @@ class Optimizer:
                     trace_file.unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
-
 
 
 def run_with_args(args: Namespace) -> None:

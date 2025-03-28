@@ -6,29 +6,30 @@ from rich.table import Table
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.models.models import ProcessedBenchmarkInfo, BenchmarkDetail
+from codeflash.models.models import ProcessedBenchmarkInfo, BenchmarkDetail, BenchmarkKey
+from codeflash.result.critic import performance_gain
 
 
-def validate_and_format_benchmark_table(function_benchmark_timings: dict[str, dict[str, int]],
-                          total_benchmark_timings: dict[str, int]) -> dict[str, list[tuple[str, float, float, float]]]:
+def validate_and_format_benchmark_table(function_benchmark_timings: dict[str, dict[BenchmarkKey, int]],
+                          total_benchmark_timings: dict[BenchmarkKey, int]) -> dict[str, list[tuple[str, float, float, float]]]:
     function_to_result = {}
     # Process each function's benchmark data
     for func_path, test_times in function_benchmark_timings.items():
         # Sort by percentage (highest first)
         sorted_tests = []
-        for test_name, func_time in test_times.items():
-            total_time = total_benchmark_timings.get(test_name, 0)
+        for benchmark_key, func_time in test_times.items():
+            total_time = total_benchmark_timings.get(benchmark_key, 0)
             if func_time > total_time:
-                logger.debug(f"Skipping test {test_name} due to func_time {func_time} > total_time {total_time}")
+                logger.debug(f"Skipping test {benchmark_key} due to func_time {func_time} > total_time {total_time}")
                 # If the function time is greater than total time, likely to have multithreading / multiprocessing issues.
                 # Do not try to project the optimization impact for this function.
-                sorted_tests.append((test_name, 0.0, 0.0, 0.0))
+                sorted_tests.append((str(benchmark_key), 0.0, 0.0, 0.0))
             if total_time > 0:
                 percentage = (func_time / total_time) * 100
                 # Convert nanoseconds to milliseconds
                 func_time_ms = func_time / 1_000_000
                 total_time_ms = total_time / 1_000_000
-                sorted_tests.append((test_name, total_time_ms, func_time_ms, percentage))
+                sorted_tests.append((str(benchmark_key), total_time_ms, func_time_ms, percentage))
         sorted_tests.sort(key=lambda x: x[3], reverse=True)
         function_to_result[func_path] = sorted_tests
     return function_to_result
@@ -107,8 +108,7 @@ def process_benchmark_data(
         ) * og_benchmark_timing
 
         # Calculate speedup
-        benchmark_speedup_ratio = total_benchmark_timing / expected_new_benchmark_timing
-        benchmark_speedup_percent = (benchmark_speedup_ratio - 1) * 100
+        benchmark_speedup_percent = performance_gain(original_runtime_ns=total_benchmark_timing, optimized_runtime_ns=int(expected_new_benchmark_timing)) * 100
 
         benchmark_details.append(
             BenchmarkDetail(
