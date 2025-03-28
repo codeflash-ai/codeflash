@@ -62,6 +62,8 @@ def run_behavioral_tests(
             "--capture=tee-sys",
             f"--timeout={pytest_timeout}",
             "-q",
+            "-o",
+            "addopts=",
             "--codeflash_loops_scope=session",
             "--codeflash_min_loops=1",
             "--codeflash_max_loops=1",
