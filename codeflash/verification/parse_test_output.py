@@ -29,6 +29,7 @@ from codeflash.models.models import (
     TestType,
     VerificationType,
 )
+from codeflash.verification.coverage_utils import CoverageUtils
 
 if TYPE_CHECKING:
     import subprocess
@@ -523,7 +524,7 @@ def parse_test_results(
     all_args = False
     if coverage_database_file and source_file and code_context and function_name:
         all_args = True
-        coverage = CoverageData.load_from_sqlite_database(
+        coverage = CoverageUtils.load_from_sqlite_database(
             database_path=coverage_database_file,
             config_path=coverage_config_file,
             source_code_path=source_file,
