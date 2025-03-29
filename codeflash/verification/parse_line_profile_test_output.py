@@ -85,7 +85,7 @@ def show_func(filename, start_lineno, func_name, timings, unit):
         if 'def' in line_ or nhits!='':
             table_rows.append((nhits, time, per_hit, percent, line_))
     pass
-    out_table+= tabulate(headers=table_cols,tabular_data=table_rows,tablefmt="pipe")
+    out_table+= tabulate(headers=table_cols,tabular_data=table_rows,tablefmt="pipe",colglobalalign=None, preserve_whitespace=True)
     out_table+='\n'
     return out_table
 
