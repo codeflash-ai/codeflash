@@ -84,27 +84,33 @@ def show_func(filename, start_lineno, func_name, timings, unit):
         line_ = line.rstrip('\n').rstrip('\r')
         if 'def' in line_ or nhits!='':
             table_rows.append((nhits, time, per_hit, percent, line_))
+    pass
     out_table+= tabulate(headers=table_cols,tabular_data=table_rows,tablefmt="pipe")
     out_table+='\n'
     return out_table
 
-def show_text(stats):
+def show_text(stats: dict) -> str:
     """ Show text for the given timings.
     """
     out_table = ""
-    out_table+='# Timer unit: %g s\n' % stats.unit
-    stats_order = sorted(stats.timings.items())
+    out_table+='# Timer unit: %g s\n' % stats['unit']
+    stats_order = sorted(stats['timings'].items())
     # Show detailed per-line information for each function.
     for (fn, lineno, name), timings in stats_order:
-        table_md =show_func(fn, lineno, name, stats.timings[fn, lineno, name], stats.unit)
+        table_md =show_func(fn, lineno, name, stats['timings'][fn, lineno, name], stats['unit'])
         out_table+=table_md
     return out_table
 
-def parse_lprof_results(lprofiler_database_file: Path | None) -> str:
-    lprofiler_database_file = lprofiler_database_file.with_suffix(".lprof")
-    if not lprofiler_database_file.exists():
-        return ""
+def parse_line_profile_results(line_profiler_output_file: Path | None) -> dict:
+    line_profiler_output_file = line_profiler_output_file.with_suffix(".lprof")
+    stats_dict = {}
+    if not line_profiler_output_file.exists():
+        return {'timings':{},'unit':0}
     else:
-        with open(lprofiler_database_file,'rb') as f:
+        with open(line_profiler_output_file,'rb') as f:
             stats = pickle.load(f)
-        return show_text(stats), None
+            stats_dict['timings'] = stats.timings
+            stats_dict['unit'] = stats.unit
+            str_out=show_text(stats_dict)
+            stats_dict['str_out']=str_out
+        return stats_dict, None

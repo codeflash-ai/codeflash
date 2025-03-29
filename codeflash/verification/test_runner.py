@@ -126,7 +126,7 @@ def run_behavioral_tests(
 
     return result_file_path, results, coverage_database_file if enable_coverage else None, coverage_config_file if enable_coverage else None
 
-def run_lprof_tests(
+def run_line_profile_tests(
     test_paths: TestFiles,
     pytest_cmd: str,
     test_env: dict[str, str],
@@ -138,7 +138,7 @@ def run_lprof_tests(
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,
     pytest_max_loops: int = 100_000,
-    lprofiler_database_file: Path | None = None,
+    line_profiler_output_file: Path | None = None,
 
 ) -> tuple[Path, subprocess.CompletedProcess]:
     if test_framework == "pytest":
@@ -162,23 +162,23 @@ def run_lprof_tests(
             else:
                 test_files.append(str(file.benchmarking_file_path))
         test_files = list(set(test_files))  # remove multiple calls in the same test function
-        # pytest_args = [
-        #     "--capture=tee-sys",
-        #     f"--timeout={pytest_timeout}",
-        #     "-q",
-        #     "--codeflash_loops_scope=session",
-        #     f"--codeflash_min_loops={pytest_min_loops}",
-        #     f"--codeflash_max_loops={pytest_max_loops}",
-        #     f"--codeflash_seconds={pytest_target_runtime_seconds}",
-        # ]
-        # result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
-        # result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
+        pytest_args = [
+            "--capture=tee-sys",
+            f"--timeout={pytest_timeout}",
+            "-q",
+            "--codeflash_loops_scope=session",
+            f"--codeflash_min_loops={pytest_min_loops}",
+            f"--codeflash_max_loops={pytest_max_loops}",
+            f"--codeflash_seconds={pytest_target_runtime_seconds}",
+        ]
+        result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
+        result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
-        # pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
-        # blocklist_args = [f"-p no:{plugin}" for plugin in BENCHMARKING_BLOCKLISTED_PLUGINS]
+        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
+        blocklist_args = [f"-p no:{plugin}" for plugin in BENCHMARKING_BLOCKLISTED_PLUGINS]
         pytest_test_env["LINE_PROFILE"]="1"
         results = execute_test_subprocess(
-            pytest_cmd_list + test_files,
+            pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
             cwd=cwd,
             env=pytest_test_env,
             timeout=600,  # TODO: Make this dynamic
@@ -186,7 +186,7 @@ def run_lprof_tests(
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
-    return lprofiler_database_file, results
+    return line_profiler_output_file, results
 
 def run_benchmarking_tests(
     test_paths: TestFiles,
