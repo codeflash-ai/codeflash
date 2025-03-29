@@ -211,7 +211,7 @@ def process_test_files(
         for test_file, functions in file_to_test_map.items():
             try:
                 script = jedi.Script(path=test_file, project=jedi_project)
-                test_functions_by_name: dict[str, TestFunction] = {}
+                test_functions = set()
 
                 all_names = script.get_names(all_scopes=True, references=True)
                 all_defs = script.get_names(all_scopes=True, definitions=True)
@@ -238,18 +238,22 @@ def process_test_files(
                             function.test_function
                         )[1]
                         if function_name in top_level_functions:
-                            test_functions_by_name[function_name] = TestFunction(
-                                function_name,
-                                function.test_class,
-                                parameters,
-                                function.test_type,
+                            test_functions.add(
+                                TestFunction(
+                                    function_name,
+                                    function.test_class,
+                                    parameters,
+                                    function.test_type,
+                                )
                             )
                     elif function.test_function in top_level_functions:
-                        test_functions_by_name[function.test_function] = TestFunction(
-                            function.test_function,
-                            function.test_class,
-                            None,
-                            function.test_type,
+                        test_functions.add(
+                            TestFunction(
+                                function.test_function,
+                                function.test_class,
+                                None,
+                                function.test_type,
+                            )
                         )
                     elif UNITTEST_PARAMETERIZED_TEST_NAME_REGEX.match(
                         function.test_function
@@ -258,11 +262,13 @@ def process_test_files(
                             "", function.test_function
                         )
                         if base_name in top_level_functions:
-                            test_functions_by_name[base_name] = TestFunction(
-                                function_name=base_name,
-                                test_class=function.test_class,
-                                parameters=function.test_function,
-                                test_type=function.test_type,
+                            test_functions.add(
+                                TestFunction(
+                                    function_name=base_name,
+                                    test_class=function.test_class,
+                                    parameters=function.test_function,
+                                    test_type=function.test_type,
+                                )
                             )
 
             elif test_framework == "unittest":
@@ -283,7 +289,7 @@ def process_test_files(
                                 )
 
                                 if is_parameterized and new_function == def_name.name:
-                                    test_functions_by_name[def_name.name] = (
+                                    test_functions.add(
                                         TestFunction(
                                             function_name=def_name.name,
                                             test_class=matched_name,
@@ -292,7 +298,7 @@ def process_test_files(
                                         )
                                     )
                                 elif function == def_name.name:
-                                    test_functions_by_name[def_name.name] = (
+                                    test_functions.add(
                                         TestFunction(
                                             function_name=def_name.name,
                                             test_class=matched_name,
@@ -300,6 +306,13 @@ def process_test_files(
                                             test_type=functions[0].test_type,
                                         )
                                     )
+
+            test_functions_list = list(test_functions)
+            test_functions_raw = [elem.function_name for elem in test_functions_list]
+
+            test_functions_by_name = defaultdict(list)
+            for i, func_name in enumerate(test_functions_raw):
+                test_functions_by_name[func_name].append(i)
 
             for name in all_names:
                 if name.full_name is None:
@@ -334,36 +347,36 @@ def process_test_files(
                     and definition[0].module_name != name.module_name
                     and definition[0].full_name is not None
                 ):
-                    test_function = test_functions_by_name[scope]
-                    scope_test_function = test_function.function_name
-                    scope_test_class = test_function.test_class
-                    scope_parameters = test_function.parameters
-                    test_type = test_function.test_type
+                    for index in test_functions_by_name[scope]:
+                        scope_test_function = test_functions_list[index].function_name
+                        scope_test_class = test_functions_list[index].test_class
+                        scope_parameters = test_functions_list[index].parameters
+                        test_type = test_functions_list[index].test_type
 
-                    if scope_parameters is not None:
-                        if test_framework == "pytest":
-                            scope_test_function += "[" + scope_parameters + "]"
-                        if test_framework == "unittest":
-                            scope_test_function += "_" + scope_parameters
+                        if scope_parameters is not None:
+                            if test_framework == "pytest":
+                                scope_test_function += "[" + scope_parameters + "]"
+                            if test_framework == "unittest":
+                                scope_test_function += "_" + scope_parameters
 
-                    full_name_without_module_prefix = definition[0].full_name.replace(
-                        definition[0].module_name + ".", "", 1
-                    )
-                    qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
+                        full_name_without_module_prefix = definition[
+                            0
+                        ].full_name.replace(definition[0].module_name + ".", "", 1)
+                        qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
 
-                    function_to_test_map[qualified_name_with_modules_from_root].add(
-                        FunctionCalledInTest(
-                            tests_in_file=TestsInFile(
-                                test_file=test_file,
-                                test_class=scope_test_class,
-                                test_function=scope_test_function,
-                                test_type=test_type,
-                            ),
-                            position=CodePosition(
-                                line_no=name.line, col_no=name.column
-                            ),
+                        function_to_test_map[qualified_name_with_modules_from_root].add(
+                            FunctionCalledInTest(
+                                tests_in_file=TestsInFile(
+                                    test_file=test_file,
+                                    test_class=scope_test_class,
+                                    test_function=scope_test_function,
+                                    test_type=test_type,
+                                ),
+                                position=CodePosition(
+                                    line_no=name.line, col_no=name.column
+                                ),
+                            )
                         )
-                    )
 
             progress.advance(task_id)
 
