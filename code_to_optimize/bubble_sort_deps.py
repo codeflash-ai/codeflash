@@ -1,15 +1,11 @@
+from code_to_optimize.bubble_sort_dep1_helper import dep1_comparer
+from code_to_optimize.bubble_sort_dep2_swap import dep2_swap
+
+
 def sorter_deps(arr):
-    n = len(arr)
-    for i in range(n):
-        # We use a flag to check if the array is already sorted
-        swapped = False
-        # Reduce the range of j, since the last i elements are already sorted
-        for j in range(n - 1 - i):
-            if arr[j] > arr[j + 1]:
-                # Swap without a helper function
-                arr[j], arr[j + 1] = arr[j + 1], arr[j]
-                swapped = True
-        # If no elements were swapped in the inner loop, break
-        if not swapped:
-            break
+    for i in range(len(arr)):
+        for j in range(len(arr) - 1):
+            if dep1_comparer(arr, j):
+                dep2_swap(arr, j)
     return arr
+

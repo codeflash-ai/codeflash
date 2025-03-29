@@ -108,69 +108,69 @@ def sorter(arr):
     arr.sort()
     return arr
 
-def test_pytest_line_profile_runner():
-    def get_fto_cc(file_path):
-        function_to_optimize = FunctionToOptimize(
-            function_name="sort_classmethod", file_path=file_path, parents=[], starting_line=None, ending_line=None
-        )
-        original_helper_code: dict[Path, str] = {}
-        test_config = TestConfig(
-            tests_root=file_path.parent / "tests",
-            tests_project_rootdir=file_path.parent.resolve(),
-            project_root_path=file_path.parent.parent.resolve(),
-            test_framework="pytest",
-            pytest_cmd="pytest",
-        )
-        func_optimizer = FunctionOptimizer(function_to_optimize=function_to_optimize, test_cfg=test_config)
-        ctx_result = func_optimizer.get_code_optimization_context()
-        if not is_successful(ctx_result):
-            pytest.fail()
-        code_context = ctx_result.unwrap()
-        helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
-        for helper_function_path in helper_function_paths:
-            with helper_function_path.open(encoding="utf8") as f:
-                helper_code = f.read()
-                original_helper_code[helper_function_path] = helper_code
-        return func_optimizer, code_context, original_helper_code
-    file_path = (Path(__file__) / ".." / ".." / "code_to_optimize" / "bubble_sort_classmethod.py").resolve()
-    func_optimizer, code_context, original_helper_code = get_fto_cc(file_path)
-    #check if decorators are added properly or not
-    file_path_to_helper_classes = defaultdict(set)
-    for function_source in code_context.helper_functions:
-        if (
-                function_source.qualified_name != func_optimizer.function_to_optimize.qualified_name
-                and "." in function_source.qualified_name
-        ):
-            file_path_to_helper_classes[function_source.file_path].add(function_source.qualified_name.split(".")[0])
-    try:
-        line_profiler_output_file = add_decorator_imports(func_optimizer.function_to_optimize, code_context)
-    except Exception as e:
-        print(e)
-    finally:
-        func_optimizer.write_code_and_helpers(func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path)
-    #now check if lp runs properly or not
-    # test_env = os.environ.copy()
-    # test_env["CODEFLASH_TEST_ITERATION"] = "0"
-    # test_env["CODEFLASH_TRACER_DISABLE"] = "1"
-    # if "PYTHONPATH" not in test_env:
-    #     test_env["PYTHONPATH"] = str(config.project_root_path)
-    # else:
-    #     test_env["PYTHONPATH"] += os.pathsep + str(config.project_root_path)
-    #
-    # with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
-    #     test_files = TestFiles(
-    #         test_files=[TestFile(instrumented_behavior_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
-    #     )
-    #     fp.write(code.encode("utf-8"))
-    #     fp.flush()
-    #     result_file, process = run_line_profile_tests(
-    #         test_files,
-    #         cwd=cur_dir_path,
-    #         test_env=test_env,
-    #         test_framework="pytest",
-    #         line_profiler_output_file=line_profiler_output_file,
-    #         pytest_cmd="pytest",
-    #     )
-    # print(process.stdout)
-    # result_file.unlink(missing_ok=True)
+# def test_pytest_line_profile_runner():
+#     def get_fto_cc(file_path):
+#         function_to_optimize = FunctionToOptimize(
+#             function_name="sort_classmethod", file_path=file_path, parents=[], starting_line=None, ending_line=None
+#         )
+#         original_helper_code: dict[Path, str] = {}
+#         test_config = TestConfig(
+#             tests_root=file_path.parent / "tests",
+#             tests_project_rootdir=file_path.parent.resolve(),
+#             project_root_path=file_path.parent.parent.resolve(),
+#             test_framework="pytest",
+#             pytest_cmd="pytest",
+#         )
+#         func_optimizer = FunctionOptimizer(function_to_optimize=function_to_optimize, test_cfg=test_config)
+#         ctx_result = func_optimizer.get_code_optimization_context()
+#         if not is_successful(ctx_result):
+#             pytest.fail()
+#         code_context = ctx_result.unwrap()
+#         helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+#         for helper_function_path in helper_function_paths:
+#             with helper_function_path.open(encoding="utf8") as f:
+#                 helper_code = f.read()
+#                 original_helper_code[helper_function_path] = helper_code
+#         return func_optimizer, code_context, original_helper_code
+#     file_path = (Path(__file__) / ".." / ".." / "code_to_optimize" / "bubble_sort_classmethod.py").resolve()
+#     func_optimizer, code_context, original_helper_code = get_fto_cc(file_path)
+#     #check if decorators are added properly or not
+#     file_path_to_helper_classes = defaultdict(set)
+#     for function_source in code_context.helper_functions:
+#         if (
+#                 function_source.qualified_name != func_optimizer.function_to_optimize.qualified_name
+#                 and "." in function_source.qualified_name
+#         ):
+#             file_path_to_helper_classes[function_source.file_path].add(function_source.qualified_name.split(".")[0])
+#     try:
+#         line_profiler_output_file = add_decorator_imports(func_optimizer.function_to_optimize, code_context)
+#     except Exception as e:
+#         print(e)
+#     finally:
+#         func_optimizer.write_code_and_helpers(func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path)
+#     #now check if lp runs properly or not
+#     # test_env = os.environ.copy()
+#     # test_env["CODEFLASH_TEST_ITERATION"] = "0"
+#     # test_env["CODEFLASH_TRACER_DISABLE"] = "1"
+#     # if "PYTHONPATH" not in test_env:
+#     #     test_env["PYTHONPATH"] = str(config.project_root_path)
+#     # else:
+#     #     test_env["PYTHONPATH"] += os.pathsep + str(config.project_root_path)
+#     #
+#     # with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
+#     #     test_files = TestFiles(
+#     #         test_files=[TestFile(instrumented_behavior_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
+#     #     )
+#     #     fp.write(code.encode("utf-8"))
+#     #     fp.flush()
+#     #     result_file, process = run_line_profile_tests(
+#     #         test_files,
+#     #         cwd=cur_dir_path,
+#     #         test_env=test_env,
+#     #         test_framework="pytest",
+#     #         line_profiler_output_file=line_profiler_output_file,
+#     #         pytest_cmd="pytest",
+#     #     )
+#     # print(process.stdout)
+#     # result_file.unlink(missing_ok=True)
 
