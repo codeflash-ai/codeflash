@@ -362,7 +362,7 @@ def check_for_toml_or_setup_file() -> str | None:
     return cast(str, project_name)
 
 
-def install_github_actions(override_formatter_check: bool=False) -> None:
+def install_github_actions(override_formatter_check: bool = False) -> None:
     try:
         config, config_file_path = parse_config_file(override_formatter_check=override_formatter_check)
 
@@ -490,9 +490,12 @@ def get_dependency_installation_commands(dep_manager: DependencyManager) -> tupl
         return """|
           python -m pip install --upgrade pip
           pip install poetry
-          poetry install --all-extras"""
+          poetry install --all-extras
+          poetry add codeflash"""
     if dep_manager == DependencyManager.UV:
-        return "uv sync --all-extras"
+        return """|
+          uv sync --all-extras
+          uv pip install codeflash"""
     # PIP or UNKNOWN
     return """|
           python -m pip install --upgrade pip
