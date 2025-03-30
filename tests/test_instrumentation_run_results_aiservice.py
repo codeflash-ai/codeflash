@@ -10,11 +10,10 @@ import isort
 from code_to_optimize.bubble_sort_method import BubbleSorter
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode
+from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode, TestType, VerificationType
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
-from codeflash.verification.test_results import TestType, VerificationType
 
 # Used by aiservice instrumentation
 behavior_logging_code = """from __future__ import annotations
