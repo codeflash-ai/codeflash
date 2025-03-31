@@ -32,6 +32,7 @@ class TestShellUtils(unittest.TestCase):
 
 
 # unit tests
+@unittest.skipUnless(os.name == "posix", "Only runs on Linux-based systems")
 class TestReadApiKeyFromShellConfig(unittest.TestCase):
     def setUp(self):
         """Setup a temporary shell configuration file for testing."""
