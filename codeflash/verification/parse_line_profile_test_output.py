@@ -5,6 +5,7 @@ from codeflash.code_utils.tabulate import tabulate
 import os
 import dill as pickle
 from pathlib import Path
+from typing import Optional
 
 def show_func(filename, start_lineno, func_name, timings, unit):
     total_hits = sum(t[1] for t in timings)
@@ -72,7 +73,7 @@ def show_text(stats: dict) -> str:
         out_table+=table_md
     return out_table
 
-def parse_line_profile_results(line_profiler_output_file: Path | None) -> dict:
+def parse_line_profile_results(line_profiler_output_file: Optional[Path]) -> dict:
     line_profiler_output_file = line_profiler_output_file.with_suffix(".lprof")
     stats_dict = {}
     if not line_profiler_output_file.exists():
