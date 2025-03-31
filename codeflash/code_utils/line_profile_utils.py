@@ -212,8 +212,7 @@ def add_decorator_imports(function_to_optimize, code_context):
         file_paths[elem.file_path].append(elem.qualified_name)
     for file_path,fns_present in file_paths.items():
         #open file
-        with open(file_path, "r", encoding="utf-8") as file:
-            file_contents = file.read()
+        file_contents = file_path.read_text("utf-8")
         # parse to cst
         module_node = cst.parse_module(file_contents)
         for fn_name in fns_present:
@@ -229,9 +228,7 @@ def add_decorator_imports(function_to_optimize, code_context):
         with open(file_path, "w", encoding="utf-8") as file:
             file.write(modified_code)
     #Adding profile.enable line for changing the savepath of the data, do this only for the main file and not the helper files
-    with open(function_to_optimize.file_path,'r') as f:
-        file_contents = f.read()
+    file_contents = function_to_optimize.file_path.read_text("utf-8")
     modified_code = add_profile_enable(file_contents,str(line_profile_output_file))
-    with open(function_to_optimize.file_path,'w') as f:
-        f.write(modified_code)
+    function_to_optimize.file_path.write_text(modified_code,"utf-8")
     return line_profile_output_file
