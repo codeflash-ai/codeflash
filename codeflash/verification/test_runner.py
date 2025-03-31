@@ -10,12 +10,13 @@ from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
-from codeflash.models.models import TestFiles
-from codeflash.verification.test_results import TestType
+from codeflash.models.models import TestFiles, TestType
 
 if TYPE_CHECKING:
     from codeflash.models.models import TestFiles
 
+BEHAVIORAL_BLOCKLISTED_PLUGINS = ["benchmark"]
+BENCHMARKING_BLOCKLISTED_PLUGINS = ["codspeed", "cov", "benchmark", "profiling"]
 
 def execute_test_subprocess(
     cmd_list: list[str], cwd: Path, env: dict[str, str] | None, timeout: int = 600
@@ -87,16 +88,18 @@ def run_behavioral_tests(
             else:
                 coverage_cmd.extend(shlex.split(pytest_cmd, posix=IS_POSIX)[1:])
 
+            blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS if plugin != "cov"]
             results = execute_test_subprocess(
-                coverage_cmd + common_pytest_args + result_args + test_files, cwd=cwd, env=pytest_test_env, timeout=600
+                coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files, cwd=cwd, env=pytest_test_env, timeout=600
             )
             logger.debug(
                 f"Result return code: {results.returncode}, "
                 f"{'Result stderr:' + str(results.stderr) if results.stderr else ''}"
             )
         else:
+            blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS]
             results = execute_test_subprocess(
-                pytest_cmd_list + common_pytest_args + result_args + test_files,
+                pytest_cmd_list + common_pytest_args + blocklist_args + result_args + test_files,
                 cwd=cwd,
                 env=pytest_test_env,
                 timeout=600,  # TODO: Make this dynamic
@@ -170,8 +173,10 @@ def run_benchmarking_tests(
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
+        blocklist_args = [f"-p no:{plugin}" for plugin in BENCHMARKING_BLOCKLISTED_PLUGINS]
+
         results = execute_test_subprocess(
-            pytest_cmd_list + pytest_args + result_args + test_files,
+            pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
             cwd=cwd,
             env=pytest_test_env,
             timeout=600,  # TODO: Make this dynamic

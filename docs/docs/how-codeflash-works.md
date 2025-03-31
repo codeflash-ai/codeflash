@@ -25,7 +25,7 @@ To optimize code, Codeflash first gathers all necessary context from the codebas
 
 ## Verification of correctness
 
-![Verification](/img/verification.svg)
+![Verification](/img/codeflash_arch_diagram.gif)
 
 The goal of correctness verification is to ensure that when the original code is replaced by the new code, there are no behavioral changes in the code and the rest of the system. This means the replacement should be completely safe.
 
