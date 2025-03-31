@@ -3,7 +3,6 @@ import tempfile
 from pathlib import Path
 
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
-from codeflash.verification.test_results import TestType
 from codeflash.verification.verification_utils import TestConfig
 
 

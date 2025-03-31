@@ -24,7 +24,7 @@ class CodeFlashBenchmarkPlugin:
             cur.execute("PRAGMA synchronous = OFF")
             cur.execute(
                 "CREATE TABLE IF NOT EXISTS benchmark_timings("
-                "benchmark_file_name TEXT, benchmark_function_name TEXT, benchmark_line_number INTEGER,"
+                "benchmark_file_path TEXT, benchmark_function_name TEXT, benchmark_line_number INTEGER,"
                 "benchmark_time_ns INTEGER)"
             )
             self._connection.commit()
@@ -47,7 +47,7 @@ class CodeFlashBenchmarkPlugin:
             cur = self._connection.cursor()
             # Insert data into the benchmark_timings table
             cur.executemany(
-                "INSERT INTO benchmark_timings (benchmark_file_name, benchmark_function_name, benchmark_line_number, benchmark_time_ns) VALUES (?, ?, ?, ?)",
+                "INSERT INTO benchmark_timings (benchmark_file_path, benchmark_function_name, benchmark_line_number, benchmark_time_ns) VALUES (?, ?, ?, ?)",
                 self.benchmark_timings
             )
             self._connection.commit()
@@ -86,7 +86,7 @@ class CodeFlashBenchmarkPlugin:
             # Query the function_calls table for all function calls
             cursor.execute(
                 "SELECT module_name, class_name, function_name, "
-                "benchmark_file_name, benchmark_function_name, benchmark_line_number, function_time_ns "
+                "benchmark_file_path, benchmark_function_name, benchmark_line_number, function_time_ns "
                 "FROM benchmark_function_timings"
             )
 
@@ -101,7 +101,7 @@ class CodeFlashBenchmarkPlugin:
                     qualified_name = f"{module_name}.{function_name}"
 
                 # Create the benchmark key (file::function::line)
-                benchmark_key = BenchmarkKey(file_name=benchmark_file, function_name=benchmark_func)
+                benchmark_key = BenchmarkKey(file_path=benchmark_file, function_name=benchmark_func)
                 # Initialize the inner dictionary if needed
                 if qualified_name not in result:
                     result[qualified_name] = {}
@@ -143,20 +143,20 @@ class CodeFlashBenchmarkPlugin:
         try:
             # Query the benchmark_function_timings table to get total overhead for each benchmark
             cursor.execute(
-                "SELECT benchmark_file_name, benchmark_function_name, benchmark_line_number, SUM(overhead_time_ns) "
+                "SELECT benchmark_file_path, benchmark_function_name, benchmark_line_number, SUM(overhead_time_ns) "
                 "FROM benchmark_function_timings "
-                "GROUP BY benchmark_file_name, benchmark_function_name, benchmark_line_number"
+                "GROUP BY benchmark_file_path, benchmark_function_name, benchmark_line_number"
             )
 
             # Process overhead information
             for row in cursor.fetchall():
                 benchmark_file, benchmark_func, benchmark_line, total_overhead_ns = row
-                benchmark_key = BenchmarkKey(file_name=benchmark_file, function_name=benchmark_func)
+                benchmark_key = BenchmarkKey(file_path=benchmark_file, function_name=benchmark_func)
                 overhead_by_benchmark[benchmark_key] = total_overhead_ns or 0  # Handle NULL sum case
 
             # Query the benchmark_timings table for total times
             cursor.execute(
-                "SELECT benchmark_file_name, benchmark_function_name, benchmark_line_number, benchmark_time_ns "
+                "SELECT benchmark_file_path, benchmark_function_name, benchmark_line_number, benchmark_time_ns "
                 "FROM benchmark_timings"
             )
 
@@ -165,7 +165,7 @@ class CodeFlashBenchmarkPlugin:
                 benchmark_file, benchmark_func, benchmark_line, time_ns = row
 
                 # Create the benchmark key (file::function::line)
-                benchmark_key = BenchmarkKey(file_name=benchmark_file, function_name=benchmark_func)
+                benchmark_key = BenchmarkKey(file_path=benchmark_file, function_name=benchmark_func)
                 # Subtract overhead from total time
                 overhead = overhead_by_benchmark.get(benchmark_key, 0)
                 result[benchmark_key] = time_ns - overhead
@@ -236,13 +236,13 @@ class CodeFlashBenchmarkPlugin:
                 The return value of the function
 
             """
-            benchmark_file_name = self.request.node.fspath
+            benchmark_file_path = str(self.request.node.fspath)
             benchmark_function_name = self.request.node.name
             line_number = int(str(sys._getframe(1).f_lineno))  # 1 frame up in the call stack
 
             # Set env vars so codeflash decorator can identify what benchmark its being run in
             os.environ["CODEFLASH_BENCHMARK_FUNCTION_NAME"] = benchmark_function_name
-            os.environ["CODEFLASH_BENCHMARK_FILE_NAME"] = benchmark_file_name
+            os.environ["CODEFLASH_BENCHMARK_FILE_PATH"] = benchmark_file_path
             os.environ["CODEFLASH_BENCHMARK_LINE_NUMBER"] = str(line_number)
             os.environ["CODEFLASH_BENCHMARKING"] = "True"
 
@@ -260,7 +260,7 @@ class CodeFlashBenchmarkPlugin:
             codeflash_trace.function_call_count = 0
             # Add to the benchmark timings buffer
             codeflash_benchmark_plugin.benchmark_timings.append(
-                (benchmark_file_name, benchmark_function_name, line_number, end - start))
+                (benchmark_file_path, benchmark_function_name, line_number, end - start))
 
             return result
 

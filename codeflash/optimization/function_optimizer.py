@@ -22,12 +22,12 @@ from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module, extract_code
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     cleanup_paths,
     file_name_from_test_module_name,
     get_run_tmp_file,
+    has_any_async_functions,
     module_name_from_file_path,
 )
 from codeflash.code_utils.config_consts import (
@@ -49,7 +49,6 @@ from codeflash.models.models import (
     BestOptimization,
     CodeOptimizationContext,
     FunctionCalledInTest,
-    FunctionParent,
     GeneratedTests,
     GeneratedTestsList,
     OptimizationSet,
@@ -58,8 +57,9 @@ from codeflash.models.models import (
     TestFile,
     TestFiles,
     TestingMode,
+    TestResults,
+    TestType, BenchmarkKey,
 )
-from codeflash.optimization.function_context import get_constrained_function_context_and_helper_functions
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
 from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.result.explanation import Explanation
@@ -68,16 +68,12 @@ from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.parse_test_output import parse_test_results
-from codeflash.verification.test_results import TestResults, TestType
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests
 from codeflash.verification.verification_utils import get_test_file_path
 from codeflash.verification.verifier import generate_tests
 
 if TYPE_CHECKING:
     from argparse import Namespace
-
-    import numpy as np
-    import numpy.typing as npt
 
     from codeflash.either import Result
     from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
@@ -163,7 +159,7 @@ class FunctionOptimizer:
             transient=True,
         ):
             generated_results = self.generate_tests_and_optimizations(
-                code_to_optimize_with_helpers=code_context.code_to_optimize_with_helpers,
+                testgen_context_code=code_context.testgen_context_code,
                 read_writable_code=code_context.read_writable_code,
                 read_only_context_code=code_context.read_only_context_code,
                 helper_functions=code_context.helper_functions,
@@ -242,7 +238,7 @@ class FunctionOptimizer:
 
         best_optimization = None
 
-        for u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
+        for _u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
             if candidates is None:
                 continue
 
@@ -432,30 +428,30 @@ class FunctionOptimizer:
                         )
                         tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
                         tree.add(f"Speedup ratio: {perf_gain + 1:.1f}X")
+                        replay_perf_gain = {}
                         if self.args.benchmark:
-
-                            benchmark_keys = {(benchmark.file_name, benchmark.function_name) for benchmark in self.total_benchmark_timings}
-                            test_results_by_benchmark = candidate_result.benchmarking_test_results.group_by_benchmark(benchmark_keys)
-                            for benchmark_key, test_results in test_results_by_benchmark.items():
+                            logger.info(f"Calculating benchmark improvement..")
+                            test_results_by_benchmark = candidate_result.benchmarking_test_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.test_cfg.benchmark_tests_root / "codeflash_replay_tests", self.project_root)
+                            for benchmark_key, candidate_test_results in test_results_by_benchmark.items():
                                 original_code_replay_runtime = original_code_baseline.replay_benchmarking_test_results[benchmark_key].total_passed_runtime()
-                                candidate_replay_runtime = candidate_result.replay_benchmarking_test_results.total_passed_runtime()
-                                replay_perf_gain = performance_gain(
+                                candidate_replay_runtime = candidate_test_results.total_passed_runtime()
+                                replay_perf_gain[benchmark_key] = performance_gain(
                                     original_runtime_ns=original_code_replay_runtime,
                                     optimized_runtime_ns=candidate_replay_runtime,
                                 )
-                                tree.add(f"Original benchmark replay runtime: {humanize_runtime(original_code_replay_runtime)}")
+                                tree.add(
+                                    f"Original benchmark replay runtime: {humanize_runtime(original_code_replay_runtime)}")
                                 tree.add(
                                     f"Best benchmark replay runtime: {humanize_runtime(candidate_replay_runtime)} "
                                     f"(measured over {candidate_result.max_loop_count} "
                                     f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
                                 )
-                                tree.add(f"Speedup percentage for benchmark replay test: {replay_perf_gain * 100:.1f}%")
-                                tree.add(f"Speedup ratio for benchmark replay test: {replay_perf_gain + 1:.1f}X")
+                                tree.add(f"Speedup percentage for benchmark replay test: {replay_perf_gain[benchmark_key] * 100:.1f}%")
+                                tree.add(f"Speedup ratio for benchmark replay test: {replay_perf_gain[benchmark_key] + 1:.1f}X")
                         best_optimization = BestOptimization(
                             candidate=candidate,
                             helper_functions=code_context.helper_functions,
                             runtime=best_test_runtime,
-                            replay_runtime=candidate_replay_runtime if self.args.benchmark else None,
                             winning_behavioral_test_results=candidate_result.behavior_test_results,
                             replay_performance_gain=replay_perf_gain if self.args.benchmark else None,
                             winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
@@ -582,50 +578,6 @@ class FunctionOptimizer:
         return did_update
 
     def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
-        code_to_optimize, contextual_dunder_methods = extract_code([self.function_to_optimize])
-        if code_to_optimize is None:
-            return Failure("Could not find function to optimize.")
-        (helper_code, helper_functions, helper_dunder_methods) = get_constrained_function_context_and_helper_functions(
-            self.function_to_optimize, self.project_root, code_to_optimize
-        )
-        if self.function_to_optimize.parents:
-            function_class = self.function_to_optimize.parents[0].name
-            same_class_helper_methods = [
-                df
-                for df in helper_functions
-                if df.qualified_name.count(".") > 0 and df.qualified_name.split(".")[0] == function_class
-            ]
-            optimizable_methods = [
-                FunctionToOptimize(
-                    df.qualified_name.split(".")[-1],
-                    df.file_path,
-                    [FunctionParent(df.qualified_name.split(".")[0], "ClassDef")],
-                    None,
-                    None,
-                )
-                for df in same_class_helper_methods
-            ] + [self.function_to_optimize]
-            dedup_optimizable_methods = []
-            added_methods = set()
-            for method in reversed(optimizable_methods):
-                if f"{method.file_path}.{method.qualified_name}" not in added_methods:
-                    dedup_optimizable_methods.append(method)
-                    added_methods.add(f"{method.file_path}.{method.qualified_name}")
-            if len(dedup_optimizable_methods) > 1:
-                code_to_optimize, contextual_dunder_methods = extract_code(list(reversed(dedup_optimizable_methods)))
-                if code_to_optimize is None:
-                    return Failure("Could not find function to optimize.")
-        code_to_optimize_with_helpers = helper_code + "\n" + code_to_optimize
-
-        code_to_optimize_with_helpers_and_imports = add_needed_imports_from_module(
-            self.function_to_optimize_source_code,
-            code_to_optimize_with_helpers,
-            self.function_to_optimize.file_path,
-            self.function_to_optimize.file_path,
-            self.project_root,
-            helper_functions,
-        )
-
         try:
             new_code_ctx = code_context_extractor.get_code_optimization_context(
                 self.function_to_optimize, self.project_root
@@ -635,7 +587,7 @@ class FunctionOptimizer:
 
         return Success(
             CodeOptimizationContext(
-                code_to_optimize_with_helpers=code_to_optimize_with_helpers_and_imports,
+                testgen_context_code=new_code_ctx.testgen_context_code,
                 read_writable_code=new_code_ctx.read_writable_code,
                 read_only_context_code=new_code_ctx.read_only_context_code,
                 helper_functions=new_code_ctx.helper_functions,  # only functions that are read writable
@@ -739,7 +691,7 @@ class FunctionOptimizer:
 
     def generate_tests_and_optimizations(
         self,
-        code_to_optimize_with_helpers: str,
+        testgen_context_code: str,
         read_writable_code: str,
         read_only_context_code: str,
         helper_functions: list[FunctionSource],
@@ -754,7 +706,7 @@ class FunctionOptimizer:
             # Submit the test generation task as future
             future_tests = self.generate_and_instrument_tests(
                 executor,
-                code_to_optimize_with_helpers,
+                testgen_context_code,
                 [definition.fully_qualified_name for definition in helper_functions],
                 generated_test_paths,
                 generated_perf_test_paths,
@@ -883,9 +835,7 @@ class FunctionOptimizer:
                 )
                 console.rule()
                 return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
-            if not coverage_critic(
-            coverage_results, self.args.test_framework
-                ):
+            if not coverage_critic(coverage_results, self.args.test_framework):
                 return Failure("The threshold for test coverage was not met.")
             if test_framework == "pytest":
                 benchmarking_results, _ = self.run_and_parse_tests(
@@ -953,8 +903,10 @@ class FunctionOptimizer:
             logger.debug(f"Total original code runtime (ns): {total_timing}")
 
             if self.args.benchmark:
-                replay_benchmarking_test_results = benchmarking_results.filter_by_test_type(TestType.REPLAY_TEST)
-                logger.info(f"Total replay test runtime: {humanize_runtime(replay_benchmarking_test_results.total_passed_runtime())}")
+                replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.test_cfg.benchmark_tests_root / "codeflash_replay_tests", self.project_root)
+                for benchmark_name, benchmark_results in replay_benchmarking_test_results.items():
+
+                    logger.info(f"Replay benchmark '{benchmark_name}' runtime: {humanize_runtime(benchmark_results.total_passed_runtime())}")
             return Success(
                 (
                     OriginalCodeBaseline(
@@ -1075,10 +1027,9 @@ class FunctionOptimizer:
 
             logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
             if self.args.benchmark:
-                candidate_replay_benchmarking_results = candidate_benchmarking_results.filter_by_test_type(TestType.REPLAY_TEST)
-                logger.debug(
-                    f"Total optimized code {optimization_candidate_index} replay benchmark runtime (ns): {candidate_replay_benchmarking_results.total_passed_runtime()}"
-                )
+                candidate_replay_benchmarking_results = candidate_benchmarking_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.test_cfg.benchmark_tests_root / "codeflash_replay_tests", self.project_root)
+                for benchmark_name, benchmark_results in candidate_replay_benchmarking_results.items():
+                    logger.debug(f"Benchmark {benchmark_name} runtime (ns): {humanize_runtime(benchmark_results.total_passed_runtime())}")
             return Success(
                 OptimizedCandidateResult(
                     max_loop_count=loop_count,
@@ -1106,15 +1057,15 @@ class FunctionOptimizer:
         unittest_loop_index: int | None = None,
     ) -> tuple[TestResults, CoverageData | None]:
         coverage_database_file = None
+        coverage_config_file = None
         try:
             if testing_type == TestingMode.BEHAVIOR:
-                result_file_path, run_result, coverage_database_file = run_behavioral_tests(
+                result_file_path, run_result, coverage_database_file, coverage_config_file = run_behavioral_tests(
                     test_files,
                     test_framework=self.test_cfg.test_framework,
                     cwd=self.project_root,
                     test_env=test_env,
                     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                    pytest_cmd=self.test_cfg.pytest_cmd,
                     verbose=True,
                     enable_coverage=enable_coverage,
                 )
@@ -1123,24 +1074,25 @@ class FunctionOptimizer:
                     test_files,
                     cwd=self.project_root,
                     test_env=test_env,
-                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     pytest_cmd=self.test_cfg.pytest_cmd,
+                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     pytest_target_runtime_seconds=testing_time,
                     pytest_min_loops=pytest_min_loops,
                     pytest_max_loops=pytest_max_loops,
                     test_framework=self.test_cfg.test_framework,
                 )
             else:
-                raise ValueError(f"Unexpected testing type: {testing_type}")
+                msg = f"Unexpected testing type: {testing_type}"
+                raise ValueError(msg)
         except subprocess.TimeoutExpired:
             logger.exception(
-                f'Error running tests in {", ".join(str(f) for f in test_files.test_files)}.\nTimeout Error'
+                f"Error running tests in {', '.join(str(f) for f in test_files.test_files)}.\nTimeout Error"
             )
             return TestResults(), None
         if run_result.returncode != 0 and testing_type == TestingMode.BEHAVIOR:
             logger.debug(
-                f'Nonzero return code {run_result.returncode} when running tests in '
-                f'{", ".join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n'
+                f"Nonzero return code {run_result.returncode} when running tests in "
+                f"{', '.join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n"
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
@@ -1155,6 +1107,7 @@ class FunctionOptimizer:
             source_file=self.function_to_optimize.file_path,
             code_context=code_context,
             coverage_database_file=coverage_database_file,
+            coverage_config_file=coverage_config_file,
         )
         return results, coverage_results
 
@@ -1185,4 +1138,3 @@ class FunctionOptimizer:
                 zip(generated_test_paths, generated_perf_test_paths)
             )
         ]
-
