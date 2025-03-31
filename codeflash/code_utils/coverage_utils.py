@@ -44,9 +44,9 @@ def generate_candidates(source_code_path: Path) -> list[str]:
     candidates: list[str] = [source_code_path.name]
     current_path: Path = source_code_path.parent
 
-    while current_path != current_path.parent:
-        candidate_path = (Path(current_path.name) / candidates[-1]).as_posix()
-        candidates.append(candidate_path)
+    root = Path(current_path.root)
+    while current_path != root:
+        candidates.append(f"{current_path.name}/{candidates[-1]}")
         current_path = current_path.parent
 
     return candidates
