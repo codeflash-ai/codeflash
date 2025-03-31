@@ -76,7 +76,7 @@ def parse_line_profile_results(line_profiler_output_file: Path | None) -> dict:
     line_profiler_output_file = line_profiler_output_file.with_suffix(".lprof")
     stats_dict = {}
     if not line_profiler_output_file.exists():
-        return {'timings':{},'unit':0}
+        return {'timings':{},'unit':0, 'str_out':''}, None
     else:
         with open(line_profiler_output_file,'rb') as f:
             stats = pickle.load(f)

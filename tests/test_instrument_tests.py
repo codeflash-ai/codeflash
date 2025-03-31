@@ -21,7 +21,7 @@ from codeflash.models.models import (
     TestFiles,
     TestingMode,
     TestsInFile,
-    TestType,
+    TestType, CodeOptimizationContext,
 )
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
