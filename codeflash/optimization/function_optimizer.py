@@ -781,6 +781,7 @@ class FunctionOptimizer:
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
     ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
+        line_profile_results = {'timings':{},'unit':0, 'str_out':''}
         # For the original function - run the tests and get the runtime, plus coverage
         with progress_bar(f"Establishing original code baseline for {self.function_to_optimize.function_name}"):
             assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
@@ -842,12 +843,11 @@ class FunctionOptimizer:
                     self.write_code_and_helpers(
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
-                if not line_profile_results:
+                if line_profile_results['str_out']=='':
                     logger.warning(
                         f"Couldn't run line profiler for original function {self.function_to_optimize.function_name}"
                     )
                     console.rule()
-                    line_profile_results = {'timings':{},'unit':0, 'str_out':''}
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
                     test_env=test_env,
