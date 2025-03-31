@@ -284,6 +284,7 @@ def test_prepare_image_for_yolo():
 
 
 def test_perfinjector_bubble_sort_results() -> None:
+    computed_fn_opt = False
     code = """from code_to_optimize.bubble_sort import sorter
 
 
@@ -504,6 +505,7 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
             with helper_function_path.open(encoding="utf8") as f:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
+        computed_fn_opt = True
         line_profiler_output_file = add_decorator_imports(
             func_optimizer.function_to_optimize, code_context)
         line_profile_results, _ = func_optimizer.run_and_parse_tests(
@@ -519,14 +521,16 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
         tmp_lpr = list(line_profile_results['timings'].keys())
         assert len(tmp_lpr) == 1 and line_profile_results['timings'][tmp_lpr[0]][0][1]==2
     finally:
-        func_optimizer.write_code_and_helpers(
-            func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
-        )
+        if computed_fn_opt:
+            func_optimizer.write_code_and_helpers(
+                func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
+            )
         test_path.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
 
 
 def test_perfinjector_bubble_sort_parametrized_results() -> None:
+    computed_fn_opt = False
     code = """from code_to_optimize.bubble_sort import sorter
 import pytest
 
@@ -754,6 +758,7 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
             with helper_function_path.open(encoding="utf8") as f:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
+        computed_fn_opt = True
         line_profiler_output_file = add_decorator_imports(
             func_optimizer.function_to_optimize, code_context)
         line_profile_results, _ = func_optimizer.run_and_parse_tests(
@@ -769,14 +774,16 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
         tmp_lpr = list(line_profile_results['timings'].keys())
         assert len(tmp_lpr) == 1 and line_profile_results['timings'][tmp_lpr[0]][0][1]==3
     finally:
-        func_optimizer.write_code_and_helpers(
-            func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
-        )
+        if computed_fn_opt:
+            func_optimizer.write_code_and_helpers(
+                func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
+            )
         test_path.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
 
 
 def test_perfinjector_bubble_sort_parametrized_loop_results() -> None:
+    computed_fn_opt = False
     code = """from code_to_optimize.bubble_sort import sorter
 import pytest
 
@@ -1090,6 +1097,7 @@ def test_sort_parametrized_loop(input, expected_output):
             with helper_function_path.open(encoding="utf8") as f:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
+        computed_fn_opt = True
         line_profiler_output_file = add_decorator_imports(
             func_optimizer.function_to_optimize, code_context)
         line_profile_results, _ = func_optimizer.run_and_parse_tests(
@@ -1105,15 +1113,17 @@ def test_sort_parametrized_loop(input, expected_output):
         tmp_lpr = list(line_profile_results['timings'].keys())
         assert len(tmp_lpr) == 1 and line_profile_results['timings'][tmp_lpr[0]][0][1]==6
     finally:
-        func_optimizer.write_code_and_helpers(
-            func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
-        )
+        if computed_fn_opt:
+            func_optimizer.write_code_and_helpers(
+                func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
+            )
         test_path.unlink(missing_ok=True)
         test_path_behavior.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
 
 
 def test_perfinjector_bubble_sort_loop_results() -> None:
+    computed_fn_opt = False
     code = """from code_to_optimize.bubble_sort import sorter
 
 
@@ -1360,6 +1370,7 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
             with helper_function_path.open(encoding="utf8") as f:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
+        computed_fn_opt = True
         line_profiler_output_file = add_decorator_imports(
             func_optimizer.function_to_optimize, code_context)
         line_profile_results, _ = func_optimizer.run_and_parse_tests(
@@ -1375,9 +1386,10 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
         tmp_lpr = list(line_profile_results['timings'].keys())
         assert len(tmp_lpr) == 1 and line_profile_results['timings'][tmp_lpr[0]][0][1]==3
     finally:
-        func_optimizer.write_code_and_helpers(
-            func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
-        )
+        if computed_fn_opt is True:
+            func_optimizer.write_code_and_helpers(
+                func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
+            )
         test_path.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
         test_path_behavior.unlink(missing_ok=True)
