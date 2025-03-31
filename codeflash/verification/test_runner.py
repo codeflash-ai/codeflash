@@ -10,8 +10,7 @@ from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
-from codeflash.models.models import TestFiles
-from codeflash.verification.test_results import TestType
+from codeflash.models.models import TestFiles, TestType
 
 if TYPE_CHECKING:
     from codeflash.models.models import TestFiles

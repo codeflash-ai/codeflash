@@ -26,8 +26,8 @@ from codeflash.code_utils.code_utils import (
     cleanup_paths,
     file_name_from_test_module_name,
     get_run_tmp_file,
-    module_name_from_file_path,
     has_any_async_functions,
+    module_name_from_file_path,
 )
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
@@ -57,6 +57,8 @@ from codeflash.models.models import (
     TestFile,
     TestFiles,
     TestingMode,
+    TestResults,
+    TestType,
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
 from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
@@ -78,6 +80,7 @@ if TYPE_CHECKING:
     from codeflash.either import Result
     from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
     from codeflash.verification.verification_utils import TestConfig
+
 
 class FunctionOptimizer:
     def __init__(
