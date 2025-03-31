@@ -847,6 +847,7 @@ class FunctionOptimizer:
                         f"Couldn't run line profiler for original function {self.function_to_optimize.function_name}"
                     )
                     console.rule()
+                    line_profile_results = {'timings':{},'unit':0, 'str_out':''}
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
                     test_env=test_env,
