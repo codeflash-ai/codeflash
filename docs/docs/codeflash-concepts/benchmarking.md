@@ -4,7 +4,7 @@ sidebar_position: 2
 
 # How Codeflash measures code runtime
 
-Codeflash reports benchmarking results that look like this :
+Codeflash reports benchmarking results that look like this:
 
 ```text
 ⏱️ Runtime : 32.8 microseconds → 29.2 microseconds (best of 315 runs)
@@ -13,7 +13,7 @@ Codeflash reports benchmarking results that look like this :
 To measure runtime, Codeflash runs a function multiple times with several inputs 
 and sums the minimum time for each input to get the total runtime.
 
-A simplified pseudocode of Codeflash benchmarking looks like this -
+A simplified pseudocode of Codeflash benchmarking looks like this:
 
 ```python
 loops = 0
@@ -31,7 +31,7 @@ number_of_runs = loops
 
 The above code runs the function multiple times on different inputs and uses the minimum time for each input.
 
-In this document we explain :
+In this document we explain:
 - How we measure the runtime of code
 - How we determine if an optimization is actually faster
 - Why we measure the timing as best of N runs
