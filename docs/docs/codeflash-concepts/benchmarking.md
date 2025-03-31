@@ -7,47 +7,47 @@ Codeflash reports benchmarking results that look like this.
 To measure the runtime of code, Codeflash runs the function multiple times, on several inputs 
 and sums the minimum time of each input to get the total runtime.
 
-A simplified pseudocode of the benchmarking that Codeflash implements looks like this -
+A simplified pseudocode of Codeflash benchmarking looks like this -
 
 ```python
 loops = 0
-start_time = time.time()
 min_input_runtime = [float('inf')] * len(test_inputs)
+start_time = time.time()
 while loops <= 5 or time.time() - start_time < 10:
     loops += 1
     for input_index, input in enumerate(test_inputs):
-        t = time(function(input))
+        t = time(function_to_optimize(input))
         if t < min_input_runtime[input_index]:
             min_input_runtime[input_index] = t
 total_runtime = sum(min_input_runtime)
 number_of_runs = loops
 ```
 
-The above code runs the function multiple times on different inputs and takes the minimum time for each input.
+The above code runs the function multiple times on different inputs and uses the minimum time for each input.
 
 In this document we explain -
-- how we measure the runtime of code
-- how we determine if an optimization is actually faster
-- why we measure the timing as best of N runs
-- how we measure the runtime when we run on a wide variety of test cases.
+- How we measure the runtime of code
+- How we determine if an optimization is actually faster
+- Why we measure the timing as best of N runs
+- How we measure the runtime when we run on a wide variety of test cases.
 
 ## Goals of Codeflash auto-benchmarking
 
-A core design of Codeflash is that it does not make assumptions
-on the types of optimizations that might be faster. It generates multiple possible optimizations with LLMs and then automatically benchmarks the code 
+A core principle of Codeflash is that it does not make assumptions
+on what types of optimizations that might be faster. It generates multiple possible optimizations with LLMs and then automatically benchmarks the code 
 on a variety of inputs to verify empirically if the optimization is actually faster.
 
 The goals of Codeflash auto-benchmarking are:
 - Accurately measure the runtime of code.
-- Measure runtime of a wide variety of codes.
+- Measure runtime for a wide variety of code.
 - Measure runtime on a variety of inputs.
-- Do all the above on real machine, where there might be other processes running, causing timing measurement noise.
-- Make a binary decision on whether an optimization is faster or not.
+- Do all the above on a real machine, where there might be other processes running, causing timing measurement noise.
+- Finally make a binary decision whether an optimization is faster or not.
 
-## A useful train analogy -
+## Racing Trains as an analogy-
 
 Imagine that you are a boss at a train company who wants to purchase a train to run between the two cities of San Francisco and Los Angeles.
-You are deciding between two trains, Train A and Train B, and want to run the train that is the fastest between the two cities.
+You want to decide between two trains, Train A and Train B, and want to run the train that is the fastest between the two cities.
 
 You can measure the speed of the trains by timing how long it takes to go from San Francisco to Los Angeles.
 
