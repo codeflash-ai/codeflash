@@ -9,11 +9,10 @@ from pathlib import Path
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles, TestingMode
+from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles, TestingMode, TestType
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
-from codeflash.verification.test_results import TestType
 
 # Used by cli instrumentation
 codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):

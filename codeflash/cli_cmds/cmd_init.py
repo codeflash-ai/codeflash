@@ -73,7 +73,7 @@ def init_codeflash() -> None:
 
         install_github_app()
 
-        install_github_actions()
+        install_github_actions(override_formatter_check=True)
 
         click.echo(
             f"{LF}"
@@ -362,9 +362,9 @@ def check_for_toml_or_setup_file() -> str | None:
     return cast(str, project_name)
 
 
-def install_github_actions() -> None:
+def install_github_actions(override_formatter_check: bool=False) -> None:
     try:
-        config, config_file_path = parse_config_file()
+        config, config_file_path = parse_config_file(override_formatter_check=override_formatter_check)
 
         ph("cli-github-actions-install-started")
         try:
@@ -504,11 +504,11 @@ def get_dependency_manager_installation_string(dep_manager: DependencyManager) -
     py_version = sys.version_info
     python_version_string = f"'{py_version.major}.{py_version.minor}'"
     if dep_manager == DependencyManager.UV:
-        return """name: Setup UV
+        return """name: 🐍 Setup UV
         uses: astral-sh/setup-uv@v4
         with:
           enable-cache: true"""
-    return f"""name: Set up Python
+    return f"""name: 🐍 Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: {python_version_string}"""
