@@ -2,14 +2,16 @@
 
 """Pretty-print tabular data."""
 
+import dataclasses
+import math
+import re
 import warnings
 from collections import namedtuple
 from collections.abc import Iterable
-from itertools import chain, zip_longest as izip_longest
 from functools import reduce
-import re
-import math
-import dataclasses
+from itertools import chain
+from itertools import zip_longest as izip_longest
+
 import wcwidth  # optional wide-character (CJK) support
 
 __all__ = ["tabulate", "tabulate_formats"]
@@ -59,8 +61,7 @@ def _is_separating_line_value(value):
 def _is_separating_line(row):
     row_type = type(row)
     is_sl = (row_type == list or row_type == str) and (
-        (len(row) >= 1 and _is_separating_line_value(row[0]))
-        or (len(row) >= 2 and _is_separating_line_value(row[1]))
+        (len(row) >= 1 and _is_separating_line_value(row[0])) or (len(row) >= 2 and _is_separating_line_value(row[1]))
     )
 
     return is_sl
@@ -68,25 +69,27 @@ def _is_separating_line(row):
 
 def _pipe_segment_with_colons(align, colwidth):
     """Return a segment of a horizontal line with optional colons which
-    indicate column's alignment (as in `pipe` output format)."""
+    indicate column's alignment (as in `pipe` output format).
+    """
     w = colwidth
     if align in ["right", "decimal"]:
         return ("-" * (w - 1)) + ":"
-    elif align == "center":
+    if align == "center":
         return ":" + ("-" * (w - 2)) + ":"
-    elif align == "left":
+    if align == "left":
         return ":" + ("-" * (w - 1))
-    else:
-        return "-" * w
+    return "-" * w
 
 
 def _pipe_line_with_colons(colwidths, colaligns):
     """Return a horizontal line with optional colons to indicate column's
-    alignment (as in `pipe` output format)."""
+    alignment (as in `pipe` output format).
+    """
     if not colaligns:  # e.g. printing an empty data frame (github issue #15)
         colaligns = [""] * len(colwidths)
     segments = [_pipe_segment_with_colons(a, w) for a, w in zip(colaligns, colwidths)]
     return "|" + "|".join(segments) + "|"
+
 
 _table_formats = {
     "simple": TableFormat(
@@ -111,16 +114,12 @@ _table_formats = {
     ),
 }
 
-tabulate_formats = list(sorted(_table_formats.keys()))
+tabulate_formats = sorted(_table_formats.keys())
 
 # The table formats for which multiline cells will be folded into subsequent
 # table rows. The key is the original format specified at the API. The value is
 # the format that will be used to represent the original format.
-multiline_formats = {
-    "plain": "plain",
-    "pipe": "pipe",
-
-}
+multiline_formats = {"plain": "plain", "pipe": "pipe"}
 
 _multiline_codes = re.compile(r"\r|\n|\r\n")
 _multiline_codes_bytes = re.compile(b"\r|\n|\r\n")
@@ -152,9 +151,8 @@ _ansi_codes = re.compile(_ansi_escape_pat, re.VERBOSE)
 _ansi_codes_bytes = re.compile(_ansi_escape_pat.encode("utf8"), re.VERBOSE)
 _ansi_color_reset_code = "\033[0m"
 
-_float_with_thousands_separators = re.compile(
-    r"^(([+-]?[0-9]{1,3})(?:,([0-9]{3}))*)?(?(1)\.[0-9]*|\.[0-9]+)?$"
-)
+_float_with_thousands_separators = re.compile(r"^(([+-]?[0-9]{1,3})(?:,([0-9]{3}))*)?(?(1)\.[0-9]*|\.[0-9]+)?$")
+
 
 def _isnumber_with_thousands_separator(string):
     try:
@@ -202,16 +200,12 @@ def _isint(string, inttype=int):
             (hasattr(string, "is_integer") or hasattr(string, "__array__"))
             and str(type(string)).startswith("<class 'numpy.int")
         )  # numpy.int64 and similar
-        or (
-            isinstance(string, (bytes, str)) and _isconvertible(inttype, string)
-        )  # integer as string
+        or (isinstance(string, (bytes, str)) and _isconvertible(inttype, string))  # integer as string
     )
 
 
 def _isbool(string):
-    return type(string) is bool or (
-        isinstance(string, (bytes, str)) and string in ("True", "False")
-    )
+    return type(string) is bool or (isinstance(string, (bytes, str)) and string in ("True", "False"))
 
 
 def _type(string, has_invisible=True, numparse=True):
@@ -220,43 +214,31 @@ def _type(string, has_invisible=True, numparse=True):
 
     if string is None or (isinstance(string, (bytes, str)) and not string):
         return type(None)
-    elif hasattr(string, "isoformat"):  # datetime.datetime, date, and time
+    if hasattr(string, "isoformat"):  # datetime.datetime, date, and time
         return str
-    elif _isbool(string):
+    if _isbool(string):
         return bool
-    elif numparse and (
-        _isint(string)
-        or (
-            isinstance(string, str)
-            and _isnumber_with_thousands_separator(string)
-            and "." not in string
-        )
+    if numparse and (
+        _isint(string) or (isinstance(string, str) and _isnumber_with_thousands_separator(string) and "." not in string)
     ):
         return int
-    elif numparse and (
-        _isnumber(string)
-        or (isinstance(string, str) and _isnumber_with_thousands_separator(string))
-    ):
+    if numparse and (_isnumber(string) or (isinstance(string, str) and _isnumber_with_thousands_separator(string))):
         return float
-    elif isinstance(string, bytes):
+    if isinstance(string, bytes):
         return bytes
-    else:
-        return str
+    return str
 
 
 def _afterpoint(string):
     if _isnumber(string) or _isnumber_with_thousands_separator(string):
         if _isint(string):
             return -1
-        else:
-            pos = string.rfind(".")
-            pos = string.lower().rfind("e") if pos < 0 else pos
-            if pos >= 0:
-                return len(string) - pos - 1
-            else:
-                return -1  # no point
-    else:
-        return -1  # not a number
+        pos = string.rfind(".")
+        pos = string.lower().rfind("e") if pos < 0 else pos
+        if pos >= 0:
+            return len(string) - pos - 1
+        return -1  # no point
+    return -1  # not a number
 
 
 def _padleft(width, s):
@@ -281,8 +263,8 @@ def _padnone(ignore_width, s):
 def _strip_ansi(s):
     if isinstance(s, str):
         return _ansi_codes.sub(r"\4", s)
-    else:  # a bytestring
-        return _ansi_codes_bytes.sub(r"\4", s)
+    # a bytestring
+    return _ansi_codes_bytes.sub(r"\4", s)
 
 
 def _visible_width(s):
@@ -292,15 +274,14 @@ def _visible_width(s):
         len_fn = len
     if isinstance(s, (str, bytes)):
         return len_fn(_strip_ansi(s))
-    else:
-        return len_fn(str(s))
+    return len_fn(str(s))
 
 
 def _is_multiline(s):
     if isinstance(s, str):
         return bool(re.search(_multiline_codes, s))
-    else:  # a bytestring
-        return bool(re.search(_multiline_codes_bytes, s))
+    # a bytestring
+    return bool(re.search(_multiline_codes_bytes, s))
 
 
 def _multiline_width(multiline_s, line_width_fn=len):
@@ -384,65 +365,40 @@ def _align_column(
     is_multiline=False,
     preserve_whitespace=False,
 ):
-    strings, padfn = _align_column_choose_padfn(
-        strings, alignment, has_invisible, preserve_whitespace
-    )
-    width_fn = _align_column_choose_width_fn(
-        has_invisible, enable_widechars, is_multiline
-    )
+    strings, padfn = _align_column_choose_padfn(strings, alignment, has_invisible, preserve_whitespace)
+    width_fn = _align_column_choose_width_fn(has_invisible, enable_widechars, is_multiline)
 
     s_widths = list(map(width_fn, strings))
     maxwidth = max(max(_flat_list(s_widths)), minwidth)
     # TODO: refactor column alignment in single-line and multiline modes
     if is_multiline:
         if not enable_widechars and not has_invisible:
-            padded_strings = [
-                "\n".join([padfn(maxwidth, s) for s in ms.splitlines()])
-                for ms in strings
-            ]
+            padded_strings = ["\n".join([padfn(maxwidth, s) for s in ms.splitlines()]) for ms in strings]
         else:
             # enable wide-character width corrections
             s_lens = [[len(s) for s in re.split("[\r\n]", ms)] for ms in strings]
-            visible_widths = [
-                [maxwidth - (w - l) for w, l in zip(mw, ml)]
-                for mw, ml in zip(s_widths, s_lens)
-            ]
+            visible_widths = [[maxwidth - (w - l) for w, l in zip(mw, ml)] for mw, ml in zip(s_widths, s_lens)]
             # wcswidth and _visible_width don't count invisible characters;
             # padfn doesn't need to apply another correction
             padded_strings = [
                 "\n".join([padfn(w, s) for s, w in zip((ms.splitlines() or ms), mw)])
                 for ms, mw in zip(strings, visible_widths)
             ]
-    else:  # single-line cell values
-        if not enable_widechars and not has_invisible:
-            padded_strings = [padfn(maxwidth, s) for s in strings]
-        else:
-            # enable wide-character width corrections
-            s_lens = list(map(len, strings))
-            visible_widths = [maxwidth - (w - l) for w, l in zip(s_widths, s_lens)]
-            # wcswidth and _visible_width don't count invisible characters;
-            # padfn doesn't need to apply another correction
-            padded_strings = [padfn(w, s) for s, w in zip(strings, visible_widths)]
+    elif not enable_widechars and not has_invisible:
+        padded_strings = [padfn(maxwidth, s) for s in strings]
+    else:
+        # enable wide-character width corrections
+        s_lens = list(map(len, strings))
+        visible_widths = [maxwidth - (w - l) for w, l in zip(s_widths, s_lens)]
+        # wcswidth and _visible_width don't count invisible characters;
+        # padfn doesn't need to apply another correction
+        padded_strings = [padfn(w, s) for s, w in zip(strings, visible_widths)]
     return padded_strings
 
 
 def _more_generic(type1, type2):
-    types = {
-        type(None): 0,
-        bool: 1,
-        int: 2,
-        float: 3,
-        bytes: 4,
-        str: 5,
-    }
-    invtypes = {
-        5: str,
-        4: bytes,
-        3: float,
-        2: int,
-        1: bool,
-        0: type(None),
-    }
+    types = {type(None): 0, bool: 1, int: 2, float: 3, bytes: 4, str: 5}
+    invtypes = {5: str, 4: bytes, 3: float, 2: int, 1: bool, 0: type(None)}
     moregeneric = max(types.get(type1, 5), types.get(type2, 5))
     return invtypes[moregeneric]
 
@@ -460,26 +416,20 @@ def _format(val, valtype, floatfmt, intfmt, missingval="", has_invisible=True):
 
     if valtype is str:
         return f"{val}"
-    elif valtype is int:
+    if valtype is int:
         if isinstance(val, str):
             val_striped = val.encode("unicode_escape").decode("utf-8")
-            colored = re.search(
-                r"(\\[xX]+[0-9a-fA-F]+\[\d+[mM]+)([0-9.]+)(\\.*)$", val_striped
-            )
+            colored = re.search(r"(\\[xX]+[0-9a-fA-F]+\[\d+[mM]+)([0-9.]+)(\\.*)$", val_striped)
             if colored:
                 total_groups = len(colored.groups())
                 if total_groups == 3:
                     digits = colored.group(2)
                     if digits.isdigit():
-                        val_new = (
-                            colored.group(1)
-                            + format(int(digits), intfmt)
-                            + colored.group(3)
-                        )
+                        val_new = colored.group(1) + format(int(digits), intfmt) + colored.group(3)
                         val = val_new.encode("utf-8").decode("unicode_escape")
             intfmt = ""
         return format(val, intfmt)
-    elif valtype is bytes:
+    if valtype is bytes:
         try:
             return str(val, "ascii")
         except (TypeError, UnicodeDecodeError):
@@ -490,35 +440,29 @@ def _format(val, valtype, floatfmt, intfmt, missingval="", has_invisible=True):
             raw_val = _strip_ansi(val)
             formatted_val = format(float(raw_val), floatfmt)
             return val.replace(raw_val, formatted_val)
-        else:
-            if isinstance(val, str) and "," in val:
-                val = val.replace(",", "")  # handle thousands-separators
-            return format(float(val), floatfmt)
+        if isinstance(val, str) and "," in val:
+            val = val.replace(",", "")  # handle thousands-separators
+        return format(float(val), floatfmt)
     else:
         return f"{val}"
 
 
-def _align_header(
-    header, alignment, width, visible_width, is_multiline=False, width_fn=None
-):
-    "Pad string header to width chars given known visible_width of the header."
+def _align_header(header, alignment, width, visible_width, is_multiline=False, width_fn=None):
+    """Pad string header to width chars given known visible_width of the header."""
     if is_multiline:
         header_lines = re.split(_multiline_codes, header)
-        padded_lines = [
-            _align_header(h, alignment, width, width_fn(h)) for h in header_lines
-        ]
+        padded_lines = [_align_header(h, alignment, width, width_fn(h)) for h in header_lines]
         return "\n".join(padded_lines)
     # else: not multiline
     ninvisible = len(header) - visible_width
     width += ninvisible
     if alignment == "left":
         return _padright(width, header)
-    elif alignment == "center":
+    if alignment == "center":
         return _padboth(width, header)
-    elif not alignment:
+    if not alignment:
         return f"{header}"
-    else:
-        return _padleft(width, header)
+    return _padleft(width, header)
 
 
 def _remove_separating_lines(rows):
@@ -531,11 +475,11 @@ def _remove_separating_lines(rows):
             else:
                 sans_rows.append(row)
         return sans_rows, separating_lines
-    else:
-        return rows, None
+    return rows, None
+
 
 def _bool(val):
-    "A wrapper around standard bool() which doesn't throw on NumPy arrays"
+    """A wrapper around standard bool() which doesn't throw on NumPy arrays"""
     try:
         return bool(val)
     except ValueError:  # val is likely to be a numpy array with many elements
@@ -556,23 +500,18 @@ def _normalize_tabular_data(tabular_data, headers, showindex="default"):
     index = None
     if hasattr(tabular_data, "keys") and hasattr(tabular_data, "values"):
         # dict-like and pandas.DataFrame?
-        if hasattr(tabular_data.values, "__call__"):
+        if callable(tabular_data.values):
             # likely a conventional dict
             keys = tabular_data.keys()
             try:
-                rows = list(
-                    izip_longest(*tabular_data.values())
-                )  # columns have to be transposed
+                rows = list(izip_longest(*tabular_data.values()))  # columns have to be transposed
             except TypeError:  # not iterable
                 raise TypeError(err_msg)
 
         elif hasattr(tabular_data, "index"):
             # values is a property, has .index => it's likely a pandas.DataFrame (pandas 0.11.0)
             keys = list(tabular_data)
-            if (
-                showindex in ["default", "always", True]
-                and tabular_data.index.name is not None
-            ):
+            if showindex in ["default", "always", True] and tabular_data.index.name is not None:
                 if isinstance(tabular_data.index.name, list):
                     keys[:0] = tabular_data.index.name
                 else:
@@ -596,19 +535,10 @@ def _normalize_tabular_data(tabular_data, headers, showindex="default"):
         if headers == "keys" and not rows:
             # an empty table (issue #81)
             headers = []
-        elif (
-            headers == "keys"
-            and hasattr(tabular_data, "dtype")
-            and getattr(tabular_data.dtype, "names")
-        ):
+        elif headers == "keys" and hasattr(tabular_data, "dtype") and tabular_data.dtype.names:
             # numpy record array
             headers = tabular_data.dtype.names
-        elif (
-            headers == "keys"
-            and len(rows) > 0
-            and isinstance(rows[0], tuple)
-            and hasattr(rows[0], "_fields")
-        ):
+        elif headers == "keys" and len(rows) > 0 and isinstance(rows[0], tuple) and hasattr(rows[0], "_fields"):
             # namedtuple
             headers = list(map(str, rows[0]._fields))
         elif len(rows) > 0 and hasattr(rows[0], "keys") and hasattr(rows[0], "values"):
@@ -639,9 +569,7 @@ def _normalize_tabular_data(tabular_data, headers, showindex="default"):
                 else:
                     headers = []
             elif headers:
-                raise ValueError(
-                    "headers for a list of dicts is not a dict or a keyword"
-                )
+                raise ValueError("headers for a list of dicts is not a dict or a keyword")
             rows = [[row.get(k) for k in keys] for row in rows]
 
         elif (
@@ -654,11 +582,7 @@ def _normalize_tabular_data(tabular_data, headers, showindex="default"):
             # print tabulate(cursor, headers='keys')
             headers = [column[0] for column in tabular_data.description]
 
-        elif (
-            dataclasses is not None
-            and len(rows) > 0
-            and dataclasses.is_dataclass(rows[0])
-        ):
+        elif dataclasses is not None and len(rows) > 0 and dataclasses.is_dataclass(rows[0]):
             # Python's dataclass
             field_names = [field.name for field in dataclasses.fields(rows[0])]
             if headers == "keys":
@@ -698,6 +622,7 @@ def _normalize_tabular_data(tabular_data, headers, showindex="default"):
 
     return rows, headers, headers_pad
 
+
 def _to_str(s, encoding="utf8", errors="ignore"):
     if isinstance(s, bytes):
         return s.decode(encoding=encoding, errors=errors)
@@ -727,9 +652,7 @@ def tabulate(
     if tabular_data is None:
         tabular_data = []
 
-    list_of_lists, headers, headers_pad = _normalize_tabular_data(
-        tabular_data, headers, showindex=showindex
-    )
+    list_of_lists, headers, headers_pad = _normalize_tabular_data(tabular_data, headers, showindex=showindex)
     list_of_lists, separating_lines = _remove_separating_lines(list_of_lists)
 
     # PrettyTable formatting does not use any extra padding.
@@ -771,11 +694,7 @@ def tabulate(
     has_invisible = _ansi_codes.search(plain_text) is not None
 
     enable_widechars = wcwidth is not None and WIDE_CHARS_MODE
-    if (
-        not isinstance(tablefmt, TableFormat)
-        and tablefmt in multiline_formats
-        and _is_multiline(plain_text)
-    ):
+    if not isinstance(tablefmt, TableFormat) and tablefmt in multiline_formats and _is_multiline(plain_text):
         tablefmt = multiline_formats.get(tablefmt, tablefmt)
         is_multiline = True
     else:
@@ -787,17 +706,13 @@ def tabulate(
     numparses = _expand_numparse(disable_numparse, len(cols))
     coltypes = [_column_type(col, numparse=np) for col, np in zip(cols, numparses)]
     if isinstance(floatfmt, str):  # old version
-        float_formats = len(cols) * [
-            floatfmt
-        ]  # just duplicate the string to use in each column
+        float_formats = len(cols) * [floatfmt]  # just duplicate the string to use in each column
     else:  # if floatfmt is list, tuple etc we have one per column
         float_formats = list(floatfmt)
         if len(float_formats) < len(cols):
             float_formats.extend((len(cols) - len(float_formats)) * [_DEFAULT_FLOATFMT])
     if isinstance(intfmt, str):  # old version
-        int_formats = len(cols) * [
-            intfmt
-        ]  # just duplicate the string to use in each column
+        int_formats = len(cols) * [intfmt]  # just duplicate the string to use in each column
     else:  # if intfmt is list, tuple etc we have one per column
         int_formats = list(intfmt)
         if len(int_formats) < len(cols):
@@ -810,9 +725,7 @@ def tabulate(
             missing_vals.extend((len(cols) - len(missing_vals)) * [_DEFAULT_MISSINGVAL])
     cols = [
         [_format(v, ct, fl_fmt, int_fmt, miss_v, has_invisible) for v in c]
-        for c, ct, fl_fmt, int_fmt, miss_v in zip(
-            cols, coltypes, float_formats, int_formats, missing_vals
-        )
+        for c, ct, fl_fmt, int_fmt, miss_v in zip(cols, coltypes, float_formats, int_formats, missing_vals)
     ]
 
     # align columns
@@ -833,26 +746,16 @@ def tabulate(
         for idx, align in enumerate(colalign):
             if not idx < len(aligns):
                 break
-            elif align != "global":
+            if align != "global":
                 aligns[idx] = align
-    minwidths = (
-        [width_fn(h) + min_padding for h in headers] if headers else [0] * len(cols)
-    )
+    minwidths = [width_fn(h) + min_padding for h in headers] if headers else [0] * len(cols)
     aligns_copy = aligns.copy()
     # Reset alignments in copy of alignments list to "left" for 'colon_grid' format,
     # which enforces left alignment in the text output of the data.
     if tablefmt == "colon_grid":
         aligns_copy = ["left"] * len(cols)
     cols = [
-        _align_column(
-            c,
-            a,
-            minw,
-            has_invisible,
-            enable_widechars,
-            is_multiline,
-            preserve_whitespace,
-        )
+        _align_column(c, a, minw, has_invisible, enable_widechars, is_multiline, preserve_whitespace)
         for c, a, minw in zip(cols, aligns_copy, minwidths)
     ]
 
@@ -879,14 +782,11 @@ def tabulate(
                 hidx = headers_pad + idx
                 if not hidx < len(aligns_headers):
                     break
-                elif align == "same" and hidx < len(aligns):  # same as column align
+                if align == "same" and hidx < len(aligns):  # same as column align
                     aligns_headers[hidx] = aligns[hidx]
                 elif align != "global":
                     aligns_headers[hidx] = align
-        minwidths = [
-            max(minw, max(width_fn(cl) for cl in c))
-            for minw, c in zip(minwidths, t_cols)
-        ]
+        minwidths = [max(minw, max(width_fn(cl) for cl in c)) for minw, c in zip(minwidths, t_cols)]
         headers = [
             _align_header(h, a, minw, width_fn(h), is_multiline, width_fn)
             for h, a, minw in zip(headers, aligns_headers, minwidths)
@@ -901,16 +801,7 @@ def tabulate(
 
     ra_default = rowalign if isinstance(rowalign, str) else None
     rowaligns = _expand_iterable(rowalign, len(rows), ra_default)
-    return _format_table(
-        tablefmt,
-        headers,
-        aligns_headers,
-        rows,
-        minwidths,
-        aligns,
-        is_multiline,
-        rowaligns=rowaligns,
-    )
+    return _format_table(tablefmt, headers, aligns_headers, rows, minwidths, aligns, is_multiline, rowaligns=rowaligns)
 
 
 def _expand_numparse(disable_numparse, column_count):
@@ -919,15 +810,13 @@ def _expand_numparse(disable_numparse, column_count):
         for index in disable_numparse:
             numparses[index] = False
         return numparses
-    else:
-        return [not disable_numparse] * column_count
+    return [not disable_numparse] * column_count
 
 
 def _expand_iterable(original, num_desired, default):
     if isinstance(original, Iterable) and not isinstance(original, str):
         return original + [default] * (num_desired - len(original))
-    else:
-        return [default] * num_desired
+    return [default] * num_desired
 
 
 def _pad_row(cells, padding):
@@ -937,8 +826,7 @@ def _pad_row(cells, padding):
         pad = " " * padding
         padded_cells = [pad + cell + pad for cell in cells]
         return padded_cells
-    else:
-        return cells
+    return cells
 
 
 def _build_simple_row(padded_cells, rowfmt):
@@ -947,37 +835,37 @@ def _build_simple_row(padded_cells, rowfmt):
 
 
 def _build_row(padded_cells, colwidths, colaligns, rowfmt):
-    if not rowfmt:
-        return None
-    if hasattr(rowfmt, "__call__"):
-        return rowfmt(padded_cells, colwidths, colaligns)
-    else:
-        return _build_simple_row(padded_cells, rowfmt)
+    if rowfmt:
+        if callable(rowfmt):
+            return rowfmt(padded_cells, colwidths, colaligns)
+        begin, sep, end = rowfmt
+        return (begin + sep.join(padded_cells) + end).rstrip()
+    return None
+
 
 def _append_basic_row(lines, padded_cells, colwidths, colaligns, rowfmt, rowalign=None):
     # NOTE: rowalign is ignored and exists for api compatibility with _append_multiline_row
     lines.append(_build_row(padded_cells, colwidths, colaligns, rowfmt))
     return lines
 
+
 def _build_line(colwidths, colaligns, linefmt):
-    "Return a string which represents a horizontal line."
+    """Return a string which represents a horizontal line."""
     if not linefmt:
         return None
-    if hasattr(linefmt, "__call__"):
+    if callable(linefmt):
         return linefmt(colwidths, colaligns)
-    else:
-        begin, fill, sep, end = linefmt
-        cells = [fill * w for w in colwidths]
-        return _build_simple_row(cells, (begin, sep, end))
+    begin, fill, sep, end = linefmt
+    cells = [fill * w for w in colwidths]
+    return _build_simple_row(cells, (begin, sep, end))
 
 
 def _append_line(lines, colwidths, colaligns, linefmt):
     lines.append(_build_line(colwidths, colaligns, linefmt))
     return lines
 
-def _format_table(
-    fmt, headers, headersaligns, rows, colwidths, colaligns, is_multiline, rowaligns
-):
+
+def _format_table(fmt, headers, headersaligns, rows, colwidths, colaligns, is_multiline, rowaligns):
     lines = []
     hidden = fmt.with_header_hide if (headers and fmt.with_header_hide) else []
     pad = fmt.padding
@@ -1001,31 +889,13 @@ def _format_table(
         # initial rows with a line below
         for row, ralign in zip(rows[:-1], rowaligns):
             if row != SEPARATING_LINE:
-                append_row(
-                    lines,
-                    pad_row(row, pad),
-                    padded_widths,
-                    colaligns,
-                    fmt.datarow,
-                    rowalign=ralign,
-                )
+                append_row(lines, pad_row(row, pad), padded_widths, colaligns, fmt.datarow, rowalign=ralign)
             _append_line(lines, padded_widths, colaligns, fmt.linebetweenrows)
         # the last row without a line below
-        append_row(
-            lines,
-            pad_row(rows[-1], pad),
-            padded_widths,
-            colaligns,
-            fmt.datarow,
-            rowalign=rowaligns[-1],
-        )
+        append_row(lines, pad_row(rows[-1], pad), padded_widths, colaligns, fmt.datarow, rowalign=rowaligns[-1])
     else:
         separating_line = (
-            fmt.linebetweenrows
-            or fmt.linebelowheader
-            or fmt.linebelow
-            or fmt.lineabove
-            or Line("", "", "", "")
+            fmt.linebetweenrows or fmt.linebelowheader or fmt.linebelow or fmt.lineabove or Line("", "", "", "")
         )
         for row in rows:
             # test to see if either the 1st column or the 2nd column (account for showindex) has
@@ -1033,9 +903,7 @@ def _format_table(
             if _is_separating_line(row):
                 _append_line(lines, padded_widths, colaligns, separating_line)
             else:
-                append_row(
-                    lines, pad_row(row, pad), padded_widths, colaligns, fmt.datarow
-                )
+                append_row(lines, pad_row(row, pad), padded_widths, colaligns, fmt.datarow)
 
     if fmt.linebelow and "linebelow" not in hidden:
         _append_line(lines, padded_widths, colaligns, fmt.linebelow)
@@ -1043,5 +911,5 @@ def _format_table(
     if headers or rows:
         output = "\n".join(lines)
         return output
-    else:  # a completely empty table
-        return ""
+    # a completely empty table
+    return ""
