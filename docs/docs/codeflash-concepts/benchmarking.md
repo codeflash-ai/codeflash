@@ -50,7 +50,7 @@ The goals of Codeflash auto-benchmarking are:
 - Do all the above on a real machine, where other processes might be running and causing timing measurement noise
 - Finally make a binary decision whether an optimization is faster or not
 
-## Racing Trains as an analogy-
+## Racing Trains as an analogy
 
 Imagine you're a boss at a train company choosing between two trains to runs between San Francisco and Los Angeles.
 You want to determine which train is faster.
