@@ -1,8 +1,14 @@
-## How Codeflash measures the runtime of code
+---
+sidebar_position: 2
+---
+
+# How Codeflash measures code runtime
 
 Codeflash reports benchmarking results that look like this :
 
+```text
 ⏱️ Runtime : 32.8 microseconds → 29.2 microseconds (best of 315 runs)
+```
 
 To measure runtime, Codeflash runs a function multiple times with several inputs 
 and sums the minimum time for each input to get the total runtime.
