@@ -48,6 +48,7 @@ class Optimizer:
             project_root_path=args.project_root,
             test_framework=args.test_framework,
             pytest_cmd=args.pytest_cmd,
+            benchmark_tests_root=args.benchmarks_root if "benchmark" in args and "benchmarks_root" in args else None,
         )
 
         self.aiservice_client = AiServiceClient()
@@ -114,7 +115,7 @@ class Optimizer:
                     if trace_file.exists():
                         trace_file.unlink()
 
-                    replay_tests_dir = Path(self.args.tests_root)
+                    replay_tests_dir = Path(self.args.benchmarks_root) / "codeflash_replay_tests"
                     trace_benchmarks_pytest(self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file) # Run all tests that use pytest-benchmark
                     replay_count = generate_replay_test(trace_file, replay_tests_dir)
                     if replay_count == 0:
@@ -251,8 +252,8 @@ class Optimizer:
                 if function_optimizer.test_cfg.concolic_test_root_dir:
                     shutil.rmtree(function_optimizer.test_cfg.concolic_test_root_dir, ignore_errors=True)
                 if self.args.benchmark:
-                    if replay_tests_dir.exists():
-                        shutil.rmtree(replay_tests_dir, ignore_errors=True)
+                    # if replay_tests_dir.exists():
+                    #     shutil.rmtree(replay_tests_dir, ignore_errors=True)
                     trace_file.unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()

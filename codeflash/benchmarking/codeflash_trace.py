@@ -33,8 +33,8 @@ class CodeflashTrace:
             cur.execute("PRAGMA synchronous = OFF")
             cur.execute(
                 "CREATE TABLE IF NOT EXISTS benchmark_function_timings("
-                "function_name TEXT, class_name TEXT, module_name TEXT, file_name TEXT,"
-                "benchmark_function_name TEXT, benchmark_file_name TEXT, benchmark_line_number INTEGER,"
+                "function_name TEXT, class_name TEXT, module_name TEXT, file_path TEXT,"
+                "benchmark_function_name TEXT, benchmark_file_path TEXT, benchmark_line_number INTEGER,"
                 "function_time_ns INTEGER, overhead_time_ns INTEGER, args BLOB, kwargs BLOB)"
             )
             self._connection.commit()
@@ -62,8 +62,8 @@ class CodeflashTrace:
             # Insert data into the benchmark_function_timings table
             cur.executemany(
                 "INSERT INTO benchmark_function_timings"
-                "(function_name, class_name, module_name, file_name, benchmark_function_name, "
-                "benchmark_file_name, benchmark_line_number, function_time_ns, overhead_time_ns, args, kwargs) "
+                "(function_name, class_name, module_name, file_path, benchmark_function_name, "
+                "benchmark_file_path, benchmark_line_number, function_time_ns, overhead_time_ns, args, kwargs) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 self.function_calls_data
             )
@@ -115,7 +115,7 @@ class CodeflashTrace:
 
             # Get benchmark info from environment
             benchmark_function_name = os.environ.get("CODEFLASH_BENCHMARK_FUNCTION_NAME", "")
-            benchmark_file_name = os.environ.get("CODEFLASH_BENCHMARK_FILE_NAME", "")
+            benchmark_file_path = os.environ.get("CODEFLASH_BENCHMARK_FILE_PATH", "")
             benchmark_line_number = os.environ.get("CODEFLASH_BENCHMARK_LINE_NUMBER", "")
             # Get class name
             class_name = ""
@@ -151,7 +151,7 @@ class CodeflashTrace:
 
             self.function_calls_data.append(
                 (func.__name__, class_name, func.__module__, func.__code__.co_filename,
-                 benchmark_function_name, benchmark_file_name, benchmark_line_number, execution_time,
+                 benchmark_function_name, benchmark_file_path, benchmark_line_number, execution_time,
                  overhead_time, pickled_args, pickled_kwargs)
             )
             return result

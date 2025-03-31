@@ -2,18 +2,21 @@ from __future__ import annotations
 
 import sqlite3
 import textwrap
-from collections.abc import Generator
-from typing import Any, Dict
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import isort
 
 from codeflash.cli_cmds.console import logger
 from codeflash.discovery.functions_to_optimize import inspect_top_level_functions_or_methods
 from codeflash.verification.verification_utils import get_test_file_path
-from pathlib import Path
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
 
 def get_next_arg_and_return(
-        trace_file: str, function_name: str, file_name: str, class_name: str | None = None, num_to_get: int = 256
+        trace_file: str, function_name: str, file_path: str, class_name: str | None = None, num_to_get: int = 256
 ) -> Generator[Any]:
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
@@ -21,13 +24,13 @@ def get_next_arg_and_return(
 
     if class_name is not None:
         cursor = cur.execute(
-            "SELECT * FROM benchmark_function_timings WHERE function_name = ? AND file_name = ? AND class_name = ? LIMIT ?",
-            (function_name, file_name, class_name, limit),
+            "SELECT * FROM benchmark_function_timings WHERE function_name = ? AND file_path = ? AND class_name = ? LIMIT ?",
+            (function_name, file_path, class_name, limit),
         )
     else:
         cursor = cur.execute(
-            "SELECT * FROM benchmark_function_timings WHERE function_name = ? AND file_name = ? AND class_name = '' LIMIT ?",
-            (function_name, file_name, limit),
+            "SELECT * FROM benchmark_function_timings WHERE function_name = ? AND file_path = ? AND class_name = '' LIMIT ?",
+            (function_name, file_path, limit),
         )
 
     while (val := cursor.fetchone()) is not None:
@@ -88,7 +91,7 @@ trace_file_path = r"{trace_file}"
     # Templates for different types of tests
     test_function_body = textwrap.dedent(
         """\
-        for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_name=r"{file_name}", num_to_get={max_run_count}):
+        for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_path=r"{file_path}", num_to_get={max_run_count}):
             args = pickle.loads(args_pkl)
             kwargs = pickle.loads(kwargs_pkl)
             ret = {function_name}(*args, **kwargs)
@@ -97,7 +100,7 @@ trace_file_path = r"{trace_file}"
 
     test_method_body = textwrap.dedent(
         """\
-        for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_name=r"{file_name}", class_name="{class_name}", num_to_get={max_run_count}):
+        for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_path=r"{file_path}", class_name="{class_name}", num_to_get={max_run_count}):
             args = pickle.loads(args_pkl)
             kwargs = pickle.loads(kwargs_pkl){filter_variables}
             function_name = "{orig_function_name}"
@@ -112,7 +115,7 @@ trace_file_path = r"{trace_file}"
 
     test_class_method_body = textwrap.dedent(
         """\
-        for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_name=r"{file_name}", class_name="{class_name}", num_to_get={max_run_count}):
+        for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_path=r"{file_path}", class_name="{class_name}", num_to_get={max_run_count}):
             args = pickle.loads(args_pkl)
             kwargs = pickle.loads(kwargs_pkl){filter_variables}
             if not args:
@@ -122,7 +125,7 @@ trace_file_path = r"{trace_file}"
     )
     test_static_method_body = textwrap.dedent(
         """\
-        for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_name=r"{file_name}", class_name="{class_name}", num_to_get={max_run_count}):
+        for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="{orig_function_name}", file_path=r"{file_path}", class_name="{class_name}", num_to_get={max_run_count}):
             args = pickle.loads(args_pkl)
             kwargs = pickle.loads(kwargs_pkl){filter_variables}
             ret = {class_name_alias}{method_name}(*args, **kwargs)
@@ -140,13 +143,13 @@ trace_file_path = r"{trace_file}"
         module_name = func.get("module_name")
         function_name = func.get("function_name")
         class_name = func.get("class_name")
-        file_name = func.get("file_name")
+        file_path = func.get("file_path")
         function_properties = func.get("function_properties")
         if not class_name:
             alias = get_function_alias(module_name, function_name)
             test_body = test_function_body.format(
                 function_name=alias,
-                file_name=file_name,
+                file_path=file_path,
                 orig_function_name=function_name,
                 max_run_count=max_run_count,
             )
@@ -160,7 +163,7 @@ trace_file_path = r"{trace_file}"
             if function_properties.is_classmethod:
                 test_body = test_class_method_body.format(
                     orig_function_name=function_name,
-                    file_name=file_name,
+                    file_path=file_path,
                     class_name_alias=class_name_alias,
                     class_name=class_name,
                     method_name=method_name,
@@ -170,7 +173,7 @@ trace_file_path = r"{trace_file}"
             elif function_properties.is_staticmethod:
                 test_body = test_static_method_body.format(
                     orig_function_name=function_name,
-                    file_name=file_name,
+                    file_path=file_path,
                     class_name_alias=class_name_alias,
                     class_name=class_name,
                     method_name=method_name,
@@ -180,7 +183,7 @@ trace_file_path = r"{trace_file}"
             else:
                 test_body = test_method_body.format(
                     orig_function_name=function_name,
-                    file_name=file_name,
+                    file_path=file_path,
                     class_name_alias=class_name_alias,
                     class_name=class_name,
                     method_name=method_name,
@@ -216,42 +219,41 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
 
         # Get distinct benchmark names
         cursor.execute(
-            "SELECT DISTINCT benchmark_function_name, benchmark_file_name FROM benchmark_function_timings"
+            "SELECT DISTINCT benchmark_function_name, benchmark_file_path FROM benchmark_function_timings"
         )
         benchmarks = cursor.fetchall()
 
         # Generate a test for each benchmark
         for benchmark in benchmarks:
-            benchmark_function_name, benchmark_file_name = benchmark
+            benchmark_function_name, benchmark_file_path = benchmark
             # Get functions associated with this benchmark
             cursor.execute(
-                "SELECT DISTINCT function_name, class_name, module_name, file_name, benchmark_line_number FROM benchmark_function_timings "
-                "WHERE benchmark_function_name = ? AND benchmark_file_name = ?",
-                (benchmark_function_name, benchmark_file_name)
+                "SELECT DISTINCT function_name, class_name, module_name, file_path, benchmark_line_number FROM benchmark_function_timings "
+                "WHERE benchmark_function_name = ? AND benchmark_file_path = ?",
+                (benchmark_function_name, benchmark_file_path)
             )
 
             functions_data = []
             for func_row in cursor.fetchall():
-                function_name, class_name, module_name, file_name, benchmark_line_number = func_row
-
+                function_name, class_name, module_name, file_path, benchmark_line_number = func_row
                 # Add this function to our list
                 functions_data.append({
                     "function_name": function_name,
                     "class_name": class_name,
-                    "file_name": file_name,
+                    "file_path": file_path,
                     "module_name": module_name,
                     "benchmark_function_name": benchmark_function_name,
-                    "benchmark_file_name": benchmark_file_name,
+                    "benchmark_file_path": benchmark_file_path,
                     "benchmark_line_number": benchmark_line_number,
                     "function_properties": inspect_top_level_functions_or_methods(
-                            file_name=file_name,
+                            file_name=Path(file_path),
                             function_or_method_name=function_name,
                             class_name=class_name,
                         )
                 })
 
             if not functions_data:
-                logger.info(f"No functions found for benchmark {benchmark_function_name} in {benchmark_file_name}")
+                logger.info(f"No functions found for benchmark {benchmark_function_name} in {benchmark_file_path}")
                 continue
 
             # Generate the test code for this benchmark
@@ -265,17 +267,19 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
 
             # Write to file if requested
             if output_dir:
+                name = Path(benchmark_file_path).name.split(".")[0][5:] # remove "test_" from the name since we add it in later
                 output_file = get_test_file_path(
-                    test_dir=Path(output_dir), function_name=f"{benchmark_file_name}_{benchmark_function_name}", test_type="replay"
+                    test_dir=Path(output_dir), function_name=f"{name}_{benchmark_function_name}", test_type="replay"
                 )
                 # Write test code to file, parents = true
                 output_dir.mkdir(parents=True, exist_ok=True)
                 output_file.write_text(test_code, "utf-8")
                 count += 1
-                logger.info(f"Replay test for benchmark `{benchmark_function_name}` in {benchmark_file_name} written to {output_file}")
+                logger.info(f"Replay test for benchmark `{benchmark_function_name}` in {name} written to {output_file}")
 
         conn.close()
 
     except Exception as e:
         logger.info(f"Error generating replay tests: {e}")
+
     return count

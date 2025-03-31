@@ -58,7 +58,7 @@ from codeflash.models.models import (
     TestFiles,
     TestingMode,
     TestResults,
-    TestType,
+    TestType, BenchmarkKey,
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
 from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
@@ -428,30 +428,30 @@ class FunctionOptimizer:
                         )
                         tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
                         tree.add(f"Speedup ratio: {perf_gain + 1:.1f}X")
+                        replay_perf_gain = {}
                         if self.args.benchmark:
-
-                            benchmark_keys = {(benchmark.file_name, benchmark.function_name) for benchmark in self.total_benchmark_timings}
-                            test_results_by_benchmark = candidate_result.benchmarking_test_results.group_by_benchmark(benchmark_keys)
-                            for benchmark_key, test_results in test_results_by_benchmark.items():
+                            logger.info(f"Calculating benchmark improvement..")
+                            test_results_by_benchmark = candidate_result.benchmarking_test_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.test_cfg.benchmark_tests_root / "codeflash_replay_tests", self.project_root)
+                            for benchmark_key, candidate_test_results in test_results_by_benchmark.items():
                                 original_code_replay_runtime = original_code_baseline.replay_benchmarking_test_results[benchmark_key].total_passed_runtime()
-                                candidate_replay_runtime = candidate_result.replay_benchmarking_test_results.total_passed_runtime()
-                                replay_perf_gain = performance_gain(
+                                candidate_replay_runtime = candidate_test_results.total_passed_runtime()
+                                replay_perf_gain[benchmark_key] = performance_gain(
                                     original_runtime_ns=original_code_replay_runtime,
                                     optimized_runtime_ns=candidate_replay_runtime,
                                 )
-                                tree.add(f"Original benchmark replay runtime: {humanize_runtime(original_code_replay_runtime)}")
+                                tree.add(
+                                    f"Original benchmark replay runtime: {humanize_runtime(original_code_replay_runtime)}")
                                 tree.add(
                                     f"Best benchmark replay runtime: {humanize_runtime(candidate_replay_runtime)} "
                                     f"(measured over {candidate_result.max_loop_count} "
                                     f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
                                 )
-                                tree.add(f"Speedup percentage for benchmark replay test: {replay_perf_gain * 100:.1f}%")
-                                tree.add(f"Speedup ratio for benchmark replay test: {replay_perf_gain + 1:.1f}X")
+                                tree.add(f"Speedup percentage for benchmark replay test: {replay_perf_gain[benchmark_key] * 100:.1f}%")
+                                tree.add(f"Speedup ratio for benchmark replay test: {replay_perf_gain[benchmark_key] + 1:.1f}X")
                         best_optimization = BestOptimization(
                             candidate=candidate,
                             helper_functions=code_context.helper_functions,
                             runtime=best_test_runtime,
-                            replay_runtime=candidate_replay_runtime if self.args.benchmark else None,
                             winning_behavioral_test_results=candidate_result.behavior_test_results,
                             replay_performance_gain=replay_perf_gain if self.args.benchmark else None,
                             winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
@@ -903,8 +903,10 @@ class FunctionOptimizer:
             logger.debug(f"Total original code runtime (ns): {total_timing}")
 
             if self.args.benchmark:
-                replay_benchmarking_test_results = benchmarking_results.filter_by_test_type(TestType.REPLAY_TEST)
-                logger.info(f"Total replay test runtime: {humanize_runtime(replay_benchmarking_test_results.total_passed_runtime())}")
+                replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.test_cfg.benchmark_tests_root / "codeflash_replay_tests", self.project_root)
+                for benchmark_name, benchmark_results in replay_benchmarking_test_results.items():
+
+                    logger.info(f"Replay benchmark '{benchmark_name}' runtime: {humanize_runtime(benchmark_results.total_passed_runtime())}")
             return Success(
                 (
                     OriginalCodeBaseline(
@@ -1025,10 +1027,9 @@ class FunctionOptimizer:
 
             logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
             if self.args.benchmark:
-                candidate_replay_benchmarking_results = candidate_benchmarking_results.filter_by_test_type(TestType.REPLAY_TEST)
-                logger.debug(
-                    f"Total optimized code {optimization_candidate_index} replay benchmark runtime (ns): {candidate_replay_benchmarking_results.total_passed_runtime()}"
-                )
+                candidate_replay_benchmarking_results = candidate_benchmarking_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.test_cfg.benchmark_tests_root / "codeflash_replay_tests", self.project_root)
+                for benchmark_name, benchmark_results in candidate_replay_benchmarking_results.items():
+                    logger.debug(f"Benchmark {benchmark_name} runtime (ns): {humanize_runtime(benchmark_results.total_passed_runtime())}")
             return Success(
                 OptimizedCandidateResult(
                     max_loop_count=loop_count,
