@@ -1,41 +1,42 @@
-## How codeflash decides if an optimization is faster
+## How Codeflash measures the runtime of code
 
-Codeflash reports benchmarking results that look something like this.
+Codeflash reports benchmarking results that look like this.
 
 ⏱️ Runtime : 32.8 microseconds → 29.2 microseconds (best of 315 runs)
 
-In this document we explain how we measure the runtime of code, how we determine if an optimization is faster, why we measure
-timing as bes of N runs, how we measure the runtime of a wide variety of codes.
+In this document we explain -
+- how we measure the runtime of code
+- how we determine if an optimization is actually faster
+- why we measure the timing as best of N runs
+- how we measure the runtime when we run on a wide variety of test cases.
 
-## Design of Codeflash auto-benchmarking
+## Goals of Codeflash auto-benchmarking
 
-A core part of the design of Codeflash is that it does not make strong assumptions
-of what types of optimizations are faster. Codeflash automatically benchmarks the code 
-on a variety of inputs and determines empirically if the optimization is actually faster.
+A core design of Codeflash is that it does not make assumptions
+on the types of optimizations that might be faster. It generates multiple possible optimizations with LLMs and then automatically benchmarks the code 
+on a variety of inputs to verify empirically if the optimization is actually faster.
 
-The aims behind the design of Codeflash auto-benchmarking are:
-- Be able to accurately measure the runtime of code.
-- Be able to measure runtime of a wide variety of codes.
-- Be able to measure runtime of code on a variety of inputs.
-- Do all the above on real machine, where there might be other processes running, creating timing measurement noise.
-- Be able to make a binary decision on whether an optimization is faster or not.
+The goals of Codeflash auto-benchmarking are:
+- Accurately measure the runtime of code.
+- Measure runtime of a wide variety of codes.
+- Measure runtime on a variety of inputs.
+- Do all the above on real machine, where there might be other processes running, causing timing measurement noise.
+- Make a binary decision on whether an optimization is faster or not.
 
-A useful train analogy -
-(timing decision is a binary decision)
-Imagine that you are a train supervisor who is comparing that between two trains, Train A and Train B, which one is faster.
+## A useful train analogy -
 
-[//]: # (Your objective is to figure out which train is the fastest to go from Seattle to San Diego. )
+Imagine that you are a boss at a train company who wants to purchase a train to run between the two cities of San Francisco and Los Angeles.
+You are deciding between two trains, Train A and Train B, and want to run the train that is the fastest between the two cities.
 
-[//]: # (The route first goes to San Francisco, Los Angeles and then ends at San Diego.)
 You can measure the speed of the trains by timing how long it takes to go from San Francisco to Los Angeles.
 
 Unfortunately, there are real life factors that can affect the speed of the trains. There might 
-be rail traffic, weather conditions, terrain or other factors that can slow down the trains.
+be rail traffic, unfavorable weather conditions, hills or other factors that can slow down the trains.
 
 To settle the contest, you ask a train driver to race the two trains and run the trains as fast as possible.
-You run both the trains A and B from San Francisco to Los Angeles and measure the time it takes.
+You measure the time it takes to go from San Francisco to Los Angeles.
 
-Now the train A took 5% less time to do Seattle->San Diego than train B. But the driver complaints that
+Now the train A took 5% less time than train B. But the driver complaints that
 train B's run had poor weather on the way so they can't make conclusions yet. It is very important to definitively
 know which train is faster.
 
@@ -46,33 +47,32 @@ This gives us timing data looking like the following. The units are in hours.
 
 ![img_2.png](img_2.png)
 
-Now our task becomes seemingly harder to decide which train is faster because now there are 50x2 data points.
+Now the task to decide which train is faster becomes harder since now there are 50x2 data points.
 
-Unfortunately, the timing data is also noisy. Other trains might be running on the tracks, the weather might change, 
-or the train might be delayed for some other reason. This makes it hard to determine which train is faster.
+Unfortunately, the timing data is noisy. Other trains might be running on the tracks, the weather might change etc.
+This makes it hard to determine which train is faster in reality.
 
-The crucial point is that, the noise in the timing data is not the fault of the train.
-If we think about which train is fast - speed is a property of the train and not the hindrances.
-The ideal way to decide the time would be to clear out all the hindrances and measure the time.
-That way we would have a clean data set that is not noisy.
+The crucial point here is that the noise in the timing data is not the fault of the train.
+Speed of the train is an intrinsic property of the train and not the external hindrances.
+an important property of the noise is that it is only additive in nature , i.e. when there is a hindrance, the time taken only increases.
+There is no negative noise, which would make the trains go faster.
+The ideal way to decide the run time would be to clear out all the hindrances and rerun the race.
+That way we would have a clean data set that is not noisy, and the run times would be the true speed of the train.
 
 But in real life, we cannot do that. The best we can do is to try to minimize the noise, 
-and get the "signal" which is the speed of the train, and not the noise which is the time added by hindrances.
+to get close to the "signal" which is the intrinsic speed of the train, and not the noise which is the time added by hindrances.
 Luckily, we can do that. When we repeat the race multiple times, we get multiple data points.
-There will be a lot of cases where when the train goes between two stations, all the conditions are favorable,
+There will be many cases where when the train runs between the two stations, all the conditions are favorable,
 and the train is able to run at its maximum speed. This will be when the noise is the least, and the
 measured time will be the smallest. This is the "signal" we are looking for - the fastest speed that the train 
-can achieve. The noise is only additive noise, i.e. when there is a hindrance, the time taken only increases, there is no
-negative noise, which would make the train go faster.
+can achieve over the whole route. This speed can be compared to find the fastest train.
 
-So the key idea is that we find the minimum time that the train can achieve at a sector. That is very close to the fastest speed that the train can achieve.
+So the key idea is that we find the minimum time that the train can achieve between two cities. That is very close to the fastest speed that the train can achieve.
 
 ## How Codeflash benchmarks code
 
-From the above, it is clear that we want to measure the fastest speed, which corresponds to the minimum time that the train can achieve.
-This has the least amount of additive noise, and is the most accurate measure of the intrinsic speed of the train.
-
-The same idea applies to Codeflash . With processors, there are many different types of noise that can increase the runtime of a function.
+The idea of measuring the fastest speed, which minimizes the noise, is the same idea that Codeflash uses to measure the runtime of code.
+With computer processors, there are many different types of noise that can increase the runtime of a function.
 The noise can be caused by -
 - The hardware - there can be cache misses, cpu frequency scaling up and down, etc.
 - the operating system - there can be context switches, memory allocation, etc.
