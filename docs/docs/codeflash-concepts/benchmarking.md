@@ -4,6 +4,27 @@ Codeflash reports benchmarking results that look like this.
 
 ⏱️ Runtime : 32.8 microseconds → 29.2 microseconds (best of 315 runs)
 
+To measure the runtime of code, Codeflash runs the function multiple times, on several inputs 
+and sums the minimum time of each input to get the total runtime.
+
+A simplified pseudocode of the benchmarking that Codeflash implements looks like this -
+
+```python
+loops = 0
+start_time = time.time()
+min_input_runtime = [float('inf')] * len(test_inputs)
+while loops <= 5 or time.time() - start_time < 10:
+    loops += 1
+    for input_index, input in enumerate(test_inputs):
+        t = time(function(input))
+        if t < min_input_runtime[input_index]:
+            min_input_runtime[input_index] = t
+total_runtime = sum(min_input_runtime)
+number_of_runs = loops
+```
+
+The above code runs the function multiple times on different inputs and takes the minimum time for each input.
+
 In this document we explain -
 - how we measure the runtime of code
 - how we determine if an optimization is actually faster
@@ -71,7 +92,7 @@ So the key idea is that we find the minimum time that the train can achieve betw
 
 ## How Codeflash benchmarks code
 
-The idea of measuring the fastest speed, which minimizes the noise, is the same idea that Codeflash uses to measure the runtime of code.
+The idea of measuring the fastest speed, which minimizes the external noise, is the same idea that Codeflash uses to measure the runtime of code.
 With computer processors, there are many different types of noise that can increase the runtime of a function.
 The noise can be caused by -
 - The hardware - there can be cache misses, cpu frequency scaling up and down, etc.
@@ -79,8 +100,8 @@ The noise can be caused by -
 - the language - there can be garbage collection, thread scheduling etc.
 
 Codeflash tries to minimize the noise by running the function multiple times and taking the minimum time.
-This is when the function is not slowed down by any hindrances. The processor frequency is at its maximum,
-cache misses are not happening, the operating system is not doing any context switches etc.
+This happens when the function is not slowed down by any hindrances. The processor frequency is at its maximum,
+cache misses are minimal, the operating system is not doing any context switches etc.
 This is the fastest speed that the function can achieve, and is the most accurate measure of the intrinsic speed of the function.
 
 When Codeflash wants to measure if an optimization is faster than the original function, it runs the two functions
@@ -88,23 +109,23 @@ multiple times and takes the minimum time for both the functions. This most accu
 intrinstic speed of the function, which is the signal we are looking for. We can now compare the two functions and see which one is faster.
 
 We have found that when we run the function several times, the chance of getting "lucky" when the function is not 
-slowed down by any hindrances gets very high. There codeflash tries to run the function as many times as reasonably possible.
-Currently we loop the code for 10 seconds and a minimum of 5 loops, which gives us a good balance between accuracy of runtime of and the time it takes to run the function.
+slowed down by any hindrances becomes very high. To maximize this luck, codeflash tries to run the function as many times as reasonably possible.
+Currently, we loop the code for 10 seconds with a minimum of 5 loops, which gives us a good balance between accuracy of time measurement and the time it takes to run the function.
 
 ## What happens when there are multiple inputs to a function?
 
 The above idea works well when there is only one input to a function. But what if there are multiple inputs?
 
-Lets consider the train analogy again. Now the train goes between multiple stations. It first starts from Seattle up north, 
+Let's consider the train analogy again. Now the train race is extended between multiple stations. It first starts from Seattle up north, 
 and then goes south to San Francisco, then Los Angeles, and finally terminating at San Diego. We want to again measure 
-which train is the faster one on this route.
+which train is the faster one for this route.
 
 We can only measure the time taken by the train to go from one station to the next.
 
 Here is how the timing data looks like. The units are in hours.
 
 ![img_1.png](img_1.png)
-Now our task becomes seemingly harder to decide which train is faster because now there are 50x3x2 data points to consider.
+Now the task to decide which train is faster becomes even harder since now there are 50x3x2 data points to consider.
 Unfortunately, the timing data is also noisy. Running the same train on the same route might not give the same time, because 
 of external factors like weather, traffic, etc. This makes it hard to determine which train is faster.
 
@@ -112,20 +133,24 @@ So, which train is faster?
 
 The above insight of measuring the fastest speed of the train is still applicable here. But since there are multiple 
 sectors, we need to measure the fastest speed of the train separately for each sector. This is because one sector might
-have hills or winding tracks, which might slow down the train. But these will affect both the trains equally.
+have hills or winding tracks, which might slow down the train. 
 
-So to find the train that is fastest between the two stations, we find the minimum time taken by the train to go from one station to the next.
+So, we divide the route into sectors between the stations,
+and measure the fastest speed of the train for each sector. To find the train that is fastest between the two stations, we find the minimum time taken by the train to go from one station to the next.
 We then sum the minimum times for all the sectors to get the total time taken by the train to go from the first station to the last station.
 The train that has the smallest sum of minimum times is the fastest train. Since this measures the intrinsic speed of the 
-train on a given route.
+train on a given route. The reason to calculate the minimum time for each sector is to increase our "luck" of not 
+getting slowed down by any hindrances. The chance of encountering external noise is lower in one sector than in the whole route.
+This makes the time measurement more accurate, when we measure the minimum time for each sector.
 
-This is the same idea that Codeflash applies to functions. It measures the intrinsic speed of a function on separate inputs. 
-It then assumes a workload is composed of multiple inputs, and measures the intrinsic speed of the function on each input.
-Then the instrinsic runtime of the function on the workload which consists of multipe inputs
-is the sum of the intrinsic runtime of the function on each input.
+
+This is the same idea that Codeflash applies to functions. For a workload composed of multiple inputs,
+it measures the intrinsic speed of a function on different inputs separately.
+The total instrinsic runtime of the workload is the sum of the intrinsic runtime of the function on each input.
+
 (make drawings for each of the concepts)
 
-We have found that this approach is very accurate and is the best way to measure the speed of a function, even in noisy Virtual machines.
-We use a noise floor of 5% of the runtime, and only of the optimization is at least 5% faster than the original function, we consider it to be a significant improvement.
-This technique gets rid of most of the measurement noise, and gives us a very accurate measure of the intrinsic speed of the function.
+We have found that this approach to be very accurate and is a great way to measure the speed of a function, even in noisy Virtual machines.
+We use a noise floor of 5% of the runtime (10% on Github Actions), and only the optimizations that are at least 5% faster than the original function, we consider it to be a significant improvement.
+This technique gets rid of most of the measurement noise, and gives us a very accurate measure of the noise-free intrinsic speed of the function.
 
