@@ -1,11 +1,11 @@
 ## How Codeflash measures the runtime of code
 
-Codeflash reports benchmarking results that look like this.
+Codeflash reports benchmarking results that look like this :
 
 ⏱️ Runtime : 32.8 microseconds → 29.2 microseconds (best of 315 runs)
 
-To measure the runtime of code, Codeflash runs the function multiple times, on several inputs 
-and sums the minimum time of each input to get the total runtime.
+To measure runtime, Codeflash runs a function multiple times with several inputs 
+and sums the minimum time for each input to get the total runtime.
 
 A simplified pseudocode of Codeflash benchmarking looks like this -
 
@@ -25,7 +25,7 @@ number_of_runs = loops
 
 The above code runs the function multiple times on different inputs and uses the minimum time for each input.
 
-In this document we explain -
+In this document we explain :
 - How we measure the runtime of code
 - How we determine if an optimization is actually faster
 - Why we measure the timing as best of N runs
@@ -33,124 +33,109 @@ In this document we explain -
 
 ## Goals of Codeflash auto-benchmarking
 
-A core principle of Codeflash is that it does not make assumptions
-on what types of optimizations that might be faster. It generates multiple possible optimizations with LLMs and then automatically benchmarks the code 
-on a variety of inputs to verify empirically if the optimization is actually faster.
+A core principle of Codeflash is that it makes no assumptions about which optimizations might be faster.
+Instead, it generates multiple possible optimizations with LLMs and automatically benchmarks the code 
+on a variety of inputs to empirically verify if the optimization is actually faster.
 
 The goals of Codeflash auto-benchmarking are:
-- Accurately measure the runtime of code.
-- Measure runtime for a wide variety of code.
-- Measure runtime on a variety of inputs.
-- Do all the above on a real machine, where there might be other processes running, causing timing measurement noise.
-- Finally make a binary decision whether an optimization is faster or not.
+- Accurately measure the runtime of code
+- Measure runtime for a wide variety of code
+- Measure runtime on a variety of inputs
+- Do all the above on a real machine, where other processes might be running and causing timing measurement noise
+- Finally make a binary decision whether an optimization is faster or not
 
 ## Racing Trains as an analogy-
 
-Imagine that you are a boss at a train company who wants to purchase a train to run between the two cities of San Francisco and Los Angeles.
-You want to decide between two trains, Train A and Train B, and want to run the train that is the fastest between the two cities.
+Imagine you're a boss at a train company choosing between two trains to runs between San Francisco and Los Angeles.
+You want to determine which train is faster.
 
-You can measure the speed of the trains by timing how long it takes to go from San Francisco to Los Angeles.
+You can measure their by timing how long each takes to travel between the two cities.
 
-Unfortunately, there are real life factors that can affect the speed of the trains. There might 
-be rail traffic, unfavorable weather conditions, hills or other factors that can slow down the trains.
+However, real-life factors affect train speeds: rail traffic, unfavorable weather, hills, and other obstacles. 
+These can slow them down.
 
-To settle the contest, you ask a train driver to race the two trains and run the trains as fast as possible.
-You measure the time it takes to go from San Francisco to Los Angeles.
+To settle the contest, you have a driver race the two trains at maximum possible speed. 
+You measure the travel times between the two cities for each train.
 
-Now the train A took 5% less time than train B. But the driver complaints that
-train B's run had poor weather on the way so they can't make conclusions yet. It is very important to definitively
-know which train is faster.
+Train A took 5% less time than Train B. But the driver points out that Train B encountered poor weather, 
+making it impossible to draw firm conclusions. Since it's crucial to know which train is truly faster, you need more data.
 
-You now ask the driver to repeat the race between the two trains multiple times.
-Now in this world they have plenty of free time so they end up repeating the race 50 times.
+You ask the driver to repeat the race multiple times. In this scenario, since they have plenty of time, they repeat the race 50 times.
 
-This gives us timing data looking like the following. The units are in hours.
+This gives us timing data (in hours) that looks like the following.
 
 ![img_2.png](img_2.png)
 
-Now the task to decide which train is faster becomes harder since now there are 50x2 data points.
+With 100 data points (50 per train), determining the faster train becomes more complex.
 
-Unfortunately, the timing data is noisy. Other trains might be running on the tracks, the weather might change etc.
-This makes it hard to determine which train is faster in reality.
+The timing data contains noise from various factors: other trains on the tracks, changing weather, and so on. 
+This makes it challenging to determine which train is faster.
 
-The crucial point here is that the noise in the timing data is not the fault of the train.
-Speed of the train is an intrinsic property of the train and not the external hindrances.
-an important property of the noise is that it is only additive in nature , i.e. when there is a hindrance, the time taken only increases.
-There is no negative noise, which would make the trains go faster.
-The ideal way to decide the run time would be to clear out all the hindrances and rerun the race.
-That way we would have a clean data set that is not noisy, and the run times would be the true speed of the train.
+Here's the crucial insight: timing noise isn't the train's fault. A train's speed is an intrinsic property,
+independent of external hindrances. The noise only adds time—there's no "negative noise" that makes trains go faster. 
+Ideally, we'd measure speed with no hindrances at all, giving us clean, noise-free data that shows true speed.
 
-But in real life, we cannot do that. The best we can do is to try to minimize the noise, 
-to get close to the "signal" which is the intrinsic speed of the train, and not the noise which is the time added by hindrances.
-Luckily, we can do that. When we repeat the race multiple times, we get multiple data points.
-There will be many cases where when the train runs between the two stations, all the conditions are favorable,
-and the train is able to run at its maximum speed. This will be when the noise is the least, and the
-measured time will be the smallest. This is the "signal" we are looking for - the fastest speed that the train 
-can achieve over the whole route. This speed can be compared to find the fastest train.
 
-So the key idea is that we find the minimum time that the train can achieve between two cities. That is very close to the fastest speed that the train can achieve.
+In reality, we can't eliminate all noise. Instead, we minimize it by focusing on the "signal"—the train's intrinsic 
+speed—rather than the noise from hindrances. By running multiple races, we get multiple data points. Sometimes conditions
+are nearly perfect, allowing the train to reach maximum speed. These minimal-noise runs produce the smallest times—our
+"signal" that reveals the train's true capabilities. We can compare these best times to determine the faster train.
+
+The key is finding each train's minimum time between cities—this closely approximates its maximum achievable speed.
 
 ## How Codeflash benchmarks code
 
-The idea of measuring the fastest speed, which minimizes the external noise, is the same idea that Codeflash uses to measure the runtime of code.
-With computer processors, there are many different types of noise that can increase the runtime of a function.
-The noise can be caused by -
-- The hardware - there can be cache misses, cpu frequency scaling up and down, etc.
-- the operating system - there can be context switches, memory allocation, etc.
-- the language - there can be garbage collection, thread scheduling etc.
+This principle of measuring peak performance while minimizing external noise is exactly how Codeflash measures code runtime.
+Computer processors face various sources of noise that can increase function runtime:
 
-Codeflash tries to minimize the noise by running the function multiple times and taking the minimum time.
-This happens when the function is not slowed down by any hindrances. The processor frequency is at its maximum,
-cache misses are minimal, the operating system is not doing any context switches etc.
-This is the fastest speed that the function can achieve, and is the most accurate measure of the intrinsic speed of the function.
+- Hardware: cache misses, CPU frequency scaling, etc.
+- Operating system: context switches, memory allocation, etc.
+- Programming language: garbage collection, thread scheduling, etc.
 
-When Codeflash wants to measure if an optimization is faster than the original function, it runs the two functions
-multiple times and takes the minimum time for both the functions. This most accurate measurement of the
-intrinstic speed of the function, which is the signal we are looking for. We can now compare the two functions and see which one is faster.
+Codeflash minimizes noise by running functions multiple times and taking the minimum time. 
+This minimum typically occurs when there are fewest hindrances: the processor frequency is maximal, 
+cache misses are minimal, and the operating system is not doing context switches. This approaches the function's true speed.
 
-We have found that when we run the function several times, the chance of getting "lucky" when the function is not 
-slowed down by any hindrances becomes very high. To maximize this luck, codeflash tries to run the function as many times as reasonably possible.
-Currently, we loop the code for 10 seconds with a minimum of 5 loops, which gives us a good balance between accuracy of time measurement and the time it takes to run the function.
+When comparing an optimization to the original function, Codeflash runs both multiple times and compares their 
+minimum times. This gives us the most accurate measurement of each function's intrinsic speed which is our signal, allowing for a
+meaningful comparison.
+
+We've found that running a function multiple times increases the likelihood of getting these "lucky" minimal-noise runs.
+To maximize this, Codeflash runs each function for 10 seconds with a minimum of 5 loops, balancing measurement accuracy with reasonable runtime.
 
 ## What happens when there are multiple inputs to a function?
 
-The above idea works well when there is only one input to a function. But what if there are multiple inputs?
+While this approach works well for single inputs, what about multiple inputs?
 
-Let's consider the train analogy again. Now the train race is extended between multiple stations. It first starts from Seattle up north, 
-and then goes south to San Francisco, then Los Angeles, and finally terminating at San Diego. We want to again measure 
-which train is the faster one for this route.
+Now the race runs through multiple stations: Seattle to San Francisco to Los Angeles to San Diego. 
+We still need to determine the faster train for this route.
 
-We can only measure the time taken by the train to go from one station to the next.
+We can only measure times between adjacent stations.
 
-Here is how the timing data looks like. The units are in hours.
+Here is how the timing data looks like (in hours):
 
 ![img_1.png](img_1.png)
-Now the task to decide which train is faster becomes even harder since now there are 50x3x2 data points to consider.
-Unfortunately, the timing data is also noisy. Running the same train on the same route might not give the same time, because 
-of external factors like weather, traffic, etc. This makes it hard to determine which train is faster.
 
-So, which train is faster?
+With 300 data points (50 runs × 3 segments × 2 trains) and varying conditions on each segment, 
+determining the faster train becomes even more challenging.
 
-The above insight of measuring the fastest speed of the train is still applicable here. But since there are multiple 
-sectors, we need to measure the fastest speed of the train separately for each sector. This is because one sector might
-have hills or winding tracks, which might slow down the train. 
+Which train is faster?
 
-So, we divide the route into sectors between the stations,
-and measure the fastest speed of the train for each sector. To find the train that is fastest between the two stations, we find the minimum time taken by the train to go from one station to the next.
-We then sum the minimum times for all the sectors to get the total time taken by the train to go from the first station to the last station.
-The train that has the smallest sum of minimum times is the fastest train. Since this measures the intrinsic speed of the 
-train on a given route. The reason to calculate the minimum time for each sector is to increase our "luck" of not 
-getting slowed down by any hindrances. The chance of encountering external noise is lower in one sector than in the whole route.
-This makes the time measurement more accurate, when we measure the minimum time for each sector.
+Our insight about measuring peak performance still applies, but we need to measure each segment separately 
+since the track differs between segments due to hills and track curves.
 
 
-This is the same idea that Codeflash applies to functions. For a workload composed of multiple inputs,
-it measures the intrinsic speed of a function on different inputs separately.
-The total instrinsic runtime of the workload is the sum of the intrinsic runtime of the function on each input.
+We divide the route into segments between stations and measure each train's fastest time per segment.
+We find the minimum time for each segment, then sum these minimums to get the total route time. 
+The train with the lowest sum of minimum times is fastest. This approach better captures each train's 
+intrinsic speed because measuring shorter segments reduces the chance of encountering noise in that segment, compared to measuring the entire route.
+The result is more accurate timing data.
 
-(make drawings for each of the concepts)
+Codeflash applies this same principle to functions with multiple inputs. For workloads with multiple inputs, 
+it measures a function's intrinsic speed on each input separately. The total intrinsic runtime is the sum 
+of these individual minimums.
 
-We have found that this approach to be very accurate and is a great way to measure the speed of a function, even in noisy Virtual machines.
-We use a noise floor of 5% of the runtime (10% on Github Actions), and only the optimizations that are at least 5% faster than the original function, we consider it to be a significant improvement.
-This technique gets rid of most of the measurement noise, and gives us a very accurate measure of the noise-free intrinsic speed of the function.
 
+This approach proves highly accurate, even on noisy virtual machines. We use a 5% noise floor for runtime 
+(10% on GitHub Actions) and only consider optimizations significant if they're at least 5% faster than the original function.
+This technique effectively minimizes measurement noise, giving us an accurate measure of a function's true, noise-free, intrinsic speed.
