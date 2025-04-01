@@ -22,7 +22,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class MyClass:
 
-    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=True)
+    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file("test_return_values").as_posix()}', tests_root='{test_path.parent.as_posix()}', is_fto=True)
     def __init__(self):
         self.x = 1
 
@@ -86,7 +86,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class MyClass(ParentClass):
 
-    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=True)
+    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).as_posix()}', tests_root='{test_path.parent.as_posix()}', is_fto=True)
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -128,7 +128,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class MyClass:
 
-    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=True)
+    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).as_posix()}', tests_root='{test_path.parent.as_posix()}', is_fto=True)
     def __init__(self):
         self.x = 1
 
@@ -184,7 +184,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class MyClass:
 
-    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=True)
+    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).as_posix()}', tests_root='{test_path.parent.as_posix()}', is_fto=True)
     def __init__(self):
         self.x = 1
 
@@ -197,7 +197,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class HelperClass:
 
-    @codeflash_capture(function_name='HelperClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=False)
+    @codeflash_capture(function_name='HelperClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).as_posix()}', tests_root='{test_path.parent.as_posix()}', is_fto=False)
     def __init__(self):
         self.y = 1
 
@@ -271,7 +271,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class MyClass:
 
-    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=True)
+    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).as_posix()}', tests_root='{test_path.parent.as_posix()}', is_fto=True)
     def __init__(self):
         self.x = 1
 
@@ -289,7 +289,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class HelperClass1:
 
-    @codeflash_capture(function_name='HelperClass1.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=False)
+    @codeflash_capture(function_name='HelperClass1.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).as_posix()}', tests_root='{test_path.parent.as_posix()}', is_fto=False)
     def __init__(self):
         self.y = 1
 
@@ -304,7 +304,7 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class HelperClass2:
 
-    @codeflash_capture(function_name='HelperClass2.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=False)
+    @codeflash_capture(function_name='HelperClass2.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).as_posix()}', tests_root='{test_path.parent.as_posix()}', is_fto=False)
     def __init__(self):
         self.z = 2
 
@@ -313,7 +313,7 @@ class HelperClass2:
 
 class AnotherHelperClass:
 
-    @codeflash_capture(function_name='AnotherHelperClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))!s}', tests_root='{test_path.parent!s}', is_fto=False)
+    @codeflash_capture(function_name='AnotherHelperClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).as_posix()}', tests_root='{test_path.parent.as_posix()}', is_fto=False)
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 

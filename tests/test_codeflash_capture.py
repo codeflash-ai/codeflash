@@ -42,7 +42,7 @@ from codeflash.verification.codeflash_capture import get_test_info_from_stack
 class MyClass:
     def __init__(self):
         self.x = 2
-        print(f"TEST_INFO_START|{{get_test_info_from_stack('{test_dir!s}')}}|TEST_INFO_END")
+        print(f"TEST_INFO_START|{{get_test_info_from_stack('{test_dir.resolve().as_posix()}')}}|TEST_INFO_END")
 """
     test_file_name = "test_stack_info_temp.py"
 
@@ -54,7 +54,7 @@ class MyClass:
         with sample_code_path.open("w") as f:
             f.write(sample_code)
         result = execute_test_subprocess(
-            cwd=test_dir, env={}, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
+            cwd=test_dir, env=os.environ.copy(), cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
         )
         assert not result.stderr
         assert result.returncode == 0
@@ -117,7 +117,7 @@ from codeflash.verification.codeflash_capture import get_test_info_from_stack
 class MyClass:
     def __init__(self):
         self.x = 2
-        print(f"TEST_INFO_START|{{get_test_info_from_stack('{test_dir!s}')}}|TEST_INFO_END")
+        print(f"TEST_INFO_START|{{get_test_info_from_stack('{test_dir.resolve().as_posix()}')}}|TEST_INFO_END")
 """
     test_file_name = "test_stack_info_temp.py"
 
@@ -129,7 +129,7 @@ class MyClass:
         with sample_code_path.open("w") as f:
             f.write(sample_code)
         result = execute_test_subprocess(
-            cwd=test_dir, env={}, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
+            cwd=test_dir, env=os.environ.copy(), cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
         )
         assert not result.stderr
         assert result.returncode == 0
@@ -181,7 +181,7 @@ from codeflash.verification.codeflash_capture import get_test_info_from_stack
 class MyClass:
     def __init__(self):
         self.x = 2
-        print(f"TEST_INFO_START|{{get_test_info_from_stack('{test_dir!s}')}}|TEST_INFO_END")
+        print(f"TEST_INFO_START|{{get_test_info_from_stack('{test_dir.resolve().as_posix()}')}}|TEST_INFO_END")
 """
     test_dir = (Path(__file__).parent.parent / "code_to_optimize" / "tests" / "pytest").resolve()
     test_file_name = "test_stack_info_temp.py"
@@ -194,7 +194,7 @@ class MyClass:
         with sample_code_path.open("w") as f:
             f.write(sample_code)
         result = execute_test_subprocess(
-            cwd=test_dir, env={}, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
+            cwd=test_dir, env=os.environ.copy(), cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
         )
         assert not result.stderr
         assert result.returncode == 0
@@ -261,7 +261,7 @@ class MyClass:
     def __init__(self):
         self.x = 2
         # Print out the detected test info each time we instantiate MyClass
-        print(f"TEST_INFO_START|{{get_test_info_from_stack('{test_dir!s}')}}|TEST_INFO_END")
+        print(f"TEST_INFO_START|{{get_test_info_from_stack('{test_dir.resolve().as_posix()}')}}|TEST_INFO_END")
 """
 
     test_file_name = "test_stack_info_recursive_temp.py"
@@ -279,7 +279,7 @@ class MyClass:
 
         # Run pytest as a subprocess
         result = execute_test_subprocess(
-            cwd=test_dir, env={}, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
+            cwd=test_dir, env=os.environ.copy(), cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
         )
 
         # Check for errors
@@ -343,7 +343,7 @@ from codeflash.verification.codeflash_capture import get_test_info_from_stack
 class MyClass:
     def __init__(self):
         self.x = 2
-        print(f"TEST_INFO_START|{{get_test_info_from_stack('{test_dir!s}')}}|TEST_INFO_END")
+        print(f"TEST_INFO_START|{{get_test_info_from_stack('{test_dir.resolve().as_posix()}')}}|TEST_INFO_END")
 """
     test_dir = (Path(__file__).parent.parent / "code_to_optimize" / "tests" / "pytest").resolve()
     test_file_name = "test_stack_info_temp.py"
@@ -356,7 +356,7 @@ class MyClass:
         with sample_code_path.open("w") as f:
             f.write(sample_code)
         result = execute_test_subprocess(
-            cwd=test_dir, env={}, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
+            cwd=test_dir, env=os.environ.copy(), cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
         )
         assert not result.stderr
         assert result.returncode == 0
@@ -413,7 +413,7 @@ class TestUnittestExample(unittest.TestCase):
     sample_code = f"""
 from codeflash.verification.codeflash_capture import codeflash_capture
 class MyClass:
-    @codeflash_capture(function_name="some_function", tmp_dir_path="{get_run_tmp_file(Path("test_return_values"))}", tests_root="{test_dir!s}")
+    @codeflash_capture(function_name="some_function", tmp_dir_path="{get_run_tmp_file(Path("test_return_values")).resolve().as_posix()}", tests_root="{test_dir.resolve().as_posix()}")
     def __init__(self, x=2):
         self.x = x
     """
@@ -536,7 +536,7 @@ class ParentClass:
         self.x = 2
 
 class MyClass(ParentClass):
-    @codeflash_capture(function_name="some_function", tmp_dir_path="{get_run_tmp_file(Path("test_return_values"))}", tests_root="{test_dir!s}")
+    @codeflash_capture(function_name="some_function", tmp_dir_path="{get_run_tmp_file(Path("test_return_values")).resolve().as_posix()}", tests_root="{test_dir.resolve().as_posix()}")
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
     """
@@ -653,9 +653,9 @@ from codeflash.verification.codeflash_capture import codeflash_capture
 
 class MyClass:
     @codeflash_capture(
-        function_name="some_function", 
-        tmp_dir_path="{get_run_tmp_file(Path("test_return_values"))}", 
-        tests_root="{test_dir!s}"
+        function_name="some_function",
+        tmp_dir_path="{get_run_tmp_file(Path("test_return_values")).resolve().as_posix()}",
+        tests_root="{test_dir.resolve().as_posix()}"
     )
     def __init__(self, x=2):
         self.x = x
@@ -771,7 +771,7 @@ from code_to_optimize.tests.pytest.helper_file_1 import HelperClass1
 from code_to_optimize.tests.pytest.helper_file_2 import HelperClass2, AnotherHelperClass
 
 class MyClass:
-    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))}', tests_root="{test_dir!s}" , is_fto=True)
+    @codeflash_capture(function_name='MyClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).resolve().as_posix()}', tests_root="{test_dir.resolve().as_posix()}" , is_fto=True)
     def __init__(self):
         self.x = 1
 
@@ -785,7 +785,7 @@ class MyClass:
 from codeflash.verification.codeflash_capture import codeflash_capture
 
 class HelperClass1:
-    @codeflash_capture(function_name='HelperClass1.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))}',  tests_root="{test_dir!s}", is_fto=False)
+    @codeflash_capture(function_name='HelperClass1.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).resolve().as_posix()}',  tests_root="{test_dir.resolve().as_posix()}", is_fto=False)
     def __init__(self):
         self.y = 1
 
@@ -797,7 +797,7 @@ class HelperClass1:
 from codeflash.verification.codeflash_capture import codeflash_capture
 
 class HelperClass2:
-    @codeflash_capture(function_name='HelperClass2.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))}', tests_root="{test_dir!s}", is_fto=False)
+    @codeflash_capture(function_name='HelperClass2.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).resolve().as_posix()}', tests_root="{test_dir.resolve().as_posix()}", is_fto=False)
     def __init__(self):
         self.z = 2
 
@@ -805,7 +805,7 @@ class HelperClass2:
         return 2
 
 class AnotherHelperClass:
-    @codeflash_capture(function_name='AnotherHelperClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values"))}', tests_root="{test_dir!s}", is_fto=False)
+    @codeflash_capture(function_name='AnotherHelperClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).resolve().as_posix()}', tests_root="{test_dir.resolve().as_posix()}", is_fto=False)
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
