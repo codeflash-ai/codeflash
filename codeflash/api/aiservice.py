@@ -172,6 +172,10 @@ class AiServiceClient:
 
         logger.info("Generating optimized candidates…")
         console.rule()
+        if line_profiler_results=="":
+            logger.info("No LineProfiler results were provided, Skipping optimization.")
+            console.rule()
+            return []
         try:
             response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=600)
         except requests.exceptions.RequestException as e:

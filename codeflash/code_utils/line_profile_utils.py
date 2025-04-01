@@ -1,25 +1,25 @@
 """Adapted from line_profiler (https://github.com/pyutils/line_profiler) written by Enthought, Inc. (BSD License)"""
 from collections import defaultdict
+from pathlib import Path
+from typing import Union
 
 import isort
 import libcst as cst
-from pathlib import Path
-from typing import Union, List
-from libcst import ImportFrom, ImportAlias, Name
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 
 
 class LineProfilerDecoratorAdder(cst.CSTTransformer):
     """Transformer that adds a decorator to a function with a specific qualified name."""
-    #Todo we don't support nested functions yet so they can only be inside classes, dont use qualified names, instead use the structure
+
+    #TODO we don't support nested functions yet so they can only be inside classes, dont use qualified names, instead use the structure
     def __init__(self, qualified_name: str, decorator_name: str):
-        """
-        Initialize the transformer.
+        """Initialize the transformer.
 
         Args:
             qualified_name: The fully qualified name of the function to add the decorator to (e.g., "MyClass.nested_func.target_func").
             decorator_name: The name of the decorator to add.
+
         """
         super().__init__()
         self.qualified_name_parts = qualified_name.split(".")
@@ -45,7 +45,7 @@ class LineProfilerDecoratorAdder(cst.CSTTransformer):
         function_name = original_node.name.value
 
         # Check if the current context path matches our target qualified name
-        if self._matches_qualified_path():
+        if self.context_stack==self.qualified_name_parts:
             # Check if the decorator is already present
             has_decorator = any(
                 self._is_target_decorator(decorator.decorator)
@@ -68,22 +68,11 @@ class LineProfilerDecoratorAdder(cst.CSTTransformer):
         self.context_stack.pop()
         return updated_node
 
-    def _matches_qualified_path(self) -> bool:
-        """Check if the current context stack matches the qualified name."""
-        if len(self.context_stack) != len(self.qualified_name_parts):
-            return False
-
-        for i, name in enumerate(self.qualified_name_parts):
-            if self.context_stack[i] != name:
-                return False
-
-        return True
-
     def _is_target_decorator(self, decorator_node: Union[cst.Name, cst.Attribute, cst.Call]) -> bool:
         """Check if a decorator matches our target decorator name."""
         if isinstance(decorator_node, cst.Name):
             return decorator_node.value == self.decorator_name
-        elif isinstance(decorator_node, cst.Call) and isinstance(decorator_node.func, cst.Name):
+        if isinstance(decorator_node, cst.Call) and isinstance(decorator_node.func, cst.Name):
             return decorator_node.func.value == self.decorator_name
         return False
 
@@ -147,8 +136,7 @@ class ProfileEnableTransformer(cst.CSTTransformer):
         return updated_node.with_changes(body=new_body)
 
 def add_decorator_to_qualified_function(module, qualified_name, decorator_name):
-    """
-    Add a decorator to a function with the exact qualified name in the source code.
+    """Add a decorator to a function with the exact qualified name in the source code.
 
     Args:
         module: The Python source code as a string.
@@ -157,6 +145,7 @@ def add_decorator_to_qualified_function(module, qualified_name, decorator_name):
 
     Returns:
         The modified source code as a string.
+
     """
     # Parse the source code into a CST
 
@@ -168,7 +157,7 @@ def add_decorator_to_qualified_function(module, qualified_name, decorator_name):
     return modified_module
 
 def add_profile_enable(original_code: str, line_profile_output_file: str) -> str:
-    # todo modify by using a libcst transformer
+    # TODO modify by using a libcst transformer
     module = cst.parse_module(original_code)
     transformer = ProfileEnableTransformer(line_profile_output_file)
     modified_module = module.visit(transformer)
@@ -217,7 +206,7 @@ def add_decorator_imports(function_to_optimize, code_context):
         module_node = cst.parse_module(file_contents)
         for fn_name in fns_present:
             # add decorator
-            module_node = add_decorator_to_qualified_function(module_node, fn_name, 'codeflash_line_profile')
+            module_node = add_decorator_to_qualified_function(module_node, fn_name, "codeflash_line_profile")
         # add imports
         # Create a transformer to add the import
         transformer = ImportAdder("from line_profiler import profile as codeflash_line_profile")

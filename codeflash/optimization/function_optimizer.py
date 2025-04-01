@@ -232,7 +232,8 @@ class FunctionOptimizer:
         ):
             cleanup_paths(paths_to_cleanup)
             return Failure("The threshold for test coverage was not met.")
-        # request for new optimizations but don't block execution, check for completion later, only adding to control set right now
+        # request for new optimizations but don't block execution, check for completion later
+        # adding to control and experiment set but with same traceid
         best_optimization = None
 
         for _u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
@@ -359,30 +360,36 @@ class FunctionOptimizer:
         )
         console.rule()
         candidates = deque(candidates)
+        # Start a new thread for AI service request, start loop in main thread
+        # check if aiservice request is complete, when it is complete, append result to the candidates list
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_line_profile_results = executor.submit(self.aiservice_client.optimize_python_code_line_profiler,
-            source_code=code_context.read_writable_code,
-            dependency_code=code_context.read_only_context_code,
-            trace_id=self.function_trace_id,
-            line_profiler_results=original_code_baseline.line_profile_results['str_out'],
-            num_candidates = 10,
-            experiment_metadata = None)
+            future_line_profile_results = executor.submit(
+                self.aiservice_client.optimize_python_code_line_profiler,
+                source_code=code_context.read_writable_code,
+                dependency_code=code_context.read_only_context_code,
+                trace_id=self.function_trace_id,
+                line_profiler_results=original_code_baseline.line_profile_results["str_out"],
+                num_candidates=10,
+                experiment_metadata=None,
+            )
             try:
                 candidate_index = 0
                 done = False
+                original_len = len(candidates)
                 while candidates:
-                #for candidate_index, candidate in enumerate(candidates, start=1):
+                    # for candidate_index, candidate in enumerate(candidates, start=1):
                     done = True if future_line_profile_results is None else future_line_profile_results.done()
                     if done and (future_line_profile_results is not None):
                         line_profile_results = future_line_profile_results.result()
                         candidates.extend(line_profile_results)
-                        logger.info(f"Added result from line profiler to candidates: {len(line_profile_results)}")
+                        original_len+= len(candidates)
+                        logger.info(f"Added results from line profiler to candidates, total candidates now: {original_len}")
                         future_line_profile_results = None
                     candidate_index += 1
                     candidate = candidates.popleft()
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
-                    logger.info(f"Optimization candidate {candidate_index}/{len(candidates)}:")
+                    logger.info(f"Optimization candidate {candidate_index}/{original_len}:")
                     code_print(candidate.source_code)
                     try:
                         did_update = self.replace_function_and_helpers_with_optimized_code(
@@ -397,7 +404,9 @@ class FunctionOptimizer:
                     except (ValueError, SyntaxError, cst.ParserSyntaxError, AttributeError) as e:
                         logger.error(e)
                         self.write_code_and_helpers(
-                            self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+                            self.function_to_optimize_source_code,
+                            original_helper_code,
+                            self.function_to_optimize.file_path,
                         )
                         continue
 
@@ -781,7 +790,7 @@ class FunctionOptimizer:
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
     ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
-        line_profile_results = {'timings':{},'unit':0, 'str_out':''}
+        line_profile_results = {"timings": {}, "unit": 0, "str_out": ""}
         # For the original function - run the tests and get the runtime, plus coverage
         with progress_bar(f"Establishing original code baseline for {self.function_to_optimize.function_name}"):
             assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
@@ -826,8 +835,7 @@ class FunctionOptimizer:
                 return Failure("The threshold for test coverage was not met.")
             if test_framework == "pytest":
                 try:
-                    line_profiler_output_file = add_decorator_imports(
-                        self.function_to_optimize, code_context)
+                    line_profiler_output_file = add_decorator_imports(self.function_to_optimize, code_context)
                     line_profile_results, _ = self.run_and_parse_tests(
                         testing_type=TestingMode.LINE_PROFILE,
                         test_env=test_env,
@@ -843,7 +851,7 @@ class FunctionOptimizer:
                     self.write_code_and_helpers(
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
-                if line_profile_results['str_out']=='':
+                if line_profile_results["str_out"] == "":
                     logger.warning(
                         f"Couldn't run line profiler for original function {self.function_to_optimize.function_name}"
                     )
@@ -1081,7 +1089,7 @@ class FunctionOptimizer:
                     pytest_min_loops=1,
                     pytest_max_loops=1,
                     test_framework=self.test_cfg.test_framework,
-                    line_profiler_output_file=line_profiler_output_file
+                    line_profiler_output_file=line_profiler_output_file,
                 )
             elif testing_type == TestingMode.PERFORMANCE:
                 result_file_path, run_result = run_benchmarking_tests(
