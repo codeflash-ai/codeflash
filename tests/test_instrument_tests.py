@@ -3155,6 +3155,7 @@ def test_add_decorator_imports_helper_in_class():
     )
     func = FunctionToOptimize(function_name="sort_classmethod", parents=[], file_path=code_path)
     func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    os.chdir(run_cwd)
     #func_optimizer = pass
     try:
         ctx_result = func_optimizer.get_code_optimization_context()
@@ -3168,9 +3169,10 @@ def test_add_decorator_imports_helper_in_class():
         computed_fn_opt = True
         line_profiler_output_file = add_decorator_imports(
             func_optimizer.function_to_optimize, code_context)
-        expected_code_main = f"""from code_to_optimize.bubble_sort_in_class import BubbleSortClass
-from line_profiler import profile as codeflash_line_profile
+        expected_code_main = f"""from line_profiler import profile as codeflash_line_profile
 codeflash_line_profile.enable(output_prefix='{line_profiler_output_file}')
+
+from code_to_optimize.bubble_sort_in_class import BubbleSortClass
 
 
 @codeflash_line_profile
@@ -3224,6 +3226,7 @@ def test_add_decorator_imports_helper_in_nested_class():
     )
     func = FunctionToOptimize(function_name="sort_classmethod", parents=[], file_path=code_path)
     func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    os.chdir(run_cwd)
     #func_optimizer = pass
     try:
         ctx_result = func_optimizer.get_code_optimization_context()
@@ -3237,9 +3240,10 @@ def test_add_decorator_imports_helper_in_nested_class():
         computed_fn_opt = True
         line_profiler_output_file = add_decorator_imports(
             func_optimizer.function_to_optimize, code_context)
-        expected_code_main = f"""from code_to_optimize.bubble_sort_in_nested_class import WrapperClass
-from line_profiler import profile as codeflash_line_profile
+        expected_code_main = f"""from line_profiler import profile as codeflash_line_profile
 codeflash_line_profile.enable(output_prefix='{line_profiler_output_file}')
+
+from code_to_optimize.bubble_sort_in_nested_class import WrapperClass
 
 
 @codeflash_line_profile
