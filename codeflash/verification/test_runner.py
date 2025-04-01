@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 BEHAVIORAL_BLOCKLISTED_PLUGINS = ["benchmark"]
 BENCHMARKING_BLOCKLISTED_PLUGINS = ["codspeed", "cov", "benchmark", "profiling"]
 
+
 def execute_test_subprocess(
     cmd_list: list[str], cwd: Path, env: dict[str, str] | None, timeout: int = 600
 ) -> subprocess.CompletedProcess:
@@ -83,7 +84,14 @@ def run_behavioral_tests(
             )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any,
             # then the current run will be appended to the previous data, which skews the results
             logger.debug(cov_erase)
-            coverage_cmd = [SAFE_SYS_EXECUTABLE, "-m", "coverage", "run", f"--rcfile={coverage_config_file.as_posix()}", "-m"]
+            coverage_cmd = [
+                SAFE_SYS_EXECUTABLE,
+                "-m",
+                "coverage",
+                "run",
+                f"--rcfile={coverage_config_file.as_posix()}",
+                "-m",
+            ]
 
             if pytest_cmd == "pytest":
                 coverage_cmd.extend(["pytest"])
@@ -92,7 +100,10 @@ def run_behavioral_tests(
 
             blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS if plugin != "cov"]
             results = execute_test_subprocess(
-                coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files, cwd=cwd, env=pytest_test_env, timeout=600
+                coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files,
+                cwd=cwd,
+                env=pytest_test_env,
+                timeout=600,
             )
             logger.debug(
                 f"Result return code: {results.returncode}, "
@@ -125,7 +136,12 @@ def run_behavioral_tests(
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
 
-    return result_file_path, results, coverage_database_file if enable_coverage else None, coverage_config_file if enable_coverage else None
+    return (
+        result_file_path,
+        results,
+        coverage_database_file if enable_coverage else None,
+        coverage_config_file if enable_coverage else None,
+    )
 
 
 def run_benchmarking_tests(
