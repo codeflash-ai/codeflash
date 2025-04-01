@@ -410,10 +410,12 @@ def get_function_sources_from_jedi(
                         and definition.full_name
                         and definition.type == "function"
                         and not belongs_to_function_qualified(definition, qualified_function_name)
+                        # Avoid nested functions or classes. Only class.function is allowed
+                        and len((qualified_name := get_qualified_name(definition.module_name, definition.full_name)).split(".")) <= 2
                     ):
                         function_source = FunctionSource(
                             file_path=definition_path,
-                            qualified_name=get_qualified_name(definition.module_name, definition.full_name),
+                            qualified_name=qualified_name,
                             fully_qualified_name=definition.full_name,
                             only_function_name=definition.name,
                             source_code=definition.get_line_code(),
