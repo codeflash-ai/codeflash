@@ -54,7 +54,7 @@ class MyClass:
         with sample_code_path.open("w") as f:
             f.write(sample_code)
         result = execute_test_subprocess(
-            cwd=test_dir, env={}, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
+            cwd=test_dir, env=os.environ.copy(), cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
         )
         assert not result.stderr
         assert result.returncode == 0
@@ -129,7 +129,7 @@ class MyClass:
         with sample_code_path.open("w") as f:
             f.write(sample_code)
         result = execute_test_subprocess(
-            cwd=test_dir, env={}, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
+            cwd=test_dir, env=os.environ.copy(), cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
         )
         assert not result.stderr
         assert result.returncode == 0
@@ -194,7 +194,7 @@ class MyClass:
         with sample_code_path.open("w") as f:
             f.write(sample_code)
         result = execute_test_subprocess(
-            cwd=test_dir, env={}, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
+            cwd=test_dir, env=os.environ.copy(), cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
         )
         assert not result.stderr
         assert result.returncode == 0
@@ -279,7 +279,7 @@ class MyClass:
 
         # Run pytest as a subprocess
         result = execute_test_subprocess(
-            cwd=test_dir, env={}, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
+            cwd=test_dir, env=os.environ.copy(), cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
         )
 
         # Check for errors
@@ -356,7 +356,7 @@ class MyClass:
         with sample_code_path.open("w") as f:
             f.write(sample_code)
         result = execute_test_subprocess(
-            cwd=test_dir, env={}, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
+            cwd=test_dir, env=os.environ.copy(), cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"]
         )
         assert not result.stderr
         assert result.returncode == 0
