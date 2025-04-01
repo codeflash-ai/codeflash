@@ -22,6 +22,7 @@ class CodeFlashBenchmarkPlugin:
             self._connection = sqlite3.connect(self._trace_path)
             cur = self._connection.cursor()
             cur.execute("PRAGMA synchronous = OFF")
+            cur.execute("PRAGMA journal_mode = MEMORY")
             cur.execute(
                 "CREATE TABLE IF NOT EXISTS benchmark_timings("
                 "benchmark_file_path TEXT, benchmark_function_name TEXT, benchmark_line_number INTEGER,"
