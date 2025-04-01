@@ -23,6 +23,12 @@ class HelperClass:
     def helper_method(self):
         return self.name
 
+    class NestedClass:
+        def __init__(self, name):
+            self.name = name
+
+        def nested_method(self):
+            return self.name
 
 def main_method():
     return "hello"
@@ -33,6 +39,7 @@ class MainClass:
         self.name = name
 
     def main_method(self):
+        self.name = HelperClass.NestedClass("test").nested_method()
         return HelperClass(self.name).helper_method()
 
 
@@ -73,6 +80,8 @@ def test_code_replacement10() -> None:
     )
 
     code_ctx = get_code_optimization_context(function_to_optimize=func_top_optimize, project_root_path=file_path.parent)
+    qualified_names = {func.qualified_name for func in code_ctx.helper_functions}
+    assert qualified_names == {"HelperClass.helper_method"} # Nested method should not be in here
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
 
     expected_read_write_context = """
@@ -91,6 +100,7 @@ class MainClass:
         self.name = name
 
     def main_method(self):
+        self.name = HelperClass.NestedClass("test").nested_method()
         return HelperClass(self.name).helper_method()
 """
     expected_read_only_context = """
