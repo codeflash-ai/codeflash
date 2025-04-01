@@ -1924,7 +1924,7 @@ class TestPigLatin(unittest.TestCase):
         ).replace('"', "'")
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
         #
         # # Overwrite old test with new instrumented test
@@ -2456,7 +2456,7 @@ def test_class_name_A_function_name():
     assert success
     assert new_test is not None
     assert new_test.replace('"', "'") == expected.format(
-        tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+        tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         module_path="tests.pytest.test_class_function_instrumentation_temp",
     ).replace('"', "'")
 
@@ -2527,7 +2527,7 @@ def test_common_tags_1():
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_wrong_function_instrumentation_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
     finally:
         test_path.unlink(missing_ok=True)
@@ -2590,7 +2590,7 @@ def test_sort():
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_conditional_instrumentation_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
     finally:
         test_path.unlink(missing_ok=True)
@@ -2667,7 +2667,7 @@ def test_sort():
         assert success
         formatted_expected = expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_results_temp",
-            tmp_dir_path=str(get_run_tmp_file(Path("test_return_values"))),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         )
         assert new_test is not None
         assert new_test.replace('"', "'") == formatted_expected.replace('"', "'")
