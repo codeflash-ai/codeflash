@@ -483,7 +483,7 @@ class TestResults(BaseModel):
         test_results_by_benchmark = defaultdict(TestResults)
         benchmark_module_path = {}
         for benchmark_key in benchmark_keys:
-            benchmark_module_path[benchmark_key] = module_name_from_file_path(benchmark_replay_test_dir.resolve() / f"test_{Path(benchmark_key.file_path).name.split('.')[0][5:]}_{benchmark_key.function_name}__replay_test_", project_root)
+            benchmark_module_path[benchmark_key] = module_name_from_file_path(benchmark_replay_test_dir.resolve() / f"test_{Path(benchmark_key.file_path).name.split('.')[0][5:]}__replay_test_", project_root)
         for test_result in self.test_results:
             if (test_result.test_type == TestType.REPLAY_TEST):
                 for benchmark_key, module_path in benchmark_module_path.items():
