@@ -26,10 +26,15 @@ from codeflash.optimization.function_context import belongs_to_function_qualifie
 
 
 def get_code_optimization_context(
-    function_to_optimize: FunctionToOptimize, project_root_path: Path, optim_token_limit: int = 8000, testgen_token_limit: int = 8000
+    function_to_optimize: FunctionToOptimize,
+    project_root_path: Path,
+    optim_token_limit: int = 8000,
+    testgen_token_limit: int = 8000,
 ) -> CodeOptimizationContext:
     # Get FunctionSource representation of helpers of FTO
-    helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi({function_to_optimize.file_path: {function_to_optimize.qualified_name}}, project_root_path)
+    helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(
+        {function_to_optimize.file_path: {function_to_optimize.qualified_name}}, project_root_path
+    )
 
     # Add function to optimize into helpers of FTO dict, as they'll be processed together
     fto_as_function_source = get_function_to_optimize_as_function_source(function_to_optimize, project_root_path)
@@ -37,20 +42,27 @@ def get_code_optimization_context(
 
     # Format data to search for helpers of helpers using get_function_sources_from_jedi
     helpers_of_fto_qualified_names_dict = {
-        file_path: {source.qualified_name for source in sources}
-        for file_path, sources in helpers_of_fto_dict.items()
+        file_path: {source.qualified_name for source in sources} for file_path, sources in helpers_of_fto_dict.items()
     }
 
     # __init__ functions are automatically considered as helpers of FTO, so we add them to the dict (regardless of whether they exist)
     # This helps us to search for helpers of __init__ functions of classes that contain helpers of FTO
     for qualified_names in helpers_of_fto_qualified_names_dict.values():
-         qualified_names.update({f"{qn.rsplit('.', 1)[0]}.__init__" for qn in qualified_names if '.' in qn})
+        qualified_names.update({f"{qn.rsplit('.', 1)[0]}.__init__" for qn in qualified_names if "." in qn})
 
     # Get FunctionSource representation of helpers of helpers of FTO
-    helpers_of_helpers_dict, helpers_of_helpers_list = get_function_sources_from_jedi(helpers_of_fto_qualified_names_dict, project_root_path)
+    helpers_of_helpers_dict, helpers_of_helpers_list = get_function_sources_from_jedi(
+        helpers_of_fto_qualified_names_dict, project_root_path
+    )
 
     # Extract code context for optimization
-    final_read_writable_code = extract_code_string_context_from_files(helpers_of_fto_dict,{}, project_root_path, remove_docstrings=False, code_context_type=CodeContextType.READ_WRITABLE).code
+    final_read_writable_code = extract_code_string_context_from_files(
+        helpers_of_fto_dict,
+        {},
+        project_root_path,
+        remove_docstrings=False,
+        code_context_type=CodeContextType.READ_WRITABLE,
+    ).code
     read_only_code_markdown = extract_code_markdown_context_from_files(
         helpers_of_fto_dict,
         helpers_of_helpers_dict,
@@ -80,10 +92,7 @@ def get_code_optimization_context(
         logger.debug("Code context has exceeded token limit, removing docstrings from read-only code")
         # Extract read only code without docstrings
         read_only_code_no_docstring_markdown = extract_code_markdown_context_from_files(
-            helpers_of_fto_dict,
-            helpers_of_helpers_dict,
-            project_root_path,
-            remove_docstrings=True,
+            helpers_of_fto_dict, helpers_of_helpers_dict, project_root_path, remove_docstrings=True
         )
         read_only_context_code = read_only_code_no_docstring_markdown.markdown
         read_only_code_no_docstring_markdown_tokens = len(tokenizer.encode(read_only_context_code))
@@ -116,12 +125,13 @@ def get_code_optimization_context(
             raise ValueError("Testgen code context has exceeded token limit, cannot proceed")
 
     return CodeOptimizationContext(
-        testgen_context_code = testgen_context_code,
+        testgen_context_code=testgen_context_code,
         read_writable_code=final_read_writable_code,
         read_only_context_code=read_only_context_code,
         helper_functions=helpers_of_fto_list,
         preexisting_objects=preexisting_objects,
     )
+
 
 def extract_code_string_context_from_files(
     helpers_of_fto: dict[Path, set[FunctionSource]],
@@ -169,9 +179,15 @@ def extract_code_string_context_from_files(
             continue
         try:
             qualified_function_names = {func.qualified_name for func in function_sources}
-            helpers_of_helpers_qualified_names = {func.qualified_name for func in helpers_of_helpers.get(file_path, set())}
+            helpers_of_helpers_qualified_names = {
+                func.qualified_name for func in helpers_of_helpers.get(file_path, set())
+            }
             code_context = parse_code_and_prune_cst(
-                original_code,  code_context_type, qualified_function_names, helpers_of_helpers_qualified_names, remove_docstrings
+                original_code,
+                code_context_type,
+                qualified_function_names,
+                helpers_of_helpers_qualified_names,
+                remove_docstrings,
             )
 
         except ValueError as e:
@@ -180,12 +196,12 @@ def extract_code_string_context_from_files(
         if code_context.strip():
             final_code_string_context += f"\n{code_context}"
             final_code_string_context = add_needed_imports_from_module(
-                    src_module_code=original_code,
-                    dst_module_code=final_code_string_context,
-                    src_path=file_path,
-                    dst_path=file_path,
-                    project_root=project_root_path,
-                    helper_functions= list(helpers_of_fto.get(file_path, set()) | helpers_of_helpers.get(file_path, set()))
+                src_module_code=original_code,
+                dst_module_code=final_code_string_context,
+                src_path=file_path,
+                dst_path=file_path,
+                project_root=project_root_path,
+                helper_functions=list(helpers_of_fto.get(file_path, set()) | helpers_of_helpers.get(file_path, set())),
             )
     if code_context_type == CodeContextType.READ_WRITABLE:
         return CodeString(code=final_code_string_context)
@@ -199,7 +215,7 @@ def extract_code_string_context_from_files(
         try:
             qualified_helper_function_names = {func.qualified_name for func in helper_function_sources}
             code_context = parse_code_and_prune_cst(
-                original_code, code_context_type, set(), qualified_helper_function_names,  remove_docstrings
+                original_code, code_context_type, set(), qualified_helper_function_names, remove_docstrings
             )
         except ValueError as e:
             logger.debug(f"Error while getting read-only code: {e}")
@@ -208,14 +224,15 @@ def extract_code_string_context_from_files(
         if code_context.strip():
             final_code_string_context += f"\n{code_context}"
             final_code_string_context = add_needed_imports_from_module(
-                    src_module_code=original_code,
-                    dst_module_code=final_code_string_context,
-                    src_path=file_path,
-                    dst_path=file_path,
-                    project_root=project_root_path,
-                    helper_functions=list(helpers_of_helpers_no_overlap.get(file_path, set())),
+                src_module_code=original_code,
+                dst_module_code=final_code_string_context,
+                src_path=file_path,
+                dst_path=file_path,
+                project_root=project_root_path,
+                helper_functions=list(helpers_of_helpers_no_overlap.get(file_path, set())),
             )
     return CodeString(code=final_code_string_context)
+
 
 def extract_code_markdown_context_from_files(
     helpers_of_fto: dict[Path, set[FunctionSource]],
@@ -263,9 +280,15 @@ def extract_code_markdown_context_from_files(
             continue
         try:
             qualified_function_names = {func.qualified_name for func in function_sources}
-            helpers_of_helpers_qualified_names = {func.qualified_name for func in helpers_of_helpers.get(file_path, set())}
+            helpers_of_helpers_qualified_names = {
+                func.qualified_name for func in helpers_of_helpers.get(file_path, set())
+            }
             code_context = parse_code_and_prune_cst(
-                original_code,  code_context_type, qualified_function_names, helpers_of_helpers_qualified_names, remove_docstrings
+                original_code,
+                code_context_type,
+                qualified_function_names,
+                helpers_of_helpers_qualified_names,
+                remove_docstrings,
             )
 
         except ValueError as e:
@@ -280,7 +303,8 @@ def extract_code_markdown_context_from_files(
                     dst_path=file_path,
                     project_root=project_root_path,
                     helper_functions=list(
-                        helpers_of_fto.get(file_path, set()) | helpers_of_helpers.get(file_path, set()))
+                        helpers_of_fto.get(file_path, set()) | helpers_of_helpers.get(file_path, set())
+                    ),
                 ),
                 file_path=file_path.relative_to(project_root_path),
             )
@@ -295,7 +319,7 @@ def extract_code_markdown_context_from_files(
         try:
             qualified_helper_function_names = {func.qualified_name for func in helper_function_sources}
             code_context = parse_code_and_prune_cst(
-                original_code, code_context_type, set(), qualified_helper_function_names, remove_docstrings,
+                original_code, code_context_type, set(), qualified_helper_function_names, remove_docstrings
             )
         except ValueError as e:
             logger.debug(f"Error while getting read-only code: {e}")
@@ -317,8 +341,9 @@ def extract_code_markdown_context_from_files(
     return code_context_markdown
 
 
-def get_function_to_optimize_as_function_source(function_to_optimize: FunctionToOptimize,
-                                       project_root_path: Path) -> FunctionSource:
+def get_function_to_optimize_as_function_source(
+    function_to_optimize: FunctionToOptimize, project_root_path: Path
+) -> FunctionSource:
     # Use jedi to find function to optimize
     script = jedi.Script(path=function_to_optimize.file_path, project=jedi.Project(path=project_root_path))
 
@@ -327,11 +352,12 @@ def get_function_to_optimize_as_function_source(function_to_optimize: FunctionTo
 
     # Find the name that matches our function
     for name in names:
-        if (name.type == "function" and
-        name.full_name and
-                name.name == function_to_optimize.function_name and
-                get_qualified_name(name.module_name, name.full_name) == function_to_optimize.qualified_name):
-
+        if (
+            name.type == "function"
+            and name.full_name
+            and name.name == function_to_optimize.function_name
+            and get_qualified_name(name.module_name, name.full_name) == function_to_optimize.qualified_name
+        ):
             function_source = FunctionSource(
                 file_path=function_to_optimize.file_path,
                 qualified_name=function_to_optimize.qualified_name,
@@ -343,7 +369,8 @@ def get_function_to_optimize_as_function_source(function_to_optimize: FunctionTo
             return function_source
 
     raise ValueError(
-        f"Could not find function {function_to_optimize.function_name} in {function_to_optimize.file_path}")
+        f"Could not find function {function_to_optimize.function_name} in {function_to_optimize.file_path}"
+    )
 
 
 def get_function_sources_from_jedi(
@@ -383,10 +410,12 @@ def get_function_sources_from_jedi(
                         and definition.full_name
                         and definition.type == "function"
                         and not belongs_to_function_qualified(definition, qualified_function_name)
+                        # Avoid nested functions or classes. Only class.function is allowed
+                        and len((qualified_name := get_qualified_name(definition.module_name, definition.full_name)).split(".")) <= 2
                     ):
                         function_source = FunctionSource(
                             file_path=definition_path,
-                            qualified_name=get_qualified_name(definition.module_name, definition.full_name),
+                            qualified_name=qualified_name,
                             fully_qualified_name=definition.full_name,
                             only_function_name=definition.name,
                             source_code=definition.get_line_code(),
@@ -417,8 +446,13 @@ def remove_docstring_from_body(indented_block: cst.IndentedBlock) -> cst.CSTNode
         return indented_block.with_changes(body=indented_block.body[1:])
     return indented_block
 
+
 def parse_code_and_prune_cst(
-    code: str, code_context_type: CodeContextType, target_functions: set[str], helpers_of_helper_functions: set[str] = set(), remove_docstrings: bool = False
+    code: str,
+    code_context_type: CodeContextType,
+    target_functions: set[str],
+    helpers_of_helper_functions: set[str] = set(),
+    remove_docstrings: bool = False,
 ) -> str:
     """Create a read-only version of the code by parsing and filtering the code to keep only class contextual information, and other module scoped variables."""
     module = cst.parse_module(code)
@@ -440,6 +474,7 @@ def parse_code_and_prune_cst(
     if filtered_node and isinstance(filtered_node, cst.Module):
         return str(filtered_node.code)
     return ""
+
 
 def prune_cst_for_read_writable_code(
     node: cst.CSTNode, target_functions: set[str], prefix: str = ""
@@ -519,6 +554,7 @@ def prune_cst_for_read_writable_code(
         return None, False
 
     return (node.with_changes(**updates) if updates else node), True
+
 
 def prune_cst_for_read_only_code(
     node: cst.CSTNode,
@@ -622,7 +658,6 @@ def prune_cst_for_read_only_code(
         return (node.with_changes(**updates), found_any_target)
 
     return None, False
-
 
 
 def prune_cst_for_testgen_code(

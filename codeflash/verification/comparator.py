@@ -50,6 +50,7 @@ try:
 except ImportError:
     HAS_TORCH = False
 
+
 def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
     """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
     try:
@@ -180,7 +181,6 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
             if orig.device != new.device:
                 return False
             return torch.allclose(orig, new, equal_nan=True)
-
 
         if HAS_PYRSISTENT and isinstance(
             orig,

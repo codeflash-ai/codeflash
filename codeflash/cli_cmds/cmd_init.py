@@ -393,7 +393,7 @@ def check_for_toml_or_setup_file() -> str | None:
     return cast(str, project_name)
 
 
-def install_github_actions(override_formatter_check: bool=False) -> None:
+def install_github_actions(override_formatter_check: bool = False) -> None:
     try:
         config, config_file_path = parse_config_file(override_formatter_check=override_formatter_check)
 
