@@ -31,6 +31,7 @@ class CodeflashTrace:
             self._connection = sqlite3.connect(self._trace_path)
             cur = self._connection.cursor()
             cur.execute("PRAGMA synchronous = OFF")
+            cur.execute("PRAGMA journal_mode = MEMORY")
             cur.execute(
                 "CREATE TABLE IF NOT EXISTS benchmark_function_timings("
                 "function_name TEXT, class_name TEXT, module_name TEXT, file_path TEXT,"
