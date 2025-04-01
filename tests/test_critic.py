@@ -8,10 +8,13 @@ from codeflash.models.models import (
     CoverageData,
     CoverageStatus,
     FunctionCoverage,
+    FunctionTestInvocation,
+    InvocationId,
     OptimizedCandidateResult,
+    TestResults,
+    TestType,
 )
 from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
-from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults, TestType
 
 
 def test_performance_gain() -> None:

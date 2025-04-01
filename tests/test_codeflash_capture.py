@@ -7,11 +7,10 @@ from pathlib import Path
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode
+from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode, TestType, VerificationType
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
-from codeflash.verification.test_results import TestType, VerificationType
 from codeflash.verification.test_runner import execute_test_subprocess
 from codeflash.verification.verification_utils import TestConfig
 

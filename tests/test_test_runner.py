@@ -2,9 +2,8 @@ import os
 import tempfile
 from pathlib import Path
 
-from codeflash.models.models import TestFile, TestFiles
+from codeflash.models.models import TestFile, TestFiles, TestType
 from codeflash.verification.parse_test_output import parse_test_xml
-from codeflash.verification.test_results import TestType
 from codeflash.verification.test_runner import run_behavioral_tests
 from codeflash.verification.verification_utils import TestConfig
 

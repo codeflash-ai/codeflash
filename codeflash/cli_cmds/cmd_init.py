@@ -67,20 +67,27 @@ def init_codeflash() -> None:
 
         did_add_new_key = prompt_api_key()
 
-        setup_info: SetupInfo = collect_setup_info()
+        if should_modify_pyproject_toml():
 
-        configure_pyproject_toml(setup_info)
+            setup_info: SetupInfo = collect_setup_info()
+
+            configure_pyproject_toml(setup_info)
 
         install_github_app()
 
         install_github_actions(override_formatter_check=True)
+
+        module_string = ""
+        if "setup_info" in locals():
+            module_string = f" you selected ({setup_info.module_root})"
+
 
         click.echo(
             f"{LF}"
             f"⚡️ Codeflash is now set up! You can now run:{LF}"
             f"    codeflash --file <path-to-file> --function <function-name> to optimize a function within a file{LF}"
             f"    codeflash --file <path-to-file> to optimize all functions in a file{LF}"
-            f"    codeflash --all to optimize all functions in all files in the module you selected ({setup_info.module_root}){LF}"
+            f"    codeflash --all to optimize all functions in all files in the module{module_string}{LF}"
             f"-or-{LF}"
             f"    codeflash --help to see all options{LF}"
         )
@@ -115,6 +122,30 @@ def ask_run_end_to_end_test(args: Namespace) -> None:
     if run_tests:
         bubble_sort_path, bubble_sort_test_path = create_bubble_sort_file_and_test(args)
         run_end_to_end_test(args, bubble_sort_path, bubble_sort_test_path)
+
+def should_modify_pyproject_toml() -> bool:
+    """
+    Check if the current directory contains a valid pyproject.toml file with codeflash config
+    If it does, ask the user if they want to re-configure it.
+    """
+    from rich.prompt import Confirm
+    pyproject_toml_path = Path.cwd() / "pyproject.toml"
+    if not pyproject_toml_path.exists():
+        return True
+    try:
+        config, config_file_path = parse_config_file(pyproject_toml_path)
+    except Exception as e:
+        return True
+
+    if "module_root" not in config or config["module_root"] is None or not Path(config["module_root"]).is_dir():
+        return True
+    if "tests_root" not in config or config["tests_root"] is None or not Path(config["tests_root"]).is_dir():
+        return True
+
+    create_toml = Confirm.ask(
+        f"✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?", default=False, show_default=True
+    )
+    return create_toml
 
 
 def collect_setup_info() -> SetupInfo:
@@ -362,7 +393,7 @@ def check_for_toml_or_setup_file() -> str | None:
     return cast(str, project_name)
 
 
-def install_github_actions(override_formatter_check: bool=False) -> None:
+def install_github_actions(override_formatter_check: bool = False) -> None:
     try:
         config, config_file_path = parse_config_file(override_formatter_check=override_formatter_check)
 

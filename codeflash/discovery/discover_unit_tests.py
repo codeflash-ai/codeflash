@@ -16,8 +16,7 @@ from pytest import ExitCode
 from codeflash.cli_cmds.console import console, logger, test_files_progress_bar
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
-from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile
-from codeflash.verification.test_results import TestType
+from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 
 if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
