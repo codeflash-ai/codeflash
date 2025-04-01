@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_replacer import normalize_code, normalize_node
 from codeflash.code_utils.code_utils import get_run_tmp_file
@@ -16,10 +16,9 @@ from codeflash.code_utils.static_analysis import analyze_imported_modules, get_f
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
 from codeflash.either import is_successful
-from codeflash.models.models import ValidCode
+from codeflash.models.models import TestType, ValidCode
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.telemetry.posthog_cf import ph
-from codeflash.verification.test_results import TestType
 from codeflash.verification.verification_utils import TestConfig
 
 if TYPE_CHECKING:
@@ -94,8 +93,6 @@ class Optimizer:
                 logger.info("No functions found to optimize. Exiting…")
                 return
 
-            console.rule()
-            logger.info(f"Discovering existing unit tests in {self.test_cfg.tests_root}…")
             console.rule()
             function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
             num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])

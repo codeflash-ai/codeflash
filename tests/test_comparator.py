@@ -12,9 +12,9 @@ import pydantic
 import pytest
 
 from codeflash.either import Failure, Success
+from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType
 from codeflash.verification.comparator import comparator
 from codeflash.verification.equivalence import compare_test_results
-from codeflash.verification.test_results import FunctionTestInvocation, InvocationId, TestResults, TestType
 
 
 def test_basic_python_objects() -> None:
