@@ -116,39 +116,8 @@ def sort_classmethod(x):
     y = WrapperClass.BubbleSortClass()
     return y.sorter(x)
 """
-        expected_code_helper = """from line_profiler import profile as codeflash_line_profile
-
-
-def hi():
-    pass
-
-
-class WrapperClass:
-    def __init__(self):
-        pass
-
-    class BubbleSortClass:
-        def __init__(self):
-            pass
-
-        @codeflash_line_profile
-        def sorter(self, arr):
-            def inner_helper(arr, j):
-                return arr[j] > arr[j + 1]
-
-            for i in range(len(arr)):
-                for j in range(len(arr) - 1):
-                    if arr[j] > arr[j + 1]:
-                        temp = arr[j]
-                        arr[j] = arr[j + 1]
-                        arr[j + 1] = temp
-            return arr
-
-        def helper(self, arr, j):
-            return arr[j] > arr[j + 1]
-"""
         assert code_path.read_text("utf-8") == expected_code_main
-        assert code_context.helper_functions[0].file_path.read_text("utf-8") == expected_code_helper
+        assert code_context.helper_functions.__len__() == 0
     finally:
         func_optimizer.write_code_and_helpers(
             func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
