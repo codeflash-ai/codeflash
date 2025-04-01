@@ -2773,24 +2773,29 @@ def test_code_replacement10() -> None:
     codeflash_con.close()
 """
 
-    with tempfile.NamedTemporaryFile(mode="w") as f:
-        f.write(code)
-        f.flush()
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as temp_file:
+        temp_file.write(code)
+        temp_file_path = Path(temp_file.name)
+
+    try:
         func = FunctionToOptimize(
             function_name="get_code_optimization_context",
             parents=[FunctionParent("Optimizer", "ClassDef")],
-            file_path=Path(f.name),
+            file_path=temp_file_path,
         )
         original_cwd = Path.cwd()
         run_cwd = Path(__file__).parent.parent.resolve()
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            Path(f.name), [CodePosition(22, 28), CodePosition(28, 28)], func, Path(f.name).parent, "pytest"
+            temp_file_path, [CodePosition(22, 28), CodePosition(28, 28)], func, temp_file_path.parent, "pytest"
         )
         os.chdir(original_cwd)
+    finally:
+        temp_file_path.unlink(missing_ok=True)
+
     assert success
     assert new_test == expected.format(
-        module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
+        module_path=temp_file_path.name, tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
     )
 
 
