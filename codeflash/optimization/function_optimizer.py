@@ -362,7 +362,7 @@ class FunctionOptimizer:
         candidates = deque(candidates)
         # Start a new thread for AI service request, start loop in main thread
         # check if aiservice request is complete, when it is complete, append result to the candidates list
-        with concurrent.futures.ThreadPoolExecutor() as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future_line_profile_results = executor.submit(
                 self.aiservice_client.optimize_python_code_line_profiler,
                 source_code=code_context.read_writable_code,
