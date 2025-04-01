@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 import enum
 import re
 import sys
-from collections.abc import Collection, Iterator
+from collections.abc import Collection
 from enum import Enum, IntEnum
 from pathlib import Path
 from re import Pattern
@@ -527,7 +527,7 @@ class TestResults(BaseModel):
         if len(self) != len(other):
             return False
         original_recursion_limit = sys.getrecursionlimit()
-        cast(TestResults, other)
+        cast("TestResults", other)
         for test_result in self:
             other_test_result = other.get_by_unique_invocation_loop_id(test_result.unique_invocation_loop_id)
             if other_test_result is None:

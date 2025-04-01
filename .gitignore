@@ -254,3 +254,6 @@ fabric.properties
 
 # Mac
 .DS_Store
+
+# VSC Workspace settings
+codeflash.code-workspace

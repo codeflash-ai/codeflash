@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import isort
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+
+if TYPE_CHECKING:
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 
 def instrument_codeflash_capture(
@@ -109,7 +112,7 @@ class InitDecorator(ast.NodeTransformer):
             func=ast.Name(id="codeflash_capture", ctx=ast.Load()),
             args=[],
             keywords=[
-                ast.keyword(arg="function_name", value=ast.Constant(value=".".join([node.name, "__init__"]))),
+                ast.keyword(arg="function_name", value=ast.Constant(value=f"{node.name}.__init__")),
                 ast.keyword(arg="tmp_dir_path", value=ast.Constant(value=self.tmp_dir_path)),
                 ast.keyword(arg="tests_root", value=ast.Constant(value=str(self.tests_root))),
                 ast.keyword(arg="is_fto", value=ast.Constant(value=self.is_fto)),

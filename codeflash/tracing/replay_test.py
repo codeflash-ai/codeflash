@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import sqlite3
 import textwrap
-from collections.abc import Generator
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-from codeflash.discovery.functions_to_optimize import FunctionProperties, inspect_top_level_functions_or_methods
-from codeflash.tracing.tracing_utils import FunctionModules
+from codeflash.discovery.functions_to_optimize import inspect_top_level_functions_or_methods
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+    from codeflash.discovery.functions_to_optimize import FunctionProperties
+    from codeflash.tracing.tracing_utils import FunctionModules
 
 
 def get_next_arg_and_return(

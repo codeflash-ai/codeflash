@@ -78,7 +78,7 @@ def codeflash_capture(function_name: str, tmp_dir_path: str, tests_root: str, is
 
     def decorator(wrapped):
         @functools.wraps(wrapped)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs) -> None:
             # Dynamic information retrieved from stack
             test_module_name, test_class_name, test_name, line_id = get_test_info_from_stack(tests_root)
 
@@ -103,7 +103,7 @@ def codeflash_capture(function_name: str, tmp_dir_path: str, tests_root: str, is
 
             # Generate invocation id
             invocation_id = f"{line_id}_{codeflash_test_index}"
-            print(
+            print(  # noqa: T201
                 f"!######{test_module_name}:{(test_class_name + '.' if test_class_name else '')}{test_name}:{function_name}:{loop_index}:{invocation_id}######!"
             )
             # Connect to sqlite
@@ -129,7 +129,8 @@ def codeflash_capture(function_name: str, tmp_dir_path: str, tests_root: str, is
                     0
                 ].__dict__  # self is always the first argument, this is ensured during instrumentation
             else:
-                raise ValueError("Instance state could not be captured.")
+                msg = "Instance state could not be captured."
+                raise ValueError(msg)
             codeflash_cur.execute(
                 "CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)"
             )

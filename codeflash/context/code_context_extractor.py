@@ -3,18 +3,15 @@ from __future__ import annotations
 import os
 from collections import defaultdict
 from itertools import chain
-from pathlib import Path
+from typing import TYPE_CHECKING, Optional
 
 import jedi
 import libcst as cst
 import tiktoken
-from jedi.api.classes import Name
-from libcst import CSTNode
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
 from codeflash.code_utils.code_utils import get_qualified_name, path_belongs_to_site_packages
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import (
     CodeContextType,
     CodeOptimizationContext,
@@ -23,6 +20,15 @@ from codeflash.models.models import (
     FunctionSource,
 )
 from codeflash.optimization.function_context import belongs_to_function_qualified
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from jedi.api.classes import Name
+    from libcst import CSTNode
+
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from typing import Callable
 
 
 def get_code_optimization_context(
@@ -75,7 +81,8 @@ def get_code_optimization_context(
     tokenizer = tiktoken.encoding_for_model("gpt-4o")
     final_read_writable_tokens = len(tokenizer.encode(final_read_writable_code))
     if final_read_writable_tokens > optim_token_limit:
-        raise ValueError("Read-writable code has exceeded token limit, cannot proceed")
+        msg = "Read-writable code has exceeded token limit, cannot proceed"
+        raise ValueError(msg)
 
     # Setup preexisting objects for code replacer
     preexisting_objects = set(
@@ -122,7 +129,8 @@ def get_code_optimization_context(
         testgen_context_code = testgen_code_markdown.code
         testgen_context_code_tokens = len(tokenizer.encode(testgen_context_code))
         if testgen_context_code_tokens > testgen_token_limit:
-            raise ValueError("Testgen code context has exceeded token limit, cannot proceed")
+            msg = "Testgen code context has exceeded token limit, cannot proceed"
+            raise ValueError(msg)
 
     return CodeOptimizationContext(
         testgen_context_code=testgen_context_code,
@@ -143,7 +151,7 @@ def extract_code_string_context_from_files(
     """Extract code context from files containing target functions and their helpers.
     This function processes two sets of files:
     1. Files containing the function to optimize (fto) and their first-degree helpers
-    2. Files containing only helpers of helpers (with no overlap with the first set)
+    2. Files containing only helpers of helpers (with no overlap with the first set).
 
     For each file, it extracts relevant code based on the specified context type, adds necessary
     imports, and combines them.
@@ -358,7 +366,7 @@ def get_function_to_optimize_as_function_source(
             and name.name == function_to_optimize.function_name
             and get_qualified_name(name.module_name, name.full_name) == function_to_optimize.qualified_name
         ):
-            function_source = FunctionSource(
+            return FunctionSource(
                 file_path=function_to_optimize.file_path,
                 qualified_name=function_to_optimize.qualified_name,
                 fully_qualified_name=name.full_name,
@@ -366,11 +374,9 @@ def get_function_to_optimize_as_function_source(
                 source_code=name.get_line_code(),
                 jedi_definition=name,
             )
-            return function_source
 
-    raise ValueError(
-        f"Could not find function {function_to_optimize.function_name} in {function_to_optimize.file_path}"
-    )
+    msg = f"Could not find function {function_to_optimize.function_name} in {function_to_optimize.file_path}"
+    raise ValueError(msg)
 
 
 def get_function_sources_from_jedi(
@@ -436,7 +442,7 @@ def get_section_names(node: cst.CSTNode) -> list[str]:
 
 
 def remove_docstring_from_body(indented_block: cst.IndentedBlock) -> cst.CSTNode:
-    """Removes the docstring from an indented block if it exists"""
+    """Removes the docstring from an indented block if it exists."""
     if not isinstance(indented_block.body[0], cst.SimpleStatementLine):
         return indented_block
     first_stmt = indented_block.body[0].body[0]
@@ -464,15 +470,12 @@ def parse_code_and_prune_cst(
         filtered_node, found_target = prune_cst_for_testgen_code(
             module, target_functions, helpers_of_helper_functions, remove_docstrings=remove_docstrings
         )
-    else:
-        raise ValueError(f"Unknown code_context_type: {code_context_type}")
-
     if not found_target:
-        raise ValueError("No target functions found in the provided code")
+        msg = "No target functions found in the provided code"
+        raise ValueError(msg)
     if filtered_node and isinstance(filtered_node, cst.Module):
         return str(filtered_node.code)
     return ""
-
 
 def prune_cst_for_read_writable_code(
     node: cst.CSTNode, target_functions: set[str], prefix: str = ""
@@ -500,7 +503,8 @@ def prune_cst_for_read_writable_code(
             return None, False
         # Assuming always an IndentedBlock
         if not isinstance(node.body, cst.IndentedBlock):
-            raise ValueError("ClassDef body is not an IndentedBlock")
+            msg = "ClassDef body is not an IndentedBlock"
+            raise ValueError(msg)
         class_prefix = f"{prefix}.{node.name.value}" if prefix else node.name.value
         new_body = []
         found_target = False
@@ -593,7 +597,8 @@ def prune_cst_for_read_only_code(
             return None, False
         # Assuming always an IndentedBlock
         if not isinstance(node.body, cst.IndentedBlock):
-            raise ValueError("ClassDef body is not an IndentedBlock")
+            msg = "ClassDef body is not an IndentedBlock"
+            raise ValueError(msg)
 
         class_prefix = f"{prefix}.{node.name.value}" if prefix else node.name.value
 
@@ -612,10 +617,12 @@ def prune_cst_for_read_only_code(
             return None, False
 
         if remove_docstrings:
-            return node.with_changes(
-                body=remove_docstring_from_body(node.body.with_changes(body=new_class_body))
-            ) if new_class_body else None, True
-        return node.with_changes(body=node.body.with_changes(body=new_class_body)) if new_class_body else None, True
+            return (
+                node.with_changes(body=remove_docstring_from_body(node.body.with_changes(body=new_class_body)))
+                if new_class_body
+                else None
+            ), True
+        return (node.with_changes(body=node.body.with_changes(body=new_class_body)) if new_class_body else None), True
 
     # For other nodes, keep the node and recursively filter children
     section_names = get_section_names(node)
@@ -698,7 +705,8 @@ def prune_cst_for_testgen_code(
             return None, False
         # Assuming always an IndentedBlock
         if not isinstance(node.body, cst.IndentedBlock):
-            raise ValueError("ClassDef body is not an IndentedBlock")
+            msg = "ClassDef body is not an IndentedBlock"
+            raise ValueError(msg)
 
         class_prefix = f"{prefix}.{node.name.value}" if prefix else node.name.value
 
@@ -717,10 +725,12 @@ def prune_cst_for_testgen_code(
             return None, False
 
         if remove_docstrings:
-            return node.with_changes(
-                body=remove_docstring_from_body(node.body.with_changes(body=new_class_body))
-            ) if new_class_body else None, True
-        return node.with_changes(body=node.body.with_changes(body=new_class_body)) if new_class_body else None, True
+            return (
+                node.with_changes(body=remove_docstring_from_body(node.body.with_changes(body=new_class_body)))
+                if new_class_body
+                else None
+            ), True
+        return (node.with_changes(body=node.body.with_changes(body=new_class_body)) if new_class_body else None), True
 
     # For other nodes, keep the node and recursively filter children
     section_names = get_section_names(node)

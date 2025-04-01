@@ -16,7 +16,7 @@ class PytestCollectionPlugin:
         collected_tests.extend(session.items)
         pytest_rootdir = session.config.rootdir
 
-    def pytest_collection_modifyitems(config, items):
+    def pytest_collection_modifyitems(self, items) -> None:
         skip_benchmark = pytest.mark.skip(reason="Skipping benchmark tests")
         for item in items:
             if "benchmark" in item.fixturenames:

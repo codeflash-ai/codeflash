@@ -31,7 +31,7 @@ except ImportError:
     HAS_SCIPY = False
 
 try:
-    import pandas
+    import pandas  # noqa: ICN001
 
     HAS_PANDAS = True
 except ImportError:
@@ -100,7 +100,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
         if HAS_SQLALCHEMY:
             try:
                 insp = sqlalchemy.inspection.inspect(orig)
-                insp = sqlalchemy.inspection.inspect(new)
+                insp = sqlalchemy.inspection.inspect(new)  # noqa: F841
                 orig_keys = orig.__dict__
                 new_keys = new.__dict__
                 for key in list(orig_keys.keys()):
@@ -115,7 +115,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
         # scipy condition because dok_matrix type is also a instance of dict, but dict comparison doesn't work for it
         if isinstance(orig, dict) and not (HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix)):
             if superset_obj:
-                return all(k in new.keys() and comparator(v, new[k], superset_obj) for k, v in orig.items())
+                return all(k in new and comparator(v, new[k], superset_obj) for k, v in orig.items())
             if len(orig) != len(new):
                 return False
             for key in orig:
