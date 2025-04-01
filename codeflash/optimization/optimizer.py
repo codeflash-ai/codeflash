@@ -148,8 +148,6 @@ class Optimizer:
                 return
 
             console.rule()
-            logger.info(f"Discovering existing unit tests in {self.test_cfg.tests_root}…")
-            console.rule()
             function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
             num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
             console.rule()
