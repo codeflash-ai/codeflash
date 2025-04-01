@@ -37,21 +37,21 @@ def test_trace_benchmarks():
         process_and_bubble_sort_path = (project_root / "process_and_bubble_sort_codeflash_trace.py").as_posix()
         # Expected function calls
         expected_calls = [
-            ("__init__", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_class_sort", str(benchmarks_root / "test_benchmark_bubble_sort.py"), 20),
-
-            ("sort_class", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_class_sort", str(benchmarks_root / "test_benchmark_bubble_sort.py"), 18),
-
-            ("sort_static", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_class_sort", str(benchmarks_root / "test_benchmark_bubble_sort.py"), 19),
-
             ("sorter", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
              f"{bubble_sort_path}",
              "test_class_sort", str(benchmarks_root / "test_benchmark_bubble_sort.py"), 17),
+
+            ("sort_class", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
+             f"{bubble_sort_path}",
+             "test_class_sort2", str(benchmarks_root / "test_benchmark_bubble_sort.py"), 20),
+
+            ("sort_static", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
+             f"{bubble_sort_path}",
+             "test_class_sort3", str(benchmarks_root / "test_benchmark_bubble_sort.py"), 23),
+
+            ("__init__", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
+             f"{bubble_sort_path}",
+             "test_class_sort4", str(benchmarks_root / "test_benchmark_bubble_sort.py"), 26),
 
             ("sorter", "", "code_to_optimize.bubble_sort_codeflash_trace",
              f"{bubble_sort_path}",
@@ -76,20 +76,28 @@ def test_trace_benchmarks():
         # Close connection
         conn.close()
         generate_replay_test(output_file, tests_root)
-        test_class_sort_path = tests_root / Path("test_benchmark_bubble_sort_test_class_sort__replay_test_0.py")
+        test_class_sort_path = tests_root / Path("test_benchmark_bubble_sort__replay_test_0.py")
         assert test_class_sort_path.exists()
         test_class_sort_code = f"""
 import dill as pickle
 
 from code_to_optimize.bubble_sort_codeflash_trace import \\
     Sorter as code_to_optimize_bubble_sort_codeflash_trace_Sorter
+from code_to_optimize.bubble_sort_codeflash_trace import \\
+    sorter as code_to_optimize_bubble_sort_codeflash_trace_sorter
 from codeflash.benchmarking.replay_test import get_next_arg_and_return
 
-functions = ['sorter', 'sort_class', 'sort_static']
+functions = ['sort_class', 'sort_static', 'sorter']
 trace_file_path = r"{output_file.as_posix()}"
 
+def test_code_to_optimize_bubble_sort_codeflash_trace_sorter():
+    for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, benchmark_function_name="test_sort", function_name="sorter", file_path=r"{bubble_sort_path}", num_to_get=100):
+        args = pickle.loads(args_pkl)
+        kwargs = pickle.loads(kwargs_pkl)
+        ret = code_to_optimize_bubble_sort_codeflash_trace_sorter(*args, **kwargs)
+
 def test_code_to_optimize_bubble_sort_codeflash_trace_Sorter_sorter():
-    for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="sorter", file_path=r"{bubble_sort_path}", class_name="Sorter", num_to_get=100):
+    for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, benchmark_function_name="test_class_sort", function_name="sorter", file_path=r"{bubble_sort_path}", class_name="Sorter", num_to_get=100):
         args = pickle.loads(args_pkl)
         kwargs = pickle.loads(kwargs_pkl)
         function_name = "sorter"
@@ -102,7 +110,7 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_Sorter_sorter():
             ret = instance.sorter(*args[1:], **kwargs)
 
 def test_code_to_optimize_bubble_sort_codeflash_trace_Sorter_sort_class():
-    for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="sort_class", file_path=r"{bubble_sort_path}", class_name="Sorter", num_to_get=100):
+    for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, benchmark_function_name="test_class_sort2", function_name="sort_class", file_path=r"{bubble_sort_path}", class_name="Sorter", num_to_get=100):
         args = pickle.loads(args_pkl)
         kwargs = pickle.loads(kwargs_pkl)
         if not args:
@@ -110,13 +118,13 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_Sorter_sort_class():
         ret = code_to_optimize_bubble_sort_codeflash_trace_Sorter.sort_class(*args[1:], **kwargs)
 
 def test_code_to_optimize_bubble_sort_codeflash_trace_Sorter_sort_static():
-    for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="sort_static", file_path=r"{bubble_sort_path}", class_name="Sorter", num_to_get=100):
+    for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, benchmark_function_name="test_class_sort3", function_name="sort_static", file_path=r"{bubble_sort_path}", class_name="Sorter", num_to_get=100):
         args = pickle.loads(args_pkl)
         kwargs = pickle.loads(kwargs_pkl)
         ret = code_to_optimize_bubble_sort_codeflash_trace_Sorter.sort_static(*args, **kwargs)
 
 def test_code_to_optimize_bubble_sort_codeflash_trace_Sorter___init__():
-    for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="__init__", file_path=r"{bubble_sort_path}", class_name="Sorter", num_to_get=100):
+    for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, benchmark_function_name="test_class_sort4", function_name="__init__", file_path=r"{bubble_sort_path}", class_name="Sorter", num_to_get=100):
         args = pickle.loads(args_pkl)
         kwargs = pickle.loads(kwargs_pkl)
         function_name = "__init__"
@@ -131,20 +139,29 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_Sorter___init__():
 """
         assert test_class_sort_path.read_text("utf-8").strip()==test_class_sort_code.strip()
 
-        test_sort_path = tests_root / Path("test_benchmark_bubble_sort_test_sort__replay_test_0.py")
+        test_sort_path = tests_root / Path("test_process_and_sort__replay_test_0.py")
         assert test_sort_path.exists()
         test_sort_code = f"""
 import dill as pickle
 
 from code_to_optimize.bubble_sort_codeflash_trace import \\
     sorter as code_to_optimize_bubble_sort_codeflash_trace_sorter
+from code_to_optimize.process_and_bubble_sort_codeflash_trace import \\
+    compute_and_sort as \\
+    code_to_optimize_process_and_bubble_sort_codeflash_trace_compute_and_sort
 from codeflash.benchmarking.replay_test import get_next_arg_and_return
 
-functions = ['sorter']
+functions = ['compute_and_sort', 'sorter']
 trace_file_path = r"{output_file}"
 
+def test_code_to_optimize_process_and_bubble_sort_codeflash_trace_compute_and_sort():
+    for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, benchmark_function_name="test_compute_and_sort", function_name="compute_and_sort", file_path=r"{process_and_bubble_sort_path}", num_to_get=100):
+        args = pickle.loads(args_pkl)
+        kwargs = pickle.loads(kwargs_pkl)
+        ret = code_to_optimize_process_and_bubble_sort_codeflash_trace_compute_and_sort(*args, **kwargs)
+
 def test_code_to_optimize_bubble_sort_codeflash_trace_sorter():
-    for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, function_name="sorter", file_path=r"{bubble_sort_path}", num_to_get=100):
+    for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, benchmark_function_name="test_no_func", function_name="sorter", file_path=r"{bubble_sort_path}", num_to_get=100):
         args = pickle.loads(args_pkl)
         kwargs = pickle.loads(kwargs_pkl)
         ret = code_to_optimize_bubble_sort_codeflash_trace_sorter(*args, **kwargs)
