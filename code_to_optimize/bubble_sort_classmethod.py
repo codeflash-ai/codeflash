@@ -1,6 +1,6 @@
-from code_to_optimize.bubble_sort_in_nested_class import WrapperClass
+from code_to_optimize.bubble_sort_in_class import BubbleSortClass
 
 
 def sort_classmethod(x):
-    y = WrapperClass.BubbleSortClass()
+    y = BubbleSortClass()
     return y.sorter(x)
