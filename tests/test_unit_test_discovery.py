@@ -17,7 +17,6 @@ def test_unit_test_discovery_pytest():
     )
     tests = discover_unit_tests(test_config)
     assert len(tests) > 0
-    # print(tests)
 
 
 def test_unit_test_discovery_unittest():
@@ -108,7 +107,6 @@ def test_discover_tests_pytest_with_temp_dir_root():
 
         # Discover tests
         discovered_tests = discover_unit_tests(test_config)
-
         # Check if the dummy test file is discovered
         assert len(discovered_tests) == 1
         assert len(discovered_tests["dummy_code.dummy_function"]) == 2
