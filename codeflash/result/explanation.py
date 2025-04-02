@@ -1,8 +1,13 @@
 from __future__ import annotations
+
+import shutil
+from io import StringIO
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 from pydantic.dataclasses import dataclass
+from rich.console import Console
+from rich.table import Table
 
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.models.models import BenchmarkDetail, TestResults
@@ -43,11 +48,42 @@ class Explanation:
         benchmark_info = ""
 
         if self.benchmark_details:
-            benchmark_info += "Benchmark Performance Details:\n"
+            # Get terminal width (or use a reasonable default if detection fails)
+            try:
+                terminal_width = int(shutil.get_terminal_size().columns * 0.8)
+            except Exception:
+                terminal_width = 200  # Fallback width
+
+            # Create a rich table for better formatting
+            table = Table(title="Benchmark Performance Details", width=terminal_width)
+
+            # Add columns - split Benchmark File and Function into separate columns
+            # Using proportional width for benchmark file column (40% of terminal width)
+            benchmark_col_width = max(int(terminal_width * 0.4), 40)
+            table.add_column("Benchmark File", style="cyan", width=benchmark_col_width)
+            table.add_column("Function", style="cyan")
+            table.add_column("Original Runtime", style="magenta")
+            table.add_column("Expected New Runtime", style="green")
+            table.add_column("Speedup", style="red")
+
+            # Add rows with split data
             for detail in self.benchmark_details:
-                benchmark_info += f"Original timing for {detail.benchmark_name}::{detail.test_function}: {detail.original_timing}\n"
-                benchmark_info += f"Expected new timing for {detail.benchmark_name}::{detail.test_function}: {detail.expected_new_timing}\n"
-                benchmark_info += f"Benchmark speedup for {detail.benchmark_name}::{detail.test_function}: {detail.speedup_percent:.2f}%\n\n"
+                # Split the benchmark name and test function
+                benchmark_name = detail.benchmark_name
+                test_function = detail.test_function
+
+                table.add_row(
+                    benchmark_name,
+                    test_function,
+                    f"{detail.original_timing}",
+                    f"{detail.expected_new_timing}",
+                    f"{detail.speedup_percent:.2f}%"
+                )
+
+            # Render table to string - using actual terminal width
+            console = Console(file=StringIO(), width=terminal_width)
+            console.print(table)
+            benchmark_info = console.file.getvalue() + "\n"
 
         return (
                 f"Optimized {self.function_name} in {self.file_path}\n"

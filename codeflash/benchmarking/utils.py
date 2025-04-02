@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from typing import Optional
 
 from rich.console import Console
@@ -6,7 +7,7 @@ from rich.table import Table
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.models.models import ProcessedBenchmarkInfo, BenchmarkDetail, BenchmarkKey
+from codeflash.models.models import BenchmarkDetail, BenchmarkKey, ProcessedBenchmarkInfo
 from codeflash.result.critic import performance_gain
 
 
@@ -37,6 +38,7 @@ def validate_and_format_benchmark_table(function_benchmark_timings: dict[str, di
 def print_benchmark_table(function_to_results: dict[str, list[tuple[BenchmarkKey, float, float, float]]]) -> None:
     console = Console()
     for func_path, sorted_tests in function_to_results.items():
+        console.print()
         function_name = func_path.split(":")[-1]
 
         # Create a table for this function

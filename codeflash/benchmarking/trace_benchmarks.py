@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import re
-
-from pytest import ExitCode
+import subprocess
+from pathlib import Path
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
-from pathlib import Path
-import subprocess
+
 
 def trace_benchmarks_pytest(benchmarks_root: Path, tests_root:Path, project_root: Path, trace_file: Path, timeout:int = 300) -> None:
     result = subprocess.run(

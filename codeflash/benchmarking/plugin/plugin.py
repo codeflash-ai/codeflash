@@ -1,11 +1,15 @@
 from __future__ import annotations
+
 import os
 import sqlite3
 import sys
 import time
 from pathlib import Path
+
 import pytest
+
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
+from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.models.models import BenchmarkKey
 
 
@@ -13,11 +17,13 @@ class CodeFlashBenchmarkPlugin:
     def __init__(self) -> None:
         self._trace_path = None
         self._connection = None
+        self.project_root = None
         self.benchmark_timings = []
 
-    def setup(self, trace_path:str) -> None:
+    def setup(self, trace_path:str, project_root:str) -> None:
         try:
             # Open connection
+            self.project_root = project_root
             self._trace_path = trace_path
             self._connection = sqlite3.connect(self._trace_path)
             cur = self._connection.cursor()
@@ -235,9 +241,10 @@ class CodeFlashBenchmarkPlugin:
 
             Returns:
                 The return value of the function
+            a
 
             """
-            benchmark_file_path = str(self.request.node.fspath)
+            benchmark_file_path = module_name_from_file_path(Path(str(self.request.node.fspath)), Path(codeflash_benchmark_plugin.project_root))
             benchmark_function_name = self.request.node.name
             line_number = int(str(sys._getframe(1).f_lineno))  # 1 frame up in the call stack
 

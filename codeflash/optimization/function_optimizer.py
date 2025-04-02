@@ -42,7 +42,6 @@ from codeflash.code_utils.remove_generated_tests import remove_functions_from_ge
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.either import Failure, Success, is_successful
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
@@ -58,7 +57,7 @@ from codeflash.models.models import (
     TestFiles,
     TestingMode,
     TestResults,
-    TestType, BenchmarkKey,
+    TestType,
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
 from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
@@ -75,8 +74,9 @@ from codeflash.verification.verifier import generate_tests
 if TYPE_CHECKING:
     from argparse import Namespace
 
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.either import Result
-    from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
+    from codeflash.models.models import BenchmarkKey, CoverageData, FunctionSource, OptimizedCandidate
     from codeflash.verification.verification_utils import TestConfig
 
 
@@ -92,6 +92,7 @@ class FunctionOptimizer:
         function_benchmark_timings: dict[BenchmarkKey, int] | None = None,
         total_benchmark_timings: dict[BenchmarkKey, int] | None = None,
         args: Namespace | None = None,
+        replay_tests_dir: Path|None = None
     ) -> None:
         self.project_root = test_cfg.project_root_path
         self.test_cfg = test_cfg
@@ -120,6 +121,7 @@ class FunctionOptimizer:
 
         self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
+        self.replay_tests_dir = replay_tests_dir if replay_tests_dir else None
 
     def optimize_function(self) -> Result[BestOptimization, str]:
         should_run_experiment = self.experiment_id is not None
@@ -392,7 +394,7 @@ class FunctionOptimizer:
                     )
                     continue
 
-                # Instrument codeflash capture
+
                 run_results = self.run_optimized_candidate(
                     optimization_candidate_index=candidate_index,
                     baseline_results=original_code_baseline,
@@ -430,8 +432,8 @@ class FunctionOptimizer:
                         tree.add(f"Speedup ratio: {perf_gain + 1:.1f}X")
                         replay_perf_gain = {}
                         if self.args.benchmark:
-                            logger.info(f"Calculating benchmark improvement..")
-                            test_results_by_benchmark = candidate_result.benchmarking_test_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.test_cfg.benchmark_tests_root / "codeflash_replay_tests", self.project_root)
+                            benchmark_tree = Tree("Speedup percentage on benchmarks:")
+                            test_results_by_benchmark = candidate_result.benchmarking_test_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.replay_tests_dir, self.project_root)
                             for benchmark_key, candidate_test_results in test_results_by_benchmark.items():
                                 original_code_replay_runtime = original_code_baseline.replay_benchmarking_test_results[benchmark_key].total_passed_runtime()
                                 candidate_replay_runtime = candidate_test_results.total_passed_runtime()
@@ -439,15 +441,8 @@ class FunctionOptimizer:
                                     original_runtime_ns=original_code_replay_runtime,
                                     optimized_runtime_ns=candidate_replay_runtime,
                                 )
-                                tree.add(
-                                    f"Original benchmark replay runtime: {humanize_runtime(original_code_replay_runtime)}")
-                                tree.add(
-                                    f"Best benchmark replay runtime: {humanize_runtime(candidate_replay_runtime)} "
-                                    f"(measured over {candidate_result.max_loop_count} "
-                                    f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
-                                )
-                                tree.add(f"Speedup percentage for benchmark replay test: {replay_perf_gain[benchmark_key] * 100:.1f}%")
-                                tree.add(f"Speedup ratio for benchmark replay test: {replay_perf_gain[benchmark_key] + 1:.1f}X")
+                                benchmark_tree.add(f"{benchmark_key}: {replay_perf_gain[benchmark_key] * 100:.1f}%")
+
                         best_optimization = BestOptimization(
                             candidate=candidate,
                             helper_functions=code_context.helper_functions,
@@ -467,6 +462,8 @@ class FunctionOptimizer:
                         tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
                         tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
                     console.print(tree)
+                    if self.args.benchmark and benchmark_tree:
+                        console.print(benchmark_tree)
                     console.rule()
 
                 self.write_code_and_helpers(
@@ -903,10 +900,7 @@ class FunctionOptimizer:
             logger.debug(f"Total original code runtime (ns): {total_timing}")
 
             if self.args.benchmark:
-                replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.test_cfg.benchmark_tests_root / "codeflash_replay_tests", self.project_root)
-                for benchmark_name, benchmark_results in replay_benchmarking_test_results.items():
-
-                    logger.info(f"Replay benchmark '{benchmark_name}' runtime: {humanize_runtime(benchmark_results.total_passed_runtime())}")
+                replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.replay_tests_dir, self.project_root)
             return Success(
                 (
                     OriginalCodeBaseline(
@@ -929,7 +923,6 @@ class FunctionOptimizer:
         file_path_to_helper_classes: dict[Path, set[str]],
     ) -> Result[OptimizedCandidateResult, str]:
         assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
-
         with progress_bar("Testing optimization candidate"):
             test_env = os.environ.copy()
             test_env["CODEFLASH_LOOP_INDEX"] = "0"
@@ -941,8 +934,6 @@ class FunctionOptimizer:
                 test_env["PYTHONPATH"] += os.pathsep + str(self.project_root)
 
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
-            get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
-
             # Instrument codeflash capture
             candidate_fto_code = Path(self.function_to_optimize.file_path).read_text("utf-8")
             candidate_helper_code = {}
@@ -973,7 +964,6 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
-
             if compare_test_results(baseline_results.behavioral_test_results, candidate_behavior_results):
                 logger.info("Test results matched!")
                 console.rule()
@@ -1027,7 +1017,7 @@ class FunctionOptimizer:
 
             logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
             if self.args.benchmark:
-                candidate_replay_benchmarking_results = candidate_benchmarking_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.test_cfg.benchmark_tests_root / "codeflash_replay_tests", self.project_root)
+                candidate_replay_benchmarking_results = candidate_benchmarking_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.replay_tests_dir, self.project_root)
                 for benchmark_name, benchmark_results in candidate_replay_benchmarking_results.items():
                     logger.debug(f"Benchmark {benchmark_name} runtime (ns): {humanize_runtime(benchmark_results.total_passed_runtime())}")
             return Success(
