@@ -27,7 +27,7 @@ def test_trace_benchmarks():
         # Get the count of records
         # Get all records
         cursor.execute(
-            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_file_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_file_path, benchmark_function_name, function_name")
+            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name")
         function_calls = cursor.fetchall()
 
         # Assert the length of function calls
@@ -71,7 +71,7 @@ def test_trace_benchmarks():
             assert actual[2] == expected[2], f"Mismatch at index {idx} for module_name"
             assert Path(actual[3]).name == Path(expected[3]).name, f"Mismatch at index {idx} for file_path"
             assert actual[4] == expected[4], f"Mismatch at index {idx} for benchmark_function_name"
-            assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_file_path"
+            assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_module_path"
             assert actual[6] == expected[6], f"Mismatch at index {idx} for benchmark_line_number"
         # Close connection
         conn.close()
@@ -189,7 +189,7 @@ def test_trace_multithreaded_benchmark() -> None:
         # Get the count of records
         # Get all records
         cursor.execute(
-            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_file_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_file_path, benchmark_function_name, function_name")
+            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name")
         function_calls = cursor.fetchall()
 
         # Assert the length of function calls
@@ -217,7 +217,7 @@ def test_trace_multithreaded_benchmark() -> None:
             assert actual[2] == expected[2], f"Mismatch at index {idx} for module_name"
             assert Path(actual[3]).name == Path(expected[3]).name, f"Mismatch at index {idx} for file_path"
             assert actual[4] == expected[4], f"Mismatch at index {idx} for benchmark_function_name"
-            assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_file_path"
+            assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_module_path"
             assert actual[6] == expected[6], f"Mismatch at index {idx} for benchmark_line_number"
         # Close connection
         conn.close()
