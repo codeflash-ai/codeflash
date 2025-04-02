@@ -426,13 +426,13 @@ class FunctionOptimizer:
                         continue
 
 
-                run_results = self.run_optimized_candidate(
-                    optimization_candidate_index=candidate_index,
-                    baseline_results=original_code_baseline,
-                    original_helper_code=original_helper_code,
-                    file_path_to_helper_classes=file_path_to_helper_classes,
-                )
-                console.rule()
+                    run_results = self.run_optimized_candidate(
+                        optimization_candidate_index=candidate_index,
+                        baseline_results=original_code_baseline,
+                        original_helper_code=original_helper_code,
+                        file_path_to_helper_classes=file_path_to_helper_classes,
+                    )
+                    console.rule()
 
                     if not is_successful(run_results):
                         optimized_runtimes[candidate.optimization_id] = None
@@ -448,58 +448,60 @@ class FunctionOptimizer:
                         )
                         speedup_ratios[candidate.optimization_id] = perf_gain
 
-                    tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
-                    if speedup_critic(
-                        candidate_result, original_code_baseline.runtime, best_runtime_until_now
-                    ) and quantity_of_tests_critic(candidate_result):
-                        tree.add("This candidate is faster than the previous best candidate. 🚀")
-                        tree.add(f"Original summed runtime: {humanize_runtime(original_code_baseline.runtime)}")
-                        tree.add(
-                            f"Best summed runtime: {humanize_runtime(candidate_result.best_test_runtime)} "
-                            f"(measured over {candidate_result.max_loop_count} "
-                            f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
-                        )
-                        tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
-                        tree.add(f"Speedup ratio: {perf_gain + 1:.1f}X")
-                        replay_perf_gain = {}
-                        if self.args.benchmark:
-                            benchmark_tree = Tree("Speedup percentage on benchmarks:")
-                            test_results_by_benchmark = candidate_result.benchmarking_test_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.replay_tests_dir, self.project_root)
-                            for benchmark_key, candidate_test_results in test_results_by_benchmark.items():
-                                original_code_replay_runtime = original_code_baseline.replay_benchmarking_test_results[benchmark_key].total_passed_runtime()
-                                candidate_replay_runtime = candidate_test_results.total_passed_runtime()
-                                replay_perf_gain[benchmark_key] = performance_gain(
-                                    original_runtime_ns=original_code_replay_runtime,
-                                    optimized_runtime_ns=candidate_replay_runtime,
-                                )
-                                benchmark_tree.add(f"{benchmark_key}: {replay_perf_gain[benchmark_key] * 100:.1f}%")
+                        tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
+                        if speedup_critic(
+                            candidate_result, original_code_baseline.runtime, best_runtime_until_now
+                        ) and quantity_of_tests_critic(candidate_result):
+                            tree.add("This candidate is faster than the previous best candidate. 🚀")
+                            tree.add(f"Original summed runtime: {humanize_runtime(original_code_baseline.runtime)}")
+                            tree.add(
+                                f"Best summed runtime: {humanize_runtime(candidate_result.best_test_runtime)} "
+                                f"(measured over {candidate_result.max_loop_count} "
+                                f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                            )
+                            tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
+                            tree.add(f"Speedup ratio: {perf_gain + 1:.1f}X")
+                            replay_perf_gain = {}
+                            if self.args.benchmark:
+                                test_results_by_benchmark = candidate_result.benchmarking_test_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.replay_tests_dir, self.project_root)
+                                if len(test_results_by_benchmark) > 0:
+                                    benchmark_tree = Tree("Speedup percentage on benchmarks:")
+                                for benchmark_key, candidate_test_results in test_results_by_benchmark.items():
 
-                        best_optimization = BestOptimization(
-                            candidate=candidate,
-                            helper_functions=code_context.helper_functions,
-                            runtime=best_test_runtime,
-                            winning_behavioral_test_results=candidate_result.behavior_test_results,
-                            replay_performance_gain=replay_perf_gain if self.args.benchmark else None,
-                            winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
-                            winning_replay_benchmarking_test_results=candidate_result.benchmarking_test_results,
-                        )
-                        best_runtime_until_now = best_test_runtime
-                    else:
-                        tree.add(
-                            f"Summed runtime: {humanize_runtime(best_test_runtime)} "
-                            f"(measured over {candidate_result.max_loop_count} "
-                            f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
-                        )
-                        tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
-                        tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
-                    console.print(tree)
-                    if self.args.benchmark and benchmark_tree:
-                        console.print(benchmark_tree)
-                    console.rule()
+                                    original_code_replay_runtime = original_code_baseline.replay_benchmarking_test_results[benchmark_key].total_passed_runtime()
+                                    candidate_replay_runtime = candidate_test_results.total_passed_runtime()
+                                    replay_perf_gain[benchmark_key] = performance_gain(
+                                        original_runtime_ns=original_code_replay_runtime,
+                                        optimized_runtime_ns=candidate_replay_runtime,
+                                    )
+                                    benchmark_tree.add(f"{benchmark_key}: {replay_perf_gain[benchmark_key] * 100:.1f}%")
 
-                    self.write_code_and_helpers(
-                        self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-                    )
+                            best_optimization = BestOptimization(
+                                candidate=candidate,
+                                helper_functions=code_context.helper_functions,
+                                runtime=best_test_runtime,
+                                winning_behavioral_test_results=candidate_result.behavior_test_results,
+                                replay_performance_gain=replay_perf_gain if self.args.benchmark else None,
+                                winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
+                                winning_replay_benchmarking_test_results=candidate_result.benchmarking_test_results,
+                            )
+                            best_runtime_until_now = best_test_runtime
+                        else:
+                            tree.add(
+                                f"Summed runtime: {humanize_runtime(best_test_runtime)} "
+                                f"(measured over {candidate_result.max_loop_count} "
+                                f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                            )
+                            tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
+                            tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
+                        console.print(tree)
+                        if self.args.benchmark and benchmark_tree:
+                            console.print(benchmark_tree)
+                        console.rule()
+
+                        self.write_code_and_helpers(
+                            self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+                        )
 
             except KeyboardInterrupt as e:
                 self.write_code_and_helpers(

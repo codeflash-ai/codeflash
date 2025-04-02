@@ -84,11 +84,11 @@ class BestOptimization(BaseModel):
 
 @dataclass(frozen=True)
 class BenchmarkKey:
-    file_path: str
+    module_path: str
     function_name: str
 
     def __str__(self) -> str:
-        return f"{self.file_path}::{self.function_name}"
+        return f"{self.module_path}::{self.function_name}"
 
 @dataclass
 class BenchmarkDetail:
@@ -484,7 +484,7 @@ class TestResults(BaseModel):
         test_results_by_benchmark = defaultdict(TestResults)
         benchmark_module_path = {}
         for benchmark_key in benchmark_keys:
-            benchmark_module_path[benchmark_key] = module_name_from_file_path(benchmark_replay_test_dir.resolve() / f"test_{Path(benchmark_key.file_path).name.split('.')[0][5:]}__replay_test_", project_root)
+            benchmark_module_path[benchmark_key] = module_name_from_file_path(benchmark_replay_test_dir.resolve() / f"test_{benchmark_key.module_path.replace(".", "_")}__replay_test_", project_root)
         for test_result in self.test_results:
             if (test_result.test_type == TestType.REPLAY_TEST):
                 for benchmark_key, module_path in benchmark_module_path.items():

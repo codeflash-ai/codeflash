@@ -227,18 +227,18 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
 
         # Get distinct benchmark file paths
         cursor.execute(
-            "SELECT DISTINCT benchmark_file_path FROM benchmark_function_timings"
+            "SELECT DISTINCT benchmark_module_path FROM benchmark_function_timings"
         )
         benchmark_files = cursor.fetchall()
 
         # Generate a test for each benchmark file
         for benchmark_file in benchmark_files:
-            benchmark_file_path = benchmark_file[0]
+            benchmark_module_path = benchmark_file[0]
             # Get all benchmarks and functions associated with this file path
             cursor.execute(
             "SELECT DISTINCT benchmark_function_name, function_name, class_name, module_name, file_path, benchmark_line_number FROM benchmark_function_timings "
-                "WHERE benchmark_file_path = ?",
-                (benchmark_file_path,)
+                "WHERE benchmark_module_path = ?",
+                (benchmark_module_path,)
             )
 
             functions_data = []
@@ -251,7 +251,7 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
                     "file_path": file_path,
                     "module_name": module_name,
                     "benchmark_function_name": benchmark_function_name,
-                    "benchmark_file_path": benchmark_file_path,
+                    "benchmark_module_path": benchmark_module_path,
                     "benchmark_line_number": benchmark_line_number,
                     "function_properties": inspect_top_level_functions_or_methods(
                         file_name=Path(file_path),
@@ -261,7 +261,7 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
                 })
 
             if not functions_data:
-                logger.info(f"No benchmark test functions found in {benchmark_file_path}")
+                logger.info(f"No benchmark test functions found in {benchmark_module_path}")
                 continue
             # Generate the test code for this benchmark
             test_code = create_trace_replay_test_code(
@@ -272,7 +272,7 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
             )
             test_code = isort.code(test_code)
             output_file = get_test_file_path(
-                test_dir=Path(output_dir), function_name=benchmark_file_path, test_type="replay"
+                test_dir=Path(output_dir), function_name=benchmark_module_path, test_type="replay"
             )
             # Write test code to file, parents = true
             output_dir.mkdir(parents=True, exist_ok=True)

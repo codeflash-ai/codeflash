@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from typing import Optional
 
 from rich.console import Console
@@ -35,8 +36,14 @@ def validate_and_format_benchmark_table(function_benchmark_timings: dict[str, di
         function_to_result[func_path] = sorted_tests
     return function_to_result
 
+
 def print_benchmark_table(function_to_results: dict[str, list[tuple[BenchmarkKey, float, float, float]]]) -> None:
-    console = Console()
+
+    try:
+        terminal_width = int(shutil.get_terminal_size().columns * 0.8)
+    except Exception:
+        terminal_width = 200  # Fallback width
+    console = Console(width = terminal_width)
     for func_path, sorted_tests in function_to_results.items():
         console.print()
         function_name = func_path.split(":")[-1]
@@ -44,23 +51,30 @@ def print_benchmark_table(function_to_results: dict[str, list[tuple[BenchmarkKey
         # Create a table for this function
         table = Table(title=f"Function: {function_name}", border_style="blue")
 
-        # Add columns
-        table.add_column("Benchmark Test", style="cyan", no_wrap=True)
+        # Add columns - split the benchmark test into two columns
+        table.add_column("Benchmark Module Path", style="cyan", no_wrap=True)
+        table.add_column("Test Function", style="magenta", no_wrap=True)
         table.add_column("Total Time (ms)", justify="right", style="green")
         table.add_column("Function Time (ms)", justify="right", style="yellow")
         table.add_column("Percentage (%)", justify="right", style="red")
 
         for benchmark_key, total_time, func_time, percentage in sorted_tests:
+            # Split the benchmark test into module path and function name
+            module_path = benchmark_key.module_path
+            test_function = benchmark_key.function_name
+
             if total_time == 0.0:
                 table.add_row(
-                    f"{benchmark_key.file_path}::{benchmark_key.function_name}",
+                    module_path,
+                    test_function,
                     "N/A",
                     "N/A",
                     "N/A"
                 )
             else:
                 table.add_row(
-                    f"{benchmark_key.file_path}::{benchmark_key.function_name}",
+                    module_path,
+                    test_function,
                     f"{total_time:.3f}",
                     f"{func_time:.3f}",
                     f"{percentage:.2f}"
@@ -108,7 +122,7 @@ def process_benchmark_data(
 
         benchmark_details.append(
             BenchmarkDetail(
-                benchmark_name=benchmark_key.file_path,
+                benchmark_name=benchmark_key.module_path,
                 test_function=benchmark_key.function_name,
                 original_timing=humanize_runtime(int(total_benchmark_timing)),
                 expected_new_timing=humanize_runtime(int(expected_new_benchmark_timing)),
