@@ -2,19 +2,20 @@
 solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 """
 
+import sys
 from pathlib import Path
 
 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO, ask_run_end_to_end_test
-from codeflash.cli_cmds.console import paneled_text
+from codeflash.cli_cmds.console import logger, paneled_text
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.optimization import optimizer
 from codeflash.telemetry import posthog_cf
 from codeflash.telemetry.sentry import init_sentry
 
 
-def main() -> None:
-    """Entry point for the codeflash command-line interface."""
+def _main() -> None:
+    """Internal entry point for the codeflash command-line interface."""
     paneled_text(
         CODEFLASH_LOGO, panel_args={"title": "https://codeflash.ai", "expand": False}, text_args={"style": "bold gold3"}
     )
@@ -38,6 +39,16 @@ def main() -> None:
         init_sentry(not args.disable_telemetry, exclude_errors=True)
         posthog_cf.initialize_posthog(not args.disable_telemetry)
         optimizer.run_with_args(args)
+
+
+def main() -> None:
+    """Entry point for the codeflash command-line interface with global exception handling."""
+    try:
+        _main()
+    except Exception as e:
+        logger.error(f"Error: {str(e)}")
+        logger.error("Raise an issue on Codeflash's Github issues at - https://github.com/codeflash-ai/codeflash/issues")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
