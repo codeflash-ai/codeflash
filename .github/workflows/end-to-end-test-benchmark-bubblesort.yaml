@@ -35,7 +35,7 @@ jobs:
           poetry install --with dev
 
       - name: Run Codeflash to optimize code
-        id: optimize_code with benchmarks
+        id: optimize_code_with_benchmarks
         run: |
           source .venv/bin/activate
           poetry run python tests/scripts/end_to_end_test_benchmark_sort.py
