@@ -55,7 +55,7 @@ class Explanation:
                 terminal_width = 200  # Fallback width
 
             # Create a rich table for better formatting
-            table = Table(title="Benchmark Performance Details", width=terminal_width)
+            table = Table(title="Benchmark Performance Details", width=terminal_width, show_lines=True)
 
             # Add columns - split Benchmark File and Function into separate columns
             # Using proportional width for benchmark file column (40% of terminal width)
