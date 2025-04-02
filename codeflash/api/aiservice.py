@@ -135,6 +135,76 @@ class AiServiceClient:
         console.rule()
         return []
 
+    def optimize_python_code_line_profiler(
+        self,
+        source_code: str,
+        dependency_code: str,
+        trace_id: str,
+        line_profiler_results: str,
+        num_candidates: int = 10,
+        experiment_metadata: ExperimentMetadata | None = None,
+    ) -> list[OptimizedCandidate]:
+        """Optimize the given python code for performance by making a request to the Django endpoint.
+
+        Parameters
+        ----------
+        - source_code (str): The python code to optimize.
+        - dependency_code (str): The dependency code used as read-only context for the optimization
+        - trace_id (str): Trace id of optimization run
+        - num_candidates (int): Number of optimization variants to generate. Default is 10.
+        - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
+
+        Returns
+        -------
+        - List[OptimizationCandidate]: A list of Optimization Candidates.
+
+        """
+        payload = {
+            "source_code": source_code,
+            "dependency_code": dependency_code,
+            "num_variants": num_candidates,
+            "line_profiler_results": line_profiler_results,
+            "trace_id": trace_id,
+            "python_version": platform.python_version(),
+            "experiment_metadata": experiment_metadata,
+            "codeflash_version": codeflash_version,
+        }
+
+        logger.info("Generating optimized candidates…")
+        console.rule()
+        if line_profiler_results=="":
+            logger.info("No LineProfiler results were provided, Skipping optimization.")
+            console.rule()
+            return []
+        try:
+            response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=600)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating optimized candidates: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
+            return []
+
+        if response.status_code == 200:
+            optimizations_json = response.json()["optimizations"]
+            logger.info(f"Generated {len(optimizations_json)} candidates.")
+            console.rule()
+            return [
+                OptimizedCandidate(
+                    source_code=opt["source_code"],
+                    explanation=opt["explanation"],
+                    optimization_id=opt["optimization_id"],
+                )
+                for opt in optimizations_json
+            ]
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return []
+
+
     def log_results(
         self,
         function_trace_id: str,
