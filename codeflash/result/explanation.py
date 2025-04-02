@@ -50,7 +50,7 @@ class Explanation:
         if self.benchmark_details:
             # Get terminal width (or use a reasonable default if detection fails)
             try:
-                terminal_width = int(shutil.get_terminal_size().columns * 0.8)
+                terminal_width = int(shutil.get_terminal_size().columns * 0.9)
             except Exception:
                 terminal_width = 200  # Fallback width
 
@@ -60,11 +60,11 @@ class Explanation:
             # Add columns - split Benchmark File and Function into separate columns
             # Using proportional width for benchmark file column (40% of terminal width)
             benchmark_col_width = max(int(terminal_width * 0.4), 40)
-            table.add_column("Benchmark Module Path", style="cyan", width=benchmark_col_width)
-            table.add_column("Test Function", style="cyan")
-            table.add_column("Original Runtime", style="magenta")
-            table.add_column("Expected New Runtime", style="green")
-            table.add_column("Speedup", style="red")
+            table.add_column("Benchmark Module Path", style="cyan", width=benchmark_col_width, overflow="fold")
+            table.add_column("Test Function", style="cyan", overflow="fold")
+            table.add_column("Original Runtime", style="magenta", justify="right")
+            table.add_column("Expected New Runtime", style="green", justify="right")
+            table.add_column("Speedup", style="red", justify="right")
 
             # Add rows with split data
             for detail in self.benchmark_details:
