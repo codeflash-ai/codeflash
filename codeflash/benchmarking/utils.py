@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import shutil
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
+from rich.box import HORIZONTALS
 from rich.console import Console
 from rich.table import Table
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.models.models import BenchmarkDetail, BenchmarkKey, ProcessedBenchmarkInfo
+from codeflash.models.models import BenchmarkDetail, ProcessedBenchmarkInfo
 from codeflash.result.critic import performance_gain
+
+if TYPE_CHECKING:
+    from codeflash.models.models import BenchmarkKey
 
 
 def validate_and_format_benchmark_table(function_benchmark_timings: dict[str, dict[BenchmarkKey, int]],
@@ -49,10 +53,10 @@ def print_benchmark_table(function_to_results: dict[str, list[tuple[BenchmarkKey
         function_name = func_path.split(":")[-1]
 
         # Create a table for this function
-        table = Table(title=f"Function: {function_name}", border_style="blue")
-
+        table = Table(title=f"Function: {function_name}", width=terminal_width, border_style="blue", box=HORIZONTALS)
+        benchmark_col_width = max(int(terminal_width * 0.4), 40)
         # Add columns - split the benchmark test into two columns
-        table.add_column("Benchmark Module Path", style="cyan", overflow="fold")
+        table.add_column("Benchmark Module Path", width=benchmark_col_width, style="cyan", overflow="fold")
         table.add_column("Test Function", style="magenta", overflow="fold")
         table.add_column("Total Time (ms)", justify="right", style="green")
         table.add_column("Function Time (ms)", justify="right", style="yellow")
