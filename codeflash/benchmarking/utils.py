@@ -3,7 +3,6 @@ from __future__ import annotations
 import shutil
 from typing import TYPE_CHECKING, Optional
 
-from rich.box import HORIZONTALS
 from rich.console import Console
 from rich.table import Table
 
@@ -53,7 +52,7 @@ def print_benchmark_table(function_to_results: dict[str, list[tuple[BenchmarkKey
         function_name = func_path.split(":")[-1]
 
         # Create a table for this function
-        table = Table(title=f"Function: {function_name}", width=terminal_width, border_style="blue", box=HORIZONTALS)
+        table = Table(title=f"Function: {function_name}", width=terminal_width, border_style="blue", show_lines=True)
         benchmark_col_width = max(int(terminal_width * 0.4), 40)
         # Add columns - split the benchmark test into two columns
         table.add_column("Benchmark Module Path", width=benchmark_col_width, style="cyan", overflow="fold")
