@@ -68,7 +68,6 @@ def init_codeflash() -> None:
         did_add_new_key = prompt_api_key()
 
         if should_modify_pyproject_toml():
-
             setup_info: SetupInfo = collect_setup_info()
 
             configure_pyproject_toml(setup_info)
@@ -80,7 +79,6 @@ def init_codeflash() -> None:
         module_string = ""
         if "setup_info" in locals():
             module_string = f" you selected ({setup_info.module_root})"
-
 
         click.echo(
             f"{LF}"
@@ -123,12 +121,14 @@ def ask_run_end_to_end_test(args: Namespace) -> None:
         bubble_sort_path, bubble_sort_test_path = create_bubble_sort_file_and_test(args)
         run_end_to_end_test(args, bubble_sort_path, bubble_sort_test_path)
 
+
 def should_modify_pyproject_toml() -> bool:
     """
     Check if the current directory contains a valid pyproject.toml file with codeflash config
     If it does, ask the user if they want to re-configure it.
     """
     from rich.prompt import Confirm
+
     pyproject_toml_path = Path.cwd() / "pyproject.toml"
     if not pyproject_toml_path.exists():
         return True
@@ -143,7 +143,9 @@ def should_modify_pyproject_toml() -> bool:
         return True
 
     create_toml = Confirm.ask(
-        f"✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?", default=False, show_default=True
+        f"✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?",
+        default=False,
+        show_default=True,
     )
     return create_toml
 

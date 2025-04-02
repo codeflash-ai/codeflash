@@ -235,6 +235,10 @@ class Tracer:
         with Path(test_file_path).open("w", encoding="utf8") as file:
             file.write(replay_test)
 
+        from rich.syntax import Syntax
+
+        console.print(Syntax(replay_test, "python"))
+
         console.print(
             f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}",
             crop=False,

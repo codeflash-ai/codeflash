@@ -40,10 +40,7 @@ FUNCTION_NAME_REGEX = re.compile(r"([^.]+)\.([a-zA-Z0-9_]+)$")
 def discover_unit_tests(
     cfg: TestConfig, discover_only_these_tests: list[Path] | None = None
 ) -> dict[str, list[FunctionCalledInTest]]:
-    framework_strategies: dict[str, Callable] = {
-        "pytest": discover_tests_pytest,
-        "unittest": discover_tests_unittest,
-    }
+    framework_strategies: dict[str, Callable] = {"pytest": discover_tests_pytest, "unittest": discover_tests_unittest}
     strategy = framework_strategies.get(cfg.test_framework, None)
     if not strategy:
         error_message = f"Unsupported test framework: {cfg.test_framework}"
@@ -91,9 +88,7 @@ def discover_tests_pytest(
             )
 
         elif 0 <= exitcode <= 5:
-            logger.warning(
-                f"Failed to collect tests. Pytest Exit code: {exitcode}={ExitCode(exitcode).name}"
-            )
+            logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}={ExitCode(exitcode).name}")
         else:
             logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
         console.rule()
@@ -116,10 +111,7 @@ def discover_tests_pytest(
             test_function=test["test_function"],
             test_type=test_type,
         )
-        if (
-            discover_only_these_tests
-            and test_obj.test_file not in discover_only_these_tests
-        ):
+        if discover_only_these_tests and test_obj.test_file not in discover_only_these_tests:
             continue
         file_to_test_map[test_obj.test_file].append(test_obj)
     # Within these test files, find the project functions they are referring to and return their names/locations
@@ -144,8 +136,7 @@ def discover_tests_unittest(
         _test_module_path = Path(_test_module.replace(".", os.sep)).with_suffix(".py")
         _test_module_path = tests_root / _test_module_path
         if not _test_module_path.exists() or (
-            discover_only_these_tests
-            and str(_test_module_path) not in discover_only_these_tests
+            discover_only_these_tests and str(_test_module_path) not in discover_only_these_tests
         ):
             return None
         if "__replay_test" in str(_test_module_path):
@@ -172,9 +163,7 @@ def discover_tests_unittest(
                 if not hasattr(test, "_testMethodName") and hasattr(test, "_tests"):
                     for test_2 in test._tests:
                         if not hasattr(test_2, "_testMethodName"):
-                            logger.warning(
-                                f"Didn't find tests for {test_2}"
-                            )  # it goes deeper?
+                            logger.warning(f"Didn't find tests for {test_2}")  # it goes deeper?
                             continue
                         details = get_test_details(test_2)
                         if details is not None:
@@ -203,10 +192,10 @@ def process_test_files(
     jedi_project = jedi.Project(path=project_root_path)
     goto_cache = {}
 
-    with test_files_progress_bar(
-        total=len(file_to_test_map), description="Processing test files"
-    ) as (progress, task_id):
-
+    with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
+        progress,
+        task_id,
+    ):
         for test_file, functions in file_to_test_map.items():
             try:
                 script = jedi.Script(path=test_file, project=jedi_project)
@@ -216,12 +205,8 @@ def process_test_files(
                 all_defs = script.get_names(all_scopes=True, definitions=True)
                 all_names_top = script.get_names(all_scopes=True)
 
-                top_level_functions = {
-                    name.name: name for name in all_names_top if name.type == "function"
-                }
-                top_level_classes = {
-                    name.name: name for name in all_names_top if name.type == "class"
-                }
+                top_level_functions = {name.name: name for name in all_names_top if name.type == "function"}
+                top_level_classes = {name.name: name for name in all_names_top if name.type == "class"}
             except Exception as e:
                 logger.debug(f"Failed to get jedi script for {test_file}: {e}")
                 progress.advance(task_id)
@@ -230,36 +215,18 @@ def process_test_files(
             if test_framework == "pytest":
                 for function in functions:
                     if "[" in function.test_function:
-                        function_name = PYTEST_PARAMETERIZED_TEST_NAME_REGEX.split(
-                            function.test_function
-                        )[0]
-                        parameters = PYTEST_PARAMETERIZED_TEST_NAME_REGEX.split(
-                            function.test_function
-                        )[1]
+                        function_name = PYTEST_PARAMETERIZED_TEST_NAME_REGEX.split(function.test_function)[0]
+                        parameters = PYTEST_PARAMETERIZED_TEST_NAME_REGEX.split(function.test_function)[1]
                         if function_name in top_level_functions:
                             test_functions.add(
-                                TestFunction(
-                                    function_name,
-                                    function.test_class,
-                                    parameters,
-                                    function.test_type,
-                                )
+                                TestFunction(function_name, function.test_class, parameters, function.test_type)
                             )
                     elif function.test_function in top_level_functions:
                         test_functions.add(
-                            TestFunction(
-                                function.test_function,
-                                function.test_class,
-                                None,
-                                function.test_type,
-                            )
+                            TestFunction(function.test_function, function.test_class, None, function.test_type)
                         )
-                    elif UNITTEST_PARAMETERIZED_TEST_NAME_REGEX.match(
-                        function.test_function
-                    ):
-                        base_name = UNITTEST_STRIP_NUMBERED_SUFFIX_REGEX.sub(
-                            "", function.test_function
-                        )
+                    elif UNITTEST_PARAMETERIZED_TEST_NAME_REGEX.match(function.test_function):
+                        base_name = UNITTEST_STRIP_NUMBERED_SUFFIX_REGEX.sub("", function.test_function)
                         if base_name in top_level_functions:
                             test_functions.add(
                                 TestFunction(
@@ -283,9 +250,7 @@ def process_test_files(
                             and f".{matched_name}." in def_name.full_name
                         ):
                             for function in functions_to_search:
-                                (is_parameterized, new_function, parameters) = (
-                                    discover_parameters_unittest(function)
-                                )
+                                (is_parameterized, new_function, parameters) = discover_parameters_unittest(function)
 
                                 if is_parameterized and new_function == def_name.name:
                                     test_functions.add(
@@ -329,9 +294,7 @@ def process_test_files(
                     if cache_key in goto_cache:
                         definition = goto_cache[cache_key]
                     else:
-                        definition = name.goto(
-                            follow_imports=True, follow_builtin_imports=False
-                        )
+                        definition = name.goto(follow_imports=True, follow_builtin_imports=False)
                         goto_cache[cache_key] = definition
                 except Exception as e:
                     logger.debug(str(e))
@@ -358,9 +321,9 @@ def process_test_files(
                             if test_framework == "unittest":
                                 scope_test_function += "_" + scope_parameters
 
-                        full_name_without_module_prefix = definition[
-                            0
-                        ].full_name.replace(definition[0].module_name + ".", "", 1)
+                        full_name_without_module_prefix = definition[0].full_name.replace(
+                            definition[0].module_name + ".", "", 1
+                        )
                         qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
 
                         function_to_test_map[qualified_name_with_modules_from_root].add(
@@ -371,9 +334,7 @@ def process_test_files(
                                     test_function=scope_test_function,
                                     test_type=test_type,
                                 ),
-                                position=CodePosition(
-                                    line_no=name.line, col_no=name.column
-                                ),
+                                position=CodePosition(line_no=name.line, col_no=name.column),
                             )
                         )
 
