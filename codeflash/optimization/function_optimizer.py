@@ -449,6 +449,7 @@ class FunctionOptimizer:
                         speedup_ratios[candidate.optimization_id] = perf_gain
 
                         tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
+                        benchmark_tree = None
                         if speedup_critic(
                             candidate_result, original_code_baseline.runtime, best_runtime_until_now
                         ) and quantity_of_tests_critic(candidate_result):
@@ -499,9 +500,9 @@ class FunctionOptimizer:
                             console.print(benchmark_tree)
                         console.rule()
 
-                        self.write_code_and_helpers(
-                            self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-                        )
+                    self.write_code_and_helpers(
+                        self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+                    )
 
             except KeyboardInterrupt as e:
                 self.write_code_and_helpers(
