@@ -13,9 +13,9 @@ def test_trace_benchmarks():
     # Test the trace_benchmarks function
     project_root = Path(__file__).parent.parent / "code_to_optimize"
     benchmarks_root = project_root / "tests" / "pytest" / "benchmarks_test"
-    tests_root = project_root / "tests" / "test_trace_benchmarks"
-    tests_root.mkdir(parents=False, exist_ok=False)
-    output_file = (tests_root / Path("test_trace_benchmarks.trace")).resolve()
+    replay_tests_dir = benchmarks_root / "codeflash_replay_tests"
+    tests_root = project_root / "tests"
+    output_file = (benchmarks_root / Path("test_trace_benchmarks.trace")).resolve()
     trace_benchmarks_pytest(benchmarks_root, tests_root, project_root, output_file)
     assert output_file.exists()
     try:
@@ -39,31 +39,31 @@ def test_trace_benchmarks():
         expected_calls = [
             ("sorter", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
              f"{bubble_sort_path}",
-             "test_class_sort", str(benchmarks_root / "test_benchmark_bubble_sort.py"), 17),
+             "test_class_sort", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 17),
 
             ("sort_class", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
              f"{bubble_sort_path}",
-             "test_class_sort2", str(benchmarks_root / "test_benchmark_bubble_sort.py"), 20),
+             "test_class_sort2", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 20),
 
             ("sort_static", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
              f"{bubble_sort_path}",
-             "test_class_sort3", str(benchmarks_root / "test_benchmark_bubble_sort.py"), 23),
+             "test_class_sort3", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 23),
 
             ("__init__", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
              f"{bubble_sort_path}",
-             "test_class_sort4", str(benchmarks_root / "test_benchmark_bubble_sort.py"), 26),
+             "test_class_sort4", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 26),
 
             ("sorter", "", "code_to_optimize.bubble_sort_codeflash_trace",
              f"{bubble_sort_path}",
-             "test_sort", str(benchmarks_root / "test_benchmark_bubble_sort.py"), 7),
+             "test_sort", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 7),
 
             ("compute_and_sort", "", "code_to_optimize.process_and_bubble_sort_codeflash_trace",
              f"{process_and_bubble_sort_path}",
-             "test_compute_and_sort", str(benchmarks_root / "test_process_and_sort.py"), 4),
+             "test_compute_and_sort", "tests.pytest.benchmarks_test.test_process_and_sort_example", 4),
 
             ("sorter", "", "code_to_optimize.bubble_sort_codeflash_trace",
              f"{bubble_sort_path}",
-             "test_no_func", str(benchmarks_root / "test_process_and_sort.py"), 8),
+             "test_no_func", "tests.pytest.benchmarks_test.test_process_and_sort_example", 8),
         ]
         for idx, (actual, expected) in enumerate(zip(function_calls, expected_calls)):
             assert actual[0] == expected[0], f"Mismatch at index {idx} for function_name"
@@ -75,8 +75,8 @@ def test_trace_benchmarks():
             assert actual[6] == expected[6], f"Mismatch at index {idx} for benchmark_line_number"
         # Close connection
         conn.close()
-        generate_replay_test(output_file, tests_root)
-        test_class_sort_path = tests_root / Path("test_benchmark_bubble_sort__replay_test_0.py")
+        generate_replay_test(output_file, replay_tests_dir)
+        test_class_sort_path = replay_tests_dir/ Path("test_tests_pytest_benchmarks_test_test_benchmark_bubble_sort_example__replay_test_0.py")
         assert test_class_sort_path.exists()
         test_class_sort_code = f"""
 import dill as pickle
@@ -139,7 +139,7 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_Sorter___init__():
 """
         assert test_class_sort_path.read_text("utf-8").strip()==test_class_sort_code.strip()
 
-        test_sort_path = tests_root / Path("test_process_and_sort__replay_test_0.py")
+        test_sort_path = replay_tests_dir / Path("test_tests_pytest_benchmarks_test_test_process_and_sort_example__replay_test_0.py")
         assert test_sort_path.exists()
         test_sort_code = f"""
 import dill as pickle
@@ -170,14 +170,14 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_sorter():
         assert test_sort_path.read_text("utf-8").strip()==test_sort_code.strip()
     finally:
         # cleanup
-        shutil.rmtree(tests_root)
+        output_file.unlink(missing_ok=True)
+        shutil.rmtree(replay_tests_dir)
 
 def test_trace_multithreaded_benchmark() -> None:
     project_root = Path(__file__).parent.parent / "code_to_optimize"
     benchmarks_root = project_root / "tests" / "pytest" / "benchmarks_multithread"
-    tests_root = project_root / "tests" / "test_trace_benchmarks"
-    tests_root.mkdir(parents=False, exist_ok=False)
-    output_file = (tests_root / Path("test_trace_benchmarks.trace")).resolve()
+    tests_root = project_root / "tests"
+    output_file = (benchmarks_root / Path("test_trace_benchmarks.trace")).resolve()
     trace_benchmarks_pytest(benchmarks_root, tests_root, project_root, output_file)
     assert output_file.exists()
     try:
@@ -209,7 +209,7 @@ def test_trace_multithreaded_benchmark() -> None:
         expected_calls = [
             ("sorter", "", "code_to_optimize.bubble_sort_codeflash_trace",
              f"{bubble_sort_path}",
-             "test_benchmark_sort", str(benchmarks_root / "test_multithread_sort.py"), 4),
+             "test_benchmark_sort", "tests.pytest.benchmarks_multithread.test_multithread_sort", 4),
         ]
         for idx, (actual, expected) in enumerate(zip(function_calls, expected_calls)):
             assert actual[0] == expected[0], f"Mismatch at index {idx} for function_name"
@@ -224,4 +224,4 @@ def test_trace_multithreaded_benchmark() -> None:
 
     finally:
         # cleanup
-        shutil.rmtree(tests_root)
+        output_file.unlink(missing_ok=True)

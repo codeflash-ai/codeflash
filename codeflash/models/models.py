@@ -479,7 +479,6 @@ class TestResults(BaseModel):
 
     def group_by_benchmarks(self, benchmark_keys:list[BenchmarkKey], benchmark_replay_test_dir: Path, project_root: Path) -> dict[BenchmarkKey, TestResults]:
         """Group TestResults by benchmark for calculating improvements for each benchmark."""
-
         test_results_by_benchmark = defaultdict(TestResults)
         benchmark_module_path = {}
         for benchmark_key in benchmark_keys:

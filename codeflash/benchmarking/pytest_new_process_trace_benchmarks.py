@@ -13,7 +13,7 @@ if __name__ == "__main__":
     import pytest
 
     try:
-        codeflash_benchmark_plugin.setup(trace_file)
+        codeflash_benchmark_plugin.setup(trace_file, project_root)
         codeflash_trace.setup(trace_file)
         exitcode = pytest.main(
             [benchmarks_root, "--codeflash-trace", "-p", "no:benchmark", "-s", "-o", "addopts="], plugins=[codeflash_benchmark_plugin]

@@ -4,10 +4,12 @@ import ast
 import os
 import shutil
 import tempfile
+from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
+from codeflash.benchmarking.instrument_codeflash_trace import instrument_codeflash_trace_decorator
 from codeflash.benchmarking.plugin.plugin import CodeFlashBenchmarkPlugin
 from codeflash.benchmarking.replay_test import generate_replay_test
 from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
@@ -20,16 +22,10 @@ from codeflash.code_utils.static_analysis import analyze_imported_modules, get_f
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
 from codeflash.either import is_successful
-from codeflash.models.models import TestType, ValidCode
-from codeflash.models.models import ValidCode, TestType, BenchmarkKey
+from codeflash.models.models import BenchmarkKey, TestType, ValidCode
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
-from codeflash.benchmarking.utils import print_benchmark_table
-from codeflash.benchmarking.instrument_codeflash_trace import instrument_codeflash_trace_decorator
-
-
-from collections import defaultdict
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -54,7 +50,7 @@ class Optimizer:
         self.aiservice_client = AiServiceClient()
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
-
+        self.replay_tests_dir = None
     def create_function_optimizer(
         self,
         function_to_optimize: FunctionToOptimize,
@@ -74,6 +70,7 @@ class Optimizer:
             args=self.args,
             function_benchmark_timings=function_benchmark_timings if function_benchmark_timings else None,
             total_benchmark_timings=total_benchmark_timings if total_benchmark_timings else None,
+            replay_tests_dir = self.replay_tests_dir
         )
 
     def run(self) -> None:
@@ -115,9 +112,9 @@ class Optimizer:
                     if trace_file.exists():
                         trace_file.unlink()
 
-                    replay_tests_dir = Path(self.args.benchmarks_root) / "codeflash_replay_tests"
+                    self.replay_tests_dir = Path(tempfile.mkdtemp(prefix="codeflash_replay_tests_", dir=self.args.benchmarks_root))
                     trace_benchmarks_pytest(self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file) # Run all tests that use pytest-benchmark
-                    replay_count = generate_replay_test(trace_file, replay_tests_dir)
+                    replay_count = generate_replay_test(trace_file, self.replay_tests_dir)
                     if replay_count == 0:
                         logger.info(f"No valid benchmarks found in {self.args.benchmarks_root} for functions to optimize, continuing optimization")
                     else:
@@ -125,10 +122,9 @@ class Optimizer:
                         total_benchmark_timings = CodeFlashBenchmarkPlugin.get_benchmark_timings(trace_file)
                         function_to_results = validate_and_format_benchmark_table(function_benchmark_timings, total_benchmark_timings)
                         print_benchmark_table(function_to_results)
-                        logger.info("Finished tracing existing benchmarks")
                 except Exception as e:
                     logger.info(f"Error while tracing existing benchmarks: {e}")
-                    logger.info(f"Information on existing benchmarks will not be available for this run.")
+                    logger.info("Information on existing benchmarks will not be available for this run.")
                 finally:
                     # Restore original source code
                     for file in file_path_to_source_code:
@@ -250,8 +246,8 @@ class Optimizer:
                 if function_optimizer.test_cfg.concolic_test_root_dir:
                     shutil.rmtree(function_optimizer.test_cfg.concolic_test_root_dir, ignore_errors=True)
                 if self.args.benchmark:
-                    # if replay_tests_dir.exists():
-                    #     shutil.rmtree(replay_tests_dir, ignore_errors=True)
+                    if self.replay_tests_dir.exists():
+                        shutil.rmtree(self.replay_tests_dir, ignore_errors=True)
                     trace_file.unlink(missing_ok=True)
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()

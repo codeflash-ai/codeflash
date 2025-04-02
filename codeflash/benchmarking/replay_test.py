@@ -271,19 +271,15 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
                 max_run_count=max_run_count,
             )
             test_code = isort.code(test_code)
-
-            name = Path(benchmark_file_path).name.split(".")[0][5:] # remove "test_" from the name since we add it in later
             output_file = get_test_file_path(
-                test_dir=Path(output_dir), function_name=f"{name}", test_type="replay"
+                test_dir=Path(output_dir), function_name=benchmark_file_path, test_type="replay"
             )
             # Write test code to file, parents = true
             output_dir.mkdir(parents=True, exist_ok=True)
             output_file.write_text(test_code, "utf-8")
             count += 1
-            logger.info(f"Replay test for benchmark file `{benchmark_file_path}` in {name} written to {output_file}")
 
         conn.close()
-
     except Exception as e:
         logger.info(f"Error generating replay tests: {e}")
 
