@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 from io import StringIO
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 from pydantic.dataclasses import dataclass
 from rich.console import Console
@@ -79,11 +79,11 @@ class Explanation:
                     f"{detail.expected_new_timing}",
                     f"{detail.speedup_percent:.2f}%"
                 )
-
-            # Render table to string - using actual terminal width
-            console = Console(file=StringIO(), width=terminal_width)
+            # Convert table to string
+            string_buffer = StringIO()
+            console = Console(file=string_buffer, width=terminal_width)
             console.print(table)
-            benchmark_info = console.file.getvalue() + "\n"
+            benchmark_info = cast(StringIO, console.file).getvalue() + "\n" # Cast for mypy
 
         return (
                 f"Optimized {self.function_name} in {self.file_path}\n"
