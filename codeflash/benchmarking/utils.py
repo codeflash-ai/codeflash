@@ -40,9 +40,9 @@ def validate_and_format_benchmark_table(function_benchmark_timings: dict[str, di
 def print_benchmark_table(function_to_results: dict[str, list[tuple[BenchmarkKey, float, float, float]]]) -> None:
 
     try:
-        terminal_width = int(shutil.get_terminal_size().columns * 0.8)
+        terminal_width = int(shutil.get_terminal_size().columns * 0.9)
     except Exception:
-        terminal_width = 200  # Fallback width
+        terminal_width = 120  # Fallback width
     console = Console(width = terminal_width)
     for func_path, sorted_tests in function_to_results.items():
         console.print()
@@ -52,8 +52,8 @@ def print_benchmark_table(function_to_results: dict[str, list[tuple[BenchmarkKey
         table = Table(title=f"Function: {function_name}", border_style="blue")
 
         # Add columns - split the benchmark test into two columns
-        table.add_column("Benchmark Module Path", style="cyan", no_wrap=True)
-        table.add_column("Test Function", style="magenta", no_wrap=True)
+        table.add_column("Benchmark Module Path", style="cyan", overflow="fold")
+        table.add_column("Test Function", style="magenta", overflow="fold")
         table.add_column("Total Time (ms)", justify="right", style="green")
         table.add_column("Function Time (ms)", justify="right", style="yellow")
         table.add_column("Percentage (%)", justify="right", style="red")
