@@ -184,8 +184,8 @@ def run_line_profile_tests(
             f"--timeout={pytest_timeout}",
             "-q",
             "--codeflash_loops_scope=session",
-            f"--codeflash_min_loops={pytest_min_loops}",
-            f"--codeflash_max_loops={pytest_max_loops}",
+            "--codeflash_min_loops=1",
+            "--codeflash_max_loops=1",
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
         ]
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))

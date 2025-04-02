@@ -377,7 +377,7 @@ class FunctionOptimizer:
         candidates = deque(candidates)
         # Start a new thread for AI service request, start loop in main thread
         # check if aiservice request is complete, when it is complete, append result to the candidates list
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             future_line_profile_results = executor.submit(
                 self.aiservice_client.optimize_python_code_line_profiler,
                 source_code=code_context.read_writable_code,
@@ -397,8 +397,8 @@ class FunctionOptimizer:
                     if done and (future_line_profile_results is not None):
                         line_profile_results = future_line_profile_results.result()
                         candidates.extend(line_profile_results)
-                        original_len+= len(candidates)
-                        logger.info(f"Added results from line profiler to candidates, total candidates now: {original_len}")
+                        original_len+= len(line_profile_results)
+                        logger.info(f"Added {len(line_profile_results)} results from line profiler to candidates, total candidates now: {original_len}")
                         future_line_profile_results = None
                     candidate_index += 1
                     candidate = candidates.popleft()
@@ -1126,8 +1126,8 @@ class FunctionOptimizer:
                     pytest_cmd=self.test_cfg.pytest_cmd,
                     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     pytest_target_runtime_seconds=testing_time,
-                    pytest_min_loops=1,
-                    pytest_max_loops=1,
+                    pytest_min_loops=pytest_min_loops,
+                    pytest_max_loops=pytest_min_loops,
                     test_framework=self.test_cfg.test_framework,
                     line_profiler_output_file=line_profiler_output_file,
                 )
