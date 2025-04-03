@@ -467,3 +467,81 @@ class ClassB:
         # Compare the modified content with expected content
         assert modified_content_1.strip() == expected_content_1.strip()
         assert modified_content_2.strip() == expected_content_2.strip()
+
+
+def test_add_decorator_to_method_after_nested_class() -> None:
+    """Test adding decorator to a method that appears after a nested class definition."""
+    code = """
+class OuterClass:
+    class NestedClass:
+        def nested_method(self):
+            return "Hello from nested class method"
+
+    def target_method(self):
+        return "Hello from target method after nested class"
+"""
+
+    fto = FunctionToOptimize(
+        function_name="target_method",
+        file_path=Path("dummy_path.py"),
+        parents=[FunctionParent(name="OuterClass", type="ClassDef")]
+    )
+
+    modified_code = add_codeflash_decorator_to_code(
+        code=code,
+        functions_to_optimize=[fto]
+    )
+
+    expected_code = """
+from codeflash.benchmarking.codeflash_trace import codeflash_trace
+class OuterClass:
+    class NestedClass:
+        def nested_method(self):
+            return "Hello from nested class method"
+
+    @codeflash_trace
+    def target_method(self):
+        return "Hello from target method after nested class"
+"""
+
+    assert modified_code.strip() == expected_code.strip()
+
+
+def test_add_decorator_to_function_after_nested_function() -> None:
+    """Test adding decorator to a function that appears after a function with a nested function."""
+    code = """
+def function_with_nested():
+    def inner_function():
+        return "Hello from inner function"
+
+    return inner_function()
+
+def target_function():
+    return "Hello from target function after nested function"
+"""
+
+    fto = FunctionToOptimize(
+        function_name="target_function",
+        file_path=Path("dummy_path.py"),
+        parents=[]
+    )
+
+    modified_code = add_codeflash_decorator_to_code(
+        code=code,
+        functions_to_optimize=[fto]
+    )
+
+    expected_code = """
+from codeflash.benchmarking.codeflash_trace import codeflash_trace
+def function_with_nested():
+    def inner_function():
+        return "Hello from inner function"
+
+    return inner_function()
+
+@codeflash_trace
+def target_function():
+    return "Hello from target function after nested function"
+"""
+
+    assert modified_code.strip() == expected_code.strip()
