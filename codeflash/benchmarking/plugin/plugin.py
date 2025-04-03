@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import os
 import sqlite3
 import sys
@@ -19,8 +20,10 @@ class CodeFlashBenchmarkPlugin:
         self._connection = None
         self.project_root = None
         self.benchmark_timings = []
+        # Register an atexit handler to safely close the connection
+        atexit.register(self.close_connection)
 
-    def setup(self, trace_path:str, project_root:str) -> None:
+    def setup(self, trace_path: str, project_root: str) -> None:
         try:
             # Open connection
             self.project_root = project_root
@@ -35,7 +38,7 @@ class CodeFlashBenchmarkPlugin:
                 "benchmark_time_ns INTEGER)"
             )
             self._connection.commit()
-            self.close() # Reopen only at the end of pytest session
+            self.close()  # Reopen only at the end of pytest session
         except Exception as e:
             print(f"Database setup error: {e}")
             if self._connection:
@@ -47,22 +50,22 @@ class CodeFlashBenchmarkPlugin:
         if not self.benchmark_timings:
             return  # No data to write
 
-        if self._connection is None:
-            self._connection = sqlite3.connect(self._trace_path)
+        connection = self._get_connection()
 
         try:
-            cur = self._connection.cursor()
+            cur = connection.cursor()
             # Insert data into the benchmark_timings table
             cur.executemany(
                 "INSERT INTO benchmark_timings (benchmark_module_path, benchmark_function_name, benchmark_line_number, benchmark_time_ns) VALUES (?, ?, ?, ?)",
-                self.benchmark_timings
+                self.benchmark_timings,
             )
-            self._connection.commit()
-            self.benchmark_timings = [] # Clear the benchmark timings list
+            # Clear the benchmark timings list
+            self.benchmark_timings = []
         except Exception as e:
             print(f"Error writing to benchmark timings database: {e}")
-            self._connection.rollback()
+            connection.rollback()
             raise
+
     def close(self) -> None:
         if self._connection:
             self._connection.close()
@@ -196,12 +199,7 @@ class CodeFlashBenchmarkPlugin:
 
     @staticmethod
     def pytest_addoption(parser):
-        parser.addoption(
-            "--codeflash-trace",
-            action="store_true",
-            default=False,
-            help="Enable CodeFlash tracing"
-        )
+        parser.addoption("--codeflash-trace", action="store_true", default=False, help="Enable CodeFlash tracing")
 
     @staticmethod
     def pytest_plugin_registered(plugin, manager):
@@ -244,7 +242,9 @@ class CodeFlashBenchmarkPlugin:
             a
 
             """
-            benchmark_module_path = module_name_from_file_path(Path(str(self.request.node.fspath)), Path(codeflash_benchmark_plugin.project_root))
+            benchmark_module_path = module_name_from_file_path(
+                Path(str(self.request.node.fspath)), Path(codeflash_benchmark_plugin.project_root)
+            )
             benchmark_function_name = self.request.node.name
             line_number = int(str(sys._getframe(1).f_lineno))  # 1 frame up in the call stack
 
@@ -254,7 +254,7 @@ class CodeFlashBenchmarkPlugin:
             os.environ["CODEFLASH_BENCHMARK_LINE_NUMBER"] = str(line_number)
             os.environ["CODEFLASH_BENCHMARKING"] = "True"
 
-        # Run the function
+            # Run the function
             start = time.perf_counter_ns()
             result = func(*args, **kwargs)
             end = time.perf_counter_ns()
@@ -268,7 +268,8 @@ class CodeFlashBenchmarkPlugin:
             codeflash_trace.function_call_count = 0
             # Add to the benchmark timings buffer
             codeflash_benchmark_plugin.benchmark_timings.append(
-                (benchmark_module_path, benchmark_function_name, line_number, end - start))
+                (benchmark_module_path, benchmark_function_name, line_number, end - start)
+            )
 
             return result
 
@@ -279,5 +280,17 @@ class CodeFlashBenchmarkPlugin:
             return None
 
         return CodeFlashBenchmarkPlugin.Benchmark(request)
+
+    def close_connection(self) -> None:
+        if self._connection:
+            self._connection.commit()
+            self._connection.close()
+            self._connection = None
+
+    def _get_connection(self) -> sqlite3.Connection:
+        if self._connection is None:
+            self._connection = sqlite3.connect(self._trace_path)
+        return self._connection
+
 
 codeflash_benchmark_plugin = CodeFlashBenchmarkPlugin()
