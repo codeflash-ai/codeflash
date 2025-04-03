@@ -78,6 +78,9 @@ class Tracer:
     _function_call_buffer = []
     _buffer_size = 1000
 
+    _cache_lock = threading.RLock()
+    _db_lock = threading.RLock()
+
     def __init__(
         self,
         output: str = "codeflash.trace",
@@ -134,8 +137,13 @@ class Tracer:
 
         assert timeout is None or timeout > 0, "Timeout should be greater than 0"
         self.timeout = timeout
-        self.next_insert = self._buffer_size
+        # Thread-local storage for buffers
+        self._thread_local = threading.local()
+        self._thread_local.function_call_buffer = []
+        self._thread_local.next_insert = self._buffer_size
+
         self.trace_count = 0
+        self._trace_count_lock = threading.Lock()
 
         # Profiler variables
         self.bias = 0  # calibration constant
@@ -149,13 +157,19 @@ class Tracer:
         self.t = self.timer()
 
     def _flush_buffer(self) -> None:
-        if not self._function_call_buffer:
+        if not hasattr(self._thread_local, "function_call_buffer"):
+            self._thread_local.function_call_buffer = []
+
+        if not self._thread_local.function_call_buffer:
             return
 
-        cur = self.con.cursor()
-        cur.executemany("INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)", self._function_call_buffer)
-        self.con.commit()
-        self._function_call_buffer.clear()
+        with self._db_lock:
+            cur = self.con.cursor()
+            cur.executemany(
+                "INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)", self._thread_local.function_call_buffer
+            )
+            self.con.commit()
+            self._thread_local.function_call_buffer.clear()
 
     def __enter__(self) -> None:
         if self.disable:
@@ -176,6 +190,7 @@ class Tracer:
 
         self.con = sqlite3.connect(self.output_file, check_same_thread=False)
         cur = self.con.cursor()
+        # Performance optimizations for SQLite
         cur.execute("PRAGMA synchronous = OFF")
         cur.execute("PRAGMA journal_mode = WAL")
         cur.execute("PRAGMA temp_store = MEMORY")
@@ -199,9 +214,11 @@ class Tracer:
         if self.disable:
             return
         sys.setprofile(None)
+        threading.setprofile(None)
 
-        # Flush any remaining buffered function calls
         self._flush_buffer()
+
+        time.sleep(0.1)
 
         console.rule("Codeflash: Traced Program Output End", style="bold blue")
         self.create_stats()
@@ -278,18 +295,19 @@ class Tracer:
             console.print(f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds.")
             return
         code = frame.f_code
-        # TODO : It currently doesn't log the last return call from the first function
 
+        # Early rejection for better performance
         if code.co_name in self.ignored_functions:
             return
 
         # Cache file path resolution
         file_name_str = code.co_filename
-        if file_name_str not in self._path_cache:
-            file_name = Path(file_name_str).resolve()
-            self._path_cache[file_name_str] = file_name
-        else:
-            file_name = self._path_cache[file_name_str]
+        with self._cache_lock:
+            if file_name_str not in self._path_cache:
+                file_name = Path(file_name_str).resolve()
+                self._path_cache[file_name_str] = file_name
+            else:
+                file_name = self._path_cache[file_name_str]
 
         if not file_name.exists():
             return
@@ -318,17 +336,17 @@ class Tracer:
         if function_qualified_name not in self.function_count:
             self.function_count[function_qualified_name] = 0
 
-            # Cache file filter results
-            if file_name not in self._file_filter_cache:
-                file_valid = filter_files_optimized(
-                    file_path=file_name,
-                    tests_root=Path(self.config["tests_root"]),
-                    ignore_paths=[Path(p) for p in self.config["ignore_paths"]],
-                    module_root=Path(self.config["module_root"]),
-                )
-                self._file_filter_cache[file_name] = file_valid
-            else:
-                file_valid = self._file_filter_cache[file_name]
+            with self._cache_lock:
+                if file_name not in self._file_filter_cache:
+                    file_valid = filter_files_optimized(
+                        file_path=file_name,
+                        tests_root=Path(self.config["tests_root"]),
+                        ignore_paths=[Path(p) for p in self.config["ignore_paths"]],
+                        module_root=Path(self.config["module_root"]),
+                    )
+                    self._file_filter_cache[file_name] = file_valid
+                else:
+                    file_valid = self._file_filter_cache[file_name]
 
             if not file_valid:
                 self.ignored_qualified_functions.add(function_qualified_name)
@@ -368,15 +386,21 @@ class Tracer:
                 self.function_count[function_qualified_name] -= 1
                 return
 
-        self._function_call_buffer.append(
+        if not hasattr(self._thread_local, "function_call_buffer"):
+            self._thread_local.function_call_buffer = []
+            self._thread_local.next_insert = self._buffer_size
+
+        self._thread_local.function_call_buffer.append(
             (event, code.co_name, class_name, str(file_name), frame.f_lineno, frame.f_back.__hash__(), t_ns, local_vars)
         )
 
-        self.trace_count += 1
-        self.next_insert -= 1
-        if self.next_insert == 0:
+        with self._trace_count_lock:
+            self.trace_count += 1
+
+        self._thread_local.next_insert -= 1
+        if self._thread_local.next_insert <= 0:
             self._flush_buffer()
-            self.next_insert = self._buffer_size
+            self._thread_local.next_insert = self._buffer_size
 
     def trace_callback(self, frame: FrameType, event: str, arg: str | None) -> None:
         # Profiler section
