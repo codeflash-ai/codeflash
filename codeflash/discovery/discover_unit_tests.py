@@ -103,6 +103,13 @@ def discover_tests_pytest(
         cfg.tests_project_rootdir = Path(pytest_rootdir)
     file_to_test_map = defaultdict(list)
     for test in tests:
+        if (
+            discover_only_these_tests
+            and Path(test["test_file"]) not in discover_only_these_tests
+        ):
+            continue
+
+        # Process discovered tests
         if "__replay_test" in test["test_file"]:
             test_type = TestType.REPLAY_TEST
         elif "test_concolic_coverage" in test["test_file"]:
@@ -110,19 +117,27 @@ def discover_tests_pytest(
         else:
             test_type = TestType.EXISTING_UNIT_TEST
 
+        # Apply the string processing logic here before creating the TestsInFile object
+        test_function = test["test_function"]
+
+        # Process parameterized pytest tests
+        if "[" in test_function:
+            function_name = PYTEST_PARAMETERIZED_TEST_NAME_REGEX.split(test_function)[0]
+            parameters = PYTEST_PARAMETERIZED_TEST_NAME_REGEX.split(test_function)[1]
+            test_function = f"{function_name}[{parameters}]"
+        # Process unittest parameterized tests
+        elif UNITTEST_PARAMETERIZED_TEST_NAME_REGEX.match(test_function):
+            base_name = UNITTEST_STRIP_NUMBERED_SUFFIX_REGEX.sub("", test_function)
+            test_function = f"{base_name}[{test_function}]"
+
         test_obj = TestsInFile(
             test_file=Path(test["test_file"]),
             test_class=test["test_class"],
-            test_function=test["test_function"],
+            test_function=test_function,
             test_type=test_type,
         )
-        if (
-            discover_only_these_tests
-            and test_obj.test_file not in discover_only_these_tests
-        ):
-            continue
+
         file_to_test_map[test_obj.test_file].append(test_obj)
-    # Within these test files, find the project functions they are referring to and return their names/locations
     return process_test_files(file_to_test_map, cfg)
 
 
@@ -210,7 +225,7 @@ def process_test_files(
         for test_file, test_functions in file_to_test_map.items():
             try:
                 script = jedi.Script(path=test_file, project=jedi_project)
-                function_to_tests_in_file = {}
+                function_to_tests_in_file = defaultdict(set)
                 all_names = script.get_names(all_scopes=True, references=True)
                 all_defs = script.get_names(all_scopes=True, definitions=True)
 
@@ -225,32 +240,12 @@ def process_test_files(
                 progress.advance(task_id)
                 continue
 
-            # Modify functions to manage edge cases
             if test_framework == "pytest":
                 for function in test_functions:
-                    if "[" in function.test_function:
-                        function_name = PYTEST_PARAMETERIZED_TEST_NAME_REGEX.split(
-                            function.test_function
-                        )[0]
-                        parameters = PYTEST_PARAMETERIZED_TEST_NAME_REGEX.split(
-                            function.test_function
-                        )[1]
-                        if function_name in top_level_functions:
-                            function_to_tests_in_file[function_name] = TestsInFile(test_file=Path(test_file), test_class=function.test_class, test_function = f"{function_name}[{parameters}]", test_type=function.test_type)
-                    elif function.test_function in top_level_functions:
-                        function_to_tests_in_file[function.test_function] = function # no change needed
-                    elif UNITTEST_PARAMETERIZED_TEST_NAME_REGEX.match(
-                        function.test_function
-                    ):
-                        base_name = UNITTEST_STRIP_NUMBERED_SUFFIX_REGEX.sub(
-                            "", function.test_function
-                        )
-                        if base_name in top_level_functions:
-                            function_to_tests_in_file[base_name] = TestsInFile(test_file=Path(test_file),
-                                                                       test_class=function.test_class,
-                                                                       test_function=f"{base_name}[{function.test_function}]",
-                                                                       test_type=function.test_type)
+                    if function.test_function in top_level_functions:
+                        function_to_tests_in_file[function.test_function].add(function)
 
+            # Unittest will be deprecated soon
             elif test_framework == "unittest":
                 functions_to_search = [elem.test_function for elem in test_functions]
                 test_suites = {elem.test_class for elem in test_functions}
@@ -268,15 +263,15 @@ def process_test_files(
                                     discover_parameters_unittest(function)
                                 )
                                 if is_parameterized and new_function == def_name.name:
-                                    function_to_tests_in_file[def_name.name] = TestsInFile(test_file=Path(test_file),
+                                    function_to_tests_in_file[def_name.name].add(TestsInFile(test_file=Path(test_file),
                                                                                test_class=matched_name,
                                                                                test_function=f"{def_name.name}_{parameters}",
-                                                                               test_type=test_functions[0].test_type)
+                                                                               test_type=test_functions[0].test_type))
                                 elif function == def_name.name:
-                                    function_to_tests_in_file[def_name.name] = TestsInFile(test_file=Path(test_file),
+                                    function_to_tests_in_file[def_name.name].add(TestsInFile(test_file=Path(test_file),
                                                                                test_class=matched_name,
                                                                                test_function=f"{def_name.name}",
-                                                                               test_type=test_functions[0].test_type)
+                                                                               test_type=test_functions[0].test_type))
 
             for name in all_names:
                 if name.full_name is None:
@@ -311,20 +306,20 @@ def process_test_files(
                     and definition[0].module_name != name.module_name
                     and definition[0].full_name is not None
                 ):
-                    full_name_without_module_prefix = definition[
-                        0
-                    ].full_name.replace(definition[0].module_name + ".", "", 1)
-                    qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
+                    for tests_in_file in function_to_tests_in_file[scope]:
+                        full_name_without_module_prefix = definition[
+                            0
+                        ].full_name.replace(definition[0].module_name + ".", "", 1)
+                        qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
 
-                    function_to_test_map[qualified_name_with_modules_from_root].add(
-                        FunctionCalledInTest(
-                            tests_in_file=function_to_tests_in_file[scope],
-                            position=CodePosition(
-                                line_no=name.line, col_no=name.column
-                            ),
+                        function_to_test_map[qualified_name_with_modules_from_root].add(
+                            FunctionCalledInTest(
+                                tests_in_file=tests_in_file,
+                                position=CodePosition(
+                                    line_no=name.line, col_no=name.column
+                                ),
+                            )
                         )
-                    )
 
             progress.advance(task_id)
-
     return {function: list(tests) for function, tests in function_to_test_map.items()}
