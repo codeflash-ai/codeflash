@@ -127,10 +127,11 @@ class Optimizer:
                     logger.info("Information on existing benchmarks will not be available for this run.")
                 finally:
                     # Restore original source code
+                    trace_file.unlink()
+                    shutil.rmtree(self.replay_tests_dir, ignore_errors=True)
                     for file in file_path_to_source_code:
                         with file.open("w", encoding="utf8") as f:
                             f.write(file_path_to_source_code[file])
-
         optimizations_found: int = 0
         function_iterator_count: int = 0
         if self.args.test_framework == "pytest":
