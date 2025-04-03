@@ -29,7 +29,7 @@ def validate_and_format_benchmark_table(function_benchmark_timings: dict[str, di
                 # If the function time is greater than total time, likely to have multithreading / multiprocessing issues.
                 # Do not try to project the optimization impact for this function.
                 sorted_tests.append((benchmark_key, 0.0, 0.0, 0.0))
-            if total_time > 0:
+            elif total_time > 0:
                 percentage = (func_time / total_time) * 100
                 # Convert nanoseconds to milliseconds
                 func_time_ms = func_time / 1_000_000
