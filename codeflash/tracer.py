@@ -72,10 +72,10 @@ class Tracer:
     Traces function calls, input arguments, and profiling info.
     """
 
-    _path_cache: dict[str, bool] = {}
-    _file_filter_cache: dict[str, bool] = {}
+    _path_cache = {}
+    _file_filter_cache = {}
 
-    _function_call_buffer: list[dict[str, Any]] = []
+    _function_call_buffer = []
     _buffer_size = 1000
 
     def __init__(
@@ -212,6 +212,7 @@ class Tracer:
             "call_count_nonrecursive INTEGER, num_callers INTEGER, total_time_ns INTEGER, "
             "cumulative_time_ns INTEGER, callers BLOB)"
         )
+
         pstats_data = []
         for func, (cc, nc, tt, ct, callers) in self.stats.items():
             remapped_callers = [{"key": k, "value": v} for k, v in callers.items()]
@@ -282,6 +283,7 @@ class Tracer:
         if code.co_name in self.ignored_functions:
             return
 
+        # Cache file path resolution
         file_name_str = code.co_filename
         if file_name_str not in self._path_cache:
             file_name = Path(file_name_str).resolve()
@@ -306,14 +308,14 @@ class Tracer:
             elif "cls" in arguments and hasattr(arguments["cls"], "__name__"):
                 class_name = arguments["cls"].__name__
         except:  # noqa: E722
-            # someone can override the getattr method and raise an exception. I'm looking at you wrapt
             return
 
+        # Create function qualified name once
         function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
         if function_qualified_name in self.ignored_qualified_functions:
             return
+
         if function_qualified_name not in self.function_count:
-            # seeing this function for the first time
             self.function_count[function_qualified_name] = 0
 
             # Cache file filter results
@@ -329,7 +331,6 @@ class Tracer:
                 file_valid = self._file_filter_cache[file_name]
 
             if not file_valid:
-                # we don't want to trace this function because it cannot be optimized
                 self.ignored_qualified_functions.add(function_qualified_name)
                 return
 
@@ -357,19 +358,16 @@ class Tracer:
             if class_name and code.co_name == "__init__":
                 del arguments_copy["self"]
 
-            # Use protocol 5 for better performance with Python 3.8+
-            local_vars = pickle.dumps(arguments_copy, protocol=5)
+            local_vars = pickle.dumps(arguments_copy, protocol=pickle.HIGHEST_PROTOCOL)
             sys.setrecursionlimit(original_recursion_limit)
         except (TypeError, pickle.PicklingError, AttributeError, RecursionError, OSError):
             try:
                 local_vars = dill.dumps(arguments_copy, protocol=dill.HIGHEST_PROTOCOL)
                 sys.setrecursionlimit(original_recursion_limit)
             except (TypeError, dill.PicklingError, AttributeError, RecursionError, OSError):
-                # give up
                 self.function_count[function_qualified_name] -= 1
                 return
 
-        # Add to buffer instead of immediate DB insertion
         self._function_call_buffer.append(
             (event, code.co_name, class_name, str(file_name), frame.f_lineno, frame.f_back.__hash__(), t_ns, local_vars)
         )
@@ -503,10 +501,7 @@ class Tracer:
             cc = cc + 1
 
         if pfn in callers:
-            callers[pfn] = callers[pfn] + 1  # hack: gather more
-            # stats such as the amount of time added to ct courtesy
-            # of this specific call, and the contribution to cc
-            # courtesy of this call.
+            callers[pfn] = callers[pfn] + 1
         else:
             callers[pfn] = 1
 
@@ -519,7 +514,7 @@ class Tracer:
         "exception": trace_dispatch_exception,
         "return": trace_dispatch_return,
         "c_call": trace_dispatch_c_call,
-        "c_exception": trace_dispatch_return,  # the C function returned
+        "c_exception": trace_dispatch_return,
         "c_return": trace_dispatch_return,
     }
 
@@ -533,8 +528,6 @@ class Tracer:
         get_time = self.timer
         t = get_time() - self.t
         while self.cur[-1]:
-            # We *can* cause assertion errors here if
-            # dispatch_trace_return checks for a frame match!
             self.dispatch["return"](self, self.cur[-2], t)
             t = 0
         self.t = get_time() - t
@@ -731,7 +724,9 @@ class Tracer:
 
     def snapshot_stats(self) -> None:
         self.stats = {}
-        for func, (cc, _ns, tt, ct, caller_dict) in self.timings.items():
+        # Create a copy of self.timings to avoid modification during iteration
+        timings_copy = dict(self.timings)
+        for func, (cc, _ns, tt, ct, caller_dict) in timings_copy.items():
             callers = caller_dict.copy()
             nc = 0
             for callcnt in callers.values():

@@ -172,7 +172,7 @@ class AiServiceClient:
 
         logger.info("Generating optimized candidates…")
         console.rule()
-        if line_profiler_results=="":
+        if line_profiler_results == "":
             logger.info("No LineProfiler results were provided, Skipping optimization.")
             console.rule()
             return []
@@ -203,7 +203,6 @@ class AiServiceClient:
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
         return []
-
 
     def log_results(
         self,
