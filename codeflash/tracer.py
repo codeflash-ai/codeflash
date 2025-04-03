@@ -72,6 +72,12 @@ class Tracer:
     Traces function calls, input arguments, and profiling info.
     """
 
+    _path_cache: dict[str, bool] = {}
+    _file_filter_cache: dict[str, bool] = {}
+
+    _function_call_buffer: list[dict[str, Any]] = []
+    _buffer_size = 1000
+
     def __init__(
         self,
         output: str = "codeflash.trace",
@@ -110,7 +116,7 @@ class Tracer:
             return
         self.con = None
         self.output_file = Path(output).resolve()
-        self.functions = functions
+        self.functions = set(functions)  # Convert to set for O(1) lookups
         self.function_modules: list[FunctionModules] = []
         self.function_count = defaultdict(int)
         self.current_file_path = Path(__file__).resolve()
@@ -124,11 +130,11 @@ class Tracer:
         console.rule(f"Project Root: {self.project_root}", style="bold blue")
         self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>", "<module>"}
 
-        self.file_being_called_from: str = str(Path(sys._getframe().f_back.f_code.co_filename).name).replace(".", "_")  # noqa: SLF001
+        self.file_being_called_from = str(Path(sys._getframe().f_back.f_code.co_filename).name).replace(".", "_")
 
         assert timeout is None or timeout > 0, "Timeout should be greater than 0"
         self.timeout = timeout
-        self.next_insert = 1000
+        self.next_insert = self._buffer_size
         self.trace_count = 0
 
         # Profiler variables
@@ -141,6 +147,15 @@ class Tracer:
         self.simulate_call("profiler")
         assert "test_framework" in self.config, "Please specify 'test-framework' in pyproject.toml config file"
         self.t = self.timer()
+
+    def _flush_buffer(self) -> None:
+        if not self._function_call_buffer:
+            return
+
+        cur = self.con.cursor()
+        cur.executemany("INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)", self._function_call_buffer)
+        self.con.commit()
+        self._function_call_buffer.clear()
 
     def __enter__(self) -> None:
         if self.disable:
@@ -161,15 +176,18 @@ class Tracer:
 
         self.con = sqlite3.connect(self.output_file, check_same_thread=False)
         cur = self.con.cursor()
-        cur.execute("""PRAGMA synchronous = OFF""")
-        cur.execute("""PRAGMA journal_mode = WAL""")
-        # TODO: Check out if we need to export the function test name as well
+        cur.execute("PRAGMA synchronous = OFF")
+        cur.execute("PRAGMA journal_mode = WAL")
+        cur.execute("PRAGMA temp_store = MEMORY")
+        cur.execute("PRAGMA cache_size = 10000")
+
+        # Create table
         cur.execute(
             "CREATE TABLE function_calls(type TEXT, function TEXT, classname TEXT, filename TEXT, "
             "line_number INTEGER, last_frame_address INTEGER, time_ns INTEGER, args BLOB)"
         )
         console.rule("Codeflash: Traced Program Output Begin", style="bold blue")
-        frame = sys._getframe(0)  # Get this frame and simulate a call to it  # noqa: SLF001
+        frame = sys._getframe(0)
         self.dispatch["call"](self, frame, 0)
         self.start_time = time.time()
         sys.setprofile(self.trace_callback)
@@ -181,7 +199,10 @@ class Tracer:
         if self.disable:
             return
         sys.setprofile(None)
-        self.con.commit()
+
+        # Flush any remaining buffered function calls
+        self._flush_buffer()
+
         console.rule("Codeflash: Traced Program Output End", style="bold blue")
         self.create_stats()
 
@@ -191,12 +212,14 @@ class Tracer:
             "call_count_nonrecursive INTEGER, num_callers INTEGER, total_time_ns INTEGER, "
             "cumulative_time_ns INTEGER, callers BLOB)"
         )
+        pstats_data = []
         for func, (cc, nc, tt, ct, callers) in self.stats.items():
             remapped_callers = [{"key": k, "value": v} for k, v in callers.items()]
-            cur.execute(
-                "INSERT INTO pstats VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (str(Path(func[0]).resolve()), func[1], func[2], func[3], cc, nc, tt, ct, json.dumps(remapped_callers)),
+            pstats_data.append(
+                (str(Path(func[0]).resolve()), func[1], func[2], func[3], cc, nc, tt, ct, json.dumps(remapped_callers))
             )
+
+        cur.executemany("INSERT INTO pstats VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", pstats_data)
         self.con.commit()
 
         self.make_pstats_compatible()
@@ -207,7 +230,7 @@ class Tracer:
         self.con.commit()
         self.con.close()
 
-        # filter any functions where we did not capture the return
+        # Filter any functions where we did not capture the return
         self.function_modules = [
             function
             for function in self.function_modules
@@ -254,45 +277,62 @@ class Tracer:
             console.print(f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds.")
             return
         code = frame.f_code
-        file_name = Path(code.co_filename).resolve()
         # TODO : It currently doesn't log the last return call from the first function
 
         if code.co_name in self.ignored_functions:
             return
+
+        file_name_str = code.co_filename
+        if file_name_str not in self._path_cache:
+            file_name = Path(file_name_str).resolve()
+            self._path_cache[file_name_str] = file_name
+        else:
+            file_name = self._path_cache[file_name_str]
+
         if not file_name.exists():
             return
+
         if self.functions and code.co_name not in self.functions:
             return
-        class_name = None
+
+        # Extract class information
         arguments = frame.f_locals
+        class_name = None
         try:
-            if (
-                "self" in arguments
-                and hasattr(arguments["self"], "__class__")
-                and hasattr(arguments["self"].__class__, "__name__")
-            ):
-                class_name = arguments["self"].__class__.__name__
+            if "self" in arguments and hasattr(arguments["self"], "__class__"):
+                cls = arguments["self"].__class__
+                if hasattr(cls, "__name__"):
+                    class_name = cls.__name__
             elif "cls" in arguments and hasattr(arguments["cls"], "__name__"):
                 class_name = arguments["cls"].__name__
         except:  # noqa: E722
             # someone can override the getattr method and raise an exception. I'm looking at you wrapt
             return
+
         function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
         if function_qualified_name in self.ignored_qualified_functions:
             return
         if function_qualified_name not in self.function_count:
             # seeing this function for the first time
             self.function_count[function_qualified_name] = 0
-            file_valid = filter_files_optimized(
-                file_path=file_name,
-                tests_root=Path(self.config["tests_root"]),
-                ignore_paths=[Path(p) for p in self.config["ignore_paths"]],
-                module_root=Path(self.config["module_root"]),
-            )
+
+            # Cache file filter results
+            if file_name not in self._file_filter_cache:
+                file_valid = filter_files_optimized(
+                    file_path=file_name,
+                    tests_root=Path(self.config["tests_root"]),
+                    ignore_paths=[Path(p) for p in self.config["ignore_paths"]],
+                    module_root=Path(self.config["module_root"]),
+                )
+                self._file_filter_cache[file_name] = file_valid
+            else:
+                file_valid = self._file_filter_cache[file_name]
+
             if not file_valid:
                 # we don't want to trace this function because it cannot be optimized
                 self.ignored_qualified_functions.add(function_qualified_name)
                 return
+
             self.function_modules.append(
                 FunctionModules(
                     function_name=code.co_name,
@@ -308,63 +348,51 @@ class Tracer:
                 self.ignored_qualified_functions.add(function_qualified_name)
                 return
 
-        # TODO: Also check if this function arguments are unique from the values logged earlier
-
-        cur = self.con.cursor()
-
+        # Serialize function arguments
         t_ns = time.perf_counter_ns()
         original_recursion_limit = sys.getrecursionlimit()
         try:
-            # pickling can be a recursive operator, so we need to increase the recursion limit
-            sys.setrecursionlimit(10000)
-            # We do not pickle self for __init__ to avoid recursion errors, and instead instantiate its class
-            # directly with the rest of the arguments in the replay tests. We copy the arguments to avoid memory
-            # leaks, bad references or side effects when unpickling.
-            arguments = dict(arguments.items())
+            # Make a copy to avoid side effects
+            arguments_copy = dict(arguments.items())
             if class_name and code.co_name == "__init__":
-                del arguments["self"]
-            local_vars = pickle.dumps(arguments, protocol=pickle.HIGHEST_PROTOCOL)
+                del arguments_copy["self"]
+
+            # Use protocol 5 for better performance with Python 3.8+
+            local_vars = pickle.dumps(arguments_copy, protocol=5)
             sys.setrecursionlimit(original_recursion_limit)
         except (TypeError, pickle.PicklingError, AttributeError, RecursionError, OSError):
-            # we retry with dill if pickle fails. It's slower but more comprehensive
             try:
-                local_vars = dill.dumps(arguments, protocol=dill.HIGHEST_PROTOCOL)
+                local_vars = dill.dumps(arguments_copy, protocol=dill.HIGHEST_PROTOCOL)
                 sys.setrecursionlimit(original_recursion_limit)
-
             except (TypeError, dill.PicklingError, AttributeError, RecursionError, OSError):
                 # give up
                 self.function_count[function_qualified_name] -= 1
                 return
-        cur.execute(
-            "INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                event,
-                code.co_name,
-                class_name,
-                str(file_name),
-                frame.f_lineno,
-                frame.f_back.__hash__(),
-                t_ns,
-                local_vars,
-            ),
+
+        # Add to buffer instead of immediate DB insertion
+        self._function_call_buffer.append(
+            (event, code.co_name, class_name, str(file_name), frame.f_lineno, frame.f_back.__hash__(), t_ns, local_vars)
         )
+
         self.trace_count += 1
         self.next_insert -= 1
         if self.next_insert == 0:
-            self.next_insert = 1000
-            self.con.commit()
+            self._flush_buffer()
+            self.next_insert = self._buffer_size
 
     def trace_callback(self, frame: FrameType, event: str, arg: str | None) -> None:
-        # profiler section
+        # Profiler section
         timer = self.timer
         t = timer() - self.t - self.bias
         if event == "c_call":
             self.c_func_name = arg.__name__
 
         prof_success = bool(self.dispatch[event](self, frame, t))
-        # tracer section
-        self.tracer_logic(frame, event)
-        # measure the time as the last thing before return
+
+        # Only process 'call' events for tracing to reduce overhead
+        if event == "call":
+            self.tracer_logic(frame, event)
+
         if prof_success:
             self.t = timer()
         else:
