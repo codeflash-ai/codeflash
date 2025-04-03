@@ -12,12 +12,14 @@ class AddDecoratorTransformer(cst.CSTTransformer):
         self.target_functions = target_functions
         self.added_codeflash_trace = False
         self.class_name = ""
+        self.function_name = ""
         self.decorator = cst.Decorator(
             decorator=cst.Name(value="codeflash_trace")
         )
 
     def leave_ClassDef(self, original_node, updated_node):
-        self.class_name = ""
+        if self.class_name == original_node.name.value:
+            self.class_name = "" # Even if nested classes are not visited, this function is still called on them
         return updated_node
 
     def visit_ClassDef(self, node):
@@ -25,7 +27,14 @@ class AddDecoratorTransformer(cst.CSTTransformer):
             return False
         self.class_name = node.name.value
 
+    def visit_FunctionDef(self, node):
+        if self.function_name: # Don't go into nested function
+            return False
+        self.function_name = node.name.value
+
     def leave_FunctionDef(self, original_node, updated_node):
+        if self.function_name == original_node.name.value:
+            self.function_name = ""
         if (self.class_name, original_node.name.value) in self.target_functions:
             # Add the new decorator after any existing decorators, so it gets executed first
             updated_decorators = list(updated_node.decorators) + [self.decorator]
@@ -33,8 +42,8 @@ class AddDecoratorTransformer(cst.CSTTransformer):
             return updated_node.with_changes(
                 decorators=updated_decorators
             )
-        else:
-            return updated_node
+
+        return updated_node
 
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         # Create import statement for codeflash_trace
