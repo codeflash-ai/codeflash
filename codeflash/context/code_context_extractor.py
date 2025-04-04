@@ -11,7 +11,7 @@ import tiktoken
 from jedi.api.classes import Name
 from libcst import CSTNode
 
-from codeflash.cli_cmds.console import code_print, logger
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
 from codeflash.code_utils.code_utils import get_qualified_name, path_belongs_to_site_packages
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -73,7 +73,6 @@ def get_code_optimization_context(
 
     # Handle token limits
     tokenizer = tiktoken.encoding_for_model("gpt-4o")
-    code_print(final_read_writable_code)
     final_read_writable_tokens = len(tokenizer.encode(final_read_writable_code))
     if final_read_writable_tokens > optim_token_limit:
         raise ValueError("Read-writable code has exceeded token limit, cannot proceed")
