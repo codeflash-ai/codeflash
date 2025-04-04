@@ -22,18 +22,6 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # - name: Set up Python 3.11 for CLI
-      #   uses: astral-sh/setup-uv@v5
-      #   with:
-      #     python-version: 3.11.6
-
-      # - name: Install dependencies (CLI)
-      #   run: |
-      #     uv tool install poetry
-      #     uv venv
-      #     source .venv/bin/activate
-      #     poetry install --with dev
-
       - name: Remove .git
         run: |
           if [ -d ".git" ]; then
@@ -49,6 +37,10 @@ jobs:
             echo ".git directory does not exist. Nothing to remove."
             exit 1
           fi
+      - name: Set up uv Python 3.11 for CLI
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: 3.11.6
 
       - name: Run Codeflash to optimize code
         id: optimize_code

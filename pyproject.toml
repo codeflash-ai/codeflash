@@ -40,14 +40,10 @@ dependencies = [
     "crosshair-tool>=0.0.78",
     "coverage>=7.6.4",
 ]
+urls = { "Homepage" = "https://codeflash.ai" }
+scripts = { codeflash = "codeflash.main:main" }
 
-dynamic = ["version"] # Determined by uv-dynamic-versioning during `uv build`.
-
-[project.urls]
-Homepage = "https://codeflash.ai"
-
-[project.scripts]
-codeflash = "codeflash.main:main"
+dynamic = ["version"] # Determined by uv-dynamic-versioning during `uv build`
 
 [dependency-groups]
 dev = [
