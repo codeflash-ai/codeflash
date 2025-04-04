@@ -144,7 +144,7 @@ class CodeflashTrace:
 
                     except (TypeError, dill.PicklingError, AttributeError, RecursionError, OSError) as e:
                         print(f"Error pickling arguments for function {func.__name__}: {e}")
-                        return None
+                        return result
 
             if len(self.function_calls_data) > 1000:
                 self.write_function_timings()
