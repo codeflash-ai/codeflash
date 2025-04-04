@@ -3,8 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import tomlkit
-
 
 def find_pyproject_toml(config_file: Path | None = None) -> Path:
     # Find the pyproject.toml file on the root of the project
@@ -34,22 +32,25 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
 def parse_config_file(
     config_file_path: Path | None = None, override_formatter_check: bool = False
 ) -> tuple[dict[str, Any], Path]:
+    import tomlkit
+
+    from codeflash.code_utils.config_parser import find_pyproject_toml
+
     config_file_path = find_pyproject_toml(config_file_path)
     try:
         with config_file_path.open("rb") as f:
             data = tomlkit.parse(f.read())
     except tomlkit.exceptions.ParseError as e:
-        msg = f"Error while parsing the config file {config_file_path}. Please recheck the file for syntax errors. Error: {e}"
-        raise ValueError(msg) from e
+        raise ValueError(
+            f"Error while parsing the config file {config_file_path}. Please recheck the file for syntax errors. Error: {e}"
+        ) from e
 
     try:
-        tool = data["tool"]
-        assert isinstance(tool, dict)
-        config = tool["codeflash"]
-    except tomlkit.exceptions.NonExistentKey as e:
-        msg = f"Could not find the 'codeflash' block in the config file {config_file_path}. Please run 'codeflash init' to create the config file."
-        raise ValueError(msg) from e
-    assert isinstance(config, dict)
+        config = data["tool"]["codeflash"]
+    except KeyError as e:
+        raise ValueError(
+            f"Could not find the 'codeflash' block in the config file {config_file_path}. Please run 'codeflash init' to create the config file."
+        ) from e
 
     # default values:
     path_keys = ["module-root", "tests-root"]
@@ -58,44 +59,25 @@ def parse_config_file(
     bool_keys = {"disable-telemetry": False, "disable-imports-sorting": False}
     list_str_keys = {"formatter-cmds": ["black $file"]}
 
-    for key in str_keys:
-        if key in config:
-            config[key] = str(config[key])
-        else:
-            config[key] = str_keys[key]
-    for key in bool_keys:
-        if key in config:
-            config[key] = bool(config[key])
-        else:
-            config[key] = bool_keys[key]
+    config = {**{k: str_keys[k] for k in str_keys if k not in config}, **config}
+    config = {**{k: bool_keys[k] for k in bool_keys if k not in config}, **config}
+    config = {**config, **{k: list_str_keys[k] for k in list_str_keys if k not in config}}
+
     for key in path_keys:
         if key in config:
             config[key] = str((Path(config_file_path).parent / Path(config[key])).resolve())
-    for key in list_str_keys:
-        if key in config:
-            config[key] = [str(cmd) for cmd in config[key]]
-        else:
-            config[key] = list_str_keys[key]
-
     for key in path_list_keys:
         if key in config:
             config[key] = [str((Path(config_file_path).parent / path).resolve()) for path in config[key]]
-        else:  # Default to empty list
-            config[key] = []
 
     assert config["test-framework"] in ["pytest", "unittest"], (
         "In pyproject.toml, Codeflash only supports the 'test-framework' as pytest and unittest."
     )
-    if len(config["formatter-cmds"]) > 0:
-        # see if this is happening during GitHub actions setup
-        if not override_formatter_check:
-            assert config["formatter-cmds"][0] != "your-formatter $file", (
-                "The formatter command is not set correctly in pyproject.toml. Please set the "
-                "formatter command in the 'formatter-cmds' key. More info - https://docs.codeflash.ai/configuration"
-            )
-    for key in list(config.keys()):
-        if "-" in key:
-            config[key.replace("-", "_")] = config[key]
-            del config[key]
+    if config["formatter-cmds"] and not override_formatter_check:
+        assert config["formatter-cmds"][0] != "your-formatter $file", (
+            "The formatter command is not set correctly in pyproject.toml. Please set the "
+            "formatter command in the 'formatter-cmds' key. More info - https://docs.codeflash.ai/configuration"
+        )
+    config = {k.replace("-", "_"): v for k, v in config.items()}
 
     return config, config_file_path

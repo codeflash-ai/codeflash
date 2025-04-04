@@ -136,17 +136,19 @@ def should_modify_pyproject_toml() -> bool:
     except Exception:
         return True
 
-    if "module_root" not in config or config["module_root"] is None or not Path(config["module_root"]).is_dir():
-        return True
-    if "tests_root" not in config or config["tests_root"] is None or not Path(config["tests_root"]).is_dir():
+    if (
+        "module_root" not in config
+        or not Path(config["module_root"]).is_dir()
+        or "tests_root" not in config
+        or not Path(config["tests_root"]).is_dir()
+    ):
         return True
 
-    create_toml = Confirm.ask(
+    return Confirm.ask(
         "✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?",
         default=False,
         show_default=True,
     )
-    return create_toml
 
 
 def collect_setup_info() -> SetupInfo:
