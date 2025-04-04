@@ -31,7 +31,7 @@ def belongs_to_class(name: Name, class_name: str) -> bool:
 def belongs_to_function_qualified(name: Name, qualified_function_name: str) -> bool:
     """Check if the given jedi Name is a direct child of the specified function, matched by qualified function name."""
     try:
-        if get_qualified_name(name.module_name, name.full_name) == qualified_function_name:
+        if name.full_name.startswith(name.module_name) and get_qualified_name(name.module_name, name.full_name) == qualified_function_name:
             # Handles function definition and recursive function calls
             return False
         if name := name.parent():
