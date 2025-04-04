@@ -261,6 +261,7 @@ class FunctionOptimizer:
                         best_optimization.candidate.explanation, title="Best Candidate Explanation", border_style="blue"
                     )
                 )
+                get_new_explanation = "abc"
                 explanation = Explanation(
                     raw_explanation_message=best_optimization.candidate.explanation,
                     winning_behavioral_test_results=best_optimization.winning_behavioral_test_results,
