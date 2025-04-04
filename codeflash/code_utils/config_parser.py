@@ -31,7 +31,9 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
     raise ValueError(msg)
 
 
-def parse_config_file(config_file_path: Path | None = None) -> tuple[dict[str, Any], Path]:
+def parse_config_file(
+    config_file_path: Path | None = None, override_formatter_check: bool = False
+) -> tuple[dict[str, Any], Path]:
     config_file_path = find_pyproject_toml(config_file_path)
     try:
         with config_file_path.open("rb") as f:
@@ -85,10 +87,12 @@ def parse_config_file(config_file_path: Path | None = None) -> tuple[dict[str, A
         "In pyproject.toml, Codeflash only supports the 'test-framework' as pytest and unittest."
     )
     if len(config["formatter-cmds"]) > 0:
-        assert config["formatter-cmds"][0] != "your-formatter $file", (
-            "The formatter command is not set correctly in pyproject.toml. Please set the "
-            "formatter command in the 'formatter-cmds' key. More info - https://docs.codeflash.ai/configuration"
-        )
+        #see if this is happening during GitHub actions setup
+        if not override_formatter_check:
+            assert config["formatter-cmds"][0] != "your-formatter $file", (
+                "The formatter command is not set correctly in pyproject.toml. Please set the "
+                "formatter command in the 'formatter-cmds' key. More info - https://docs.codeflash.ai/configuration"
+            )
     for key in list(config.keys()):
         if "-" in key:
             config[key.replace("-", "_")] = config[key]

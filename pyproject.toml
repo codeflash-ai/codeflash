@@ -144,7 +144,7 @@ warn_required_dynamic_aliases = true
 line-length = 120
 fix = true
 show-fixes = true
-exclude = ["code_to_optimize/", "pie_test_set/"]
+exclude = ["code_to_optimize/", "pie_test_set/", "tests/"]
 
 [tool.ruff.lint]
 select = ["ALL"]

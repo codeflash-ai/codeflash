@@ -12,10 +12,19 @@ from codeflash.code_utils.instrument_existing_tests import (
     FunctionImportedAsVisitor,
     inject_profiling_into_existing_test,
 )
+from codeflash.code_utils.line_profile_utils import add_decorator_imports
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles, TestingMode, TestsInFile
+from codeflash.models.models import (
+    CodeOptimizationContext,
+    CodePosition,
+    FunctionParent,
+    TestFile,
+    TestFiles,
+    TestingMode,
+    TestsInFile,
+    TestType,
+)
 from codeflash.optimization.function_optimizer import FunctionOptimizer
-from codeflash.verification.test_results import TestType
 from codeflash.verification.verification_utils import TestConfig
 
 codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
@@ -276,6 +285,7 @@ def test_prepare_image_for_yolo():
 
 
 def test_perfinjector_bubble_sort_results() -> None:
+    computed_fn_opt = False
     code = """from code_to_optimize.bubble_sort import sorter
 
 
@@ -488,13 +498,40 @@ result: [0, 1, 2, 3, 4, 5]
 codeflash stdout: Sorting list
 result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
         assert out_str == test_results_perf[1].stdout
-
+        ctx_result = func_optimizer.get_code_optimization_context()
+        code_context: CodeOptimizationContext = ctx_result.unwrap()
+        original_helper_code: dict[Path, str] = {}
+        helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+        for helper_function_path in helper_function_paths:
+            with helper_function_path.open(encoding="utf8") as f:
+                helper_code = f.read()
+                original_helper_code[helper_function_path] = helper_code
+        computed_fn_opt = True
+        line_profiler_output_file = add_decorator_imports(
+            func_optimizer.function_to_optimize, code_context)
+        line_profile_results, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.LINE_PROFILE,
+            test_env=test_env,
+            test_files=test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+            line_profiler_output_file = line_profiler_output_file
+        )
+        tmp_lpr = list(line_profile_results["timings"].keys())
+        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1]==2
     finally:
+        if computed_fn_opt:
+            func_optimizer.write_code_and_helpers(
+                func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
+            )
         test_path.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
 
 
 def test_perfinjector_bubble_sort_parametrized_results() -> None:
+    computed_fn_opt = False
     code = """from code_to_optimize.bubble_sort import sorter
 import pytest
 
@@ -714,13 +751,40 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
         )
         assert test_results_perf[2].runtime > 0
         assert test_results_perf[2].did_pass
-
+        ctx_result = func_optimizer.get_code_optimization_context()
+        code_context: CodeOptimizationContext = ctx_result.unwrap()
+        original_helper_code: dict[Path, str] = {}
+        helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+        for helper_function_path in helper_function_paths:
+            with helper_function_path.open(encoding="utf8") as f:
+                helper_code = f.read()
+                original_helper_code[helper_function_path] = helper_code
+        computed_fn_opt = True
+        line_profiler_output_file = add_decorator_imports(
+            func_optimizer.function_to_optimize, code_context)
+        line_profile_results, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.LINE_PROFILE,
+            test_env=test_env,
+            test_files=test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+            line_profiler_output_file = line_profiler_output_file
+        )
+        tmp_lpr = list(line_profile_results["timings"].keys())
+        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1]==3
     finally:
+        if computed_fn_opt:
+            func_optimizer.write_code_and_helpers(
+                func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
+            )
         test_path.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
 
 
 def test_perfinjector_bubble_sort_parametrized_loop_results() -> None:
+    computed_fn_opt = False
     code = """from code_to_optimize.bubble_sort import sorter
 import pytest
 
@@ -1026,13 +1090,41 @@ def test_sort_parametrized_loop(input, expected_output):
         )
         assert test_results[5].runtime > 0
         assert test_results[5].did_pass
+        ctx_result = func_optimizer.get_code_optimization_context()
+        code_context: CodeOptimizationContext = ctx_result.unwrap()
+        original_helper_code: dict[Path, str] = {}
+        helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+        for helper_function_path in helper_function_paths:
+            with helper_function_path.open(encoding="utf8") as f:
+                helper_code = f.read()
+                original_helper_code[helper_function_path] = helper_code
+        computed_fn_opt = True
+        line_profiler_output_file = add_decorator_imports(
+            func_optimizer.function_to_optimize, code_context)
+        line_profile_results, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.LINE_PROFILE,
+            test_env=test_env,
+            test_files=test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+            line_profiler_output_file = line_profiler_output_file
+        )
+        tmp_lpr = list(line_profile_results["timings"].keys())
+        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1]==6
     finally:
+        if computed_fn_opt:
+            func_optimizer.write_code_and_helpers(
+                func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
+            )
         test_path.unlink(missing_ok=True)
         test_path_behavior.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
 
 
 def test_perfinjector_bubble_sort_loop_results() -> None:
+    computed_fn_opt = False
     code = """from code_to_optimize.bubble_sort import sorter
 
 
@@ -1271,7 +1363,34 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
         )
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
+        ctx_result = func_optimizer.get_code_optimization_context()
+        code_context: CodeOptimizationContext = ctx_result.unwrap()
+        original_helper_code: dict[Path, str] = {}
+        helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+        for helper_function_path in helper_function_paths:
+            with helper_function_path.open(encoding="utf8") as f:
+                helper_code = f.read()
+                original_helper_code[helper_function_path] = helper_code
+        computed_fn_opt = True
+        line_profiler_output_file = add_decorator_imports(
+            func_optimizer.function_to_optimize, code_context)
+        line_profile_results, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.LINE_PROFILE,
+            test_env=test_env,
+            test_files=test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+            line_profiler_output_file = line_profiler_output_file
+        )
+        tmp_lpr = list(line_profile_results["timings"].keys())
+        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1]==3
     finally:
+        if computed_fn_opt is True:
+            func_optimizer.write_code_and_helpers(
+                func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
+            )
         test_path.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
         test_path_behavior.unlink(missing_ok=True)

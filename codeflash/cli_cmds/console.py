@@ -7,7 +7,16 @@ from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.logging import RichHandler
-from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 
 from codeflash.cli_cmds.console_constants import SPINNER_TYPES
 from codeflash.cli_cmds.logging_config import BARE_LOGGING_FORMAT
@@ -22,15 +31,26 @@ DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 console = Console()
 logging.basicConfig(
     level=logging.INFO,
-    handlers=[RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)],
+    handlers=[
+        RichHandler(
+            rich_tracebacks=True,
+            markup=False,
+            console=console,
+            show_path=False,
+            show_time=False,
+        )
+    ],
     format=BARE_LOGGING_FORMAT,
 )
 
 logger = logging.getLogger("rich")
+logging.getLogger("parso").setLevel(logging.WARNING)
 
 
 def paneled_text(
-    text: str, panel_args: dict[str, str | bool] | None = None, text_args: dict[str, str] | None = None
+    text: str,
+    panel_args: dict[str, str | bool] | None = None,
+    text_args: dict[str, str] | None = None,
 ) -> None:
     """Print text in a panel."""
     from rich.panel import Panel
@@ -57,7 +77,9 @@ spinners = cycle(SPINNER_TYPES)
 
 
 @contextmanager
-def progress_bar(message: str, *, transient: bool = False) -> Generator[TaskID, None, None]:
+def progress_bar(
+    message: str, *, transient: bool = False
+) -> Generator[TaskID, None, None]:
     """Display a progress bar with a spinner and elapsed time."""
     progress = Progress(
         SpinnerColumn(next(spinners)),
@@ -69,3 +91,25 @@ def progress_bar(message: str, *, transient: bool = False) -> Generator[TaskID, 
     task = progress.add_task(message, total=None)
     with progress:
         yield task
+
+
+@contextmanager
+def test_files_progress_bar(
+    total: int, description: str
+) -> Generator[tuple[Progress, TaskID], None, None]:
+    """Progress bar for test files."""
+    with Progress(
+        SpinnerColumn(next(spinners)),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(
+            complete_style="cyan",
+            finished_style="green",
+            pulse_style="yellow",
+        ),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+        transient=True,
+    ) as progress:
+        task_id = progress.add_task(description, total=total)
+        yield progress, task_id
