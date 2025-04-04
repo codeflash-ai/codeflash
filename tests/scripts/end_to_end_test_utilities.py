@@ -202,8 +202,8 @@ def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_p
         return False
 
     functions_traced = re.search(r"Traced (\d+) function calls successfully and replay test created at - (.*)$", stdout)
-    if not functions_traced or int(functions_traced.group(1)) != 5:
-        logging.error("Expected 5 traced functions")
+    if not functions_traced or int(functions_traced.group(1)) != 4:
+        logging.error("Expected 4 traced functions")
         return False
 
     replay_test_path = pathlib.Path(functions_traced.group(2))

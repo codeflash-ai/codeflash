@@ -247,13 +247,17 @@ class Tracer:
             return
         if self.timeout is not None and (time.time() - self.start_time) > self.timeout:
             sys.setprofile(None)
+            threading.setprofile(None)
             console.print(f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds.")
             return
         code = frame.f_code
+
         file_name = Path(code.co_filename).resolve()
         # TODO : It currently doesn't log the last return call from the first function
 
         if code.co_name in self.ignored_functions:
+            return
+        if not file_name.is_relative_to(self.project_root):
             return
         if not file_name.exists():
             return
