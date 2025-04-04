@@ -16,11 +16,11 @@ def test_function_eligible_for_optimization() -> None:
     return a**2
     """
     functions_found = {}
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(function)
-        f.flush()
-        functions_found = find_all_functions_in_file(Path(f.name))
-    assert functions_found[Path(f.name)][0].function_name == "test_function_eligible_for_optimization"
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_file = Path(temp_dir) / "temp_file.py"
+        temp_file.write_text(function)
+        functions_found = find_all_functions_in_file(temp_file)
+    assert functions_found[temp_file][0].function_name == "test_function_eligible_for_optimization"
 
     # Has no return statement
     function = """def test_function_not_eligible_for_optimization():
@@ -28,16 +28,17 @@ def test_function_eligible_for_optimization() -> None:
     print(a)
     """
     functions_found = {}
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(function)
-        f.flush()
-        functions_found = find_all_functions_in_file(Path(f.name))
-    assert len(functions_found[Path(f.name)]) == 0
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_file = Path(temp_dir) / "temp_file.py"
+        temp_file.write_text(function)
+        functions_found = find_all_functions_in_file(temp_file)
+    assert len(functions_found[temp_file]) == 0
 
 
 def test_find_top_level_function_or_method():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_file = Path(temp_dir) / "temp_file.py"
+        temp_file.write_text(
             """def functionA():
     def functionB():
         return 5
@@ -61,8 +62,7 @@ def non_classmethod_function(cls, name):
     return cls.name
     """
         )
-        f.flush()
-        path_obj_name = Path(f.name)
+        path_obj_name = temp_file
         assert inspect_top_level_functions_or_methods(path_obj_name, "functionA").is_top_level
         assert not inspect_top_level_functions_or_methods(path_obj_name, "functionB").is_top_level
         assert inspect_top_level_functions_or_methods(path_obj_name, "functionC", class_name="A").is_top_level
@@ -84,8 +84,9 @@ def non_classmethod_function(cls, name):
 
 
 def test_class_method_discovery():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_file = Path(temp_dir) / "temp_file.py"
+        temp_file.write_text(
             """class A:
     def functionA():
         return True
@@ -99,11 +100,10 @@ class X:
 def functionA():
     return True"""
         )
-        f.flush()
         test_config = TestConfig(
             tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
         )
-        path_obj_name = Path(f.name)
+        path_obj_name = temp_file
         functions, functions_count = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
