@@ -42,5 +42,4 @@ jobs:
       - name: ⚡️Codeflash Optimization
         id: optimize_code
         run: |
-          source .venv/bin/activate
-          poetry run codeflash
+          uv run codeflash
