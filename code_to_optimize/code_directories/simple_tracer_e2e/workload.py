@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 def funcA(number):
     k = 0
-    for i in range(number * 100):
+    for i in range(number * 2):
         k += i
     # Simplify the for loop by using sum with a range object
     j = sum(range(number))
@@ -14,7 +14,7 @@ def funcA(number):
 
 def test_threadpool() -> None:
     pool = ThreadPoolExecutor(max_workers=3)
-    args = list(range(10, 31, 10))
+    args = list(range(10, 31))
     result = pool.map(funcA, args)
 
     for r in result:
