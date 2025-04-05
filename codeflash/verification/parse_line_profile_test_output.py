@@ -16,12 +16,12 @@ def show_func(filename, start_lineno, func_name, timings, unit):
         return ''
     scalar = 1
     if os.path.exists(filename):
-        out_table+=f'## Function: {func_name}\n'
+        out_table += f'## Function: {func_name}\n'
         # Clear the cache to ensure that we get up-to-date results.
         linecache.clearcache()
         all_lines = linecache.getlines(filename)
         sublines = inspect.getblock(all_lines[start_lineno - 1:])
-    out_table+='## Total time: %g s\n' % (total_time * unit)
+    out_table += '## Total time: %g s\n' % (total_time * unit)
     # Define minimum column sizes so text fits and usually looks consistent
     default_column_sizes = {
         'hits': 9,
@@ -57,7 +57,7 @@ def show_func(filename, start_lineno, func_name, timings, unit):
         if 'def' in line_ or nhits!='':
             table_rows.append((nhits, time, per_hit, percent, line_))
     pass
-    out_table+= tabulate(headers=table_cols,tabular_data=table_rows,tablefmt="pipe",colglobalalign=None, preserve_whitespace=True)
+    out_table += tabulate(headers=table_cols,tabular_data=table_rows,tablefmt="pipe",colglobalalign=None, preserve_whitespace=True)
     out_table+='\n'
     return out_table
 
@@ -65,12 +65,12 @@ def show_text(stats: dict) -> str:
     """ Show text for the given timings.
     """
     out_table = ""
-    out_table+='# Timer unit: %g s\n' % stats['unit']
+    out_table += '# Timer unit: %g s\n' % stats['unit']
     stats_order = sorted(stats['timings'].items())
     # Show detailed per-line information for each function.
     for (fn, lineno, name), timings in stats_order:
-        table_md =show_func(fn, lineno, name, stats['timings'][fn, lineno, name], stats['unit'])
-        out_table+=table_md
+        table_md = show_func(fn, lineno, name, stats['timings'][fn, lineno, name], stats['unit'])
+        out_table += table_md
     return out_table
 
 def parse_line_profile_results(line_profiler_output_file: Optional[Path]) -> dict:
@@ -83,6 +83,6 @@ def parse_line_profile_results(line_profiler_output_file: Optional[Path]) -> dic
             stats = pickle.load(f)
             stats_dict['timings'] = stats.timings
             stats_dict['unit'] = stats.unit
-            str_out=show_text(stats_dict)
-            stats_dict['str_out']=str_out
+            str_out = show_text(stats_dict)
+            stats_dict['str_out'] = str_out
         return stats_dict, None

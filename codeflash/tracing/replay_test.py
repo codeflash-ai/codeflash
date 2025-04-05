@@ -42,7 +42,7 @@ def get_function_alias(module: str, function_name: str) -> str:
 def create_trace_replay_test(
     trace_file: str, functions: list[FunctionModules], test_framework: str = "pytest", max_run_count=100
 ) -> str:
-    assert test_framework in ["pytest", "unittest"]
+    assert test_framework in {"pytest", "unittest"}
 
     imports = f"""import dill as pickle
 {"import unittest" if test_framework == "unittest" else ""}

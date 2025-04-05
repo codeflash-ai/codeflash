@@ -70,7 +70,7 @@ def _pipe_segment_with_colons(align, colwidth):
     """Return a segment of a horizontal line with optional colons which
     indicate column's alignment (as in `pipe` output format)."""
     w = colwidth
-    if align in ["right", "decimal"]:
+    if align in {"right", "decimal"}:
         return ("-" * (w - 1)) + ":"
     elif align == "center":
         return ":" + ("-" * (w - 2)) + ":"
@@ -176,7 +176,7 @@ def _isconvertible(conv, string):
 def _isnumber(string):
     return (
         # fast path
-        type(string) in (float, int)
+        type(string) in {float, int}
         # covers 'NaN', +/- 'inf', and eg. '1e2', as well as any type
         # convertible to int/float.
         or (
@@ -188,7 +188,7 @@ def _isnumber(string):
                 # just an over/underflow
                 or (
                     not (math.isinf(float(string)) or math.isnan(float(string)))
-                    or string.lower() in ["inf", "-inf", "nan"]
+                    or string.lower() in {"inf", "-inf", "nan"}
                 )
             )
         )
@@ -210,7 +210,7 @@ def _isint(string, inttype=int):
 
 def _isbool(string):
     return type(string) is bool or (
-        isinstance(string, (bytes, str)) and string in ("True", "False")
+        isinstance(string, (bytes, str)) and string in {"True", "False"}
     )
 
 
@@ -570,7 +570,7 @@ def _normalize_tabular_data(tabular_data, headers, showindex="default"):
             # values is a property, has .index => it's likely a pandas.DataFrame (pandas 0.11.0)
             keys = list(tabular_data)
             if (
-                showindex in ["default", "always", True]
+                showindex in {"default", "always", True}
                 and tabular_data.index.name is not None
             ):
                 if isinstance(tabular_data.index.name, list):
@@ -686,7 +686,7 @@ def _normalize_tabular_data(tabular_data, headers, showindex="default"):
     rows = list(map(lambda r: r if _is_separating_line(r) else list(r), rows))
 
     # add or remove an index column
-    showindex_is_a_str = type(showindex) in [str, bytes]
+    showindex_is_a_str = type(showindex) in {str, bytes}
     if showindex == "never" or (not _bool(showindex) and not showindex_is_a_str):
         pass
 
@@ -820,7 +820,7 @@ def tabulate(
     if colglobalalign is not None:  # if global alignment provided
         aligns = [colglobalalign] * len(cols)
     else:  # default
-        aligns = [numalign if ct in [int, float] else stralign for ct in coltypes]
+        aligns = [numalign if ct in {int, float} else stralign for ct in coltypes]
     # then specific alignments
     if colalign is not None:
         assert isinstance(colalign, Iterable)

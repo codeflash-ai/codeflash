@@ -16,13 +16,13 @@ def humanize_runtime(time_in_ns: int) -> str:
 
         units = re.split(r",|\s", runtime_human)[1]
 
-        if units in ("microseconds", "microsecond"):
+        if units in {"microseconds", "microsecond"}:
             runtime_human = f"{time_micro:.3g}"
-        elif units in ("milliseconds", "millisecond"):
+        elif units in {"milliseconds", "millisecond"}:
             runtime_human = "%.3g" % (time_micro / 1000)
-        elif units in ("seconds", "second"):
+        elif units in {"seconds", "second"}:
             runtime_human = "%.3g" % (time_micro / (1000**2))
-        elif units in ("minutes", "minute"):
+        elif units in {"minutes", "minute"}:
             runtime_human = "%.3g" % (time_micro / (60 * 1000**2))
         else:  # hours
             runtime_human = "%.3g" % (time_micro / (3600 * 1000**2))

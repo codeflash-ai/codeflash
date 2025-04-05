@@ -127,7 +127,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             iteration_id = val[5]
             runtime = val[6]
             verification_type = val[8]
-            if verification_type in (VerificationType.INIT_STATE_FTO, VerificationType.INIT_STATE_HELPER):
+            if verification_type in {VerificationType.INIT_STATE_FTO, VerificationType.INIT_STATE_HELPER}:
                 test_type = TestType.INIT_STATE_TEST
             else:
                 # TODO : this is because sqlite writes original file module path. Should make it consistent
