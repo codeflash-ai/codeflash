@@ -233,7 +233,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 new_keys = {k: v for k, v in new.__dict__.items() if k != "parent"}
             return comparator(orig_keys, new_keys, superset_obj)
 
-        if type(orig) in [types.BuiltinFunctionType, types.BuiltinMethodType]:
+        if type(orig) in {types.BuiltinFunctionType, types.BuiltinMethodType}:
             return new == orig
         if str(type(orig)) == "<class 'object'>":
             return True
