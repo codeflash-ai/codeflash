@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from rich.tree import Tree
@@ -11,7 +12,7 @@ if TYPE_CHECKING:
 import enum
 import re
 import sys
-from collections.abc import Collection, Iterator
+from collections.abc import Collection
 from enum import Enum, IntEnum
 from pathlib import Path
 from re import Pattern
@@ -22,7 +23,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.code_utils import validate_python_code
+from codeflash.code_utils.code_utils import module_name_from_file_path, validate_python_code
 from codeflash.code_utils.env_utils import is_end_to_end
 from codeflash.verification.comparator import comparator
 
@@ -76,10 +77,60 @@ class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
     helper_functions: list[FunctionSource]
     runtime: int
+    replay_performance_gain: Optional[dict[BenchmarkKey,float]] = None
     winning_behavioral_test_results: TestResults
     winning_benchmarking_test_results: TestResults
+    winning_replay_benchmarking_test_results : Optional[TestResults] = None
 
+@dataclass(frozen=True)
+class BenchmarkKey:
+    module_path: str
+    function_name: str
 
+    def __str__(self) -> str:
+        return f"{self.module_path}::{self.function_name}"
+
+@dataclass
+class BenchmarkDetail:
+    benchmark_name: str
+    test_function: str
+    original_timing: str
+    expected_new_timing: str
+    speedup_percent: float
+
+    def to_string(self) -> str:
+        return (
+            f"Original timing for {self.benchmark_name}::{self.test_function}: {self.original_timing}\n"
+            f"Expected new timing for {self.benchmark_name}::{self.test_function}: {self.expected_new_timing}\n"
+            f"Benchmark speedup for {self.benchmark_name}::{self.test_function}: {self.speedup_percent:.2f}%\n"
+        )
+
+    def to_dict(self) -> dict[str, any]:
+        return {
+            "benchmark_name": self.benchmark_name,
+            "test_function": self.test_function,
+            "original_timing": self.original_timing,
+            "expected_new_timing": self.expected_new_timing,
+            "speedup_percent": self.speedup_percent
+        }
+
+@dataclass
+class ProcessedBenchmarkInfo:
+    benchmark_details: list[BenchmarkDetail]
+
+    def to_string(self) -> str:
+        if not self.benchmark_details:
+            return ""
+
+        result = "Benchmark Performance Details:\n"
+        for detail in self.benchmark_details:
+            result += detail.to_string() + "\n"
+        return result
+
+    def to_dict(self) -> dict[str, list[dict[str, any]]]:
+        return {
+            "benchmark_details": [detail.to_dict() for detail in self.benchmark_details]
+        }
 class CodeString(BaseModel):
     code: Annotated[str, AfterValidator(validate_python_code)]
     file_path: Optional[Path] = None
@@ -118,6 +169,7 @@ class OptimizedCandidateResult(BaseModel):
     best_test_runtime: int
     behavior_test_results: TestResults
     benchmarking_test_results: TestResults
+    replay_benchmarking_test_results: Optional[dict[BenchmarkKey, TestResults]] = None
     optimization_candidate_index: int
     total_candidate_timing: int
 
@@ -222,6 +274,7 @@ class FunctionParent:
 class OriginalCodeBaseline(BaseModel):
     behavioral_test_results: TestResults
     benchmarking_test_results: TestResults
+    replay_benchmarking_test_results: Optional[dict[BenchmarkKey, TestResults]] = None
     line_profile_results: dict
     runtime: int
     coverage_results: Optional[CoverageData]
@@ -426,6 +479,20 @@ class TestResults(BaseModel):
                 raise ValueError(msg)
             self.test_result_idx[k] = v + original_len
 
+    def group_by_benchmarks(self, benchmark_keys:list[BenchmarkKey], benchmark_replay_test_dir: Path, project_root: Path) -> dict[BenchmarkKey, TestResults]:
+        """Group TestResults by benchmark for calculating improvements for each benchmark."""
+        test_results_by_benchmark = defaultdict(TestResults)
+        benchmark_module_path = {}
+        for benchmark_key in benchmark_keys:
+            benchmark_module_path[benchmark_key] = module_name_from_file_path(benchmark_replay_test_dir.resolve() / f"test_{benchmark_key.module_path.replace('.', '_')}__replay_test_", project_root)
+        for test_result in self.test_results:
+            if (test_result.test_type == TestType.REPLAY_TEST):
+                for benchmark_key, module_path in benchmark_module_path.items():
+                    if test_result.id.test_module_path.startswith(module_path):
+                        test_results_by_benchmark[benchmark_key].add(test_result)
+
+        return test_results_by_benchmark
+
     def get_by_unique_invocation_loop_id(self, unique_invocation_loop_id: str) -> FunctionTestInvocation | None:
         try:
             return self.test_results[self.test_result_idx[unique_invocation_loop_id]]
@@ -473,25 +540,23 @@ class TestResults(BaseModel):
             tree.add(
                 f"{test_type.to_name()} - Passed: {report[test_type]['passed']}, Failed: {report[test_type]['failed']}"
             )
-        return tree
+        return
 
     def usable_runtime_data_by_test_case(self) -> dict[InvocationId, list[int]]:
-        for result in self.test_results:
-            if result.did_pass and not result.runtime:
-                msg = (
-                    f"Ignoring test case that passed but had no runtime -> {result.id}, "
-                    f"Loop # {result.loop_index}, Test Type: {result.test_type}, "
-                    f"Verification Type: {result.verification_type}"
-                )
-                logger.debug(msg)
 
-        usable_runtimes = [
-            (result.id, result.runtime) for result in self.test_results if result.did_pass and result.runtime
-        ]
-        return {
-            usable_id: [runtime[1] for runtime in usable_runtimes if runtime[0] == usable_id]
-            for usable_id in {runtime[0] for runtime in usable_runtimes}
-        }
+        usable_runtime = defaultdict(list)
+        for result in self.test_results:
+            if result.did_pass:
+                if not result.runtime:
+                    msg = (
+                        f"Ignoring test case that passed but had no runtime -> {result.id}, "
+                        f"Loop # {result.loop_index}, Test Type: {result.test_type}, "
+                        f"Verification Type: {result.verification_type}"
+                    )
+                    logger.debug(msg)
+                else:
+                    usable_runtime[result.id].append(result.runtime)
+        return usable_runtime
 
     def total_passed_runtime(self) -> int:
         """Calculate the sum of runtimes of all test cases that passed.
