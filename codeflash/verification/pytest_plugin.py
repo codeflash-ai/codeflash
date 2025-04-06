@@ -128,14 +128,14 @@ class PytestLoops:
             count += 1
             total_time = self._get_total_time(session)
 
-            for index, item in enumerate(session.items, 1):
+            for index, item in enumerate(session.items):
                 item: pytest.Item = item  # noqa: PLW0127, PLW2901
                 item._report_sections.clear()  # clear reports for new test  # noqa: SLF001
 
                 if total_time > SHORTEST_AMOUNT_OF_TIME:
                     item._nodeid = self._set_nodeid(item._nodeid, count)  # noqa: SLF001
 
-                next_item: pytest.Item = session.items[index] if index < len(session.items) else None
+                next_item: pytest.Item = session.items[index + 1] if index + 1 < len(session.items) else None
 
                 self._clear_lru_caches(item)
 
