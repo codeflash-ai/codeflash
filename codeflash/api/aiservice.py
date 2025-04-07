@@ -207,11 +207,10 @@ class AiServiceClient:
     def get_new_explanation(
         self,
         source_code: str,
+        optimized_code: str,
         dependency_code: str,
         trace_id: str,
-        num_candidates: int = 10,
-        experiment_metadata: ExperimentMetadata | None = None,
-        existing_explanation: str = "",
+        existing_explanation: str,
     ) -> str:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -230,16 +229,12 @@ class AiServiceClient:
 
         """
         payload = {
-            "source_code": source_code,
-            "dependency_code": dependency_code,
-            "num_variants": num_candidates,
             "trace_id": trace_id,
-            "python_version": platform.python_version(),
-            "experiment_metadata": experiment_metadata,
-            "codeflash_version": codeflash_version,
+            "source_code": source_code,
+            "optimized_code":optimized_code,
             "existing_explanation": existing_explanation,
+            "dependency_code": dependency_code,
         }
-
         logger.info("Generating optimized candidates…")
         console.rule()
         try:

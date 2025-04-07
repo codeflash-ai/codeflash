@@ -8,6 +8,7 @@ import subprocess
 import time
 import uuid
 from collections import defaultdict, deque
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -254,21 +255,14 @@ class FunctionOptimizer:
             )
 
             if best_optimization:
-                logger.info("Best candidate:")
-                code_print(best_optimization.candidate.source_code)
-                console.print(
-                    Panel(
-                        best_optimization.candidate.explanation, title="Best Candidate Explanation", border_style="blue"
-                    )
-                )
-                #could possibly have it in the best optimization dataclass
                 new_explanation = self.aiservice_client.get_new_explanation(source_code=code_context.read_writable_code,
                 dependency_code=code_context.read_only_context_code,
                 trace_id=self.function_trace_id,
                 num_candidates=1,
                 experiment_metadata=None, existing_explanation=best_optimization.candidate.explanation)
+                best_optimization.candidate = replace(best_optimization.candidate, explanation=new_explanation if new_explanation!="" else best_optimization.candidate.explanation)
                 explanation = Explanation(
-                    raw_explanation_message=new_explanation if new_explanation!="" else best_optimization.candidate.explanation,
+                    raw_explanation_message=best_optimization.candidate.explanation,
                     winning_behavioral_test_results=best_optimization.winning_behavioral_test_results,
                     winning_benchmarking_test_results=best_optimization.winning_benchmarking_test_results,
                     original_runtime_ns=original_code_baseline.runtime,
@@ -276,7 +270,13 @@ class FunctionOptimizer:
                     function_name=function_to_optimize_qualified_name,
                     file_path=self.function_to_optimize.file_path,
                 )
-
+                logger.info("Best candidate:")
+                code_print(best_optimization.candidate.source_code)
+                console.print(
+                    Panel(
+                        best_optimization.candidate.explanation, title="Best Candidate Explanation", border_style="blue"
+                    )
+                )
                 self.log_successful_optimization(explanation, generated_tests)
 
                 self.replace_function_and_helpers_with_optimized_code(
