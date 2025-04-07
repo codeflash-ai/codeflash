@@ -1,7 +1,7 @@
 name: CodeFlash
 
 on:
-  pull_request:
+  pull_request_target:
     paths:
       - "**"
   workflow_dispatch:
@@ -26,6 +26,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Validate PR
+        run: |
+          if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep -q "codeflash-optimize.yaml"; then
+            echo "This workflow file has been modified. Exiting for security."
+            exit 1
+          fi
 
       - name: 🐍 Set up Python 3.11 for CLI
         uses: astral-sh/setup-uv@v5

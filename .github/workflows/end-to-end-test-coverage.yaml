@@ -1,7 +1,7 @@
 name: Coverage E2E
 
 on:
-  pull_request:
+  pull_request_target:
   workflow_dispatch:
 
 jobs:
@@ -19,6 +19,12 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Validate PR
+        run: |
+          if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep -q "end-to-end-test-coverage.yaml"; then
+            echo "This workflow file has been modified. Exiting for security."
+            exit 1
+          fi
 
       - name: Set up Python 3.11 for CLI
         uses: astral-sh/setup-uv@v5
