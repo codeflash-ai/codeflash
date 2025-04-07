@@ -9,6 +9,24 @@ def sorter(arr):
                 arr[j + 1] = temp
     return arr
 
+@codeflash_trace
+def recursive_bubble_sort(arr, n=None):
+    # Initialize n if not provided
+    if n is None:
+        n = len(arr)
+
+    # Base case: if n is 1, the array is already sorted
+    if n == 1:
+        return arr
+
+    # One pass of bubble sort - move the largest element to the end
+    for i in range(n - 1):
+        if arr[i] > arr[i + 1]:
+            arr[i], arr[i + 1] = arr[i + 1], arr[i]
+
+    # Recursively sort the remaining n-1 elements
+    return recursive_bubble_sort(arr, n - 1)
+
 class Sorter:
     @codeflash_trace
     def __init__(self, arr):

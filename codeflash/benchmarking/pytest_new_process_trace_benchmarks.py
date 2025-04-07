@@ -16,7 +16,7 @@ if __name__ == "__main__":
         codeflash_benchmark_plugin.setup(trace_file, project_root)
         codeflash_trace.setup(trace_file)
         exitcode = pytest.main(
-            [benchmarks_root, "--codeflash-trace", "-p", "no:benchmark", "-s", "-o", "addopts="], plugins=[codeflash_benchmark_plugin]
+            [benchmarks_root, "--codeflash-trace", "-p", "no:benchmark","-p", "no:codspeed","-p", "no:cov-s", "-o", "addopts="], plugins=[codeflash_benchmark_plugin]
         ) # Errors will be printed to stdout, not stderr
 
     except Exception as e:

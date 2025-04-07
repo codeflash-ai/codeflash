@@ -34,7 +34,7 @@ def get_next_arg_and_return(
         )
 
     while (val := cursor.fetchone()) is not None:
-        yield val[9], val[10]  # args and kwargs are at indices 7 and 8
+        yield val[9], val[10]  # pickled_args, pickled_kwargs
 
 
 def get_function_alias(module: str, function_name: str) -> str:

@@ -3,6 +3,7 @@ import os
 import pickle
 import sqlite3
 import sys
+import threading
 import time
 from typing import Callable
 
@@ -18,6 +19,8 @@ class CodeflashTrace:
         self.pickle_count_limit = 1000
         self._connection = None
         self._trace_path = None
+        self._thread_local = threading.local()
+        self._thread_local.active_functions = set()
 
     def setup(self, trace_path: str) -> None:
         """Set up the database connection for direct writing.
@@ -98,23 +101,29 @@ class CodeflashTrace:
             The wrapped function
 
         """
+        func_id = (func.__module__,func.__name__)
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
+            # Initialize thread-local active functions set if it doesn't exist
+            if not hasattr(self._thread_local, "active_functions"):
+                self._thread_local.active_functions = set()
+            # If it's in a recursive function, just return the result
+            if func_id in self._thread_local.active_functions:
+                return func(*args, **kwargs)
+            # Track active functions so we can detect recursive functions
+            self._thread_local.active_functions.add(func_id)
             # Measure execution time
             start_time = time.thread_time_ns()
             result = func(*args, **kwargs)
             end_time = time.thread_time_ns()
             # Calculate execution time
             execution_time = end_time - start_time
-
             self.function_call_count += 1
 
-            # Measure overhead
-            original_recursion_limit = sys.getrecursionlimit()
             # Check if currently in pytest benchmark fixture
             if os.environ.get("CODEFLASH_BENCHMARKING", "False") == "False":
+                self._thread_local.active_functions.remove(func_id)
                 return result
-
             # Get benchmark info from environment
             benchmark_function_name = os.environ.get("CODEFLASH_BENCHMARK_FUNCTION_NAME", "")
             benchmark_module_path = os.environ.get("CODEFLASH_BENCHMARK_MODULE_PATH", "")
@@ -125,32 +134,54 @@ class CodeflashTrace:
             if "." in qualname:
                 class_name = qualname.split(".")[0]
 
-            if self.function_call_count <= self.pickle_count_limit:
+            # Limit pickle count so memory does not explode
+            if self.function_call_count > self.pickle_count_limit:
+                print("Pickle limit reached")
+                self._thread_local.active_functions.remove(func_id)
+                overhead_time = time.thread_time_ns() - end_time
+                self.function_calls_data.append(
+                    (func.__name__, class_name, func.__module__, func.__code__.co_filename,
+                     benchmark_function_name, benchmark_module_path, benchmark_line_number, execution_time,
+                     overhead_time, None, None)
+                )
+                return result
+
+            try:
+                original_recursion_limit = sys.getrecursionlimit()
+                sys.setrecursionlimit(10000)
+                # args = dict(args.items())
+                # if class_name and func.__name__ == "__init__" and "self" in args:
+                #     del args["self"]
+                # Pickle the arguments
+                pickled_args = pickle.dumps(args, protocol=pickle.HIGHEST_PROTOCOL)
+                pickled_kwargs = pickle.dumps(kwargs, protocol=pickle.HIGHEST_PROTOCOL)
+                sys.setrecursionlimit(original_recursion_limit)
+            except (TypeError, pickle.PicklingError, AttributeError, RecursionError, OSError):
+                # Retry with dill if pickle fails. It's slower but more comprehensive
                 try:
-                    sys.setrecursionlimit(1000000)
-                    args = dict(args.items())
-                    if class_name and func.__name__ == "__init__" and "self" in args:
-                        del args["self"]
-                    # Pickle the arguments
-                    pickled_args = pickle.dumps(args, protocol=pickle.HIGHEST_PROTOCOL)
-                    pickled_kwargs = pickle.dumps(kwargs, protocol=pickle.HIGHEST_PROTOCOL)
+                    pickled_args = dill.dumps(args, protocol=pickle.HIGHEST_PROTOCOL)
+                    pickled_kwargs = dill.dumps(kwargs, protocol=pickle.HIGHEST_PROTOCOL)
                     sys.setrecursionlimit(original_recursion_limit)
-                except (TypeError, pickle.PicklingError, AttributeError, RecursionError, OSError):
-                    # we retry with dill if pickle fails. It's slower but more comprehensive
-                    try:
-                        pickled_args = dill.dumps(args, protocol=pickle.HIGHEST_PROTOCOL)
-                        pickled_kwargs = dill.dumps(kwargs, protocol=pickle.HIGHEST_PROTOCOL)
-                        sys.setrecursionlimit(original_recursion_limit)
 
-                    except (TypeError, dill.PicklingError, AttributeError, RecursionError, OSError) as e:
-                        print(f"Error pickling arguments for function {func.__name__}: {e}")
-                        return result
+                except (TypeError, dill.PicklingError, AttributeError, RecursionError, OSError) as e:
+                    print(f"Error pickling arguments for function {func.__name__}: {e}")
+                    # Add to the list of function calls without pickled args. Used for timing info only
+                    self._thread_local.active_functions.remove(func_id)
+                    overhead_time = time.thread_time_ns() - end_time
+                    self.function_calls_data.append(
+                        (func.__name__, class_name, func.__module__, func.__code__.co_filename,
+                         benchmark_function_name, benchmark_module_path, benchmark_line_number, execution_time,
+                         overhead_time, None, None)
+                    )
+                    return result
 
+            # Flush to database every 1000 calls
             if len(self.function_calls_data) > 1000:
                 self.write_function_timings()
-            # Calculate overhead time
-            overhead_time = time.thread_time_ns() - end_time
 
+            # Add to the list of function calls with pickled args, to be used for replay tests
+            self._thread_local.active_functions.remove(func_id)
+            overhead_time = time.thread_time_ns() - end_time
             self.function_calls_data.append(
                 (func.__name__, class_name, func.__module__, func.__code__.co_filename,
                  benchmark_function_name, benchmark_module_path, benchmark_line_number, execution_time,
