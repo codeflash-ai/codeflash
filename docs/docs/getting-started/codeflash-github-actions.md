@@ -17,7 +17,7 @@ So setting this up is highly recommended.
 
 ## Prerequisites
 - You have a Codeflash API key. If you don't have one, you can generate one from the [Codeflash Webapp](https://app.codeflash.ai/). Make sure you generate the API key with the right GitHub account that has access to the repository you want to optimize.
-- You have completed [local installation](/getting-started/local-installation) steps and have a Python project with a `pyproject.toml` file that is configured with Codeflash. If you haven't configured Codeflash for your project yet, you can do so by running `codeflash init` in the root directory of your project.
+- You have completed [local installation](/docs/docs/getting-started/local-installation.md) steps and have a Python project with a `pyproject.toml` file that is configured with Codeflash. If you haven't configured Codeflash for your project yet, you can do so by running `codeflash init` in the root directory of your project.
 
 ## Add the Codeflash GitHub Actions workflow
 
