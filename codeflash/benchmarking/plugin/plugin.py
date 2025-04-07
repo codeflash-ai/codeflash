@@ -175,6 +175,7 @@ class CodeFlashBenchmarkPlugin:
                 benchmark_key = BenchmarkKey(module_path=benchmark_file, function_name=benchmark_func)
                 # Subtract overhead from total time
                 overhead = overhead_by_benchmark.get(benchmark_key, 0)
+                print("benchmark_func:", benchmark_func, "Total time:", time_ns, "Overhead:", overhead, "Result:", time_ns - overhead)
                 result[benchmark_key] = time_ns - overhead
 
         finally:
@@ -210,6 +211,13 @@ class CodeFlashBenchmarkPlugin:
             manager.unregister(plugin)
 
     @staticmethod
+    def pytest_configure(config):
+        """Register the benchmark marker."""
+        config.addinivalue_line(
+            "markers",
+            "benchmark: mark test as a benchmark that should be run with codeflash tracing"
+        )
+    @staticmethod
     def pytest_collection_modifyitems(config, items):
         # Skip tests that don't have the benchmark fixture
         if not config.getoption("--codeflash-trace"):
@@ -217,9 +225,19 @@ class CodeFlashBenchmarkPlugin:
 
         skip_no_benchmark = pytest.mark.skip(reason="Test requires benchmark fixture")
         for item in items:
-            if hasattr(item, "fixturenames") and "benchmark" in item.fixturenames:
-                continue
-            item.add_marker(skip_no_benchmark)
+            # Check for direct benchmark fixture usage
+            has_fixture = hasattr(item, "fixturenames") and "benchmark" in item.fixturenames
+
+            # Check for @pytest.mark.benchmark marker
+            has_marker = False
+            if hasattr(item, "get_closest_marker"):
+                marker = item.get_closest_marker("benchmark")
+                if marker is not None:
+                    has_marker = True
+
+            # Skip if neither fixture nor marker is present
+            if not (has_fixture or has_marker):
+                item.add_marker(skip_no_benchmark)
 
     # Benchmark fixture
     class Benchmark:
@@ -227,44 +245,37 @@ class CodeFlashBenchmarkPlugin:
             self.request = request
 
         def __call__(self, func, *args, **kwargs):
-            """Handle behaviour for the benchmark fixture in pytest.
+            """Handle both direct function calls and decorator usage."""
+            if args or kwargs:
+                # Used as benchmark(func, *args, **kwargs)
+                return self._run_benchmark(func, *args, **kwargs)
+            # Used as @benchmark decorator
+            def wrapped_func(*args, **kwargs):
+                return func(*args, **kwargs)
+            result = self._run_benchmark(func)
+            return wrapped_func
 
-            For example,
-
-            def test_something(benchmark):
-                benchmark(sorter, [3,2,1])
-
-            Args:
-                func: The function to benchmark (e.g. sorter)
-                args: The arguments to pass to the function (e.g. [3,2,1])
-                kwargs: The keyword arguments to pass to the function
-
-            Returns:
-                The return value of the function
-            a
-
-            """
-            benchmark_module_path = module_name_from_file_path(Path(str(self.request.node.fspath)), Path(codeflash_benchmark_plugin.project_root))
+        def _run_benchmark(self, func, *args, **kwargs):
+            """Actual benchmark implementation."""
+            benchmark_module_path = module_name_from_file_path(Path(str(self.request.node.fspath)),
+                                                               Path(codeflash_benchmark_plugin.project_root))
             benchmark_function_name = self.request.node.name
-            line_number = int(str(sys._getframe(1).f_lineno))  # 1 frame up in the call stack
-
-            # Set env vars so codeflash decorator can identify what benchmark its being run in
+            line_number = int(str(sys._getframe(2).f_lineno))  # 2 frames up in the call stack
+            # Set env vars
             os.environ["CODEFLASH_BENCHMARK_FUNCTION_NAME"] = benchmark_function_name
             os.environ["CODEFLASH_BENCHMARK_MODULE_PATH"] = benchmark_module_path
             os.environ["CODEFLASH_BENCHMARK_LINE_NUMBER"] = str(line_number)
             os.environ["CODEFLASH_BENCHMARKING"] = "True"
-
-        # Run the function
-            start = time.perf_counter_ns()
+            # Run the function
+            start = time.thread_time_ns()
             result = func(*args, **kwargs)
-            end = time.perf_counter_ns()
-
+            end = time.thread_time_ns()
             # Reset the environment variable
             os.environ["CODEFLASH_BENCHMARKING"] = "False"
 
             # Write function calls
             codeflash_trace.write_function_timings()
-            # Reset function call count after a benchmark is run
+            # Reset function call count
             codeflash_trace.function_call_count = 0
             # Add to the benchmark timings buffer
             codeflash_benchmark_plugin.benchmark_timings.append(
