@@ -1,4 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
+
+
 def funcA(number):
     k = 0
     for i in range(number * 100):
@@ -8,6 +10,7 @@ def funcA(number):
 
     # Use a generator expression directly in join for more efficiency
     return " ".join(str(i) for i in range(number))
+
 
 def test_threadpool() -> None:
     pool = ThreadPoolExecutor(max_workers=3)

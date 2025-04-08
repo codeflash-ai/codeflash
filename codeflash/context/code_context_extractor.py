@@ -356,6 +356,7 @@ def get_function_to_optimize_as_function_source(
             name.type == "function"
             and name.full_name
             and name.name == function_to_optimize.function_name
+            and name.full_name.startswith(name.module_name)
             and get_qualified_name(name.module_name, name.full_name) == function_to_optimize.qualified_name
         ):
             function_source = FunctionSource(
@@ -410,10 +411,13 @@ def get_function_sources_from_jedi(
                         and definition.full_name
                         and definition.type == "function"
                         and not belongs_to_function_qualified(definition, qualified_function_name)
+                        and definition.full_name.startswith(definition.module_name)
+                        # Avoid nested functions or classes. Only class.function is allowed
+                        and len((qualified_name := get_qualified_name(definition.module_name, definition.full_name)).split(".")) <= 2
                     ):
                         function_source = FunctionSource(
                             file_path=definition_path,
-                            qualified_name=get_qualified_name(definition.module_name, definition.full_name),
+                            qualified_name=qualified_name,
                             fully_qualified_name=definition.full_name,
                             only_function_name=definition.name,
                             source_code=definition.get_line_code(),
