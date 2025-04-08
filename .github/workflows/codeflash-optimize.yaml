@@ -13,6 +13,7 @@ concurrency:
 jobs:
   optimize:
     name: Optimize new Python code
+    environment: external-trusted-contributors
     if: ${{ github.actor != 'codeflash-ai[bot]' }}
     runs-on: ubuntu-latest
     env:

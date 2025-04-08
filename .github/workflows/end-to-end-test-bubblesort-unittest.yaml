@@ -6,6 +6,7 @@ on:
 
 jobs:
   bubble-sort-optimization-unittest:
+    environment: external-trusted-contributors
     runs-on: ubuntu-latest
     env:
       CODEFLASH_AIS_SERVER: prod

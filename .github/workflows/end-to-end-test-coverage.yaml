@@ -6,6 +6,7 @@ on:
 
 jobs:
   end-to-end-test-coverage:
+    environment: external-trusted-contributors
     runs-on: ubuntu-latest
     env:
       CODEFLASH_AIS_SERVER: prod
