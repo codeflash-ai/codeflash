@@ -33,7 +33,7 @@ jobs:
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   name: labelName,
-                  color: '#f9d0c4',
+                  color: 'f9d0c4',
                   description: 'This PR modifies GitHub Actions workflows'
                 });
                 console.log(`Label "${labelName}" created`);
