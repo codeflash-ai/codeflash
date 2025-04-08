@@ -1,7 +1,7 @@
 name: CodeFlash
 
 on:
-  pull_request:
+  pull_request_target:
     paths:
       - "**"
   workflow_dispatch:
@@ -13,6 +13,7 @@ concurrency:
 jobs:
   optimize:
     name: Optimize new Python code
+    environment: external-trusted-contributors
     if: ${{ github.actor != 'codeflash-ai[bot]' }}
     runs-on: ubuntu-latest
     env:
@@ -26,6 +27,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Validate PR
+        run: |
+          # Checking for any workflow changes for security risks
+          if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep -q "^.github/workflows/"; then
+            echo "Workflow changes detected."
+
+            # Check if the PR author is allowed
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            if [[ "$AUTHOR" != "misrasaurabh1" && "$AUTHOR" != "KRRT7" ]]; then
+              echo "Unauthorized user ($AUTHOR) attempting to modify workflows. Exiting."
+              exit 1
+            else
+              echo "Authorized user ($AUTHOR). Proceeding."
+            fi
+          fi
 
       - name: 🐍 Set up Python 3.11 for CLI
         uses: astral-sh/setup-uv@v5
