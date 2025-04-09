@@ -235,8 +235,8 @@ class FunctionOptimizer:
         # request for new optimizations but don't block execution, check for completion later
         # adding to control and experiment set but with same traceid
         best_optimization = None
-
-        for _u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
+        run_experiment = self.experiment_id is not None
+        for _u, (candidates,exp_type) in enumerate(zip([optimizations_set.control, optimizations_set.experiment],["EXP0","EXP1"])):
             if candidates is None:
                 continue
 
@@ -246,6 +246,8 @@ class FunctionOptimizer:
                 original_code_baseline=original_code_baseline,
                 original_helper_code=original_helper_code,
                 file_path_to_helper_classes=file_path_to_helper_classes,
+                exp_type=exp_type,
+                run_experiment=run_experiment,
             )
             ph("cli-optimize-function-finished", {"function_trace_id": self.function_trace_id})
 
@@ -346,6 +348,8 @@ class FunctionOptimizer:
         original_code_baseline: OriginalCodeBaseline,
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
+        exp_type: str,
+        run_experiment: bool
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime
@@ -367,7 +371,7 @@ class FunctionOptimizer:
                 self.aiservice_client.optimize_python_code_line_profiler,
                 source_code=code_context.read_writable_code,
                 dependency_code=code_context.read_only_context_code,
-                trace_id=self.function_trace_id,
+                trace_id=self.function_trace_id[:-4] + exp_type if run_experiment else self.function_trace_id,
                 line_profiler_results=original_code_baseline.line_profile_results["str_out"],
                 num_candidates=10,
                 experiment_metadata=None,
@@ -377,7 +381,6 @@ class FunctionOptimizer:
                 done = False
                 original_len = len(candidates)
                 while candidates:
-                    # for candidate_index, candidate in enumerate(candidates, start=1):
                     done = True if future_line_profile_results is None else future_line_profile_results.done()
                     if done and (future_line_profile_results is not None):
                         line_profile_results = future_line_profile_results.result()
