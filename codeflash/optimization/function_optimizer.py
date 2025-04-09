@@ -235,8 +235,7 @@ class FunctionOptimizer:
         # request for new optimizations but don't block execution, check for completion later
         # adding to control and experiment set but with same traceid
         best_optimization = None
-        run_experiment = self.experiment_id is not None
-        for _u, (candidates,exp_type) in enumerate(zip([optimizations_set.control, optimizations_set.experiment],["EXP0","EXP1"])):
+        for _u, (candidates, exp_type) in enumerate(zip([optimizations_set.control, optimizations_set.experiment],["EXP0","EXP1"])):
             if candidates is None:
                 continue
 
@@ -247,7 +246,6 @@ class FunctionOptimizer:
                 original_helper_code=original_helper_code,
                 file_path_to_helper_classes=file_path_to_helper_classes,
                 exp_type=exp_type,
-                run_experiment=run_experiment,
             )
             ph("cli-optimize-function-finished", {"function_trace_id": self.function_trace_id})
 
@@ -349,7 +347,6 @@ class FunctionOptimizer:
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
         exp_type: str,
-        run_experiment: bool
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime
@@ -367,18 +364,18 @@ class FunctionOptimizer:
         # Start a new thread for AI service request, start loop in main thread
         # check if aiservice request is complete, when it is complete, append result to the candidates list
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            ai_service_client = self.local_aiservice_client if self.experiment_id else self.aiservice_client
             future_line_profile_results = executor.submit(
-                self.aiservice_client.optimize_python_code_line_profiler,
+                ai_service_client.optimize_python_code_line_profiler,
                 source_code=code_context.read_writable_code,
                 dependency_code=code_context.read_only_context_code,
-                trace_id=self.function_trace_id[:-4] + exp_type if run_experiment else self.function_trace_id,
+                trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
                 line_profiler_results=original_code_baseline.line_profile_results["str_out"],
                 num_candidates=10,
-                experiment_metadata=None,
+                experiment_metadata=ExperimentMetadata(id=self.experiment_id, group= "control" if exp_type == "EXP0" else "experiment") if self.experiment_id  else None,
             )
             try:
                 candidate_index = 0
-                done = False
                 original_len = len(candidates)
                 while candidates:
                     done = True if future_line_profile_results is None else future_line_profile_results.done()
