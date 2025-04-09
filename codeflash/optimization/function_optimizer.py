@@ -319,20 +319,12 @@ class FunctionOptimizer:
                             original_helper_code,
                             self.function_to_optimize.file_path,
                         )
-        for generated_test_path in generated_test_paths:
-            generated_test_path.unlink(missing_ok=True)
-        for generated_perf_test_path in generated_perf_test_paths:
-            generated_perf_test_path.unlink(missing_ok=True)
-        for test_paths in instrumented_unittests_created_for_function:
-            test_paths.unlink(missing_ok=True)
-        for fn in function_to_concolic_tests:
-            for test in function_to_concolic_tests[fn]:
-                if not test.tests_in_file.test_file.parent.exists():
-                    logger.warning(
-                        f"Concolic test directory {test.tests_in_file.test_file.parent} does not exist so could not be deleted."
-                    )
-                shutil.rmtree(test.tests_in_file.test_file.parent, ignore_errors=True)
-                break  # need to delete only one test directory
+                        
+        # lista filepath
+        filespaths = generated_test_paths + generated_perf_test_paths
+        # remove all test files
+        cleanup_paths(filespaths)
+
 
         if not best_optimization:
             return Failure(f"No best optimizations found for function {self.function_to_optimize.qualified_name}")
