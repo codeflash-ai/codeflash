@@ -319,11 +319,7 @@ class FunctionOptimizer:
                             original_helper_code,
                             self.function_to_optimize.file_path,
                         )
-                        
-        # lista filepath
-        filespaths = generated_test_paths + generated_perf_test_paths
-        # remove all test files
-        cleanup_paths(filespaths)
+        cleanup_paths(generated_test_paths + generated_perf_test_paths)
 
 
         if not best_optimization:

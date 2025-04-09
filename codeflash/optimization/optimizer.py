@@ -20,6 +20,7 @@ from codeflash.models.models import TestType, ValidCode
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
+from codeflash.code_utils.code_utils import cleanup_paths
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -177,16 +178,22 @@ class Optimizer:
                 logger.info("✨ All functions have been optimized! ✨")
         finally:
             if function_optimizer:
-                for test_file in function_optimizer.test_files.get_by_type(TestType.GENERATED_REGRESSION).test_files:
-                    test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
-                    test_file.benchmarking_file_path.unlink(missing_ok=True)
-                for test_file in function_optimizer.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
-                    test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
-                    test_file.benchmarking_file_path.unlink(missing_ok=True)
-                for test_file in function_optimizer.test_files.get_by_type(TestType.CONCOLIC_COVERAGE_TEST).test_files:
-                    test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
-                if function_optimizer.test_cfg.concolic_test_root_dir:
-                    shutil.rmtree(function_optimizer.test_cfg.concolic_test_root_dir, ignore_errors=True)
+                list_of_paths_to_delete = [
+                    test_file.instrumented_behavior_file_path
+                    for test_type in [
+                        TestType.GENERATED_REGRESSION,
+                        TestType.EXISTING_UNIT_TEST,
+                        TestType.CONCOLIC_COVERAGE_TEST,
+                    ]
+                    for test_file in function_optimizer.test_files.get_by_type(test_type).test_files
+                ] + [
+                    test_file.benchmarking_file_path
+                    for test_type in [TestType.GENERATED_REGRESSION, TestType.EXISTING_UNIT_TEST]
+                    for test_file in function_optimizer.test_files.get_by_type(test_type).test_files
+                ] + [function_optimizer.test_cfg.concolic_test_root_dir]
+
+                cleanup_paths(list_of_paths_to_delete)
+
             if hasattr(get_run_tmp_file, "tmpdir"):
                 get_run_tmp_file.tmpdir.cleanup()
 
