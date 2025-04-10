@@ -45,21 +45,24 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             superset_obj = True
         if not comparator(original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj):
             are_equal = False
-            logger.debug(
-                "File Name: %s\n"
-                "Test Type: %s\n"
-                "Verification Type: %s\n"
-                "Invocation ID: %s\n"
-                "Original return value: %s\n"
-                "Candidate return value: %s\n"
-                "-------------------",
-                original_test_result.file_name,
-                original_test_result.test_type,
-                original_test_result.verification_type,
-                original_test_result.id,
-                original_test_result.return_value,
-                cdd_test_result.return_value,
-            )
+            try:
+                logger.debug(
+                    "File Name: %s\n"
+                    "Test Type: %s\n"
+                    "Verification Type: %s\n"
+                    "Invocation ID: %s\n"
+                    "Original return value: %s\n"
+                    "Candidate return value: %s\n"
+                    "-------------------",
+                    original_test_result.file_name,
+                    original_test_result.test_type,
+                    original_test_result.verification_type,
+                    original_test_result.id,
+                    original_test_result.return_value,
+                    cdd_test_result.return_value,
+                )
+            except Exception as e:
+                logger.error(e)
             break
         if (original_test_result.stdout and cdd_test_result.stdout) and not comparator(
             original_test_result.stdout, cdd_test_result.stdout
