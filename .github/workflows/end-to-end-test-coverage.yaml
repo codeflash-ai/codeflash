@@ -1,15 +1,10 @@
 name: Coverage E2E
 
 on:
-  # For specific file changes
+  # Use pull_request_target for everything to ensure access to secrets
   pull_request_target:
     paths:
-      - '.github/workflows/**'
-
-  # For all other changes
-  pull_request:
-    paths-ignore:
-      - '.github/workflows/**'
+      - '**'  # Trigger for all paths
 
   workflow_dispatch:
 
