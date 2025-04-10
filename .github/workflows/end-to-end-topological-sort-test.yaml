@@ -22,16 +22,15 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Validate PR
         run: |
           # Check for any workflow changes
           if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" | grep -q "^.github/workflows/"; then
             echo "⚠️ Workflow changes detected."
-
             # Get the PR author
             AUTHOR="${{ github.event.pull_request.user.login }}"
             echo "PR Author: $AUTHOR"
-
             # Allowlist check
             if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
               echo "✅ Authorized user ($AUTHOR). Proceeding."
