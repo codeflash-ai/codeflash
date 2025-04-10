@@ -270,6 +270,7 @@ class OriginalCodeBaseline(BaseModel):
     behavioral_test_results: TestResults
     benchmarking_test_results: TestResults
     replay_benchmarking_test_results: Optional[dict[BenchmarkKey, TestResults]] = None
+    line_profile_results: dict
     runtime: int
     coverage_results: Optional[CoverageData]
 
