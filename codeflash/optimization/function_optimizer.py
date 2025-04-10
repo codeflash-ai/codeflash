@@ -364,7 +364,7 @@ class FunctionOptimizer:
         # Start a new thread for AI service request, start loop in main thread
         # check if aiservice request is complete, when it is complete, append result to the candidates list
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            ai_service_client = self.local_aiservice_client if self.experiment_id else self.aiservice_client
+            ai_service_client = self.aiservice_client if exp_type=="EXP0" else self.local_aiservice_client
             future_line_profile_results = executor.submit(
                 ai_service_client.optimize_python_code_line_profiler,
                 source_code=code_context.read_writable_code,
