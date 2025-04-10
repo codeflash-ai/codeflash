@@ -1,9 +1,16 @@
 name: CodeFlash
 
 on:
+  # For specific file changes
   pull_request_target:
     paths:
-      - "**"
+      - '.github/workflows/**'
+
+  # For all other changes
+  pull_request:
+    paths-ignore:
+      - '.github/workflows/**'
+
   workflow_dispatch:
 
 concurrency:
