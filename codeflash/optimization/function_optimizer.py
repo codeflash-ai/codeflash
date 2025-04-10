@@ -247,7 +247,7 @@ class FunctionOptimizer:
                 file_path_to_helper_classes=file_path_to_helper_classes,
                 exp_type=exp_type,
             )
-            ph("cli-optimize-function-finished", {"function_trace_id": self.function_trace_id})
+            ph("cli-optimize-function-finished", {"function_trace_id": self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id})
 
             generated_tests = remove_functions_from_generated_tests(
                 generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
@@ -271,7 +271,7 @@ class FunctionOptimizer:
                     file_path=self.function_to_optimize.file_path,
                 )
 
-                self.log_successful_optimization(explanation, generated_tests)
+                self.log_successful_optimization(explanation, generated_tests, exp_type)
 
                 self.replace_function_and_helpers_with_optimized_code(
                     code_context=code_context, optimized_code=best_optimization.candidate.source_code
@@ -309,7 +309,7 @@ class FunctionOptimizer:
                         explanation=explanation,
                         existing_tests_source=existing_tests,
                         generated_original_test_source=generated_tests_str,
-                        function_trace_id=self.function_trace_id,
+                        function_trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
                         coverage_message=coverage_message,
                         git_remote=self.args.git_remote,
                     )
@@ -477,8 +477,8 @@ class FunctionOptimizer:
                 logger.exception(f"Optimization interrupted: {e}")
                 raise
 
-        self.aiservice_client.log_results(
-            function_trace_id=self.function_trace_id,
+        ai_service_client.log_results(
+            function_trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
             speedup_ratio=speedup_ratios,
             original_runtime=original_code_baseline.runtime,
             optimized_runtime=optimized_runtimes,
@@ -486,7 +486,7 @@ class FunctionOptimizer:
         )
         return best_optimization
 
-    def log_successful_optimization(self, explanation: Explanation, generated_tests: GeneratedTestsList) -> None:
+    def log_successful_optimization(self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str) -> None:
         explanation_panel = Panel(
             f"⚡️ Optimization successful! 📄 {self.function_to_optimize.qualified_name} in {explanation.file_path}\n"
             f"📈 {explanation.perf_improvement_line}\n"
@@ -512,7 +512,7 @@ class FunctionOptimizer:
         ph(
             "cli-optimize-success",
             {
-                "function_trace_id": self.function_trace_id,
+                "function_trace_id": self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
                 "speedup_x": explanation.speedup_x,
                 "speedup_pct": explanation.speedup_pct,
                 "best_runtime": explanation.best_runtime_ns,
