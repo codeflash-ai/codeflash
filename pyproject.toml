@@ -6,6 +6,8 @@ description = "Client for codeflash.ai - automatic code performance optimization
 license = "BSL-1.1"
 authors = ["CodeFlash Inc. <contact@codeflash.ai>"]
 homepage = "https://codeflash.ai"
+repository = "https://github.com/codeflash-ai/codeflash"
+documentation = "https://docs.codeflash.ai/"
 readme = "README.md"
 packages = [{ include = "codeflash", format = ["sdist"] }]
 keywords = [
@@ -64,6 +66,9 @@ exclude = [
     "venv",
     "env",
 ]
+
+[project.urls]
+
 
 # Versions here the minimum required versions for the project. These should be as loose as possible.
 [tool.poetry.dependencies]
