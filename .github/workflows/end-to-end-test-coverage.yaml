@@ -10,7 +10,14 @@ on:
 
 jobs:
   end-to-end-test-coverage:
-    environment: external-trusted-contributors
+    # Dynamically determine if environment is needed only when workflow files change and contributor is external
+    environment: ${{
+                   github.event_name == 'workflow_dispatch' ||
+                   contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') &&
+                   github.event.pull_request.user.login != 'misrasaurabh1' &&
+                   github.event.pull_request.user.login != 'KRRT7'
+                   ? 'external-trusted-contributors': ''
+    }}
     runs-on: ubuntu-latest
     env:
       CODEFLASH_AIS_SERVER: prod
@@ -37,7 +44,7 @@ jobs:
             # Allowlist check
             if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
               echo "✅ Authorized user ($AUTHOR). Proceeding."
-            elif [[ "${{ github.event_name }}" == "pull_request_target" && "${{ github.event.pull_request.state }}" == "open" ]]; then
+            elif [["${{ github.event.pull_request.state }}" == "open" ]]; then
               echo "✅ PR triggered by 'pull_request_target' and is open. Assuming protection rules are in place. Proceeding."
             else
               echo "⛔ Unauthorized user ($AUTHOR) attempting to modify workflows. Exiting."
