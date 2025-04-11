@@ -36,6 +36,20 @@ class UnexpectedError(Exception):
     pass
 
 
+import platform
+if platform.system() == 'Linux' or platform.system() == 'Darwin':
+    import resource
+    import psutil
+
+    # Get total system memory
+    total_memory = psutil.virtual_memory().total
+    # Set memory limit to 80% of total system memory
+    memory_limit = int(total_memory * 0.8)
+
+    # Set both soft and hard limits
+    resource.setrlimit(resource.RLIMIT_AS, (memory_limit, memory_limit))
+
+
 def pytest_addoption(parser: Parser) -> None:
     """Add command line options."""
     pytest_loops = parser.getgroup("loops")
