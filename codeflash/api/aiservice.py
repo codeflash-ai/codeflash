@@ -204,6 +204,60 @@ class AiServiceClient:
         console.rule()
         return []
 
+    def get_new_explanation(
+        self,
+        source_code: str,
+        optimized_code: str,
+        dependency_code: str,
+        trace_id: str,
+        existing_explanation: str,
+    ) -> str:
+        """Optimize the given python code for performance by making a request to the Django endpoint.
+
+        Parameters
+        ----------
+        - source_code (str): The python code to optimize.
+        - dependency_code (str): The dependency code used as read-only context for the optimization
+        - trace_id (str): Trace id of optimization run
+        - num_candidates (int): Number of optimization variants to generate. Default is 10.
+        - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
+        - existing_explanation (str): Existing explanation from AIservice call
+
+        Returns
+        -------
+        - List[OptimizationCandidate]: A list of Optimization Candidates.
+
+        """
+        payload = {
+            "trace_id": trace_id,
+            "source_code": source_code,
+            "optimized_code":optimized_code,
+            "existing_explanation": existing_explanation,
+            "dependency_code": dependency_code,
+        }
+        logger.info("Generating optimized candidates…")
+        console.rule()
+        try:
+            response = self.make_ai_service_request("/explain", payload=payload, timeout=600)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating optimized candidates: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
+            return ""
+
+        if response.status_code == 200:
+            explanation = response.json()["explanation"]
+            logger.info(f"New Explanation: {explanation}")
+            console.rule()
+            return explanation
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return ""
+
 
     def log_results(
         self,
