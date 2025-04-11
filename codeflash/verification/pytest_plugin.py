@@ -39,11 +39,10 @@ class UnexpectedError(Exception):
 import platform
 if platform.system() == 'Linux' or platform.system() == 'Darwin':
     import resource
-    import psutil
+    import os
 
     # Get total system memory
-    total_memory = psutil.virtual_memory().total
-    # Set memory limit to 80% of total system memory
+    total_memory = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')    # Set memory limit to 80% of total system memory
     memory_limit = int(total_memory * 0.8)
 
     # Set both soft and hard limits
