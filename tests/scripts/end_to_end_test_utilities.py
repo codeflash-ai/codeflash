@@ -26,6 +26,7 @@ class TestConfig:
     min_improvement_x: float = 0.1
     trace_mode: bool = False
     coverage_expectations: list[CoverageExpectation] = field(default_factory=list)
+    benchmarks_root: Optional[pathlib.Path] = None
 
 
 def clear_directory(directory_path: str | pathlib.Path) -> None:
@@ -85,8 +86,8 @@ def run_codeflash_command(
     path_to_file = cwd / config.file_path
     file_contents = path_to_file.read_text("utf-8")
     test_root = cwd / "tests" / (config.test_framework or "")
-    command = build_command(cwd, config, test_root)
 
+    command = build_command(cwd, config, test_root, config.benchmarks_root if config.benchmarks_root else None)
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
     )
@@ -116,7 +117,7 @@ def run_codeflash_command(
     return validated
 
 
-def build_command(cwd: pathlib.Path, config: TestConfig, test_root: pathlib.Path) -> list[str]:
+def build_command(cwd: pathlib.Path, config: TestConfig, test_root: pathlib.Path, benchmarks_root:pathlib.Path|None = None) -> list[str]:
     python_path = "../../../codeflash/main.py" if "code_directories" in str(cwd) else "../codeflash/main.py"
 
     base_command = ["python", python_path, "--file", config.file_path, "--no-pr"]
@@ -127,7 +128,8 @@ def build_command(cwd: pathlib.Path, config: TestConfig, test_root: pathlib.Path
         base_command.extend(
             ["--test-framework", config.test_framework, "--tests-root", str(test_root), "--module-root", str(cwd)]
         )
-
+    if benchmarks_root:
+        base_command.extend(["--benchmark", "--benchmarks-root", str(benchmarks_root)])
     return base_command
 
 

@@ -52,10 +52,10 @@ def parse_config_file(
     assert isinstance(config, dict)
 
     # default values:
-    path_keys = {"module-root", "tests-root"}
-    path_list_keys = {"ignore-paths", }
+    path_keys = ["module-root", "tests-root", "benchmarks-root"]
+    path_list_keys = ["ignore-paths"]
     str_keys = {"pytest-cmd": "pytest", "git-remote": "origin"}
-    bool_keys = {"disable-telemetry": False, "disable-imports-sorting": False}
+    bool_keys = {"disable-telemetry": False, "disable-imports-sorting": False, "benchmark": False}
     list_str_keys = {"formatter-cmds": ["black $file"]}
 
     for key in str_keys:

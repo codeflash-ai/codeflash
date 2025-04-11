@@ -10,6 +10,7 @@ from typing import Any
 import sentry_sdk
 
 from codeflash.cli_cmds.console import logger
+from codeflash.picklepatch.pickle_placeholder import PicklePlaceholderAccessError
 
 try:
     import numpy as np
@@ -64,7 +65,11 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
             if len(orig) != len(new):
                 return False
             return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
-
+        if isinstance(orig, PicklePlaceholderAccessError) or isinstance(new, PicklePlaceholderAccessError):
+            # If this error was raised, there was an attempt to access the PicklePlaceholder, which represents an unpickleable object.
+            # The test results should be rejected as the behavior of the unpickleable object is unknown.
+            logger.debug("Unable to verify behavior of unpickleable object in replay test")
+            return False
         if isinstance(
             orig,
             (
