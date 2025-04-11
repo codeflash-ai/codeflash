@@ -24,9 +24,9 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo
               });
-              
+
               const labelExists = labels.data.some(label => label.name === labelName);
-              
+
               if (!labelExists) {
                 // Create the label if it doesn't exist
                 await github.rest.issues.createLabel({

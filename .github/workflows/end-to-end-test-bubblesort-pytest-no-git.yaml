@@ -1,7 +1,11 @@
 name: end-to-end-test
 
 on:
+  # Use pull_request_target for everything to ensure access to secrets
   pull_request_target:
+    paths:
+      - '**'  # Trigger for all paths
+
   workflow_dispatch:
 
 jobs:
