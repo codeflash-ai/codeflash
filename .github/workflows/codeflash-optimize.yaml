@@ -1,7 +1,6 @@
 name: CodeFlash
 
 on:
-  # Use pull_request_target for everything to ensure access to secrets
   pull_request_target:
     paths:
       - '**'  # Trigger for all paths
@@ -15,7 +14,14 @@ concurrency:
 jobs:
   optimize:
     name: Optimize new Python code
-    environment: external-trusted-contributors
+    # Dynamically determine if environment is needed only when workflow files change and contributor is external
+    environment: ${{
+      github.event_name == 'workflow_dispatch' ||
+      contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') &&
+      github.event.pull_request.user.login != 'misrasaurabh1' &&
+      github.event.pull_request.user.login != 'KRRT7'
+      ? 'external-trusted-contributors' : ''
+    }}
     if: ${{ github.actor != 'codeflash-ai[bot]' }}
     runs-on: ubuntu-latest
     env:
@@ -42,8 +48,8 @@ jobs:
             # Allowlist check
             if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
               echo "✅ Authorized user ($AUTHOR). Proceeding."
-            elif [[ "${{ github.event_name }}" == "pull_request_target" && "${{ github.event.pull_request.state }}" == "open" ]]; then
-              echo "✅ PR triggered by 'pull_request_target' and is open. Assuming protection rules are in place. Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "✅ PR is open. Proceeding with appropriate protections."
             else
               echo "⛔ Unauthorized user ($AUTHOR) attempting to modify workflows. Exiting."
               exit 1
