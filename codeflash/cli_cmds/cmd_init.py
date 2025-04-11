@@ -70,7 +70,6 @@ def init_codeflash() -> None:
         did_add_new_key = prompt_api_key()
 
         if should_modify_pyproject_toml():
-
             setup_info: SetupInfo = collect_setup_info()
 
             configure_pyproject_toml(setup_info)
@@ -82,7 +81,6 @@ def init_codeflash() -> None:
         module_string = ""
         if "setup_info" in locals():
             module_string = f" you selected ({setup_info.module_root})"
-
 
         click.echo(
             f"{LF}"
@@ -125,18 +123,19 @@ def ask_run_end_to_end_test(args: Namespace) -> None:
         bubble_sort_path, bubble_sort_test_path = create_bubble_sort_file_and_test(args)
         run_end_to_end_test(args, bubble_sort_path, bubble_sort_test_path)
 
+
 def should_modify_pyproject_toml() -> bool:
-    """
-    Check if the current directory contains a valid pyproject.toml file with codeflash config
+    """Check if the current directory contains a valid pyproject.toml file with codeflash config
     If it does, ask the user if they want to re-configure it.
     """
     from rich.prompt import Confirm
+
     pyproject_toml_path = Path.cwd() / "pyproject.toml"
     if not pyproject_toml_path.exists():
         return True
     try:
         config, config_file_path = parse_config_file(pyproject_toml_path)
-    except Exception as e:
+    except Exception:
         return True
 
     if "module_root" not in config or config["module_root"] is None or not Path(config["module_root"]).is_dir():
@@ -145,7 +144,9 @@ def should_modify_pyproject_toml() -> bool:
         return True
 
     create_toml = Confirm.ask(
-        f"✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?", default=False, show_default=True
+        "✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?",
+        default=False,
+        show_default=True,
     )
     return create_toml
 
@@ -226,7 +227,7 @@ def collect_setup_info() -> SetupInfo:
         else:
             apologize_and_exit()
     else:
-        tests_root = Path(curdir) / Path(cast(str, tests_root_answer))
+        tests_root = Path(curdir) / Path(cast("str", tests_root_answer))
     tests_root = tests_root.relative_to(curdir)
     ph("cli-tests-root-provided")
 
@@ -280,9 +281,9 @@ def collect_setup_info() -> SetupInfo:
     return SetupInfo(
         module_root=str(module_root),
         tests_root=str(tests_root),
-        test_framework=cast(str, test_framework),
+        test_framework=cast("str", test_framework),
         ignore_paths=ignore_paths,
-        formatter=cast(str, formatter),
+        formatter=cast("str", formatter),
         git_remote=str(git_remote),
     )
 
@@ -392,7 +393,7 @@ def check_for_toml_or_setup_file() -> str | None:
             click.echo("⏩️ Skipping pyproject.toml creation.")
             apologize_and_exit()
     click.echo()
-    return cast(str, project_name)
+    return cast("str", project_name)
 
 
 def install_github_actions(override_formatter_check: bool = False) -> None:

@@ -74,7 +74,7 @@ def inquirer_wrapper_path(*args: str, **kwargs: str) -> dict[str, str] | None:
     new_kwargs["message"] = last_message
     new_args.append(args[0])
 
-    return cast(dict[str, str], inquirer.prompt([inquirer.Path(*new_args, **new_kwargs)]))
+    return cast("dict[str, str]", inquirer.prompt([inquirer.Path(*new_args, **new_kwargs)]))
 
 
 def split_string_to_fit_width(string: str, width: int) -> list[str]:
