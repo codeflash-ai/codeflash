@@ -10,7 +10,7 @@ from codeflash.cli_cmds.console import logger
 class ProfileStats(pstats.Stats):
     def __init__(self, trace_file_path: str, time_unit: str = "ns") -> None:
         assert Path(trace_file_path).is_file(), f"Trace file {trace_file_path} does not exist"
-        assert time_unit in ["ns", "us", "ms", "s"], f"Invalid time unit {time_unit}"
+        assert time_unit in {"ns", "us", "ms", "s"}, f"Invalid time unit {time_unit}"
         self.trace_file_path = trace_file_path
         self.time_unit = time_unit
         logger.debug(hasattr(self, "create_stats"))
@@ -59,10 +59,10 @@ class ProfileStats(pstats.Stats):
         time_unit = {"ns": "nanoseconds", "us": "microseconds", "ms": "milliseconds", "s": "seconds"}[self.time_unit]
         print(f"in {self.total_tt:.3f} {time_unit}", file=self.stream)
         print(file=self.stream)
-        width, list = self.get_print_list(amount)
-        if list:
+        width, list_ = self.get_print_list(amount)
+        if list_:
             self.print_title()
-            for func in list:
+            for func in list_:
                 self.print_line(func)
             print(file=self.stream)
             print(file=self.stream)

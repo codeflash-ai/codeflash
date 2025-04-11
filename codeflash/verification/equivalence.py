@@ -40,26 +40,29 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         superset_obj = False
         if original_test_result.verification_type and (
             original_test_result.verification_type
-            in (VerificationType.INIT_STATE_HELPER, VerificationType.INIT_STATE_FTO)
+            in {VerificationType.INIT_STATE_HELPER, VerificationType.INIT_STATE_FTO}
         ):
             superset_obj = True
         if not comparator(original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj):
             are_equal = False
-            logger.debug(
-                "File Name: %s\n"
-                "Test Type: %s\n"
-                "Verification Type: %s\n"
-                "Invocation ID: %s\n"
-                "Original return value: %s\n"
-                "Candidate return value: %s\n"
-                "-------------------",
-                original_test_result.file_name,
-                original_test_result.test_type,
-                original_test_result.verification_type,
-                original_test_result.id,
-                original_test_result.return_value,
-                cdd_test_result.return_value,
-            )
+            try:
+                logger.debug(
+                    "File Name: %s\n"
+                    "Test Type: %s\n"
+                    "Verification Type: %s\n"
+                    "Invocation ID: %s\n"
+                    "Original return value: %s\n"
+                    "Candidate return value: %s\n"
+                    "-------------------",
+                    original_test_result.file_name,
+                    original_test_result.test_type,
+                    original_test_result.verification_type,
+                    original_test_result.id,
+                    original_test_result.return_value,
+                    cdd_test_result.return_value,
+                )
+            except Exception as e:
+                logger.error(e)
             break
         if (original_test_result.stdout and cdd_test_result.stdout) and not comparator(
             original_test_result.stdout, cdd_test_result.stdout
@@ -67,7 +70,7 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             are_equal = False
             break
 
-        if original_test_result.test_type in [TestType.EXISTING_UNIT_TEST, TestType.CONCOLIC_COVERAGE_TEST] and (
+        if original_test_result.test_type in {TestType.EXISTING_UNIT_TEST, TestType.CONCOLIC_COVERAGE_TEST} and (
             cdd_test_result.did_pass != original_test_result.did_pass
         ):
             are_equal = False

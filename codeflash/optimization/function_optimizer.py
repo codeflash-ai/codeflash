@@ -830,7 +830,7 @@ class FunctionOptimizer:
         line_profile_results = {"timings": {}, "unit": 0, "str_out": ""}
         # For the original function - run the tests and get the runtime, plus coverage
         with progress_bar(f"Establishing original code baseline for {self.function_to_optimize.function_name}"):
-            assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
+            assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}
             success = True
 
             test_env = os.environ.copy()
@@ -981,7 +981,8 @@ class FunctionOptimizer:
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
     ) -> Result[OptimizedCandidateResult, str]:
-        assert (test_framework := self.args.test_framework) in ["pytest", "unittest"]
+        assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}
+
         with progress_bar("Testing optimization candidate"):
             test_env = os.environ.copy()
             test_env["CODEFLASH_LOOP_INDEX"] = "0"
@@ -1159,7 +1160,7 @@ class FunctionOptimizer:
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
-        if testing_type in [TestingMode.BEHAVIOR, TestingMode.PERFORMANCE]:
+        if testing_type in {TestingMode.BEHAVIOR, TestingMode.PERFORMANCE}:
             results, coverage_results = parse_test_results(
                 test_xml_path=result_file_path,
                 test_files=test_files,

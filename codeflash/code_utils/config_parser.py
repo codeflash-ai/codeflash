@@ -83,7 +83,7 @@ def parse_config_file(
         else:  # Default to empty list
             config[key] = []
 
-    assert config["test-framework"] in ["pytest", "unittest"], (
+    assert config["test-framework"] in {"pytest", "unittest"}, (
         "In pyproject.toml, Codeflash only supports the 'test-framework' as pytest and unittest."
     )
     if len(config["formatter-cmds"]) > 0:
