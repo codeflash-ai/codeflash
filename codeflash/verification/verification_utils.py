@@ -6,8 +6,6 @@ from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
-from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
-
 
 def get_test_file_path(test_dir: Path, function_name: str, iteration: int = 0, test_type: str = "unit") -> Path:
     assert test_type in {"unit", "inspired", "replay", "perf"}
