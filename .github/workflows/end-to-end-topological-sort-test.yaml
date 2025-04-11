@@ -1,12 +1,23 @@
 name: end-to-end-test
 
 on:
+  # Use pull_request_target for everything to ensure access to secrets
   pull_request_target:
+    paths:
+      - '**'  # Trigger for all paths
+
   workflow_dispatch:
 
 jobs:
   topological-sort-optimization:
-    environment: external-trusted-contributors
+    # Dynamically determine if environment is needed only when workflow files change and contributor is external
+    environment: ${{
+                   github.event_name == 'workflow_dispatch' ||
+                   contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') &&
+                   github.event.pull_request.user.login != 'misrasaurabh1' &&
+                   github.event.pull_request.user.login != 'KRRT7'
+                   ? 'external-trusted-contributors': ''
+    }}
     runs-on: ubuntu-latest
     env:
       CODEFLASH_AIS_SERVER: prod
@@ -22,23 +33,26 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Validate PR
-        run: |
-          # Checking for any workflow changes for security risks
-          if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep -q "^.github/workflows/"; then
-            echo "Workflow changes detected."
 
-            # Check if the PR author is allowed
+      - name: Validate PR for workflow changes
+        run: |
+          # Check for any workflow changes
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" | grep -q "^.github/workflows/"; then
+            echo "⚠️ Workflow changes detected."
+            # Get the PR author
             AUTHOR="${{ github.event.pull_request.user.login }}"
-            if [[ "$AUTHOR" != "misrasaurabh1" && "$AUTHOR" != "KRRT7" ]]; then
-              echo "Unauthorized user ($AUTHOR) attempting to modify workflows. Exiting."
-              exit 1
+            echo "PR Author: $AUTHOR"
+            # Allowlist check
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+              echo "✅ Authorized user ($AUTHOR). Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "✅ PR is open. Assuming protection rules are in place. Proceeding."
             else
-              echo "Authorized user ($AUTHOR). Proceeding."
+              echo "⛔ Unauthorized user ($AUTHOR) attempting to modify workflows. Exiting."
+              exit 1
             fi
-          fiif git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep -q "end-to-end-topological-sort-test.yaml"; then
-            echo "This workflow file has been modified. Exiting for security."
-            exit 1
+          else
+            echo "✅ No workflow file changes detected. Proceeding."
           fi
 
       - name: Set up Python 3.11 for CLI

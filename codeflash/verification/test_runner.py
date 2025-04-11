@@ -164,7 +164,7 @@ def run_line_profile_tests(
         )
         test_files: list[str] = []
         for file in test_paths.test_files:
-            if file.test_type in [TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST] and file.tests_in_file:
+            if file.test_type in {TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST} and file.tests_in_file:
                 test_files.extend(
                     [
                         str(file.benchmarking_file_path)
@@ -224,7 +224,7 @@ def run_benchmarking_tests(
         )
         test_files: list[str] = []
         for file in test_paths.test_files:
-            if file.test_type in [TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST] and file.tests_in_file:
+            if file.test_type in {TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST} and file.tests_in_file:
                 test_files.extend(
                     [
                         str(file.benchmarking_file_path)

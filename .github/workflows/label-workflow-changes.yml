@@ -1,0 +1,55 @@
+name: PR Labeler
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+    types: [opened, synchronize, reopened]
+
+jobs:
+  label-workflow-changes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Label PR with workflow changes
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const labelName = 'workflow-modified';
+
+            // Check if the label exists
+            try {
+              const labels = await github.rest.issues.listLabelsForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              });
+
+              const labelExists = labels.data.some(label => label.name === labelName);
+
+              if (!labelExists) {
+                // Create the label if it doesn't exist
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: labelName,
+                  color: 'f9d0c4',
+                  description: 'This PR modifies GitHub Actions workflows'
+                });
+                console.log(`Label "${labelName}" created`);
+              } else {
+                console.log(`Label "${labelName}" already exists`);
+              }
+            } catch (error) {
+              console.error(`Failed to check or create label: ${error.message}`);
+              throw error;
+            }
+
+            // Add the label to the PR
+            await github.rest.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: [labelName]
+            });
+            console.log(`Label "${labelName}" added to the PR.`);
