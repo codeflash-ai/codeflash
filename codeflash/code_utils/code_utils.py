@@ -6,6 +6,7 @@ import site
 from functools import lru_cache
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import shutil
 
 from codeflash.cli_cmds.console import logger
 
@@ -118,4 +119,7 @@ def has_any_async_functions(code: str) -> bool:
 
 def cleanup_paths(paths: list[Path]) -> None:
     for path in paths:
-        path.unlink(missing_ok=True)
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+        else:
+            path.unlink(missing_ok=True)
