@@ -1,3 +1,8 @@
+class PicklePlaceholderAccessError(Exception):
+    """Custom exception raised when attempting to access an unpicklable object."""
+
+
+
 class PicklePlaceholder:
     """A placeholder for an object that couldn't be pickled.
 
@@ -22,22 +27,22 @@ class PicklePlaceholder:
         self.__dict__["path"] = path if path is not None else []
 
     def __getattr__(self, name):
-        """Raise an error when any attribute is accessed."""
+        """Raise a custom error when any attribute is accessed."""
         path_str = ".".join(self.__dict__["path"]) if self.__dict__["path"] else "root object"
-        raise AttributeError(
-            f"Cannot access attribute '{name}' on unpicklable object at {path_str}. "
+        raise PicklePlaceholderAccessError(
+            f"Attempt to access unpickleable object: Cannot access attribute '{name}' on unpicklable object at {path_str}. "
             f"Original type: {self.__dict__['obj_type']}. Error: {self.__dict__['error_msg']}"
         )
 
     def __setattr__(self, name, value):
         """Prevent setting attributes."""
-        self.__getattr__(name)  # This will raise an AttributeError
+        self.__getattr__(name)  # This will raise our custom error
 
     def __call__(self, *args, **kwargs):
-        """Raise an error when the object is called."""
+        """Raise a custom error when the object is called."""
         path_str = ".".join(self.__dict__["path"]) if self.__dict__["path"] else "root object"
-        raise TypeError(
-            f"Cannot call unpicklable object at {path_str}. "
+        raise PicklePlaceholderAccessError(
+            f"Attempt to access unpickleable object: Cannot call unpicklable object at {path_str}. "
             f"Original type: {self.__dict__['obj_type']}. Error: {self.__dict__['error_msg']}"
         )
 

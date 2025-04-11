@@ -175,7 +175,6 @@ class CodeFlashBenchmarkPlugin:
                 benchmark_key = BenchmarkKey(module_path=benchmark_file, function_name=benchmark_func)
                 # Subtract overhead from total time
                 overhead = overhead_by_benchmark.get(benchmark_key, 0)
-                print("benchmark_func:", benchmark_func, "Total time:", time_ns, "Overhead:", overhead, "Result:", time_ns - overhead)
                 result[benchmark_key] = time_ns - overhead
 
         finally:
@@ -267,9 +266,9 @@ class CodeFlashBenchmarkPlugin:
             os.environ["CODEFLASH_BENCHMARK_LINE_NUMBER"] = str(line_number)
             os.environ["CODEFLASH_BENCHMARKING"] = "True"
             # Run the function
-            start = time.thread_time_ns()
+            start = time.time_ns()
             result = func(*args, **kwargs)
-            end = time.thread_time_ns()
+            end = time.time_ns()
             # Reset the environment variable
             os.environ["CODEFLASH_BENCHMARKING"] = "False"
 

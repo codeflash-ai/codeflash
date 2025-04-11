@@ -62,7 +62,7 @@ def create_trace_replay_test_code(
     assert test_framework in ["pytest", "unittest"]
 
     # Create Imports
-    imports = f"""import dill as pickle 
+    imports = f"""from codeflash.picklepatch.pickle_patcher import PicklePatcher as pickle
 {"import unittest" if test_framework == "unittest" else ""}
 from codeflash.benchmarking.replay_test import get_next_arg_and_return
 """

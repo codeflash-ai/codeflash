@@ -1,15 +1,14 @@
+import shutil
 import sqlite3
-
-from codeflash.benchmarking.plugin.plugin import codeflash_benchmark_plugin
-from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
-from codeflash.benchmarking.replay_test import generate_replay_test
 from pathlib import Path
 
-from codeflash.benchmarking.utils import print_benchmark_table, validate_and_format_benchmark_table
-import shutil
+from codeflash.benchmarking.plugin.plugin import codeflash_benchmark_plugin
+from codeflash.benchmarking.replay_test import generate_replay_test
+from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
+from codeflash.benchmarking.utils import validate_and_format_benchmark_table
 
 
-def test_trace_benchmarks():
+def test_trace_benchmarks() -> None:
     # Test the trace_benchmarks function
     project_root = Path(__file__).parent.parent / "code_to_optimize"
     benchmarks_root = project_root / "tests" / "pytest" / "benchmarks_test"
@@ -83,13 +82,12 @@ def test_trace_benchmarks():
         test_class_sort_path = replay_tests_dir/ Path("test_tests_pytest_benchmarks_test_test_benchmark_bubble_sort_example__replay_test_0.py")
         assert test_class_sort_path.exists()
         test_class_sort_code = f"""
-import dill as pickle
-
 from code_to_optimize.bubble_sort_codeflash_trace import \\
     Sorter as code_to_optimize_bubble_sort_codeflash_trace_Sorter
 from code_to_optimize.bubble_sort_codeflash_trace import \\
     sorter as code_to_optimize_bubble_sort_codeflash_trace_sorter
 from codeflash.benchmarking.replay_test import get_next_arg_and_return
+from codeflash.picklepatch.pickle_patcher import PicklePatcher as pickle
 
 functions = ['sort_class', 'sort_static', 'sorter']
 trace_file_path = r"{output_file.as_posix()}"
@@ -146,14 +144,13 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_Sorter___init__():
         test_sort_path = replay_tests_dir / Path("test_tests_pytest_benchmarks_test_test_process_and_sort_example__replay_test_0.py")
         assert test_sort_path.exists()
         test_sort_code = f"""
-import dill as pickle
-
 from code_to_optimize.bubble_sort_codeflash_trace import \\
     sorter as code_to_optimize_bubble_sort_codeflash_trace_sorter
 from code_to_optimize.process_and_bubble_sort_codeflash_trace import \\
     compute_and_sort as \\
     code_to_optimize_process_and_bubble_sort_codeflash_trace_compute_and_sort
 from codeflash.benchmarking.replay_test import get_next_arg_and_return
+from codeflash.picklepatch.pickle_patcher import PicklePatcher as pickle
 
 functions = ['compute_and_sort', 'sorter']
 trace_file_path = r"{output_file}"

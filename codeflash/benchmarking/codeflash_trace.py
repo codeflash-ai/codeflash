@@ -2,12 +2,11 @@ import functools
 import os
 import pickle
 import sqlite3
-import sys
 import threading
 import time
 from typing import Callable
 
-import dill
+from codeflash.picklepatch.pickle_patcher import PicklePatcher
 
 
 class CodeflashTrace:
@@ -147,34 +146,20 @@ class CodeflashTrace:
                 return result
 
             try:
-                original_recursion_limit = sys.getrecursionlimit()
-                sys.setrecursionlimit(10000)
-                # args = dict(args.items())
-                # if class_name and func.__name__ == "__init__" and "self" in args:
-                #     del args["self"]
                 # Pickle the arguments
-                pickled_args = pickle.dumps(args, protocol=pickle.HIGHEST_PROTOCOL)
-                pickled_kwargs = pickle.dumps(kwargs, protocol=pickle.HIGHEST_PROTOCOL)
-                sys.setrecursionlimit(original_recursion_limit)
-            except (TypeError, pickle.PicklingError, AttributeError, RecursionError, OSError):
-                # Retry with dill if pickle fails. It's slower but more comprehensive
-                try:
-                    pickled_args = dill.dumps(args, protocol=pickle.HIGHEST_PROTOCOL)
-                    pickled_kwargs = dill.dumps(kwargs, protocol=pickle.HIGHEST_PROTOCOL)
-                    sys.setrecursionlimit(original_recursion_limit)
-
-                except (TypeError, dill.PicklingError, AttributeError, RecursionError, OSError) as e:
-                    print(f"Error pickling arguments for function {func.__name__}: {e}")
-                    # Add to the list of function calls without pickled args. Used for timing info only
-                    self._thread_local.active_functions.remove(func_id)
-                    overhead_time = time.thread_time_ns() - end_time
-                    self.function_calls_data.append(
-                        (func.__name__, class_name, func.__module__, func.__code__.co_filename,
-                         benchmark_function_name, benchmark_module_path, benchmark_line_number, execution_time,
-                         overhead_time, None, None)
-                    )
-                    return result
-
+                pickled_args = PicklePatcher.dumps(args, protocol=pickle.HIGHEST_PROTOCOL)
+                pickled_kwargs = PicklePatcher.dumps(kwargs, protocol=pickle.HIGHEST_PROTOCOL)
+            except Exception as e:
+                print(f"Error pickling arguments for function {func.__name__}: {e}")
+                # Add to the list of function calls without pickled args. Used for timing info only
+                self._thread_local.active_functions.remove(func_id)
+                overhead_time = time.thread_time_ns() - end_time
+                self.function_calls_data.append(
+                    (func.__name__, class_name, func.__module__, func.__code__.co_filename,
+                     benchmark_function_name, benchmark_module_path, benchmark_line_number, execution_time,
+                     overhead_time, None, None)
+                )
+                return result
             # Flush to database every 1000 calls
             if len(self.function_calls_data) > 1000:
                 self.write_function_timings()

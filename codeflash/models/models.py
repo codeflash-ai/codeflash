@@ -16,7 +16,7 @@ from collections.abc import Collection
 from enum import Enum, IntEnum
 from pathlib import Path
 from re import Pattern
-from typing import Annotated, Any, Optional, Union, cast
+from typing import Annotated, Optional, cast
 
 from jedi.api.classes import Name
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
@@ -362,6 +362,7 @@ class FunctionCoverage:
 class TestingMode(enum.Enum):
     BEHAVIOR = "behavior"
     PERFORMANCE = "performance"
+    LINE_PROFILE = "line_profile"
 
 
 class VerificationType(str, Enum):
@@ -533,7 +534,7 @@ class TestResults(BaseModel):
             tree.add(
                 f"{test_type.to_name()} - Passed: {report[test_type]['passed']}, Failed: {report[test_type]['failed']}"
             )
-        return
+        return tree
 
     def usable_runtime_data_by_test_case(self) -> dict[InvocationId, list[int]]:
 

@@ -8,6 +8,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import dill as pickle
 from junitparser.xunit2 import JUnitXml
 from lxml.etree import XMLParser, parse
 
@@ -20,7 +21,6 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType, VerificationType
-from codeflash.picklepatch.pickle_patcher import PicklePatcher
 from codeflash.verification.coverage_utils import CoverageUtils
 
 if TYPE_CHECKING:
@@ -75,7 +75,7 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
 
                 test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
                 try:
-                    test_pickle = PicklePatcher.loads(test_pickle_bin) if loop_index == 1 else None
+                    test_pickle = pickle.loads(test_pickle_bin) if loop_index == 1 else None
                 except Exception as e:
                     if DEBUG_MODE:
                         logger.exception(f"Failed to load pickle file for {encoded_test_name} Exception: {e}")
@@ -133,7 +133,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                 # TODO : this is because sqlite writes original file module path. Should make it consistent
                 test_type = test_files.get_test_type_by_original_file_path(test_file_path)
             try:
-                ret_val = (PicklePatcher.loads(val[7]) if loop_index == 1 else None,)
+                ret_val = (pickle.loads(val[7]) if loop_index == 1 else None,)
             except Exception:
                 continue
             test_results.add(
