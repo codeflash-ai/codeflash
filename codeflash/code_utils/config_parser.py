@@ -52,8 +52,8 @@ def parse_config_file(
     assert isinstance(config, dict)
 
     # default values:
-    path_keys = ["module-root", "tests-root"]
-    path_list_keys = ["ignore-paths"]
+    path_keys = {"module-root", "tests-root"}
+    path_list_keys = {"ignore-paths", }
     str_keys = {"pytest-cmd": "pytest", "git-remote": "origin"}
     bool_keys = {"disable-telemetry": False, "disable-imports-sorting": False}
     list_str_keys = {"formatter-cmds": ["black $file"]}
@@ -83,7 +83,7 @@ def parse_config_file(
         else:  # Default to empty list
             config[key] = []
 
-    assert config["test-framework"] in ["pytest", "unittest"], (
+    assert config["test-framework"] in {"pytest", "unittest"}, (
         "In pyproject.toml, Codeflash only supports the 'test-framework' as pytest and unittest."
     )
     if len(config["formatter-cmds"]) > 0:
