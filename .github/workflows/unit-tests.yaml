@@ -32,7 +32,7 @@ jobs:
         run: uvx poetry install --with dev
 
       - name: Unit tests
-        run: uvx poetry run pytest tests/ --cov --cov-report=xml
+        run: uvx poetry run pytest tests/ --cov --cov-report=xml --disable-warnings
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5

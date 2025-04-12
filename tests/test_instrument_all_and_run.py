@@ -12,6 +12,7 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles, TestingMode, TestType
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.equivalence import compare_test_results
+from codeflash.code_utils.formatter import format_code_in_memory
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 
 # Used by cli instrumentation
@@ -119,10 +120,12 @@ def test_sort():
         os.chdir(original_cwd)
         assert success
         assert new_test is not None
-        assert new_test.replace('"', "'") == expected.format(
+        assert format_code_in_memory(new_test) == format_code_in_memory(
+            expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_results_temp",
             tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
-        ).replace('"', "'")
+            )
+        )
 
         with test_path.open("w") as f:
             f.write(new_test)
@@ -307,9 +310,9 @@ def test_sort():
             Path(f.name), [CodePosition(7, 13), CodePosition(12, 13)], fto, Path(f.name).parent, "pytest"
         )
     assert success
-    assert new_test.replace('"', "'") == expected.format(
+    assert format_code_in_memory(new_test) == format_code_in_memory(expected.format(
         module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
-    ).replace('"', "'")
+    ))
     tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/").resolve()
     test_path = tests_root / "test_class_method_behavior_results_temp.py"
     test_path_perf = tests_root / "test_class_method_behavior_results_perf_temp.py"
