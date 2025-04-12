@@ -6,6 +6,7 @@ import inspect
 # System Imports
 import logging
 import os
+import platform
 import re
 import sys
 import time
@@ -34,6 +35,19 @@ class InvalidTimeParameterError(Exception):
 
 class UnexpectedError(Exception):
     pass
+
+
+if platform.system() == "Linux" or platform.system() == "Darwin":
+    import resource
+
+    # Get total system memory
+    total_memory = os.sysconf("SC_PAGE_SIZE") * os.sysconf(
+        "SC_PHYS_PAGES"
+    )  # Set memory limit to 80% of total system memory
+    memory_limit = int(total_memory * 0.8)
+
+    # Set both soft and hard limits
+    resource.setrlimit(resource.RLIMIT_AS, (memory_limit, memory_limit))
 
 
 def pytest_addoption(parser: Parser) -> None:
