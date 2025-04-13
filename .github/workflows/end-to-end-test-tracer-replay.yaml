@@ -10,13 +10,14 @@ on:
 jobs:
   tracer-replay:
     # Dynamically determine if environment is needed only when workflow files change and contributor is external
-    environment: ${{
-                   github.event_name == 'workflow_dispatch' ||
-                   contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') &&
-                   github.event.pull_request.user.login != 'misrasaurabh1' &&
-                   github.event.pull_request.user.login != 'KRRT7'
-                   ? 'external-trusted-contributors': ''
-    }}
+    environment: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') &&
+        github.event.pull_request.user.login != 'misrasaurabh1' &&
+        github.event.pull_request.user.login != 'KRRT7'
+        ? 'external-trusted-contributors': ''
+      }}
     runs-on: ubuntu-latest
     env:
       CODEFLASH_AIS_SERVER: prod
