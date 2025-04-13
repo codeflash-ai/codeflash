@@ -137,6 +137,7 @@ def extract_code_string_context_from_files(
     helpers_of_fto: dict[Path, set[FunctionSource]],
     helpers_of_helpers: dict[Path, set[FunctionSource]],
     project_root_path: Path,
+    *,
     remove_docstrings: bool = False,
     code_context_type: CodeContextType = CodeContextType.READ_ONLY,
 ) -> CodeString:
@@ -413,7 +414,12 @@ def get_function_sources_from_jedi(
                         and not belongs_to_function_qualified(definition, qualified_function_name)
                         and definition.full_name.startswith(definition.module_name)
                         # Avoid nested functions or classes. Only class.function is allowed
-                        and len((qualified_name := get_qualified_name(definition.module_name, definition.full_name)).split(".")) <= 2
+                        and len(
+                            (qualified_name := get_qualified_name(definition.module_name, definition.full_name)).split(
+                                "."
+                            )
+                        )
+                        <= 2
                     ):
                         function_source = FunctionSource(
                             file_path=definition_path,
