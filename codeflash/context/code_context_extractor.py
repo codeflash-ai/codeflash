@@ -75,7 +75,7 @@ def get_code_optimization_context(
     tokenizer = tiktoken.encoding_for_model("gpt-4o")
     final_read_writable_tokens = len(tokenizer.encode(final_read_writable_code))
     if final_read_writable_tokens > optim_token_limit:
-        raise ValueError("Read-writable code has exceeded token limit, cannot proceed")
+        raise ValueError("Exceeded token limit, cannot proceed")
 
     # Setup preexisting objects for code replacer
     preexisting_objects = set(
@@ -413,7 +413,12 @@ def get_function_sources_from_jedi(
                         and not belongs_to_function_qualified(definition, qualified_function_name)
                         and definition.full_name.startswith(definition.module_name)
                         # Avoid nested functions or classes. Only class.function is allowed
-                        and len((qualified_name := get_qualified_name(definition.module_name, definition.full_name)).split(".")) <= 2
+                        and len(
+                            (qualified_name := get_qualified_name(definition.module_name, definition.full_name)).split(
+                                "."
+                            )
+                        )
+                        <= 2
                     ):
                         function_source = FunctionSource(
                             file_path=definition_path,
