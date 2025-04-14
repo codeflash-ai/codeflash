@@ -33,12 +33,13 @@ class TestUnittestRunnerSorter(unittest.TestCase):
         tests_project_rootdir=cur_dir_path.parent,
     )
 
-    with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
+    with tempfile.TemporaryDirectory(dir=cur_dir_path) as tempdir:
+        temp_file_path = Path(tempdir) / "test_xx.py"
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_behavior_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
+            test_files=[TestFile(instrumented_behavior_file_path=temp_file_path, test_type=TestType.EXISTING_UNIT_TEST)]
         )
-        fp.write(code.encode("utf-8"))
-        fp.flush()
+        with open(temp_file_path, "w", encoding="utf-8") as fp:
+            fp.write(code)
         result_file, process, _, _ = run_behavioral_tests(
             test_files,
             test_framework=config.test_framework,
@@ -77,12 +78,13 @@ def test_sort():
     else:
         test_env["PYTHONPATH"] += os.pathsep + str(config.project_root_path)
 
-    with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
+    with tempfile.TemporaryDirectory(dir=cur_dir_path) as tempdir:
+        temp_file_path = Path(tempdir) / "test_xx.py"
         test_files = TestFiles(
-            test_files=[TestFile(instrumented_behavior_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
+            test_files=[TestFile(instrumented_behavior_file_path=temp_file_path, test_type=TestType.EXISTING_UNIT_TEST)]
         )
-        fp.write(code.encode("utf-8"))
-        fp.flush()
+        with open(temp_file_path, "w", encoding="utf-8") as fp:
+            fp.write(code)
         result_file, process, _, _ = run_behavioral_tests(
             test_files,
             test_framework=config.test_framework,
