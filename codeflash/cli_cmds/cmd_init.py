@@ -50,6 +50,7 @@ CODEFLASH_LOGO: str = (
 class SetupInfo:
     module_root: str
     tests_root: str
+    benchmarks_root: str | None
     test_framework: str
     ignore_paths: list[str]
     formatter: str
@@ -126,8 +127,7 @@ def ask_run_end_to_end_test(args: Namespace) -> None:
         run_end_to_end_test(args, bubble_sort_path, bubble_sort_test_path)
 
 def should_modify_pyproject_toml() -> bool:
-    """
-    Check if the current directory contains a valid pyproject.toml file with codeflash config
+    """Check if the current directory contains a valid pyproject.toml file with codeflash config
     If it does, ask the user if they want to re-configure it.
     """
     from rich.prompt import Confirm
@@ -136,7 +136,7 @@ def should_modify_pyproject_toml() -> bool:
         return True
     try:
         config, config_file_path = parse_config_file(pyproject_toml_path)
-    except Exception as e:
+    except Exception:
         return True
 
     if "module_root" not in config or config["module_root"] is None or not Path(config["module_root"]).is_dir():
@@ -145,7 +145,7 @@ def should_modify_pyproject_toml() -> bool:
         return True
 
     create_toml = Confirm.ask(
-        f"✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?", default=False, show_default=True
+        "✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?", default=False, show_default=True
     )
     return create_toml
 
@@ -245,6 +245,66 @@ def collect_setup_info() -> SetupInfo:
 
     ph("cli-test-framework-provided", {"test_framework": test_framework})
 
+    # Get benchmarks root directory
+    default_benchmarks_subdir = "benchmarks"
+    create_benchmarks_option = f"okay, create a {default_benchmarks_subdir}{os.path.sep} directory for me!"
+    no_benchmarks_option = "I don't need benchmarks"
+
+    # Check if benchmarks directory exists inside tests directory
+    tests_subdirs = []
+    if tests_root.exists():
+        tests_subdirs = [d.name for d in tests_root.iterdir() if d.is_dir() and not d.name.startswith(".")]
+
+    benchmarks_options = []
+    if default_benchmarks_subdir in tests_subdirs:
+        benchmarks_options.append(default_benchmarks_subdir)
+    benchmarks_options.extend([d for d in tests_subdirs if d != default_benchmarks_subdir])
+    benchmarks_options.append(create_benchmarks_option)
+    benchmarks_options.append(custom_dir_option)
+    benchmarks_options.append(no_benchmarks_option)
+
+    benchmarks_answer = inquirer_wrapper(
+        inquirer.list_input,
+        message="Where are your benchmarks located? (benchmarks must be a sub directory of your tests root directory)",
+        choices=benchmarks_options,
+        default=(
+            default_benchmarks_subdir if default_benchmarks_subdir in benchmarks_options else benchmarks_options[0]),
+    )
+
+    if benchmarks_answer == create_benchmarks_option:
+        benchmarks_root = tests_root / default_benchmarks_subdir
+        benchmarks_root.mkdir(exist_ok=True)
+        click.echo(f"✅ Created directory {benchmarks_root}{os.path.sep}{LF}")
+    elif benchmarks_answer == custom_dir_option:
+        custom_benchmarks_answer = inquirer_wrapper_path(
+            "path",
+            message=f"Enter the path to your benchmarks directory inside {tests_root}{os.path.sep} ",
+            path_type=inquirer.Path.DIRECTORY,
+        )
+        if custom_benchmarks_answer:
+            benchmarks_root = tests_root / Path(custom_benchmarks_answer["path"])
+        else:
+            apologize_and_exit()
+    elif benchmarks_answer == no_benchmarks_option:
+        benchmarks_root = None
+    else:
+        benchmarks_root = tests_root / Path(cast(str, benchmarks_answer))
+
+    # TODO: Implement other benchmark framework options
+    # if benchmarks_root:
+    #     benchmarks_root = benchmarks_root.relative_to(curdir)
+    #
+    #     # Ask about benchmark framework
+    #     benchmark_framework_options = ["pytest-benchmark", "asv (Airspeed Velocity)", "custom/other"]
+    #     benchmark_framework = inquirer_wrapper(
+    #         inquirer.list_input,
+    #         message="Which benchmark framework do you use?",
+    #         choices=benchmark_framework_options,
+    #         default=benchmark_framework_options[0],
+    #         carousel=True,
+    #     )
+
+
     formatter = inquirer_wrapper(
         inquirer.list_input,
         message="Which code formatter do you use?",
@@ -280,6 +340,7 @@ def collect_setup_info() -> SetupInfo:
     return SetupInfo(
         module_root=str(module_root),
         tests_root=str(tests_root),
+        benchmarks_root = str(benchmarks_root) if benchmarks_root else None,
         test_framework=cast(str, test_framework),
         ignore_paths=ignore_paths,
         formatter=cast(str, formatter),
@@ -438,11 +499,19 @@ def install_github_actions(override_formatter_check: bool = False) -> None:
             return
         workflows_path.mkdir(parents=True, exist_ok=True)
         from importlib.resources import files
+        benchmark_mode = False
+        if "benchmarks_root" in config:
+            benchmark_mode = inquirer_wrapper(
+                inquirer.confirm,
+                message="⚡️It looks like you've configured a benchmarks_root in your config. Would you like to run the Github action in benchmark mode? "
+                        " This will show the impact of Codeflash's suggested optimizations on your benchmarks",
+                default=True,
+            )
 
         optimize_yml_content = (
             files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding="utf-8")
         )
-        materialized_optimize_yml_content = customize_codeflash_yaml_content(optimize_yml_content, config, git_root)
+        materialized_optimize_yml_content = customize_codeflash_yaml_content(optimize_yml_content, config, git_root, benchmark_mode)
         with optimize_yaml_path.open("w", encoding="utf8") as optimize_yml_file:
             optimize_yml_file.write(materialized_optimize_yml_content)
         click.echo(f"{LF}✅ Created GitHub action workflow at {optimize_yaml_path}{LF}")
@@ -557,7 +626,7 @@ def get_github_action_working_directory(toml_path: Path, git_root: Path) -> str:
 
 
 def customize_codeflash_yaml_content(
-    optimize_yml_content: str, config: tuple[dict[str, Any], Path], git_root: Path
+    optimize_yml_content: str, config: tuple[dict[str, Any], Path], git_root: Path, benchmark_mode: bool = False
 ) -> str:
     module_path = str(Path(config["module_root"]).relative_to(git_root) / "**")
     optimize_yml_content = optimize_yml_content.replace("{{ codeflash_module_path }}", module_path)
@@ -588,6 +657,9 @@ def customize_codeflash_yaml_content(
 
     # Add codeflash command
     codeflash_cmd = get_codeflash_github_action_command(dep_manager)
+
+    if benchmark_mode:
+        codeflash_cmd += " --benchmark"
     return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
 
 
@@ -609,6 +681,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     codeflash_section["module-root"] = setup_info.module_root
     codeflash_section["tests-root"] = setup_info.tests_root
     codeflash_section["test-framework"] = setup_info.test_framework
+    codeflash_section["benchmarks-root"] = setup_info.benchmarks_root if setup_info.benchmarks_root else ""
     codeflash_section["ignore-paths"] = setup_info.ignore_paths
     if setup_info.git_remote not in ["", "origin"]:
         codeflash_section["git-remote"] = setup_info.git_remote
