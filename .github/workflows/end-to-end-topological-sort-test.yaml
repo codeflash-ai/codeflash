@@ -11,13 +11,7 @@ on:
 jobs:
   topological-sort-optimization:
     # Dynamically determine if environment is needed only when workflow files change and contributor is external
-    environment: ${{
-                   github.event_name == 'workflow_dispatch' ||
-                   contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') &&
-                   github.event.pull_request.user.login != 'misrasaurabh1' &&
-                   github.event.pull_request.user.login != 'KRRT7'
-                   ? 'external-trusted-contributors': ''
-    }}
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
     runs-on: ubuntu-latest
     env:
       CODEFLASH_AIS_SERVER: prod
@@ -33,11 +27,38 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Debug Environment Decision
+        run: |
+          # Construct the condition result manually for debugging
+          EVENT_NAME="${{ github.event_name }}"
+          FILES_CHANGED="${{ toJSON(github.event.pull_request.files.*.filename) }}"
+          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+
+          echo "Event Name: $EVENT_NAME"
+          echo "Files Changed: $FILES_CHANGED"
+          echo "PR Author: $PR_AUTHOR"
+
+          # Check workflow file changes
+          if [[ "$FILES_CHANGED" == *".github/workflows/"* ]]; then
+            echo "Workflow files changed: YES"
+          else
+            echo "Workflow files changed: NO"
+          fi
+
+          # Check author conditions
+          if [[ "$PR_AUTHOR" != "misrasaurabh1" && "$PR_AUTHOR" != "KRRT7" ]]; then
+            echo "Author needs approval: YES"
+          else
+            echo "Author needs approval: NO"
+          fi
+
+          # Selected environment
+          echo "Selected Environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}"
 
       - name: Validate PR for workflow changes
         run: |
           # Check for any workflow changes
-          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" | grep -q "^.github/workflows/"; then
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
             echo "⚠️ Workflow changes detected."
             # Get the PR author
             AUTHOR="${{ github.event.pull_request.user.login }}"
