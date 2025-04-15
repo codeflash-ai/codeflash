@@ -20,7 +20,7 @@ def require_github_app_or_exit(owner: str, repo: str) -> None:
             f"It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo} or the GitHub"
             f" account linked to your CODEFLASH_API_KEY does not have access to the repository {owner}/{repo}.{LF}"
             "Before continuing, please install the Codeflash GitHub App on your repository by visiting "
-            f"https://github.com/apps/codeflash-ai{LF}"
+            f"https://github.com/apps/codeflash-ai/installations/select_target{LF}"
         )
         logger.error(
             f"Note: if you want to find optimizations without opening PRs, you can run Codeflash with the --no-pr flag.{LF}"
