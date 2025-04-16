@@ -72,6 +72,7 @@ def discover_tests_pytest(
         capture_output=True,
         text=True,
     )
+    print(result.stdout)
     try:
         with tmp_pickle_path.open(mode="rb") as f:
             exitcode, tests, pytest_rootdir = pickle.load(f)
