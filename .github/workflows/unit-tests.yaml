@@ -2,7 +2,7 @@ name: unit-tests
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
   workflow_dispatch:
 
@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: [3.9.18, 3.10.13, 3.11.6, 3.12.1, 3.13.0]
     continue-on-error: true
     runs-on: ubuntu-latest
     steps:
@@ -19,23 +19,18 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: actions/setup-python@v5
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-
-      - name: install poetry as a tool
-        run: uv tool install poetry
-
-      - name: install dependencies
-        run: uvx poetry install --with dev
-
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry install --with dev
       - name: Unit tests
-        run: uvx poetry run pytest tests/ --cov --cov-report=xml
-
+        run: |
+          poetry run pytest tests/ --cov --cov-report=xml
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         if: matrix.python-version == '3.12.1'
