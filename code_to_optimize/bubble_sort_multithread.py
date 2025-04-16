@@ -8,7 +8,7 @@ def multithreaded_sorter(unsorted_lists: list[list[int]]) -> list[list[int]]:
     sorted_lists = [None] * len(unsorted_lists)
 
     # Use ThreadPoolExecutor to manage threads
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         # Submit all sorting tasks and map them to their original indices
         future_to_index = {
             executor.submit(sorter, unsorted_list): i
