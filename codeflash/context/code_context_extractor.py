@@ -14,6 +14,7 @@ from libcst import CSTNode
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
 from codeflash.code_utils.code_utils import get_qualified_name, path_belongs_to_site_packages
+from codeflash.context.unused_definition_remover import remove_unused_definitions_by_function_names
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import (
     CodeContextType,
@@ -189,7 +190,7 @@ def extract_code_string_context_from_files(
                 helpers_of_helpers_qualified_names,
                 remove_docstrings,
             )
-
+            code_context = remove_unused_definitions_by_function_names(code_context, qualified_function_names | helpers_of_helpers_qualified_names)
         except ValueError as e:
             logger.debug(f"Error while getting read-only code: {e}")
             continue
@@ -217,6 +218,7 @@ def extract_code_string_context_from_files(
             code_context = parse_code_and_prune_cst(
                 original_code, code_context_type, set(), qualified_helper_function_names, remove_docstrings
             )
+            code_context = remove_unused_definitions_by_function_names(code_context, qualified_helper_function_names)
         except ValueError as e:
             logger.debug(f"Error while getting read-only code: {e}")
             continue
@@ -290,6 +292,9 @@ def extract_code_markdown_context_from_files(
                 helpers_of_helpers_qualified_names,
                 remove_docstrings,
             )
+            code_context = remove_unused_definitions_by_function_names(
+                code_context, qualified_function_names | helpers_of_helpers_qualified_names
+            )
 
         except ValueError as e:
             logger.debug(f"Error while getting read-only code: {e}")
@@ -320,6 +325,9 @@ def extract_code_markdown_context_from_files(
             qualified_helper_function_names = {func.qualified_name for func in helper_function_sources}
             code_context = parse_code_and_prune_cst(
                 original_code, code_context_type, set(), qualified_helper_function_names, remove_docstrings
+            )
+            code_context = remove_unused_definitions_by_function_names(
+                code_context, qualified_helper_function_names
             )
         except ValueError as e:
             logger.debug(f"Error while getting read-only code: {e}")

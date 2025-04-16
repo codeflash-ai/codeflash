@@ -929,9 +929,6 @@ def fetch_and_process_data():
     """
     expected_read_only_context = f"""
 ```python:{path_to_utils.relative_to(project_root)}
-GLOBAL_VAR = 10
-
-
 class DataProcessor:
     \"\"\"A class for processing data.\"\"\"
 
@@ -940,11 +937,6 @@ class DataProcessor:
     def __repr__(self) -> str:
         \"\"\"Return a string representation of the DataProcessor.\"\"\"
         return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
-```
-```python:{path_to_file.relative_to(project_root)}
-if __name__ == "__main__":
-    result = fetch_and_process_data()
-    print("Processed data:", result)
 ```
 """
     assert read_write_context.strip() == expected_read_write_context.strip()
@@ -1006,9 +998,6 @@ def fetch_and_transform_data():
     """
     expected_read_only_context = f"""
 ```python:{path_to_utils.relative_to(project_root)}
-GLOBAL_VAR = 10
-
-
 class DataProcessor:
     \"\"\"A class for processing data.\"\"\"
 
@@ -1017,11 +1006,6 @@ class DataProcessor:
     def __repr__(self) -> str:
         \"\"\"Return a string representation of the DataProcessor.\"\"\"
         return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
-```
-```python:{path_to_file.relative_to(project_root)}
-if __name__ == "__main__":
-    result = fetch_and_process_data()
-    print("Processed data:", result)
 ```
 ```python:{path_to_transform_utils.relative_to(project_root)}
 class DataTransformer:
@@ -1084,9 +1068,6 @@ class DataTransformer:
         return self.data
 ```
 ```python:{path_to_utils.relative_to(project_root)}
-GLOBAL_VAR = 10
-
-
 class DataProcessor:
     \"\"\"A class for processing data.\"\"\"
 
@@ -1147,9 +1128,6 @@ def update_data(data):
     return data + " updated"
 ```
 ```python:{path_to_utils.relative_to(project_root)}
-GLOBAL_VAR = 10
-
-
 class DataProcessor:
     \"\"\"A class for processing data.\"\"\"
 
@@ -1252,9 +1230,6 @@ class DataTransformer:
     """
     expected_read_only_context = f"""
 ```python:{path_to_utils.relative_to(project_root)}
-GLOBAL_VAR = 10
-
-
 class DataProcessor:
     \"\"\"A class for processing data.\"\"\"
 
@@ -1323,3 +1298,19 @@ def outside_method():
 """
         assert read_write_context.strip() == expected_read_write_context.strip()
         assert read_only_context.strip() == expected_read_only_context.strip()
+
+def test_direct_module_import() -> None:
+    project_root = Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever"
+    path_to_main = project_root / "main.py"
+    path_to_fto = project_root / "import_test.py"
+    function_to_optimize = FunctionToOptimize(
+        function_name="function_to_optimize",
+        file_path=str(path_to_fto),
+        parents=[],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    code_ctx = get_code_optimization_context(function_to_optimize, project_root)
+    read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
+    print(read_only_context.strip())
