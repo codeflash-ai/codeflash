@@ -69,7 +69,7 @@ exclude = [
 [tool.poetry.dependencies]
 python = ">=3.9"
 unidiff = ">=0.7.4"
-pytest = ">=7.0.0,<8.3.4"
+pytest = ">=7.0.0"
 gitpython = ">=3.1.31"
 libcst = ">=1.0.1"
 jedi = ">=0.19.1"
@@ -93,6 +93,7 @@ lxml = ">=5.3.0"
 crosshair-tool = ">=0.0.78"
 coverage = ">=7.6.4"
 line_profiler=">=4.2.0" #this is the minimum version which supports python 3.13
+black = "^25.1.0"
 [tool.poetry.group.dev]
 optional = true
 

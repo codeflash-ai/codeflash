@@ -5,13 +5,13 @@ from pathlib import Path
 import pytest
 
 from codeflash.code_utils.config_parser import parse_config_file
-from codeflash.code_utils.formatter import format_code, sort_imports
+from codeflash.code_utils.formatter import format_code, format_code_in_memory
 
 
 def test_remove_duplicate_imports():
     """Test that duplicate imports are removed when should_sort_imports is True."""
     original_code = "import os\nimport os\n"
-    new_code = sort_imports(original_code)
+    new_code = format_code_in_memory(original_code, imports_only=True)
     assert new_code == "import os\n"
 
 
@@ -19,7 +19,7 @@ def test_remove_multiple_duplicate_imports():
     """Test that multiple duplicate imports are removed when should_sort_imports is True."""
     original_code = "import sys\nimport os\nimport sys\n"
 
-    new_code = sort_imports(original_code)
+    new_code = format_code_in_memory(original_code, imports_only=True)
     assert new_code == "import os\nimport sys\n"
 
 
@@ -27,7 +27,7 @@ def test_sorting_imports():
     """Test that imports are sorted when should_sort_imports is True."""
     original_code = "import sys\nimport unittest\nimport os\n"
 
-    new_code = sort_imports(original_code)
+    new_code = format_code_in_memory(original_code, imports_only=True)
     assert new_code == "import os\nimport sys\nimport unittest\n"
 
 
@@ -40,7 +40,7 @@ def test_sort_imports_without_formatting():
 
         new_code = format_code(formatter_cmds=["disabled"], path=tmp_path)
         assert new_code is not None
-        new_code = sort_imports(new_code)
+        new_code = format_code_in_memory(new_code, imports_only=True)
         assert new_code == "import os\nimport sys\nimport unittest\n"
 
 
@@ -63,7 +63,7 @@ def foo():
     return os.path.join(sys.path[0], 'bar')
 """
 
-    actual = sort_imports(original_code)
+    actual = format_code_in_memory(original_code, imports_only=True)
 
     assert actual == expected
 
@@ -90,7 +90,7 @@ def foo():
     return os.path.join(sys.path[0], 'bar')
 """
 
-    actual = sort_imports(original_code)
+    actual = format_code_in_memory(original_code, imports_only=True)
 
     assert actual == expected
 

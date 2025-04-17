@@ -3,14 +3,18 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
+from functools import partial
 from typing import TYPE_CHECKING
 
+import black
 import isort
 
 from codeflash.cli_cmds.console import console, logger
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+imports_sort = partial(isort.code, float_to_top=True)
 
 
 def format_code(formatter_cmds: list[str], path: Path) -> str:
@@ -46,12 +50,19 @@ def format_code(formatter_cmds: list[str], path: Path) -> str:
     return path.read_text(encoding="utf8")
 
 
-def sort_imports(code: str) -> str:
+def format_code_in_memory(code: str, *, imports_only: bool = False) -> str:
+    if imports_only:
+        try:
+            sorted_code = imports_sort(code)
+        except Exception:  # noqa: BLE001
+            logger.debug("Failed to sort imports with isort.")
+            return code
+        return sorted_code
     try:
-        # Deduplicate and sort imports, modify the code in memory, not on disk
-        sorted_code = isort.code(code)
-    except Exception:
-        logger.exception("Failed to sort imports with isort.")
-        return code  # Fall back to original code if isort fails
+        formatted_code = black.format_str(code, mode=black.FileMode())
+        formatted_code = imports_sort(formatted_code)
+    except Exception:  # noqa: BLE001
+        logger.debug("Failed to format code with black.")
+        return code
 
-    return sorted_code
+    return formatted_code

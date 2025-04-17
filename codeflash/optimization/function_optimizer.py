@@ -35,7 +35,7 @@ from codeflash.code_utils.config_consts import (
     N_TESTS_TO_GENERATE,
     TOTAL_LOOPING_TIME,
 )
-from codeflash.code_utils.formatter import format_code, sort_imports
+from codeflash.code_utils.formatter import format_code, format_code_in_memory
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
@@ -541,14 +541,14 @@ class FunctionOptimizer:
 
         new_code = format_code(self.args.formatter_cmds, path)
         if should_sort_imports:
-            new_code = sort_imports(new_code)
+            new_code = format_code_in_memory(new_code, imports_only=True)
 
         new_helper_code: dict[Path, str] = {}
         helper_functions_paths = {hf.file_path for hf in helper_functions}
         for module_abspath in helper_functions_paths:
             formatted_helper_code = format_code(self.args.formatter_cmds, module_abspath)
             if should_sort_imports:
-                formatted_helper_code = sort_imports(formatted_helper_code)
+                formatted_helper_code = format_code_in_memory(formatted_helper_code, imports_only=True)
             new_helper_code[module_abspath] = formatted_helper_code
 
         return new_code, new_helper_code
