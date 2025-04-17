@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import os
+import time
 import shutil
 import tempfile
 from pathlib import Path
@@ -94,10 +95,11 @@ class Optimizer:
                 return
 
             console.rule()
+            start_time = time.time()
             function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
             num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
             console.rule()
-            logger.info(f"Discovered {num_discovered_tests} existing unit tests in {self.test_cfg.tests_root}")
+            logger.info(f"Discovered {num_discovered_tests} existing unit tests in {(time.time() - start_time):.1f}s at {self.test_cfg.tests_root}")
             console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
 
