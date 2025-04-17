@@ -748,10 +748,6 @@ class MainClass:
 
 def test_code_replacement10() -> None:
     get_code_output = """from __future__ import annotations
-import os
-
-os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
-
 
 class HelperClass:
     def __init__(self, name):
