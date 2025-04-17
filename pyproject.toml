@@ -128,6 +128,7 @@ script = "codeflash/update_license_version.py"
 
 [tool.poetry.scripts]
 codeflash = "codeflash.main:main"
+codeflash-lsp = "codeflash.lsp.server:main"
 
 [tool.mypy]
 show_error_code_links = true
