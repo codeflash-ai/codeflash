@@ -68,4 +68,4 @@ jobs:
         id: optimize_code
         run: |
           source .venv/bin/activate
-          poetry run codeflash
+          poetry run codeflash --benchmark

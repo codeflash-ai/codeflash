@@ -19,6 +19,7 @@ from rich.syntax import Syntax
 from rich.tree import Tree
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
+from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
@@ -42,7 +43,6 @@ from codeflash.code_utils.remove_generated_tests import remove_functions_from_ge
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.either import Failure, Success, is_successful
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
@@ -76,8 +76,9 @@ from codeflash.verification.verifier import generate_tests
 if TYPE_CHECKING:
     from argparse import Namespace
 
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.either import Result
-    from codeflash.models.models import CoverageData, FunctionSource, OptimizedCandidate
+    from codeflash.models.models import BenchmarkKey, CoverageData, FunctionSource, OptimizedCandidate
     from codeflash.verification.verification_utils import TestConfig
 
 
@@ -90,7 +91,10 @@ class FunctionOptimizer:
         function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
         function_to_optimize_ast: ast.FunctionDef | None = None,
         aiservice_client: AiServiceClient | None = None,
+        function_benchmark_timings: dict[BenchmarkKey, int] | None = None,
+        total_benchmark_timings: dict[BenchmarkKey, int] | None = None,
         args: Namespace | None = None,
+        replay_tests_dir: Path|None = None
     ) -> None:
         self.project_root = test_cfg.project_root_path
         self.test_cfg = test_cfg
@@ -113,10 +117,13 @@ class FunctionOptimizer:
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.test_files = TestFiles(test_files=[])
-
         self.args = args  # Check defaults for these
         self.function_trace_id: str = str(uuid.uuid4())
         self.original_module_path = module_name_from_file_path(self.function_to_optimize.file_path, self.project_root)
+
+        self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
+        self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
+        self.replay_tests_dir = replay_tests_dir if replay_tests_dir else None
 
     def optimize_function(self) -> Result[BestOptimization, str]:
         should_run_experiment = self.experiment_id is not None
@@ -136,8 +143,8 @@ class FunctionOptimizer:
                 original_helper_code[helper_function_path] = helper_code
         if has_any_async_functions(code_context.read_writable_code):
             return Failure("Codeflash does not support async functions in the code to optimize.")
-        code_print(code_context.read_writable_code)
 
+        code_print(code_context.read_writable_code)
         generated_test_paths = [
             get_test_file_path(
                 self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
@@ -261,6 +268,13 @@ class FunctionOptimizer:
                         best_optimization.candidate.explanation, title="Best Candidate Explanation", border_style="blue"
                     )
                 )
+                processed_benchmark_info = None
+                if self.args.benchmark:
+                    processed_benchmark_info = process_benchmark_data(
+                        replay_performance_gain=best_optimization.replay_performance_gain,
+                        fto_benchmark_timings=self.function_benchmark_timings,
+                        total_benchmark_timings=self.total_benchmark_timings
+                    )
                 explanation = Explanation(
                     raw_explanation_message=best_optimization.candidate.explanation,
                     winning_behavioral_test_results=best_optimization.winning_behavioral_test_results,
@@ -269,6 +283,7 @@ class FunctionOptimizer:
                     best_runtime_ns=best_optimization.runtime,
                     function_name=function_to_optimize_qualified_name,
                     file_path=self.function_to_optimize.file_path,
+                    benchmark_details=processed_benchmark_info.benchmark_details if processed_benchmark_info else None
                 )
 
                 self.log_successful_optimization(explanation, generated_tests)
@@ -362,7 +377,7 @@ class FunctionOptimizer:
         candidates = deque(candidates)
         # Start a new thread for AI service request, start loop in main thread
         # check if aiservice request is complete, when it is complete, append result to the candidates list
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future_line_profile_results = executor.submit(
                 self.aiservice_client.optimize_python_code_line_profiler,
                 source_code=code_context.read_writable_code,
@@ -382,8 +397,8 @@ class FunctionOptimizer:
                     if done and (future_line_profile_results is not None):
                         line_profile_results = future_line_profile_results.result()
                         candidates.extend(line_profile_results)
-                        original_len+= len(line_profile_results)
-                        logger.info(f"Added {len(line_profile_results)} results from line profiler to candidates, total candidates now: {original_len}")
+                        original_len+= len(candidates)
+                        logger.info(f"Added results from line profiler to candidates, total candidates now: {original_len}")
                         future_line_profile_results = None
                     candidate_index += 1
                     candidate = candidates.popleft()
@@ -410,7 +425,7 @@ class FunctionOptimizer:
                         )
                         continue
 
-                    # Instrument codeflash capture
+
                     run_results = self.run_optimized_candidate(
                         optimization_candidate_index=candidate_index,
                         baseline_results=original_code_baseline,
@@ -434,6 +449,7 @@ class FunctionOptimizer:
                         speedup_ratios[candidate.optimization_id] = perf_gain
 
                         tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
+                        benchmark_tree = None
                         if speedup_critic(
                             candidate_result, original_code_baseline.runtime, best_runtime_until_now
                         ) and quantity_of_tests_critic(candidate_result):
@@ -446,13 +462,29 @@ class FunctionOptimizer:
                             )
                             tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
                             tree.add(f"Speedup ratio: {perf_gain + 1:.1f}X")
+                            replay_perf_gain = {}
+                            if self.args.benchmark:
+                                test_results_by_benchmark = candidate_result.benchmarking_test_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.replay_tests_dir, self.project_root)
+                                if len(test_results_by_benchmark) > 0:
+                                    benchmark_tree = Tree("Speedup percentage on benchmarks:")
+                                for benchmark_key, candidate_test_results in test_results_by_benchmark.items():
+
+                                    original_code_replay_runtime = original_code_baseline.replay_benchmarking_test_results[benchmark_key].total_passed_runtime()
+                                    candidate_replay_runtime = candidate_test_results.total_passed_runtime()
+                                    replay_perf_gain[benchmark_key] = performance_gain(
+                                        original_runtime_ns=original_code_replay_runtime,
+                                        optimized_runtime_ns=candidate_replay_runtime,
+                                    )
+                                    benchmark_tree.add(f"{benchmark_key}: {replay_perf_gain[benchmark_key] * 100:.1f}%")
 
                             best_optimization = BestOptimization(
                                 candidate=candidate,
                                 helper_functions=code_context.helper_functions,
                                 runtime=best_test_runtime,
                                 winning_behavioral_test_results=candidate_result.behavior_test_results,
+                                replay_performance_gain=replay_perf_gain if self.args.benchmark else None,
                                 winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
+                                winning_replay_benchmarking_test_results=candidate_result.benchmarking_test_results,
                             )
                             best_runtime_until_now = best_test_runtime
                         else:
@@ -464,6 +496,8 @@ class FunctionOptimizer:
                             tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
                             tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
                         console.print(tree)
+                        if self.args.benchmark and benchmark_tree:
+                            console.print(benchmark_tree)
                         console.rule()
 
                     self.write_code_and_helpers(
@@ -507,7 +541,8 @@ class FunctionOptimizer:
             )
 
             console.print(Group(explanation_panel, tests_panel))
-        console.print(explanation_panel)
+        else:
+            console.print(explanation_panel)
 
         ph(
             "cli-optimize-success",
@@ -664,6 +699,7 @@ class FunctionOptimizer:
 
                 unique_instrumented_test_files.add(new_behavioral_test_path)
                 unique_instrumented_test_files.add(new_perf_test_path)
+
                 if not self.test_files.get_by_original_file_path(path_obj_test_file):
                     self.test_files.add(
                         TestFile(
@@ -675,6 +711,7 @@ class FunctionOptimizer:
                             tests_in_file=[t.tests_in_file for t in tests_in_file_list],
                         )
                     )
+
             logger.info(
                 f"Discovered {existing_test_files_count} existing unit test file"
                 f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
@@ -865,7 +902,6 @@ class FunctionOptimizer:
                     enable_coverage=False,
                     code_context=code_context,
                 )
-
             else:
                 benchmarking_results = TestResults()
                 start_time: float = time.time()
@@ -920,11 +956,15 @@ class FunctionOptimizer:
             )
             console.rule()
             logger.debug(f"Total original code runtime (ns): {total_timing}")
+
+            if self.args.benchmark:
+                replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.replay_tests_dir, self.project_root)
             return Success(
                 (
                     OriginalCodeBaseline(
                         behavioral_test_results=behavioral_results,
                         benchmarking_test_results=benchmarking_results,
+                        replay_benchmarking_test_results = replay_benchmarking_test_results if self.args.benchmark else None,
                         runtime=total_timing,
                         coverage_results=coverage_results,
                         line_profile_results=line_profile_results,
@@ -954,8 +994,6 @@ class FunctionOptimizer:
                 test_env["PYTHONPATH"] += os.pathsep + str(self.project_root)
 
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
-            get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
-
             # Instrument codeflash capture
             candidate_fto_code = Path(self.function_to_optimize.file_path).read_text("utf-8")
             candidate_helper_code = {}
@@ -986,7 +1024,6 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
-
             if compare_test_results(baseline_results.behavioral_test_results, candidate_behavior_results):
                 logger.info("Test results matched!")
                 console.rule()
@@ -1039,12 +1076,17 @@ class FunctionOptimizer:
                 console.rule()
 
             logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
+            if self.args.benchmark:
+                candidate_replay_benchmarking_results = candidate_benchmarking_results.group_by_benchmarks(self.total_benchmark_timings.keys(), self.replay_tests_dir, self.project_root)
+                for benchmark_name, benchmark_results in candidate_replay_benchmarking_results.items():
+                    logger.debug(f"Benchmark {benchmark_name} runtime (ns): {humanize_runtime(benchmark_results.total_passed_runtime())}")
             return Success(
                 OptimizedCandidateResult(
                     max_loop_count=loop_count,
                     best_test_runtime=total_candidate_timing,
                     behavior_test_results=candidate_behavior_results,
                     benchmarking_test_results=candidate_benchmarking_results,
+                    replay_benchmarking_test_results = candidate_replay_benchmarking_results if self.args.benchmark else None,
                     optimization_candidate_index=optimization_candidate_index,
                     total_candidate_timing=total_candidate_timing,
                 )
@@ -1086,8 +1128,8 @@ class FunctionOptimizer:
                     pytest_cmd=self.test_cfg.pytest_cmd,
                     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     pytest_target_runtime_seconds=testing_time,
-                    pytest_min_loops=pytest_min_loops,
-                    pytest_max_loops=pytest_min_loops,
+                    pytest_min_loops=1,
+                    pytest_max_loops=1,
                     test_framework=self.test_cfg.test_framework,
                     line_profiler_output_file=line_profiler_output_file,
                 )
