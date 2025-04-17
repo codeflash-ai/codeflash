@@ -160,8 +160,8 @@ class CodeflashTrace:
                      overhead_time, None, None)
                 )
                 return result
-            # Flush to database every 1000 calls
-            if len(self.function_calls_data) > 1000:
+            # Flush to database every 100 calls
+            if len(self.function_calls_data) > 100:
                 self.write_function_timings()
 
             # Add to the list of function calls with pickled args, to be used for replay tests

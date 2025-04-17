@@ -7,7 +7,7 @@ class PicklePlaceholder:
     """A placeholder for an object that couldn't be pickled.
 
     When unpickled, any attempt to access attributes or call methods on this
-    placeholder will raise an informative exception.
+    placeholder will raise a PicklePlaceholderAccessError.
     """
 
     def __init__(self, obj_type, obj_str, error_msg, path=None):
