@@ -1,9 +1,11 @@
-from typing import Union
+from __future__ import annotations
+from typing import Union, Optional
 
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 
 from codeflash.code_utils.time_utils import humanize_runtime
+from codeflash.models.models import BenchmarkDetail
 from codeflash.models.models import TestResults
 
 
@@ -18,8 +20,9 @@ class PrComment:
     speedup_pct: str
     winning_behavioral_test_results: TestResults
     winning_benchmarking_test_results: TestResults
+    benchmark_details: Optional[list[BenchmarkDetail]] = None
 
-    def to_json(self) -> dict[str, Union[dict[str, dict[str, int]], int, str]]:
+    def to_json(self) -> dict[str, Union[dict[str, dict[str, int]], int, str, Optional[list[BenchmarkDetail]]]]:
         report_table = {
             test_type.to_name(): result
             for test_type, result in self.winning_behavioral_test_results.get_test_pass_fail_report_by_type().items()
@@ -36,6 +39,7 @@ class PrComment:
             "speedup_pct": self.speedup_pct,
             "loop_count": self.winning_benchmarking_test_results.number_of_loops(),
             "report_table": report_table,
+            "benchmark_details": self.benchmark_details if self.benchmark_details else None,
         }
 
 
