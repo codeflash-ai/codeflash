@@ -1,6 +1,9 @@
+import multiprocessing
 import shutil
 import sqlite3
 from pathlib import Path
+
+import pytest
 
 from codeflash.benchmarking.plugin.plugin import codeflash_benchmark_plugin
 from codeflash.benchmarking.replay_test import generate_replay_test
@@ -174,6 +177,11 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_sorter():
         output_file.unlink(missing_ok=True)
         shutil.rmtree(replay_tests_dir)
 
+# Skip the test if the machine has only 1 thread/CPU
+@pytest.mark.skipif(
+    multiprocessing.cpu_count() <= 1,
+    reason="This test requires more than 1 CPU thread"
+)
 def test_trace_multithreaded_benchmark() -> None:
     project_root = Path(__file__).parent.parent / "code_to_optimize"
     benchmarks_root = project_root / "tests" / "pytest" / "benchmarks_multithread"
