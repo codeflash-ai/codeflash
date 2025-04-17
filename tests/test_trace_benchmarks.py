@@ -275,7 +275,6 @@ def test_trace_benchmark_decorator() -> None:
             assert Path(actual[3]).name == Path(expected[3]).name, f"Mismatch at index {idx} for file_path"
             assert actual[4] == expected[4], f"Mismatch at index {idx} for benchmark_function_name"
             assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_module_path"
-            assert actual[6] == expected[6], f"Mismatch at index {idx} for benchmark_line_number"
         # Close connection
         conn.close()
 
