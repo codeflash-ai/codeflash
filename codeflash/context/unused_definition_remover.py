@@ -71,7 +71,7 @@ def collect_top_level_definitions(node: cst.CSTNode, definitions: dict[str, Usag
                 definitions[name] = UsageInfo(name=name)
         return definitions
 
-    if isinstance(node, cst.AnnAssign | cst.AugAssign):
+    if isinstance(node, (cst.AnnAssign, cst.AugAssign)):
         if isinstance(node.target, cst.Name):
             name = node.target.value
             definitions[name] = UsageInfo(name=name)
@@ -318,7 +318,7 @@ def remove_unused_definitions_recursively(
 
     """
     # Skip import statements
-    if isinstance(node, cst.Import | cst.ImportFrom):
+    if isinstance(node, (cst.Import, cst.ImportFrom)):
         return node, True
 
     # Never remove function definitions
@@ -394,7 +394,7 @@ def remove_unused_definitions_recursively(
                     return node, True
         return None, False
 
-    if isinstance(node, cst.AnnAssign | cst.AugAssign):
+    if isinstance(node, (cst.AnnAssign, cst.AugAssign)):
         names = extract_names_from_targets(node.target)
         for name in names:
             if name in definitions and definitions[name].used_by_qualified_function:
