@@ -76,7 +76,7 @@ class Optimizer:
 
     def run(self) -> None:
         ph("cli-optimize-run-start")
-        logger.info("Fixing Running optimizer.")
+        logger.info("Running optimizer.")
         console.rule()
         if not env_utils.ensure_codeflash_api_key():
             return
@@ -97,7 +97,7 @@ class Optimizer:
         )
         function_benchmark_timings: dict[str, dict[BenchmarkKey, int]] = {}
         total_benchmark_timings: dict[BenchmarkKey, int] = {}
-        if self.args.benchmark:
+        if self.args.benchmark and num_optimizable_functions > 0:
             with progress_bar(
                     f"Running benchmarks in {self.args.benchmarks_root}",
                     transient=True,
