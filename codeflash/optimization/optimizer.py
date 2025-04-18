@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import ast
 import os
-import time
 import shutil
 import tempfile
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -83,7 +83,7 @@ class Optimizer:
         function_optimizer = None
         file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
         num_optimizable_functions: int
-
+        logger.info(self.args)
         # discover functions
         (file_to_funcs_to_optimize, num_optimizable_functions) = get_functions_to_optimize(
             optimize_all=self.args.all,
