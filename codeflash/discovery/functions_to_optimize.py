@@ -358,11 +358,11 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
                         for decorator in body_node.decorator_list
                     ):
                         self.is_classmethod = True
-                    elif any(
-                        isinstance(decorator, ast.Name) and decorator.id == "staticmethod"
-                        for decorator in body_node.decorator_list
-                    ):
-                        self.is_staticmethod = True
+                    # elif any(
+                    #     isinstance(decorator, ast.Name) and decorator.id == "staticmethod"
+                    #     for decorator in body_node.decorator_list
+                    # ):
+                    #     self.is_staticmethod = True
                     return
         else:
             # If we have line number info, check if class has a static method with the same line number
