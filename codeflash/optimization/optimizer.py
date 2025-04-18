@@ -76,7 +76,7 @@ class Optimizer:
 
     def run(self) -> None:
         ph("cli-optimize-run-start")
-        logger.info("Running optimizer.")
+        logger.info("Fixing Running optimizer.")
         console.rule()
         if not env_utils.ensure_codeflash_api_key():
             return
