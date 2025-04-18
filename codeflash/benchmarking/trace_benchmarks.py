@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -9,6 +10,11 @@ from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 
 
 def trace_benchmarks_pytest(benchmarks_root: Path, tests_root:Path, project_root: Path, trace_file: Path, timeout:int = 300) -> None:
+    benchmark_env = os.environ.copy()
+    if "PYTHONPATH" not in benchmark_env:
+        benchmark_env["PYTHONPATH"] = str(project_root)
+    else:
+        benchmark_env["PYTHONPATH"] += os.pathsep + str(project_root)
     result = subprocess.run(
         [
             SAFE_SYS_EXECUTABLE,
@@ -21,7 +27,7 @@ def trace_benchmarks_pytest(benchmarks_root: Path, tests_root:Path, project_root
         check=False,
         capture_output=True,
         text=True,
-        env={"PYTHONPATH": str(project_root)},
+        env=benchmark_env,
         timeout=timeout,
     )
     if result.returncode != 0:
