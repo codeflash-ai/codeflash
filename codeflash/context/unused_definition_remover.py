@@ -88,7 +88,7 @@ def collect_top_level_definitions(node: cst.CSTNode, definitions: dict[str, Usag
         for section in section_names:
             original_content = getattr(node, section, None)
             # If section contains a list of nodes
-            if isinstance(original_content, list | tuple):
+            if isinstance(original_content, (list, tuple)):
                 for child in original_content:
                     collect_top_level_definitions(child, definitions)
             # If section contains a single node
@@ -411,7 +411,7 @@ def remove_unused_definitions_recursively(
 
     for section in section_names:
         original_content = getattr(node, section, None)
-        if isinstance(original_content, list | tuple):
+        if isinstance(original_content, (list, tuple)):
             new_children = []
             section_found_used = False
 
