@@ -299,7 +299,7 @@ def get_all_replay_test_functions(
                     if valid_function.qualified_name == function_name
                 ]
             )
-        if len(filtered_list):
+        if filtered_list:
             filtered_valid_functions[file_path] = filtered_list
 
     return filtered_valid_functions
@@ -364,7 +364,7 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
                     ):
                         self.is_staticmethod = True
                     return
-        elif self.line_no:
+        else:
             # If we have line number info, check if class has a static method with the same line number
             # This way, if we don't have the class name, we can still find the static method
             for body_node in node.body:
