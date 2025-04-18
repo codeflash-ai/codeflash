@@ -207,6 +207,7 @@ def get_functions_to_optimize(
 
 def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
     modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=False)
+    logger.info(f"modified lines: {modified_lines}")
     modified_functions: dict[str, list[FunctionToOptimize]] = {}
     for path_str in modified_lines:
         path = Path(path_str)
