@@ -1,0 +1,52 @@
+name: CodeFlash
+
+on:
+  pull_request_target:
+    paths:
+      - '**'  # Trigger for all paths
+
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  optimize:
+    name: Optimize new Python code
+    # Dynamically determine if environment is needed only when workflow files change and contributor is external
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    if: ${{ github.actor != 'codeflash-ai[bot]' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      CODEFLASH_PR_NUMBER: ${{ github.event.number }}
+      COLUMNS: 110
+    steps:
+      - name: 🛎️ Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
+
+
+      - name: 🐍 Set up Python 3.11 for CLI
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: 3.11.6
+
+      - name: 📦 Install dependencies (CLI)
+        run: |
+          uv tool install poetry
+          uv venv
+          source .venv/bin/activate
+          poetry install --with dev
+
+      - name: ⚡️Codeflash Optimization
+        id: optimize_code
+        run: |
+          source .venv/bin/activate
+          poetry run codeflash --benchmark
