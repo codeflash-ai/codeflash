@@ -15,7 +15,7 @@ jobs:
   optimize:
     name: Optimize new Python code
     # Dynamically determine if environment is needed only when workflow files change and contributor is external
-    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7' && github.event.pull_request.user.login != 'alvin-r')) && 'external-trusted-contributors' || '' }}
     if: ${{ github.actor != 'codeflash-ai[bot]' }}
     runs-on: ubuntu-latest
     env:
@@ -40,7 +40,7 @@ jobs:
             echo "PR Author: $AUTHOR"
 
             # Allowlist check
-            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" || "$AUTHOR" == "alvin-r"]]; then
               echo "✅ Authorized user ($AUTHOR). Proceeding."
             elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
               echo "✅ PR is open. Proceeding with appropriate protections."
@@ -68,4 +68,4 @@ jobs:
         id: optimize_code
         run: |
           source .venv/bin/activate
-          poetry run codeflash --benchmark
+          poetry run codeflash
