@@ -33,6 +33,12 @@ class TestGitUtils(unittest.TestCase):
         assert owner == "owner"
         assert repo_name == "repo"
 
+        # Test with another GitHub SSH URL
+        mock_get_remote_url.return_value = "git@github.com:codeflash-ai/posthog/"
+        owner, repo_name = get_repo_owner_and_name()
+        assert owner == "codeflash-ai"
+        assert repo_name == "posthog"
+
     @patch("codeflash.code_utils.git_utils.git.Repo")
     def test_check_running_in_git_repo_in_git_repo(self, mock_repo):
         mock_repo.return_value.git_dir = "/path/to/repo/.git"
