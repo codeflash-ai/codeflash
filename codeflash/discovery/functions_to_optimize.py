@@ -201,13 +201,11 @@ def get_functions_to_optimize(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root
         )
         logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
-        logger.info(f"{filtered_modified_functions}")
         return filtered_modified_functions, functions_count
 
 
 def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
     modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=False)
-    logger.info(f"modified lines: {modified_lines}")
     modified_functions: dict[str, list[FunctionToOptimize]] = {}
     for path_str in modified_lines:
         path = Path(path_str)
