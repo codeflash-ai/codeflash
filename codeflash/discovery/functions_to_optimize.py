@@ -299,7 +299,7 @@ def get_all_replay_test_functions(
                     if valid_function.qualified_name == function_name
                 ]
             )
-        if len(filtered_list):
+        if filtered_list:
             filtered_valid_functions[file_path] = filtered_list
 
     return filtered_valid_functions
