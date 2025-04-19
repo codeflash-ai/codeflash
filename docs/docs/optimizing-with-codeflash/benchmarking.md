@@ -1,7 +1,7 @@
 ---
 sidebar_position: 4
 ---
-# Benchmarks
+# Using Benchmarks
 
 Codeflash is able the determine the impact of an optimization on predefined benchmarks, when used in benchmark mode.
 
@@ -69,3 +69,23 @@ Codeflash will then calculate the impact (if any) of any optimization on the per
 
 
 
+## How it works
+
+1. Codeflash identifies benchmarks in the benchmarks-root directory.
+
+
+2. The benchmarks are run so that runtime statistics and information can be recorded. 
+
+
+3. Replay tests are generated so the performance of optimization candidates on the exact inputs used in the benchmarks can be measured.
+
+
+4. If an optimization candidate is verified to be correct, the speedup of the optimization is calculated for each benchmark. 
+
+
+5. Codeflash then reports the impact of the optimization on each benchmark. 
+
+
+Using Codeflash with benchmarks is a great way to find optimizations that really matter.
+
+Codeflash is actively working on this feature and will be adding new capabilities in the near future!
