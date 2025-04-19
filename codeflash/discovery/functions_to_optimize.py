@@ -139,11 +139,21 @@ class FunctionToOptimize:
         )
 
     @property
+    def server_info(self) -> dict[str, str | int]:
+        return {
+            "file_path": str(self.file_path),
+            "function_name": self.function_name,
+            "starting_line": self.starting_line,
+            "ending_line": self.ending_line,
+        }
+
+    @property
     def qualified_name(self) -> str:
         return self.function_name if self.parents == [] else f"{self.parents[0].name}.{self.function_name}"
 
     def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
+
 
 def get_functions_to_optimize(
     optimize_all: str | None,

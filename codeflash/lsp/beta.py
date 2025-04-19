@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from pygls import uris
 
@@ -34,16 +34,19 @@ def get_optimizable_functions(
     server: CodeflashLanguageServer, params: OptimizableFunctionsParams
 ) -> dict[str, list[str]]:
     file_path = Path(uris.to_fs_path(params.textDocument.uri))
-    optimizable_funcs, _ = get_functions_to_optimize(  # we can consider caching this later on, but for now it's fine
-        file=file_path,
-        test_cfg=server.optimizer.test_cfg,
-        ignore_paths=[],
-        project_root=server.optimizer.test_cfg.project_root_path,
-        module_root=server.optimizer.args.module_root,
-        optimize_all=None,
-        replay_test=None,
-        only_get_this_function=None,
-    )
+    server.optimizer.lsp_mode = True
+    server.optimizer.args.replay_test = None
+    server.optimizer.args.optimize_all = None
+    server.optimizer.args.file = file_path
+    server.optimizer.args.ignore_paths = []
+    server.optimizer.args.optimize_all = None
+    server.optimizer.args.replay_test = None
+    server.optimizer.args.only_get_this_function = None
+    server.optimizer.args.function = None
+    server.optimizer.args.benchmark = None
+    server.optimizer.server = server
+
+    optimizable_funcs, _ = server.optimizer.discover_functions()
     path_to_qualified_names = {}
     for path, functions in optimizable_funcs.items():
         path_to_qualified_names[path.as_posix()] = [func.qualified_name for func in functions]
@@ -51,14 +54,20 @@ def get_optimizable_functions(
 
 
 @server.feature("optimizeFunction")
-def optimize_function(server: CodeflashLanguageServer, params: OptimizeFunctionParams) -> dict[str, Any]:
+def optimize_function(server: CodeflashLanguageServer, params: OptimizeFunctionParams) -> dict[str, str]:
     file_path = Path(uris.to_fs_path(params.textDocument.uri))
-    function_name = params.functionName
-
-    return {"functionName": function_name}
+    server.optimizer.args.function = params.functionName
+    server.optimizer.args.file = file_path
+    optimizable_funcs, _ = server.optimizer.discover_functions()
+    if not optimizable_funcs:
+        return {"functionName": params.functionName, "status": "not found", "args": None}
+    fto = optimizable_funcs.popitem()[1][0]
+    return {
+        "functionName": params.functionName,
+        "status": "success",
+        "info": fto.server_info,
+    }
 
 
 if __name__ == "__main__":
-    from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
-
     server.start_io()
