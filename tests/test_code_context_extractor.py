@@ -929,9 +929,6 @@ def fetch_and_process_data():
     """
     expected_read_only_context = f"""
 ```python:{path_to_utils.relative_to(project_root)}
-GLOBAL_VAR = 10
-
-
 class DataProcessor:
     \"\"\"A class for processing data.\"\"\"
 
@@ -940,11 +937,6 @@ class DataProcessor:
     def __repr__(self) -> str:
         \"\"\"Return a string representation of the DataProcessor.\"\"\"
         return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
-```
-```python:{path_to_file.relative_to(project_root)}
-if __name__ == "__main__":
-    result = fetch_and_process_data()
-    print("Processed data:", result)
 ```
 """
     assert read_write_context.strip() == expected_read_write_context.strip()
@@ -1006,9 +998,6 @@ def fetch_and_transform_data():
     """
     expected_read_only_context = f"""
 ```python:{path_to_utils.relative_to(project_root)}
-GLOBAL_VAR = 10
-
-
 class DataProcessor:
     \"\"\"A class for processing data.\"\"\"
 
@@ -1017,11 +1006,6 @@ class DataProcessor:
     def __repr__(self) -> str:
         \"\"\"Return a string representation of the DataProcessor.\"\"\"
         return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
-```
-```python:{path_to_file.relative_to(project_root)}
-if __name__ == "__main__":
-    result = fetch_and_process_data()
-    print("Processed data:", result)
 ```
 ```python:{path_to_transform_utils.relative_to(project_root)}
 class DataTransformer:
@@ -1084,9 +1068,6 @@ class DataTransformer:
         return self.data
 ```
 ```python:{path_to_utils.relative_to(project_root)}
-GLOBAL_VAR = 10
-
-
 class DataProcessor:
     \"\"\"A class for processing data.\"\"\"
 
@@ -1147,9 +1128,6 @@ def update_data(data):
     return data + " updated"
 ```
 ```python:{path_to_utils.relative_to(project_root)}
-GLOBAL_VAR = 10
-
-
 class DataProcessor:
     \"\"\"A class for processing data.\"\"\"
 
@@ -1252,9 +1230,6 @@ class DataTransformer:
     """
     expected_read_only_context = f"""
 ```python:{path_to_utils.relative_to(project_root)}
-GLOBAL_VAR = 10
-
-
 class DataProcessor:
     \"\"\"A class for processing data.\"\"\"
 
@@ -1319,6 +1294,500 @@ class MyClass:
 ```python:{file_path.relative_to(opt.args.project_root)}
 def outside_method():
     return 1
+```
+"""
+        assert read_write_context.strip() == expected_read_write_context.strip()
+        assert read_only_context.strip() == expected_read_only_context.strip()
+
+def test_direct_module_import() -> None:
+    project_root = Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "retriever"
+    path_to_main = project_root / "main.py"
+    path_to_fto = project_root / "import_test.py"
+    function_to_optimize = FunctionToOptimize(
+        function_name="function_to_optimize",
+        file_path=str(path_to_fto),
+        parents=[],
+        starting_line=None,
+        ending_line=None,
+    )
+
+
+    code_ctx = get_code_optimization_context(function_to_optimize, project_root)
+    read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
+
+    expected_read_only_context = """
+```python:utils.py
+from transform_utils import DataTransformer
+
+class DataProcessor:
+    \"\"\"A class for processing data.\"\"\"
+
+    number = 1
+
+    def __repr__(self) -> str:
+        \"\"\"Return a string representation of the DataProcessor.\"\"\"
+        return f"DataProcessor(default_prefix={self.default_prefix!r})"
+
+    def process_data(self, raw_data: str) -> str:
+        \"\"\"Process raw data by converting it to uppercase.\"\"\"
+        return raw_data.upper()
+
+    def transform_data(self, data: str) -> str:
+        \"\"\"Transform the processed data\"\"\"
+        return DataTransformer().transform(data)
+```"""
+    expected_read_write_context = """
+import requests
+from globals import API_URL
+from utils import DataProcessor
+import code_to_optimize.code_directories.retriever.main
+
+def fetch_and_transform_data():
+    # Use the global variable for the request
+    response = requests.get(API_URL)
+
+    raw_data = response.text
+
+    # Use code from another file (utils.py)
+    processor = DataProcessor()
+    processed = processor.process_data(raw_data)
+    transformed = processor.transform_data(processed)
+
+    return transformed
+
+
+
+def function_to_optimize():
+    return code_to_optimize.code_directories.retriever.main.fetch_and_transform_data()
+"""
+    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
+
+def test_module_import_optimization() -> None:
+    main_code = '''
+import utility_module
+
+class Calculator:
+    def __init__(self, precision="high", fallback_precision=None, mode="standard"):
+        # This is where we use the imported module
+        self.precision = utility_module.select_precision(precision, fallback_precision)
+        self.mode = mode
+
+        # Using variables from the utility module
+        self.backend = utility_module.CALCULATION_BACKEND
+        self.system = utility_module.SYSTEM_TYPE
+        self.default_precision = utility_module.DEFAULT_PRECISION
+
+    def add(self, a, b):
+        return a + b
+
+    def subtract(self, a, b):
+        return a - b
+
+    def calculate(self, operation, x, y):
+        if operation == "add":
+            return self.add(x, y)
+        elif operation == "subtract":
+            return self.subtract(x, y)
+        else:
+            return None
+'''
+
+    utility_module_code = '''
+import sys
+import platform
+import logging
+
+DEFAULT_PRECISION = "medium"
+DEFAULT_MODE = "standard"
+
+# Try-except block with variable definitions
+try:
+    import numpy as np
+    # Used variable in try block
+    CALCULATION_BACKEND = "numpy"
+    # Unused variable in try block
+    VECTOR_DIMENSIONS = 3
+except ImportError:
+    # Used variable in except block
+    CALCULATION_BACKEND = "python"
+    # Unused variable in except block
+    FALLBACK_WARNING = "NumPy not available, using slower Python implementation"
+
+# Nested if-else with variable definitions
+if sys.platform.startswith('win'):
+    # Used variable in outer if
+    SYSTEM_TYPE = "windows"
+    if platform.architecture()[0] == '64bit':
+        # Unused variable in nested if
+        MEMORY_MODEL = "x64"
+    else:
+        # Unused variable in nested else
+        MEMORY_MODEL = "x86"
+elif sys.platform.startswith('linux'):
+    # Used variable in outer elif
+    SYSTEM_TYPE = "linux"
+    # Unused variable in outer elif
+    KERNEL_VERSION = platform.release()
+else:
+    # Used variable in outer else
+    SYSTEM_TYPE = "other"
+    # Unused variable in outer else
+    UNKNOWN_SYSTEM_MSG = "Running on an unrecognized platform"
+
+# Function that will be used in the main code
+def select_precision(precision, fallback_precision):
+    if precision is None:
+        return fallback_precision or DEFAULT_PRECISION
+
+    # Using the variables defined above
+    if CALCULATION_BACKEND == "numpy":
+        # Higher precision available with NumPy
+        precision_options = ["low", "medium", "high", "ultra"]
+    else:
+        # Limited precision without NumPy
+        precision_options = ["low", "medium", "high"]
+
+    if isinstance(precision, str):
+        if precision.lower() not in precision_options:
+            if fallback_precision:
+                return fallback_precision
+            else:
+                return DEFAULT_PRECISION
+        return precision.lower()
+    else:
+        return DEFAULT_PRECISION
+
+# Function that won't be used
+def get_system_details():
+    return {
+        "system": SYSTEM_TYPE,
+        "backend": CALCULATION_BACKEND,
+        "default_precision": DEFAULT_PRECISION,
+        "python_version": sys.version
+    }
+'''
+
+    # Create a temporary directory for the test
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Set up the package structure
+        package_dir = Path(temp_dir) / "package"
+        package_dir.mkdir()
+
+        # Create the __init__.py file
+        with open(package_dir / "__init__.py", "w") as init_file:
+            init_file.write("")
+
+        # Write the utility_module.py file
+        with open(package_dir / "utility_module.py", "w") as utility_file:
+            utility_file.write(utility_module_code)
+            utility_file.flush()
+
+        # Write the main code file
+        main_file_path = package_dir / "main_module.py"
+        with open(main_file_path, "w") as main_file:
+            main_file.write(main_code)
+            main_file.flush()
+
+        # Set up the optimizer
+        file_path = main_file_path.resolve()
+        opt = Optimizer(
+            Namespace(
+                project_root=package_dir.resolve(),
+                disable_telemetry=True,
+                tests_root="tests",
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=Path().resolve(),
+            )
+        )
+
+        # Define the function to optimize
+        function_to_optimize = FunctionToOptimize(
+            function_name="calculate",
+            file_path=file_path,
+            parents=[FunctionParent(name="Calculator", type="ClassDef")],
+            starting_line=None,
+            ending_line=None,
+        )
+
+        # Get the code optimization context
+        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+        read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
+        # The expected contexts
+        expected_read_write_context = """
+import utility_module
+
+class Calculator:
+    def __init__(self, precision="high", fallback_precision=None, mode="standard"):
+        # This is where we use the imported module
+        self.precision = utility_module.select_precision(precision, fallback_precision)
+        self.mode = mode
+
+        # Using variables from the utility module
+        self.backend = utility_module.CALCULATION_BACKEND
+        self.system = utility_module.SYSTEM_TYPE
+        self.default_precision = utility_module.DEFAULT_PRECISION
+
+    def add(self, a, b):
+        return a + b
+
+    def subtract(self, a, b):
+        return a - b
+
+    def calculate(self, operation, x, y):
+        if operation == "add":
+            return self.add(x, y)
+        elif operation == "subtract":
+            return self.subtract(x, y)
+        else:
+            return None
+"""
+        expected_read_only_context = """
+```python:utility_module.py
+DEFAULT_PRECISION = "medium"
+
+# Try-except block with variable definitions
+try:
+    # Used variable in try block
+    CALCULATION_BACKEND = "numpy"
+except ImportError:
+    # Used variable in except block
+    CALCULATION_BACKEND = "python"
+
+# Function that will be used in the main code
+def select_precision(precision, fallback_precision):
+    if precision is None:
+        return fallback_precision or DEFAULT_PRECISION
+
+    # Using the variables defined above
+    if CALCULATION_BACKEND == "numpy":
+        # Higher precision available with NumPy
+        precision_options = ["low", "medium", "high", "ultra"]
+    else:
+        # Limited precision without NumPy
+        precision_options = ["low", "medium", "high"]
+
+    if isinstance(precision, str):
+        if precision.lower() not in precision_options:
+            if fallback_precision:
+                return fallback_precision
+            else:
+                return DEFAULT_PRECISION
+        return precision.lower()
+    else:
+        return DEFAULT_PRECISION
+```
+"""
+        # Verify the contexts match the expected values
+        assert read_write_context.strip() == expected_read_write_context.strip()
+        assert read_only_context.strip() == expected_read_only_context.strip()
+
+def test_module_import_init_fto() -> None:
+    main_code = '''
+import utility_module
+
+class Calculator:
+    def __init__(self, precision="high", fallback_precision=None, mode="standard"):
+        # This is where we use the imported module
+        self.precision = utility_module.select_precision(precision, fallback_precision)
+        self.mode = mode
+
+        # Using variables from the utility module
+        self.backend = utility_module.CALCULATION_BACKEND
+        self.system = utility_module.SYSTEM_TYPE
+        self.default_precision = utility_module.DEFAULT_PRECISION
+
+    def add(self, a, b):
+        return a + b
+
+    def subtract(self, a, b):
+        return a - b
+
+    def calculate(self, operation, x, y):
+        if operation == "add":
+            return self.add(x, y)
+        elif operation == "subtract":
+            return self.subtract(x, y)
+        else:
+            return None
+'''
+
+    utility_module_code = '''
+import sys
+import platform
+import logging
+
+DEFAULT_PRECISION = "medium"
+DEFAULT_MODE = "standard"
+
+# Try-except block with variable definitions
+try:
+    import numpy as np
+    # Used variable in try block
+    CALCULATION_BACKEND = "numpy"
+    # Unused variable in try block
+    VECTOR_DIMENSIONS = 3
+except ImportError:
+    # Used variable in except block
+    CALCULATION_BACKEND = "python"
+    # Unused variable in except block
+    FALLBACK_WARNING = "NumPy not available, using slower Python implementation"
+
+# Nested if-else with variable definitions
+if sys.platform.startswith('win'):
+    # Used variable in outer if
+    SYSTEM_TYPE = "windows"
+    if platform.architecture()[0] == '64bit':
+        # Unused variable in nested if
+        MEMORY_MODEL = "x64"
+    else:
+        # Unused variable in nested else
+        MEMORY_MODEL = "x86"
+elif sys.platform.startswith('linux'):
+    # Used variable in outer elif
+    SYSTEM_TYPE = "linux"
+    # Unused variable in outer elif
+    KERNEL_VERSION = platform.release()
+else:
+    # Used variable in outer else
+    SYSTEM_TYPE = "other"
+    # Unused variable in outer else
+    UNKNOWN_SYSTEM_MSG = "Running on an unrecognized platform"
+
+# Function that will be used in the main code
+def select_precision(precision, fallback_precision):
+    if precision is None:
+        return fallback_precision or DEFAULT_PRECISION
+
+    # Using the variables defined above
+    if CALCULATION_BACKEND == "numpy":
+        # Higher precision available with NumPy
+        precision_options = ["low", "medium", "high", "ultra"]
+    else:
+        # Limited precision without NumPy
+        precision_options = ["low", "medium", "high"]
+
+    if isinstance(precision, str):
+        if precision.lower() not in precision_options:
+            if fallback_precision:
+                return fallback_precision
+            else:
+                return DEFAULT_PRECISION
+        return precision.lower()
+    else:
+        return DEFAULT_PRECISION
+
+# Function that won't be used
+def get_system_details():
+    return {
+        "system": SYSTEM_TYPE,
+        "backend": CALCULATION_BACKEND,
+        "default_precision": DEFAULT_PRECISION,
+        "python_version": sys.version
+    }
+'''
+
+    # Create a temporary directory for the test
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Set up the package structure
+        package_dir = Path(temp_dir) / "package"
+        package_dir.mkdir()
+
+        # Create the __init__.py file
+        with open(package_dir / "__init__.py", "w") as init_file:
+            init_file.write("")
+
+        # Write the utility_module.py file
+        with open(package_dir / "utility_module.py", "w") as utility_file:
+            utility_file.write(utility_module_code)
+            utility_file.flush()
+
+        # Write the main code file
+        main_file_path = package_dir / "main_module.py"
+        with open(main_file_path, "w") as main_file:
+            main_file.write(main_code)
+            main_file.flush()
+
+        # Set up the optimizer
+        file_path = main_file_path.resolve()
+        opt = Optimizer(
+            Namespace(
+                project_root=package_dir.resolve(),
+                disable_telemetry=True,
+                tests_root="tests",
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=Path().resolve(),
+            )
+        )
+
+        # Define the function to optimize
+        function_to_optimize = FunctionToOptimize(
+            function_name="__init__",
+            file_path=file_path,
+            parents=[FunctionParent(name="Calculator", type="ClassDef")],
+            starting_line=None,
+            ending_line=None,
+        )
+
+        # Get the code optimization context
+        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+        read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
+        # The expected contexts
+        expected_read_write_context = """
+# Function that will be used in the main code
+
+import utility_module
+
+def select_precision(precision, fallback_precision):
+    if precision is None:
+        return fallback_precision or DEFAULT_PRECISION
+
+    # Using the variables defined above
+    if CALCULATION_BACKEND == "numpy":
+        # Higher precision available with NumPy
+        precision_options = ["low", "medium", "high", "ultra"]
+    else:
+        # Limited precision without NumPy
+        precision_options = ["low", "medium", "high"]
+
+    if isinstance(precision, str):
+        if precision.lower() not in precision_options:
+            if fallback_precision:
+                return fallback_precision
+            else:
+                return DEFAULT_PRECISION
+        return precision.lower()
+    else:
+        return DEFAULT_PRECISION
+
+
+
+class Calculator:
+    def __init__(self, precision="high", fallback_precision=None, mode="standard"):
+        # This is where we use the imported module
+        self.precision = utility_module.select_precision(precision, fallback_precision)
+        self.mode = mode
+
+        # Using variables from the utility module
+        self.backend = utility_module.CALCULATION_BACKEND
+        self.system = utility_module.SYSTEM_TYPE
+        self.default_precision = utility_module.DEFAULT_PRECISION
+"""
+        expected_read_only_context = """
+```python:utility_module.py
+DEFAULT_PRECISION = "medium"
+
+# Try-except block with variable definitions
+try:
+    # Used variable in try block
+    CALCULATION_BACKEND = "numpy"
+except ImportError:
+    # Used variable in except block
+    CALCULATION_BACKEND = "python"
 ```
 """
         assert read_write_context.strip() == expected_read_write_context.strip()
