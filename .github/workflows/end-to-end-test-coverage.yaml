@@ -19,7 +19,7 @@ jobs:
       POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
       CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
       MAX_RETRIES: 3
-      RETRY_DELAY: 5
+      RETRY_DELAY: 4
       CODEFLASH_END_TO_END: 1
     steps:
       - name: 🛎️ Checkout
