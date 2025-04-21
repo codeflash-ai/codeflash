@@ -242,8 +242,7 @@ class FunctionOptimizer:
         # request for new optimizations but don't block execution, check for completion later
         # adding to control and experiment set but with same traceid
         best_optimization = None
-
-        for _u, candidates in enumerate([optimizations_set.control, optimizations_set.experiment]):
+        for _u, (candidates, exp_type) in enumerate(zip([optimizations_set.control, optimizations_set.experiment],["EXP0","EXP1"])):
             if candidates is None:
                 continue
 
@@ -253,8 +252,9 @@ class FunctionOptimizer:
                 original_code_baseline=original_code_baseline,
                 original_helper_code=original_helper_code,
                 file_path_to_helper_classes=file_path_to_helper_classes,
+                exp_type=exp_type,
             )
-            ph("cli-optimize-function-finished", {"function_trace_id": self.function_trace_id})
+            ph("cli-optimize-function-finished", {"function_trace_id": self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id})
 
             generated_tests = remove_functions_from_generated_tests(
                 generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
@@ -286,7 +286,7 @@ class FunctionOptimizer:
                     benchmark_details=processed_benchmark_info.benchmark_details if processed_benchmark_info else None,
                 )
 
-                self.log_successful_optimization(explanation, generated_tests)
+                self.log_successful_optimization(explanation, generated_tests, exp_type)
 
                 self.replace_function_and_helpers_with_optimized_code(
                     code_context=code_context, optimized_code=best_optimization.candidate.source_code
@@ -324,7 +324,7 @@ class FunctionOptimizer:
                         explanation=explanation,
                         existing_tests_source=existing_tests,
                         generated_original_test_source=generated_tests_str,
-                        function_trace_id=self.function_trace_id,
+                        function_trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
                         coverage_message=coverage_message,
                         git_remote=self.args.git_remote,
                     )
@@ -361,6 +361,7 @@ class FunctionOptimizer:
         original_code_baseline: OriginalCodeBaseline,
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
+        exp_type: str,
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime
@@ -377,27 +378,26 @@ class FunctionOptimizer:
         candidates = deque(candidates)
         # Start a new thread for AI service request, start loop in main thread
         # check if aiservice request is complete, when it is complete, append result to the candidates list
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            ai_service_client = self.aiservice_client if exp_type=="EXP0" else self.local_aiservice_client
             future_line_profile_results = executor.submit(
-                self.aiservice_client.optimize_python_code_line_profiler,
+                ai_service_client.optimize_python_code_line_profiler,
                 source_code=code_context.read_writable_code,
                 dependency_code=code_context.read_only_context_code,
-                trace_id=self.function_trace_id,
+                trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
                 line_profiler_results=original_code_baseline.line_profile_results["str_out"],
                 num_candidates=10,
-                experiment_metadata=None,
+                experiment_metadata=ExperimentMetadata(id=self.experiment_id, group= "control" if exp_type == "EXP0" else "experiment") if self.experiment_id  else None,
             )
             try:
                 candidate_index = 0
-                done = False
                 original_len = len(candidates)
                 while candidates:
-                    # for candidate_index, candidate in enumerate(candidates, start=1):
                     done = True if future_line_profile_results is None else future_line_profile_results.done()
                     if done and (future_line_profile_results is not None):
                         line_profile_results = future_line_profile_results.result()
                         candidates.extend(line_profile_results)
-                        original_len += len(candidates)
+                        original_len += len(line_profile_results)
                         logger.info(
                             f"Added results from line profiler to candidates, total candidates now: {original_len}"
                         )
@@ -519,8 +519,8 @@ class FunctionOptimizer:
                 logger.exception(f"Optimization interrupted: {e}")
                 raise
 
-        self.aiservice_client.log_results(
-            function_trace_id=self.function_trace_id,
+        ai_service_client.log_results(
+            function_trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
             speedup_ratio=speedup_ratios,
             original_runtime=original_code_baseline.runtime,
             optimized_runtime=optimized_runtimes,
@@ -528,7 +528,7 @@ class FunctionOptimizer:
         )
         return best_optimization
 
-    def log_successful_optimization(self, explanation: Explanation, generated_tests: GeneratedTestsList) -> None:
+    def log_successful_optimization(self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str) -> None:
         explanation_panel = Panel(
             f"⚡️ Optimization successful! 📄 {self.function_to_optimize.qualified_name} in {explanation.file_path}\n"
             f"📈 {explanation.perf_improvement_line}\n"
@@ -555,7 +555,7 @@ class FunctionOptimizer:
         ph(
             "cli-optimize-success",
             {
-                "function_trace_id": self.function_trace_id,
+                "function_trace_id": self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
                 "speedup_x": explanation.speedup_x,
                 "speedup_pct": explanation.speedup_pct,
                 "best_runtime": explanation.best_runtime_ns,
