@@ -397,7 +397,7 @@ class FunctionOptimizer:
                     if done and (future_line_profile_results is not None):
                         line_profile_results = future_line_profile_results.result()
                         candidates.extend(line_profile_results)
-                        original_len += len(candidates)
+                        original_len += len(line_profile_results)
                         logger.info(
                             f"Added results from line profiler to candidates, total candidates now: {original_len}"
                         )
