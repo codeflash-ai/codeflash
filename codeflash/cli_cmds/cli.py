@@ -62,6 +62,10 @@ def parse_args() -> Namespace:
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose debug logs")
     parser.add_argument("--version", action="store_true", help="Print the version of codeflash")
+    parser.add_argument("--benchmark", action="store_true", help="Trace benchmark tests and calculate optimization impact on benchmarks")
+    parser.add_argument(
+        "--benchmarks-root", type=str, help="Path to the directory of the project, where all the pytest-benchmark tests are located."
+    )
     args: Namespace = parser.parse_args()
     return process_and_validate_cmd_args(args)
 
@@ -109,6 +113,7 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     supported_keys = [
         "module_root",
         "tests_root",
+        "benchmarks_root",
         "test_framework",
         "ignore_paths",
         "pytest_cmd",
@@ -127,7 +132,12 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     assert Path(args.module_root).is_dir(), f"--module-root {args.module_root} must be a valid directory"
     assert args.tests_root is not None, "--tests-root must be specified"
     assert Path(args.tests_root).is_dir(), f"--tests-root {args.tests_root} must be a valid directory"
-
+    if args.benchmark:
+        assert args.benchmarks_root is not None, "--benchmarks-root must be specified when running with --benchmark"
+        assert Path(args.benchmarks_root).is_dir(), f"--benchmarks-root {args.benchmarks_root} must be a valid directory"
+        assert Path(args.benchmarks_root).resolve().is_relative_to(Path(args.tests_root).resolve()), (
+            f"--benchmarks-root {args.benchmarks_root} must be a subdirectory of --tests-root {args.tests_root}"
+        )
     if env_utils.get_pr_number() is not None:
         assert env_utils.ensure_codeflash_api_key(), (
             "Codeflash API key not found. When running in a Github Actions Context, provide the "
@@ -157,6 +167,8 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     # in this case, the ".." becomes outside project scope, causing issues with un-importable paths
     args.project_root = project_root_from_module_root(args.module_root, pyproject_file_path)
     args.tests_root = Path(args.tests_root).resolve()
+    if args.benchmarks_root:
+        args.benchmarks_root = Path(args.benchmarks_root).resolve()
     args.test_project_root = project_root_from_module_root(args.tests_root, pyproject_file_path)
     return handle_optimize_all_arg_parsing(args)
 

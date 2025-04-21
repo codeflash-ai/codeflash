@@ -106,7 +106,7 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
 class FunctionToOptimize:
-    """Represents a function that is a candidate for optimization.
+    """Represent a function that is a candidate for optimization.
 
     Attributes
     ----------
@@ -144,7 +144,6 @@ class FunctionToOptimize:
 
     def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
-
 
 def get_functions_to_optimize(
     optimize_all: str | None,
@@ -300,7 +299,7 @@ def get_all_replay_test_functions(
                     if valid_function.qualified_name == function_name
                 ]
             )
-        if len(filtered_list):
+        if filtered_list:
             filtered_valid_functions[file_path] = filtered_list
 
     return filtered_valid_functions
@@ -359,9 +358,15 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
                         for decorator in body_node.decorator_list
                     ):
                         self.is_classmethod = True
+                    elif any(
+                        isinstance(decorator, ast.Name) and decorator.id == "staticmethod"
+                        for decorator in body_node.decorator_list
+                    ):
+                        self.is_staticmethod = True
                     return
-        else:
-            # search if the class has a staticmethod with the same name and on the same line number
+        elif self.line_no:
+            # If we have line number info, check if class has a static method with the same line number
+            # This way, if we don't have the class name, we can still find the static method
             for body_node in node.body:
                 if (
                     isinstance(body_node, ast.FunctionDef)
