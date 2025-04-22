@@ -66,7 +66,11 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
                 len_next_bytes = file.read(4)
                 len_next = int.from_bytes(len_next_bytes, byteorder="big")
                 invocation_id_bytes = file.read(len_next)
-                invocation_id = invocation_id_bytes.decode("ascii")
+                try:
+                    invocation_id = invocation_id_bytes.decode("ascii")
+                except UnicodeDecodeError as e:
+                    logger.warning(f"Failed to decode invocation_id_bytes as ASCII in {file_location}: {e}. Skipping entry.")
+                    continue
 
                 invocation_id_object = InvocationId.from_str_id(encoded_test_name, invocation_id)
                 test_file_path = file_path_from_module_name(

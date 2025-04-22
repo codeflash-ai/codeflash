@@ -201,6 +201,7 @@ def get_functions_to_optimize(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root
         )
         logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
+        console.rule()
         return filtered_modified_functions, functions_count
 
 
