@@ -11,6 +11,7 @@ import re
 import sys
 import time
 import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from unittest import TestCase
 
@@ -37,14 +38,39 @@ class UnexpectedError(Exception):
     pass
 
 
-if platform.system() == "Linux" or platform.system() == "Darwin":
+if platform.system() == "Linux":
     import resource
 
+    # We set the memory limit to 85% of total system memory + swap when swap exists
+    swap_file_path = Path("/proc/swaps")
+    swap_exists = swap_file_path.is_file()
+    swap_size = 0
+
+    if swap_exists:
+        with swap_file_path.open("r") as f:
+            swap_lines = f.readlines()
+            swap_exists = len(swap_lines) > 1  # First line is header
+
+            if swap_exists:
+                # Parse swap size from lines after header
+                for line in swap_lines[1:]:
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        # Swap size is in KB in the 3rd column
+                        try:
+                            swap_size += int(parts[2]) * 1024  # Convert KB to bytes
+                        except (ValueError, IndexError):
+                            pass
+
     # Get total system memory
-    total_memory = os.sysconf("SC_PAGE_SIZE") * os.sysconf(
-        "SC_PHYS_PAGES"
-    )  # Set memory limit to 80% of total system memory
-    memory_limit = int(total_memory * 0.8)
+    total_memory = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+
+    # Add swap to total available memory if swap exists
+    if swap_exists:
+        total_memory += swap_size
+
+    # Set the memory limit to 85% of total memory (RAM plus swap)
+    memory_limit = int(total_memory * 0.85)
 
     # Set both soft and hard limits
     resource.setrlimit(resource.RLIMIT_AS, (memory_limit, memory_limit))
