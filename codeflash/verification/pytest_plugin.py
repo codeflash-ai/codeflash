@@ -11,6 +11,7 @@ import re
 import sys
 import time
 import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from unittest import TestCase
 
@@ -37,17 +38,25 @@ class UnexpectedError(Exception):
     pass
 
 
-if platform.system() == "Linux" or platform.system() == "Darwin":
+if platform.system() == "Linux":
     import resource
 
-    # Get total system memory
-    total_memory = os.sysconf("SC_PAGE_SIZE") * os.sysconf(
-        "SC_PHYS_PAGES"
-    )  # Set memory limit to 80% of total system memory
-    memory_limit = int(total_memory * 0.8)
+    # We set the memory limit to 85% of total system memory when no swap exists
+    swap_file_path = Path("/proc/swaps")
+    swap_exists = swap_file_path.is_file()
+    if swap_exists:
+        with swap_file_path.open("r") as f:
+            swap_exists = len(f.readlines()) > 1  # First line is header
 
-    # Set both soft and hard limits
-    resource.setrlimit(resource.RLIMIT_AS, (memory_limit, memory_limit))
+    if not swap_exists:
+        # Get total system memory
+        total_memory = os.sysconf("SC_PAGE_SIZE") * os.sysconf(
+            "SC_PHYS_PAGES"
+        )  # Set the memory limit to 85% of total system memory
+        memory_limit = int(total_memory * 0.85)
+
+        # Set both soft and hard limits
+        resource.setrlimit(resource.RLIMIT_AS, (memory_limit, memory_limit))
 
 
 def pytest_addoption(parser: Parser) -> None:
