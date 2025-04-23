@@ -255,12 +255,13 @@ def collect_setup_info() -> SetupInfo:
         tests_subdirs = [d.name for d in tests_root.iterdir() if d.is_dir() and not d.name.startswith(".")]
 
     benchmarks_options = []
+    benchmarks_options.append(no_benchmarks_option)
     if default_benchmarks_subdir in tests_subdirs:
         benchmarks_options.append(default_benchmarks_subdir)
     benchmarks_options.extend([d for d in tests_subdirs if d != default_benchmarks_subdir])
     benchmarks_options.append(create_benchmarks_option)
     benchmarks_options.append(custom_dir_option)
-    benchmarks_options.append(no_benchmarks_option)
+
 
     benchmarks_answer = inquirer_wrapper(
         inquirer.list_input,
