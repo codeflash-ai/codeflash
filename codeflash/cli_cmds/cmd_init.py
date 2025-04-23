@@ -265,7 +265,7 @@ def collect_setup_info() -> SetupInfo:
 
     benchmarks_answer = inquirer_wrapper(
         inquirer.list_input,
-        message="Where are your benchmarks located? (benchmarks must be a sub directory of your tests root directory)",
+        message="Where are your performance benchmarks located? (benchmarks must be a sub directory of your tests root directory)",
         choices=benchmarks_options,
         default=(
             default_benchmarks_subdir if default_benchmarks_subdir in benchmarks_options else benchmarks_options[0]),
