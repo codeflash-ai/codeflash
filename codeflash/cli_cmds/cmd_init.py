@@ -160,7 +160,7 @@ def collect_setup_info() -> SetupInfo:
     # Check for the existence of pyproject.toml or setup.py
     project_name = check_for_toml_or_setup_file()
 
-    ignore_subdirs = ["venv", "node_modules", "dist", "build", "build_temp", "build_scripts", "env", "logs", "tmp"]
+    ignore_subdirs = ["venv", "node_modules", "dist", "build", "build_temp", "build_scripts", "env", "logs", "tmp", "__pycache__"]
     valid_subdirs = [
         d for d in next(os.walk("."))[1] if not d.startswith(".") and not d.startswith("__") and d not in ignore_subdirs
     ]
@@ -255,16 +255,17 @@ def collect_setup_info() -> SetupInfo:
         tests_subdirs = [d.name for d in tests_root.iterdir() if d.is_dir() and not d.name.startswith(".")]
 
     benchmarks_options = []
+    benchmarks_options.append(no_benchmarks_option)
     if default_benchmarks_subdir in tests_subdirs:
         benchmarks_options.append(default_benchmarks_subdir)
-    benchmarks_options.extend([d for d in tests_subdirs if d != default_benchmarks_subdir])
+    benchmarks_options.extend([d for d in tests_subdirs if d != default_benchmarks_subdir and d not in ignore_subdirs])
     benchmarks_options.append(create_benchmarks_option)
     benchmarks_options.append(custom_dir_option)
-    benchmarks_options.append(no_benchmarks_option)
+
 
     benchmarks_answer = inquirer_wrapper(
         inquirer.list_input,
-        message="Where are your benchmarks located? (benchmarks must be a sub directory of your tests root directory)",
+        message="Where are your performance benchmarks located? (benchmarks must be a sub directory of your tests root directory)",
         choices=benchmarks_options,
         default=(
             default_benchmarks_subdir if default_benchmarks_subdir in benchmarks_options else benchmarks_options[0]),
