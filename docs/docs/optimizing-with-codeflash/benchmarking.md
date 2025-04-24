@@ -67,6 +67,12 @@ Codeflash will then calculate the impact (if any) of any optimization on the per
    
    Use `codeflash init` for an easy way to set up Codeflash as a Github Action (with the option to enable benchmark mode).
 
+   Otherwise, you can run the following command in your Codeflash GitHub Action:
+
+   ```bash
+   codeflash --benchmark
+   ```
+
 
 
 ## How it works
