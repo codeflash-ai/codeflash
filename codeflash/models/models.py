@@ -561,6 +561,7 @@ class TestResults(BaseModel):
 
         :return: The runtime in nanoseconds.
         """
+        #TODO this doesn't look at the interesection of tests of baseline and original
         return sum(
             [min(usable_runtime_data) for _, usable_runtime_data in self.usable_runtime_data_by_test_case().items()]
         )

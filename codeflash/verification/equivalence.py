@@ -70,6 +70,7 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             are_equal = False
             break
 
+# TODO: add more tests, regression and replay
         if original_test_result.test_type in {TestType.EXISTING_UNIT_TEST, TestType.CONCOLIC_COVERAGE_TEST} and (
             cdd_test_result.did_pass != original_test_result.did_pass
         ):
