@@ -298,6 +298,20 @@ def test_numpy():
     assert comparator(ak, al)
     assert not comparator(ai, ak)
 
+    dt = np.dtype([('name', 'S10'), ('age', np.int32)])
+    a_struct = np.array([('Alice', 25)], dtype=dt)
+    b_struct = np.array([('Alice', 25)], dtype=dt)
+    c_struct = np.array([('Bob', 30)], dtype=dt)
+
+    a_void = a_struct[0]
+    b_void = b_struct[0]
+    c_void = c_struct[0]
+
+    assert isinstance(a_void, np.void)
+    assert comparator(a_void, b_void)
+    assert not comparator(a_void, c_void)
+
+
 
 def test_scipy():
     try:
