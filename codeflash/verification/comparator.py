@@ -148,6 +148,11 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
         if HAS_NUMPY and isinstance(orig, (np.integer, np.bool_, np.byte)):
             return orig == new
 
+        if HAS_NUMPY and isinstance(orig, np.void):
+            if orig.dtype != new.dtype:
+                return False
+            return all(comparator(orig[field], new[field], superset_obj) for field in orig.dtype.fields)
+
         if HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix):
             if orig.dtype != new.dtype:
                 return False
