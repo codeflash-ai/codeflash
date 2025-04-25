@@ -1009,6 +1009,94 @@ def test_compare_results_fn():
 
     assert not compare_test_results(original_results, new_results_4)
 
+    new_results_5_baseline = TestResults()
+    new_results_5_baseline.add(
+        FunctionTestInvocation(
+            id=InvocationId(
+                test_module_path="test_module_path",
+                test_class_name="test_class_name",
+                test_function_name="test_function_name",
+                function_getting_tested="function_getting_tested",
+                iteration_id="0",
+            ),
+            file_name=Path("file_name"),
+            did_pass=True,
+            runtime=5,
+            test_framework="unittest",
+            test_type=TestType.GENERATED_REGRESSION,
+            return_value=5,
+            timed_out=False,
+            loop_index=1,
+        )
+    )
+
+    new_results_5_opt = TestResults()
+    new_results_5_opt.add(
+        FunctionTestInvocation(
+            id=InvocationId(
+                test_module_path="test_module_path",
+                test_class_name="test_class_name",
+                test_function_name="test_function_name",
+                function_getting_tested="function_getting_tested",
+                iteration_id="0",
+            ),
+            file_name=Path("file_name"),
+            did_pass=False,
+            runtime=5,
+            test_framework="unittest",
+            test_type=TestType.GENERATED_REGRESSION,
+            return_value=5,
+            timed_out=False,
+            loop_index=1,
+        )
+    )
+
+    assert  not compare_test_results(new_results_5_baseline, new_results_5_opt)
+
+    new_results_6_baseline = TestResults()
+    new_results_6_baseline.add(
+        FunctionTestInvocation(
+            id=InvocationId(
+                test_module_path="test_module_path",
+                test_class_name="test_class_name",
+                test_function_name="test_function_name",
+                function_getting_tested="function_getting_tested",
+                iteration_id="0",
+            ),
+            file_name=Path("file_name"),
+            did_pass=True,
+            runtime=5,
+            test_framework="unittest",
+            test_type=TestType.REPLAY_TEST,
+            return_value=5,
+            timed_out=False,
+            loop_index=1,
+        )
+    )
+
+    new_results_6_opt = TestResults()
+    new_results_6_opt.add(
+        FunctionTestInvocation(
+            id=InvocationId(
+                test_module_path="test_module_path",
+                test_class_name="test_class_name",
+                test_function_name="test_function_name",
+                function_getting_tested="function_getting_tested",
+                iteration_id="0",
+            ),
+            file_name=Path("file_name"),
+            did_pass=False,
+            runtime=5,
+            test_framework="unittest",
+            test_type=TestType.REPLAY_TEST,
+            return_value=5,
+            timed_out=False,
+            loop_index=1,
+        )
+    )
+
+    assert  not compare_test_results(new_results_6_baseline, new_results_6_opt)
+
     assert not compare_test_results(TestResults(), TestResults())
 
 
