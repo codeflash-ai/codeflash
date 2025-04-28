@@ -211,8 +211,8 @@ def is_function_being_optimized_again(code_context: CodeOptimizationContext) -> 
         # Only want to do this check during GH Actions
         return False
     owner, repo = get_repo_owner_and_name()
-
-    rw_context_hash = hashlib.sha256(str(code_context).encode()).hexdigest()
+    # TODO: Add file paths
+    rw_context_hash = hashlib.sha256(str(code_context.read_writable_code).encode()).hexdigest()
 
     payload = {"owner": owner, "repo": repo, "pullNumber": pr_number, "code_hash": rw_context_hash}
     response = make_cfapi_request(endpoint="/is-function-being-optimized-again", method="POST", payload=payload)
