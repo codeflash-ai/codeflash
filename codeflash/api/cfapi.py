@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -14,6 +15,7 @@ from pydantic.json import pydantic_encoder
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
 from codeflash.code_utils.git_utils import get_repo_owner_and_name
+from codeflash.models.models import CodeOptimizationContext
 from codeflash.version import __version__
 
 if TYPE_CHECKING:
@@ -200,3 +202,20 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
         return {}
 
     return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
+
+
+def is_function_being_optimized_again(code_context: CodeOptimizationContext) -> bool:
+    """Check if the function being optimized is being optimized again."""
+    pr_number = get_pr_number()
+    if pr_number is None:
+        # Only want to do this check during GH Actions
+        return False
+    owner, repo = get_repo_owner_and_name()
+
+    rw_context_hash = hashlib.sha256(str(code_context).encode()).hexdigest()
+
+    payload = {"owner": owner, "repo": repo, "pullNumber": pr_number, "code_hash": rw_context_hash}
+    response = make_cfapi_request(endpoint="/is-function-being-optimized-again", method="POST", payload=payload)
+    if not response.ok or response.text != "true":
+        logger.error(f"Error: {response.text}")
+        return False
