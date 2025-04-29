@@ -1,0 +1,130 @@
+import argparse
+import datetime
+import json
+import sys
+import time
+import uuid
+from pathlib import Path
+from typing import Any, Optional
+
+import click
+
+
+class CodeflashRunCheckpoint:
+    def __init__(self, module_path: Path, checkpoint_dir: str = "/tmp") -> None:
+        self.module_path = module_path
+        self.checkpoint_dir = Path(checkpoint_dir)
+        # Create a unique checkpoint file name
+        unique_id = str(uuid.uuid4())[:8]
+        checkpoint_filename = f"codeflash_checkpoint_{unique_id}.jsonl"
+        self.checkpoint_path = self.checkpoint_dir / checkpoint_filename
+
+        # Initialize the checkpoint file with metadata
+        self._initialize_checkpoint_file()
+
+    def _initialize_checkpoint_file(self) -> None:
+        """Create a new checkpoint file with metadata."""
+        metadata = {
+            "type": "metadata",
+            "module_path": str(self.module_path),
+            "created_at": time.time(),
+            "last_updated": time.time(),
+        }
+
+        with open(self.checkpoint_path, "w") as f:
+            f.write(json.dumps(metadata) + "\n")
+
+    def add_function_to_checkpoint(
+        self,
+        function_fully_qualified_name: str,
+        status: str = "optimized",
+        additional_info: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """Add a function to the checkpoint after it has been processed.
+
+        Args:
+            function_fully_qualified_name: The fully qualified name of the function
+            status: Status of optimization (e.g., "optimized", "failed", "skipped")
+            additional_info: Any additional information to store about the function
+
+        """
+        if additional_info is None:
+            additional_info = {}
+
+        function_data = {
+            "type": "function",
+            "function_name": function_fully_qualified_name,
+            "status": status,
+            "timestamp": time.time(),
+            **additional_info,
+        }
+
+        with open(self.checkpoint_path, "a") as f:
+            f.write(json.dumps(function_data) + "\n")
+
+        # Update the metadata last_updated timestamp
+        self._update_metadata_timestamp()
+
+    def _update_metadata_timestamp(self) -> None:
+        """Update the last_updated timestamp in the metadata."""
+        # Read the first line (metadata)
+        with self.checkpoint_path.open() as f:
+            metadata = json.loads(f.readline())
+            rest_content = f.read()
+
+        # Update the timestamp
+        metadata["last_updated"] = time.time()
+
+        # Write all lines to a temporary file
+
+        with self.checkpoint_path.open("w") as f:
+            f.write(json.dumps(metadata) + "\n")
+            f.write(rest_content)
+
+
+def get_all_historical_functions(checkpoint_dir: Path, module_path) -> dict[str, dict[str, str]]:
+    """Get information about all processed functions, regardless of status.
+
+    Returns:
+        Dictionary mapping function names to their processing information
+
+    """
+    processed_functions = {}
+    to_delete = []
+
+    for file in checkpoint_dir.glob("codeflash_checkpoint_*.jsonl"):
+        with file.open() as f:
+            # Skip the first line (metadata)
+            first_line = next(f)
+            metadata = json.loads(first_line)
+            if metadata.get("timestamp"):
+                metadata["timestamp"] = datetime.datetime.fromtimestamp(metadata["timestamp"])
+                if metadata["timestamp"] >= datetime.datetime.now() - datetime.timedelta(days=7):
+                    to_delete.append(file)
+                    continue
+            else:
+                metadata["timestamp"] = datetime.datetime.now()
+            if metadata.get("module_path") != module_path:
+                continue
+
+            for line in f:
+                entry = json.loads(line)
+                if entry.get("type") == "function":
+                    processed_functions[entry["function_name"]] = entry
+    for file in to_delete:
+        file.unlink()
+    return processed_functions
+
+
+def ask_should_use_checkpoint_get_functions(args: argparse.Namespace) -> Optional[dict[str, dict[str, str]]]:
+    previous_checkpoint_functions = None
+    if args.all and (sys.platform == "linux" or sys.platform == "darwin") and Path("/tmp").is_dir():
+        previous_checkpoint_functions = get_all_historical_functions(args.module_path, Path("/tmp"))
+        if previous_checkpoint_functions and click.confirm(
+            "Previous Checkpoint detected from an incomplete optimization run, shall I continue the optimization from that point?",
+            default=True,
+        ):
+            pass
+        else:
+            previous_checkpoint_functions = None
+    return previous_checkpoint_functions

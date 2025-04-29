@@ -145,6 +145,7 @@ class FunctionToOptimize:
     def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
 
+
 def get_functions_to_optimize(
     optimize_all: str | None,
     replay_test: str | None,
@@ -154,10 +155,11 @@ def get_functions_to_optimize(
     ignore_paths: list[Path],
     project_root: Path,
     module_root: Path,
+    previous_checkpoint_functions: dict[str, dict[str, str]] | None = None,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
-    assert sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1, (
-        "Only one of optimize_all, replay_test, or file should be provided"
-    )
+    assert (
+        sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1
+    ), "Only one of optimize_all, replay_test, or file should be provided"
     functions: dict[str, list[FunctionToOptimize]]
     with warnings.catch_warnings():
         warnings.simplefilter(action="ignore", category=SyntaxWarning)
@@ -198,7 +200,7 @@ def get_functions_to_optimize(
             ph("cli-optimizing-git-diff")
             functions = get_functions_within_git_diff()
         filtered_modified_functions, functions_count = filter_functions(
-            functions, test_cfg.tests_root, ignore_paths, project_root, module_root
+            functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )
         logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
         return filtered_modified_functions, functions_count
@@ -414,6 +416,7 @@ def filter_functions(
     ignore_paths: list[Path],
     project_root: Path,
     module_root: Path,
+    previous_checkpoint_functions: dict[Path, list[FunctionToOptimize]] | None = None,
     disable_logs: bool = False,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     blocklist_funcs = get_blocklisted_functions()
@@ -430,13 +433,16 @@ def filter_functions(
     ignore_paths_removed_count: int = 0
     malformed_paths_count: int = 0
     submodule_ignored_paths_count: int = 0
+    blocklist_funcs_removed_count: int = 0
+    previous_checkpoint_functions_removed_count: int = 0
     tests_root_str = str(tests_root)
     module_root_str = str(module_root)
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
+        _functions = functions
         file_path = str(file_path_path)
         if file_path.startswith(tests_root_str + os.sep):
-            test_functions_removed_count += len(functions)
+            test_functions_removed_count += len(_functions)
             continue
         if file_path in ignore_paths or any(
             file_path.startswith(str(ignore_path) + os.sep) for ignore_path in ignore_paths
@@ -449,10 +455,10 @@ def filter_functions(
             submodule_ignored_paths_count += 1
             continue
         if path_belongs_to_site_packages(Path(file_path)):
-            site_packages_removed_count += len(functions)
+            site_packages_removed_count += len(_functions)
             continue
         if not file_path.startswith(module_root_str + os.sep):
-            non_modules_removed_count += len(functions)
+            non_modules_removed_count += len(_functions)
             continue
         try:
             ast.parse(f"import {module_name_from_file_path(Path(file_path), project_root)}")
@@ -460,16 +466,30 @@ def filter_functions(
             malformed_paths_count += 1
             continue
         if blocklist_funcs:
-            functions = [
-                function
-                for function in functions
+            functions_tmp = []
+            for function in _functions:
                 if not (
                     function.file_path.name in blocklist_funcs
                     and function.qualified_name in blocklist_funcs[function.file_path.name]
-                )
-            ]
-        filtered_modified_functions[file_path] = functions
-        functions_count += len(functions)
+                ):
+                    blocklist_funcs_removed_count += 1
+                    continue
+                functions_tmp.append(function)
+            _functions = functions_tmp
+
+        if previous_checkpoint_functions:
+            functions_tmp = []
+            for function in _functions:
+                if function.file_path in previous_checkpoint_functions and function in previous_checkpoint_functions[
+                    function.file_path
+                ]:
+                    previous_checkpoint_functions_removed_count += 1
+                    continue
+                functions_tmp.append(function)
+            _functions = functions_tmp
+
+        filtered_modified_functions[file_path] = _functions
+        functions_count += len(_functions)
 
     if not disable_logs:
         log_info = {
@@ -479,6 +499,8 @@ def filter_functions(
             f"{non_modules_removed_count} function{'s' if non_modules_removed_count != 1 else ''} outside module-root": non_modules_removed_count,
             f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths": ignore_paths_removed_count,
             f"{submodule_ignored_paths_count} file{'s' if submodule_ignored_paths_count != 1 else ''} from ignored submodules": submodule_ignored_paths_count,
+            f"{blocklist_funcs_removed_count} function{'s' if blocklist_funcs_removed_count != 1 else ''} as previously optimized": blocklist_funcs_removed_count,
+            f"{previous_checkpoint_functions_removed_count} function{'s' if previous_checkpoint_functions_removed_count != 1 else ''} as previously optimized from checkpoint": previous_checkpoint_functions_removed_count,
         }
         log_string = "\n".join([k for k, v in log_info.items() if v > 0])
         if log_string:
