@@ -11,8 +11,8 @@ import click
 
 
 class CodeflashRunCheckpoint:
-    def __init__(self, module_path: Path, checkpoint_dir: str = "/tmp") -> None:
-        self.module_path = module_path
+    def __init__(self, module_root: Path, checkpoint_dir: str = "/tmp") -> None:
+        self.module_root = module_root
         self.checkpoint_dir = Path(checkpoint_dir)
         # Create a unique checkpoint file name
         unique_id = str(uuid.uuid4())[:8]
@@ -26,7 +26,7 @@ class CodeflashRunCheckpoint:
         """Create a new checkpoint file with metadata."""
         metadata = {
             "type": "metadata",
-            "module_path": str(self.module_path),
+            "module_root": str(self.module_root),
             "created_at": time.time(),
             "last_updated": time.time(),
         }
@@ -82,7 +82,7 @@ class CodeflashRunCheckpoint:
             f.write(rest_content)
 
 
-def get_all_historical_functions(checkpoint_dir: Path, module_path) -> dict[str, dict[str, str]]:
+def get_all_historical_functions(module_root: Path, checkpoint_dir: Path) -> dict[str, dict[str, str]]:
     """Get information about all processed functions, regardless of status.
 
     Returns:
@@ -97,14 +97,12 @@ def get_all_historical_functions(checkpoint_dir: Path, module_path) -> dict[str,
             # Skip the first line (metadata)
             first_line = next(f)
             metadata = json.loads(first_line)
-            if metadata.get("timestamp"):
-                metadata["timestamp"] = datetime.datetime.fromtimestamp(metadata["timestamp"])
-                if metadata["timestamp"] >= datetime.datetime.now() - datetime.timedelta(days=7):
+            if metadata.get("last_updated"):
+                last_updated = datetime.datetime.fromtimestamp(metadata["last_updated"])
+                if datetime.datetime.now() - last_updated >= datetime.timedelta(days=7):
                     to_delete.append(file)
                     continue
-            else:
-                metadata["timestamp"] = datetime.datetime.now()
-            if metadata.get("module_path") != module_path:
+            if metadata.get("module_root") != str(module_root):
                 continue
 
             for line in f:
@@ -112,14 +110,14 @@ def get_all_historical_functions(checkpoint_dir: Path, module_path) -> dict[str,
                 if entry.get("type") == "function":
                     processed_functions[entry["function_name"]] = entry
     for file in to_delete:
-        file.unlink()
+        file.unlink(missing_ok=True)
     return processed_functions
 
 
 def ask_should_use_checkpoint_get_functions(args: argparse.Namespace) -> Optional[dict[str, dict[str, str]]]:
     previous_checkpoint_functions = None
     if args.all and (sys.platform == "linux" or sys.platform == "darwin") and Path("/tmp").is_dir():
-        previous_checkpoint_functions = get_all_historical_functions(args.module_path, Path("/tmp"))
+        previous_checkpoint_functions = get_all_historical_functions(args.module_root, Path("/tmp"))
         if previous_checkpoint_functions and click.confirm(
             "Previous Checkpoint detected from an incomplete optimization run, shall I continue the optimization from that point?",
             default=True,

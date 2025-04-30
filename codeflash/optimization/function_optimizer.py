@@ -242,7 +242,9 @@ class FunctionOptimizer:
         # request for new optimizations but don't block execution, check for completion later
         # adding to control and experiment set but with same traceid
         best_optimization = None
-        for _u, (candidates, exp_type) in enumerate(zip([optimizations_set.control, optimizations_set.experiment],["EXP0","EXP1"])):
+        for _u, (candidates, exp_type) in enumerate(
+            zip([optimizations_set.control, optimizations_set.experiment], ["EXP0", "EXP1"])
+        ):
             if candidates is None:
                 continue
 
@@ -254,7 +256,14 @@ class FunctionOptimizer:
                 file_path_to_helper_classes=file_path_to_helper_classes,
                 exp_type=exp_type,
             )
-            ph("cli-optimize-function-finished", {"function_trace_id": self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id})
+            ph(
+                "cli-optimize-function-finished",
+                {
+                    "function_trace_id": self.function_trace_id[:-4] + exp_type
+                    if self.experiment_id
+                    else self.function_trace_id
+                },
+            )
 
             generated_tests = remove_functions_from_generated_tests(
                 generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
@@ -324,7 +333,9 @@ class FunctionOptimizer:
                         explanation=explanation,
                         existing_tests_source=existing_tests,
                         generated_original_test_source=generated_tests_str,
-                        function_trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
+                        function_trace_id=self.function_trace_id[:-4] + exp_type
+                        if self.experiment_id
+                        else self.function_trace_id,
                         coverage_message=coverage_message,
                         git_remote=self.args.git_remote,
                     )
@@ -379,7 +390,7 @@ class FunctionOptimizer:
         # Start a new thread for AI service request, start loop in main thread
         # check if aiservice request is complete, when it is complete, append result to the candidates list
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            ai_service_client = self.aiservice_client if exp_type=="EXP0" else self.local_aiservice_client
+            ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
             future_line_profile_results = executor.submit(
                 ai_service_client.optimize_python_code_line_profiler,
                 source_code=code_context.read_writable_code,
@@ -387,7 +398,11 @@ class FunctionOptimizer:
                 trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
                 line_profiler_results=original_code_baseline.line_profile_results["str_out"],
                 num_candidates=10,
-                experiment_metadata=ExperimentMetadata(id=self.experiment_id, group= "control" if exp_type == "EXP0" else "experiment") if self.experiment_id  else None,
+                experiment_metadata=ExperimentMetadata(
+                    id=self.experiment_id, group="control" if exp_type == "EXP0" else "experiment"
+                )
+                if self.experiment_id
+                else None,
             )
             try:
                 candidate_index = 0
@@ -462,7 +477,7 @@ class FunctionOptimizer:
                                 f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
                             )
                             tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
-                            tree.add(f"Speedup ratio: {perf_gain + 1:.1f}X")
+                            tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
                             replay_perf_gain = {}
                             if self.args.benchmark:
                                 test_results_by_benchmark = (
@@ -528,7 +543,9 @@ class FunctionOptimizer:
         )
         return best_optimization
 
-    def log_successful_optimization(self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str) -> None:
+    def log_successful_optimization(
+        self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str
+    ) -> None:
         explanation_panel = Panel(
             f"⚡️ Optimization successful! 📄 {self.function_to_optimize.qualified_name} in {explanation.file_path}\n"
             f"📈 {explanation.perf_improvement_line}\n"
@@ -555,7 +572,9 @@ class FunctionOptimizer:
         ph(
             "cli-optimize-success",
             {
-                "function_trace_id": self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
+                "function_trace_id": self.function_trace_id[:-4] + exp_type
+                if self.experiment_id
+                else self.function_trace_id,
                 "speedup_x": explanation.speedup_x,
                 "speedup_pct": explanation.speedup_pct,
                 "best_runtime": explanation.best_runtime_ns,

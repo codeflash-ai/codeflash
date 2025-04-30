@@ -8,7 +8,7 @@ from _ast import AsyncFunctionDef, ClassDef, FunctionDef
 from collections import defaultdict
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import git
 import libcst as cst
@@ -416,7 +416,7 @@ def filter_functions(
     ignore_paths: list[Path],
     project_root: Path,
     module_root: Path,
-    previous_checkpoint_functions: dict[Path, list[FunctionToOptimize]] | None = None,
+    previous_checkpoint_functions: dict[Path, dict[str, Any]] | None = None,
     disable_logs: bool = False,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     blocklist_funcs = get_blocklisted_functions()
@@ -480,9 +480,7 @@ def filter_functions(
         if previous_checkpoint_functions:
             functions_tmp = []
             for function in _functions:
-                if function.file_path in previous_checkpoint_functions and function in previous_checkpoint_functions[
-                    function.file_path
-                ]:
+                if function.qualified_name_with_modules_from_root(project_root) in previous_checkpoint_functions:
                     previous_checkpoint_functions_removed_count += 1
                     continue
                 functions_tmp.append(function)
@@ -500,7 +498,7 @@ def filter_functions(
             f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths": ignore_paths_removed_count,
             f"{submodule_ignored_paths_count} file{'s' if submodule_ignored_paths_count != 1 else ''} from ignored submodules": submodule_ignored_paths_count,
             f"{blocklist_funcs_removed_count} function{'s' if blocklist_funcs_removed_count != 1 else ''} as previously optimized": blocklist_funcs_removed_count,
-            f"{previous_checkpoint_functions_removed_count} function{'s' if previous_checkpoint_functions_removed_count != 1 else ''} as previously optimized from checkpoint": previous_checkpoint_functions_removed_count,
+            f"{previous_checkpoint_functions_removed_count} function{'s' if previous_checkpoint_functions_removed_count != 1 else ''} skipped from checkpoint": previous_checkpoint_functions_removed_count,
         }
         log_string = "\n".join([k for k, v in log_info.items() if v > 0])
         if log_string:

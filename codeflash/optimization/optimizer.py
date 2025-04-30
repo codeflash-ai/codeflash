@@ -163,7 +163,7 @@ class Optimizer:
             console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
             if self.args.all:
-                self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_path)
+                self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
 
             for original_module_path in file_to_funcs_to_optimize:
                 logger.info(f"Examining file {original_module_path!s}…")
