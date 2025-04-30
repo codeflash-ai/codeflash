@@ -18,6 +18,139 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
+from typing import List, Union
+
+
+class ImportCollector(cst.CSTVisitor):
+    """Visitor that collects all import statements in a module."""
+
+    def __init__(self):
+        super().__init__()
+        self.imports = []
+
+    def visit_Import(self, node: cst.Import) -> None:
+        self.imports.append(node)
+
+    def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
+        self.imports.append(node)
+
+
+class GlobalStatementCollector(cst.CSTVisitor):
+    """Visitor that collects all global statements (excluding imports and functions/classes)."""
+
+    def __init__(self):
+        super().__init__()
+        self.global_statements = []
+        self.in_function_or_class = False
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> bool:
+        # Don't visit inside classes
+        self.in_function_or_class = True
+        return False
+
+    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:
+        self.in_function_or_class = False
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
+        # Don't visit inside functions
+        self.in_function_or_class = True
+        return False
+
+    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:
+        self.in_function_or_class = False
+
+    def visit_SimpleStatementLine(self, node: cst.SimpleStatementLine) -> None:
+        if not self.in_function_or_class:
+            for statement in node.body:
+                # Skip imports
+                if not isinstance(statement, (cst.Import, cst.ImportFrom)):
+                    self.global_statements.append(node)
+                    break
+
+
+class LastImportFinder(cst.CSTVisitor):
+    """Finds the position of the last import statement in the module."""
+
+    def __init__(self):
+        super().__init__()
+        self.last_import_line = 0
+        self.current_line = 0
+
+    def visit_SimpleStatementLine(self, node: cst.SimpleStatementLine) -> None:
+        self.current_line += 1
+        for statement in node.body:
+            if isinstance(statement, (cst.Import, cst.ImportFrom)):
+                self.last_import_line = self.current_line
+
+
+class ImportInserter(cst.CSTTransformer):
+    """Transformer that inserts global statements after the last import."""
+
+    def __init__(self, global_statements: List[cst.SimpleStatementLine], last_import_line: int):
+        super().__init__()
+        self.global_statements = global_statements
+        self.last_import_line = last_import_line
+        self.current_line = 0
+        self.inserted = False
+
+    def leave_SimpleStatementLine(
+        self, original_node: cst.SimpleStatementLine, updated_node: cst.SimpleStatementLine
+    ) -> cst.Module:
+        self.current_line += 1
+
+        # If we're right after the last import and haven't inserted yet
+        if self.current_line == self.last_import_line and not self.inserted:
+            self.inserted = True
+            return cst.Module(body=[updated_node] + self.global_statements)
+
+        return cst.Module(body=[updated_node])
+
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
+        # If there were no imports, add at the beginning of the module
+        if self.last_import_line == 0 and not self.inserted:
+            updated_body = list(updated_node.body)
+            for stmt in reversed(self.global_statements):
+                updated_body.insert(0, stmt)
+            return updated_node.with_changes(body=updated_body)
+        return updated_node
+
+
+def extract_global_statements(source_code: str) -> List[cst.SimpleStatementLine]:
+    """Extract global statements from source code."""
+    module = cst.parse_module(source_code)
+    collector = GlobalStatementCollector()
+    module.visit(collector)
+    return collector.global_statements
+
+
+def find_last_import_line(target_code: str) -> int:
+    """Find the line number of the last import statement."""
+    module = cst.parse_module(target_code)
+    finder = LastImportFinder()
+    module.visit(finder)
+    return finder.last_import_line
+
+
+def merge_globals(source_code: str, target_code: str) -> str:
+    """Merge global statements from source into target just after imports."""
+    # Extract global statements from source
+    global_statements = extract_global_statements(source_code)
+
+    # Find the last import line in target
+    last_import_line = find_last_import_line(target_code)
+
+    # Parse the target code
+    target_module = cst.parse_module(target_code)
+
+    # Create transformer to insert global statements
+    transformer = ImportInserter(global_statements, last_import_line)
+
+    # Apply transformation
+    modified_module = target_module.visit(transformer)
+
+    # Return the modified code
+    return modified_module.code
+
 
 class FutureAliasedImportTransformer(cst.CSTTransformer):
     def leave_ImportFrom(
@@ -47,6 +180,20 @@ def add_needed_imports_from_module(
     helper_functions: list[FunctionSource] | None = None,
     helper_functions_fqn: set[str] | None = None,
 ) -> str:
+    global_statements = extract_global_statements(src_module_code)
+
+    # Find the last import line in target
+    last_import_line = find_last_import_line(dst_module_code)
+
+    # Parse the target code
+    target_module = cst.parse_module(dst_module_code)
+
+    # Create transformer to insert global statements
+    transformer = ImportInserter(global_statements, last_import_line)
+    #
+    # # Apply transformation
+    modified_module = target_module.visit(transformer)
+    dst_module_code = modified_module.code
     """Add all needed and used source module code imports to the destination module code, and return it."""
     src_module_code = delete___future___aliased_imports(src_module_code)
     if not helper_functions_fqn:
