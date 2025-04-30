@@ -6,6 +6,7 @@ import threading
 import time
 from typing import Callable
 
+from codeflash.cli_cmds.cli import logger
 from codeflash.picklepatch.pickle_patcher import PicklePatcher
 
 
@@ -42,10 +43,8 @@ class CodeflashTrace:
             )
             self._connection.commit()
         except Exception as e:
-            print(f"Database setup error: {e}")
-            if self._connection:
-                self._connection.close()
-                self._connection = None
+            logger.error(f"Database setup error: {e}")
+            self.close()
             raise
 
     def write_function_timings(self) -> None:
@@ -63,18 +62,17 @@ class CodeflashTrace:
 
         try:
             cur = self._connection.cursor()
-            # Insert data into the benchmark_function_timings table
             cur.executemany(
                 "INSERT INTO benchmark_function_timings"
                 "(function_name, class_name, module_name, file_path, benchmark_function_name, "
                 "benchmark_module_path, benchmark_line_number, function_time_ns, overhead_time_ns, args, kwargs) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                self.function_calls_data
+                self.function_calls_data,
             )
             self._connection.commit()
             self.function_calls_data = []
         except Exception as e:
-            print(f"Error writing to function timings database: {e}")
+            logger.error(f"Error writing to function timings database: {e}")
             if self._connection:
                 self._connection.rollback()
             raise
@@ -100,9 +98,10 @@ class CodeflashTrace:
             The wrapped function
 
         """
-        func_id = (func.__module__,func.__name__)
+        func_id = (func.__module__, func.__name__)
+
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: tuple, **kwargs: dict) -> object:
             # Initialize thread-local active functions set if it doesn't exist
             if not hasattr(self._thread_local, "active_functions"):
                 self._thread_local.active_functions = set()
@@ -123,25 +122,33 @@ class CodeflashTrace:
             if os.environ.get("CODEFLASH_BENCHMARKING", "False") == "False":
                 self._thread_local.active_functions.remove(func_id)
                 return result
-            # Get benchmark info from environment
+
             benchmark_function_name = os.environ.get("CODEFLASH_BENCHMARK_FUNCTION_NAME", "")
             benchmark_module_path = os.environ.get("CODEFLASH_BENCHMARK_MODULE_PATH", "")
             benchmark_line_number = os.environ.get("CODEFLASH_BENCHMARK_LINE_NUMBER", "")
-            # Get class name
             class_name = ""
             qualname = func.__qualname__
             if "." in qualname:
                 class_name = qualname.split(".")[0]
 
-            # Limit pickle count so memory does not explode
             if self.function_call_count > self.pickle_count_limit:
-                print("Pickle limit reached")
+                logger.debug("CodeflashTrace: Pickle limit reached")
                 self._thread_local.active_functions.remove(func_id)
                 overhead_time = time.thread_time_ns() - end_time
                 self.function_calls_data.append(
-                    (func.__name__, class_name, func.__module__, func.__code__.co_filename,
-                     benchmark_function_name, benchmark_module_path, benchmark_line_number, execution_time,
-                     overhead_time, None, None)
+                    (
+                        func.__name__,
+                        class_name,
+                        func.__module__,
+                        func.__code__.co_filename,
+                        benchmark_function_name,
+                        benchmark_module_path,
+                        benchmark_line_number,
+                        execution_time,
+                        overhead_time,
+                        None,
+                        None,
+                    )
                 )
                 return result
 
@@ -150,17 +157,26 @@ class CodeflashTrace:
                 pickled_args = PicklePatcher.dumps(args, protocol=pickle.HIGHEST_PROTOCOL)
                 pickled_kwargs = PicklePatcher.dumps(kwargs, protocol=pickle.HIGHEST_PROTOCOL)
             except Exception as e:
-                print(f"Error pickling arguments for function {func.__name__}: {e}")
+                logger.debug(f"CodeflashTrace: Error pickling arguments for function {func.__name__}: {e}")
                 # Add to the list of function calls without pickled args. Used for timing info only
                 self._thread_local.active_functions.remove(func_id)
                 overhead_time = time.thread_time_ns() - end_time
                 self.function_calls_data.append(
-                    (func.__name__, class_name, func.__module__, func.__code__.co_filename,
-                     benchmark_function_name, benchmark_module_path, benchmark_line_number, execution_time,
-                     overhead_time, None, None)
+                    (
+                        func.__name__,
+                        class_name,
+                        func.__module__,
+                        func.__code__.co_filename,
+                        benchmark_function_name,
+                        benchmark_module_path,
+                        benchmark_line_number,
+                        execution_time,
+                        overhead_time,
+                        None,
+                        None,
+                    )
                 )
                 return result
-            # Flush to database every 100 calls
             if len(self.function_calls_data) > 100:
                 self.write_function_timings()
 
@@ -168,12 +184,23 @@ class CodeflashTrace:
             self._thread_local.active_functions.remove(func_id)
             overhead_time = time.thread_time_ns() - end_time
             self.function_calls_data.append(
-                (func.__name__, class_name, func.__module__, func.__code__.co_filename,
-                 benchmark_function_name, benchmark_module_path, benchmark_line_number, execution_time,
-                 overhead_time, pickled_args, pickled_kwargs)
+                (
+                    func.__name__,
+                    class_name,
+                    func.__module__,
+                    func.__code__.co_filename,
+                    benchmark_function_name,
+                    benchmark_module_path,
+                    benchmark_line_number,
+                    execution_time,
+                    overhead_time,
+                    pickled_args,
+                    pickled_kwargs,
+                )
             )
             return result
+
         return wrapper
 
-# Create a singleton instance
+
 codeflash_trace = CodeflashTrace()

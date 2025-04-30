@@ -16,20 +16,23 @@ if TYPE_CHECKING:
 
 
 def get_next_arg_and_return(
-        trace_file: str, benchmark_function_name:str, function_name: str, file_path: str, class_name: str | None = None, num_to_get: int = 256
+    trace_file: str,
+    benchmark_function_name: str,
+    function_name: str,
+    file_path: str,
+    class_name: str | None = None,
+    num_to_get: int = 256,
 ) -> Generator[Any]:
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
     limit = num_to_get
 
     if class_name is not None:
-        cursor = cur.execute(
-            "SELECT * FROM benchmark_function_timings WHERE benchmark_function_name = ? AND function_name = ? AND file_path = ? AND class_name = ? LIMIT ?",
-            (benchmark_function_name, function_name, file_path, class_name, limit),
-        )
+        query = "SELECT * FROM benchmark_function_timings WHERE benchmark_function_name = ? AND function_name = ? AND file_path = ? AND class_name = ? LIMIT ?"  # noqa: E501
+        cursor = cur.execute(query(benchmark_function_name, function_name, file_path, class_name, limit))
     else:
         cursor = cur.execute(
-            "SELECT * FROM benchmark_function_timings WHERE benchmark_function_name = ? AND function_name = ? AND file_path = ? AND class_name = '' LIMIT ?",
+            "SELECT * FROM benchmark_function_timings WHERE benchmark_function_name = ? AND function_name = ? AND file_path = ? AND class_name = '' LIMIT ?",  # noqa: E501
             (benchmark_function_name, function_name, file_path, limit),
         )
 
@@ -42,10 +45,7 @@ def get_function_alias(module: str, function_name: str) -> str:
 
 
 def create_trace_replay_test_code(
-        trace_file: str,
-        functions_data: list[dict[str, Any]],
-        test_framework: str = "pytest",
-        max_run_count=256
+    trace_file: str, functions_data: list[dict[str, Any]], test_framework: str = "pytest", max_run_count=256
 ) -> str:
     """Create a replay test for functions based on trace data.
 
@@ -83,8 +83,9 @@ from codeflash.benchmarking.replay_test import get_next_arg_and_return
 
     imports += "\n".join(function_imports)
 
-    functions_to_optimize = sorted({func.get("function_name") for func in functions_data
-                             if func.get("function_name") != "__init__"})
+    functions_to_optimize = sorted(
+        {func.get("function_name") for func in functions_data if func.get("function_name") != "__init__"}
+    )
     metadata = f"""functions = {functions_to_optimize}
 trace_file_path = r"{trace_file}"
 """
@@ -95,7 +96,7 @@ trace_file_path = r"{trace_file}"
             args = pickle.loads(args_pkl)
             kwargs = pickle.loads(kwargs_pkl)
             ret = {function_name}(*args, **kwargs)
-            """
+            """  # noqa: E501
     )
 
     test_method_body = textwrap.dedent(
@@ -111,7 +112,8 @@ trace_file_path = r"{trace_file}"
             else:
                 instance = args[0] # self
                 ret = instance{method_name}(*args[1:], **kwargs)
-            """)
+            """  # noqa: E501
+    )
 
     test_class_method_body = textwrap.dedent(
         """\
@@ -121,7 +123,7 @@ trace_file_path = r"{trace_file}"
             if not args:
                 raise ValueError("No arguments provided for the method.")
             ret = {class_name_alias}{method_name}(*args[1:], **kwargs)
-            """
+            """  # noqa: E501
     )
     test_static_method_body = textwrap.dedent(
         """\
@@ -129,7 +131,7 @@ trace_file_path = r"{trace_file}"
             args = pickle.loads(args_pkl)
             kwargs = pickle.loads(kwargs_pkl){filter_variables}
             ret = {class_name_alias}{method_name}(*args, **kwargs)
-            """
+            """  # noqa: E501
     )
 
     # Create main body
@@ -142,7 +144,6 @@ trace_file_path = r"{trace_file}"
         self = ""
 
     for func in functions_data:
-
         module_name = func.get("module_name")
         function_name = func.get("function_name")
         class_name = func.get("class_name")
@@ -163,7 +164,7 @@ trace_file_path = r"{trace_file}"
             alias = get_function_alias(module_name, class_name + "_" + function_name)
 
             filter_variables = ""
-            # filter_variables = '\n    args.pop("cls", None)'
+            # filter_variables = '\n    args.pop("cls", None)'  # noqa: ERA001
             method_name = "." + function_name if function_name != "__init__" else ""
             if function_properties.is_classmethod:
                 test_body = test_class_method_body.format(
@@ -206,7 +207,10 @@ trace_file_path = r"{trace_file}"
 
     return imports + "\n" + metadata + "\n" + test_template
 
-def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework: str = "pytest", max_run_count: int = 100) -> int:
+
+def generate_replay_test(
+    trace_file_path: Path, output_dir: Path, test_framework: str = "pytest", max_run_count: int = 100
+) -> int:
     """Generate multiple replay tests from the traced function calls, grouped by benchmark.
 
     Args:
@@ -221,14 +225,10 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
     """
     count = 0
     try:
-        # Connect to the database
         conn = sqlite3.connect(trace_file_path.as_posix())
         cursor = conn.cursor()
 
-        # Get distinct benchmark file paths
-        cursor.execute(
-            "SELECT DISTINCT benchmark_module_path FROM benchmark_function_timings"
-        )
+        cursor.execute("SELECT DISTINCT benchmark_module_path FROM benchmark_function_timings")
         benchmark_files = cursor.fetchall()
 
         # Generate a test for each benchmark file
@@ -236,29 +236,28 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
             benchmark_module_path = benchmark_file[0]
             # Get all benchmarks and functions associated with this file path
             cursor.execute(
-            "SELECT DISTINCT benchmark_function_name, function_name, class_name, module_name, file_path, benchmark_line_number FROM benchmark_function_timings "
+                "SELECT DISTINCT benchmark_function_name, function_name, class_name, module_name, file_path, benchmark_line_number FROM benchmark_function_timings "  # noqa: E501
                 "WHERE benchmark_module_path = ?",
-                (benchmark_module_path,)
+                (benchmark_module_path,),
             )
 
             functions_data = []
             for row in cursor.fetchall():
                 benchmark_function_name, function_name, class_name, module_name, file_path, benchmark_line_number = row
-                # Add this function to our list
-                functions_data.append({
-                    "function_name": function_name,
-                    "class_name": class_name,
-                    "file_path": file_path,
-                    "module_name": module_name,
-                    "benchmark_function_name": benchmark_function_name,
-                    "benchmark_module_path": benchmark_module_path,
-                    "benchmark_line_number": benchmark_line_number,
-                    "function_properties": inspect_top_level_functions_or_methods(
-                        file_name=Path(file_path),
-                        function_or_method_name=function_name,
-                        class_name=class_name,
-                    )
-                })
+                functions_data.append(
+                    {
+                        "function_name": function_name,
+                        "class_name": class_name,
+                        "file_path": file_path,
+                        "module_name": module_name,
+                        "benchmark_function_name": benchmark_function_name,
+                        "benchmark_module_path": benchmark_module_path,
+                        "benchmark_line_number": benchmark_line_number,
+                        "function_properties": inspect_top_level_functions_or_methods(
+                            file_name=Path(file_path), function_or_method_name=function_name, class_name=class_name
+                        ),
+                    }
+                )
 
             if not functions_data:
                 logger.info(f"No benchmark test functions found in {benchmark_module_path}")
@@ -274,13 +273,12 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, test_framework
             output_file = get_test_file_path(
                 test_dir=Path(output_dir), function_name=benchmark_module_path, test_type="replay"
             )
-            # Write test code to file, parents = true
             output_dir.mkdir(parents=True, exist_ok=True)
             output_file.write_text(test_code, "utf-8")
             count += 1
 
         conn.close()
-    except Exception as e:
-        logger.info(f"Error generating replay tests: {e}")
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Error generating replay test: {e}")
 
     return count
