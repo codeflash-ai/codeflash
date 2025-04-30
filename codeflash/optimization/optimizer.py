@@ -52,6 +52,8 @@ class Optimizer:
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.replay_tests_dir = None
+        self.file_to_funcs_to_optimize: tuple[dict[Path, list[FunctionToOptimize]], int] | None = None
+        self.num_optimizable_functions: int | None = None
 
     def create_function_optimizer(
         self,
@@ -75,18 +77,8 @@ class Optimizer:
             replay_tests_dir=self.replay_tests_dir,
         )
 
-    def run(self) -> None:
-        ph("cli-optimize-run-start")
-        logger.info("Running optimizer.")
-        console.rule()
-        if not env_utils.ensure_codeflash_api_key():
-            return
-        function_optimizer = None
-        file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
-        num_optimizable_functions: int
-
-        # discover functions
-        (file_to_funcs_to_optimize, num_optimizable_functions) = get_functions_to_optimize(
+    def discover_functions(self) -> None:
+        self.file_to_funcs_to_optimize, self.num_optimizable_functions = get_functions_to_optimize(
             optimize_all=self.args.all,
             replay_test=self.args.replay_test,
             file=self.args.file,
@@ -96,17 +88,28 @@ class Optimizer:
             project_root=self.args.project_root,
             module_root=self.args.module_root,
         )
+
+    def run(self) -> None:
+        ph("cli-optimize-run-start")
+        logger.info("Running optimizer.")
+        console.rule()
+        if not env_utils.ensure_codeflash_api_key():
+            return
+        function_optimizer = None
+
+        self.discover_functions()
+
         function_benchmark_timings: dict[str, dict[BenchmarkKey, int]] = {}
         total_benchmark_timings: dict[BenchmarkKey, int] = {}
-        if self.args.benchmark and num_optimizable_functions > 0:
+        if self.args.benchmark and self.num_optimizable_functions > 0:
             with progress_bar(f"Running benchmarks in {self.args.benchmarks_root}", transient=True):
                 # Insert decorator
                 file_path_to_source_code = defaultdict(str)
-                for file in file_to_funcs_to_optimize:
+                for file in self.file_to_funcs_to_optimize:
                     with file.open("r", encoding="utf8") as f:
                         file_path_to_source_code[file] = f.read()
                 try:
-                    instrument_codeflash_trace_decorator(file_to_funcs_to_optimize)
+                    instrument_codeflash_trace_decorator(self.file_to_funcs_to_optimize)
                     trace_file = Path(self.args.benchmarks_root) / "benchmarks.trace"
                     if trace_file.exists():
                         trace_file.unlink()
@@ -144,8 +147,8 @@ class Optimizer:
                 tempfile.mkdtemp(dir=self.args.tests_root, prefix="codeflash_concolic_")
             )
         try:
-            ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
-            if num_optimizable_functions == 0:
+            ph("cli-optimize-functions-to-optimize", {"num_functions": self.num_optimizable_functions})
+            if self.num_optimizable_functions == 0:
                 logger.info("No functions found to optimize. Exiting…")
                 return
 
@@ -160,7 +163,7 @@ class Optimizer:
             console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
 
-            for original_module_path in file_to_funcs_to_optimize:
+            for original_module_path in self.file_to_funcs_to_optimize:
                 logger.info(f"Examining file {original_module_path!s}…")
                 console.rule()
 
@@ -199,10 +202,10 @@ class Optimizer:
                 if has_syntax_error:
                     continue
 
-                for function_to_optimize in file_to_funcs_to_optimize[original_module_path]:
+                for function_to_optimize in self.file_to_funcs_to_optimize[original_module_path]:
                     function_iterator_count += 1
                     logger.info(
-                        f"Optimizing function {function_iterator_count} of {num_optimizable_functions}: "
+                        f"Optimizing function {function_iterator_count} of {self.num_optimizable_functions}: "
                         f"{function_to_optimize.qualified_name}"
                     )
                     console.rule()
