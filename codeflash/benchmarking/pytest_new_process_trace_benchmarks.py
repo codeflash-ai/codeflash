@@ -16,8 +16,23 @@ if __name__ == "__main__":
         codeflash_benchmark_plugin.setup(trace_file, project_root)
         codeflash_trace.setup(trace_file)
         exitcode = pytest.main(
-            [benchmarks_root, "--codeflash-trace", "-p", "no:benchmark","-p", "no:codspeed","-p", "no:cov-s", "-o", "addopts="], plugins=[codeflash_benchmark_plugin]
-        ) # Errors will be printed to stdout, not stderr
+            [
+                benchmarks_root,
+                "--codeflash-trace",
+                "-p",
+                "no:benchmark",
+                "-p",
+                "no:codspeed",
+                "-p",
+                "no:cov",
+                "-p",
+                "no:profiling",
+                "-s",
+                "-o",
+                "addopts=",
+            ],
+            plugins=[codeflash_benchmark_plugin],
+        )  # Errors will be printed to stdout, not stderr
 
     except Exception as e:
         print(f"Failed to collect tests: {e!s}", file=sys.stderr)
