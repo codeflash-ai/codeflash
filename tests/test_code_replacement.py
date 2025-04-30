@@ -789,23 +789,7 @@ class MainClass:
 
 
 def test_code_replacement10() -> None:
-    get_code_output = """from __future__ import annotations
-
-class HelperClass:
-    def __init__(self, name):
-        self.name = name
-
-    def helper_method(self):
-        return self.name
-
-
-class MainClass:
-    def __init__(self, name):
-        self.name = name
-
-    def main_method(self):
-        return HelperClass(self.name).helper_method()
-"""
+    get_code_output = 'from __future__ import annotations\nimport os\n\nos.environ["CODEFLASH_API_KEY"] = "cf-test-key"\nclass HelperClass:\n    def __init__(self, name):\n        self.name = name\n\n    def helper_method(self):\n        return self.name\n\n\nclass MainClass:\n    def __init__(self, name):\n        self.name = name\n\n    def main_method(self):\n        return HelperClass(self.name).helper_method()\n'
     file_path = Path(__file__).resolve()
     func_top_optimize = FunctionToOptimize(
         function_name="main_method", file_path=file_path, parents=[FunctionParent("MainClass", "ClassDef")]
