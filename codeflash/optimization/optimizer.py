@@ -54,6 +54,8 @@ class Optimizer:
         self.replay_tests_dir = None
         self.file_to_funcs_to_optimize: tuple[dict[Path, list[FunctionToOptimize]], int] | None = None
         self.num_optimizable_functions: int | None = None
+        self.function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None
+        self.num_discovered_tests: int | None = None
 
     def create_function_optimizer(
         self,
@@ -88,6 +90,18 @@ class Optimizer:
             project_root=self.args.project_root,
             module_root=self.args.module_root,
         )
+
+    def discover_unit_tests(self) -> None:
+        console.rule()
+        start_time = time.time()
+        self.function_to_tests = discover_unit_tests(self.test_cfg)
+        self.num_discovered_tests = sum([len(value) for value in self.function_to_tests.values()])
+        console.rule()
+        logger.info(
+            f"Discovered {self.num_discovered_tests} existing unit tests in {(time.time() - start_time):.1f}s at {self.test_cfg.tests_root}"
+        )
+        console.rule()
+        ph("cli-optimize-discovered-tests", {"num_tests": self.num_discovered_tests})
 
     def run(self) -> None:
         ph("cli-optimize-run-start")
@@ -152,16 +166,7 @@ class Optimizer:
                 logger.info("No functions found to optimize. Exiting…")
                 return
 
-            console.rule()
-            start_time = time.time()
-            function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
-            num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
-            console.rule()
-            logger.info(
-                f"Discovered {num_discovered_tests} existing unit tests in {(time.time() - start_time):.1f}s at {self.test_cfg.tests_root}"
-            )
-            console.rule()
-            ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
+            self.discover_unit_tests()
 
             for original_module_path in self.file_to_funcs_to_optimize:
                 logger.info(f"Examining file {original_module_path!s}…")
@@ -231,7 +236,7 @@ class Optimizer:
                         function_optimizer = self.create_function_optimizer(
                             function_to_optimize,
                             function_to_optimize_ast,
-                            function_to_tests,
+                            self.function_to_tests,
                             validated_original_code[original_module_path].source_code,
                             function_benchmark_timings[qualified_name_w_module],
                             total_benchmark_timings,
@@ -240,7 +245,7 @@ class Optimizer:
                         function_optimizer = self.create_function_optimizer(
                             function_to_optimize,
                             function_to_optimize_ast,
-                            function_to_tests,
+                            self.function_to_tests,
                             validated_original_code[original_module_path].source_code,
                         )
 
