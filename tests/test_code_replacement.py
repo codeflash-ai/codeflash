@@ -1647,3 +1647,54 @@ print("Hello world")
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == original_code
+
+def test_global_reassignment() -> None:
+    original_code = """a=1
+print("Hello world")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+"""
+
+    optim_code = """import numpy as np
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        w = np.array([1,2,3])
+        return "I am new"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+a=2
+print("Hello world")
+"""
+
+    modified_code = """import numpy as np
+print("Hello world")
+a=2
+print("Hello world")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        w = np.array([1,2,3])
+        return "I am new"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+"""
+
+    function_names: list[str] = ["NewClass.__init__", "NewClass.__call__", "NewClass.new_function2"]
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
+    new_code: str = replace_functions_and_add_imports(
+        source_code=original_code,
+        function_names=function_names,
+        optimized_code=optim_code,
+        module_abspath=Path(__file__).resolve(),
+        preexisting_objects=preexisting_objects,
+        project_root_path=Path(__file__).resolve().parent.resolve(),
+    )
+    assert new_code == modified_code
