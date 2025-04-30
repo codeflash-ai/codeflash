@@ -258,6 +258,8 @@ class Optimizer:
                         console.rule()
                         continue
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
+            if self.functions_checkpoint:
+                self.functions_checkpoint.cleanup()
             if optimizations_found == 0:
                 logger.info("❌ No optimizations found.")
             elif self.args.all:

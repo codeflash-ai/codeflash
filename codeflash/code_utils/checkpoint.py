@@ -81,6 +81,21 @@ class CodeflashRunCheckpoint:
             f.write(json.dumps(metadata) + "\n")
             f.write(rest_content)
 
+    def cleanup(self) -> None:
+        """Unlink all the checkpoint files for this module_root."""
+        to_delete = []
+        self.checkpoint_path.unlink(missing_ok=True)
+
+        for file in self.checkpoint_dir.glob("codeflash_checkpoint_*.jsonl"):
+            with file.open() as f:
+                # Skip the first line (metadata)
+                first_line = next(f)
+                metadata = json.loads(first_line)
+                if metadata.get("module_root", str(self.module_root)) == str(self.module_root):
+                    to_delete.append(file)
+        for file in to_delete:
+            file.unlink(missing_ok=True)
+
 
 def get_all_historical_functions(module_root: Path, checkpoint_dir: Path) -> dict[str, dict[str, str]]:
     """Get information about all processed functions, regardless of status.
