@@ -29,6 +29,7 @@ if __name__ == "__main__":
                 "no:profiling",
                 "-s",
                 "-o",
+                "addopts=",
             ],
             plugins=[codeflash_benchmark_plugin],
         )  # Errors will be printed to stdout, not stderr
