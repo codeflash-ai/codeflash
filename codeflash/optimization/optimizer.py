@@ -52,6 +52,7 @@ class Optimizer:
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.replay_tests_dir = None
+
     def create_function_optimizer(
         self,
         function_to_optimize: FunctionToOptimize,
@@ -71,7 +72,7 @@ class Optimizer:
             args=self.args,
             function_benchmark_timings=function_benchmark_timings if function_benchmark_timings else None,
             total_benchmark_timings=total_benchmark_timings if total_benchmark_timings else None,
-            replay_tests_dir = self.replay_tests_dir
+            replay_tests_dir=self.replay_tests_dir,
         )
 
     def run(self) -> None:
@@ -98,10 +99,7 @@ class Optimizer:
         function_benchmark_timings: dict[str, dict[BenchmarkKey, int]] = {}
         total_benchmark_timings: dict[BenchmarkKey, int] = {}
         if self.args.benchmark and num_optimizable_functions > 0:
-            with progress_bar(
-                    f"Running benchmarks in {self.args.benchmarks_root}",
-                    transient=True,
-            ):
+            with progress_bar(f"Running benchmarks in {self.args.benchmarks_root}", transient=True):
                 # Insert decorator
                 file_path_to_source_code = defaultdict(str)
                 for file in file_to_funcs_to_optimize:
@@ -113,15 +111,23 @@ class Optimizer:
                     if trace_file.exists():
                         trace_file.unlink()
 
-                    self.replay_tests_dir = Path(tempfile.mkdtemp(prefix="codeflash_replay_tests_", dir=self.args.benchmarks_root))
-                    trace_benchmarks_pytest(self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file) # Run all tests that use pytest-benchmark
+                    self.replay_tests_dir = Path(
+                        tempfile.mkdtemp(prefix="codeflash_replay_tests_", dir=self.args.benchmarks_root)
+                    )
+                    trace_benchmarks_pytest(
+                        self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file
+                    )  # Run all tests that use pytest-benchmark
                     replay_count = generate_replay_test(trace_file, self.replay_tests_dir)
                     if replay_count == 0:
-                        logger.info(f"No valid benchmarks found in {self.args.benchmarks_root} for functions to optimize, continuing optimization")
+                        logger.info(
+                            f"No valid benchmarks found in {self.args.benchmarks_root} for functions to optimize, continuing optimization"
+                        )
                     else:
                         function_benchmark_timings = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(trace_file)
                         total_benchmark_timings = CodeFlashBenchmarkPlugin.get_benchmark_timings(trace_file)
-                        function_to_results = validate_and_format_benchmark_table(function_benchmark_timings, total_benchmark_timings)
+                        function_to_results = validate_and_format_benchmark_table(
+                            function_benchmark_timings, total_benchmark_timings
+                        )
                         print_benchmark_table(function_to_results)
                 except Exception as e:
                     logger.info(f"Error while tracing existing benchmarks: {e}")
@@ -148,10 +154,11 @@ class Optimizer:
             function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
             num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
             console.rule()
-            logger.info(f"Discovered {num_discovered_tests} existing unit tests in {(time.time() - start_time):.1f}s at {self.test_cfg.tests_root}")
+            logger.info(
+                f"Discovered {num_discovered_tests} existing unit tests in {(time.time() - start_time):.1f}s at {self.test_cfg.tests_root}"
+            )
             console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
-
 
             for original_module_path in file_to_funcs_to_optimize:
                 logger.info(f"Examining file {original_module_path!s}…")
@@ -212,14 +219,26 @@ class Optimizer:
                     qualified_name_w_module = function_to_optimize.qualified_name_with_modules_from_root(
                         self.args.project_root
                     )
-                    if self.args.benchmark and function_benchmark_timings and qualified_name_w_module in function_benchmark_timings and total_benchmark_timings:
+                    if (
+                        self.args.benchmark
+                        and function_benchmark_timings
+                        and qualified_name_w_module in function_benchmark_timings
+                        and total_benchmark_timings
+                    ):
                         function_optimizer = self.create_function_optimizer(
-                            function_to_optimize, function_to_optimize_ast, function_to_tests, validated_original_code[original_module_path].source_code, function_benchmark_timings[qualified_name_w_module], total_benchmark_timings
+                            function_to_optimize,
+                            function_to_optimize_ast,
+                            function_to_tests,
+                            validated_original_code[original_module_path].source_code,
+                            function_benchmark_timings[qualified_name_w_module],
+                            total_benchmark_timings,
                         )
                     else:
                         function_optimizer = self.create_function_optimizer(
-                            function_to_optimize, function_to_optimize_ast, function_to_tests,
-                            validated_original_code[original_module_path].source_code
+                            function_to_optimize,
+                            function_to_optimize_ast,
+                            function_to_tests,
+                            validated_original_code[original_module_path].source_code,
                         )
 
                     best_optimization = function_optimizer.optimize_function()
