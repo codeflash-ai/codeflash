@@ -11,7 +11,7 @@ import click
 
 
 class CodeflashRunCheckpoint:
-    def __init__(self, module_root: Path, checkpoint_dir: str = "/tmp") -> None:
+    def __init__(self, module_root: Path, checkpoint_dir: Path = Path("/tmp")) -> None:
         self.module_root = module_root
         self.checkpoint_dir = Path(checkpoint_dir)
         # Create a unique checkpoint file name
