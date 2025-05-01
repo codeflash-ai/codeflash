@@ -50,7 +50,7 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
 """
 
     # TODO: Module can have "-" character if the module-root is ".". Need to handle that case
-    function_properties: list[FunctionProperties] = [
+    function_properties: list[FunctionProperties | None] = [
         inspect_top_level_functions_or_methods(
             file_name=function.file_name,
             function_or_method_name=function.function_name,
@@ -61,6 +61,8 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
     ]
     function_imports = []
     for function, function_property in zip(functions, function_properties):
+        if function_property is None:
+            continue
         if not function_property.is_top_level:
             # can't be imported and run in the replay test
             continue

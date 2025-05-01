@@ -389,13 +389,12 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
 
 def inspect_top_level_functions_or_methods(
     file_name: Path, function_or_method_name: str, class_name: str | None = None, line_no: int | None = None
-) -> FunctionProperties:
+) -> FunctionProperties | None:
     with open(file_name, encoding="utf8") as file:
         try:
             ast_module = ast.parse(file.read())
-        except Exception as e:
-            logger.exception(e)
-            return False
+        except Exception:
+            return None
     visitor = TopLevelFunctionOrMethodVisitor(
         file_name=file_name, function_or_method_name=function_or_method_name, class_name=class_name, line_no=line_no
     )
