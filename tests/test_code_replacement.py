@@ -804,8 +804,7 @@ class MainClass:
         self.name = name
 
     def main_method(self):
-        return HelperClass(self.name).helper_method()
-"""
+        return HelperClass(self.name).helper_method()"""
     file_path = Path(__file__).resolve()
     func_top_optimize = FunctionToOptimize(
         function_name="main_method", file_path=file_path, parents=[FunctionParent("MainClass", "ClassDef")]
