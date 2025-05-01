@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Optional, Set
 
 import libcst as cst
 import libcst.matchers as m
@@ -20,20 +20,106 @@ if TYPE_CHECKING:
 
 from typing import List, Union
 
-
-class ImportCollector(cst.CSTVisitor):
-    """Visitor that collects all import statements in a module."""
+class GlobalAssignmentCollector(cst.CSTVisitor):
+    """Collects all global assignment statements."""
 
     def __init__(self):
         super().__init__()
-        self.imports = []
+        self.assignments: Dict[str, cst.Assign] = {}
+        self.assignment_order: List[str] = []
+        # Track scope depth to identify global assignments
+        self.scope_depth = 0
 
-    def visit_Import(self, node: cst.Import) -> None:
-        self.imports.append(node)
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> Optional[bool]:
+        self.scope_depth += 1
+        return True
 
-    def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
-        self.imports.append(node)
+    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:
+        self.scope_depth -= 1
 
+    def visit_ClassDef(self, node: cst.ClassDef) -> Optional[bool]:
+        self.scope_depth += 1
+        return True
+
+    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:
+        self.scope_depth -= 1
+
+    def visit_Assign(self, node: cst.Assign) -> Optional[bool]:
+        # Only process global assignments (not inside functions, classes, etc.)
+        if self.scope_depth == 0:  # We're at module level
+            for target in node.targets:
+                if isinstance(target.target, cst.Name):
+                    name = target.target.value
+                    self.assignments[name] = node
+                    if name not in self.assignment_order:
+                        self.assignment_order.append(name)
+        return True
+
+
+class GlobalAssignmentTransformer(cst.CSTTransformer):
+    """Transforms global assignments in the original file with those from the new file."""
+
+    def __init__(self, new_assignments: Dict[str, cst.Assign], new_assignment_order: List[str]):
+        super().__init__()
+        self.new_assignments = new_assignments
+        self.new_assignment_order = new_assignment_order
+        self.processed_assignments: Set[str] = set()
+        self.scope_depth = 0
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
+        self.scope_depth += 1
+
+    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
+        self.scope_depth -= 1
+        return updated_node
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> None:
+        self.scope_depth += 1
+
+    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:
+        self.scope_depth -= 1
+        return updated_node
+
+    def leave_Assign(self, original_node: cst.Assign, updated_node: cst.Assign) -> cst.CSTNode:
+        if self.scope_depth > 0:
+            return updated_node
+
+        # Check if this is a global assignment we need to replace
+        for target in original_node.targets:
+            if isinstance(target.target, cst.Name):
+                name = target.target.value
+                if name in self.new_assignments:
+                    self.processed_assignments.add(name)
+                    return self.new_assignments[name]
+
+        return updated_node
+
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
+        # Add any new assignments that weren't in the original file
+        new_statements = list(updated_node.body)
+
+        # Find assignments to append
+        assignments_to_append = []
+        for name in self.new_assignment_order:
+            if name not in self.processed_assignments and name in self.new_assignments:
+                assignments_to_append.append(self.new_assignments[name])
+
+        if assignments_to_append:
+            # Add a blank line before appending new assignments if needed
+            if new_statements and not isinstance(new_statements[-1], cst.EmptyLine):
+                new_statements.append(cst.SimpleStatementLine([cst.Pass()], leading_lines=[cst.EmptyLine()]))
+                new_statements.pop()  # Remove the Pass statement but keep the empty line
+
+            # Add the new assignments
+            for assignment in assignments_to_append:
+                new_statements.append(
+                    cst.SimpleStatementLine(
+                        [assignment],
+                        leading_lines=[cst.EmptyLine()]
+                    )
+                )
+
+        return updated_node.with_changes(body=new_statements)
 
 class GlobalStatementCollector(cst.CSTVisitor):
     """Visitor that collects all global statements (excluding imports and functions/classes)."""
@@ -63,7 +149,7 @@ class GlobalStatementCollector(cst.CSTVisitor):
         if not self.in_function_or_class:
             for statement in node.body:
                 # Skip imports
-                if not isinstance(statement, (cst.Import, cst.ImportFrom)):
+                if not isinstance(statement, (cst.Import, cst.ImportFrom, cst.Assign)):
                     self.global_statements.append(node)
                     break
 
@@ -130,28 +216,6 @@ def find_last_import_line(target_code: str) -> int:
     module.visit(finder)
     return finder.last_import_line
 
-
-def merge_globals(source_code: str, target_code: str) -> str:
-    """Merge global statements from source into target just after imports."""
-    # Extract global statements from source
-    global_statements = extract_global_statements(source_code)
-
-    # Find the last import line in target
-    last_import_line = find_last_import_line(target_code)
-
-    # Parse the target code
-    target_module = cst.parse_module(target_code)
-
-    # Create transformer to insert global statements
-    transformer = ImportInserter(global_statements, last_import_line)
-
-    # Apply transformation
-    modified_module = target_module.visit(transformer)
-
-    # Return the modified code
-    return modified_module.code
-
-
 class FutureAliasedImportTransformer(cst.CSTTransformer):
     def leave_ImportFrom(
         self, original_node: cst.ImportFrom, updated_node: cst.ImportFrom
@@ -180,7 +244,7 @@ def add_needed_imports_from_module(
     helper_functions: list[FunctionSource] | None = None,
     helper_functions_fqn: set[str] | None = None,
 ) -> str:
-    global_statements = extract_global_statements(src_module_code)
+    non_assignment_global_statements = extract_global_statements(src_module_code)
 
     # Find the last import line in target
     last_import_line = find_last_import_line(dst_module_code)
@@ -188,12 +252,27 @@ def add_needed_imports_from_module(
     # Parse the target code
     target_module = cst.parse_module(dst_module_code)
 
-    # Create transformer to insert global statements
-    transformer = ImportInserter(global_statements, last_import_line)
+    # Create transformer to insert non_assignment_global_statements
+    transformer = ImportInserter(non_assignment_global_statements, last_import_line)
     #
     # # Apply transformation
     modified_module = target_module.visit(transformer)
     dst_module_code = modified_module.code
+
+    # Parse the code
+    original_module = cst.parse_module(dst_module_code)
+    new_module = cst.parse_module(src_module_code)
+
+    # Collect assignments from the new file
+    new_collector = GlobalAssignmentCollector()
+    new_module.visit(new_collector)
+
+    # Transform the original file
+    transformer = GlobalAssignmentTransformer(new_collector.assignments, new_collector.assignment_order)
+    transformed_module = original_module.visit(transformer)
+
+    dst_module_code = transformed_module.code
+
     """Add all needed and used source module code imports to the destination module code, and return it."""
     src_module_code = delete___future___aliased_imports(src_module_code)
     if not helper_functions_fqn:
