@@ -1650,18 +1650,6 @@ print("Hello world")
 
 print("Hello world")
 """
-
-    modified_code = """print("Hello world")
-class NewClass:
-    def __init__(self, name):
-        self.name = name
-    def __call__(self, value):
-        return "I am still old"
-    def new_function2(value):
-        return cst.ensure_type(value, str)
-
-print("Hello world")
-"""
     function_names: list[str] = ["NewClass.__init__", "NewClass.__call__", "NewClass.new_function2"]
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
@@ -1672,7 +1660,7 @@ print("Hello world")
         preexisting_objects=preexisting_objects,
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
-    assert new_code == modified_code
+    assert new_code == original_code
 
 def test_global_reassignment() -> None:
     original_code = """a=1
