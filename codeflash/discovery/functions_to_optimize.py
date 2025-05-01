@@ -289,7 +289,6 @@ def get_all_replay_test_functions(
             file_path_parts = module_path_parts
         file_path = Path(project_root_path, *file_path_parts).with_suffix(".py")
         if not file_path.exists():
-            print(f"{file_path} does not exist")
             continue
         file_to_functions_map[file_path].append((function, function_name, class_name))
     for file_path, functions in file_to_functions_map.items():
