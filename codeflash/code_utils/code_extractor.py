@@ -29,6 +29,7 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
         self.assignment_order: List[str] = []
         # Track scope depth to identify global assignments
         self.scope_depth = 0
+        self.if_else_depth = 0
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> Optional[bool]:
         self.scope_depth += 1
@@ -44,9 +45,20 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
     def leave_ClassDef(self, original_node: cst.ClassDef) -> None:
         self.scope_depth -= 1
 
+    def visit_If(self, node: cst.If) -> Optional[bool]:
+        self.if_else_depth += 1
+        return True
+
+    def leave_If(self, original_node: cst.If) -> None:
+        self.if_else_depth -= 1
+
+    def visit_Else(self, node: cst.Else) -> Optional[bool]:
+        # Else blocks are already counted as part of the if statement
+        return True
+
     def visit_Assign(self, node: cst.Assign) -> Optional[bool]:
         # Only process global assignments (not inside functions, classes, etc.)
-        if self.scope_depth == 0:  # We're at module level
+        if self.scope_depth == 0 and self.if_else_depth == 0:  # We're at module level
             for target in node.targets:
                 if isinstance(target.target, cst.Name):
                     name = target.target.value
@@ -65,6 +77,7 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         self.new_assignment_order = new_assignment_order
         self.processed_assignments: Set[str] = set()
         self.scope_depth = 0
+        self.if_else_depth = 0
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
         self.scope_depth += 1
@@ -80,8 +93,19 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         self.scope_depth -= 1
         return updated_node
 
+    def visit_If(self, node: cst.If) -> None:
+        self.if_else_depth += 1
+
+    def leave_If(self, original_node: cst.If, updated_node: cst.If) -> cst.If:
+        self.if_else_depth -= 1
+        return updated_node
+
+    def visit_Else(self, node: cst.Else) -> None:
+        # Else blocks are already counted as part of the if statement
+        pass
+
     def leave_Assign(self, original_node: cst.Assign, updated_node: cst.Assign) -> cst.CSTNode:
-        if self.scope_depth > 0:
+        if self.scope_depth > 0 or self.if_else_depth > 0:
             return updated_node
 
         # Check if this is a global assignment we need to replace
