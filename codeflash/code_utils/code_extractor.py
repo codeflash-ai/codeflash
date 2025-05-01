@@ -235,15 +235,7 @@ def delete___future___aliased_imports(module_code: str) -> str:
     return cst.parse_module(module_code).visit(FutureAliasedImportTransformer()).code
 
 
-def add_needed_imports_from_module(
-    src_module_code: str,
-    dst_module_code: str,
-    src_path: Path,
-    dst_path: Path,
-    project_root: Path,
-    helper_functions: list[FunctionSource] | None = None,
-    helper_functions_fqn: set[str] | None = None,
-) -> str:
+def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
     non_assignment_global_statements = extract_global_statements(src_module_code)
 
     # Find the last import line in target
@@ -272,7 +264,18 @@ def add_needed_imports_from_module(
     transformed_module = original_module.visit(transformer)
 
     dst_module_code = transformed_module.code
+    return dst_module_code
 
+
+def add_needed_imports_from_module(
+    src_module_code: str,
+    dst_module_code: str,
+    src_path: Path,
+    dst_path: Path,
+    project_root: Path,
+    helper_functions: list[FunctionSource] | None = None,
+    helper_functions_fqn: set[str] | None = None,
+) -> str:
     """Add all needed and used source module code imports to the destination module code, and return it."""
     src_module_code = delete___future___aliased_imports(src_module_code)
     if not helper_functions_fqn:
