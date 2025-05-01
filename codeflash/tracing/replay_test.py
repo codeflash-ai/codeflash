@@ -112,6 +112,8 @@ trace_file_path = r"{trace_file}"
         test_template = ""
         self = ""
     for func, func_property in zip(functions, function_properties):
+        if func_property is None:
+            continue
         if not func_property.is_top_level:
             # can't be imported and run in the replay test
             continue
