@@ -288,6 +288,8 @@ def get_all_replay_test_functions(
             function = function_name
             file_path_parts = module_path_parts
         file_path = Path(project_root_path, *file_path_parts).with_suffix(".py")
+        if not file_path.exists():
+            continue
         file_to_functions_map[file_path].append((function, function_name, class_name))
     for file_path, functions in file_to_functions_map.items():
         all_valid_functions: dict[Path, list[FunctionToOptimize]] = find_all_functions_in_file(file_path=file_path)
@@ -389,13 +391,12 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
 
 def inspect_top_level_functions_or_methods(
     file_name: Path, function_or_method_name: str, class_name: str | None = None, line_no: int | None = None
-) -> FunctionProperties:
+) -> FunctionProperties | None:
     with open(file_name, encoding="utf8") as file:
         try:
             ast_module = ast.parse(file.read())
-        except Exception as e:
-            logger.exception(e)
-            return False
+        except Exception:
+            return None
     visitor = TopLevelFunctionOrMethodVisitor(
         file_name=file_name, function_or_method_name=function_or_method_name, class_name=class_name, line_no=line_no
     )
