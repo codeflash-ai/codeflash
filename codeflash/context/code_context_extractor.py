@@ -360,23 +360,26 @@ def get_function_to_optimize_as_function_source(
 
     # Find the name that matches our function
     for name in names:
-        if (
-            name.type == "function"
-            and name.full_name
-            and name.name == function_to_optimize.function_name
-            and name.full_name.startswith(name.module_name)
-            and get_qualified_name(name.module_name, name.full_name) == function_to_optimize.qualified_name
-        ):
-            function_source = FunctionSource(
-                file_path=function_to_optimize.file_path,
-                qualified_name=function_to_optimize.qualified_name,
-                fully_qualified_name=name.full_name,
-                only_function_name=name.name,
-                source_code=name.get_line_code(),
-                jedi_definition=name,
-            )
-            return function_source
-
+        try:
+            if (
+                name.type == "function"
+                and name.full_name
+                and name.name == function_to_optimize.function_name
+                and name.full_name.startswith(name.module_name)
+                and get_qualified_name(name.module_name, name.full_name) == function_to_optimize.qualified_name
+            ):
+                function_source = FunctionSource(
+                    file_path=function_to_optimize.file_path,
+                    qualified_name=function_to_optimize.qualified_name,
+                    fully_qualified_name=name.full_name,
+                    only_function_name=name.name,
+                    source_code=name.get_line_code(),
+                    jedi_definition=name,
+                )
+                return function_source
+        except Exception as e:
+            logger.exception(f"Error while getting function source: {e}")
+            continue
     raise ValueError(
         f"Could not find function {function_to_optimize.function_name} in {function_to_optimize.file_path}"
     )

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional, TypeVar
 import libcst as cst
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module
+from codeflash.code_utils.code_extractor import add_needed_imports_from_module, add_global_assignments
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
@@ -220,7 +220,8 @@ def replace_function_definitions_in_module(
     )
     if is_zero_diff(source_code, new_code):
         return False
-    module_abspath.write_text(new_code, encoding="utf8")
+    code_with_global_assignments = add_global_assignments(optimized_code, new_code)
+    module_abspath.write_text(code_with_global_assignments, encoding="utf8")
     return True
 
 
