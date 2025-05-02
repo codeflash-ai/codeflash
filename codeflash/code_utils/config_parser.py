@@ -31,17 +31,26 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
     raise ValueError(msg)
 
 
+def find_nearest_pyproject_toml(file_path: Path | str) -> Path | None:
+    dir_path = Path(file_path) if isinstance(file_path, str) else file_path.parent
+    while dir_path != dir_path.parent:
+        config_file = dir_path / "pyproject.toml"
+        if config_file.exists():
+            return config_file
+        dir_path = dir_path.parent
+    return None
+
+
 def parse_config_file(
-    config_file_path: Path | None = None, override_formatter_check: bool = False
+    config_file_path: Path | None = None, override_formatter_check: bool = False, pyproject_toml_path: Path | None = None
 ) -> tuple[dict[str, Any], Path]:
-    config_file_path = find_pyproject_toml(config_file_path)
+    config_file_path = find_pyproject_toml(config_file_path) if pyproject_toml_path is None else pyproject_toml_path
     try:
         with config_file_path.open("rb") as f:
             data = tomlkit.parse(f.read())
     except tomlkit.exceptions.ParseError as e:
         msg = f"Error while parsing the config file {config_file_path}. Please recheck the file for syntax errors. Error: {e}"
         raise ValueError(msg) from e
-
     try:
         tool = data["tool"]
         assert isinstance(tool, dict)

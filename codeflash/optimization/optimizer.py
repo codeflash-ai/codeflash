@@ -17,7 +17,6 @@ from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
 from codeflash.benchmarking.utils import print_benchmark_table, validate_and_format_benchmark_table
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint, ask_should_use_checkpoint_get_functions
 from codeflash.code_utils.code_replacer import normalize_code, normalize_node
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.static_analysis import analyze_imported_modules, get_first_top_level_function_or_method_ast
@@ -53,7 +52,6 @@ class Optimizer:
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.replay_tests_dir = None
-        self.functions_checkpoint: CodeflashRunCheckpoint | None = None
 
     def create_function_optimizer(
         self,
@@ -77,6 +75,18 @@ class Optimizer:
             replay_tests_dir=self.replay_tests_dir,
         )
 
+    def discover_functions(self) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
+        return get_functions_to_optimize(
+            optimize_all=self.args.all,
+            replay_test=self.args.replay_test,
+            file=self.args.file,
+            only_get_this_function=self.args.function,
+            test_cfg=self.test_cfg,
+            ignore_paths=self.args.ignore_paths,
+            project_root=self.args.project_root,
+            module_root=self.args.module_root,
+        )
+
     def run(self) -> None:
         ph("cli-optimize-run-start")
         logger.info("Running optimizer.")
@@ -86,7 +96,7 @@ class Optimizer:
         function_optimizer = None
         file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
         num_optimizable_functions: int
-        previous_checkpoint_functions = ask_should_use_checkpoint_get_functions(self.args)
+
         # discover functions
         (file_to_funcs_to_optimize, num_optimizable_functions) = get_functions_to_optimize(
             optimize_all=self.args.all,
@@ -97,11 +107,10 @@ class Optimizer:
             ignore_paths=self.args.ignore_paths,
             project_root=self.args.project_root,
             module_root=self.args.module_root,
-            previous_checkpoint_functions=previous_checkpoint_functions,
         )
         function_benchmark_timings: dict[str, dict[BenchmarkKey, int]] = {}
         total_benchmark_timings: dict[BenchmarkKey, int] = {}
-        if self.args.benchmark and num_optimizable_functions > 0:
+        if self.args.benchmark:
             with progress_bar(f"Running benchmarks in {self.args.benchmarks_root}", transient=True):
                 # Insert decorator
                 file_path_to_source_code = defaultdict(str)
@@ -162,8 +171,6 @@ class Optimizer:
             )
             console.rule()
             ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
-            if self.args.all:
-                self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
 
             for original_module_path in file_to_funcs_to_optimize:
                 logger.info(f"Examining file {original_module_path!s}…")
@@ -247,10 +254,6 @@ class Optimizer:
                         )
 
                     best_optimization = function_optimizer.optimize_function()
-                    if self.functions_checkpoint:
-                        self.functions_checkpoint.add_function_to_checkpoint(
-                            function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
-                        )
                     if is_successful(best_optimization):
                         optimizations_found += 1
                     else:
@@ -258,8 +261,6 @@ class Optimizer:
                         console.rule()
                         continue
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
-            if self.functions_checkpoint:
-                self.functions_checkpoint.cleanup()
             if optimizations_found == 0:
                 logger.info("❌ No optimizations found.")
             elif self.args.all:

@@ -204,3 +204,65 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
     else:
         args.all = Path(args.all).resolve()
     return args
+
+
+def process_pyproject_only(pyproject_file_path: Path) -> Namespace:
+    args = Namespace()
+    try:
+        pyproject_config, pyproject_file_path = parse_config_file(pyproject_file_path)
+    except ValueError as e:
+        logger.error(e)
+        sys.exit(1)
+    supported_keys = [
+        "module_root",
+        "tests_root",
+        "test_framework",
+        "ignore_paths",
+        "pytest_cmd",
+        "formatter_cmds",
+        "disable_telemetry",
+        "disable_imports_sorting",
+        "git_remote",
+    ]
+    for key in supported_keys:
+        if key in pyproject_config and (
+            (hasattr(args, key.replace("-", "_")) and getattr(args, key.replace("-", "_")) is None)
+            or not hasattr(args, key.replace("-", "_"))
+        ):
+            setattr(args, key.replace("-", "_"), pyproject_config[key])
+    assert args.module_root is not None, "--module-root must be specified"
+    assert Path(args.module_root).is_dir(), f"--module-root {args.module_root} must be a valid directory"
+    assert args.tests_root is not None, "--tests-root must be specified"
+    assert Path(args.tests_root).is_dir(), f"--tests-root {args.tests_root} must be a valid directory"
+
+    if env_utils.get_pr_number() is not None:
+        assert env_utils.ensure_codeflash_api_key(), (
+            "Codeflash API key not found. When running in a Github Actions Context, provide the "
+            "'CODEFLASH_API_KEY' environment variable as a secret.\n"
+            "You can add a secret by going to your repository's settings page, then clicking 'Secrets' in the left sidebar.\n"
+            "Then, click 'New repository secret' and add your api key with the variable name CODEFLASH_API_KEY.\n"
+            f"Here's a direct link: {get_github_secrets_page_url()}\n"
+            "Exiting..."
+        )
+
+        repo = git.Repo(search_parent_directories=True)
+
+        owner, repo_name = get_repo_owner_and_name(repo)
+
+        require_github_app_or_exit(owner, repo_name)
+
+    if hasattr(args, "ignore_paths") and args.ignore_paths is not None:
+        normalized_ignore_paths = []
+        for path in args.ignore_paths:
+            path_obj = Path(path)
+            assert path_obj.exists(), f"ignore-paths config must be a valid path. Path {path} does not exist"
+            normalized_ignore_paths.append(path_obj.resolve())
+        args.ignore_paths = normalized_ignore_paths
+    # Project root path is one level above the specified directory, because that's where the module can be imported from
+    args.module_root = Path(args.module_root).resolve()
+    # If module-root is "." then all imports are relatives to it.
+    # in this case, the ".." becomes outside project scope, causing issues with un-importable paths
+    args.project_root = project_root_from_module_root(args.module_root, pyproject_file_path)
+    args.tests_root = Path(args.tests_root).resolve()
+    args.test_project_root = project_root_from_module_root(args.tests_root, pyproject_file_path)
+    return handle_optimize_all_arg_parsing(args)
