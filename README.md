@@ -11,13 +11,13 @@
   </a>
 </p>
 
-[Codeflash](https://www.codeflash.ai) is a general purpose optimizer for Python that automatically improves the performance of your Python code while maintaining its correctness.
+[Codeflash](https://www.codeflash.ai) is a general purpose optimizer for Python that helps you improve the performance of your Python code while maintaining its correctness.
 It uses advanced LLMs to generate multiple optimization ideas for your code, tests them to be correct and benchmarks them for performance. It then creates merge-ready pull requests containing the best optimization found, which you can review and merge.
 
 How to use Codeflash -
 - Optimize an entire existing codebase by running `codeflash --all`
 - Automate optimizing all __future__ code you will write by installing Codeflash as a GitHub action.
-- Optimize a Python workflow end-to-end by tracing the workflow.
+- Optimize a Python workflow `python myscript.py` end-to-end by running `python -m codeflash.tracer -o benchmark.trace myscript.py`
 
 Codeflash is used by top engineering teams at [Pydantic](https://github.com/pydantic/pydantic/pulls?q=is%3Apr+author%3Amisrasaurabh1+is%3Amerged), [Langflow](https://github.com/langflow-ai/langflow/issues?q=state%3Aclosed%20is%3Apr%20author%3Amisrasaurabh1), [Albumentations](https://github.com/albumentations-team/albumentations/issues?q=state%3Amerged%20is%3Apr%20author%3Akrrt7%20OR%20state%3Amerged%20is%3Apr%20author%3Aaseembits93%20) and many others to ship performant, expert level code.
 
