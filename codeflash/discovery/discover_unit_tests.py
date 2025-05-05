@@ -17,7 +17,7 @@ from pytest import ExitCode
 
 from codeflash.cli_cmds.console import console, logger, test_files_progress_bar
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
-from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_cache_dir
+from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_cache_db
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 
 if TYPE_CHECKING:
@@ -41,7 +41,7 @@ FUNCTION_NAME_REGEX = re.compile(r"([^.]+)\.([a-zA-Z0-9_]+)$")
 
 class TestsCache:
     def __init__(self) -> None:
-        self.connection = sqlite3.connect(codeflash_cache_dir / "tests_cache.db")
+        self.connection = sqlite3.connect(codeflash_cache_db)
         self.cur = self.connection.cursor()
 
         self.cur.execute(
@@ -79,6 +79,7 @@ class TestsCache:
         line_number: int,
         col_number: int,
     ) -> None:
+        self.cur.execute("DELETE FROM discovered_tests WHERE file_path = ?", (file_path,))
         test_type_value = test_type.value if hasattr(test_type, "value") else test_type
         self.cur.execute(
             "INSERT INTO discovered_tests VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -115,7 +116,7 @@ class TestsCache:
 
     @staticmethod
     def compute_file_hash(path: str) -> str:
-        h = hashlib.md5(usedforsecurity=False)
+        h = hashlib.sha256(usedforsecurity=False)
         with Path(path).open("rb") as f:
             while True:
                 chunk = f.read(8192)

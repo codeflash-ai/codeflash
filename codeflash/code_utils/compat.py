@@ -17,3 +17,5 @@ IS_POSIX = os.name != "nt"
 
 
 codeflash_cache_dir = Path(user_config_dir(appname="codeflash", appauthor="codeflash-ai", ensure_exists=True))
+
+codeflash_cache_db = codeflash_cache_dir / "codeflash_cache.db"
