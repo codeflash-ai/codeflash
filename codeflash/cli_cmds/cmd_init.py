@@ -676,6 +676,8 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         )
         apologize_and_exit()
 
+    enable_telemetry = ask_for_telemetry()
+
     codeflash_section = tomlkit.table()
     codeflash_section.add(tomlkit.comment("All paths are relative to this pyproject.toml's directory."))
     codeflash_section["module-root"] = setup_info.module_root
@@ -683,6 +685,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     codeflash_section["test-framework"] = setup_info.test_framework
     codeflash_section["benchmarks-root"] = setup_info.benchmarks_root if setup_info.benchmarks_root else ""
     codeflash_section["ignore-paths"] = setup_info.ignore_paths
+    codeflash_section["disable-telemetry"] = not enable_telemetry
     if setup_info.git_remote not in ["", "origin"]:
         codeflash_section["git-remote"] = setup_info.git_remote
     formatter = setup_info.formatter
@@ -934,3 +937,17 @@ def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test
             console.rule()
             Path(path).unlink(missing_ok=True)
             logger.info(f"🗑️  Deleted {path}")
+
+
+def ask_for_telemetry() -> bool:
+    """Prompt the user to enable or disable telemetry."""
+    from rich.prompt import Confirm
+
+    enable_telemetry = Confirm.ask(
+        "⚡️ Would you like to enable telemetry to help us improve the Codeflash experience?",
+        default=True,
+        show_default=True,
+    )
+
+    ph("cli-telemetry-prompt", {"telemetry_enabled": enable_telemetry})
+    return enable_telemetry
