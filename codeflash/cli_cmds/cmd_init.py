@@ -949,5 +949,4 @@ def ask_for_telemetry() -> bool:
         show_default=True,
     )
 
-    ph("cli-telemetry-prompt", {"telemetry_enabled": enable_telemetry})
     return enable_telemetry
