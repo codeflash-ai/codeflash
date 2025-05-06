@@ -162,6 +162,7 @@ class FunctionOptimizer:
             f"Generating new tests and optimizations for function {self.function_to_optimize.function_name}",
             transient=True,
         ):
+            #TODO: do a/b testing with same codegen but different testgen
             generated_results = self.generate_tests_and_optimizations(
                 testgen_context_code=code_context.testgen_context_code,
                 read_writable_code=code_context.read_writable_code,
