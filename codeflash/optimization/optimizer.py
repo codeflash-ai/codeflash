@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import os
+import shutil
 import tempfile
 import time
 from collections import defaultdict
@@ -16,7 +17,7 @@ from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
 from codeflash.benchmarking.utils import print_benchmark_table, validate_and_format_benchmark_table
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
+from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint, ask_should_use_checkpoint_get_functions
 from codeflash.code_utils.code_replacer import normalize_code, normalize_node
 from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
 from codeflash.code_utils.static_analysis import analyze_imported_modules, get_first_top_level_function_or_method_ast
@@ -53,6 +54,10 @@ class Optimizer:
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.replay_tests_dir = None
         self.functions_checkpoint: CodeflashRunCheckpoint | None = None
+        self.file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None = None
+        self.num_optimizable_functions: int | None = None
+        self.function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None
+        self.num_discovered_tests: int | None = None
 
     def create_function_optimizer(
         self,
@@ -60,9 +65,23 @@ class Optimizer:
         function_to_optimize_ast: ast.FunctionDef | None = None,
         function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
         function_to_optimize_source_code: str | None = "",
-        function_benchmark_timings: dict[str, dict[BenchmarkKey, float]] | None = None,
-        total_benchmark_timings: dict[BenchmarkKey, float] | None = None,
+        all_function_benchmark_timings: dict[str, dict[BenchmarkKey, int]] | None = None,
+        overall_total_benchmark_timings: dict[BenchmarkKey, int] | None = None,
+        qualified_name_w_module_for_benchmarks: str | None = None,
     ) -> FunctionOptimizer:
+        specific_function_timings_to_pass = None
+        total_benchmark_timings_to_pass = None
+
+        if (
+            self.args.benchmark
+            and all_function_benchmark_timings
+            and qualified_name_w_module_for_benchmarks
+            and qualified_name_w_module_for_benchmarks in all_function_benchmark_timings
+            and overall_total_benchmark_timings
+        ):
+            specific_function_timings_to_pass = all_function_benchmark_timings[qualified_name_w_module_for_benchmarks]
+            total_benchmark_timings_to_pass = overall_total_benchmark_timings
+
         return FunctionOptimizer(
             function_to_optimize=function_to_optimize,
             test_cfg=self.test_cfg,
@@ -71,22 +90,14 @@ class Optimizer:
             function_to_optimize_ast=function_to_optimize_ast,
             aiservice_client=self.aiservice_client,
             args=self.args,
-            function_benchmark_timings=function_benchmark_timings if function_benchmark_timings else None,
-            total_benchmark_timings=total_benchmark_timings if total_benchmark_timings else None,
+            function_benchmark_timings=specific_function_timings_to_pass,
+            total_benchmark_timings=total_benchmark_timings_to_pass,
             replay_tests_dir=self.replay_tests_dir,
         )
 
-    def run(self) -> None:
-        ph("cli-optimize-run-start")
-        logger.info("Running optimizer.")
-        console.rule()
-        if not env_utils.ensure_codeflash_api_key():
-            return
-        function_optimizer = None
-        file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
-        num_optimizable_functions: int
-        # discover functions
-        (file_to_funcs_to_optimize, num_optimizable_functions) = get_functions_to_optimize(
+    def discover_functions(self) -> None:
+        previous_checkpoint_functions = ask_should_use_checkpoint_get_functions(self.args)
+        self.file_to_funcs_to_optimize, self.num_optimizable_functions = get_functions_to_optimize(
             optimize_all=self.args.all,
             replay_test=self.args.replay_test,
             file=self.args.file,
@@ -95,19 +106,33 @@ class Optimizer:
             ignore_paths=self.args.ignore_paths,
             project_root=self.args.project_root,
             module_root=self.args.module_root,
-            previous_checkpoint_functions=self.args.previous_checkpoint_functions,
+            previous_checkpoint_functions=previous_checkpoint_functions,
         )
+
+    def discover_unit_tests(self) -> None:
+        console.rule()
+        start_time = time.time()
+        self.function_to_tests = discover_unit_tests(self.test_cfg)
+        self.num_discovered_tests = sum([len(value) for value in self.function_to_tests.values()])
+        console.rule()
+        logger.info(
+            f"Discovered {self.num_discovered_tests} existing unit tests in {(time.time() - start_time):.1f}s at {self.test_cfg.tests_root}"
+        )
+        console.rule()
+        ph("cli-optimize-discovered-tests", {"num_tests": self.num_discovered_tests})
+
+    def _run_benchmarks(self) -> tuple[dict[str, dict[BenchmarkKey, int]], dict[BenchmarkKey, int], Path | None]:
         function_benchmark_timings: dict[str, dict[BenchmarkKey, int]] = {}
         total_benchmark_timings: dict[BenchmarkKey, int] = {}
-        if self.args.benchmark and num_optimizable_functions > 0:
+        trace_file: Path | None = None
+        if self.args.benchmark and self.num_optimizable_functions > 0:
             with progress_bar(f"Running benchmarks in {self.args.benchmarks_root}", transient=True):
-                # Insert decorator
                 file_path_to_source_code = defaultdict(str)
-                for file in file_to_funcs_to_optimize:
-                    with file.open("r", encoding="utf8") as f:
-                        file_path_to_source_code[file] = f.read()
+                for file_path in self.file_to_funcs_to_optimize:
+                    with file_path.open("r", encoding="utf8") as f:
+                        file_path_to_source_code[file_path] = f.read()
                 try:
-                    instrument_codeflash_trace_decorator(file_to_funcs_to_optimize)
+                    instrument_codeflash_trace_decorator(self.file_to_funcs_to_optimize)
                     trace_file = Path(self.args.benchmarks_root) / "benchmarks.trace"
                     if trace_file.exists():
                         trace_file.unlink()
@@ -117,11 +142,12 @@ class Optimizer:
                     )
                     trace_benchmarks_pytest(
                         self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file
-                    )  # Run all tests that use pytest-benchmark
+                    )
                     replay_count = generate_replay_test(trace_file, self.replay_tests_dir)
                     if replay_count == 0:
                         logger.info(
-                            f"No valid benchmarks found in {self.args.benchmarks_root} for functions to optimize, continuing optimization"
+                            f"No valid benchmarks found in {self.args.benchmarks_root} for functions to optimize, "
+                            "continuing optimization"
                         )
                     else:
                         function_benchmark_timings = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(trace_file)
@@ -130,14 +156,26 @@ class Optimizer:
                             function_benchmark_timings, total_benchmark_timings
                         )
                         print_benchmark_table(function_to_results)
-                except Exception as e:
+                except Exception as e:  # TODO: Consider more specific exception handling
                     logger.info(f"Error while tracing existing benchmarks: {e}")
                     logger.info("Information on existing benchmarks will not be available for this run.")
                 finally:
-                    # Restore original source code
-                    for file in file_path_to_source_code:
-                        with file.open("w", encoding="utf8") as f:
-                            f.write(file_path_to_source_code[file])
+                    for file_path in file_path_to_source_code:
+                        with file_path.open("w", encoding="utf8") as f:
+                            f.write(file_path_to_source_code[file_path])
+        return function_benchmark_timings, total_benchmark_timings, trace_file
+
+    def run(self) -> None:
+        ph("cli-optimize-run-start")
+        logger.info("Running optimizer.")
+        console.rule()
+        if not env_utils.ensure_codeflash_api_key():
+            return
+        function_optimizer = None
+
+        self.discover_functions()
+
+        function_benchmark_timings, total_benchmark_timings, trace_file = self._run_benchmarks()
         optimizations_found: int = 0
         function_iterator_count: int = 0
         if self.args.test_framework == "pytest":
@@ -145,25 +183,14 @@ class Optimizer:
                 tempfile.mkdtemp(dir=self.args.tests_root, prefix="codeflash_concolic_")
             )
         try:
-            ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
-            if num_optimizable_functions == 0:
+            ph("cli-optimize-functions-to-optimize", {"num_functions": self.num_optimizable_functions})
+            if self.num_optimizable_functions == 0:
                 logger.info("No functions found to optimize. Exiting…")
                 return
 
-            console.rule()
-            start_time = time.time()
-            function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
-            num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
-            console.rule()
-            logger.info(
-                f"Discovered {num_discovered_tests} existing unit tests in {(time.time() - start_time):.1f}s at {self.test_cfg.tests_root}"
-            )
-            console.rule()
-            ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
-            if self.args.all:
-                self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
+            self.discover_unit_tests()
 
-            for original_module_path in file_to_funcs_to_optimize:
+            for original_module_path in self.file_to_funcs_to_optimize:
                 logger.info(f"Examining file {original_module_path!s}…")
                 console.rule()
 
@@ -202,10 +229,10 @@ class Optimizer:
                 if has_syntax_error:
                     continue
 
-                for function_to_optimize in file_to_funcs_to_optimize[original_module_path]:
+                for function_to_optimize in self.file_to_funcs_to_optimize[original_module_path]:
                     function_iterator_count += 1
                     logger.info(
-                        f"Optimizing function {function_iterator_count} of {num_optimizable_functions}: "
+                        f"Optimizing function {function_iterator_count} of {self.num_optimizable_functions}: "
                         f"{function_to_optimize.qualified_name}"
                     )
                     console.rule()
@@ -222,27 +249,15 @@ class Optimizer:
                     qualified_name_w_module = function_to_optimize.qualified_name_with_modules_from_root(
                         self.args.project_root
                     )
-                    if (
-                        self.args.benchmark
-                        and function_benchmark_timings
-                        and qualified_name_w_module in function_benchmark_timings
-                        and total_benchmark_timings
-                    ):
-                        function_optimizer = self.create_function_optimizer(
-                            function_to_optimize,
-                            function_to_optimize_ast,
-                            function_to_tests,
-                            validated_original_code[original_module_path].source_code,
-                            function_benchmark_timings[qualified_name_w_module],
-                            total_benchmark_timings,
-                        )
-                    else:
-                        function_optimizer = self.create_function_optimizer(
-                            function_to_optimize,
-                            function_to_optimize_ast,
-                            function_to_tests,
-                            validated_original_code[original_module_path].source_code,
-                        )
+                    function_optimizer = self.create_function_optimizer(
+                        function_to_optimize,
+                        function_to_optimize_ast,
+                        self.function_to_tests,
+                        validated_original_code[original_module_path].source_code,
+                        function_benchmark_timings,
+                        total_benchmark_timings,
+                        qualified_name_w_module,
+                    )
 
                     best_optimization = function_optimizer.optimize_function()
                     if self.functions_checkpoint:
@@ -265,6 +280,7 @@ class Optimizer:
         finally:
             if function_optimizer:
                 function_optimizer.cleanup_generated_files()
+                trace_file.unlink(missing_ok=True)
 
 
 def run_with_args(args: Namespace) -> None:
