@@ -345,20 +345,6 @@ class FunctionOptimizer:
                             original_helper_code,
                             self.function_to_optimize.file_path,
                         )
-        for generated_test_path in generated_test_paths:
-            generated_test_path.unlink(missing_ok=True)
-        for generated_perf_test_path in generated_perf_test_paths:
-            generated_perf_test_path.unlink(missing_ok=True)
-        for test_paths in instrumented_unittests_created_for_function:
-            test_paths.unlink(missing_ok=True)
-        for fn in function_to_concolic_tests:
-            for test in function_to_concolic_tests[fn]:
-                if not test.tests_in_file.test_file.parent.exists():
-                    logger.warning(
-                        f"Concolic test directory {test.tests_in_file.test_file.parent} does not exist so could not be deleted."
-                    )
-                shutil.rmtree(test.tests_in_file.test_file.parent, ignore_errors=True)
-                break  # need to delete only one test directory
 
         if not best_optimization:
             return Failure(f"No best optimizations found for function {self.function_to_optimize.qualified_name}")
@@ -1242,3 +1228,25 @@ class FunctionOptimizer:
                 zip(generated_test_paths, generated_perf_test_paths)
             )
         ]
+
+    def cleanup_generated_files(self) -> None:
+        paths_to_cleanup = (
+            [
+                test_file.instrumented_behavior_file_path
+                for test_type in [
+                    TestType.GENERATED_REGRESSION,
+                    TestType.EXISTING_UNIT_TEST,
+                    TestType.CONCOLIC_COVERAGE_TEST,
+                ]
+                for test_file in self.test_files.get_by_type(test_type).test_files
+            ]
+            + [
+                test_file.benchmarking_file_path
+                for test_type in [TestType.GENERATED_REGRESSION, TestType.EXISTING_UNIT_TEST]
+                for test_file in self.test_files.get_by_type(test_type).test_files
+            ]
+            + [self.test_cfg.concolic_test_root_dir]
+        )
+        cleanup_paths(paths_to_cleanup)
+        if hasattr(get_run_tmp_file, "tmpdir"):
+            get_run_tmp_file.tmpdir.cleanup()
