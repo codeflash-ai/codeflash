@@ -162,7 +162,7 @@ class FunctionOptimizer:
             f"Generating new tests and optimizations for function {self.function_to_optimize.function_name}",
             transient=True,
         ):
-            #TODO: do a/b testing with same codegen but different testgen
+            # TODO: do a/b testing with same codegen but different testgen
             generated_results = self.generate_tests_and_optimizations(
                 testgen_context_code=code_context.testgen_context_code,
                 read_writable_code=code_context.read_writable_code,
@@ -760,7 +760,8 @@ class FunctionOptimizer:
         run_experiment: bool = False,
     ) -> Result[tuple[GeneratedTestsList, dict[str, list[FunctionCalledInTest]], OptimizationSet], str]:
         assert len(generated_test_paths) == N_TESTS_TO_GENERATE
-        max_workers = N_TESTS_TO_GENERATE + 2 if not run_experiment else N_TESTS_TO_GENERATE + 3
+        max_workers = 2*N_TESTS_TO_GENERATE + 2 if not run_experiment else 2*N_TESTS_TO_GENERATE + 3
+        self.local_aiservice_client = LocalAiServiceClient()
         console.rule()
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit the test generation task as future
@@ -770,6 +771,7 @@ class FunctionOptimizer:
                 [definition.fully_qualified_name for definition in helper_functions],
                 generated_test_paths,
                 generated_perf_test_paths,
+                run_experiment=True,
             )
             future_optimization_candidates = executor.submit(
                 self.aiservice_client.optimize_python_code,
@@ -1223,8 +1225,9 @@ class FunctionOptimizer:
         helper_function_names: list[str],
         generated_test_paths: list[Path],
         generated_perf_test_paths: list[Path],
+        run_experiment: bool
     ) -> list[concurrent.futures.Future]:
-        return [
+        original = [
             executor.submit(
                 generate_tests,
                 self.aiservice_client,
@@ -1234,12 +1237,34 @@ class FunctionOptimizer:
                 Path(self.original_module_path),
                 self.test_cfg,
                 INDIVIDUAL_TESTCASE_TIMEOUT,
-                self.function_trace_id,
+                self.function_trace_id,#[:-4]+"TST0" if run_experiment else self.function_trace_id,
                 test_index,
                 test_path,
                 test_perf_path,
+                single_prompt=False,
             )
             for test_index, (test_path, test_perf_path) in enumerate(
                 zip(generated_test_paths, generated_perf_test_paths)
             )
         ]
+        if run_experiment:
+            original+=[
+                executor.submit(
+                    generate_tests,
+                    self.local_aiservice_client,
+                    source_code_being_tested,
+                    self.function_to_optimize,
+                    helper_function_names,
+                    Path(self.original_module_path),
+                    self.test_cfg,
+                    INDIVIDUAL_TESTCASE_TIMEOUT,
+                    self.function_trace_id,#[:-4]+"TST1",
+                    test_index,
+                    test_path,
+                    test_perf_path,
+                    single_prompt=True,
+                )
+                for test_index, (test_path, test_perf_path) in enumerate(
+                    zip(generated_test_paths, generated_perf_test_paths)
+                )]
+        return original

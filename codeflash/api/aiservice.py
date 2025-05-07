@@ -248,6 +248,7 @@ class AiServiceClient:
         test_timeout: int,
         trace_id: str,
         test_index: int,
+        single_prompt: bool=False,
     ) -> tuple[str, str, str] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
 
@@ -284,7 +285,10 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
         }
         try:
-            response = self.make_ai_service_request("/testgen", payload=payload, timeout=600)
+            if single_prompt:
+                response = self.make_ai_service_request("/testgen-single-prompt", payload=payload, timeout=600)
+            else:
+                response = self.make_ai_service_request("/testgen", payload=payload, timeout=600)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating tests: {e}")
             ph("cli-testgen-error-caught", {"error": str(e)})
