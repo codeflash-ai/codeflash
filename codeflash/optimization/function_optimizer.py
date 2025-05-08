@@ -1237,14 +1237,14 @@ class FunctionOptimizer:
                 Path(self.original_module_path),
                 self.test_cfg,
                 INDIVIDUAL_TESTCASE_TIMEOUT,
-                self.function_trace_id,#[:-4]+"TST0" if run_experiment else self.function_trace_id,
+                self.function_trace_id[:-4]+"TST0" if run_experiment else self.function_trace_id,
                 test_index,
                 test_path,
                 test_perf_path,
                 single_prompt=False,
             )
             for test_index, (test_path, test_perf_path) in enumerate(
-                zip(generated_test_paths, generated_perf_test_paths)
+                zip(generated_test_paths[:2], generated_perf_test_paths[:2])
             )
         ]
         if run_experiment:
@@ -1258,13 +1258,13 @@ class FunctionOptimizer:
                     Path(self.original_module_path),
                     self.test_cfg,
                     INDIVIDUAL_TESTCASE_TIMEOUT,
-                    self.function_trace_id,#[:-4]+"TST1",
+                    self.function_trace_id[:-4]+"TST1",
                     test_index,
                     test_path,
                     test_perf_path,
                     single_prompt=True,
                 )
                 for test_index, (test_path, test_perf_path) in enumerate(
-                    zip(generated_test_paths, generated_perf_test_paths)
+                    zip(generated_test_paths[2:], generated_perf_test_paths[2:])
                 )]
         return original
