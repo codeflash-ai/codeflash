@@ -32,7 +32,7 @@ def speedup_critic(
     The noise floor is doubled when benchmarking on a (noisy) GitHub Action virtual instance, also we want to be more confident there.
     """
     in_github_actions_mode = bool(env_utils.get_pr_number())
-    noise_floor = 2 * MIN_IMPROVEMENT_THRESHOLD if original_code_runtime < 10000 else MIN_IMPROVEMENT_THRESHOLD
+    noise_floor = 3 * MIN_IMPROVEMENT_THRESHOLD if original_code_runtime < 10000 else MIN_IMPROVEMENT_THRESHOLD
     if in_github_actions_mode:
         noise_floor = noise_floor * 2  # Increase the noise floor in GitHub Actions mode
 
