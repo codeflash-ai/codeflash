@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import json
 import os
 import platform
@@ -95,6 +97,7 @@ class AiServiceClient:
         - List[OptimizationCandidate]: A list of Optimization Candidates.
 
         """
+        start_time = time.perf_counter()
         payload = {
             "source_code": source_code,
             "dependency_code": dependency_code,
@@ -118,6 +121,8 @@ class AiServiceClient:
             optimizations_json = response.json()["optimizations"]
             logger.info(f"Generated {len(optimizations_json)} candidates.")
             console.rule()
+            end_time = time.perf_counter()
+            logger.info(f"Optimization took {end_time - start_time:.2f} seconds.")
             return [
                 OptimizedCandidate(
                     source_code=opt["source_code"],
