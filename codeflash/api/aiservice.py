@@ -285,10 +285,7 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
         }
         try:
-            if single_prompt:
-                response = self.make_ai_service_request("/testgen-single-prompt", payload=payload, timeout=600)
-            else:
-                response = self.make_ai_service_request("/testgen", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/testgen", payload=payload, timeout=600)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating tests: {e}")
             ph("cli-testgen-error-caught", {"error": str(e)})
