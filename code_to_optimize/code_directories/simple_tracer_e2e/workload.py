@@ -2,10 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 def funcA(number):
-    if number>1000:
-        number=1000
-    if number<1:
-        number=1
+    number = number if number < 1000 else 1000
     k = 0
     for i in range(number * 100):
         k += i
