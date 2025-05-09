@@ -248,6 +248,7 @@ class AiServiceClient:
         test_timeout: int,
         trace_id: str,
         test_index: int,
+        single_prompt: bool=False,
     ) -> tuple[str, str, str] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
 
