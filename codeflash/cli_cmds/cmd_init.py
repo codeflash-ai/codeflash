@@ -592,9 +592,12 @@ def get_dependency_installation_commands(dep_manager: DependencyManager) -> tupl
         return """|
           python -m pip install --upgrade pip
           pip install poetry
-          poetry install --all-extras"""
+          poetry install --all-extras
+          poetry add codeflash"""
     if dep_manager == DependencyManager.UV:
-        return "uv sync --all-extras"
+        return """|
+          uv sync --all-extras
+          uv pip install codeflash"""
     # PIP or UNKNOWN
     return """|
           python -m pip install --upgrade pip
