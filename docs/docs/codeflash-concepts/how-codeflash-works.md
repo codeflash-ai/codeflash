@@ -21,13 +21,12 @@ Codeflash currently only runs tests that directly call the target function in th
 
 ## Optimization Generation
 
-To optimize code, Codeflash first gathers all necessary context from the codebase. It then calls our backend to generate several candidate optimizations. These are called "candidates" because their speed and correctness haven't been verified yet. Both properties will be verified in later steps.
-
+To optimize code, Codeflash first gathers all necessary context from the codebase. It also line-profiles your code to understand where the bottlenecks might reside. It then calls our backend to generate several candidate optimizations. These are called "candidates" because their speed and correctness haven't been verified yet. Both properties will be verified in later steps.
 ## Verification of correctness
 
 ![Verification](/img/codeflash_arch_diagram.gif)
 
-The goal of correctness verification is to ensure that when the original code is replaced by the new code, there are no behavioral changes in the code and the rest of the system. This means the replacement should be completely safe.
+The goal of correctness verification is to ensure that when the new code replaces the original code, there are no behavioral changes in the code and the rest of the system. This means the replacement should be completely safe.
 
 To verify correctness, Codeflash calls the function with numerous inputs, confirming that the new function behaves identically to the original.
 
@@ -60,4 +59,4 @@ Codeflash implements several techniques to measure code performance accurately. 
 
 ## Creating Pull Requests
 
-Once an optimization passes all checks, Codeflash creates a pull request through the Codeflash GitHub app directly in your repository. The pull request includes the new code, the speedup percentage, an explanation of the optimization, test statistics including coverage, and the test content itself. You can review and merge the new code if it meets your standards. Feel free to modify the code as needed—we welcome your improvements!
+Once an optimization passes all checks, Codeflash creates a pull request through the Codeflash GitHub app directly in your repository. The pull request includes the new code, the speedup percentage, an explanation of the optimization, test statistics including coverage, and the test content itself. You can review and merge the new code if it meets your standar
