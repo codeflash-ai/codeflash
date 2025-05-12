@@ -20,7 +20,6 @@ def main() -> None:
         CODEFLASH_LOGO, panel_args={"title": "https://codeflash.ai", "expand": False}, text_args={"style": "bold gold3"}
     )
     args = parse_args()
-
     if args.command:
         if args.config_file and Path.exists(args.config_file):
             pyproject_config, _ = parse_config_file(args.config_file)
