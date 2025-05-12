@@ -122,7 +122,7 @@ class AiServiceClient:
             logger.info(f"Generated {len(optimizations_json)} candidates.")
             console.rule()
             end_time = time.perf_counter()
-            logger.info(f"Optimization took {end_time - start_time:.2f} seconds.")
+            logger.debug(f"Optimization took {end_time - start_time:.2f} seconds.")
             return [
                 OptimizedCandidate(
                     source_code=opt["source_code"],

@@ -58,7 +58,7 @@ def generate_tests(
         logger.warning(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")
         return None
     end_time = time.perf_counter()
-    logger.info(f"Generated tests in {end_time - start_time:.2f} seconds")
+    logger.debug(f"Generated tests in {end_time - start_time:.2f} seconds")
     return (
         generated_test_source,
         instrumented_behavior_test_source,

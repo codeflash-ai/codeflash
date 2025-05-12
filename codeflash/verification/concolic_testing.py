@@ -88,5 +88,5 @@ def generate_concolic_tests(
             logger.debug(f"Error running CrossHair Cover {': ' + cover_result.stderr if cover_result.stderr else '.'}")
             console.rule()
     end_time = time.perf_counter()
-    logger.info(f"Generated concolic tests in {end_time - start_time:.2f} seconds")
+    logger.debug(f"Generated concolic tests in {end_time - start_time:.2f} seconds")
     return function_to_concolic_tests, concolic_test_suite_code
