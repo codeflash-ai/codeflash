@@ -59,4 +59,4 @@ Codeflash implements several techniques to measure code performance accurately. 
 
 ## Creating Pull Requests
 
-Once an optimization passes all checks, Codeflash creates a pull request through the Codeflash GitHub app directly in your repository. The pull request includes the new code, the speedup percentage, an explanation of the optimization, test statistics including coverage, and the test content itself. You can review and merge the new code if it meets your standar
+Once an optimization passes all checks, Codeflash creates a pull request through the Codeflash GitHub app directly in your repository. The pull request includes the new code, the speedup percentage, an explanation of the optimization, test statistics including coverage, and the test content itself. You can review, edit, and merge the new code.

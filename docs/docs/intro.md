@@ -18,7 +18,7 @@ This offers high confidence that the behavior of your code remains unchanged.
 
 ### Continuous Optimization
 
-Because Codeflash is an automated process, you can install it as a GitHub action and have it optimize the new code on every pull request opened.
+Because Codeflash is an automated process, you can install it as a GitHub action and have it optimize the new code on every pull request.
 When Codeflash finds an optimization, it will ask you to review it. It will write a detailed explanation of the changes it made, and include all relevant info like % speed increase and proofs of correctness.
 
 This is a great way to ensure that your code, your team's code and your AI Agent's code are optimized for performance before it causes a performance regression. We call this *Continuous Optimization*.
