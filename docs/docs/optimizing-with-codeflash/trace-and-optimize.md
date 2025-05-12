@@ -3,7 +3,7 @@ sidebar_position: 4
 ---
 # Optimize Workflows End-to-End by Tracing them.
 
-Codeflash supports optimizing an entire Python script end to end by tracing the execution of the script and generating Replay Tests. Tracing means following the execution of a script These Replay Tests can be used to optimize all the functions called in the script.
+Codeflash supports optimizing an entire Python script end to end by tracing the execution of the script and generating Replay Tests. Tracing means following the execution of a script and capturing the inputs to all the functions called, so they can be replayed again while optimizing. These Replay Tests can be used to optimize all the functions called in the script.
 
 ## Motivation for Tracing a workflow
 
