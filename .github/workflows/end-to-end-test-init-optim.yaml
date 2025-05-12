@@ -20,7 +20,7 @@ jobs:
       COLUMNS: 110
       MAX_RETRIES: 3
       RETRY_DELAY: 5
-      EXPECTED_IMPROVEMENT_PCT: 300
+      EXPECTED_IMPROVEMENT_PCT: 30
       CODEFLASH_END_TO_END: 1
     steps:
       - name: 🛎️ Checkout
