@@ -15,6 +15,7 @@ from codeflash.code_utils.git_utils import (
     get_repo_owner_and_name,
     git_root_dir,
 )
+from codeflash.code_utils.github_utils import github_pr_url
 from codeflash.github.PrComment import FileDiffContent, PrComment
 
 if TYPE_CHECKING:
@@ -133,7 +134,7 @@ def check_create_pr(
         )
         if response.ok:
             pr_number = response.text
-            pr_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}"
+            pr_url = github_pr_url(owner, repo, pr_number)
             logger.info(f"Successfully created a new PR #{pr_number} with the optimized code: {pr_url}")
         else:
             logger.error(
