@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import ast
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -29,6 +31,7 @@ def generate_tests(
 ) -> tuple[str, str, Path] | None:
     # TODO: Sometimes this recreates the original Class definition. This overrides and messes up the original
     #  class import. Remove the recreation of the class definition
+    start_time = time.perf_counter()
     test_module_path = Path(module_name_from_file_path(test_path, test_cfg.tests_project_rootdir))
     response = aiservice_client.generate_regression_tests(
         source_code_being_tested=source_code_being_tested,
@@ -54,7 +57,8 @@ def generate_tests(
     else:
         logger.warning(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")
         return None
-
+    end_time = time.perf_counter()
+    logger.debug(f"Generated tests in {end_time - start_time:.2f} seconds")
     return (
         generated_test_source,
         instrumented_behavior_test_source,
