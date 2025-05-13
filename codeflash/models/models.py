@@ -364,7 +364,7 @@ class TestingMode(enum.Enum):
     PERFORMANCE = "performance"
     LINE_PROFILE = "line_profile"
 
-
+#TODO this class is duplicated in codeflash_capture
 class VerificationType(str, Enum):
     FUNCTION_CALL = (
         "function_call"  # Correctness verification for a test function, checks input values and output values)
