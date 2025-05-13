@@ -14,6 +14,7 @@ from pydantic.json import pydantic_encoder
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
 from codeflash.code_utils.git_utils import get_repo_owner_and_name
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.version import __version__
 
 if TYPE_CHECKING:
@@ -200,3 +201,37 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
         return {}
 
     return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
+
+def get_has_been_optimized(code_context: FunctionToOptimize) -> bool:
+    """Gets whether or not the current code context has already been optimized
+
+    :return: If the function has already been optimized
+    """
+
+    code_context_hash = hash(code_context)
+
+    not_found = 404
+    internal_server_error = 500
+
+    pr_number = get_pr_number()
+    if pr_number is None:
+        return False
+
+    owner, repo = get_repo_owner_and_name()
+    information = {"code_context_hash": code_context_hash, "repo_owner": owner, "repo_name": repo}
+    try:
+        req = make_cfapi_request(endpoint="/is-code-already-optimized", method="GET", payload=information)
+        if req.status_code == not_found:
+            logger.debug(req.json()["message"])
+            return False
+        if req.status_code == internal_server_error:
+            logger.error(req.json()["message"])
+            return False
+        req.raise_for_status()
+        content: dict[str, str] = req.json()
+    except Exception as e:
+        logger.error(f"Error getting blocklisted functions: {e}")
+        sentry_sdk.capture_exception(e)
+        return False
+
+    return content["already_optimized"] == 'true'

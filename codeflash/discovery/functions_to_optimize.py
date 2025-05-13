@@ -138,6 +138,9 @@ class FunctionToOptimize:
             f"{'.' if self.parents else ''}{self.function_name}"
         )
 
+    def __hash__(self):
+        return hash(self.function_name + str(self.file_path))
+
     @property
     def qualified_name(self) -> str:
         return self.function_name if self.parents == [] else f"{self.parents[0].name}.{self.function_name}"
