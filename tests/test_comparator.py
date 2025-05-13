@@ -125,6 +125,12 @@ def test_basic_python_objects() -> None:
     assert comparator(a, b)
     assert not comparator(a, c)
 
+    a = range(1,10)
+    b = range(1,10)
+    c = range(1,20)
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
 
 def test_standard_python_library_objects() -> None:
     a = datetime.datetime(2020, 2, 2, 2, 2, 2) # type: ignore
