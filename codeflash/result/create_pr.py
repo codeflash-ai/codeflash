@@ -133,8 +133,8 @@ def check_create_pr(
             coverage_message=coverage_message,
         )
         if response.ok:
-            pr_number = response.text
-            pr_url = github_pr_url(owner, repo, pr_number)
+            pr_id = response.text
+            pr_url = github_pr_url(owner, repo, pr_id)
             logger.info(f"Successfully created a new PR #{pr_number} with the optimized code: {pr_url}")
         else:
             logger.error(
