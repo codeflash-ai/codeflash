@@ -1,3 +1,4 @@
+import array
 import ast
 import datetime
 import decimal
@@ -169,6 +170,15 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
             return orig == new
         if HAS_PANDAS and pandas.isna(orig) and pandas.isna(new):
             return True
+
+        if isinstance(orig, array.array):
+            if not isinstance(new, array.array):
+                return False
+            if orig.typecode != new.typecode:
+                return False
+            if len(orig) != len(new):
+                return False
+            return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
 
         # This should be at the end of all numpy checking
         try:
