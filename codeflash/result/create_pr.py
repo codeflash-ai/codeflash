@@ -132,7 +132,9 @@ def check_create_pr(
             coverage_message=coverage_message,
         )
         if response.ok:
-            logger.info(f"Successfully created a new PR #{response.text} with the optimized code.")
+            pr_number = response.text
+            pr_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}"
+            logger.info(f"Successfully created a new PR #{pr_number} with the optimized code: {pr_url}")
         else:
             logger.error(
                 f"Optimization was successful, but I failed to create a PR with the optimized code."
