@@ -46,9 +46,9 @@ def get_optimizable_functions(
     server.optimizer.args.benchmark = None
     server.optimizer.server = server
 
-    optimizable_funcs, _ = server.optimizer.discover_functions()
+    server.optimizer.discover_functions()
     path_to_qualified_names = {}
-    for path, functions in optimizable_funcs.items():
+    for path, functions in server.optimizer.file_to_funcs_to_optimize.items():
         path_to_qualified_names[path.as_posix()] = [func.qualified_name for func in functions]
     return path_to_qualified_names
 
