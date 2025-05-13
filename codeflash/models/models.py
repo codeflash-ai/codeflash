@@ -537,19 +537,20 @@ class TestResults(BaseModel):
         return tree
 
     def usable_runtime_data_by_test_case(self) -> dict[InvocationId, list[int]]:
-        usable_id_to_runtime = defaultdict(list)
+        # Efficient single traversal, directly accumulating into a dict.
+        by_id: dict[InvocationId, list[int]] = {}
         for result in self.test_results:
             if result.did_pass:
-                if not result.runtime:
+                if result.runtime:
+                    by_id.setdefault(result.id, []).append(result.runtime)
+                else:
                     msg = (
                         f"Ignoring test case that passed but had no runtime -> {result.id}, "
                         f"Loop # {result.loop_index}, Test Type: {result.test_type}, "
                         f"Verification Type: {result.verification_type}"
                     )
                     logger.debug(msg)
-            else:
-                usable_id_to_runtime[result.id].append(result.runtime)
-        return usable_id_to_runtime
+        return by_id
 
     def total_passed_runtime(self) -> int:
         """Calculate the sum of runtimes of all test cases that passed.
