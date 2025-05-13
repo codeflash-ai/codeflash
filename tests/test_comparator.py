@@ -137,7 +137,11 @@ def test_basic_python_objects() -> None:
     (range(-10, 0), range(-5, 0), False),
     (range(5, 1), range(10, 5), True),                # empty ranges
     (range(5, 1), range(5, 1), True),
+    (range(7), range(0, 7), True),
+    (range(0, 7), range(0, 7, 1), True),
+    (range(7), range(0, 7, 1), True),
 ])
+
 def test_ranges(r1, r2, expected):
     assert comparator(r1, r2) == expected
 
