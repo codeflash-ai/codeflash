@@ -125,11 +125,21 @@ def test_basic_python_objects() -> None:
     assert comparator(a, b)
     assert not comparator(a, c)
 
-    a = range(1,10)
-    b = range(1,10)
-    c = range(1,20)
-    assert comparator(a, b)
-    assert not comparator(a, c)
+@pytest.mark.parametrize("r1, r2, expected", [
+    (range(1, 10), range(1, 10), True),                # equal
+    (range(0, 10), range(1, 10), False),               # different start
+    (range(2, 10), range(1, 10), False),
+    (range(1, 5), range(1, 10), False),                # different stop
+    (range(1, 20), range(1, 10), False),
+    (range(1, 10, 1), range(1, 10, 2), False),          # different step
+    (range(1, 10, 3), range(1, 10, 2), False),
+    (range(-5, 0), range(-5, 0), True),                # negative ranges
+    (range(-10, 0), range(-5, 0), False),
+    (range(5, 1), range(10, 5), True),                # empty ranges
+    (range(5, 1), range(5, 1), True),
+])
+def test_ranges(r1, r2, expected):
+    assert comparator(r1, r2) == expected
 
 
 def test_standard_python_library_objects() -> None:
