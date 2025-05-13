@@ -135,7 +135,7 @@ def check_create_pr(
         if response.ok:
             pr_id = response.text
             pr_url = github_pr_url(owner, repo, pr_id)
-            logger.info(f"Successfully created a new PR #{pr_number} with the optimized code: {pr_url}")
+            logger.info(f"Successfully created a new PR #{pr_id} with the optimized code: {pr_url}")
         else:
             logger.error(
                 f"Optimization was successful, but I failed to create a PR with the optimized code."
