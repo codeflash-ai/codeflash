@@ -107,6 +107,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
         logger.warning(f"No test results for {sqlite_file_path} found.")
         console.rule()
         return test_results
+    db = None
     try:
         db = sqlite3.connect(sqlite_file_path)
         cur = db.cursor()
@@ -114,6 +115,11 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             "SELECT test_module_path, test_class_name, test_function_name, "
             "function_getting_tested, loop_index, iteration_id, runtime, return_value,verification_type FROM test_results"
         ).fetchall()
+    except Exception as e:
+        logger.warning(f"Failed to parse test results from {sqlite_file_path}. Exception: {e}")
+        if db is not None:
+            db.close()
+        return test_results
     finally:
         db.close()
     for val in data:

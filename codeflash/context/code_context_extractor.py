@@ -217,7 +217,9 @@ def extract_code_string_context_from_files(
             continue
         try:
             qualified_helper_function_names = {func.qualified_name for func in helper_function_sources}
-            code_without_unused_defs = remove_unused_definitions_by_function_names(original_code, qualified_helper_function_names)
+            code_without_unused_defs = remove_unused_definitions_by_function_names(
+                original_code, qualified_helper_function_names
+            )
             code_context = parse_code_and_prune_cst(
                 code_without_unused_defs, code_context_type, set(), qualified_helper_function_names, remove_docstrings
             )
@@ -325,7 +327,9 @@ def extract_code_markdown_context_from_files(
             continue
         try:
             qualified_helper_function_names = {func.qualified_name for func in helper_function_sources}
-            code_without_unused_defs = remove_unused_definitions_by_function_names(original_code, qualified_helper_function_names)
+            code_without_unused_defs = remove_unused_definitions_by_function_names(
+                original_code, qualified_helper_function_names
+            )
             code_context = parse_code_and_prune_cst(
                 code_without_unused_defs, code_context_type, set(), qualified_helper_function_names, remove_docstrings
             )
@@ -403,12 +407,8 @@ def get_function_sources_from_jedi(
             for name in names:
                 try:
                     definitions: list[Name] = name.goto(follow_imports=True, follow_builtin_imports=False)
-                except Exception as e:
-                    try:
-                        logger.exception(f"Error while getting definition for {name.full_name}: {e}")
-                    except Exception as e:
-                        # name.full_name can also throw exceptions sometimes
-                        logger.exception(f"Error while getting definition: {e}")
+                except Exception:  # noqa: BLE001
+                    logger.debug(f"Error while getting definitions for {qualified_function_name}")
                     definitions = []
                 if definitions:
                     # TODO: there can be multiple definitions, see how to handle such cases
@@ -424,7 +424,12 @@ def get_function_sources_from_jedi(
                         and not belongs_to_function_qualified(definition, qualified_function_name)
                         and definition.full_name.startswith(definition.module_name)
                         # Avoid nested functions or classes. Only class.function is allowed
-                        and len((qualified_name := get_qualified_name(definition.module_name, definition.full_name)).split(".")) <= 2
+                        and len(
+                            (qualified_name := get_qualified_name(definition.module_name, definition.full_name)).split(
+                                "."
+                            )
+                        )
+                        <= 2
                     ):
                         function_source = FunctionSource(
                             file_path=definition_path,

@@ -7,6 +7,7 @@ import re
 import sys
 from enum import Enum, Flag, IntFlag, auto
 from pathlib import Path
+import array # Add import for array
 
 import pydantic
 import pytest
@@ -202,6 +203,24 @@ def test_standard_python_library_objects() -> None:
     assert comparator(a, b)
     assert not comparator(a, c)
     assert not comparator(a, d)
+
+    arr1 = array.array('i', [1, 2, 3])
+    arr2 = array.array('i', [1, 2, 3])
+    arr3 = array.array('i', [4, 5, 6])
+    arr4 = array.array('f', [1.0, 2.0, 3.0])
+
+    assert comparator(arr1, arr2)
+    assert not comparator(arr1, arr3)
+    assert not comparator(arr1, arr4)
+    assert not comparator(arr1, [1, 2, 3])
+
+    empty_arr_i1 = array.array('i')
+    empty_arr_i2 = array.array('i')
+    empty_arr_f = array.array('f')
+    assert comparator(empty_arr_i1, empty_arr_i2)
+    assert not comparator(empty_arr_i1, empty_arr_f)
+    assert not comparator(empty_arr_i1, arr1)
+
 
 
 def test_numpy():
