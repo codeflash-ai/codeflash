@@ -172,8 +172,6 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
             return True
 
         if isinstance(orig, array.array):
-            if not isinstance(new, array.array):
-                return False
             if orig.typecode != new.typecode:
                 return False
             if len(orig) != len(new):
