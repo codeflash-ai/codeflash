@@ -84,6 +84,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 frozenset,
                 enum.Enum,
                 type,
+                range
             ),
         ):
             return orig == new
