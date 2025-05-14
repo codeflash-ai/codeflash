@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import concurrent.futures
+import dataclasses
 import os
 import shutil
 import subprocess
@@ -453,7 +454,7 @@ class FunctionOptimizer:
                             if temp_code_file_path and temp_code_file_path.exists():
                                 temp_code_file_path.unlink(missing_ok=True)
                         
-                    candidate.source_code = formatted_candidate_code
+                    candidate = dataclasses.replace(candidate, source_code=formatted_candidate_code)
 
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
