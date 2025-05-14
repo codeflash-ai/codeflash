@@ -7,6 +7,7 @@ import re
 import sys
 from enum import Enum, Flag, IntFlag, auto
 from pathlib import Path
+import array # Add import for array
 
 import pydantic
 import pytest
@@ -124,6 +125,26 @@ def test_basic_python_objects() -> None:
     assert comparator(a, b)
     assert not comparator(a, c)
 
+@pytest.mark.parametrize("r1, r2, expected", [
+    (range(1, 10), range(1, 10), True),                # equal
+    (range(0, 10), range(1, 10), False),               # different start
+    (range(2, 10), range(1, 10), False),
+    (range(1, 5), range(1, 10), False),                # different stop
+    (range(1, 20), range(1, 10), False),
+    (range(1, 10, 1), range(1, 10, 2), False),          # different step
+    (range(1, 10, 3), range(1, 10, 2), False),
+    (range(-5, 0), range(-5, 0), True),                # negative ranges
+    (range(-10, 0), range(-5, 0), False),
+    (range(5, 1), range(10, 5), True),                # empty ranges
+    (range(5, 1), range(5, 1), True),
+    (range(7), range(0, 7), True),
+    (range(0, 7), range(0, 7, 1), True),
+    (range(7), range(0, 7, 1), True),
+])
+
+def test_ranges(r1, r2, expected):
+    assert comparator(r1, r2) == expected
+
 
 def test_standard_python_library_objects() -> None:
     a = datetime.datetime(2020, 2, 2, 2, 2, 2) # type: ignore
@@ -202,6 +223,24 @@ def test_standard_python_library_objects() -> None:
     assert comparator(a, b)
     assert not comparator(a, c)
     assert not comparator(a, d)
+
+    arr1 = array.array('i', [1, 2, 3])
+    arr2 = array.array('i', [1, 2, 3])
+    arr3 = array.array('i', [4, 5, 6])
+    arr4 = array.array('f', [1.0, 2.0, 3.0])
+
+    assert comparator(arr1, arr2)
+    assert not comparator(arr1, arr3)
+    assert not comparator(arr1, arr4)
+    assert not comparator(arr1, [1, 2, 3])
+
+    empty_arr_i1 = array.array('i')
+    empty_arr_i2 = array.array('i')
+    empty_arr_f = array.array('f')
+    assert comparator(empty_arr_i1, empty_arr_i2)
+    assert not comparator(empty_arr_i1, empty_arr_f)
+    assert not comparator(empty_arr_i1, arr1)
+
 
 
 def test_numpy():

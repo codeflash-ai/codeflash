@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import os
-import shutil
 import tempfile
 import time
 from collections import defaultdict
@@ -17,9 +16,9 @@ from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
 from codeflash.benchmarking.utils import print_benchmark_table, validate_and_format_benchmark_table
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint, ask_should_use_checkpoint_get_functions
+from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
 from codeflash.code_utils.code_replacer import normalize_code, normalize_node
-from codeflash.code_utils.code_utils import get_run_tmp_file
+from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
 from codeflash.code_utils.static_analysis import analyze_imported_modules, get_first_top_level_function_or_method_ast
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
@@ -86,7 +85,6 @@ class Optimizer:
         function_optimizer = None
         file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
         num_optimizable_functions: int
-        previous_checkpoint_functions = ask_should_use_checkpoint_get_functions(self.args)
         # discover functions
         (file_to_funcs_to_optimize, num_optimizable_functions) = get_functions_to_optimize(
             optimize_all=self.args.all,
@@ -97,7 +95,7 @@ class Optimizer:
             ignore_paths=self.args.ignore_paths,
             project_root=self.args.project_root,
             module_root=self.args.module_root,
-            previous_checkpoint_functions=previous_checkpoint_functions,
+            previous_checkpoint_functions=self.args.previous_checkpoint_functions,
         )
         function_benchmark_timings: dict[str, dict[BenchmarkKey, int]] = {}
         total_benchmark_timings: dict[BenchmarkKey, int] = {}
@@ -266,22 +264,7 @@ class Optimizer:
                 logger.info("✨ All functions have been optimized! ✨")
         finally:
             if function_optimizer:
-                for test_file in function_optimizer.test_files.get_by_type(TestType.GENERATED_REGRESSION).test_files:
-                    test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
-                    test_file.benchmarking_file_path.unlink(missing_ok=True)
-                for test_file in function_optimizer.test_files.get_by_type(TestType.EXISTING_UNIT_TEST).test_files:
-                    test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
-                    test_file.benchmarking_file_path.unlink(missing_ok=True)
-                for test_file in function_optimizer.test_files.get_by_type(TestType.CONCOLIC_COVERAGE_TEST).test_files:
-                    test_file.instrumented_behavior_file_path.unlink(missing_ok=True)
-                if function_optimizer.test_cfg.concolic_test_root_dir:
-                    shutil.rmtree(function_optimizer.test_cfg.concolic_test_root_dir, ignore_errors=True)
-                if self.args.benchmark:
-                    if self.replay_tests_dir.exists():
-                        shutil.rmtree(self.replay_tests_dir, ignore_errors=True)
-                    trace_file.unlink(missing_ok=True)
-            if hasattr(get_run_tmp_file, "tmpdir"):
-                get_run_tmp_file.tmpdir.cleanup()
+                function_optimizer.cleanup_generated_files()
 
 
 def run_with_args(args: Namespace) -> None:
