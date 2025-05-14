@@ -5,6 +5,7 @@ import concurrent.futures
 import os
 import shutil
 import subprocess
+import tempfile
 import time
 import uuid
 from collections import defaultdict, deque
@@ -124,6 +125,7 @@ class FunctionOptimizer:
         self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
         self.replay_tests_dir = replay_tests_dir if replay_tests_dir else None
+        self.optimizer_temp_dir = Path(tempfile.mkdtemp(prefix="codeflash_opt_fmt_"))
 
     def optimize_function(self) -> Result[BestOptimization, str]:
         should_run_experiment = self.experiment_id is not None
@@ -301,9 +303,30 @@ class FunctionOptimizer:
                     code_context=code_context, optimized_code=best_optimization.candidate.source_code
                 )
 
-                new_code, new_helper_code = self.reformat_code_and_helpers(
-                    code_context.helper_functions, explanation.file_path, self.function_to_optimize_source_code
-                )
+                if not self.args.disable_imports_sorting:
+                    main_file_path = self.function_to_optimize.file_path
+                    if main_file_path.exists():
+                        current_main_content = main_file_path.read_text(encoding="utf8")
+                        sorted_main_content = sort_imports(current_main_content)
+                        if sorted_main_content != current_main_content:
+                            main_file_path.write_text(sorted_main_content, encoding="utf8")
+                    
+                    writable_helper_file_paths = {hf.file_path for hf in code_context.helper_functions}
+                    for helper_file_path in writable_helper_file_paths:
+                        if helper_file_path.exists():
+                            current_helper_content = helper_file_path.read_text(encoding="utf8")
+                            sorted_helper_content = sort_imports(current_helper_content)
+                            if sorted_helper_content != current_helper_content:
+                                helper_file_path.write_text(sorted_helper_content, encoding="utf8")
+
+                new_code = self.function_to_optimize.file_path.read_text(encoding="utf8")
+                new_helper_code: dict[Path, str] = {}
+                for helper_file_path_key in original_helper_code:
+                    if helper_file_path_key.exists():
+                         new_helper_code[helper_file_path_key] = helper_file_path_key.read_text(encoding="utf8")
+                    else:
+                         logger.warning(f"Helper file {helper_file_path_key} not found after optimization. It will not be included in new_helper_code for PR.")
+
 
                 existing_tests = existing_tests_source_for(
                     self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
@@ -405,6 +428,33 @@ class FunctionOptimizer:
                         future_line_profile_results = None
                     candidate_index += 1
                     candidate = candidates.popleft()
+
+                    formatted_candidate_code = candidate.source_code
+                    if self.args.formatter_cmds:
+                        temp_code_file_path: Path | None = None
+                        try:
+                            with tempfile.NamedTemporaryFile(
+                                mode="w",
+                                suffix=".py",
+                                delete=False,
+                                encoding="utf8",
+                                dir=self.optimizer_temp_dir
+                            ) as tmp_file:
+                                tmp_file.write(candidate.source_code)
+                                temp_code_file_path = Path(tmp_file.name)
+                            
+                            formatted_candidate_code = format_code(
+                                formatter_cmds=self.args.formatter_cmds, 
+                                path=temp_code_file_path
+                            )
+                        except Exception as e:
+                            logger.error(f"Error during formatting candidate code via temp file: {e}. Using original candidate code.")
+                        finally:
+                            if temp_code_file_path and temp_code_file_path.exists():
+                                temp_code_file_path.unlink(missing_ok=True)
+                        
+                    candidate.source_code = formatted_candidate_code
+
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
                     logger.info(f"Optimization candidate {candidate_index}/{original_len}:")
@@ -579,27 +629,6 @@ class FunctionOptimizer:
         for module_abspath in original_helper_code:
             with Path(module_abspath).open("w", encoding="utf8") as f:
                 f.write(original_helper_code[module_abspath])
-
-    def reformat_code_and_helpers(
-        self, helper_functions: list[FunctionSource], path: Path, original_code: str
-    ) -> tuple[str, dict[Path, str]]:
-        should_sort_imports = not self.args.disable_imports_sorting
-        if should_sort_imports and isort.code(original_code) != original_code:
-            should_sort_imports = False
-
-        new_code = format_code(self.args.formatter_cmds, path)
-        if should_sort_imports:
-            new_code = sort_imports(new_code)
-
-        new_helper_code: dict[Path, str] = {}
-        helper_functions_paths = {hf.file_path for hf in helper_functions}
-        for module_abspath in helper_functions_paths:
-            formatted_helper_code = format_code(self.args.formatter_cmds, module_abspath)
-            if should_sort_imports:
-                formatted_helper_code = sort_imports(formatted_helper_code)
-            new_helper_code[module_abspath] = formatted_helper_code
-
-        return new_code, new_helper_code
 
     def replace_function_and_helpers_with_optimized_code(
         self, code_context: CodeOptimizationContext, optimized_code: str
