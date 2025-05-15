@@ -239,7 +239,7 @@ def collect_setup_info() -> SetupInfo:
         else:
             apologize_and_exit()
     else:
-        tests_root = Path(curdir) / Path(cast(str, tests_root_answer))
+        tests_root = Path(curdir) / Path(cast("str", tests_root_answer))
     tests_root = tests_root.relative_to(curdir)
     ph("cli-tests-root-provided")
 
@@ -302,7 +302,7 @@ def collect_setup_info() -> SetupInfo:
     elif benchmarks_answer == no_benchmarks_option:
         benchmarks_root = None
     else:
-        benchmarks_root = tests_root / Path(cast(str, benchmarks_answer))
+        benchmarks_root = tests_root / Path(cast("str", benchmarks_answer))
 
     # TODO: Implement other benchmark framework options
     # if benchmarks_root:
@@ -354,9 +354,9 @@ def collect_setup_info() -> SetupInfo:
         module_root=str(module_root),
         tests_root=str(tests_root),
         benchmarks_root=str(benchmarks_root) if benchmarks_root else None,
-        test_framework=cast(str, test_framework),
+        test_framework=cast("str", test_framework),
         ignore_paths=ignore_paths,
-        formatter=cast(str, formatter),
+        formatter=cast("str", formatter),
         git_remote=str(git_remote),
     )
 
@@ -466,7 +466,7 @@ def check_for_toml_or_setup_file() -> str | None:
             click.echo("⏩️ Skipping pyproject.toml creation.")
             apologize_and_exit()
     click.echo()
-    return cast(str, project_name)
+    return cast("str", project_name)
 
 
 def install_github_actions(override_formatter_check: bool = False) -> None:
@@ -619,17 +619,9 @@ def get_dependency_installation_commands(dep_manager: DependencyManager) -> tupl
 
 
 def get_dependency_manager_installation_string(dep_manager: DependencyManager) -> str:
-    py_version = sys.version_info
-    python_version_string = f"'{py_version.major}.{py_version.minor}'"
-    if dep_manager == DependencyManager.UV:
-        return """name: 🐍 Setup UV
-        uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true"""
-    return f"""name: 🐍 Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: {python_version_string}"""
+    if dep_manager is DependencyManager.UV:
+        return _UV_STRING
+    return _PYTHON_STRING
 
 
 def get_github_action_working_directory(toml_path: Path, git_root: Path) -> str:
@@ -966,3 +958,16 @@ def ask_for_telemetry() -> bool:
     )
 
     return enable_telemetry
+
+
+PYTHON_VERSION_STRING = f"'{sys.version_info.major}.{sys.version_info.minor}'"
+
+_UV_STRING = """name: 🐍 Setup UV
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true"""
+
+_PYTHON_STRING = f"""name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: {PYTHON_VERSION_STRING}"""
