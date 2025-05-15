@@ -55,3 +55,12 @@ def sort_imports(code: str) -> str:
         return code  # Fall back to original code if isort fails
 
     return sorted_code
+
+
+def sort_imports_in_place(paths: list[Path]) -> None:
+    for path in paths:
+        if path.exists():
+            content = path.read_text(encoding="utf8")
+            sorted_content = sort_imports(content)
+            if sorted_content != content:
+                path.write_text(sorted_content, encoding="utf8")

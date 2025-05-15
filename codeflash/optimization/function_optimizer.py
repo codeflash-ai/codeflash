@@ -38,7 +38,7 @@ from codeflash.code_utils.config_consts import (
     N_TESTS_TO_GENERATE,
     TOTAL_LOOPING_TIME,
 )
-from codeflash.code_utils.formatter import format_code, sort_imports
+from codeflash.code_utils.formatter import format_code, sort_imports_in_place
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
@@ -305,20 +305,8 @@ class FunctionOptimizer:
                 )
 
                 if not self.args.disable_imports_sorting:
-                    main_file_path = self.function_to_optimize.file_path
-                    if main_file_path.exists():
-                        current_main_content = main_file_path.read_text(encoding="utf8")
-                        sorted_main_content = sort_imports(current_main_content)
-                        if sorted_main_content != current_main_content:
-                            main_file_path.write_text(sorted_main_content, encoding="utf8")
-                    
-                    writable_helper_file_paths = {hf.file_path for hf in code_context.helper_functions}
-                    for helper_file_path in writable_helper_file_paths:
-                        if helper_file_path.exists():
-                            current_helper_content = helper_file_path.read_text(encoding="utf8")
-                            sorted_helper_content = sort_imports(current_helper_content)
-                            if sorted_helper_content != current_helper_content:
-                                helper_file_path.write_text(sorted_helper_content, encoding="utf8")
+                    path_to_sort_imports_for = [self.function_to_optimize.file_path] + [hf.file_path for hf in code_context.helper_functions]
+                    sort_imports_in_place(path_to_sort_imports_for)
 
                 new_code = self.function_to_optimize.file_path.read_text(encoding="utf8")
                 new_helper_code: dict[Path, str] = {}
