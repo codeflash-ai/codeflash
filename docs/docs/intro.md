@@ -2,7 +2,7 @@
 sidebar_position: 1
 slug: /
 ---
-## What is Codeflash?
+# What is Codeflash?
 
 Welcome! Codeflash is an AI performance optimizer for Python code.
 Codeflash speeds up Python code by figuring out the best way to rewrite your code while verifying that the behavior of the code is unchanged.
