@@ -9,7 +9,7 @@ import time
 import uuid
 from collections import defaultdict, deque
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import cast, TYPE_CHECKING
 
 import isort
 import libcst as cst
@@ -592,7 +592,10 @@ class FunctionOptimizer:
         new_helper_code: dict[Path, str] = {}
         for i, path in enumerate(paths):
             unformatted_code = path.read_text(encoding="utf8")
-            code_context = self.get_code_optimization_context()
+            code_context_result = self.get_code_optimization_context()
+            if code_context_result.is_failure():
+                raise Exception("Unable to generate code context for formatting purposes")
+            code_context = cast(CodeOptimizationContext, code_context_result.unwrap())
             code_ranges_unformatted = get_modification_code_ranges(unformatted_code, self.function_to_optimize, code_context)
 
             formatted_code = format_code(self.args.formatter_cmds, path)
@@ -600,17 +603,15 @@ class FunctionOptimizer:
             # functions (even before optimization was applied) and filepaths, none of which is changing.
             code_ranges_formatted = get_modification_code_ranges(formatted_code, self.function_to_optimize, code_context)
 
-            if len(code_ranges_formatted != code_ranges_unformatted):
+            if len(code_ranges_formatted) != len(code_ranges_unformatted):
                 raise Exception("Formatting had unexpected effects on code ranges")
 
             # It is important to sort in descending order so that the index arithmetic remains simple as we modify new_code
-            code_ranges_unformatted.sort(key=lambda range: range[0], reverse=True)
-            code_ranges_formatted.sort(key=lambda range: range[0], reverse=True)
+            code_ranges_unformatted.sort(key=lambda range: range.start, reverse=True)
+            code_ranges_formatted.sort(key=lambda range: range.start, reverse=True)
             new_code = unformatted_code
             for range_0, range_1 in zip(code_ranges_unformatted, code_ranges_formatted):
-                range_0_0, range_0_1 = range_0
-                range_1_0, range_1_1 = range_1
-                new_code = new_code[:range_0_0] + new_code[range_1_0:range_1_1 + 1] + new_code[range_0_1 + 1]
+                new_code = new_code[:range_0.start] + new_code[range_1.start:range_1.end + 1] + new_code[range_0.end + 1]
 
             path.write_text(new_code, encoding="utf8")
 
