@@ -609,12 +609,14 @@ class FunctionOptimizer:
             # It is important to sort in descending order so that the index arithmetic remains simple as we modify new_code
             code_ranges_unformatted.sort(key=lambda range: range[0], reverse=True)
             code_ranges_formatted.sort(key=lambda range: range[0], reverse=True)
-            new_code = unformatted_code
+            formatted_code_lines = formatted_code.split("\n")
+            new_code_lines = unformatted_code.split("\n")
             for range_0, range_1 in zip(code_ranges_unformatted, code_ranges_formatted):
                 range_0_0, range_0_1 = range_0
                 range_1_0, range_1_1 = range_1
-                new_code = new_code[:range_0_0] + new_code[range_1_0:range_1_1 + 1] + new_code[range_0_1 + 1]
-
+                new_code_lines = new_code_lines[:range_0_0] + formatted_code_lines[range_1_0:range_1_1 + 1] + new_code_lines[range_0_1 + 1:]
+            new_code = "\n".join(new_code_lines)
+            breakpoint()
             path.write_text(new_code, encoding="utf8")
 
             if should_sort_imports:
