@@ -9,7 +9,7 @@ import time
 import uuid
 from collections import defaultdict, deque
 from pathlib import Path
-from typing import cast, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 import isort
 import libcst as cst
@@ -302,7 +302,9 @@ class FunctionOptimizer:
                 )
 
                 new_code, new_helper_code = self.reformat_code_and_helpers(
-                    code_context.helper_functions, explanation.file_path, self.function_to_optimize_source_code
+                    code_context,
+                    explanation.file_path,
+                    self.function_to_optimize_source_code,
                 )
 
                 existing_tests = existing_tests_source_for(
@@ -581,21 +583,24 @@ class FunctionOptimizer:
                 f.write(original_helper_code[module_abspath])
 
     def reformat_code_and_helpers(
-        self, helper_functions: list[FunctionSource], fto_path: Path, original_code: str
+        self,
+        code_context: CodeOptimizationContext,
+        fto_path: Path,
+        original_code: str,
     ) -> tuple[str, dict[Path, str]]:
         should_sort_imports = not self.args.disable_imports_sorting
         if should_sort_imports and isort.code(original_code) != original_code:
             should_sort_imports = False
         
+        helper_functions = code_context.helper_functions
+
         paths = [fto_path] + list({hf.file_path for hf in helper_functions})
         new_target_code = None
         new_helper_code: dict[Path, str] = {}
         for i, path in enumerate(paths):
             unformatted_code = path.read_text(encoding="utf8")
-            code_context_result = self.get_code_optimization_context()
-            if code_context_result.is_failure():
-                raise Exception("Unable to generate code context for formatting purposes")
-            code_context = cast(CodeOptimizationContext, code_context_result.unwrap())
+            # TODO(zomglings): code_context.preexisting_objects doesn't read all functions in the old file. We should add that to context
+            # separately. That's a much bigger change.
             code_ranges_unformatted = get_modification_code_ranges(unformatted_code, self.function_to_optimize, code_context)
 
             formatted_code = format_code(self.args.formatter_cmds, path)
