@@ -36,7 +36,7 @@ from codeflash.code_utils.config_consts import (
     N_TESTS_TO_GENERATE,
     TOTAL_LOOPING_TIME,
 )
-from codeflash.code_utils.formatter import format_code, sort_imports
+from codeflash.code_utils.formatter import format_code, get_modification_code_ranges, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports
 from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
@@ -581,25 +581,48 @@ class FunctionOptimizer:
                 f.write(original_helper_code[module_abspath])
 
     def reformat_code_and_helpers(
-        self, helper_functions: list[FunctionSource], path: Path, original_code: str
+        self, helper_functions: list[FunctionSource], fto_path: Path, original_code: str
     ) -> tuple[str, dict[Path, str]]:
         should_sort_imports = not self.args.disable_imports_sorting
         if should_sort_imports and isort.code(original_code) != original_code:
             should_sort_imports = False
-
-        new_code = format_code(self.args.formatter_cmds, path)
-        if should_sort_imports:
-            new_code = sort_imports(new_code)
-
+        
+        paths = [fto_path] + list({hf.file_path for hf in helper_functions})
+        new_target_code = None
         new_helper_code: dict[Path, str] = {}
-        helper_functions_paths = {hf.file_path for hf in helper_functions}
-        for module_abspath in helper_functions_paths:
-            formatted_helper_code = format_code(self.args.formatter_cmds, module_abspath)
-            if should_sort_imports:
-                formatted_helper_code = sort_imports(formatted_helper_code)
-            new_helper_code[module_abspath] = formatted_helper_code
+        for i, path in enumerate(paths):
+            unformatted_code = path.read_text(encoding="utf8")
+            code_context = self.get_code_optimization_context()
+            code_ranges_unformatted = get_modification_code_ranges(unformatted_code, self.function_to_optimize, code_context)
 
-        return new_code, new_helper_code
+            formatted_code = format_code(self.args.formatter_cmds, path)
+            # Note: We do not need to refresh the code_context because we only use it to refer to names of original
+            # functions (even before optimization was applied) and filepaths, none of which is changing.
+            code_ranges_formatted = get_modification_code_ranges(formatted_code, self.function_to_optimize, code_context)
+
+            if len(code_ranges_formatted != code_ranges_unformatted):
+                raise Exception("Formatting had unexpected effects on code ranges")
+
+            # It is important to sort in descending order so that the index arithmetic remains simple as we modify new_code
+            code_ranges_unformatted.sort(key=lambda range: range[0], reverse=True)
+            code_ranges_formatted.sort(key=lambda range: range[0], reverse=True)
+            new_code = unformatted_code
+            for range_0, range_1 in zip(code_ranges_unformatted, code_ranges_formatted):
+                range_0_0, range_0_1 = range_0
+                range_1_0, range_1_1 = range_1
+                new_code = new_code[:range_0_0] + new_code[range_1_0:range_1_1 + 1] + new_code[range_0_1 + 1]
+
+            path.write_text(new_code, encoding="utf8")
+
+            if should_sort_imports:
+                new_code = sort_imports(new_code)
+            
+            if i == 0:
+                new_target_code = new_code
+            else:
+                new_helper_code[path] = new_code
+
+        return new_target_code, new_helper_code
 
     def replace_function_and_helpers_with_optimized_code(
         self, code_context: CodeOptimizationContext, optimized_code: str
