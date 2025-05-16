@@ -616,7 +616,6 @@ class FunctionOptimizer:
                 range_1_0, range_1_1 = range_1
                 new_code_lines = new_code_lines[:range_0_0] + formatted_code_lines[range_1_0:range_1_1 + 1] + new_code_lines[range_0_1 + 1:]
             new_code = "\n".join(new_code_lines)
-            breakpoint()
             path.write_text(new_code, encoding="utf8")
 
             if should_sort_imports:
