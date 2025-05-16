@@ -52,7 +52,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
         self.new_class_functions: dict[str, list[cst.FunctionDef]] = defaultdict(list)
         self.current_class = None
         self.modified_init_functions: dict[str, cst.FunctionDef] = {}
-        self.modification_code_ranges: list[tuple[int, int]] = []
+        self.modification_code_range_lines: list[tuple[int, int]] = []
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
         modification = True
@@ -72,7 +72,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
 
         if modification:
             pos = self.get_metadata(cst.metadata.PositionProvider, node)
-            self.modification_code_ranges.append((pos.start, pos.end))
+            self.modification_code_range_lines.append((pos.start.line, pos.end.line))
 
         return False
 

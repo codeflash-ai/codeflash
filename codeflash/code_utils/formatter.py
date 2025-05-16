@@ -90,4 +90,4 @@ def get_modification_code_ranges(
     module = cst.metadata.MetadataWrapper(cst.parse_module(modified_code))
     visitor = OptimFunctionCollector(code_context.preexisting_objects, parsed_function_names)
     module.visit(visitor)
-    return visitor.modification_code_ranges
+    return visitor.modification_code_range_lines
