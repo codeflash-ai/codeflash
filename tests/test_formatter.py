@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from codeflash.code_utils.config_parser import parse_config_file
-from codeflash.code_utils.formatter import format_code, sort_imports, sort_imports_in_place
+from codeflash.code_utils.formatter import format_code, sort_imports
 
 
 def test_remove_duplicate_imports():
@@ -29,23 +29,6 @@ def test_sorting_imports():
 
     new_code = sort_imports(original_code)
     assert new_code == "import os\nimport sys\nimport unittest\n"
-
-def test_sort_imports_in_place():
-    """Test that sorting imports in place in multiple files works."""
-    original_code = "import sys\nimport unittest\nimport os\n"
-    expected_code = "import os\nimport sys\nimport unittest\n"
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        file_paths = []
-        for i in range(3):
-            file_path = Path(tmpdir) / f"test_file_{i}.py"
-            file_path.write_text(original_code, encoding="utf8")
-            file_paths.append(file_path)
-        
-        sort_imports_in_place(file_paths)
-        
-        for file_path in file_paths:
-            assert file_path.read_text(encoding="utf8") == expected_code
 
 
 def test_sort_imports_without_formatting():
