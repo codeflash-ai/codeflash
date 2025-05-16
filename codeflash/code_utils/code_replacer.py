@@ -34,7 +34,7 @@ def normalize_code(code: str) -> str:
 
 
 class OptimFunctionCollector(cst.CSTVisitor):
-    METADATA_DEPENDENCIES = (cst.metadata.ParentNodeProvider,)
+    METADATA_DEPENDENCIES = (cst.metadata.ParentNodeProvider, cst.metadata.PositionProvider)
 
     def __init__(
         self,
@@ -52,8 +52,11 @@ class OptimFunctionCollector(cst.CSTVisitor):
         self.new_class_functions: dict[str, list[cst.FunctionDef]] = defaultdict(list)
         self.current_class = None
         self.modified_init_functions: dict[str, cst.FunctionDef] = {}
+        self.modification_code_ranges: list[tuple[int, int]] = []
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
+        modification = True
+
         if (self.current_class, node.name.value) in self.function_names:
             self.modified_functions[(self.current_class, node.name.value)] = node
         elif self.current_class and node.name.value == "__init__":
@@ -64,6 +67,13 @@ class OptimFunctionCollector(cst.CSTVisitor):
             and self.current_class is None
         ):
             self.new_functions.append(node)
+        else:
+            modification = False
+
+        if modification:
+            pos = self.get_metadata(cst.metadata.PositionProvider, node)
+            self.modification_code_ranges.append((pos.start, pos.end))
+
         return False
 
     def visit_ClassDef(self, node: cst.ClassDef) -> bool:
@@ -153,7 +163,6 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         else:
             node = node.with_changes(body=(*self.new_functions, *node.body))
         return node
-
 
 def replace_functions_in_file(
     source_code: str,

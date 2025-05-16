@@ -6,8 +6,12 @@ import subprocess
 from typing import TYPE_CHECKING
 
 import isort
+import libcst as cst
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.code_utils.code_replacer import OptimFunctionCollector
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.models import CodeOptimizationContext 
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -55,3 +59,34 @@ def sort_imports(code: str) -> str:
         return code  # Fall back to original code if isort fails
 
     return sorted_code
+
+def get_modification_code_ranges(
+    modified_code: str,
+    fto: FunctionToOptimize,
+    code_context: CodeOptimizationContext,
+) -> list[tuple[int, int]]:
+    """
+    Returns the line number of modified and new functions in a string containing containing the code in a fully modified file.
+    """
+    modified_functions = set()
+    modified_functions.add(fto.qualified_name)
+    for helper_function in code_context.helper_functions:
+        if helper_function.jedi_definition.type != "class":
+            modified_functions.add(helper_function.qualified_name)
+    
+    parsed_function_names = set()
+    for original_function_name in modified_functions:
+        if original_function_name.count(".") == 0:
+            class_name, function_name = None, original_function_name
+        elif original_function_name.count(".") == 1:
+            class_name, function_name = original_function_name.split(".")
+        else:
+            msg = f"Unable to find {original_function_name}. Returning unchanged source code."
+            logger.error(msg)
+            continue
+        parsed_function_names.add((class_name, function_name))
+
+    module = cst.metadata.MetadataWrapper(cst.parse_module(modified_code))
+    visitor = OptimFunctionCollector(code_context.preexisting_objects, parsed_function_names)
+    module.visit(visitor)
+    return visitor.modification_code_ranges
