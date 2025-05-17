@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 from codeflash.code_utils.config_parser import parse_config_file
-from codeflash.code_utils.formatter import format_code, sort_imports
+from codeflash.code_utils.formatter import format_code, get_modification_code_ranges, sort_imports
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 
 def test_remove_duplicate_imports():
@@ -209,3 +210,15 @@ def foo():
         tmp_path = tmp.name
         with pytest.raises(FileNotFoundError):
             format_code(formatter_cmds=["exit 1"], path=Path(tmp_path))
+
+def test_get_modification_code_ranges_self_contained_fto():
+    modified_code = """
+def hello(name):
+    print(f"Hello, {{name}}")
+"""
+
+    fto = FunctionToOptimize(function_name="hello", file_path=Path("hello.py"), parents=[])
+    code_ranges = get_modification_code_ranges(modified_code, fto, set(), [])
+
+    assert len(code_ranges) == 1
+    assert code_ranges[0] == (2, 3)
