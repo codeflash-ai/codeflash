@@ -11,7 +11,7 @@ import libcst as cst
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_replacer import OptimFunctionCollector
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeOptimizationContext 
+from codeflash.models.models import FunctionParent, FunctionSource
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -64,14 +64,15 @@ def sort_imports(code: str) -> str:
 def get_modification_code_ranges(
     modified_code: str,
     fto: FunctionToOptimize,
-    code_context: CodeOptimizationContext,
+    preexisting_functions: set[tuple[str, tuple[FunctionParent,...]]],
+    helper_functions: list[FunctionSource],
 ) -> list[tuple[int, int]]:
     """
     Returns the line number of modified and new functions in a string containing containing the code in a fully modified file.
     """
     modified_functions = set()
     modified_functions.add(fto.qualified_name)
-    for helper_function in code_context.helper_functions:
+    for helper_function in helper_functions:
         if helper_function.jedi_definition.type != "class":
             modified_functions.add(helper_function.qualified_name)
     
@@ -88,6 +89,6 @@ def get_modification_code_ranges(
         parsed_function_names.add((class_name, function_name))
 
     module = cst.metadata.MetadataWrapper(cst.parse_module(modified_code))
-    visitor = OptimFunctionCollector(code_context.preexisting_objects, parsed_function_names)
+    visitor = OptimFunctionCollector(preexisting_functions, parsed_function_names)
     module.visit(visitor)
     return visitor.modification_code_range_lines

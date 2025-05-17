@@ -22,6 +22,7 @@ from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
+from codeflash.code_utils.code_extractor import find_preexisting_objects
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
     cleanup_paths,
@@ -49,6 +50,7 @@ from codeflash.models.models import (
     BestOptimization,
     CodeOptimizationContext,
     FunctionCalledInTest,
+    FunctionParent,
     GeneratedTests,
     GeneratedTestsList,
     OptimizationSet,
@@ -297,12 +299,20 @@ class FunctionOptimizer:
 
                 self.log_successful_optimization(explanation, generated_tests, exp_type)
 
+                # xylophone
+                preexisting_functions_by_filepath: dict[Path, list[str]] = {}
+                filepaths_to_inspect = [self.function_to_optimize.file_path] + list({helper.file_path for helper in code_context.helper_functions})
+                for filepath in filepaths_to_inspect:
+                    source_code = filepath.read_text(encoding="utf8")
+                    preexisting_functions_by_filepath[filepath] = find_preexisting_objects(source_code)
+
                 self.replace_function_and_helpers_with_optimized_code(
                     code_context=code_context, optimized_code=best_optimization.candidate.source_code
                 )
 
                 new_code, new_helper_code = self.reformat_code_and_helpers(
-                    code_context,
+                    preexisting_functions_by_filepath,
+                    code_context.helper_functions,
                     explanation.file_path,
                     self.function_to_optimize_source_code,
                 )
@@ -584,7 +594,8 @@ class FunctionOptimizer:
 
     def reformat_code_and_helpers(
         self,
-        code_context: CodeOptimizationContext,
+        preexisting_functions_by_filepath: dict[Path, set[tuple[str, tuple[FunctionParent,...]]]],
+        helper_functions: list[FunctionSource],
         fto_path: Path,
         original_code: str,
     ) -> tuple[str, dict[Path, str]]:
@@ -592,21 +603,26 @@ class FunctionOptimizer:
         if should_sort_imports and isort.code(original_code) != original_code:
             should_sort_imports = False
         
-        helper_functions = code_context.helper_functions
-
         paths = [fto_path] + list({hf.file_path for hf in helper_functions})
         new_target_code = None
         new_helper_code: dict[Path, str] = {}
         for i, path in enumerate(paths):
             unformatted_code = path.read_text(encoding="utf8")
-            # TODO(zomglings): code_context.preexisting_objects doesn't read all functions in the old file. We should add that to context
-            # separately. That's a much bigger change.
-            code_ranges_unformatted = get_modification_code_ranges(unformatted_code, self.function_to_optimize, code_context)
-
+            code_ranges_unformatted = get_modification_code_ranges(
+                unformatted_code,
+                self.function_to_optimize,
+                preexisting_functions_by_filepath[path],
+                helper_functions,
+            )
             formatted_code = format_code(self.args.formatter_cmds, path)
             # Note: We do not need to refresh the code_context because we only use it to refer to names of original
             # functions (even before optimization was applied) and filepaths, none of which is changing.
-            code_ranges_formatted = get_modification_code_ranges(formatted_code, self.function_to_optimize, code_context)
+            code_ranges_formatted = get_modification_code_ranges(
+                formatted_code,
+                self.function_to_optimize,
+                preexisting_functions_by_filepath[path],
+                helper_functions,
+            )
 
             if len(code_ranges_formatted) != len(code_ranges_unformatted):
                 raise Exception("Formatting had unexpected effects on code ranges")
