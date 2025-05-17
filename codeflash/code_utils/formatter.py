@@ -60,7 +60,6 @@ def sort_imports(code: str) -> str:
 
     return sorted_code
 
-# TODO(zomglings): Write unit tests.
 def get_modification_code_ranges(
     modified_code: str,
     fto: FunctionToOptimize,
@@ -68,7 +67,7 @@ def get_modification_code_ranges(
     helper_functions: list[FunctionSource],
 ) -> list[tuple[int, int]]:
     """
-    Returns the line number of modified and new functions in a string containing containing the code in a fully modified file.
+    Returns the starting and ending line numbers of modified and new functions in a file containing edits.
     """
     modified_functions = set()
     modified_functions.add(fto.qualified_name)
