@@ -254,6 +254,11 @@ class Tracer:
             return
         code = frame.f_code
 
+        # Check function name first before resolving path
+        if code.co_name in self.ignored_functions:
+            return
+
+        # Now resolve file path only if we need it
         co_filename = code.co_filename
         if co_filename in self.path_cache:
             file_name = self.path_cache[co_filename]
@@ -262,8 +267,6 @@ class Tracer:
             self.path_cache[co_filename] = file_name
         # TODO : It currently doesn't log the last return call from the first function
 
-        if code.co_name in self.ignored_functions:
-            return
         if not file_name.is_relative_to(self.project_root):
             return
         if not file_name.exists():
@@ -488,8 +491,9 @@ class Tracer:
             cc = cc + 1
 
         if pfn in callers:
-            callers[pfn] = callers[pfn] + 1  # hack: gather more
-            # stats such as the amount of time added to ct courtesy
+            # Increment call count between these functions
+            callers[pfn] = callers[pfn] + 1
+            # Note: This tracks stats such as the amount of time added to ct
             # of this specific call, and the contribution to cc
             # courtesy of this call.
         else:
