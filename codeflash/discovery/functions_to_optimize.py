@@ -206,6 +206,7 @@ def get_functions_to_optimize(
         logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
         if optimize_all:
             three_min_in_ns = int(1.8e11)
+            console.rule()
             logger.info(
                 f"It might take about {humanize_runtime(functions_count*three_min_in_ns)} to fully optimize this project. Codeflash "
                 f"will keep opening pull requests as it finds optimizations."
