@@ -293,7 +293,12 @@ class Tracer:
         except:  # noqa: E722
             # someone can override the getattr method and raise an exception. I'm looking at you wrapt
             return
-        function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
+
+        try:
+            function_qualified_name = f"{file_name}:{code.co_qualname}"
+        except AttributeError:
+            function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
+
         if function_qualified_name in self.ignored_qualified_functions:
             return
         if function_qualified_name not in self.function_count:
