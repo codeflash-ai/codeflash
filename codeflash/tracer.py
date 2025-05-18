@@ -42,6 +42,7 @@ from codeflash.discovery.functions_to_optimize import filter_files_optimized
 from codeflash.tracing.replay_test import create_trace_replay_test
 from codeflash.tracing.tracing_utils import FunctionModules
 from codeflash.verification.verification_utils import get_test_file_path
+import contextlib
 
 if TYPE_CHECKING:
     from types import FrameType, TracebackType
@@ -266,14 +267,20 @@ class Tracer:
         class_name = None
         arguments = frame.f_locals
         try:
-            if (
-                "self" in arguments
-                and hasattr(arguments["self"], "__class__")
-                and hasattr(arguments["self"].__class__, "__name__")
-            ):
-                class_name = arguments["self"].__class__.__name__
-            elif "cls" in arguments and hasattr(arguments["cls"], "__name__"):
-                class_name = arguments["cls"].__name__
+            self_arg = arguments.get("self")
+            if self_arg is not None:
+                try:
+                    class_name = self_arg.__class__.__name__
+                except AttributeError:
+                    cls_arg = arguments.get("cls")
+                    if cls_arg is not None:
+                        with contextlib.suppress(AttributeError):
+                            class_name = cls_arg.__name__
+            else:
+                cls_arg = arguments.get("cls")
+                if cls_arg is not None:
+                    with contextlib.suppress(AttributeError):
+                        class_name = cls_arg.__name__
         except:  # noqa: E722
             # someone can override the getattr method and raise an exception. I'm looking at you wrapt
             return
