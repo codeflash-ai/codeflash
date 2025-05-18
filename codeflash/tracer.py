@@ -11,6 +11,7 @@
 #
 from __future__ import annotations
 
+import contextlib
 import importlib.machinery
 import io
 import json
@@ -42,7 +43,6 @@ from codeflash.discovery.functions_to_optimize import filter_files_optimized
 from codeflash.tracing.replay_test import create_trace_replay_test
 from codeflash.tracing.tracing_utils import FunctionModules
 from codeflash.verification.verification_utils import get_test_file_path
-import contextlib
 
 if TYPE_CHECKING:
     from types import FrameType, TracebackType
@@ -100,6 +100,7 @@ class Tracer:
             )
             disable = True
         self.disable = disable
+        self._db_lock: threading.Lock | None = None
         if self.disable:
             return
         if sys.getprofile() is not None or sys.gettrace() is not None:
@@ -109,6 +110,9 @@ class Tracer:
             )
             self.disable = True
             return
+
+        self._db_lock = threading.Lock()
+
         self.con = None
         self.output_file = Path(output).resolve()
         self.functions = functions
@@ -180,34 +184,55 @@ class Tracer:
     def __exit__(
         self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: TracebackType | None
     ) -> None:
-        if self.disable:
+        if self.disable or self._db_lock is None:
             return
         sys.setprofile(None)
-        self.con.commit()
-        console.rule("Codeflash: Traced Program Output End", style="bold blue")
-        self.create_stats()
+        threading.setprofile(None)
 
-        cur = self.con.cursor()
-        cur.execute(
-            "CREATE TABLE pstats (filename TEXT, line_number INTEGER, function TEXT, class_name TEXT, "
-            "call_count_nonrecursive INTEGER, num_callers INTEGER, total_time_ns INTEGER, "
-            "cumulative_time_ns INTEGER, callers BLOB)"
-        )
-        for func, (cc, nc, tt, ct, callers) in self.stats.items():
-            remapped_callers = [{"key": k, "value": v} for k, v in callers.items()]
+        with self._db_lock:
+            if self.con is None:
+                return
+
+            self.con.commit()  # Commit any pending from tracer_logic
+            console.rule("Codeflash: Traced Program Output End", style="bold blue")
+            self.create_stats()  # This calls snapshot_stats which uses self.timings
+
+            cur = self.con.cursor()
             cur.execute(
-                "INSERT INTO pstats VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (str(Path(func[0]).resolve()), func[1], func[2], func[3], cc, nc, tt, ct, json.dumps(remapped_callers)),
+                "CREATE TABLE pstats (filename TEXT, line_number INTEGER, function TEXT, class_name TEXT, "
+                "call_count_nonrecursive INTEGER, num_callers INTEGER, total_time_ns INTEGER, "
+                "cumulative_time_ns INTEGER, callers BLOB)"
             )
-        self.con.commit()
+            # self.stats is populated by snapshot_stats() called within create_stats()
+            # Ensure self.stats is accessed after create_stats() and within the lock if it involves DB data
+            # For now, assuming self.stats is primarily in-memory after create_stats()
+            for func, (cc, nc, tt, ct, callers) in self.stats.items():
+                remapped_callers = [{"key": k, "value": v} for k, v in callers.items()]
+                cur.execute(
+                    "INSERT INTO pstats VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(Path(func[0]).resolve()),
+                        func[1],
+                        func[2],
+                        func[3],
+                        cc,
+                        nc,
+                        tt,
+                        ct,
+                        json.dumps(remapped_callers),
+                    ),
+                )
+            self.con.commit()
 
-        self.make_pstats_compatible()
-        self.print_stats("tottime")
-        cur = self.con.cursor()
-        cur.execute("CREATE TABLE total_time (time_ns INTEGER)")
-        cur.execute("INSERT INTO total_time VALUES (?)", (self.total_tt,))
-        self.con.commit()
-        self.con.close()
+            self.make_pstats_compatible()  # Modifies self.stats and self.timings in-memory
+            self.print_stats("tottime")  # Uses self.stats, prints to console
+
+            cur = self.con.cursor()  # New cursor
+            cur.execute("CREATE TABLE total_time (time_ns INTEGER)")
+            cur.execute("INSERT INTO total_time VALUES (?)", (self.total_tt,))
+            self.con.commit()
+            self.con.close()
+            self.con = None  # Mark connection as closed
 
         # filter any functions where we did not capture the return
         self.function_modules = [
@@ -252,6 +277,9 @@ class Tracer:
             threading.setprofile(None)
             console.print(f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds.")
             return
+        if self.disable or self._db_lock is None or self.con is None:
+            return
+
         code = frame.f_code
 
         # Check function name first before resolving path
@@ -331,49 +359,59 @@ class Tracer:
 
         # TODO: Also check if this function arguments are unique from the values logged earlier
 
-        cur = self.con.cursor()
-
-        t_ns = time.perf_counter_ns()
-        original_recursion_limit = sys.getrecursionlimit()
-        try:
-            # pickling can be a recursive operator, so we need to increase the recursion limit
-            sys.setrecursionlimit(10000)
-            # We do not pickle self for __init__ to avoid recursion errors, and instead instantiate its class
-            # directly with the rest of the arguments in the replay tests. We copy the arguments to avoid memory
-            # leaks, bad references or side effects when unpickling.
-            arguments = dict(arguments.items())
-            if class_name and code.co_name == "__init__":
-                del arguments["self"]
-            local_vars = pickle.dumps(arguments, protocol=pickle.HIGHEST_PROTOCOL)
-            sys.setrecursionlimit(original_recursion_limit)
-        except (TypeError, pickle.PicklingError, AttributeError, RecursionError, OSError):
-            # we retry with dill if pickle fails. It's slower but more comprehensive
-            try:
-                local_vars = dill.dumps(arguments, protocol=dill.HIGHEST_PROTOCOL)
-                sys.setrecursionlimit(original_recursion_limit)
-
-            except (TypeError, dill.PicklingError, AttributeError, RecursionError, OSError):
-                # give up
-                self.function_count[function_qualified_name] -= 1
+        with self._db_lock:
+            # Check connection again inside lock, in case __exit__ closed it.
+            if self.con is None:
                 return
-        cur.execute(
-            "INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                event,
-                code.co_name,
-                class_name,
-                str(file_name),
-                frame.f_lineno,
-                frame.f_back.__hash__(),
-                t_ns,
-                local_vars,
-            ),
-        )
-        self.trace_count += 1
-        self.next_insert -= 1
-        if self.next_insert == 0:
-            self.next_insert = 1000
-            self.con.commit()
+
+            cur = self.con.cursor()
+
+            t_ns = time.perf_counter_ns()
+            original_recursion_limit = sys.getrecursionlimit()
+            try:
+                # pickling can be a recursive operator, so we need to increase the recursion limit
+                sys.setrecursionlimit(10000)
+                # We do not pickle self for __init__ to avoid recursion errors, and instead instantiate its class
+                # directly with the rest of the arguments in the replay tests. We copy the arguments to avoid memory
+                # leaks, bad references or side effects when unpickling.
+                arguments_copy = dict(arguments.items())  # Use the local 'arguments' from frame.f_locals
+                if class_name and code.co_name == "__init__" and "self" in arguments_copy:
+                    del arguments_copy["self"]
+                local_vars = pickle.dumps(arguments_copy, protocol=pickle.HIGHEST_PROTOCOL)
+                sys.setrecursionlimit(original_recursion_limit)
+            except (TypeError, pickle.PicklingError, AttributeError, RecursionError, OSError):
+                # we retry with dill if pickle fails. It's slower but more comprehensive
+                try:
+                    sys.setrecursionlimit(10000)  # Ensure limit is high for dill too
+                    # arguments_copy should be used here as well if defined above
+                    local_vars = dill.dumps(
+                        arguments_copy if "arguments_copy" in locals() else dict(arguments.items()),
+                        protocol=dill.HIGHEST_PROTOCOL,
+                    )
+                    sys.setrecursionlimit(original_recursion_limit)
+
+                except (TypeError, dill.PicklingError, AttributeError, RecursionError, OSError):
+                    self.function_count[function_qualified_name] -= 1
+                    return
+
+            cur.execute(
+                "INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    event,
+                    code.co_name,
+                    class_name,
+                    str(file_name),
+                    frame.f_lineno,
+                    frame.f_back.__hash__(),
+                    t_ns,
+                    local_vars,
+                ),
+            )
+            self.trace_count += 1
+            self.next_insert -= 1
+            if self.next_insert == 0:
+                self.next_insert = 1000
+                self.con.commit()
 
     def trace_callback(self, frame: FrameType, event: str, arg: str | None) -> None:
         # profiler section
