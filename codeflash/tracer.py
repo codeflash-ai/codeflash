@@ -246,7 +246,7 @@ class Tracer:
     def tracer_logic(self, frame: FrameType, event: str) -> None:
         if event != "call":
             return
-        if self.timeout is not None and (time.time() - self.start_time) > self.timeout:
+        if None is not self.timeout and (time.time() - self.start_time) > self.timeout:
             sys.setprofile(None)
             threading.setprofile(None)
             console.print(f"Codeflash: Timeout reached! Stopping tracing at {self.timeout} seconds.")
