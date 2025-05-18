@@ -203,6 +203,11 @@ def get_functions_to_optimize(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )
         logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
+        if optimize_all:
+            logger.info(
+                f"It might take about {functions_count*3} minutes to fully optimize this project. Codeflash "
+                f"will keep opening pull requests as it finds optimizations."
+            )
         return filtered_modified_functions, functions_count
 
 
