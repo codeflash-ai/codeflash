@@ -254,7 +254,6 @@ class Tracer:
             return
         code = frame.f_code
 
-        # Use cached resolved path if available, otherwise resolve and cache it
         co_filename = code.co_filename
         if co_filename in self.path_cache:
             file_name = self.path_cache[co_filename]
