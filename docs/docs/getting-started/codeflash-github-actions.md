@@ -106,7 +106,7 @@ This assumes that you install poetry with pip and have Codeflash dependency in t
 2. uv
 
 ```yaml
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
       - run: uv sync --group=dev
