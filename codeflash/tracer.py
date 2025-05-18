@@ -131,6 +131,7 @@ class Tracer:
         self.timeout = timeout
         self.next_insert = 1000
         self.trace_count = 0
+        self.path_cache = {}  # Cache for resolved file paths
 
         # Profiler variables
         self.bias = 0  # calibration constant
@@ -253,7 +254,13 @@ class Tracer:
             return
         code = frame.f_code
 
-        file_name = Path(code.co_filename).resolve()
+        # Use cached resolved path if available, otherwise resolve and cache it
+        co_filename = code.co_filename
+        if co_filename in self.path_cache:
+            file_name = self.path_cache[co_filename]
+        else:
+            file_name = Path(co_filename).resolve()
+            self.path_cache[co_filename] = file_name
         # TODO : It currently doesn't log the last return call from the first function
 
         if code.co_name in self.ignored_functions:
