@@ -30,6 +30,8 @@ def humanize_runtime(time_in_ns: int) -> str:
             runtime_human = "%.3g" % (time_micro / (24*3600 * 1000**2))
     runtime_human_parts = str(runtime_human).split(".")
     if len(runtime_human_parts[0]) == 1:
+        if runtime_human_parts[0]=='1' and len(runtime_human_parts)>1:
+            units = units+'s'
         if len(runtime_human_parts) == 1:
             runtime_human = f"{runtime_human_parts[0]}.00"
         elif len(runtime_human_parts[1]) >= 2:
