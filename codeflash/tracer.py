@@ -763,7 +763,7 @@ class Tracer:
 
     def snapshot_stats(self) -> None:
         self.stats = {}
-        for func, (cc, _ns, tt, ct, caller_dict) in self.timings.items():
+        for func, (cc, _ns, tt, ct, caller_dict) in list(self.timings.items()):
             callers = caller_dict.copy()
             nc = 0
             for callcnt in callers.values():
