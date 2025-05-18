@@ -22,6 +22,7 @@ from codeflash.code_utils.code_utils import (
     path_belongs_to_site_packages,
 )
 from codeflash.code_utils.git_utils import get_git_diff
+from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.models.models import FunctionParent
 from codeflash.telemetry.posthog_cf import ph
@@ -203,6 +204,12 @@ def get_functions_to_optimize(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )
         logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
+        if optimize_all:
+            three_min_in_ns = int(1.8e11)
+            logger.info(
+                f"It might take about {humanize_runtime(functions_count*three_min_in_ns)} to fully optimize this project. Codeflash "
+                f"will keep opening pull requests as it finds optimizations."
+            )
         return filtered_modified_functions, functions_count
 
 
