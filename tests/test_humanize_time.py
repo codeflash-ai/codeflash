@@ -25,3 +25,5 @@ def test_humanize_runtime():
     assert humanize_runtime(123456789123) == "2.06 minutes"
     assert humanize_runtime(1234567891234) == "20.6 minutes"
     assert humanize_runtime(12345678912345) == "3.43 hours"
+    assert humanize_runtime(98765431298760) == "1.14 day"
+    assert humanize_runtime(197530862597520) == "2.29 days"
