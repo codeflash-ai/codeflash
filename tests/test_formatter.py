@@ -2,11 +2,13 @@ import os
 import tempfile
 from pathlib import Path
 
+from jedi.api.classes import Name
 import pytest
 
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.formatter import format_code, get_modification_code_ranges, sort_imports
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.models import FunctionSource
 
 
 def test_remove_duplicate_imports():
