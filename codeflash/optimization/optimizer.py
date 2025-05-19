@@ -266,6 +266,8 @@ class Optimizer:
             if function_optimizer:
                 function_optimizer.cleanup_generated_files()
 
+            if self.test_cfg.concolic_test_root_dir:
+                cleanup_paths([self.test_cfg.concolic_test_root_dir])
 
 def run_with_args(args: Namespace) -> None:
     optimizer = Optimizer(args)
