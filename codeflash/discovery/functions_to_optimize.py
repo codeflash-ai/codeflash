@@ -9,6 +9,7 @@ from collections import defaultdict
 from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
+from hashlib import sha256
 
 import git
 import libcst as cst
@@ -25,6 +26,8 @@ from codeflash.code_utils.git_utils import get_git_diff
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.models.models import FunctionParent
 from codeflash.telemetry.posthog_cf import ph
+
+from codeflash.code_utils.env_utils import get_pr_number
 
 if TYPE_CHECKING:
     from libcst import CSTNode
@@ -139,7 +142,7 @@ class FunctionToOptimize:
         )
 
     def __hash__(self):
-        return hash(self.function_name + str(self.file_path))
+        return sha256((self.function_name + str(self.file_path)).encode()).hexdigest()
 
     @property
     def qualified_name(self) -> str:
@@ -202,7 +205,7 @@ def get_functions_to_optimize(
             logger.info("Finding all functions modified in the current git diff ...")
             ph("cli-optimizing-git-diff")
             functions = get_functions_within_git_diff()
-            if os.getenv("PR_NUMBER"):
+            if get_pr_number():
                 functions = filter_already_optimized(functions)
         filtered_modified_functions, functions_count = filter_functions(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions

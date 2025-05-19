@@ -230,7 +230,7 @@ def get_has_been_optimized(code_context: FunctionToOptimize) -> bool:
         req.raise_for_status()
         content: dict[str, str] = req.json()
     except Exception as e:
-        logger.error(f"Error getting blocklisted functions: {e}")
+        logger.error(f"Error getting already optimized functions: {e}")
         sentry_sdk.capture_exception(e)
         return False
 
