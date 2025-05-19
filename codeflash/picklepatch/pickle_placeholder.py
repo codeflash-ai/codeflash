@@ -2,7 +2,6 @@ class PicklePlaceholderAccessError(Exception):
     """Custom exception raised when attempting to access an unpicklable object."""
 
 
-
 class PicklePlaceholder:
     """A placeholder for an object that couldn't be pickled.
 
@@ -62,10 +61,5 @@ class PicklePlaceholder:
         """Make sure pickling of the placeholder itself works correctly."""
         return (
             PicklePlaceholder,
-            (
-                self.__dict__["obj_type"],
-                self.__dict__["obj_str"],
-                self.__dict__["error_msg"],
-                self.__dict__["path"]
-            )
+            (self.__dict__["obj_type"], self.__dict__["obj_str"], self.__dict__["error_msg"], self.__dict__["path"]),
         )

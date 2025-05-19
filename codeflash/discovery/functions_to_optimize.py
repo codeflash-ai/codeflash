@@ -158,9 +158,9 @@ def get_functions_to_optimize(
     module_root: Path,
     previous_checkpoint_functions: dict[str, dict[str, str]] | None = None,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
-    assert (
-        sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1
-    ), "Only one of optimize_all, replay_test, or file should be provided"
+    assert sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1, (
+        "Only one of optimize_all, replay_test, or file should be provided"
+    )
     functions: dict[str, list[FunctionToOptimize]]
     with warnings.catch_warnings():
         warnings.simplefilter(action="ignore", category=SyntaxWarning)
@@ -208,7 +208,7 @@ def get_functions_to_optimize(
             three_min_in_ns = int(1.8e11)
             console.rule()
             logger.info(
-                f"It might take about {humanize_runtime(functions_count*three_min_in_ns)} to fully optimize this project. Codeflash "
+                f"It might take about {humanize_runtime(functions_count * three_min_in_ns)} to fully optimize this project. Codeflash "
                 f"will keep opening pull requests as it finds optimizations."
             )
         return filtered_modified_functions, functions_count

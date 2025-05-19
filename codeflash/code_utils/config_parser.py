@@ -87,7 +87,7 @@ def parse_config_file(
         "In pyproject.toml, Codeflash only supports the 'test-framework' as pytest and unittest."
     )
     if len(config["formatter-cmds"]) > 0:
-        #see if this is happening during GitHub actions setup
+        # see if this is happening during GitHub actions setup
         if not override_formatter_check:
             assert config["formatter-cmds"][0] != "your-formatter $file", (
                 "The formatter command is not set correctly in pyproject.toml. Please set the "

@@ -1,12 +1,12 @@
 from __future__ import annotations
-from typing import Union, Optional
+
+from typing import Optional, Union
 
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.models.models import BenchmarkDetail
-from codeflash.models.models import TestResults
+from codeflash.models.models import BenchmarkDetail, TestResults
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})

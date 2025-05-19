@@ -303,7 +303,7 @@ class QualifiedFunctionUsageMarker:
 
 
 def remove_unused_definitions_recursively(
-        node: cst.CSTNode, definitions: dict[str, UsageInfo]
+    node: cst.CSTNode, definitions: dict[str, UsageInfo]
 ) -> tuple[cst.CSTNode | None, bool]:
     """Recursively filter the node to remove unused definitions.
 
@@ -358,7 +358,10 @@ def remove_unused_definitions_recursively(
                             names = extract_names_from_targets(target.target)
                             for name in names:
                                 class_var_name = f"{class_name}.{name}"
-                                if class_var_name in definitions and definitions[class_var_name].used_by_qualified_function:
+                                if (
+                                    class_var_name in definitions
+                                    and definitions[class_var_name].used_by_qualified_function
+                                ):
                                     var_used = True
                                     method_or_var_used = True
                                     break

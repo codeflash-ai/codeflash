@@ -20,7 +20,7 @@ class CodeFlashBenchmarkPlugin:
         self.project_root = None
         self.benchmark_timings = []
 
-    def setup(self, trace_path:str, project_root:str) -> None:
+    def setup(self, trace_path: str, project_root: str) -> None:
         try:
             # Open connection
             self.project_root = project_root
@@ -35,7 +35,7 @@ class CodeFlashBenchmarkPlugin:
                 "benchmark_time_ns INTEGER)"
             )
             self._connection.commit()
-            self.close() # Reopen only at the end of pytest session
+            self.close()  # Reopen only at the end of pytest session
         except Exception as e:
             print(f"Database setup error: {e}")
             if self._connection:
@@ -55,14 +55,15 @@ class CodeFlashBenchmarkPlugin:
             # Insert data into the benchmark_timings table
             cur.executemany(
                 "INSERT INTO benchmark_timings (benchmark_module_path, benchmark_function_name, benchmark_line_number, benchmark_time_ns) VALUES (?, ?, ?, ?)",
-                self.benchmark_timings
+                self.benchmark_timings,
             )
             self._connection.commit()
-            self.benchmark_timings = [] # Clear the benchmark timings list
+            self.benchmark_timings = []  # Clear the benchmark timings list
         except Exception as e:
             print(f"Error writing to benchmark timings database: {e}")
             self._connection.rollback()
             raise
+
     def close(self) -> None:
         if self._connection:
             self._connection.close()
@@ -196,12 +197,7 @@ class CodeFlashBenchmarkPlugin:
 
     @staticmethod
     def pytest_addoption(parser):
-        parser.addoption(
-            "--codeflash-trace",
-            action="store_true",
-            default=False,
-            help="Enable CodeFlash tracing"
-        )
+        parser.addoption("--codeflash-trace", action="store_true", default=False, help="Enable CodeFlash tracing")
 
     @staticmethod
     def pytest_plugin_registered(plugin, manager):
@@ -213,9 +209,9 @@ class CodeFlashBenchmarkPlugin:
     def pytest_configure(config):
         """Register the benchmark marker."""
         config.addinivalue_line(
-            "markers",
-            "benchmark: mark test as a benchmark that should be run with codeflash tracing"
+            "markers", "benchmark: mark test as a benchmark that should be run with codeflash tracing"
         )
+
     @staticmethod
     def pytest_collection_modifyitems(config, items):
         # Skip tests that don't have the benchmark fixture
@@ -248,16 +244,19 @@ class CodeFlashBenchmarkPlugin:
             if args or kwargs:
                 # Used as benchmark(func, *args, **kwargs)
                 return self._run_benchmark(func, *args, **kwargs)
+
             # Used as @benchmark decorator
             def wrapped_func(*args, **kwargs):
                 return func(*args, **kwargs)
+
             result = self._run_benchmark(func)
             return wrapped_func
 
         def _run_benchmark(self, func, *args, **kwargs):
             """Actual benchmark implementation."""
-            benchmark_module_path = module_name_from_file_path(Path(str(self.request.node.fspath)),
-                                                               Path(codeflash_benchmark_plugin.project_root))
+            benchmark_module_path = module_name_from_file_path(
+                Path(str(self.request.node.fspath)), Path(codeflash_benchmark_plugin.project_root)
+            )
             benchmark_function_name = self.request.node.name
             line_number = int(str(sys._getframe(2).f_lineno))  # 2 frames up in the call stack
             # Set env vars
@@ -278,7 +277,8 @@ class CodeFlashBenchmarkPlugin:
             codeflash_trace.function_call_count = 0
             # Add to the benchmark timings buffer
             codeflash_benchmark_plugin.benchmark_timings.append(
-                (benchmark_module_path, benchmark_function_name, line_number, end - start))
+                (benchmark_module_path, benchmark_function_name, line_number, end - start)
+            )
 
             return result
 
@@ -289,5 +289,6 @@ class CodeFlashBenchmarkPlugin:
             return None
 
         return CodeFlashBenchmarkPlugin.Benchmark(request)
+
 
 codeflash_benchmark_plugin = CodeFlashBenchmarkPlugin()
