@@ -85,7 +85,7 @@ def get_code_optimization_context(
     )
     read_only_context_code = read_only_code_markdown.markdown
 
-    read_only_code_markdown_tokens = len(tokenizer.encode(read_only_context_code))
+    read_only_code_markdown_tokens = len(read_only_context_code)*0.75
     total_tokens = final_read_writable_tokens + read_only_code_markdown_tokens
     if total_tokens > optim_token_limit:
         logger.debug("Code context has exceeded token limit, removing docstrings from read-only code")
@@ -94,7 +94,7 @@ def get_code_optimization_context(
             helpers_of_fto_dict, helpers_of_helpers_dict, project_root_path, remove_docstrings=True
         )
         read_only_context_code = read_only_code_no_docstring_markdown.markdown
-        read_only_code_no_docstring_markdown_tokens = len(tokenizer.encode(read_only_context_code))
+        read_only_code_no_docstring_markdown_tokens = len(read_only_context_code)*0.75
         total_tokens = final_read_writable_tokens + read_only_code_no_docstring_markdown_tokens
         if total_tokens > optim_token_limit:
             logger.debug("Code context has exceeded token limit, removing read-only code")
@@ -109,7 +109,7 @@ def get_code_optimization_context(
         code_context_type=CodeContextType.TESTGEN,
     )
     testgen_context_code = testgen_code_markdown.code
-    testgen_context_code_tokens = len(tokenizer.encode(testgen_context_code))
+    testgen_context_code_tokens = len(testgen_context_code)*0.75
     if testgen_context_code_tokens > testgen_token_limit:
         testgen_code_markdown = extract_code_string_context_from_files(
             helpers_of_fto_dict,
@@ -119,7 +119,7 @@ def get_code_optimization_context(
             code_context_type=CodeContextType.TESTGEN,
         )
         testgen_context_code = testgen_code_markdown.code
-        testgen_context_code_tokens = len(tokenizer.encode(testgen_context_code))
+        testgen_context_code_tokens = len(testgen_context_code)*0.75
         if testgen_context_code_tokens > testgen_token_limit:
             raise ValueError("Testgen code context has exceeded token limit, cannot proceed")
 
