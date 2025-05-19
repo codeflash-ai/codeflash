@@ -10,8 +10,11 @@ from tempfile import TemporaryDirectory
 
 from codeflash.cli_cmds.console import logger
 
+
 def encode_str(s: str) -> str:
-    return s[:int(0.75 * len(s))]
+    # Use integer math for the index calculation to avoid float operations
+    return s[: len(s) * 3 // 4]
+
 
 def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
     if not full_qualified_name:
