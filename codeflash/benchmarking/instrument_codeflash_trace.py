@@ -13,22 +13,20 @@ class AddDecoratorTransformer(cst.CSTTransformer):
         self.added_codeflash_trace = False
         self.class_name = ""
         self.function_name = ""
-        self.decorator = cst.Decorator(
-            decorator=cst.Name(value="codeflash_trace")
-        )
+        self.decorator = cst.Decorator(decorator=cst.Name(value="codeflash_trace"))
 
     def leave_ClassDef(self, original_node, updated_node):
         if self.class_name == original_node.name.value:
-            self.class_name = "" # Even if nested classes are not visited, this function is still called on them
+            self.class_name = ""  # Even if nested classes are not visited, this function is still called on them
         return updated_node
 
     def visit_ClassDef(self, node):
-        if self.class_name: # Don't go into nested class
+        if self.class_name:  # Don't go into nested class
             return False
         self.class_name = node.name.value
 
     def visit_FunctionDef(self, node):
-        if self.function_name: # Don't go into nested function
+        if self.function_name:  # Don't go into nested function
             return False
         self.function_name = node.name.value
 
@@ -39,9 +37,7 @@ class AddDecoratorTransformer(cst.CSTTransformer):
             # Add the new decorator after any existing decorators, so it gets executed first
             updated_decorators = list(updated_node.decorators) + [self.decorator]
             self.added_codeflash_trace = True
-            return updated_node.with_changes(
-                decorators=updated_decorators
-            )
+            return updated_node.with_changes(decorators=updated_decorators)
 
         return updated_node
 
@@ -53,17 +49,10 @@ class AddDecoratorTransformer(cst.CSTTransformer):
             body=[
                 cst.ImportFrom(
                     module=cst.Attribute(
-                        value=cst.Attribute(
-                            value=cst.Name(value="codeflash"),
-                            attr=cst.Name(value="benchmarking")
-                        ),
-                        attr=cst.Name(value="codeflash_trace")
+                        value=cst.Attribute(value=cst.Name(value="codeflash"), attr=cst.Name(value="benchmarking")),
+                        attr=cst.Name(value="codeflash_trace"),
                     ),
-                    names=[
-                        cst.ImportAlias(
-                            name=cst.Name(value="codeflash_trace")
-                        )
-                    ]
+                    names=[cst.ImportAlias(name=cst.Name(value="codeflash_trace"))],
                 )
             ]
         )
@@ -72,6 +61,7 @@ class AddDecoratorTransformer(cst.CSTTransformer):
         new_body = [import_stmt, *list(updated_node.body)]
 
         return updated_node.with_changes(body=new_body)
+
 
 def add_codeflash_decorator_to_code(code: str, functions_to_optimize: list[FunctionToOptimize]) -> str:
     """Add codeflash_trace to a function.
@@ -91,25 +81,18 @@ def add_codeflash_decorator_to_code(code: str, functions_to_optimize: list[Funct
             class_name = function_to_optimize.parents[0].name
         target_functions.add((class_name, function_to_optimize.function_name))
 
-    transformer = AddDecoratorTransformer(
-        target_functions = target_functions,
-    )
+    transformer = AddDecoratorTransformer(target_functions=target_functions)
 
     module = cst.parse_module(code)
     modified_module = module.visit(transformer)
     return modified_module.code
 
 
-def instrument_codeflash_trace_decorator(
-        file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
-) -> None:
+def instrument_codeflash_trace_decorator(file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]) -> None:
     """Instrument codeflash_trace decorator to functions to optimize."""
     for file_path, functions_to_optimize in file_to_funcs_to_optimize.items():
         original_code = file_path.read_text(encoding="utf-8")
-        new_code = add_codeflash_decorator_to_code(
-            original_code,
-            functions_to_optimize
-        )
+        new_code = add_codeflash_decorator_to_code(original_code, functions_to_optimize)
         # Modify the code
         modified_code = isort.code(code=new_code, float_to_top=True)
 

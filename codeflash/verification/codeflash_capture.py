@@ -7,9 +7,11 @@ import inspect
 import os
 import sqlite3
 import time
-from pathlib import Path
 from enum import Enum
+from pathlib import Path
+
 import dill as pickle
+
 
 class VerificationType(str, Enum):
     FUNCTION_CALL = (

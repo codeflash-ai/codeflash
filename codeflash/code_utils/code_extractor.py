@@ -18,7 +18,8 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
-from typing import List, Union
+from typing import List
+
 
 class GlobalAssignmentCollector(cst.CSTVisitor):
     """Collects all global assignment statements."""
@@ -136,14 +137,10 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
 
             # Add the new assignments
             for assignment in assignments_to_append:
-                new_statements.append(
-                    cst.SimpleStatementLine(
-                        [assignment],
-                        leading_lines=[cst.EmptyLine()]
-                    )
-                )
+                new_statements.append(cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()]))
 
         return updated_node.with_changes(body=new_statements)
+
 
 class GlobalStatementCollector(cst.CSTVisitor):
     """Visitor that collects all global statements (excluding imports and functions/classes)."""
@@ -239,6 +236,7 @@ def find_last_import_line(target_code: str) -> int:
     finder = LastImportFinder()
     module.visit(finder)
     return finder.last_import_line
+
 
 class FutureAliasedImportTransformer(cst.CSTTransformer):
     def leave_ImportFrom(

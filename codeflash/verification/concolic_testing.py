@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import time
-
 import ast
 import subprocess
 import tempfile
+import time
 from argparse import Namespace
 from pathlib import Path
 

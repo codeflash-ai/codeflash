@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional, TypeVar
 import libcst as cst
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module, add_global_assignments
+from codeflash.code_utils.code_extractor import add_global_assignments, add_needed_imports_from_module
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:

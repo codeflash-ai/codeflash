@@ -69,7 +69,7 @@ class CodeflashTrace:
                 "(function_name, class_name, module_name, file_path, benchmark_function_name, "
                 "benchmark_module_path, benchmark_line_number, function_time_ns, overhead_time_ns, args, kwargs) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                self.function_calls_data
+                self.function_calls_data,
             )
             self._connection.commit()
             self.function_calls_data = []
@@ -100,7 +100,8 @@ class CodeflashTrace:
             The wrapped function
 
         """
-        func_id = (func.__module__,func.__name__)
+        func_id = (func.__module__, func.__name__)
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             # Initialize thread-local active functions set if it doesn't exist
@@ -139,9 +140,19 @@ class CodeflashTrace:
                 self._thread_local.active_functions.remove(func_id)
                 overhead_time = time.thread_time_ns() - end_time
                 self.function_calls_data.append(
-                    (func.__name__, class_name, func.__module__, func.__code__.co_filename,
-                     benchmark_function_name, benchmark_module_path, benchmark_line_number, execution_time,
-                     overhead_time, None, None)
+                    (
+                        func.__name__,
+                        class_name,
+                        func.__module__,
+                        func.__code__.co_filename,
+                        benchmark_function_name,
+                        benchmark_module_path,
+                        benchmark_line_number,
+                        execution_time,
+                        overhead_time,
+                        None,
+                        None,
+                    )
                 )
                 return result
 
@@ -155,9 +166,19 @@ class CodeflashTrace:
                 self._thread_local.active_functions.remove(func_id)
                 overhead_time = time.thread_time_ns() - end_time
                 self.function_calls_data.append(
-                    (func.__name__, class_name, func.__module__, func.__code__.co_filename,
-                     benchmark_function_name, benchmark_module_path, benchmark_line_number, execution_time,
-                     overhead_time, None, None)
+                    (
+                        func.__name__,
+                        class_name,
+                        func.__module__,
+                        func.__code__.co_filename,
+                        benchmark_function_name,
+                        benchmark_module_path,
+                        benchmark_line_number,
+                        execution_time,
+                        overhead_time,
+                        None,
+                        None,
+                    )
                 )
                 return result
             # Flush to database every 100 calls
@@ -168,12 +189,24 @@ class CodeflashTrace:
             self._thread_local.active_functions.remove(func_id)
             overhead_time = time.thread_time_ns() - end_time
             self.function_calls_data.append(
-                (func.__name__, class_name, func.__module__, func.__code__.co_filename,
-                 benchmark_function_name, benchmark_module_path, benchmark_line_number, execution_time,
-                 overhead_time, pickled_args, pickled_kwargs)
+                (
+                    func.__name__,
+                    class_name,
+                    func.__module__,
+                    func.__code__.co_filename,
+                    benchmark_function_name,
+                    benchmark_module_path,
+                    benchmark_line_number,
+                    execution_time,
+                    overhead_time,
+                    pickled_args,
+                    pickled_kwargs,
+                )
             )
             return result
+
         return wrapper
+
 
 # Create a singleton instance
 codeflash_trace = CodeflashTrace()

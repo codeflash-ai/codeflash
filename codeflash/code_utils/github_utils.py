@@ -27,5 +27,6 @@ def require_github_app_or_exit(owner: str, repo: str) -> None:
         )
         apologize_and_exit()
 
+
 def github_pr_url(owner: str, repo: str, pr_number: str) -> str:
     return f"https://github.com/{owner}/{repo}/pull/{pr_number}"
