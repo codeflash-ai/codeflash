@@ -14,7 +14,7 @@ import git
 import libcst as cst
 from pydantic.dataclasses import dataclass
 
-from codeflash.api.cfapi import get_blocklisted_functions
+from codeflash.api.cfapi import get_blocklisted_functions, get_has_been_optimized
 from codeflash.cli_cmds.console import DEBUG_MODE, console, logger
 from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
@@ -202,6 +202,8 @@ def get_functions_to_optimize(
             logger.info("Finding all functions modified in the current git diff ...")
             ph("cli-optimizing-git-diff")
             functions = get_functions_within_git_diff()
+            if os.getenv("PR_NUMBER"):
+                functions = filter_already_optimized(functions)
         filtered_modified_functions, functions_count = filter_functions(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )
@@ -234,6 +236,16 @@ def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
             ]
     return modified_functions
 
+def filter_already_optimized(functions: dict[str, list[FunctionToOptimize]]) -> dict[str, list[FunctionToOptimize]]:
+    filtered_functions: dict[str, list[FunctionToOptimize]] = {}
+    for path, functions_to_optimize in functions.items():
+        filtered_functions_to_optimize: list[FunctionToOptimize] = []
+        for function_to_optimize in functions_to_optimize:
+            if get_has_been_optimized(function_to_optimize):
+                filtered_functions_to_optimize.append(function_to_optimize)
+        if len(filtered_functions_to_optimize) > 0:
+            filtered_functions[path] = filtered_functions_to_optimize
+    return filtered_functions
 
 def get_all_files_and_functions(module_root_path: Path) -> dict[str, list[FunctionToOptimize]]:
     functions: dict[str, list[FunctionToOptimize]] = {}
