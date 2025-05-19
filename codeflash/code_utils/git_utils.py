@@ -182,9 +182,13 @@ def get_last_commit_author_if_pr_exists(repo: Repo | None = None) -> str | None:
     Return the author's name of the last commit in the current branch if PR_NUMBER is set.
     Otherwise, return None.
     """
-    if "PR_NUMBER" not in os.environ:
-        return None
+    try:
+        if "PR_NUMBER" not in os.environ:
+            return None
 
-    repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
-    last_commit = repository.head.commit
-    return last_commit.author.name
+        repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+        last_commit = repository.head.commit
+        return last_commit.author.name
+    except Exception as e:
+        logger.exception("Failed to get last commit author.")
+        return None
