@@ -82,7 +82,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
 
         return True
 
-    def leave_ClassDef(self, node: cst.ClassDef) -> None:
+    def leave_ClassDef(self, node: cst.ClassDef) -> None:  # noqa: ARG002
         if self.current_class:
             self.current_class = None
 
@@ -104,7 +104,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         )
         self.current_class = None
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:  # noqa: ARG002
         return False
 
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
@@ -133,7 +133,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
                 )
         return updated_node
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
         node = updated_node
         max_function_index = None
         class_index = None

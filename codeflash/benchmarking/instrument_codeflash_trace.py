@@ -1,9 +1,16 @@
-from pathlib import Path
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Optional, Union
 
 import isort
 import libcst as cst
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from libcst import BaseStatement, ClassDef, FlattenSentinel, FunctionDef, RemovalSentinel
+
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 
 class AddDecoratorTransformer(cst.CSTTransformer):
@@ -15,33 +22,35 @@ class AddDecoratorTransformer(cst.CSTTransformer):
         self.function_name = ""
         self.decorator = cst.Decorator(decorator=cst.Name(value="codeflash_trace"))
 
-    def leave_ClassDef(self, original_node, updated_node):
+    def leave_ClassDef(
+        self, original_node: ClassDef, updated_node: ClassDef
+    ) -> Union[BaseStatement, FlattenSentinel[BaseStatement], RemovalSentinel]:
         if self.class_name == original_node.name.value:
             self.class_name = ""  # Even if nested classes are not visited, this function is still called on them
         return updated_node
 
-    def visit_ClassDef(self, node):
+    def visit_ClassDef(self, node: ClassDef) -> Optional[bool]:
         if self.class_name:  # Don't go into nested class
             return False
-        self.class_name = node.name.value
+        self.class_name = node.name.value  # noqa: RET503
 
-    def visit_FunctionDef(self, node):
+    def visit_FunctionDef(self, node: FunctionDef) -> Optional[bool]:
         if self.function_name:  # Don't go into nested function
             return False
-        self.function_name = node.name.value
+        self.function_name = node.name.value  # noqa: RET503
 
-    def leave_FunctionDef(self, original_node, updated_node):
+    def leave_FunctionDef(self, original_node: FunctionDef, updated_node: FunctionDef) -> FunctionDef:
         if self.function_name == original_node.name.value:
             self.function_name = ""
         if (self.class_name, original_node.name.value) in self.target_functions:
             # Add the new decorator after any existing decorators, so it gets executed first
-            updated_decorators = list(updated_node.decorators) + [self.decorator]
+            updated_decorators = [*list(updated_node.decorators), self.decorator]
             self.added_codeflash_trace = True
             return updated_node.with_changes(decorators=updated_decorators)
 
         return updated_node
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
         # Create import statement for codeflash_trace
         if not self.added_codeflash_trace:
             return updated_node
@@ -68,7 +77,7 @@ def add_codeflash_decorator_to_code(code: str, functions_to_optimize: list[Funct
 
     Args:
         code: The source code as a string
-        function_to_optimize: The FunctionToOptimize instance containing function details
+        functions_to_optimize: List of FunctionToOptimize instances containing function details
 
     Returns:
         The modified source code as a string

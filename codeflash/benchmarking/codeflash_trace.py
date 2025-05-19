@@ -4,7 +4,7 @@ import pickle
 import sqlite3
 import threading
 import time
-from typing import Callable
+from typing import Any, Callable
 
 from codeflash.picklepatch.pickle_patcher import PicklePatcher
 
@@ -103,7 +103,7 @@ class CodeflashTrace:
         func_id = (func.__module__, func.__name__)
 
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs) -> Any:  # noqa: ANN002, ANN003, ANN401
             # Initialize thread-local active functions set if it doesn't exist
             if not hasattr(self._thread_local, "active_functions"):
                 self._thread_local.active_functions = set()

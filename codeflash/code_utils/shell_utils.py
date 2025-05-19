@@ -1,10 +1,15 @@
+from __future__ import annotations
+
 import os
 import re
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from codeflash.code_utils.compat import LF
-from codeflash.either import Failure, Result, Success
+from codeflash.either import Failure, Success
+
+if TYPE_CHECKING:
+    from codeflash.either import Result
 
 if os.name == "nt":  # Windows
     SHELL_RC_EXPORT_PATTERN = re.compile(r"^set CODEFLASH_API_KEY=(cf-.*)$", re.MULTILINE)
@@ -17,7 +22,7 @@ else:
 def read_api_key_from_shell_config() -> Optional[str]:
     try:
         shell_rc_path = get_shell_rc_path()
-        with open(shell_rc_path, encoding="utf8") as shell_rc:
+        with shell_rc_path.open(encoding="utf8") as shell_rc:
             shell_contents = shell_rc.read()
             matches = SHELL_RC_EXPORT_PATTERN.findall(shell_contents)
             return matches[-1] if matches else None
@@ -40,15 +45,14 @@ def get_api_key_export_line(api_key: str) -> str:
     return f"{SHELL_RC_EXPORT_PREFIX}{api_key}"
 
 
-def save_api_key_to_rc(api_key) -> Result[str, str]:
+def save_api_key_to_rc(api_key: str) -> Result[str, str]:
     shell_rc_path = get_shell_rc_path()
     api_key_line = get_api_key_export_line(api_key)
     try:
-        with open(shell_rc_path, "r+", encoding="utf8") as shell_file:
+        with shell_rc_path.open("r+", encoding="utf8") as shell_file:
             shell_contents = shell_file.read()
-            if os.name == "nt":  # on Windows, we're writing a batch file
-                if not shell_contents:
-                    shell_contents = "@echo off"
+            if os.name == "nt" and not shell_contents:  # on Windows, we're writing a batch file
+                shell_contents = "@echo off"
             existing_api_key = read_api_key_from_shell_config()
 
             if existing_api_key:

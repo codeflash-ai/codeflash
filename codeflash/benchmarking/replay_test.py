@@ -47,7 +47,10 @@ def get_function_alias(module: str, function_name: str) -> str:
 
 
 def create_trace_replay_test_code(
-    trace_file: str, functions_data: list[dict[str, Any]], test_framework: str = "pytest", max_run_count=256
+    trace_file: str,
+    functions_data: list[dict[str, Any]],
+    test_framework: str = "pytest",
+    max_run_count=256,  # noqa: ANN001
 ) -> str:
     """Create a replay test for functions based on trace data.
 

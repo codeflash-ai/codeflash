@@ -32,7 +32,8 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
 
 
 def parse_config_file(
-    config_file_path: Path | None = None, override_formatter_check: bool = False
+    config_file_path: Path | None = None,
+    override_formatter_check: bool = False,  # noqa: FBT001, FBT002
 ) -> tuple[dict[str, Any], Path]:
     config_file_path = find_pyproject_toml(config_file_path)
     try:
@@ -58,41 +59,40 @@ def parse_config_file(
     bool_keys = {"disable-telemetry": False, "disable-imports-sorting": False, "benchmark": False}
     list_str_keys = {"formatter-cmds": ["black $file"]}
 
-    for key in str_keys:
+    for key, default_value in str_keys.items():
         if key in config:
             config[key] = str(config[key])
         else:
-            config[key] = str_keys[key]
-    for key in bool_keys:
+            config[key] = default_value
+    for key, default_value in bool_keys.items():
         if key in config:
             config[key] = bool(config[key])
         else:
-            config[key] = bool_keys[key]
+            config[key] = default_value
     for key in path_keys:
         if key in config:
             config[key] = str((Path(config_file_path).parent / Path(config[key])).resolve())
-    for key in list_str_keys:
+    for key, default_value in list_str_keys.items():
         if key in config:
             config[key] = [str(cmd) for cmd in config[key]]
         else:
-            config[key] = list_str_keys[key]
+            config[key] = default_value
 
     for key in path_list_keys:
         if key in config:
             config[key] = [str((Path(config_file_path).parent / path).resolve()) for path in config[key]]
-        else:  # Default to empty list
+        else:
             config[key] = []
 
     assert config["test-framework"] in {"pytest", "unittest"}, (
         "In pyproject.toml, Codeflash only supports the 'test-framework' as pytest and unittest."
     )
-    if len(config["formatter-cmds"]) > 0:
-        # see if this is happening during GitHub actions setup
-        if not override_formatter_check:
-            assert config["formatter-cmds"][0] != "your-formatter $file", (
-                "The formatter command is not set correctly in pyproject.toml. Please set the "
-                "formatter command in the 'formatter-cmds' key. More info - https://docs.codeflash.ai/configuration"
-            )
+    # see if this is happening during GitHub actions setup
+    if len(config["formatter-cmds"]) > 0 and not override_formatter_check:
+        assert config["formatter-cmds"][0] != "your-formatter $file", (
+            "The formatter command is not set correctly in pyproject.toml. Please set the "
+            "formatter command in the 'formatter-cmds' key. More info - https://docs.codeflash.ai/configuration"
+        )
     for key in list(config.keys()):
         if "-" in key:
             config[key.replace("-", "_")] = config[key]

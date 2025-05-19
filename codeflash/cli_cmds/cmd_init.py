@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
 CODEFLASH_LOGO: str = (
-    f"{LF}"
+    f"{LF}"  # noqa: ISC003
     r"                   _          ___  _               _     " + f"{LF}"
     r"                  | |        / __)| |             | |    " + f"{LF}"
     r"  ____   ___    _ | |  ____ | |__ | |  ____   ___ | | _  " + f"{LF}"
@@ -126,7 +126,8 @@ def ask_run_end_to_end_test(args: Namespace) -> None:
 
 
 def should_modify_pyproject_toml() -> bool:
-    """Check if the current directory contains a valid pyproject.toml file with codeflash config
+    """Check if the current directory contains a valid pyproject.toml file with codeflash config.
+
     If it does, ask the user if they want to re-configure it.
     """
     from rich.prompt import Confirm
@@ -144,12 +145,11 @@ def should_modify_pyproject_toml() -> bool:
     if "tests_root" not in config or config["tests_root"] is None or not Path(config["tests_root"]).is_dir():
         return True
 
-    create_toml = Confirm.ask(
+    return Confirm.ask(
         "✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?",
         default=False,
         show_default=True,
     )
-    return create_toml
 
 
 def collect_setup_info() -> SetupInfo:
@@ -469,7 +469,7 @@ def check_for_toml_or_setup_file() -> str | None:
     return cast("str", project_name)
 
 
-def install_github_actions(override_formatter_check: bool = False) -> None:
+def install_github_actions(override_formatter_check: bool = False) -> None:  # noqa: FBT001, FBT002
     try:
         config, config_file_path = parse_config_file(override_formatter_check=override_formatter_check)
 
@@ -566,28 +566,22 @@ def install_github_actions(override_formatter_check: bool = False) -> None:
 
 def determine_dependency_manager(pyproject_data: dict[str, Any]) -> DependencyManager:
     """Determine which dependency manager is being used based on pyproject.toml contents."""
+    result = DependencyManager.UNKNOWN
     if (Path.cwd() / "poetry.lock").exists():
-        return DependencyManager.POETRY
-    if (Path.cwd() / "uv.lock").exists():
-        return DependencyManager.UV
-    if "tool" not in pyproject_data:
-        return DependencyManager.PIP
-
-    tool_section = pyproject_data["tool"]
-
-    # Check for poetry
-    if "poetry" in tool_section:
-        return DependencyManager.POETRY
-
-    # Check for uv
-    if any(key.startswith("uv") for key in tool_section):
-        return DependencyManager.UV
-
-    # Look for pip-specific markers
-    if "pip" in tool_section or "setuptools" in tool_section:
-        return DependencyManager.PIP
-
-    return DependencyManager.UNKNOWN
+        result = DependencyManager.POETRY
+    elif (Path.cwd() / "uv.lock").exists():
+        result = DependencyManager.UV
+    elif "tool" not in pyproject_data:
+        result = DependencyManager.PIP
+    else:
+        tool_section = pyproject_data["tool"]
+        if "poetry" in tool_section:
+            result = DependencyManager.POETRY
+        elif any(key.startswith("uv") for key in tool_section):
+            result = DependencyManager.UV
+        elif "pip" in tool_section or "setuptools" in tool_section:
+            result = DependencyManager.PIP
+    return result
 
 
 def get_codeflash_github_action_command(dep_manager: DependencyManager) -> str:
@@ -642,7 +636,10 @@ def get_github_action_working_directory(toml_path: Path, git_root: Path) -> str:
 
 
 def customize_codeflash_yaml_content(
-    optimize_yml_content: str, config: tuple[dict[str, Any], Path], git_root: Path, benchmark_mode: bool = False
+    optimize_yml_content: str,
+    config: tuple[dict[str, Any], Path],
+    git_root: Path,
+    benchmark_mode: bool = False,  # noqa: FBT001, FBT002
 ) -> str:
     module_path = str(Path(config["module_root"]).relative_to(git_root) / "**")
     optimize_yml_content = optimize_yml_content.replace("{{ codeflash_module_path }}", module_path)
@@ -878,7 +875,7 @@ class TestBubbleSort(unittest.TestCase):
         input = list(reversed(range(100)))
         output = sorter(input)
         self.assertEqual(output, list(range(100)))
-"""
+"""  # noqa: PTH119
     elif args.test_framework == "pytest":
         bubble_sort_test_content = f"""from {Path(args.module_root).name}.bubble_sort import sorter
 
@@ -959,10 +956,8 @@ def ask_for_telemetry() -> bool:
     """Prompt the user to enable or disable telemetry."""
     from rich.prompt import Confirm
 
-    enable_telemetry = Confirm.ask(
+    return Confirm.ask(
         "⚡️ Would you like to enable telemetry to help us improve the Codeflash experience?",
         default=True,
         show_default=True,
     )
-
-    return enable_telemetry

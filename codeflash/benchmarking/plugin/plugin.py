@@ -186,7 +186,7 @@ class CodeFlashBenchmarkPlugin:
 
     # Pytest hooks
     @pytest.hookimpl
-    def pytest_sessionfinish(self, session, exitstatus):
+    def pytest_sessionfinish(self, session, exitstatus) -> None:  # noqa: ANN001, ARG002
         """Execute after whole test run is completed."""
         # Write any remaining benchmark timings to the database
         codeflash_trace.close()
@@ -196,24 +196,24 @@ class CodeFlashBenchmarkPlugin:
         self.close()
 
     @staticmethod
-    def pytest_addoption(parser):
+    def pytest_addoption(parser: pytest.Parser) -> None:
         parser.addoption("--codeflash-trace", action="store_true", default=False, help="Enable CodeFlash tracing")
 
     @staticmethod
-    def pytest_plugin_registered(plugin, manager):
+    def pytest_plugin_registered(plugin, manager) -> None:  # noqa: ANN001
         # Not necessary since run with -p no:benchmark, but just in case
         if hasattr(plugin, "name") and plugin.name == "pytest-benchmark":
             manager.unregister(plugin)
 
     @staticmethod
-    def pytest_configure(config):
+    def pytest_configure(config: pytest.Config) -> None:
         """Register the benchmark marker."""
         config.addinivalue_line(
             "markers", "benchmark: mark test as a benchmark that should be run with codeflash tracing"
         )
 
     @staticmethod
-    def pytest_collection_modifyitems(config, items):
+    def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
         # Skip tests that don't have the benchmark fixture
         if not config.getoption("--codeflash-trace"):
             return
@@ -235,30 +235,30 @@ class CodeFlashBenchmarkPlugin:
                 item.add_marker(skip_no_benchmark)
 
     # Benchmark fixture
-    class Benchmark:
-        def __init__(self, request):
+    class Benchmark:  # noqa: D106
+        def __init__(self, request: pytest.FixtureRequest) -> None:
             self.request = request
 
-        def __call__(self, func, *args, **kwargs):
+        def __call__(self, func, *args, **kwargs):  # type: ignore  # noqa: ANN001, ANN002, ANN003, ANN204, PGH003
             """Handle both direct function calls and decorator usage."""
             if args or kwargs:
                 # Used as benchmark(func, *args, **kwargs)
                 return self._run_benchmark(func, *args, **kwargs)
 
             # Used as @benchmark decorator
-            def wrapped_func(*args, **kwargs):
+            def wrapped_func(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
                 return func(*args, **kwargs)
 
-            result = self._run_benchmark(func)
+            self._run_benchmark(func)
             return wrapped_func
 
-        def _run_benchmark(self, func, *args, **kwargs):
+        def _run_benchmark(self, func, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
             """Actual benchmark implementation."""
             benchmark_module_path = module_name_from_file_path(
                 Path(str(self.request.node.fspath)), Path(codeflash_benchmark_plugin.project_root)
             )
             benchmark_function_name = self.request.node.name
-            line_number = int(str(sys._getframe(2).f_lineno))  # 2 frames up in the call stack
+            line_number = int(str(sys._getframe(2).f_lineno))  # 2 frames up in the call stack  # noqa: SLF001
             # Set env vars
             os.environ["CODEFLASH_BENCHMARK_FUNCTION_NAME"] = benchmark_function_name
             os.environ["CODEFLASH_BENCHMARK_MODULE_PATH"] = benchmark_module_path
@@ -284,7 +284,7 @@ class CodeFlashBenchmarkPlugin:
 
     @staticmethod
     @pytest.fixture
-    def benchmark(request):
+    def benchmark(request: pytest.FixtureRequest) -> object:
         if not request.config.getoption("--codeflash-trace"):
             return None
 
