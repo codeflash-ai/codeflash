@@ -1,8 +1,8 @@
+# ruff: noqa: ARG002
 from __future__ import annotations
 
 import ast
-from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Optional, Set
+from typing import TYPE_CHECKING, Optional
 
 import libcst as cst
 import libcst.matchers as m
@@ -11,23 +11,24 @@ from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, Rem
 from libcst.helpers import calculate_module_and_package
 
 from codeflash.cli_cmds.console import logger
-from codeflash.models.models import FunctionParent, FunctionSource
+from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from libcst.helpers import ModuleNameAndPackage
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-
-from typing import List
+    from codeflash.models.models import FunctionSource
 
 
 class GlobalAssignmentCollector(cst.CSTVisitor):
     """Collects all global assignment statements."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
-        self.assignments: Dict[str, cst.Assign] = {}
-        self.assignment_order: List[str] = []
+        self.assignments: dict[str, cst.Assign] = {}
+        self.assignment_order: list[str] = []
         # Track scope depth to identify global assignments
         self.scope_depth = 0
         self.if_else_depth = 0
@@ -72,11 +73,11 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
 class GlobalAssignmentTransformer(cst.CSTTransformer):
     """Transforms global assignments in the original file with those from the new file."""
 
-    def __init__(self, new_assignments: Dict[str, cst.Assign], new_assignment_order: List[str]):
+    def __init__(self, new_assignments: dict[str, cst.Assign], new_assignment_order: list[str]) -> None:
         super().__init__()
         self.new_assignments = new_assignments
         self.new_assignment_order = new_assignment_order
-        self.processed_assignments: Set[str] = set()
+        self.processed_assignments: set[str] = set()
         self.scope_depth = 0
         self.if_else_depth = 0
 
@@ -124,10 +125,11 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         new_statements = list(updated_node.body)
 
         # Find assignments to append
-        assignments_to_append = []
-        for name in self.new_assignment_order:
-            if name not in self.processed_assignments and name in self.new_assignments:
-                assignments_to_append.append(self.new_assignments[name])
+        assignments_to_append = [
+            self.new_assignments[name]
+            for name in self.new_assignment_order
+            if name not in self.processed_assignments and name in self.new_assignments
+        ]
 
         if assignments_to_append:
             # Add a blank line before appending new assignments if needed
@@ -136,8 +138,12 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
                 new_statements.pop()  # Remove the Pass statement but keep the empty line
 
             # Add the new assignments
-            for assignment in assignments_to_append:
-                new_statements.append(cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()]))
+            new_statements.extend(
+                [
+                    cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()])
+                    for assignment in assignments_to_append
+                ]
+            )
 
         return updated_node.with_changes(body=new_statements)
 
@@ -145,7 +151,7 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
 class GlobalStatementCollector(cst.CSTVisitor):
     """Visitor that collects all global statements (excluding imports and functions/classes)."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.global_statements = []
         self.in_function_or_class = False
@@ -178,7 +184,7 @@ class GlobalStatementCollector(cst.CSTVisitor):
 class LastImportFinder(cst.CSTVisitor):
     """Finds the position of the last import statement in the module."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.last_import_line = 0
         self.current_line = 0
@@ -193,7 +199,7 @@ class LastImportFinder(cst.CSTVisitor):
 class ImportInserter(cst.CSTTransformer):
     """Transformer that inserts global statements after the last import."""
 
-    def __init__(self, global_statements: List[cst.SimpleStatementLine], last_import_line: int):
+    def __init__(self, global_statements: list[cst.SimpleStatementLine], last_import_line: int) -> None:
         super().__init__()
         self.global_statements = global_statements
         self.last_import_line = last_import_line
@@ -208,7 +214,7 @@ class ImportInserter(cst.CSTTransformer):
         # If we're right after the last import and haven't inserted yet
         if self.current_line == self.last_import_line and not self.inserted:
             self.inserted = True
-            return cst.Module(body=[updated_node] + self.global_statements)
+            return cst.Module(body=[updated_node, *self.global_statements])
 
         return cst.Module(body=[updated_node])
 
@@ -222,7 +228,7 @@ class ImportInserter(cst.CSTTransformer):
         return updated_node
 
 
-def extract_global_statements(source_code: str) -> List[cst.SimpleStatementLine]:
+def extract_global_statements(source_code: str) -> list[cst.SimpleStatementLine]:
     """Extract global statements from source code."""
     module = cst.parse_module(source_code)
     collector = GlobalStatementCollector()
@@ -285,8 +291,7 @@ def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
     transformer = GlobalAssignmentTransformer(new_collector.assignments, new_collector.assignment_order)
     transformed_module = original_module.visit(transformer)
 
-    dst_module_code = transformed_module.code
-    return dst_module_code
+    return transformed_module.code
 
 
 def add_needed_imports_from_module(
@@ -357,9 +362,10 @@ def add_needed_imports_from_module(
 
 
 def get_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str | None, set[tuple[str, str]]]:
-    """Return the code for a function or methods in a Python module. functions_to_optimize is either a singleton
-    FunctionToOptimize instance, which represents either a function at the module level or a method of a class at the
-    module level, or it represents a list of methods of the same class.
+    """Return the code for a function or methods in a Python module.
+
+    functions_to_optimize is either a singleton FunctionToOptimize instance, which represents either a function at the
+    module level or a method of a class at the module level, or it represents a list of methods of the same class.
     """
     if (
         not functions_to_optimize
@@ -427,7 +433,7 @@ def get_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str | Non
 
         return find_target(target.body, name_parts[1:])
 
-    with open(file_path, encoding="utf8") as file:
+    with file_path.open(encoding="utf8") as file:
         source_code: str = file.read()
     try:
         module_node: ast.Module = ast.parse(source_code)
