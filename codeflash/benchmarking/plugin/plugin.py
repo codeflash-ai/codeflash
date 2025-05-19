@@ -48,16 +48,18 @@ class CodeFlashBenchmarkPlugin:
             return  # No data to write
 
         if self._connection is None:
-            self._connection = sqlite3.connect(self._trace_path)
+            self._init_connection()
 
         try:
             cur = self._connection.cursor()
-            # Insert data into the benchmark_timings table
+            # Wrap the bulk insert in a transaction for maximum speed
+            self._connection.execute("BEGIN")
             cur.executemany(
                 "INSERT INTO benchmark_timings (benchmark_module_path, benchmark_function_name, benchmark_line_number, benchmark_time_ns) VALUES (?, ?, ?, ?)",
                 self.benchmark_timings,
             )
             self._connection.commit()
+            cur.close()
             self.benchmark_timings = []  # Clear the benchmark timings list
         except Exception as e:
             print(f"Error writing to benchmark timings database: {e}")
@@ -289,6 +291,20 @@ class CodeFlashBenchmarkPlugin:
             return None
 
         return CodeFlashBenchmarkPlugin.Benchmark(request)
+
+    def _init_connection(self) -> None:
+        """Initialize the sqlite connection and set fast write PRAGMAs."""
+        self._connection = sqlite3.connect(self._trace_path)
+        try:
+            cur = self._connection.cursor()
+            # The following PRAGMAs make inserts and commits much faster,
+            # but with reduced durability (acceptable in benchmarks).
+            cur.execute("PRAGMA synchronous = OFF")
+            cur.execute("PRAGMA journal_mode = MEMORY")
+            cur.close()
+        except Exception:
+            # Proceed even if PRAGMAs fail as a fallback
+            pass
 
 
 codeflash_benchmark_plugin = CodeFlashBenchmarkPlugin()
