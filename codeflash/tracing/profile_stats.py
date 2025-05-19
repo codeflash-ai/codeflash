@@ -43,7 +43,7 @@ class ProfileStats(pstats.Stats):
                 unmapped_callers,
             )
 
-    def print_stats(self, *amount):
+    def print_stats(self, *amount) -> pstats.Stats:  # noqa: ANN002
         # Copied from pstats.Stats.print_stats and modified to print the correct time unit
         for filename in self.files:
             print(filename, file=self.stream)
@@ -55,7 +55,7 @@ class ProfileStats(pstats.Stats):
 
         print(indent, self.total_calls, "function calls", end=" ", file=self.stream)
         if self.total_calls != self.prim_calls:
-            print("(%d primitive calls)" % self.prim_calls, end=" ", file=self.stream)
+            print("(%d primitive calls)" % self.prim_calls, end=" ", file=self.stream)  # noqa: UP031
         time_unit = {"ns": "nanoseconds", "us": "microseconds", "ms": "milliseconds", "s": "seconds"}[self.time_unit]
         print(f"in {self.total_tt:.3f} {time_unit}", file=self.stream)
         print(file=self.stream)

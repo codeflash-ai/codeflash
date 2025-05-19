@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import annotations  # noqa: N999
 
 from typing import Optional, Union
 
@@ -44,5 +44,5 @@ class PrComment:
 
 
 class FileDiffContent(BaseModel):
-    oldContent: str
-    newContent: str
+    oldContent: str  # noqa: N815
+    newContent: str  # noqa: N815

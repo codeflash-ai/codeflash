@@ -1,6 +1,7 @@
-"""Adapted from tabulate (https://github.com/astanin/python-tabulate) written by Sergey Astanin and contributors (MIT License)"""
+"""Adapted from tabulate (https://github.com/astanin/python-tabulate) written by Sergey Astanin and contributors (MIT License)."""
 
 """Pretty-print tabular data."""
+# ruff: noqa
 
 import dataclasses
 import math
@@ -34,12 +35,12 @@ WIDE_CHARS_MODE = wcwidth is not None
 # It is purposely an unprintable character, very unlikely to be used in a table
 SEPARATING_LINE = "\001"
 
-Line = namedtuple("Line", ["begin", "hline", "sep", "end"])
+Line = namedtuple("Line", ["begin", "hline", "sep", "end"])  # noqa: PYI024
 
 
-DataRow = namedtuple("DataRow", ["begin", "sep", "end"])
+DataRow = namedtuple("DataRow", ["begin", "sep", "end"])  # noqa: PYI024
 
-TableFormat = namedtuple(
+TableFormat = namedtuple(  # noqa: PYI024
     "TableFormat",
     [
         "lineabove",

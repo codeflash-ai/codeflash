@@ -23,7 +23,7 @@ from codeflash.code_utils.static_analysis import analyze_imported_modules, get_f
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
 from codeflash.either import is_successful
-from codeflash.models.models import BenchmarkKey, ValidCode
+from codeflash.models.models import ValidCode
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.models.models import FunctionCalledInTest
+    from codeflash.models.models import BenchmarkKey, FunctionCalledInTest
 
 
 class Optimizer:

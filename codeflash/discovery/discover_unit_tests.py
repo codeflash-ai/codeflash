@@ -1,3 +1,4 @@
+# ruff: noqa: SLF001
 from __future__ import annotations
 
 import hashlib
@@ -12,8 +13,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
 import jedi
+import pytest
 from pydantic.dataclasses import dataclass
-from pytest import ExitCode
 
 from codeflash.cli_cmds.console import console, logger, test_files_progress_bar
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
@@ -177,11 +178,11 @@ def discover_tests_pytest(
             error_section = match.group(1) if match else result.stdout
 
             logger.warning(
-                f"Failed to collect tests. Pytest Exit code: {exitcode}={ExitCode(exitcode).name}\n {error_section}"
+                f"Failed to collect tests. Pytest Exit code: {exitcode}={pytest.ExitCode(exitcode).name}\n {error_section}"
             )
 
         elif 0 <= exitcode <= 5:
-            logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}={ExitCode(exitcode).name}")
+            logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}={pytest.ExitCode(exitcode).name}")
         else:
             logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
         console.rule()

@@ -153,11 +153,12 @@ warn_required_dynamic_aliases = true
 line-length = 120
 fix = true
 show-fixes = true
-exclude = ["code_to_optimize/", "pie_test_set/", "tests/"]
+exclude = ["code_to_optimize/", "pie_test_set/", "tests/", "codeflash/verification/comparator.py"]
 
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
+    "N802",
     "C901",
     "D100",
     "D101",
@@ -179,7 +180,16 @@ ignore = [
     "TD003",
     "TD004",
     "PLR2004",
-    "UP007" # remove once we drop 3.9 support.
+    "UP007", # remove once we drop 3.9 support.
+    "E501",
+    "BLE001",
+    "ERA001",
+    "TRY003",
+    "EM101",
+    "T201",
+    "PGH004",
+    "S301",
+    "D104"
 ]
 
 [tool.ruff.lint.flake8-type-checking]

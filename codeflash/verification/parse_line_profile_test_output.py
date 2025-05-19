@@ -1,17 +1,23 @@
-"""Adapted from line_profiler (https://github.com/pyutils/line_profiler) written by Enthought, Inc. (BSD License)"""
+"""Adapted from line_profiler (https://github.com/pyutils/line_profiler) written by Enthought, Inc. (BSD License)."""
+
+from __future__ import annotations
 
 import inspect
 import linecache
 import os
-from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import dill as pickle
 
 from codeflash.code_utils.tabulate import tabulate
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
-def show_func(filename, start_lineno, func_name, timings, unit):
+
+def show_func(
+    filename: str, start_lineno: int, func_name: str, timings: list[tuple[int, int, float]], unit: float
+) -> str:
     total_hits = sum(t[1] for t in timings)
     total_time = sum(t[2] for t in timings)
     out_table = ""
@@ -19,7 +25,7 @@ def show_func(filename, start_lineno, func_name, timings, unit):
     if total_hits == 0:
         return ""
     scalar = 1
-    if os.path.exists(filename):
+    if os.path.exists(filename):  # noqa: PTH110
         out_table += f"## Function: {func_name}\n"
         # Clear the cache to ensure that we get up-to-date results.
         linecache.clearcache()
@@ -32,10 +38,7 @@ def show_func(filename, start_lineno, func_name, timings, unit):
     # Loop over each line to determine better column formatting.
     # Fallback to scientific notation if columns are larger than a threshold.
     for lineno, nhits, time in timings:
-        if total_time == 0:  # Happens rarely on empty function
-            percent = ""
-        else:
-            percent = "%5.1f" % (100 * time / total_time)
+        percent = "" if total_time == 0 else "%5.1f" % (100 * time / total_time)
 
         time_disp = "%5.1f" % (time * scalar)
         if len(time_disp) > default_column_sizes["time"]:
@@ -43,9 +46,9 @@ def show_func(filename, start_lineno, func_name, timings, unit):
         perhit_disp = "%5.1f" % (float(time) * scalar / nhits)
         if len(perhit_disp) > default_column_sizes["perhit"]:
             perhit_disp = "%5.1g" % (float(time) * scalar / nhits)
-        nhits_disp = "%d" % nhits
+        nhits_disp = "%d" % nhits  # noqa: UP031
         if len(nhits_disp) > default_column_sizes["hits"]:
-            nhits_disp = "%g" % nhits
+            nhits_disp = f"{nhits:g}"
         display[lineno] = (nhits_disp, time_disp, perhit_disp, percent)
     linenos = range(start_lineno, start_lineno + len(sublines))
     empty = ("", "", "", "")
@@ -65,10 +68,10 @@ def show_func(filename, start_lineno, func_name, timings, unit):
 def show_text(stats: dict) -> str:
     """Show text for the given timings."""
     out_table = ""
-    out_table += "# Timer unit: %g s\n" % stats["unit"]
+    out_table += "# Timer unit: {:g} s\n".format(stats["unit"])
     stats_order = sorted(stats["timings"].items())
     # Show detailed per-line information for each function.
-    for (fn, lineno, name), timings in stats_order:
+    for (fn, lineno, name), _timings in stats_order:
         table_md = show_func(fn, lineno, name, stats["timings"][fn, lineno, name], stats["unit"])
         out_table += table_md
     return out_table
@@ -79,7 +82,7 @@ def parse_line_profile_results(line_profiler_output_file: Optional[Path]) -> dic
     stats_dict = {}
     if not line_profiler_output_file.exists():
         return {"timings": {}, "unit": 0, "str_out": ""}, None
-    with open(line_profiler_output_file, "rb") as f:
+    with line_profiler_output_file.open("rb") as f:
         stats = pickle.load(f)
         stats_dict["timings"] = stats.timings
         stats_dict["unit"] = stats.unit
