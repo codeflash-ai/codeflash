@@ -17,6 +17,7 @@ class CodeFlashBenchmarkPlugin:
     def __init__(self) -> None:
         self._trace_path = None
         self._connection = None
+        self._cursor = None
         self.project_root = None
         self.benchmark_timings = []
 
@@ -47,18 +48,16 @@ class CodeFlashBenchmarkPlugin:
         if not self.benchmark_timings:
             return  # No data to write
 
-        if self._connection is None:
-            self._connection = sqlite3.connect(self._trace_path)
+        self._ensure_connection()
 
         try:
-            cur = self._connection.cursor()
             # Insert data into the benchmark_timings table
-            cur.executemany(
+            self._cursor.executemany(
                 "INSERT INTO benchmark_timings (benchmark_module_path, benchmark_function_name, benchmark_line_number, benchmark_time_ns) VALUES (?, ?, ?, ?)",
                 self.benchmark_timings,
             )
             self._connection.commit()
-            self.benchmark_timings = []  # Clear the benchmark timings list
+            self.benchmark_timings.clear()  # Clear the benchmark timings list (reuses the list object)
         except Exception as e:
             print(f"Error writing to benchmark timings database: {e}")
             self._connection.rollback()
@@ -289,6 +288,17 @@ class CodeFlashBenchmarkPlugin:
             return None
 
         return CodeFlashBenchmarkPlugin.Benchmark(request)
+
+    def _ensure_connection(self) -> None:
+        # Establish DB connection and optimize settings for faster inserts, if not already done
+        if self._connection is None:
+            self._connection = sqlite3.connect(self._trace_path)
+            self._cursor = self._connection.cursor()
+            # Speed up inserts by relaxing durability
+            self._cursor.execute("PRAGMA synchronous = OFF")
+            self._cursor.execute("PRAGMA journal_mode = MEMORY")
+        elif self._cursor is None:
+            self._cursor = self._connection.cursor()
 
 
 codeflash_benchmark_plugin = CodeFlashBenchmarkPlugin()
