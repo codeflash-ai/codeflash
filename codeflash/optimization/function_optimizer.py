@@ -406,6 +406,8 @@ class FunctionOptimizer:
                     try:
                         candidate = candidates.popleft()
                     except IndexError as e:
+                        if done:
+                            break
                         continue
                     candidate_index += 1
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
