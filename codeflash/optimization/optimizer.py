@@ -269,6 +269,11 @@ class Optimizer:
             if self.test_cfg.concolic_test_root_dir:
                 cleanup_paths([self.test_cfg.concolic_test_root_dir])
 
+
 def run_with_args(args: Namespace) -> None:
-    optimizer = Optimizer(args)
-    optimizer.run()
+    try:
+        optimizer = Optimizer(args)
+        optimizer.run()
+    except KeyboardInterrupt:
+        logger.warning("Keyboard interrupt received. Exiting, please wait…")
+        raise SystemExit from None
