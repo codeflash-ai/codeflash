@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import tiktoken
 
 from codeflash.code_utils.code_utils import (
     cleanup_paths,
@@ -22,6 +23,22 @@ from codeflash.code_utils.code_utils import (
 from codeflash.code_utils.concolic_utils import clean_concolic_tests
 from codeflash.code_utils.coverage_utils import generate_candidates, prepare_coverage_files
 
+def test_encode_str():
+    #not testing anything, just analyzing the behavior of encoding
+    #print("\n")
+    codebases_to_try = Path(Path(__file__).parent.resolve() / "../code_to_optimize/").glob("**/*.py")
+    ave_ratio = []
+    max_ratio_dict = dict()
+    for code_fn in codebases_to_try:
+        code_str = code_fn.read_text(encoding="utf-8")
+        if not len(code_str) or "__init__.py" in str(code_fn):
+            continue
+        tokenizer = tiktoken.encoding_for_model("gpt-4o")
+        tkt_encoded_str = tokenizer.encode(code_str)
+        code_len = len(code_str)
+        ave_ratio.append(len(tkt_encoded_str)/code_len)
+        max_ratio_dict[len(tkt_encoded_str)/code_len] = code_fn
+    print(sum(ave_ratio)/len(ave_ratio), min(ave_ratio), max(ave_ratio))
 
 @pytest.fixture
 def multiple_existing_and_non_existing_files(tmp_path: Path) -> list[Path]:
