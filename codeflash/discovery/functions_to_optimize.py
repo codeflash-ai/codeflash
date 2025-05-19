@@ -478,6 +478,8 @@ def filter_functions(
         if blocklist_funcs:
             functions_tmp = []
             for function in _functions:
+                logger.info(function.file_path.name)
+                logger.info(function.qualified_name)
                 if not (
                     function.file_path.name in blocklist_funcs
                     and function.qualified_name in blocklist_funcs[function.file_path.name]
