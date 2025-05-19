@@ -7,7 +7,6 @@ from pathlib import Path
 
 import jedi
 import libcst as cst
-import tiktoken
 from jedi.api.classes import Name
 from libcst import CSTNode
 
@@ -73,8 +72,7 @@ def get_code_optimization_context(
     )
 
     # Handle token limits
-    tokenizer = tiktoken.encoding_for_model("gpt-4o")
-    final_read_writable_tokens = len(tokenizer.encode(final_read_writable_code))
+    final_read_writable_tokens = len(final_read_writable_code)*0.75
     if final_read_writable_tokens > optim_token_limit:
         raise ValueError("Read-writable code has exceeded token limit, cannot proceed")
 
