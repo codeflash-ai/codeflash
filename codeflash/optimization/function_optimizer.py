@@ -407,6 +407,7 @@ class FunctionOptimizer:
                     except IndexError:
                         if done:
                             break
+                        time.sleep(0.1)
                         continue
                     candidate_index += 1
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
