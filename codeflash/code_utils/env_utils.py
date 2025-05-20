@@ -1,6 +1,7 @@
 import os
 import shlex
 import subprocess
+import tempfile
 from functools import lru_cache
 from typing import Optional
 
@@ -9,16 +10,21 @@ from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
 
 
 def check_formatter_installed(formatter_cmds: list[str]) -> bool:
-    clean_cmd = formatter_cmds[0].replace("uvx ","").replace("uv ","").replace("tool ","").replace("run ","")
-    clean_cmd_parts = shlex.split(clean_cmd," ")
-    formatter = "black" if "black" in clean_cmd_parts else "ruff" if "ruff" in clean_cmd_parts else clean_cmd_parts[0]
-    if not formatter:
-        try:
-            subprocess.run([formatter], check=False)
-        except (FileNotFoundError, NotADirectoryError):
-            logger.error(f"⚠️ Formatter not found: {formatter}, please ensure it is installed")
-            return False
-    return True
+    return_code = True
+    if formatter_cmds[0] == "disabled":
+        return return_code
+    tmp_code = """print("hello world")"""
+    tmp_file = tempfile.NamedTemporaryFile(suffix=".py").write_text(tmp_code, encoding="utf8")
+    file_token = "$file"  # noqa: S105
+    for command in set(formatter_cmds):
+        formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
+        formatter_cmd_list = [tmp_file.as_posix() if chunk == file_token else chunk for chunk in formatter_cmd_list]
+        result = subprocess.run(formatter_cmd_list, capture_output=True, check=False)
+        if result.returncode:
+            return_code = False
+            break
+    tmp_file.unlink(missing_ok=True)
+    return return_code
 
 
 @lru_cache(maxsize=1)
