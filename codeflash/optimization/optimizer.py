@@ -85,7 +85,7 @@ class Optimizer:
             try:
                 execute_test_subprocess([formatter])
             except (FileNotFoundError, NotADirectoryError):
-                click.echo(f"⚠️ Formatter not found: {formatter}, please ensure it is installed")
+                click.echo(f"⚠️ Formatter not found: {formatter}, please ensure it is installed. Exiting...")
                 sys.exit(1)
 
         ph("cli-optimize-run-start")
