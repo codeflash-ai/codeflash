@@ -1,4 +1,4 @@
-#ruff: noqa: PGH003
+# ruff: noqa: PGH003
 import array
 import ast
 import datetime
