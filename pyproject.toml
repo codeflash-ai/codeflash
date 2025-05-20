@@ -123,7 +123,7 @@ types-greenlet = "^3.1.0.20241221"
 types-pexpect = "^4.9.0.20241208"
 types-unidiff = "^0.7.0.20240505"
 uv = ">=0.6.2"
-licensecheck = "^2025.1.0"
+licensecheck = { version = "^2025.1.0", markers = "python_version < '4.0'" }
 
 [tool.poetry.build]
 script = "codeflash/update_license_version.py"
