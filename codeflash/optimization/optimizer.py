@@ -80,7 +80,7 @@ class Optimizer:
         )
 
     def run(self) -> None:
-        if self.args.formatter_cmds[0].startswith("black") or self.args.formatter_cmds[0].startswith("uv"):
+        if self.args.formatter_cmds[0].startswith("black") or self.args.formatter_cmds[0].startswith("ruff"):
             formatter = self.args.formatter_cmds[0].split(" ")[0]
             try:
                 execute_test_subprocess([formatter])
