@@ -2,9 +2,23 @@ import os
 from functools import lru_cache
 from typing import Optional
 
+import click
+
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
+from codeflash.verification.test_runner import execute_test_subprocess
 
+
+def check_formatter_installed(formatter_cmds: list[str]) -> bool:
+    cmd_parts = formatter_cmds[0].split(" ")
+    if "black" in cmd_parts or "ruff" in cmd_parts:
+        formatter = cmd_parts[0]
+        try:
+            execute_test_subprocess([formatter])
+        except (FileNotFoundError, NotADirectoryError):
+            click.echo(f"⚠️ Formatter not found: {formatter}, please ensure it is installed")
+            return False
+    return True
 
 @lru_cache(maxsize=1)
 def get_codeflash_api_key() -> str:

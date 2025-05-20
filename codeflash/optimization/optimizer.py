@@ -2,14 +2,11 @@ from __future__ import annotations
 
 import ast
 import os
-import sys
 import tempfile
 import time
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
-
-import click
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.benchmarking.instrument_codeflash_trace import instrument_codeflash_trace_decorator
@@ -28,7 +25,6 @@ from codeflash.either import is_successful
 from codeflash.models.models import BenchmarkKey, ValidCode
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.telemetry.posthog_cf import ph
-from codeflash.verification.test_runner import execute_test_subprocess
 from codeflash.verification.verification_utils import TestConfig
 
 if TYPE_CHECKING:
@@ -80,6 +76,7 @@ class Optimizer:
         )
 
     def run(self) -> None:
+<<<<<<< Updated upstream
         if self.args.formatter_cmds[0].startswith("black") or self.args.formatter_cmds[0].startswith("ruff"):
             formatter = self.args.formatter_cmds[0].split(" ")[0]
             try:
@@ -88,10 +85,14 @@ class Optimizer:
                 click.echo(f"⚠️ Formatter not found: {formatter}, please ensure it is installed. Exiting...")
                 sys.exit(1)
 
+=======
+>>>>>>> Stashed changes
         ph("cli-optimize-run-start")
         logger.info("Running optimizer.")
         console.rule()
         if not env_utils.ensure_codeflash_api_key():
+            return
+        if not env_utils.check_formatter_installed():
             return
         function_optimizer = None
         file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
