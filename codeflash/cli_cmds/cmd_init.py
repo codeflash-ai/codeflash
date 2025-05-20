@@ -22,7 +22,7 @@ from codeflash.cli_cmds.cli_common import apologize_and_exit, inquirer_wrapper, 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
-from codeflash.code_utils.env_utils import get_codeflash_api_key
+from codeflash.code_utils.env_utils import check_formatter_installed, get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_git_remotes, get_repo_owner_and_name
 from codeflash.code_utils.github_utils import get_github_secrets_page_url
 from codeflash.code_utils.shell_utils import get_shell_rc_path, save_api_key_to_rc
@@ -239,7 +239,7 @@ def collect_setup_info() -> SetupInfo:
         else:
             apologize_and_exit()
     else:
-        tests_root = Path(curdir) / Path(cast(str, tests_root_answer))
+        tests_root = Path(curdir) / Path(cast("str", tests_root_answer))
     tests_root = tests_root.relative_to(curdir)
     ph("cli-tests-root-provided")
 
@@ -302,7 +302,7 @@ def collect_setup_info() -> SetupInfo:
     elif benchmarks_answer == no_benchmarks_option:
         benchmarks_root = None
     else:
-        benchmarks_root = tests_root / Path(cast(str, benchmarks_answer))
+        benchmarks_root = tests_root / Path(cast("str", benchmarks_answer))
 
     # TODO: Implement other benchmark framework options
     # if benchmarks_root:
@@ -354,9 +354,9 @@ def collect_setup_info() -> SetupInfo:
         module_root=str(module_root),
         tests_root=str(tests_root),
         benchmarks_root=str(benchmarks_root) if benchmarks_root else None,
-        test_framework=cast(str, test_framework),
+        test_framework=cast("str", test_framework),
         ignore_paths=ignore_paths,
-        formatter=cast(str, formatter),
+        formatter=cast("str", formatter),
         git_remote=str(git_remote),
     )
 
@@ -466,7 +466,7 @@ def check_for_toml_or_setup_file() -> str | None:
             click.echo("⏩️ Skipping pyproject.toml creation.")
             apologize_and_exit()
     click.echo()
-    return cast(str, project_name)
+    return cast("str", project_name)
 
 
 def install_github_actions(override_formatter_check: bool = False) -> None:
@@ -717,11 +717,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         )
     elif formatter == "don't use a formatter":
         formatter_cmds.append("disabled")
-    if formatter in ["black", "ruff"]:
-        try:
-            subprocess.run([formatter], capture_output=True, check=False)
-        except (FileNotFoundError, NotADirectoryError):
-            click.echo(f"⚠️ Formatter not found: {formatter}, please ensure it is installed")
+    check_formatter_installed(formatter_cmds)
     codeflash_section["formatter-cmds"] = formatter_cmds
     # Add the 'codeflash' section, ensuring 'tool' section exists
     tool_section = pyproject_data.get("tool", tomlkit.table())
