@@ -76,17 +76,6 @@ class Optimizer:
         )
 
     def run(self) -> None:
-<<<<<<< Updated upstream
-        if self.args.formatter_cmds[0].startswith("black") or self.args.formatter_cmds[0].startswith("ruff"):
-            formatter = self.args.formatter_cmds[0].split(" ")[0]
-            try:
-                execute_test_subprocess([formatter])
-            except (FileNotFoundError, NotADirectoryError):
-                click.echo(f"⚠️ Formatter not found: {formatter}, please ensure it is installed. Exiting...")
-                sys.exit(1)
-
-=======
->>>>>>> Stashed changes
         ph("cli-optimize-run-start")
         logger.info("Running optimizer.")
         console.rule()
