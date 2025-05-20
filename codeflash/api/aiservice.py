@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import time
-
 import json
 import os
 import platform
+import time
 from typing import TYPE_CHECKING, Any
 
 import requests
@@ -122,7 +121,7 @@ class AiServiceClient:
             logger.info(f"Generated {len(optimizations_json)} candidates.")
             console.rule()
             end_time = time.perf_counter()
-            logger.debug(f"Optimization took {end_time - start_time:.2f} seconds.")
+            logger.debug(f"Generating optimizations took {end_time - start_time:.2f} seconds.")
             return [
                 OptimizedCandidate(
                     source_code=opt["source_code"],
@@ -177,7 +176,7 @@ class AiServiceClient:
 
         logger.info("Generating optimized candidates…")
         console.rule()
-        if line_profiler_results=="":
+        if line_profiler_results == "":
             logger.info("No LineProfiler results were provided, Skipping optimization.")
             console.rule()
             return []
@@ -208,7 +207,6 @@ class AiServiceClient:
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
         return []
-
 
     def log_results(
         self,
@@ -272,9 +270,10 @@ class AiServiceClient:
         - Dict[str, str] | None: The generated regression tests and instrumented tests, or None if an error occurred.
 
         """
-        assert test_framework in ["pytest", "unittest"], (
-            f"Invalid test framework, got {test_framework} but expected 'pytest' or 'unittest'"
-        )
+        assert test_framework in [
+            "pytest",
+            "unittest",
+        ], f"Invalid test framework, got {test_framework} but expected 'pytest' or 'unittest'"
         payload = {
             "source_code_being_tested": source_code_being_tested,
             "function_to_optimize": function_to_optimize,
