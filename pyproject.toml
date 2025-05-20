@@ -93,7 +93,6 @@ crosshair-tool = ">=0.0.78"
 coverage = ">=7.6.4"
 line_profiler=">=4.2.0" #this is the minimum version which supports python 3.13
 platformdirs = ">=4.3.7"
-pre-commit = "^4.2.0"
 [tool.poetry.group.dev]
 optional = true
 
@@ -123,6 +122,7 @@ types-greenlet = "^3.1.0.20241221"
 types-pexpect = "^4.9.0.20241208"
 types-unidiff = "^0.7.0.20240505"
 uv = ">=0.6.2"
+pre-commit = "^4.2.0"
 
 [tool.poetry.build]
 script = "codeflash/update_license_version.py"
