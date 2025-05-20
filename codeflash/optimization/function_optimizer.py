@@ -392,6 +392,7 @@ class FunctionOptimizer:
             try:
                 candidate_index = 0
                 original_len = len(candidates)
+                # TODO replace while true with something safer, we dont want accidental infinite loops
                 while True:
                     done = True if future_line_profile_results is None else future_line_profile_results.done()
                     if done and (future_line_profile_results is not None):
