@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 import concurrent.futures
 import os
-import shutil
 import subprocess
 import time
 import uuid
@@ -405,9 +404,10 @@ class FunctionOptimizer:
                         future_line_profile_results = None
                     try:
                         candidate = candidates.popleft()
-                    except IndexError as e:
+                    except IndexError:
                         if done:
                             break
+                        time.sleep(0.1)
                         continue
                     candidate_index += 1
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
