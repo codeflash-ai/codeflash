@@ -3,6 +3,7 @@ import shlex
 import subprocess
 import tempfile
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 from codeflash.cli_cmds.console import logger
@@ -14,7 +15,8 @@ def check_formatter_installed(formatter_cmds: list[str]) -> bool:
     if formatter_cmds[0] == "disabled":
         return return_code
     tmp_code = """print("hello world")"""
-    tmp_file = tempfile.NamedTemporaryFile(suffix=".py").write_text(tmp_code, encoding="utf8")
+    tmp_file = tempfile.NamedTemporaryFile(suffix=".py")
+    Path(tmp_file.name).write_text(tmp_code, encoding="utf8")
     file_token = "$file"  # noqa: S105
     for command in set(formatter_cmds):
         formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
@@ -23,6 +25,7 @@ def check_formatter_installed(formatter_cmds: list[str]) -> bool:
         if result.returncode:
             return_code = False
             break
+    tmp_file.close()
     tmp_file.unlink(missing_ok=True)
     return return_code
 
