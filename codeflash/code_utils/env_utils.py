@@ -15,18 +15,21 @@ def check_formatter_installed(formatter_cmds: list[str]) -> bool:
     if formatter_cmds[0] == "disabled":
         return return_code
     tmp_code = """print("hello world")"""
-    tmp_file = tempfile.NamedTemporaryFile(suffix=".py")
-    Path(tmp_file.name).write_text(tmp_code, encoding="utf8")
-    file_token = "$file"  # noqa: S105
-    for command in set(formatter_cmds):
-        formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
-        formatter_cmd_list = [tmp_file.as_posix() if chunk == file_token else chunk for chunk in formatter_cmd_list]
-        result = subprocess.run(formatter_cmd_list, capture_output=True, check=False)
-        if result.returncode:
-            return_code = False
-            break
-    tmp_file.close()
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".py") as f:
+        f.write(tmp_code)
+        f.flush()
+        tmp_file = Path(f.name)
+        file_token = "$file"  # noqa: S105
+        for command in set(formatter_cmds):
+            formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
+            formatter_cmd_list = [tmp_file.as_posix() if chunk == file_token else chunk for chunk in formatter_cmd_list]
+            result = subprocess.run(formatter_cmd_list, capture_output=True, check=False)
+            if result.returncode:
+                return_code = False
+                break
     tmp_file.unlink(missing_ok=True)
+    if not return_code:
+        raise logger.error(f"Error running formatter command: {command}")
     return return_code
 
 
