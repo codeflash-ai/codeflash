@@ -848,7 +848,7 @@ def enter_api_key_and_save_to_rc() -> None:
 
 
 def create_bubble_sort_file_and_test(args: Namespace) -> tuple[str, str]:
-    bubble_sort_content = """def sorter(arr):
+    bubble_sort_content = """def sorter(arr: list[int] | list[float]) -> list[int] | list[float]:
     for i in range(len(arr)):
         for j in range(len(arr) - 1):
             if arr[j] > arr[j + 1]:
