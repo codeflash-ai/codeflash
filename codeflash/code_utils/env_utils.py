@@ -9,8 +9,9 @@ from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
 
 
 def check_formatter_installed(formatter_cmds: list[str]) -> bool:
-    cmd_parts = shlex.split(formatter_cmds[0]," ")
-    formatter = "black" if "black" in cmd_parts else "ruff" if "ruff" in cmd_parts else None
+    clean_cmd = formatter_cmds[0].replace("uvx ","").replace("uv ","").replace("tool ","").replace("run ","")
+    clean_cmd_parts = shlex.split(clean_cmd," ")
+    formatter = "black" if "black" in clean_cmd_parts else "ruff" if "ruff" in clean_cmd_parts else clean_cmd_parts[0]
     if not formatter:
         try:
             subprocess.run([formatter], check=False)
