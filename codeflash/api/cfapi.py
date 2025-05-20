@@ -199,8 +199,4 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
         sentry_sdk.capture_exception(e)
         return {}
 
-    # return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
-    logger.info(f"pre Blocklisted functions: {content}")
-    pre = {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
-    logger.info(f"post Blocklisted functions: {pre}")
-    return pre
+    return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}

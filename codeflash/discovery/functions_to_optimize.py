@@ -429,7 +429,7 @@ def filter_functions(
     disable_logs: bool = False,  # noqa: FBT001, FBT002
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     blocklist_funcs = get_blocklisted_functions()
-    logger.info(f"Blocklisted functions: {blocklist_funcs}")
+    logger.debug(f"Blocklisted functions: {blocklist_funcs}")
     # Remove any function that we don't want to optimize
 
     # Ignore files with submodule path, cache the submodule paths
@@ -478,8 +478,6 @@ def filter_functions(
         if blocklist_funcs:
             functions_tmp = []
             for function in _functions:
-                logger.info(function.file_path.name)
-                logger.info(function.qualified_name)
                 if not (
                     function.file_path.name in blocklist_funcs
                     and function.qualified_name in blocklist_funcs[function.file_path.name]
