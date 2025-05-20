@@ -1,4 +1,5 @@
 import os
+import shlex
 import subprocess
 from functools import lru_cache
 from typing import Optional
@@ -8,9 +9,9 @@ from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
 
 
 def check_formatter_installed(formatter_cmds: list[str]) -> bool:
-    cmd_parts = formatter_cmds[0].split(" ")
-    if "black" in cmd_parts or "ruff" in cmd_parts:
-        formatter = cmd_parts[0]
+    cmd_parts = shlex.split(formatter_cmds[0]," ")
+    formatter = "black" if "black" in cmd_parts else "ruff" if "ruff" in cmd_parts else None
+    if not formatter:
         try:
             subprocess.run([formatter], check=False)
         except (FileNotFoundError, NotADirectoryError):
