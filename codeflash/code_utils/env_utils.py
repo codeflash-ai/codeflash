@@ -1,9 +1,6 @@
 import os
 from functools import lru_cache
 from typing import Optional
-
-import click
-
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
 from codeflash.verification.test_runner import execute_test_subprocess
@@ -16,7 +13,7 @@ def check_formatter_installed(formatter_cmds: list[str]) -> bool:
         try:
             execute_test_subprocess([formatter])
         except (FileNotFoundError, NotADirectoryError):
-            click.echo(f"⚠️ Formatter not found: {formatter}, please ensure it is installed")
+            logger.error(f"⚠️ Formatter not found: {formatter}, please ensure it is installed")
             return False
     return True
 
