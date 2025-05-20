@@ -1,11 +1,7 @@
 """Thanks for being curious about how codeflash works! If you might want to work with us on finally making performance a
 solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 """
-import subprocess
 from pathlib import Path
-import sys
-
-import click
 
 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO, ask_run_end_to_end_test
@@ -39,14 +35,6 @@ def main() -> None:
         ask_run_end_to_end_test(args)
     else:
         args = process_pyproject_config(args)
-        if args.formatter_cmds[0].startswith("black") or args.formatter_cmds[0].startswith("uv"):
-            formatter = args.formatter_cmds[0].split(" ")[0]
-            try:
-                subprocess.run([formatter], capture_output=True, check=False)
-            except (FileNotFoundError, NotADirectoryError):
-                click.echo(f"⚠️ Formatter not found: {formatter}, please ensure it is installed")
-                sys.exit(1)
-
         args.previous_checkpoint_functions = ask_should_use_checkpoint_get_functions(args)
         init_sentry(not args.disable_telemetry, exclude_errors=True)
         posthog_cf.initialize_posthog(not args.disable_telemetry)

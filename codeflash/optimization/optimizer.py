@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import ast
 import os
+import sys
 import tempfile
 import time
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import click
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.benchmarking.instrument_codeflash_trace import instrument_codeflash_trace_decorator
@@ -18,14 +21,14 @@ from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
 from codeflash.code_utils.code_replacer import normalize_code, normalize_node
-from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
 from codeflash.code_utils.static_analysis import analyze_imported_modules, get_first_top_level_function_or_method_ast
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
 from codeflash.either import is_successful
-from codeflash.models.models import BenchmarkKey, TestType, ValidCode
+from codeflash.models.models import BenchmarkKey, ValidCode
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.telemetry.posthog_cf import ph
+from codeflash.verification.test_runner import execute_test_subprocess
 from codeflash.verification.verification_utils import TestConfig
 
 if TYPE_CHECKING:
@@ -77,6 +80,14 @@ class Optimizer:
         )
 
     def run(self) -> None:
+        if self.args.formatter_cmds[0].startswith("black") or self.args.formatter_cmds[0].startswith("uv"):
+            formatter = self.args.formatter_cmds[0].split(" ")[0]
+            try:
+                execute_test_subprocess([formatter])
+            except (FileNotFoundError, NotADirectoryError):
+                click.echo(f"⚠️ Formatter not found: {formatter}, please ensure it is installed")
+                sys.exit(1)
+
         ph("cli-optimize-run-start")
         logger.info("Running optimizer.")
         console.rule()
