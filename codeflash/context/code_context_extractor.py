@@ -491,8 +491,7 @@ def parse_code_and_prune_cst(
             module, target_functions, helpers_of_helper_functions, remove_docstrings=remove_docstrings
         )
     else:
-        msg = f"Unknown code_context_type: {code_context_type}"
-        raise ValueError(msg)
+        raise ValueError(f"Unknown code_context_type: {code_context_type}")  # noqa: EM102
 
     if not found_target:
         raise ValueError("No target functions found in the provided code")
