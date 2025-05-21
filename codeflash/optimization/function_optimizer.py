@@ -82,6 +82,10 @@ if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
 
 
+class FunctionOptimizerError(Exception):
+    pass
+
+
 class FunctionOptimizer:
     def __init__(
         self,
@@ -626,7 +630,7 @@ class FunctionOptimizer:
             )
 
             if len(code_ranges_formatted) != len(code_ranges_unformatted):
-                raise Exception("Formatting had unexpected effects on code ranges")
+                raise FunctionOptimizerError("Formatting had unexpected effects on code ranges")
 
             # It is important to sort in descending order so that the index arithmetic remains simple as we modify new_code
             code_ranges_unformatted.sort(key=lambda r: r[0], reverse=True)

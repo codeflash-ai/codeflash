@@ -68,7 +68,7 @@ def get_modification_code_ranges(
     preexisting_functions: set[tuple[str, tuple[FunctionParent, ...]]],
     helper_functions: list[FunctionSource],
 ) -> list[tuple[int, int]]:
-    """Returns the starting and ending line numbers of modified and new functions in a file with edits."""
+    """Return the starting and ending line numbers of modified and new functions in a file with edits."""
     modified_functions = set()
     modified_functions.add(fto.qualified_name)
     for helper_function in helper_functions:
