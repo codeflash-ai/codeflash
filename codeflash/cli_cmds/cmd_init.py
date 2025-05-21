@@ -22,7 +22,7 @@ from codeflash.cli_cmds.cli_common import apologize_and_exit, inquirer_wrapper, 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
-from codeflash.code_utils.env_utils import get_codeflash_api_key
+from codeflash.code_utils.env_utils import check_formatter_installed, get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_git_remotes, get_repo_owner_and_name
 from codeflash.code_utils.github_utils import get_github_secrets_page_url
 from codeflash.code_utils.shell_utils import get_shell_rc_path, save_api_key_to_rc
@@ -720,11 +720,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         )
     elif formatter == "don't use a formatter":
         formatter_cmds.append("disabled")
-    if formatter in ["black", "ruff"]:
-        try:
-            subprocess.run([formatter], capture_output=True, check=False)
-        except (FileNotFoundError, NotADirectoryError):
-            click.echo(f"⚠️ Formatter not found: {formatter}, please ensure it is installed")
+    check_formatter_installed(formatter_cmds)
     codeflash_section["formatter-cmds"] = formatter_cmds
     # Add the 'codeflash' section, ensuring 'tool' section exists
     tool_section = pyproject_data.get("tool", tomlkit.table())
@@ -924,6 +920,14 @@ def test_sort():
 
 
 def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test_path: str) -> None:
+    try:
+        check_formatter_installed(args.formatter_cmds)
+    except Exception:
+        logger.error(
+            "Formatter not found. Review the formatter_cmds in your pyproject.toml file and make sure the formatter is installed."
+        )
+        return
+
     command = ["codeflash", "--file", "bubble_sort.py", "--function", "sorter"]
     if args.no_pr:
         command.append("--no-pr")
