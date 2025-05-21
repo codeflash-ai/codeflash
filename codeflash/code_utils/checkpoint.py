@@ -1,17 +1,21 @@
-import argparse
+from __future__ import annotations
+
 import datetime
 import json
 import sys
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import click
 
+if TYPE_CHECKING:
+    import argparse
+
 
 class CodeflashRunCheckpoint:
-    def __init__(self, module_root: Path, checkpoint_dir: Path = Path("/tmp")) -> None:
+    def __init__(self, module_root: Path, checkpoint_dir: Path = Path("/tmp")) -> None:  # noqa: S108
         self.module_root = module_root
         self.checkpoint_dir = Path(checkpoint_dir)
         # Create a unique checkpoint file name
@@ -31,7 +35,7 @@ class CodeflashRunCheckpoint:
             "last_updated": time.time(),
         }
 
-        with open(self.checkpoint_path, "w") as f:
+        with self.checkpoint_path.open("w") as f:
             f.write(json.dumps(metadata) + "\n")
 
     def add_function_to_checkpoint(
@@ -59,7 +63,7 @@ class CodeflashRunCheckpoint:
             **additional_info,
         }
 
-        with open(self.checkpoint_path, "a") as f:
+        with self.checkpoint_path.open("a") as f:
             f.write(json.dumps(function_data) + "\n")
 
         # Update the metadata last_updated timestamp
@@ -113,8 +117,8 @@ def get_all_historical_functions(module_root: Path, checkpoint_dir: Path) -> dic
             first_line = next(f)
             metadata = json.loads(first_line)
             if metadata.get("last_updated"):
-                last_updated = datetime.datetime.fromtimestamp(metadata["last_updated"])
-                if datetime.datetime.now() - last_updated >= datetime.timedelta(days=7):
+                last_updated = datetime.datetime.fromtimestamp(metadata["last_updated"])  # noqa: DTZ006
+                if datetime.datetime.now() - last_updated >= datetime.timedelta(days=7):  # noqa: DTZ005
                     to_delete.append(file)
                     continue
             if metadata.get("module_root") != str(module_root):
@@ -131,8 +135,8 @@ def get_all_historical_functions(module_root: Path, checkpoint_dir: Path) -> dic
 
 def ask_should_use_checkpoint_get_functions(args: argparse.Namespace) -> Optional[dict[str, dict[str, str]]]:
     previous_checkpoint_functions = None
-    if args.all and (sys.platform == "linux" or sys.platform == "darwin") and Path("/tmp").is_dir():
-        previous_checkpoint_functions = get_all_historical_functions(args.module_root, Path("/tmp"))
+    if args.all and (sys.platform == "linux" or sys.platform == "darwin") and Path("/tmp").is_dir():  # noqa: S108 #TODO: use the temp dir from codeutils-compat.py
+        previous_checkpoint_functions = get_all_historical_functions(args.module_root, Path("/tmp"))  # noqa: S108
         if previous_checkpoint_functions and click.confirm(
             "Previous Checkpoint detected from an incomplete optimization run, shall I continue the optimization from that point?",
             default=True,
