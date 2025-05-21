@@ -65,7 +65,7 @@ def run_behavioral_tests(
             "--codeflash_loops_scope=session",
             "--codeflash_min_loops=1",
             "--codeflash_max_loops=1",
-            f"--codeflash_seconds={pytest_target_runtime_seconds}",  # TODO : This is unnecessary, update the plugin to not ask for this  # noqa: E501
+            f"--codeflash_seconds={pytest_target_runtime_seconds}",  # TODO : This is unnecessary, update the plugin to not ask for this
         ]
 
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
@@ -150,10 +150,10 @@ def run_line_profile_tests(
     test_framework: str,
     *,
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME,
-    verbose: bool = False,
+    verbose: bool = False,  # noqa: ARG001
     pytest_timeout: int | None = None,
-    pytest_min_loops: int = 5,
-    pytest_max_loops: int = 100_000,
+    pytest_min_loops: int = 5,  # noqa: ARG001
+    pytest_max_loops: int = 100_000,  # noqa: ARG001
     line_profiler_output_file: Path | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     if test_framework == "pytest":

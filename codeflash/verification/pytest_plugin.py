@@ -57,10 +57,8 @@ if platform.system() == "Linux":
                     parts = line.split()
                     if len(parts) >= 3:
                         # Swap size is in KB in the 3rd column
-                        try:
+                        with contextlib.suppress(ValueError, IndexError):
                             swap_size += int(parts[2]) * 1024  # Convert KB to bytes
-                        except (ValueError, IndexError):
-                            pass
 
     # Get total system memory
     total_memory = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
@@ -216,7 +214,7 @@ class PytestLoops:
                 try:
                     obj_module = inspect.getmodule(obj)
                     module_name = obj_module.__name__.split(".")[0] if obj_module is not None else None
-                except Exception:  # noqa: BLE001
+                except Exception:
                     module_name = None
 
             if module_name in protected_modules:
@@ -237,9 +235,9 @@ class PytestLoops:
                         for _, obj in inspect.getmembers(module):
                             if callable(obj):
                                 _clear_cache_for_object(obj)
-                except Exception:  # noqa: BLE001, S110
+                except Exception:  # noqa: S110
                     pass
-        except Exception:  # noqa: BLE001, S110
+        except Exception:  # noqa: S110
             pass
 
     def _set_nodeid(self, nodeid: str, count: int) -> str:
