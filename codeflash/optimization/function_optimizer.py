@@ -49,7 +49,6 @@ from codeflash.models.models import (
     BestOptimization,
     CodeOptimizationContext,
     FunctionCalledInTest,
-    FunctionParent,
     GeneratedTests,
     GeneratedTestsList,
     OptimizationSet,
@@ -79,7 +78,7 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.either import Result
-    from codeflash.models.models import BenchmarkKey, CoverageData, FunctionSource, OptimizedCandidate
+    from codeflash.models.models import BenchmarkKey, CoverageData, FunctionParent, FunctionSource, OptimizedCandidate
     from codeflash.verification.verification_utils import TestConfig
 
 
@@ -299,9 +298,7 @@ class FunctionOptimizer:
                 self.log_successful_optimization(explanation, generated_tests, exp_type)
 
                 preexisting_functions_by_filepath: dict[Path, list[str]] = {}
-                filepaths_to_inspect = [self.function_to_optimize.file_path] + list(
-                    {helper.file_path for helper in code_context.helper_functions}
-                )
+                filepaths_to_inspect = [self.function_to_optimize.file_path, *list({helper.file_path for helper in code_context.helper_functions})]
                 for filepath in filepaths_to_inspect:
                     source_code = filepath.read_text(encoding="utf8")
                     preexisting_functions_by_filepath[filepath] = find_preexisting_objects(source_code)
@@ -610,7 +607,7 @@ class FunctionOptimizer:
         if should_sort_imports and isort.code(original_code) != original_code:
             should_sort_imports = False
 
-        paths = [fto_path] + list({hf.file_path for hf in helper_functions})
+        paths = [fto_path, *list({hf.file_path for hf in helper_functions})]
         new_target_code = None
         new_helper_code: dict[Path, str] = {}
         for i, path in enumerate(paths):
