@@ -270,10 +270,9 @@ class AiServiceClient:
         - Dict[str, str] | None: The generated regression tests and instrumented tests, or None if an error occurred.
 
         """
-        assert test_framework in [
-            "pytest",
-            "unittest",
-        ], f"Invalid test framework, got {test_framework} but expected 'pytest' or 'unittest'"
+        assert test_framework in ["pytest", "unittest"], (
+            f"Invalid test framework, got {test_framework} but expected 'pytest' or 'unittest'"
+        )
         payload = {
             "source_code_being_tested": source_code_being_tested,
             "function_to_optimize": function_to_optimize,
