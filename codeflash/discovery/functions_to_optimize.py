@@ -158,9 +158,9 @@ def get_functions_to_optimize(
     module_root: Path,
     previous_checkpoint_functions: dict[str, dict[str, str]] | None = None,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
-    assert (
-        sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1
-    ), "Only one of optimize_all, replay_test, or file should be provided"
+    assert sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1, (
+        "Only one of optimize_all, replay_test, or file should be provided"
+    )
     functions: dict[str, list[FunctionToOptimize]]
     with warnings.catch_warnings():
         warnings.simplefilter(action="ignore", category=SyntaxWarning)
@@ -207,7 +207,7 @@ def get_functions_to_optimize(
         if optimize_all:
             three_min_in_ns = int(1.8e11)
             logger.info(
-                f"It might take about {humanize_runtime(functions_count*three_min_in_ns)} to fully optimize this project. Codeflash "
+                f"It might take about {humanize_runtime(functions_count * three_min_in_ns)} to fully optimize this project. Codeflash "
                 f"will keep opening pull requests as it finds optimizations."
             )
         return filtered_modified_functions, functions_count
@@ -539,7 +539,14 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
 
 
 def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
-    return any(isinstance(node, ast.Return) for node in ast.walk(function_node))
+    # Custom DFS, return True as soon as a Return node is found
+    stack = [function_node]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, ast.Return):
+            return True
+        stack.extend(ast.iter_child_nodes(node))
+    return False
 
 
 def function_is_a_property(function_node: FunctionDef | AsyncFunctionDef) -> bool:
