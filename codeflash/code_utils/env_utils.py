@@ -18,6 +18,7 @@ class FormatterNotFoundError(Exception):
     def __init__(self, formatter_cmd: str) -> None:
         super().__init__(f"Formatter command not found: {formatter_cmd}")
 
+
 def check_formatter_installed(formatter_cmds: list[str]) -> bool:
     return_code = True
     if formatter_cmds[0] == "disabled":
