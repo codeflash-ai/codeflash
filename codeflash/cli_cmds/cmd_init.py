@@ -7,7 +7,7 @@ import subprocess
 import sys
 from enum import Enum, auto
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast, Union
+from typing import TYPE_CHECKING, Any, Union, cast
 
 import click
 import git
