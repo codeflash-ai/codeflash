@@ -8,7 +8,7 @@ import time
 import uuid
 from collections import defaultdict, deque
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 import isort
 import libcst as cst
@@ -607,7 +607,7 @@ class FunctionOptimizer:
         should_sort_imports = not self.args.disable_imports_sorting
         if should_sort_imports and isort.code(original_code) != original_code:
             should_sort_imports = False
-        
+
         paths = [fto_path] + list({hf.file_path for hf in helper_functions})
         new_target_code = None
         new_helper_code: dict[Path, str] = {}
@@ -646,7 +646,7 @@ class FunctionOptimizer:
 
             if should_sort_imports:
                 new_code = sort_imports(new_code)
-            
+
             if i == 0:
                 new_target_code = new_code
             else:

@@ -66,15 +66,14 @@ def get_modification_code_ranges(
     preexisting_functions: set[tuple[str, tuple[FunctionParent,...]]],
     helper_functions: list[FunctionSource],
 ) -> list[tuple[int, int]]:
-    """
-    Returns the starting and ending line numbers of modified and new functions in a file containing edits.
+    """Returns the starting and ending line numbers of modified and new functions in a file containing edits.
     """
     modified_functions = set()
     modified_functions.add(fto.qualified_name)
     for helper_function in helper_functions:
         if helper_function.jedi_definition.type != "class":
             modified_functions.add(helper_function.qualified_name)
-    
+
     parsed_function_names = set()
     for original_function_name in modified_functions:
         if original_function_name.count(".") == 0:
