@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.models import FunctionParent, FunctionSource
 
+
 def format_code(formatter_cmds: list[str], path: Path) -> str:
     # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
     formatter_name = formatter_cmds[0].lower()
@@ -60,14 +61,14 @@ def sort_imports(code: str) -> str:
 
     return sorted_code
 
+
 def get_modification_code_ranges(
     modified_code: str,
     fto: FunctionToOptimize,
-    preexisting_functions: set[tuple[str, tuple[FunctionParent,...]]],
+    preexisting_functions: set[tuple[str, tuple[FunctionParent, ...]]],
     helper_functions: list[FunctionSource],
 ) -> list[tuple[int, int]]:
-    """Returns the starting and ending line numbers of modified and new functions in a file with edits.
-    """
+    """Returns the starting and ending line numbers of modified and new functions in a file with edits."""
     modified_functions = set()
     modified_functions.add(fto.qualified_name)
     for helper_function in helper_functions:

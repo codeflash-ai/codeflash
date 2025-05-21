@@ -299,7 +299,9 @@ class FunctionOptimizer:
                 self.log_successful_optimization(explanation, generated_tests, exp_type)
 
                 preexisting_functions_by_filepath: dict[Path, list[str]] = {}
-                filepaths_to_inspect = [self.function_to_optimize.file_path] + list({helper.file_path for helper in code_context.helper_functions})
+                filepaths_to_inspect = [self.function_to_optimize.file_path] + list(
+                    {helper.file_path for helper in code_context.helper_functions}
+                )
                 for filepath in filepaths_to_inspect:
                     source_code = filepath.read_text(encoding="utf8")
                     preexisting_functions_by_filepath[filepath] = find_preexisting_objects(source_code)
@@ -599,7 +601,7 @@ class FunctionOptimizer:
 
     def reformat_code_and_helpers(
         self,
-        preexisting_functions_by_filepath: dict[Path, set[tuple[str, tuple[FunctionParent,...]]]],
+        preexisting_functions_by_filepath: dict[Path, set[tuple[str, tuple[FunctionParent, ...]]]],
         helper_functions: list[FunctionSource],
         fto_path: Path,
         original_code: str,
@@ -614,19 +616,13 @@ class FunctionOptimizer:
         for i, path in enumerate(paths):
             unformatted_code = path.read_text(encoding="utf8")
             code_ranges_unformatted = get_modification_code_ranges(
-                unformatted_code,
-                self.function_to_optimize,
-                preexisting_functions_by_filepath[path],
-                helper_functions,
+                unformatted_code, self.function_to_optimize, preexisting_functions_by_filepath[path], helper_functions
             )
             formatted_code = format_code(self.args.formatter_cmds, path)
             # Note: We do not need to refresh the code_context because we only use it to refer to names of original
             # functions (even before optimization was applied) and filepaths, none of which is changing.
             code_ranges_formatted = get_modification_code_ranges(
-                formatted_code,
-                self.function_to_optimize,
-                preexisting_functions_by_filepath[path],
-                helper_functions,
+                formatted_code, self.function_to_optimize, preexisting_functions_by_filepath[path], helper_functions
             )
 
             if len(code_ranges_formatted) != len(code_ranges_unformatted):
@@ -640,7 +636,11 @@ class FunctionOptimizer:
             for range_0, range_1 in zip(code_ranges_unformatted, code_ranges_formatted):
                 range_0_0, range_0_1 = range_0
                 range_1_0, range_1_1 = range_1
-                new_code_lines = new_code_lines[:range_0_0] + formatted_code_lines[range_1_0:range_1_1 + 1] + new_code_lines[range_0_1 + 1:]
+                new_code_lines = (
+                    new_code_lines[:range_0_0]
+                    + formatted_code_lines[range_1_0 : range_1_1 + 1]
+                    + new_code_lines[range_0_1 + 1 :]
+                )
             new_code = "\n".join(new_code_lines)
             path.write_text(new_code, encoding="utf8")
 

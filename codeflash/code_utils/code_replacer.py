@@ -164,6 +164,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
             node = node.with_changes(body=(*self.new_functions, *node.body))
         return node
 
+
 def replace_functions_in_file(
     source_code: str,
     original_function_names: list[str],
