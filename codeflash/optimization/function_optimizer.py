@@ -511,7 +511,9 @@ class FunctionOptimizer:
                     self.write_code_and_helpers(
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
-                    if (not len(candidates)) and (not done):  # all original candidates processed but lp results haven't been processed
+                    if (not len(candidates)) and (
+                        not done
+                    ):  # all original candidates processed but lp results haven't been processed
                         concurrent.futures.wait([future_line_profile_results])
                         line_profile_results = future_line_profile_results.result()
                         candidates.extend(line_profile_results)
