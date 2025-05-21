@@ -23,13 +23,18 @@ def check_formatter_installed(formatter_cmds: list[str]) -> bool:
         for command in set(formatter_cmds):
             formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
             formatter_cmd_list = [tmp_file.as_posix() if chunk == file_token else chunk for chunk in formatter_cmd_list]
-            result = subprocess.run(formatter_cmd_list, capture_output=True, check=False)
+            try:
+                result = subprocess.run(formatter_cmd_list, capture_output=True, check=False)
+            except (FileNotFoundError, NotADirectoryError):
+                return_code = False
+                break
             if result.returncode:
                 return_code = False
                 break
     tmp_file.unlink(missing_ok=True)
     if not return_code:
-        raise logger.error(f"Error running formatter command: {command}")
+        msg = f"Error running formatter command: {command}"
+        raise logger.error(msg) # type: ignore
     return return_code
 
 
