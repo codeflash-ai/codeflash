@@ -916,6 +916,14 @@ def test_sort():
 
 
 def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test_path: str) -> None:
+    try:
+        check_formatter_installed(args.formatter_cmds)
+    except Exception:  # noqa: BLE001
+        logger.error(
+            "Formatter not found. Review the formatter_cmds in your pyproject.toml file and make sure the formatter is installed."
+        )
+        return
+
     command = ["codeflash", "--file", "bubble_sort.py", "--function", "sorter"]
     if args.no_pr:
         command.append("--no-pr")

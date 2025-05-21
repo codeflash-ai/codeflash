@@ -10,6 +10,12 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
 
 
+class FormatterNotFoundError(Exception):
+    """Exception raised when a formatter is not found."""
+
+    def __init__(self, formatter_cmd: str) -> None:
+        super().__init__(f"Formatter command not found: {formatter_cmd}")
+
 def check_formatter_installed(formatter_cmds: list[str]) -> bool:
     return_code = True
     if formatter_cmds[0] == "disabled":
@@ -34,7 +40,7 @@ def check_formatter_installed(formatter_cmds: list[str]) -> bool:
     tmp_file.unlink(missing_ok=True)
     if not return_code:
         msg = f"Error running formatter command: {command}"
-        raise logger.error(msg) # type: ignore
+        raise FormatterNotFoundError(msg)
     return return_code
 
 
