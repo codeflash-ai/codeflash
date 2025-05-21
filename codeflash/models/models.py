@@ -59,24 +59,29 @@ class FunctionSource:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, FunctionSource):
             return False
-        return (self.file_path == other.file_path and
-                self.qualified_name == other.qualified_name and
-                self.fully_qualified_name == other.fully_qualified_name and
-                self.only_function_name == other.only_function_name and
-                self.source_code == other.source_code)
+        return (
+            self.file_path == other.file_path
+            and self.qualified_name == other.qualified_name
+            and self.fully_qualified_name == other.fully_qualified_name
+            and self.only_function_name == other.only_function_name
+            and self.source_code == other.source_code
+        )
 
     def __hash__(self) -> int:
-        return hash((self.file_path, self.qualified_name, self.fully_qualified_name,
-                     self.only_function_name, self.source_code))
+        return hash(
+            (self.file_path, self.qualified_name, self.fully_qualified_name, self.only_function_name, self.source_code)
+        )
+
 
 class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
     helper_functions: list[FunctionSource]
     runtime: int
-    replay_performance_gain: Optional[dict[BenchmarkKey,float]] = None
+    replay_performance_gain: Optional[dict[BenchmarkKey, float]] = None
     winning_behavioral_test_results: TestResults
     winning_benchmarking_test_results: TestResults
-    winning_replay_benchmarking_test_results : Optional[TestResults] = None
+    winning_replay_benchmarking_test_results: Optional[TestResults] = None
+
 
 @dataclass(frozen=True)
 class BenchmarkKey:
@@ -85,6 +90,7 @@ class BenchmarkKey:
 
     def __str__(self) -> str:
         return f"{self.module_path}::{self.function_name}"
+
 
 @dataclass
 class BenchmarkDetail:
@@ -107,8 +113,9 @@ class BenchmarkDetail:
             "test_function": self.test_function,
             "original_timing": self.original_timing,
             "expected_new_timing": self.expected_new_timing,
-            "speedup_percent": self.speedup_percent
+            "speedup_percent": self.speedup_percent,
         }
+
 
 @dataclass
 class ProcessedBenchmarkInfo:
@@ -124,9 +131,9 @@ class ProcessedBenchmarkInfo:
         return result
 
     def to_dict(self) -> dict[str, list[dict[str, any]]]:
-        return {
-            "benchmark_details": [detail.to_dict() for detail in self.benchmark_details]
-        }
+        return {"benchmark_details": [detail.to_dict() for detail in self.benchmark_details]}
+
+
 class CodeString(BaseModel):
     code: Annotated[str, AfterValidator(validate_python_code)]
     file_path: Optional[Path] = None
@@ -151,7 +158,8 @@ class CodeOptimizationContext(BaseModel):
     read_writable_code: str = Field(min_length=1)
     read_only_context_code: str = ""
     helper_functions: list[FunctionSource]
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]]
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]]
+
 
 class CodeContextType(str, Enum):
     READ_WRITABLE = "READ_WRITABLE"
@@ -347,6 +355,7 @@ class CoverageData:
             status=CoverageStatus.NOT_FOUND,
         )
 
+
 @dataclass
 class FunctionCoverage:
     """Represents the coverage data for a specific function in a source file."""
@@ -364,7 +373,8 @@ class TestingMode(enum.Enum):
     PERFORMANCE = "performance"
     LINE_PROFILE = "line_profile"
 
-#TODO this class is duplicated in codeflash_capture
+
+# TODO this class is duplicated in codeflash_capture
 class VerificationType(str, Enum):
     FUNCTION_CALL = (
         "function_call"  # Correctness verification for a test function, checks input values and output values)
@@ -473,14 +483,20 @@ class TestResults(BaseModel):
                 raise ValueError(msg)
             self.test_result_idx[k] = v + original_len
 
-    def group_by_benchmarks(self, benchmark_keys:list[BenchmarkKey], benchmark_replay_test_dir: Path, project_root: Path) -> dict[BenchmarkKey, TestResults]:
+    def group_by_benchmarks(
+        self, benchmark_keys: list[BenchmarkKey], benchmark_replay_test_dir: Path, project_root: Path
+    ) -> dict[BenchmarkKey, TestResults]:
         """Group TestResults by benchmark for calculating improvements for each benchmark."""
         test_results_by_benchmark = defaultdict(TestResults)
         benchmark_module_path = {}
         for benchmark_key in benchmark_keys:
-            benchmark_module_path[benchmark_key] = module_name_from_file_path(benchmark_replay_test_dir.resolve() / f"test_{benchmark_key.module_path.replace('.', '_')}__replay_test_", project_root)
+            benchmark_module_path[benchmark_key] = module_name_from_file_path(
+                benchmark_replay_test_dir.resolve()
+                / f"test_{benchmark_key.module_path.replace('.', '_')}__replay_test_",
+                project_root,
+            )
         for test_result in self.test_results:
-            if (test_result.test_type == TestType.REPLAY_TEST):
+            if test_result.test_type == TestType.REPLAY_TEST:
                 for benchmark_key, module_path in benchmark_module_path.items():
                     if test_result.id.test_module_path.startswith(module_path):
                         test_results_by_benchmark[benchmark_key].add(test_result)
@@ -559,7 +575,7 @@ class TestResults(BaseModel):
 
         :return: The runtime in nanoseconds.
         """
-        #TODO this doesn't look at the intersection of tests of baseline and original
+        # TODO this doesn't look at the intersection of tests of baseline and original
         return sum(
             [min(usable_runtime_data) for _, usable_runtime_data in self.usable_runtime_data_by_test_case().items()]
         )
@@ -589,7 +605,7 @@ class TestResults(BaseModel):
         if len(self) != len(other):
             return False
         original_recursion_limit = sys.getrecursionlimit()
-        cast(TestResults, other)
+        cast("TestResults", other)
         for test_result in self:
             other_test_result = other.get_by_unique_invocation_loop_id(test_result.unique_invocation_loop_id)
             if other_test_result is None:

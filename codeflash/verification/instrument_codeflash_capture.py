@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import isort
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+
+if TYPE_CHECKING:
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 
 def instrument_codeflash_capture(
@@ -52,7 +55,12 @@ def instrument_codeflash_capture(
 
 
 def add_codeflash_capture_to_init(
-    target_classes: set[str], fto_name: str, tmp_dir_path: str, code: str, tests_root: Path, is_fto: bool = False
+    target_classes: set[str],
+    fto_name: str,
+    tmp_dir_path: str,
+    code: str,
+    tests_root: Path,
+    is_fto: bool = False,  # noqa: FBT001, FBT002
 ) -> str:
     """Add codeflash_capture decorator to __init__ function in the specified class."""
     tree = ast.parse(code)
@@ -69,7 +77,12 @@ class InitDecorator(ast.NodeTransformer):
     """AST transformer that adds codeflash_capture decorator to specific class's __init__."""
 
     def __init__(
-        self, target_classes: set[str], fto_name: str, tmp_dir_path: str, tests_root: Path, is_fto=False
+        self,
+        target_classes: set[str],
+        fto_name: str,
+        tmp_dir_path: str,
+        tests_root: Path,
+        is_fto=False,  # noqa: ANN001, FBT002
     ) -> None:
         self.target_classes = target_classes
         self.fto_name = fto_name
@@ -109,7 +122,7 @@ class InitDecorator(ast.NodeTransformer):
             func=ast.Name(id="codeflash_capture", ctx=ast.Load()),
             args=[],
             keywords=[
-                ast.keyword(arg="function_name", value=ast.Constant(value=".".join([node.name, "__init__"]))),
+                ast.keyword(arg="function_name", value=ast.Constant(value=f"{node.name}.__init__")),
                 ast.keyword(arg="tmp_dir_path", value=ast.Constant(value=self.tmp_dir_path)),
                 ast.keyword(arg="tests_root", value=ast.Constant(value=str(self.tests_root))),
                 ast.keyword(arg="is_fto", value=ast.Constant(value=self.is_fto)),

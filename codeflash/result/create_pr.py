@@ -78,7 +78,7 @@ def check_create_pr(
                 speedup_pct=explanation.speedup_pct,
                 winning_behavioral_test_results=explanation.winning_behavioral_test_results,
                 winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
-                benchmark_details=explanation.benchmark_details
+                benchmark_details=explanation.benchmark_details,
             ),
             existing_tests=existing_tests_source,
             generated_tests=generated_original_test_source,
@@ -125,7 +125,7 @@ def check_create_pr(
                 speedup_pct=explanation.speedup_pct,
                 winning_behavioral_test_results=explanation.winning_behavioral_test_results,
                 winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
-                benchmark_details=explanation.benchmark_details
+                benchmark_details=explanation.benchmark_details,
             ),
             existing_tests=existing_tests_source,
             generated_tests=generated_original_test_source,

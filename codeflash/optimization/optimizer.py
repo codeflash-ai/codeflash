@@ -18,11 +18,12 @@ from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
 from codeflash.code_utils.code_replacer import normalize_code, normalize_node
+from codeflash.code_utils.code_utils import cleanup_paths
 from codeflash.code_utils.static_analysis import analyze_imported_modules, get_first_top_level_function_or_method_ast
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
 from codeflash.either import is_successful
-from codeflash.models.models import BenchmarkKey, ValidCode
+from codeflash.models.models import ValidCode
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.models.models import FunctionCalledInTest
+    from codeflash.models.models import BenchmarkKey, FunctionCalledInTest
 
 
 class Optimizer:
@@ -267,7 +268,14 @@ class Optimizer:
             if function_optimizer:
                 function_optimizer.cleanup_generated_files()
 
+            if self.test_cfg.concolic_test_root_dir:
+                cleanup_paths([self.test_cfg.concolic_test_root_dir])
+
 
 def run_with_args(args: Namespace) -> None:
-    optimizer = Optimizer(args)
-    optimizer.run()
+    try:
+        optimizer = Optimizer(args)
+        optimizer.run()
+    except KeyboardInterrupt:
+        logger.warning("Keyboard interrupt received. Exiting, please wait…")
+        raise SystemExit from None

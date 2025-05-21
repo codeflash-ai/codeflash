@@ -140,7 +140,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                 test_type = test_files.get_test_type_by_original_file_path(test_file_path)
             try:
                 ret_val = (pickle.loads(val[7]) if loop_index == 1 else None,)
-            except Exception:
+            except Exception:  # noqa: S112
                 continue
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
@@ -193,7 +193,7 @@ def parse_test_xml(
     for suite in xml:
         for testcase in suite:
             class_name = testcase.classname
-            test_file_name = suite._elem.attrib.get("file")
+            test_file_name = suite._elem.attrib.get("file")  # noqa: SLF001
             if (
                 test_file_name == f"unittest{os.sep}loader.py"
                 and class_name == "unittest.loader._FailedTest"
@@ -278,7 +278,7 @@ def parse_test_xml(
                             test_module_path=test_module_path,
                             test_class_name=test_class,
                             test_function_name=test_function,
-                            function_getting_tested="",  # FIXME
+                            function_getting_tested="",  # TODO: Fix this
                             iteration_id="",
                         ),
                         file_name=test_file_path,

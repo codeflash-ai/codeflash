@@ -1,3 +1,4 @@
+# ruff: noqa
 import sys
 from typing import Any
 
@@ -16,7 +17,7 @@ class PytestCollectionPlugin:
         collected_tests.extend(session.items)
         pytest_rootdir = session.config.rootdir
 
-    def pytest_collection_modifyitems(config, items):
+    def pytest_collection_modifyitems(self, items) -> None:
         skip_benchmark = pytest.mark.skip(reason="Skipping benchmark tests")
         for item in items:
             if "benchmark" in item.fixturenames:
@@ -42,8 +43,8 @@ if __name__ == "__main__":
         exitcode = pytest.main(
             [tests_root, "-p no:logging", "--collect-only", "-m", "not skip"], plugins=[PytestCollectionPlugin()]
         )
-    except Exception as e:  # noqa: BLE001
-        print(f"Failed to collect tests: {e!s}")  # noqa: T201
+    except Exception as e:
+        print(f"Failed to collect tests: {e!s}")
         exitcode = -1
     tests = parse_pytest_collection_results(collected_tests)
     import pickle
