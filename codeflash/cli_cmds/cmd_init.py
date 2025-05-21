@@ -7,7 +7,7 @@ import subprocess
 import sys
 from enum import Enum, auto
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, Union
 
 import click
 import git
@@ -50,7 +50,7 @@ CODEFLASH_LOGO: str = (
 class SetupInfo:
     module_root: str
     tests_root: str
-    benchmarks_root: str | None
+    benchmarks_root: Union[str, None]
     test_framework: str
     ignore_paths: list[str]
     formatter: str
