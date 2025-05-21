@@ -298,7 +298,10 @@ class FunctionOptimizer:
                 self.log_successful_optimization(explanation, generated_tests, exp_type)
 
                 preexisting_functions_by_filepath: dict[Path, list[str]] = {}
-                filepaths_to_inspect = [self.function_to_optimize.file_path, *list({helper.file_path for helper in code_context.helper_functions})]
+                filepaths_to_inspect = [
+                    self.function_to_optimize.file_path,
+                    *list({helper.file_path for helper in code_context.helper_functions}),
+                ]
                 for filepath in filepaths_to_inspect:
                     source_code = filepath.read_text(encoding="utf8")
                     preexisting_functions_by_filepath[filepath] = find_preexisting_objects(source_code)
