@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 import concurrent.futures
 import os
-import shutil
 import subprocess
 import time
 import uuid
@@ -393,7 +392,7 @@ class FunctionOptimizer:
             try:
                 candidate_index = 0
                 original_len = len(candidates)
-                while candidates:
+                while True:
                     done = True if future_line_profile_results is None else future_line_profile_results.done()
                     if done and (future_line_profile_results is not None):
                         line_profile_results = future_line_profile_results.result()
@@ -403,8 +402,14 @@ class FunctionOptimizer:
                             f"Added results from line profiler to candidates, total candidates now: {original_len}"
                         )
                         future_line_profile_results = None
+                    try:
+                        candidate = candidates.popleft()
+                    except IndexError:
+                        if done:
+                            break
+                        time.sleep(0.1)
+                        continue
                     candidate_index += 1
-                    candidate = candidates.popleft()
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
                     logger.info(f"Optimization candidate {candidate_index}/{original_len}:")
@@ -512,7 +517,8 @@ class FunctionOptimizer:
                     self.write_code_and_helpers(
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
-
+                    if done and not candidates:
+                        break
             except KeyboardInterrupt as e:
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
