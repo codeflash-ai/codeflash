@@ -633,8 +633,8 @@ class FunctionOptimizer:
                 raise Exception("Formatting had unexpected effects on code ranges")
 
             # It is important to sort in descending order so that the index arithmetic remains simple as we modify new_code
-            code_ranges_unformatted.sort(key=lambda range: range[0], reverse=True)
-            code_ranges_formatted.sort(key=lambda range: range[0], reverse=True)
+            code_ranges_unformatted.sort(key=lambda r: r[0], reverse=True)
+            code_ranges_formatted.sort(key=lambda r: r[0], reverse=True)
             formatted_code_lines = formatted_code.split("\n")
             new_code_lines = unformatted_code.split("\n")
             for range_0, range_1 in zip(code_ranges_unformatted, code_ranges_formatted):
