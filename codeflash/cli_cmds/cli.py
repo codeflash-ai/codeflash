@@ -62,9 +62,13 @@ def parse_args() -> Namespace:
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose debug logs")
     parser.add_argument("--version", action="store_true", help="Print the version of codeflash")
-    parser.add_argument("--benchmark", action="store_true", help="Trace benchmark tests and calculate optimization impact on benchmarks")
     parser.add_argument(
-        "--benchmarks-root", type=str, help="Path to the directory of the project, where all the pytest-benchmark tests are located."
+        "--benchmark", action="store_true", help="Trace benchmark tests and calculate optimization impact on benchmarks"
+    )
+    parser.add_argument(
+        "--benchmarks-root",
+        type=str,
+        help="Path to the directory of the project, where all the pytest-benchmark tests are located.",
     )
     args: Namespace = parser.parse_args()
     return process_and_validate_cmd_args(args)
@@ -134,7 +138,9 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     assert Path(args.tests_root).is_dir(), f"--tests-root {args.tests_root} must be a valid directory"
     if args.benchmark:
         assert args.benchmarks_root is not None, "--benchmarks-root must be specified when running with --benchmark"
-        assert Path(args.benchmarks_root).is_dir(), f"--benchmarks-root {args.benchmarks_root} must be a valid directory"
+        assert Path(args.benchmarks_root).is_dir(), (
+            f"--benchmarks-root {args.benchmarks_root} must be a valid directory"
+        )
         assert Path(args.benchmarks_root).resolve().is_relative_to(Path(args.tests_root).resolve()), (
             f"--benchmarks-root {args.benchmarks_root} must be a subdirectory of --tests-root {args.tests_root}"
         )

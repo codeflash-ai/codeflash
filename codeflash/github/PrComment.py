@@ -1,12 +1,12 @@
-from __future__ import annotations
-from typing import Union, Optional
+from __future__ import annotations  # noqa: N999
+
+from typing import Optional, Union
 
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.models.models import BenchmarkDetail
-from codeflash.models.models import TestResults
+from codeflash.models.models import BenchmarkDetail, TestResults
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
@@ -44,5 +44,5 @@ class PrComment:
 
 
 class FileDiffContent(BaseModel):
-    oldContent: str
-    newContent: str
+    oldContent: str  # noqa: N815
+    newContent: str  # noqa: N815
