@@ -22,6 +22,7 @@ from codeflash.code_utils.code_utils import (
     path_belongs_to_site_packages,
 )
 from codeflash.code_utils.git_utils import get_git_diff
+from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.models.models import FunctionParent
 from codeflash.telemetry.posthog_cf import ph
@@ -47,7 +48,7 @@ class ReturnStatementVisitor(cst.CSTVisitor):
         super().__init__()
         self.has_return_statement: bool = False
 
-    def visit_Return(self, node: cst.Return) -> None:
+    def visit_Return(self, node: cst.Return) -> None:  # noqa: ARG002
         self.has_return_statement = True
 
 
@@ -157,9 +158,9 @@ def get_functions_to_optimize(
     module_root: Path,
     previous_checkpoint_functions: dict[str, dict[str, str]] | None = None,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
-    assert (
-        sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1
-    ), "Only one of optimize_all, replay_test, or file should be provided"
+    assert sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1, (
+        "Only one of optimize_all, replay_test, or file should be provided"
+    )
     functions: dict[str, list[FunctionToOptimize]]
     with warnings.catch_warnings():
         warnings.simplefilter(action="ignore", category=SyntaxWarning)
@@ -203,13 +204,20 @@ def get_functions_to_optimize(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )
         logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
+        if optimize_all:
+            three_min_in_ns = int(1.8e11)
+            console.rule()
+            logger.info(
+                f"It might take about {humanize_runtime(functions_count * three_min_in_ns)} to fully optimize this project. Codeflash "
+                f"will keep opening pull requests as it finds optimizations."
+            )
         return filtered_modified_functions, functions_count
 
 
 def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
     modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=False)
     modified_functions: dict[str, list[FunctionToOptimize]] = {}
-    for path_str in modified_lines:
+    for path_str, lines_in_file in modified_lines.items():
         path = Path(path_str)
         if not path.exists():
             continue
@@ -227,7 +235,7 @@ def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
                 for function_to_optimize in function_lines.functions
                 if (start_line := function_to_optimize.starting_line) is not None
                 and (end_line := function_to_optimize.ending_line) is not None
-                and any(start_line <= line <= end_line for line in modified_lines[path_str])
+                and any(start_line <= line <= end_line for line in lines_in_file)
             ]
     return modified_functions
 
@@ -282,25 +290,25 @@ def get_all_replay_test_functions(
         )
         if class_name:
             # If there is a class name, append it to the module path
-            function = class_name + "." + function_name
+            qualified_function_name = class_name + "." + function_name
             file_path_parts = module_path_parts[:-1]  # Exclude the class name
         else:
-            function = function_name
+            qualified_function_name = function_name
             file_path_parts = module_path_parts
         file_path = Path(project_root_path, *file_path_parts).with_suffix(".py")
         if not file_path.exists():
             continue
-        file_to_functions_map[file_path].append((function, function_name, class_name))
-    for file_path, functions in file_to_functions_map.items():
+        file_to_functions_map[file_path].append((qualified_function_name, function_name, class_name))
+    for file_path, functions_in_file in file_to_functions_map.items():
         all_valid_functions: dict[Path, list[FunctionToOptimize]] = find_all_functions_in_file(file_path=file_path)
         filtered_list = []
-        for function in functions:
-            function_name, function_name_only, class_name = function
+        for func_data in functions_in_file:
+            qualified_name_to_match, _, _ = func_data
             filtered_list.extend(
                 [
                     valid_function
                     for valid_function in all_valid_functions[file_path]
-                    if valid_function.qualified_name == function_name
+                    if valid_function.qualified_name == qualified_name_to_match
                 ]
             )
         if filtered_list:
@@ -312,7 +320,7 @@ def get_all_replay_test_functions(
 def is_git_repo(file_path: str) -> bool:
     try:
         git.Repo(file_path, search_parent_directories=True)
-        return True
+        return True  # noqa: TRY300
     except git.InvalidGitRepositoryError:
         return False
 
@@ -392,7 +400,7 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
 def inspect_top_level_functions_or_methods(
     file_name: Path, function_or_method_name: str, class_name: str | None = None, line_no: int | None = None
 ) -> FunctionProperties | None:
-    with open(file_name, encoding="utf8") as file:
+    with file_name.open(encoding="utf8") as file:
         try:
             ast_module = ast.parse(file.read())
         except Exception:
@@ -418,9 +426,10 @@ def filter_functions(
     project_root: Path,
     module_root: Path,
     previous_checkpoint_functions: dict[Path, dict[str, Any]] | None = None,
-    disable_logs: bool = False,
+    disable_logs: bool = False,  # noqa: FBT001, FBT002
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     blocklist_funcs = get_blocklisted_functions()
+    logger.debug(f"Blocklisted functions: {blocklist_funcs}")
     # Remove any function that we don't want to optimize
 
     # Ignore files with submodule path, cache the submodule paths

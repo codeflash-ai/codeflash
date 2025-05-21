@@ -1,22 +1,25 @@
 from __future__ import annotations
 
-import time
-
 import ast
 import subprocess
 import tempfile
-from argparse import Namespace
+import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.concolic_utils import clean_concolic_tests
 from codeflash.code_utils.static_analysis import has_typed_parameters
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionCalledInTest
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
+
+if TYPE_CHECKING:
+    from argparse import Namespace
+
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.models.models import FunctionCalledInTest
 
 
 def generate_concolic_tests(

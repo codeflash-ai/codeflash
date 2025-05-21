@@ -11,6 +11,14 @@ from tempfile import TemporaryDirectory
 from codeflash.cli_cmds.console import logger
 
 
+def encoded_tokens_len(s: str) -> int:
+    """Return the approximate length of the encoded tokens.
+
+    It's an approximation of BPE encoding (https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf).
+    """
+    return int(len(s) * 0.25)
+
+
 def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
     if not full_qualified_name:
         msg = "full_qualified_name cannot be empty"
