@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import time
-
 import ast
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 

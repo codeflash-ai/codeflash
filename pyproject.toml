@@ -73,7 +73,6 @@ pytest = ">=7.0.0,!=8.3.4"
 gitpython = ">=3.1.31"
 libcst = ">=1.0.1"
 jedi = ">=0.19.1"
-tiktoken = ">=0.7.0"
 timeout-decorator = ">=0.5.0"
 pytest-timeout = ">=2.1.0"
 tomlkit = ">=0.11.7"
@@ -123,6 +122,7 @@ types-greenlet = "^3.1.0.20241221"
 types-pexpect = "^4.9.0.20241208"
 types-unidiff = "^0.7.0.20240505"
 uv = ">=0.6.2"
+pre-commit = "^4.2.0"
 
 [tool.poetry.build]
 script = "codeflash/update_license_version.py"
@@ -159,6 +159,7 @@ exclude = ["code_to_optimize/", "pie_test_set/", "tests/"]
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
+    "N802",
     "C901",
     "D100",
     "D101",
@@ -180,7 +181,16 @@ ignore = [
     "TD003",
     "TD004",
     "PLR2004",
-    "UP007" # remove once we drop 3.9 support.
+    "UP007", # remove once we drop 3.9 support.
+    "E501",
+    "BLE001",
+    "ERA001",
+    "TRY003",
+    "EM101",
+    "T201",
+    "PGH004",
+    "S301",
+    "D104"
 ]
 
 [tool.ruff.lint.flake8-type-checking]

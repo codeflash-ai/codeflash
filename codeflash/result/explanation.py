@@ -77,23 +77,23 @@ class Explanation:
                     test_function,
                     f"{detail.original_timing}",
                     f"{detail.expected_new_timing}",
-                    f"{detail.speedup_percent:.2f}%"
+                    f"{detail.speedup_percent:.2f}%",
                 )
             # Convert table to string
             string_buffer = StringIO()
             console = Console(file=string_buffer, width=terminal_width)
             console.print(table)
-            benchmark_info = cast(StringIO, console.file).getvalue() + "\n" # Cast for mypy
+            benchmark_info = cast("StringIO", console.file).getvalue() + "\n"  # Cast for mypy
 
         return (
-                f"Optimized {self.function_name} in {self.file_path}\n"
-                f"{self.perf_improvement_line}\n"
-                f"Runtime went down from {original_runtime_human} to {best_runtime_human} \n\n"
-                + (benchmark_info if benchmark_info else "")
-                + self.raw_explanation_message
-                + " \n\n"
-                + "The new optimized code was tested for correctness. The results are listed below.\n"
-                + f"{TestResults.report_to_string(self.winning_behavioral_test_results.get_test_pass_fail_report_by_type())}\n"
+            f"Optimized {self.function_name} in {self.file_path}\n"
+            f"{self.perf_improvement_line}\n"
+            f"Runtime went down from {original_runtime_human} to {best_runtime_human} \n\n"
+            + (benchmark_info if benchmark_info else "")
+            + self.raw_explanation_message
+            + " \n\n"
+            + "The new optimized code was tested for correctness. The results are listed below.\n"
+            + f"{TestResults.report_to_string(self.winning_behavioral_test_results.get_test_pass_fail_report_by_type())}\n"
         )
 
     def explanation_message(self) -> str:

@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from git import Repo
 
 
-def get_git_diff(repo_directory: Path = Path.cwd(), uncommitted_changes: bool = False) -> dict[str, list[int]]:
+def get_git_diff(repo_directory: Path = Path.cwd(), uncommitted_changes: bool = False) -> dict[str, list[int]]:  # noqa: B008, FBT001, FBT002
     repository = git.Repo(repo_directory, search_parent_directories=True)
     commit = repository.head.commit
     if uncommitted_changes:
@@ -118,7 +118,7 @@ def confirm_proceeding_with_no_git_repo() -> str | bool:
     return True
 
 
-def check_and_push_branch(repo: git.Repo, wait_for_push: bool = False) -> bool:
+def check_and_push_branch(repo: git.Repo, wait_for_push: bool = False) -> bool:  # noqa: FBT001, FBT002
     current_branch = repo.active_branch.name
     origin = repo.remote(name="origin")
 

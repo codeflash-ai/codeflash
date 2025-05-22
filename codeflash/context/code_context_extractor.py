@@ -3,19 +3,18 @@ from __future__ import annotations
 import os
 from collections import defaultdict
 from itertools import chain
-from pathlib import Path
+from pathlib import Path  # noqa: TC003
 
 import jedi
 import libcst as cst
-import tiktoken
-from jedi.api.classes import Name
-from libcst import CSTNode
+from jedi.api.classes import Name  # noqa: TC002
+from libcst import CSTNode  # noqa: TC002
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
-from codeflash.code_utils.code_utils import get_qualified_name, path_belongs_to_site_packages
+from codeflash.code_utils.code_utils import encoded_tokens_len, get_qualified_name, path_belongs_to_site_packages
 from codeflash.context.unused_definition_remover import remove_unused_definitions_by_function_names
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
 from codeflash.models.models import (
     CodeContextType,
     CodeOptimizationContext,
@@ -73,8 +72,7 @@ def get_code_optimization_context(
     )
 
     # Handle token limits
-    tokenizer = tiktoken.encoding_for_model("gpt-4o")
-    final_read_writable_tokens = len(tokenizer.encode(final_read_writable_code))
+    final_read_writable_tokens = encoded_tokens_len(final_read_writable_code)
     if final_read_writable_tokens > optim_token_limit:
         raise ValueError("Read-writable code has exceeded token limit, cannot proceed")
 
@@ -87,7 +85,7 @@ def get_code_optimization_context(
     )
     read_only_context_code = read_only_code_markdown.markdown
 
-    read_only_code_markdown_tokens = len(tokenizer.encode(read_only_context_code))
+    read_only_code_markdown_tokens = encoded_tokens_len(read_only_context_code)
     total_tokens = final_read_writable_tokens + read_only_code_markdown_tokens
     if total_tokens > optim_token_limit:
         logger.debug("Code context has exceeded token limit, removing docstrings from read-only code")
@@ -96,7 +94,7 @@ def get_code_optimization_context(
             helpers_of_fto_dict, helpers_of_helpers_dict, project_root_path, remove_docstrings=True
         )
         read_only_context_code = read_only_code_no_docstring_markdown.markdown
-        read_only_code_no_docstring_markdown_tokens = len(tokenizer.encode(read_only_context_code))
+        read_only_code_no_docstring_markdown_tokens = encoded_tokens_len(read_only_context_code)
         total_tokens = final_read_writable_tokens + read_only_code_no_docstring_markdown_tokens
         if total_tokens > optim_token_limit:
             logger.debug("Code context has exceeded token limit, removing read-only code")
@@ -111,7 +109,7 @@ def get_code_optimization_context(
         code_context_type=CodeContextType.TESTGEN,
     )
     testgen_context_code = testgen_code_markdown.code
-    testgen_context_code_tokens = len(tokenizer.encode(testgen_context_code))
+    testgen_context_code_tokens = encoded_tokens_len(testgen_context_code)
     if testgen_context_code_tokens > testgen_token_limit:
         testgen_code_markdown = extract_code_string_context_from_files(
             helpers_of_fto_dict,
@@ -121,7 +119,7 @@ def get_code_optimization_context(
             code_context_type=CodeContextType.TESTGEN,
         )
         testgen_context_code = testgen_code_markdown.code
-        testgen_context_code_tokens = len(tokenizer.encode(testgen_context_code))
+        testgen_context_code_tokens = encoded_tokens_len(testgen_context_code)
         if testgen_context_code_tokens > testgen_token_limit:
             raise ValueError("Testgen code context has exceeded token limit, cannot proceed")
 
@@ -138,13 +136,13 @@ def extract_code_string_context_from_files(
     helpers_of_fto: dict[Path, set[FunctionSource]],
     helpers_of_helpers: dict[Path, set[FunctionSource]],
     project_root_path: Path,
-    remove_docstrings: bool = False,
+    remove_docstrings: bool = False,  # noqa: FBT001, FBT002
     code_context_type: CodeContextType = CodeContextType.READ_ONLY,
 ) -> CodeString:
     """Extract code context from files containing target functions and their helpers.
     This function processes two sets of files:
     1. Files containing the function to optimize (fto) and their first-degree helpers
-    2. Files containing only helpers of helpers (with no overlap with the first set)
+    2. Files containing only helpers of helpers (with no overlap with the first set).
 
     For each file, it extracts relevant code based on the specified context type, adds necessary
     imports, and combines them.
@@ -159,15 +157,15 @@ def extract_code_string_context_from_files(
     Returns:
         CodeString containing the extracted code context with necessary imports
 
-    """
+    """  # noqa: D205
     # Rearrange to remove overlaps, so we only access each file path once
     helpers_of_helpers_no_overlap = defaultdict(set)
-    for file_path in helpers_of_helpers:
+    for file_path, function_sources in helpers_of_helpers.items():
         if file_path in helpers_of_fto:
             # Remove duplicates within the same file path, in case a helper of helper is also a helper of fto
             helpers_of_helpers[file_path] -= helpers_of_fto[file_path]
         else:
-            helpers_of_helpers_no_overlap[file_path] = helpers_of_helpers[file_path]
+            helpers_of_helpers_no_overlap[file_path] = function_sources
 
     final_code_string_context = ""
 
@@ -244,7 +242,7 @@ def extract_code_markdown_context_from_files(
     helpers_of_fto: dict[Path, set[FunctionSource]],
     helpers_of_helpers: dict[Path, set[FunctionSource]],
     project_root_path: Path,
-    remove_docstrings: bool = False,
+    remove_docstrings: bool = False,  # noqa: FBT001, FBT002
     code_context_type: CodeContextType = CodeContextType.READ_ONLY,
 ) -> CodeStringsMarkdown:
     """Extract code context from files containing target functions and their helpers, formatting them as markdown.
@@ -270,12 +268,12 @@ def extract_code_markdown_context_from_files(
     """
     # Rearrange to remove overlaps, so we only access each file path once
     helpers_of_helpers_no_overlap = defaultdict(set)
-    for file_path in helpers_of_helpers:
+    for file_path, function_sources in helpers_of_helpers.items():
         if file_path in helpers_of_fto:
             # Remove duplicates within the same file path, in case a helper of helper is also a helper of fto
             helpers_of_helpers[file_path] -= helpers_of_fto[file_path]
         else:
-            helpers_of_helpers_no_overlap[file_path] = helpers_of_helpers[file_path]
+            helpers_of_helpers_no_overlap[file_path] = function_sources
     code_context_markdown = CodeStringsMarkdown()
     # Extract code from file paths that contain fto and first degree helpers. helpers of helpers may also be included if they are in the same files
     for file_path, function_sources in helpers_of_fto.items():
@@ -372,7 +370,7 @@ def get_function_to_optimize_as_function_source(
                 and name.full_name.startswith(name.module_name)
                 and get_qualified_name(name.module_name, name.full_name) == function_to_optimize.qualified_name
             ):
-                function_source = FunctionSource(
+                return FunctionSource(
                     file_path=function_to_optimize.file_path,
                     qualified_name=function_to_optimize.qualified_name,
                     fully_qualified_name=name.full_name,
@@ -380,12 +378,11 @@ def get_function_to_optimize_as_function_source(
                     source_code=name.get_line_code(),
                     jedi_definition=name,
                 )
-                return function_source
-        except Exception as e:
+        except Exception as e:  # noqa: PERF203
             logger.exception(f"Error while getting function source: {e}")
             continue
     raise ValueError(
-        f"Could not find function {function_to_optimize.function_name} in {function_to_optimize.file_path}"
+        f"Could not find function {function_to_optimize.function_name} in {function_to_optimize.file_path}"  # noqa: EM102
     )
 
 
@@ -407,7 +404,7 @@ def get_function_sources_from_jedi(
             for name in names:
                 try:
                     definitions: list[Name] = name.goto(follow_imports=True, follow_builtin_imports=False)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     logger.debug(f"Error while getting definitions for {qualified_function_name}")
                     definitions = []
                 if definitions:
@@ -450,13 +447,13 @@ def is_dunder_method(name: str) -> bool:
 
 
 def get_section_names(node: cst.CSTNode) -> list[str]:
-    """Returns the section attribute names (e.g., body, orelse) for a given node if they exist."""
+    """Returns the section attribute names (e.g., body, orelse) for a given node if they exist."""  # noqa: D401
     possible_sections = ["body", "orelse", "finalbody", "handlers"]
     return [sec for sec in possible_sections if hasattr(node, sec)]
 
 
 def remove_docstring_from_body(indented_block: cst.IndentedBlock) -> cst.CSTNode:
-    """Removes the docstring from an indented block if it exists"""
+    """Removes the docstring from an indented block if it exists."""  # noqa: D401
     if not isinstance(indented_block.body[0], cst.SimpleStatementLine):
         return indented_block
     first_stmt = indented_block.body[0].body[0]
@@ -469,8 +466,8 @@ def parse_code_and_prune_cst(
     code: str,
     code_context_type: CodeContextType,
     target_functions: set[str],
-    helpers_of_helper_functions: set[str] = set(),
-    remove_docstrings: bool = False,
+    helpers_of_helper_functions: set[str] = set(),  # noqa: B006
+    remove_docstrings: bool = False,  # noqa: FBT001, FBT002
 ) -> str:
     """Create a read-only version of the code by parsing and filtering the code to keep only class contextual information, and other module scoped variables."""
     module = cst.parse_module(code)
@@ -485,7 +482,7 @@ def parse_code_and_prune_cst(
             module, target_functions, helpers_of_helper_functions, remove_docstrings=remove_docstrings
         )
     else:
-        raise ValueError(f"Unknown code_context_type: {code_context_type}")
+        raise ValueError(f"Unknown code_context_type: {code_context_type}")  # noqa: EM102
 
     if not found_target:
         raise ValueError("No target functions found in the provided code")
@@ -494,7 +491,7 @@ def parse_code_and_prune_cst(
     return ""
 
 
-def prune_cst_for_read_writable_code(
+def prune_cst_for_read_writable_code(  # noqa: PLR0911
     node: cst.CSTNode, target_functions: set[str], prefix: str = ""
 ) -> tuple[cst.CSTNode | None, bool]:
     """Recursively filter the node and its children to build the read-writable codeblock. This contains nodes that lead to target functions.
@@ -520,7 +517,7 @@ def prune_cst_for_read_writable_code(
             return None, False
         # Assuming always an IndentedBlock
         if not isinstance(node.body, cst.IndentedBlock):
-            raise ValueError("ClassDef body is not an IndentedBlock")
+            raise ValueError("ClassDef body is not an IndentedBlock")  # noqa: TRY004
         class_prefix = f"{prefix}.{node.name.value}" if prefix else node.name.value
         new_body = []
         found_target = False
@@ -574,14 +571,14 @@ def prune_cst_for_read_writable_code(
     return (node.with_changes(**updates) if updates else node), True
 
 
-def prune_cst_for_read_only_code(
+def prune_cst_for_read_only_code(  # noqa: PLR0911
     node: cst.CSTNode,
     target_functions: set[str],
     helpers_of_helper_functions: set[str],
     prefix: str = "",
-    remove_docstrings: bool = False,
+    remove_docstrings: bool = False,  # noqa: FBT001, FBT002
 ) -> tuple[cst.CSTNode | None, bool]:
-    """Recursively filter the node for read-only context:
+    """Recursively filter the node for read-only context.
 
     Returns:
         (filtered_node, found_target):
@@ -613,7 +610,7 @@ def prune_cst_for_read_only_code(
             return None, False
         # Assuming always an IndentedBlock
         if not isinstance(node.body, cst.IndentedBlock):
-            raise ValueError("ClassDef body is not an IndentedBlock")
+            raise ValueError("ClassDef body is not an IndentedBlock")  # noqa: TRY004
 
         class_prefix = f"{prefix}.{node.name.value}" if prefix else node.name.value
 
@@ -678,14 +675,14 @@ def prune_cst_for_read_only_code(
     return None, False
 
 
-def prune_cst_for_testgen_code(
+def prune_cst_for_testgen_code(  # noqa: PLR0911
     node: cst.CSTNode,
     target_functions: set[str],
     helpers_of_helper_functions: set[str],
     prefix: str = "",
-    remove_docstrings: bool = False,
+    remove_docstrings: bool = False,  # noqa: FBT001, FBT002
 ) -> tuple[cst.CSTNode | None, bool]:
-    """Recursively filter the node for testgen context:
+    """Recursively filter the node for testgen context.
 
     Returns:
         (filtered_node, found_target):
@@ -718,7 +715,7 @@ def prune_cst_for_testgen_code(
             return None, False
         # Assuming always an IndentedBlock
         if not isinstance(node.body, cst.IndentedBlock):
-            raise ValueError("ClassDef body is not an IndentedBlock")
+            raise ValueError("ClassDef body is not an IndentedBlock")  # noqa: TRY004
 
         class_prefix = f"{prefix}.{node.name.value}" if prefix else node.name.value
 

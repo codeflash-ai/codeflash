@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import time
-
 import json
 import os
 import platform
+import time
 from typing import TYPE_CHECKING, Any
 
 import requests
@@ -75,7 +74,7 @@ class AiServiceClient:
         # response.raise_for_status()  # Will raise an HTTPError if the HTTP request returned an unsuccessful status code
         return response
 
-    def optimize_python_code(
+    def optimize_python_code(  # noqa: D417
         self,
         source_code: str,
         dependency_code: str,
@@ -127,7 +126,7 @@ class AiServiceClient:
             logger.info(f"Generated {len(optimizations_json)} candidates.")
             console.rule()
             end_time = time.perf_counter()
-            logger.debug(f"Optimization took {end_time - start_time:.2f} seconds.")
+            logger.debug(f"Generating optimizations took {end_time - start_time:.2f} seconds.")
             return [
                 OptimizedCandidate(
                     source_code=opt["source_code"],
@@ -145,7 +144,7 @@ class AiServiceClient:
         console.rule()
         return []
 
-    def optimize_python_code_line_profiler(
+    def optimize_python_code_line_profiler(  # noqa: D417
         self,
         source_code: str,
         dependency_code: str,
@@ -182,7 +181,7 @@ class AiServiceClient:
 
         logger.info("Generating optimized candidates…")
         console.rule()
-        if line_profiler_results=="":
+        if line_profiler_results == "":
             logger.info("No LineProfiler results were provided, Skipping optimization.")
             console.rule()
             return []
@@ -214,8 +213,7 @@ class AiServiceClient:
         console.rule()
         return []
 
-
-    def log_results(
+    def log_results(  # noqa: D417
         self,
         function_trace_id: str,
         speedup_ratio: dict[str, float | None] | None,
@@ -247,7 +245,7 @@ class AiServiceClient:
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error logging features: {e}")
 
-    def generate_regression_tests(
+    def generate_regression_tests(  # noqa: D417
         self,
         source_code_being_tested: str,
         function_to_optimize: FunctionToOptimize,
@@ -314,7 +312,7 @@ class AiServiceClient:
             error = response.json()["error"]
             logger.error(f"Error generating tests: {response.status_code} - {error}")
             ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": error})
-            return None
+            return None  # noqa: TRY300
         except Exception:
             logger.error(f"Error generating tests: {response.status_code} - {response.text}")
             ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": response.text})

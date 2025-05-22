@@ -70,9 +70,12 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             are_equal = False
             break
 
-        if original_test_result.test_type in {TestType.EXISTING_UNIT_TEST, TestType.CONCOLIC_COVERAGE_TEST, TestType.GENERATED_REGRESSION, TestType.REPLAY_TEST} and (
-            cdd_test_result.did_pass != original_test_result.did_pass
-        ):
+        if original_test_result.test_type in {
+            TestType.EXISTING_UNIT_TEST,
+            TestType.CONCOLIC_COVERAGE_TEST,
+            TestType.GENERATED_REGRESSION,
+            TestType.REPLAY_TEST,
+        } and (cdd_test_result.did_pass != original_test_result.did_pass):
             are_equal = False
             break
     sys.setrecursionlimit(original_recursion_limit)
