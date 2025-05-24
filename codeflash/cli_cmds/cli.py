@@ -3,21 +3,12 @@ import sys
 from argparse import SUPPRESS, ArgumentParser, Namespace
 from pathlib import Path
 
-import git
-
 from codeflash.cli_cmds import logging_config
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.config_parser import parse_config_file
-from codeflash.code_utils.git_utils import (
-    check_and_push_branch,
-    check_running_in_git_repo,
-    confirm_proceeding_with_no_git_repo,
-    get_repo_owner_and_name,
-)
-from codeflash.code_utils.github_utils import get_github_secrets_page_url, require_github_app_or_exit
 from codeflash.version import __version__ as version
 
 
@@ -75,6 +66,13 @@ def parse_args() -> Namespace:
 
 
 def process_and_validate_cmd_args(args: Namespace) -> Namespace:
+    from codeflash.code_utils.git_utils import (
+        check_running_in_git_repo,
+        confirm_proceeding_with_no_git_repo,
+        get_repo_owner_and_name,
+    )
+    from codeflash.code_utils.github_utils import require_github_app_or_exit
+
     is_init: bool = args.command.startswith("init") if args.command else False
     if args.verbose:
         logging_config.set_level(logging.DEBUG, echo_setting=not is_init)
@@ -144,21 +142,26 @@ def process_pyproject_config(args: Namespace) -> Namespace:
         assert Path(args.benchmarks_root).resolve().is_relative_to(Path(args.tests_root).resolve()), (
             f"--benchmarks-root {args.benchmarks_root} must be a subdirectory of --tests-root {args.tests_root}"
         )
-    if env_utils.get_pr_number() is not None:
-        assert env_utils.ensure_codeflash_api_key(), (
-            "Codeflash API key not found. When running in a Github Actions Context, provide the "
-            "'CODEFLASH_API_KEY' environment variable as a secret.\n"
-            "You can add a secret by going to your repository's settings page, then clicking 'Secrets' in the left sidebar.\n"
-            "Then, click 'New repository secret' and add your api key with the variable name CODEFLASH_API_KEY.\n"
-            f"Here's a direct link: {get_github_secrets_page_url()}\n"
-            "Exiting..."
-        )
+        if env_utils.get_pr_number() is not None:
+            import git
 
-        repo = git.Repo(search_parent_directories=True)
+            from codeflash.code_utils.git_utils import get_repo_owner_and_name
+            from codeflash.code_utils.github_utils import get_github_secrets_page_url, require_github_app_or_exit
 
-        owner, repo_name = get_repo_owner_and_name(repo)
+            assert env_utils.ensure_codeflash_api_key(), (
+                "Codeflash API key not found. When running in a Github Actions Context, provide the "
+                "'CODEFLASH_API_KEY' environment variable as a secret.\n"
+                "You can add a secret by going to your repository's settings page, then clicking 'Secrets' in the left sidebar.\n"
+                "Then, click 'New repository secret' and add your api key with the variable name CODEFLASH_API_KEY.\n"
+                f"Here's a direct link: {get_github_secrets_page_url()}\n"
+                "Exiting..."
+            )
 
-        require_github_app_or_exit(owner, repo_name)
+            repo = git.Repo(search_parent_directories=True)
+
+            owner, repo_name = get_repo_owner_and_name(repo)
+
+            require_github_app_or_exit(owner, repo_name)
 
     if hasattr(args, "ignore_paths") and args.ignore_paths is not None:
         normalized_ignore_paths = []
@@ -186,7 +189,12 @@ def project_root_from_module_root(module_root: Path, pyproject_file_path: Path) 
 
 
 def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
-    if hasattr(args, "all"):
+    if args.all:
+        import git
+
+        from codeflash.code_utils.git_utils import check_and_push_branch, get_repo_owner_and_name
+        from codeflash.code_utils.github_utils import require_github_app_or_exit
+
         # Ensure that the user can actually open PRs on the repo.
         try:
             git_repo = git.Repo(search_parent_directories=True)
