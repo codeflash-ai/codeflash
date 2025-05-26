@@ -7,7 +7,7 @@ import subprocess
 import sys
 from enum import Enum, auto
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Union, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import click
 import git
@@ -50,7 +50,7 @@ CODEFLASH_LOGO: str = (
 class SetupInfo:
     module_root: str
     tests_root: str
-    benchmarks_root: Union[str, None]
+    benchmarks_root: str | None
     test_framework: str
     ignore_paths: list[str]
     formatter: str
@@ -750,7 +750,7 @@ def install_github_app() -> None:
 
     else:
         click.prompt(
-            f"Finally, you'll need install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
+            f"Finally, you'll need to install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
             f"I will attempt to open the github app page - https://github.com/apps/codeflash-ai/installations/select_target {LF}"
             f"Press Enter to open the page to let you install the app…{LF}",
             default="",
