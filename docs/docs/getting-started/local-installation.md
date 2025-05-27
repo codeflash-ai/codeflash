@@ -12,7 +12,7 @@ You can install Codeflash locally for a project by running the following command
 
 Before installing Codeflash, ensure you have:
 
-1. **Python 3.8 or higher** installed
+1. **Python 3.9 or above** installed
 2. **A Python project** with a virtual environment
 3. **Project dependencies installed** in your virtual environment
 4. **Tests** (optional) for your code (Codeflash uses tests to verify optimizations)
@@ -24,7 +24,7 @@ Always install Codeflash in your project's virtual environment, not globally. Ma
 # Example: Activate your virtual environment
 source venv/bin/activate  # On Linux/Mac
 # or
-venv\Scripts\activate     # On Windows
+#venv\Scripts\activate     # On Windows
 ```
 :::
 ### Step 1: Install Codeflash
