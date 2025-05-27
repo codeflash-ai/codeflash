@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, TypeVar, get_type_hints
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -159,3 +159,12 @@ def has_typed_parameters(node: ast.FunctionDef | ast.AsyncFunctionDef, parents: 
     if kind in [FunctionKind.CLASS_METHOD, FunctionKind.INSTANCE_METHOD]:
         return all(arg.annotation for arg in node.args.args[1:])
     return False
+
+
+def type_hints_reachable(node: ast.AST) -> bool:
+    try:
+        get_type_hints(node)
+    except Exception:
+        return False
+    else:
+        return True

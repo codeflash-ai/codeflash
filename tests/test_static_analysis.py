@@ -7,6 +7,7 @@ from codeflash.code_utils.static_analysis import (
     analyze_imported_modules,
     function_kind,
     has_typed_parameters,
+    type_hints_reachable,
 )
 from codeflash.models.models import FunctionParent
 
@@ -100,3 +101,17 @@ def a_function(self, a) -> None:
     parents6 = [FunctionParent(name="a_class", type="ClassDef")]
     assert function_kind(node6, parents6) == FunctionKind.CLASS_METHOD
     assert not has_typed_parameters(node6, parents6)
+
+    code7 = """
+import pandas as pd
+from typing import get_type_hints
+"""
+
+    assert type_hints_reachable(code7) is False
+
+    code = """
+import numpy as np
+def foo(x, y):
+    return x + y
+"""
+    assert type_hints_reachable(code) is False

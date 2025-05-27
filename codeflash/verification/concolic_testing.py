@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.concolic_utils import clean_concolic_tests
-from codeflash.code_utils.static_analysis import has_typed_parameters
+from codeflash.code_utils.static_analysis import has_typed_parameters, type_hints_reachable
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
@@ -32,6 +32,7 @@ def generate_concolic_tests(
         test_cfg.concolic_test_root_dir
         and isinstance(function_to_optimize_ast, (ast.FunctionDef, ast.AsyncFunctionDef))
         and has_typed_parameters(function_to_optimize_ast, function_to_optimize.parents)
+        and type_hints_reachable(function_to_optimize_ast)
     ):
         logger.info("Generating concolic opcode coverage tests for the original code…")
         console.rule()
