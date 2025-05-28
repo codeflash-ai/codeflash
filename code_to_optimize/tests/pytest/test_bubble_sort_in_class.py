@@ -1,4 +1,5 @@
 from code_to_optimize.bubble_sort import sorter
+from code_to_optimize.bubble_sort_in_class import BubbleSortClass
 
 
 class TestSorter:
@@ -20,3 +21,8 @@ class TestSorter:
         input = list(reversed(range(5000)))
         output = sorter(input)
         assert output == list(range(5000))
+
+def test_sort_cm():
+    obj1 = BubbleSortClass()
+    result = obj1.sorter(list(reversed(range(500))))
+    assert result == list(range(500))

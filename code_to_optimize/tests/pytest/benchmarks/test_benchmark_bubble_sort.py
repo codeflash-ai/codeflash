@@ -1,6 +1,7 @@
 import pytest
 
 from code_to_optimize.bubble_sort import sorter
+from code_to_optimize.bubble_sort_in_class import BubbleSortClass
 
 
 def test_sort(benchmark):
@@ -10,4 +11,9 @@ def test_sort(benchmark):
 # This should not be picked up as a benchmark test
 def test_sort2():
     result = sorter(list(reversed(range(500))))
+    assert result == list(range(500))
+
+def test_sort_cm(benchmark):
+    obj1 = BubbleSortClass()
+    result = benchmark(obj1.sorter, list(reversed(range(500))))
     assert result == list(range(500))
