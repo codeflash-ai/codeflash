@@ -112,6 +112,7 @@ class Optimizer:
                     instrument_codeflash_trace_decorator(file_to_funcs_to_optimize)
                     trace_file = Path(self.args.benchmarks_root) / "benchmarks.trace"
                     if trace_file.exists():
+                        #Trace file not deleted all the times
                         trace_file.unlink()
 
                     self.replay_tests_dir = Path(
