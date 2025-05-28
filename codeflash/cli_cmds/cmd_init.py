@@ -201,7 +201,7 @@ def collect_setup_info() -> SetupInfo:
             path_type=inquirer.Path.DIRECTORY,
         )
         if custom_module_root_answer:
-            module_root = Path(curdir) / Path(custom_module_root_answer["path"])
+            module_root = Path(custom_module_root_answer["path"])
         else:
             apologize_and_exit()
     else:
