@@ -102,7 +102,7 @@ class Optimizer:
         function_benchmark_timings: dict[str, dict[BenchmarkKey, int]] = {}
         total_benchmark_timings: dict[BenchmarkKey, int] = {}
         if self.args.benchmark and num_optimizable_functions > 0:
-            with progress_bar(f"Running benchmarks in {self.args.benchmarks_root}",transient=True):
+            with progress_bar(f"Running benchmarks in {self.args.benchmarks_root}", transient=True):
                 logger.info(f"Running benchmarks in {self.args.benchmarks_root}")
                 # Insert decorator
                 file_path_to_source_code = defaultdict(str)
