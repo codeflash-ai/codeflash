@@ -31,7 +31,7 @@ def format_code(formatter_cmds: list[str], path: Path) -> str:
                 console.rule(f"Formatted Successfully with: {formatter_name.replace('$file', path.name)}")
             else:
                 logger.error(f"Failed to format code with {' '.join(formatter_cmd_list)}")
-        except (FileNotFoundError, NotADirectoryError) as e:
+        except FileNotFoundError as e:
             from rich.panel import Panel
             from rich.text import Text
 
