@@ -1,6 +1,7 @@
+import sys
+
 def sorter(arr):
-    print("codeflash stdout: Sorting list")
-    # Use Python's built-in sort for much faster performance
-    arr.sort()
-    print(f"result: {arr}")
+    sys.stdout.write("codeflash stdout: Sorting list\n")  # Faster than print()
+    arr.sort()  # already optimal
+    sys.stdout.write(f"result: {arr}\n")  # Minimize print overhead
     return arr
