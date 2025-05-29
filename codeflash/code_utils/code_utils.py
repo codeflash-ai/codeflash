@@ -34,7 +34,7 @@ def custom_addopts() -> None:
             if original_addopts != "":
                 original_addopts = [x.strip() for x in original_addopts]
                 non_blacklist_plugin_args = re.sub(r"-n(?: +|=)\S+", "", " ".join(original_addopts)).split(" ")
-                non_blacklist_plugin_args = [x for x in non_blacklist_plugin_args if x!=""]
+                non_blacklist_plugin_args = [x for x in non_blacklist_plugin_args if x != ""]
                 if non_blacklist_plugin_args != original_addopts:
                     data["tool"]["pytest"]["ini_options"]["addopts"] = non_blacklist_plugin_args
                     # Write modified file
@@ -74,9 +74,7 @@ def add_addopts_to_pyproject() -> None:
                 "-n      1",
                 "-n      auto",
             ]
-            with Path.open(
-                pyproject_file, "w", encoding="utf-8"
-            ) as f:
+            with Path.open(pyproject_file, "w", encoding="utf-8") as f:
                 f.write(tomlkit.dumps(data))
 
         yield
