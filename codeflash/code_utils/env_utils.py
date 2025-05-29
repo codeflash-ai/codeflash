@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 from functools import lru_cache
 from pathlib import Path
@@ -27,8 +28,13 @@ def check_formatter_installed(formatter_cmds: list[str]) -> bool:
         f.write(tmp_code)
         f.flush()
         tmp_file = Path(f.name)
-        format_code(formatter_cmds, tmp_file)
-    tmp_file.unlink(missing_ok=True)
+        try:
+            format_code(formatter_cmds, tmp_file)
+        except Exception:
+            print(
+                "⚠️ Failed to format code since formatter was not found in the environment. Please install it and try again."
+            )
+            sys.exit(1)
     return return_code
 
 
