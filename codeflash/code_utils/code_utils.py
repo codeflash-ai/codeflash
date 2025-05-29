@@ -52,6 +52,39 @@ def custom_addopts() -> None:
                 f.write(original_content)
 
 
+@contextmanager
+def add_addopts_to_pyproject() -> None:
+    pyproject_file = find_pyproject_toml()
+    original_content = None
+    try:
+        # Read original file
+        if pyproject_file.exists():
+            with Path.open(pyproject_file, encoding="utf-8") as f:
+                original_content = f.read()
+                data = tomlkit.parse(original_content)
+            data["tool"]["pytest"] = {}
+            data["tool"]["pytest"]["ini_options"] = {}
+            data["tool"]["pytest"]["ini_options"]["addopts"] = [
+                "-n=auto",
+                "-n",
+                "1",
+                "-n 1",
+                "-n      1",
+                "-n      auto",
+            ]
+            with Path.open(
+                (Path(__file__).parent.parent.parent / "pyproject.toml").resolve(), "w", encoding="utf-8"
+            ) as f:
+                f.write(tomlkit.dumps(data))
+
+        yield
+
+    finally:
+        # Restore original file
+        with Path.open(Path("pyproject.toml"), "w", encoding="utf-8") as f:
+            f.write(original_content)
+
+
 def encoded_tokens_len(s: str) -> int:
     """Return the approximate length of the encoded tokens.
 
