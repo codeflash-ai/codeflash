@@ -17,7 +17,7 @@ import pytest
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger, test_files_progress_bar
-from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
+from codeflash.code_utils.code_utils import custom_addopts, get_run_tmp_file, module_name_from_file_path
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_cache_db
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 
@@ -150,19 +150,20 @@ def discover_tests_pytest(
     project_root = cfg.project_root_path
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
-    result = subprocess.run(
-        [
-            SAFE_SYS_EXECUTABLE,
-            Path(__file__).parent / "pytest_new_process_discovery.py",
-            str(project_root),
-            str(tests_root),
-            str(tmp_pickle_path),
-        ],
-        cwd=project_root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    with custom_addopts():
+        result = subprocess.run(
+            [
+                SAFE_SYS_EXECUTABLE,
+                Path(__file__).parent / "pytest_new_process_discovery.py",
+                str(project_root),
+                str(tests_root),
+                str(tmp_pickle_path),
+            ],
+            cwd=project_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
     try:
         with tmp_pickle_path.open(mode="rb") as f:
             exitcode, tests, pytest_rootdir = pickle.load(f)
