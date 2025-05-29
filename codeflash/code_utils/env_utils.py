@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from codeflash.cli_cmds.console import logger
+from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
 
 
@@ -28,22 +29,8 @@ def check_formatter_installed(formatter_cmds: list[str]) -> bool:
         f.write(tmp_code)
         f.flush()
         tmp_file = Path(f.name)
-        file_token = "$file"  # noqa: S105
-        for command in set(formatter_cmds):
-            formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
-            formatter_cmd_list = [tmp_file.as_posix() if chunk == file_token else chunk for chunk in formatter_cmd_list]
-            try:
-                result = subprocess.run(formatter_cmd_list, capture_output=True, check=False)
-            except (FileNotFoundError, NotADirectoryError):
-                return_code = False
-                break
-            if result.returncode:
-                return_code = False
-                break
+        format_code(formatter_cmds, tmp_file)
     tmp_file.unlink(missing_ok=True)
-    if not return_code:
-        msg = f"Error running formatter command: {command}"
-        raise FormatterNotFoundError(msg)
     return return_code
 
 
