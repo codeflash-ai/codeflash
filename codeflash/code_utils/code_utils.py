@@ -33,7 +33,7 @@ def custom_addopts() -> None:
             original_addopts = data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("addopts", "")
             # nothing to do if no addopts present
             if original_addopts != "":
-                non_blacklist_plugin_args = re.sub(r"-n +\S+", "", " ".join(original_addopts)).split(" ")
+                non_blacklist_plugin_args = re.sub(r"-n(?: +|=)\S+", "", " ".join(original_addopts)).split(" ")
                 if non_blacklist_plugin_args != original_addopts:
                     data["tool"]["pytest"]["ini_options"]["addopts"] = non_blacklist_plugin_args
                     # Write modified file
