@@ -12,13 +12,6 @@ from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
 
 
-class FormatterNotFoundError(Exception):
-    """Exception raised when a formatter is not found."""
-
-    def __init__(self, formatter_cmd: str) -> None:
-        super().__init__(f"Formatter command not found: {formatter_cmd}")
-
-
 def check_formatter_installed(formatter_cmds: list[str]) -> bool:
     return_code = True
     if formatter_cmds[0] == "disabled":
@@ -32,7 +25,7 @@ def check_formatter_installed(formatter_cmds: list[str]) -> bool:
             format_code(formatter_cmds, tmp_file)
         except Exception:
             print(
-                "⚠️ Failed to format code since formatter was not found in the environment. Please install it and try again."
+                "⚠️ Codeflash requires a code formatter to be installed in your environment, but none was found. Please install a supported formatter, verify the formatter-cmds in your codeflash pyproject.toml config and try again."
             )
             sys.exit(1)
     return return_code
