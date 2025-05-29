@@ -20,6 +20,7 @@ from codeflash.code_utils.config_parser import find_pyproject_toml
 def custom_addopts() -> None:
     pyproject_file = find_pyproject_toml()
     original_content = None
+    non_blacklist_plugin_args = ""
 
     try:
         # Read original file
