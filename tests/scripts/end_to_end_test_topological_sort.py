@@ -28,11 +28,11 @@ def run_test(expected_improvement_pct: int) -> bool:
             ],
         )
         cwd = (pathlib.Path(__file__).parent.parent.parent / "code_to_optimize").resolve()
-        return run_codeflash_command(cwd, config, expected_improvement_pct)
+        return_var = run_codeflash_command(cwd, config, expected_improvement_pct)
     finally:
         with pathlib.Path.open(pathlib.Path("pyproject.toml"), "w", encoding="utf-8") as f:
             f.write(original_content)
-
+    return return_var
 
 
 if __name__ == "__main__":
