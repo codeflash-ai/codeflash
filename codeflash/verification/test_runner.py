@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_utils import get_run_tmp_file
+from codeflash.code_utils.code_utils import custom_addopts, get_run_tmp_file
 from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
@@ -97,24 +97,27 @@ def run_behavioral_tests(
                 coverage_cmd.extend(shlex.split(pytest_cmd, posix=IS_POSIX)[1:])
 
             blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS if plugin != "cov"]
-            results = execute_test_subprocess(
-                coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files,
-                cwd=cwd,
-                env=pytest_test_env,
-                timeout=600,
-            )
+
+            with custom_addopts():
+                results = execute_test_subprocess(
+                    coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files,
+                    cwd=cwd,
+                    env=pytest_test_env,
+                    timeout=600,
+                )
             logger.debug(
                 f"Result return code: {results.returncode}, "
                 f"{'Result stderr:' + str(results.stderr) if results.stderr else ''}"
             )
         else:
             blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS]
-            results = execute_test_subprocess(
-                pytest_cmd_list + common_pytest_args + blocklist_args + result_args + test_files,
-                cwd=cwd,
-                env=pytest_test_env,
-                timeout=600,  # TODO: Make this dynamic
-            )
+            with custom_addopts():
+                results = execute_test_subprocess(
+                    pytest_cmd_list + common_pytest_args + blocklist_args + result_args + test_files,
+                    cwd=cwd,
+                    env=pytest_test_env,
+                    timeout=600,  # TODO: Make this dynamic
+                )
             logger.debug(
                 f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
             )
@@ -192,12 +195,13 @@ def run_line_profile_tests(
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
         blocklist_args = [f"-p no:{plugin}" for plugin in BENCHMARKING_BLOCKLISTED_PLUGINS]
         pytest_test_env["LINE_PROFILE"] = "1"
-        results = execute_test_subprocess(
-            pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
-            cwd=cwd,
-            env=pytest_test_env,
-            timeout=600,  # TODO: Make this dynamic
-        )
+        with custom_addopts():
+            results = execute_test_subprocess(
+                pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
+                cwd=cwd,
+                env=pytest_test_env,
+                timeout=600,  # TODO: Make this dynamic
+            )
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
@@ -252,13 +256,13 @@ def run_benchmarking_tests(
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
         blocklist_args = [f"-p no:{plugin}" for plugin in BENCHMARKING_BLOCKLISTED_PLUGINS]
-
-        results = execute_test_subprocess(
-            pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
-            cwd=cwd,
-            env=pytest_test_env,
-            timeout=600,  # TODO: Make this dynamic
-        )
+        with custom_addopts():
+            results = execute_test_subprocess(
+                pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
+                cwd=cwd,
+                env=pytest_test_env,
+                timeout=600,  # TODO: Make this dynamic
+            )
     elif test_framework == "unittest":
         test_files = [file.benchmarking_file_path for file in test_paths.test_files]
         result_file_path, results = run_unittest_tests(
@@ -278,8 +282,8 @@ def run_unittest_tests(
     log_level = ["-v"] if verbose else []
     files = [str(file) for file in test_file_paths]
     output_file = ["--output-file", str(result_file_path)]
-
-    results = execute_test_subprocess(
-        unittest_cmd_list + log_level + files + output_file, cwd=cwd, env=test_env, timeout=600
-    )
+    with custom_addopts():
+        results = execute_test_subprocess(
+            unittest_cmd_list + log_level + files + output_file, cwd=cwd, env=test_env, timeout=600
+        )
     return result_file_path, results

@@ -4,11 +4,54 @@ import ast
 import os
 import shutil
 import site
+from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import tomlkit
+
 from codeflash.cli_cmds.console import logger
+
+
+@contextmanager
+def custom_addopts(pyproject_path: str = "pyproject.toml") -> None:
+    pyproject_file = Path(pyproject_path)
+    original_content = None
+
+    try:
+        # Read original file
+        if pyproject_file.exists():
+            with Path.open(pyproject_file, encoding="utf-8") as f:
+                original_content = f.read()
+                data = tomlkit.parse(original_content)
+
+            # Backup original addopts
+            original_addopts = data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("addopts", "")
+
+            # Set new addopts
+            if "tool" not in data:
+                data["tool"] = {}
+            if "pytest" not in data["tool"]:
+                data["tool"]["pytest"] = {}
+            if "ini_options" not in data["tool"]["pytest"]:
+                data["tool"]["pytest"]["ini_options"] = {}
+
+            data["tool"]["pytest"]["ini_options"]["addopts"] = [
+                x for x in original_addopts if x not in ["-n", "-n auto", "auto"]
+            ]
+
+            # Write modified file
+            with Path.open(pyproject_file, "w", encoding="utf-8") as f:
+                f.write(tomlkit.dumps(data))
+
+        yield
+
+    finally:
+        # Restore original file
+        if original_content and pyproject_file.exists():
+            with Path.open(pyproject_file, "w", encoding="utf-8") as f:
+                f.write(original_content)
 
 
 def encoded_tokens_len(s: str) -> int:

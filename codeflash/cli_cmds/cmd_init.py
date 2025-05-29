@@ -537,7 +537,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
             existing_api_key = None
         click.prompt(
             f"Next, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.{LF}"
-            f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)}…{LF}"
+            f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} {LF}"
             f"Then, click 'New repository secret' to add your api key with the variable name CODEFLASH_API_KEY.{LF}"
             f"{'Here is your CODEFLASH_API_KEY: ' + existing_api_key + ' ' + LF}"
             if existing_api_key
