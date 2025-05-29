@@ -28,7 +28,6 @@ def custom_addopts() -> None:
             with Path.open(pyproject_file, encoding="utf-8") as f:
                 original_content = f.read()
                 data = tomlkit.parse(original_content)
-
             # Backup original addopts
             original_addopts = data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("addopts", "")
             # nothing to do if no addopts present
