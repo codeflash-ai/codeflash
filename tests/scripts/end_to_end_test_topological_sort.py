@@ -8,13 +8,17 @@ from end_to_end_test_utilities import CoverageExpectation, TestConfig, run_codef
 def run_test(expected_improvement_pct: int) -> bool:
     try:
         # Modify Pyproject file
-        with pathlib.Path.open((pathlib.Path(__file__).parent.parent.parent / "pyproject.toml").resolve(), encoding="utf-8") as f:
+        with pathlib.Path.open(
+            (pathlib.Path(__file__).parent.parent.parent / "pyproject.toml").resolve(), encoding="utf-8"
+        ) as f:
             original_content = f.read()
             data = tomlkit.parse(original_content)
         data["tool"]["pytest"] = {}
         data["tool"]["pytest"]["ini_options"] = {}
         data["tool"]["pytest"]["ini_options"]["addopts"] = ["-n=auto", "-n", "1", "-n 1", "-n      1", "-n      auto"]
-        with pathlib.Path.open((pathlib.Path(__file__).parent.parent.parent / "pyproject.toml").resolve(), "w", encoding="utf-8") as f:
+        with pathlib.Path.open(
+            (pathlib.Path(__file__).parent.parent.parent / "pyproject.toml").resolve(), "w", encoding="utf-8"
+        ) as f:
             f.write(tomlkit.dumps(data))
         config = TestConfig(
             file_path="topological_sort.py",
@@ -23,7 +27,9 @@ def run_test(expected_improvement_pct: int) -> bool:
             min_improvement_x=0.05,
             coverage_expectations=[
                 CoverageExpectation(
-                    function_name="Graph.topologicalSort", expected_coverage=100.0, expected_lines=[24, 25, 26, 27, 28, 29]
+                    function_name="Graph.topologicalSort",
+                    expected_coverage=100.0,
+                    expected_lines=[24, 25, 26, 27, 28, 29],
                 )
             ],
         )
