@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import os
-import shlex
-import subprocess
 import tempfile
 from functools import lru_cache
 from pathlib import Path
