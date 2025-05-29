@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 import shutil
 import site
 from contextlib import contextmanager
@@ -12,11 +13,12 @@ from tempfile import TemporaryDirectory
 import tomlkit
 
 from codeflash.cli_cmds.console import logger
+from codeflash.code_utils.config_parser import find_pyproject_toml
 
 
 @contextmanager
-def custom_addopts(pyproject_path: str = "pyproject.toml") -> None:
-    pyproject_file = Path(pyproject_path)
+def custom_addopts() -> None:
+    pyproject_file = find_pyproject_toml()
     original_content = None
 
     try:
@@ -28,28 +30,24 @@ def custom_addopts(pyproject_path: str = "pyproject.toml") -> None:
 
             # Backup original addopts
             original_addopts = data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("addopts", "")
-
-            # Set new addopts
-            if "tool" not in data:
-                data["tool"] = {}
-            if "pytest" not in data["tool"]:
-                data["tool"]["pytest"] = {}
-            if "ini_options" not in data["tool"]["pytest"]:
-                data["tool"]["pytest"]["ini_options"] = {}
-
-            data["tool"]["pytest"]["ini_options"]["addopts"] = [
-                x for x in original_addopts if x not in ["-n", "-n auto", "auto"]
-            ]
-
-            # Write modified file
-            with Path.open(pyproject_file, "w", encoding="utf-8") as f:
-                f.write(tomlkit.dumps(data))
+            # nothing to do if no addopts present
+            if original_addopts != "":
+                non_blacklist_plugin_args = re.sub(r"-n +\S+", "", " ".join(original_addopts)).split(" ")
+                if non_blacklist_plugin_args != original_addopts:
+                    data["tool"]["pytest"]["ini_options"]["addopts"] = non_blacklist_plugin_args
+                    # Write modified file
+                    with Path.open(pyproject_file, "w", encoding="utf-8") as f:
+                        f.write(tomlkit.dumps(data))
 
         yield
 
     finally:
         # Restore original file
-        if original_content and pyproject_file.exists():
+        if (
+            original_content
+            and pyproject_file.exists()
+            and tuple(original_addopts) not in {(), tuple(non_blacklist_plugin_args)}
+        ):
             with Path.open(pyproject_file, "w", encoding="utf-8") as f:
                 f.write(original_content)
 
