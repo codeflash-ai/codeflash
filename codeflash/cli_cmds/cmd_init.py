@@ -514,7 +514,8 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         from importlib.resources import files
 
         benchmark_mode = False
-        if "benchmarks_root" in config:
+        benchmarks_root = config.get("benchmarks_root", "").strip()
+        if benchmarks_root and benchmarks_root != "":
             benchmark_mode = inquirer_wrapper(
                 inquirer.confirm,
                 message="⚡️It looks like you've configured a benchmarks_root in your config. Would you like to run the Github action in benchmark mode? "
