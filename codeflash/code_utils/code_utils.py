@@ -32,7 +32,9 @@ def custom_addopts() -> None:
             original_addopts = data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("addopts", "")
             # nothing to do if no addopts present
             if original_addopts != "":
+                original_addopts = [x.strip() for x in original_addopts]
                 non_blacklist_plugin_args = re.sub(r"-n(?: +|=)\S+", "", " ".join(original_addopts)).split(" ")
+                non_blacklist_plugin_args = [x for x in non_blacklist_plugin_args if x!=""]
                 if non_blacklist_plugin_args != original_addopts:
                     data["tool"]["pytest"]["ini_options"]["addopts"] = non_blacklist_plugin_args
                     # Write modified file
@@ -73,7 +75,7 @@ def add_addopts_to_pyproject() -> None:
                 "-n      auto",
             ]
             with Path.open(
-                (Path(__file__).parent.parent.parent / "pyproject.toml").resolve(), "w", encoding="utf-8"
+                pyproject_file, "w", encoding="utf-8"
             ) as f:
                 f.write(tomlkit.dumps(data))
 
@@ -81,7 +83,7 @@ def add_addopts_to_pyproject() -> None:
 
     finally:
         # Restore original file
-        with Path.open(Path("pyproject.toml"), "w", encoding="utf-8") as f:
+        with Path.open(pyproject_file, "w", encoding="utf-8") as f:
             f.write(original_content)
 
 
