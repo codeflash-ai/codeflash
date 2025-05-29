@@ -1,7 +1,10 @@
-import sys
-
 def sorter(arr):
-    sys.stdout.write("codeflash stdout: Sorting list\n")  # Faster than print()
-    arr.sort()  # already optimal
-    sys.stdout.write(f"result: {arr}\n")  # Minimize print overhead
+    print("codeflash stdout: Sorting list")
+    for i in range(len(arr)):
+        for j in range(len(arr) - 1):
+            if arr[j] > arr[j + 1]:
+                temp = arr[j]
+                arr[j] = arr[j + 1]
+                arr[j + 1] = temp
+    print(f"result: {arr}")
     return arr
