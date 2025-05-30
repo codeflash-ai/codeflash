@@ -1,11 +1,9 @@
 # ruff: noqa: SLF001
 from __future__ import annotations
 
-import hashlib
 import os
 import pickle
 import re
-import sqlite3
 import subprocess
 import unittest
 from collections import defaultdict
@@ -37,97 +35,6 @@ PYTEST_PARAMETERIZED_TEST_NAME_REGEX = re.compile(r"[\[\]]")
 UNITTEST_PARAMETERIZED_TEST_NAME_REGEX = re.compile(r"^test_\w+_\d+(?:_\w+)*")
 UNITTEST_STRIP_NUMBERED_SUFFIX_REGEX = re.compile(r"_\d+(?:_\w+)*$")
 FUNCTION_NAME_REGEX = re.compile(r"([^.]+)\.([a-zA-Z0-9_]+)$")
-
-
-class TestsCache:
-    def __init__(self) -> None:
-        self.connection = sqlite3.connect(codeflash_cache_db)
-        self.cur = self.connection.cursor()
-
-        self.cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS discovered_tests(
-                file_path TEXT,
-                file_hash TEXT,
-                qualified_name_with_modules_from_root TEXT,
-                function_name TEXT,
-                test_class TEXT,
-                test_function TEXT,
-                test_type TEXT,
-                line_number INTEGER,
-                col_number INTEGER
-            )
-            """
-        )
-        self.cur.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_discovered_tests_file_path_hash
-            ON discovered_tests (file_path, file_hash)
-            """
-        )
-        self._memory_cache = {}
-
-    def insert_test(
-        self,
-        file_path: str,
-        file_hash: str,
-        qualified_name_with_modules_from_root: str,
-        function_name: str,
-        test_class: str,
-        test_function: str,
-        test_type: TestType,
-        line_number: int,
-        col_number: int,
-    ) -> None:
-        self.cur.execute("DELETE FROM discovered_tests WHERE file_path = ?", (file_path,))
-        test_type_value = test_type.value if hasattr(test_type, "value") else test_type
-        self.cur.execute(
-            "INSERT INTO discovered_tests VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                file_path,
-                file_hash,
-                qualified_name_with_modules_from_root,
-                function_name,
-                test_class,
-                test_function,
-                test_type_value,
-                line_number,
-                col_number,
-            ),
-        )
-        self.connection.commit()
-
-    def get_tests_for_file(self, file_path: str, file_hash: str) -> list[FunctionCalledInTest]:
-        cache_key = (file_path, file_hash)
-        if cache_key in self._memory_cache:
-            return self._memory_cache[cache_key]
-        self.cur.execute("SELECT * FROM discovered_tests WHERE file_path = ? AND file_hash = ?", (file_path, file_hash))
-        result = [
-            FunctionCalledInTest(
-                tests_in_file=TestsInFile(
-                    test_file=Path(row[0]), test_class=row[4], test_function=row[5], test_type=TestType(int(row[6]))
-                ),
-                position=CodePosition(line_no=row[7], col_no=row[8]),
-            )
-            for row in self.cur.fetchall()
-        ]
-        self._memory_cache[cache_key] = result
-        return result
-
-    @staticmethod
-    def compute_file_hash(path: str) -> str:
-        h = hashlib.sha256(usedforsecurity=False)
-        with Path(path).open("rb") as f:
-            while True:
-                chunk = f.read(8192)
-                if not chunk:
-                    break
-                h.update(chunk)
-        return h.hexdigest()
-
-    def close(self) -> None:
-        self.cur.close()
-        self.connection.close()
 
 
 def discover_unit_tests(
@@ -288,27 +195,12 @@ def process_test_files(
     function_to_test_map = defaultdict(set)
     jedi_project = jedi.Project(path=project_root_path)
     goto_cache = {}
-    tests_cache = TestsCache()
 
     with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
         progress,
         task_id,
     ):
         for test_file, functions in file_to_test_map.items():
-            file_hash = TestsCache.compute_file_hash(test_file)
-            cached_tests = tests_cache.get_tests_for_file(str(test_file), file_hash)
-            if cached_tests:
-                self_cur = tests_cache.cur
-                self_cur.execute(
-                    "SELECT qualified_name_with_modules_from_root FROM discovered_tests WHERE file_path = ? AND file_hash = ?",
-                    (str(test_file), file_hash),
-                )
-                qualified_names = [row[0] for row in self_cur.fetchall()]
-                for cached, qualified_name in zip(cached_tests, qualified_names):
-                    function_to_test_map[qualified_name].add(cached)
-                progress.advance(task_id)
-                continue
-
             try:
                 script = jedi.Script(path=test_file, project=jedi_project)
                 test_functions = set()
@@ -438,18 +330,6 @@ def process_test_files(
                         )
                         qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
 
-                        tests_cache.insert_test(
-                            file_path=str(test_file),
-                            file_hash=file_hash,
-                            qualified_name_with_modules_from_root=qualified_name_with_modules_from_root,
-                            function_name=scope,
-                            test_class=scope_test_class,
-                            test_function=scope_test_function,
-                            test_type=test_type,
-                            line_number=name.line,
-                            col_number=name.column,
-                        )
-
                         function_to_test_map[qualified_name_with_modules_from_root].add(
                             FunctionCalledInTest(
                                 tests_in_file=TestsInFile(
@@ -464,5 +344,4 @@ def process_test_files(
 
             progress.advance(task_id)
 
-    tests_cache.close()
     return {function: list(tests) for function, tests in function_to_test_map.items()}
