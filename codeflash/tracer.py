@@ -26,6 +26,7 @@ import time
 from argparse import ArgumentParser
 from collections import defaultdict
 from pathlib import Path
+from types import FrameType
 from typing import TYPE_CHECKING, Any, Callable, ClassVar
 
 import dill
@@ -494,56 +495,53 @@ class Tracer:
         return 1
 
     def trace_dispatch_return(self, frame: FrameType, t: int) -> int:
-        if not self.cur or not self.cur[-2]:
+        # Optimized: pull local vars, rearrange for faster short-circuit, reduce repeated attribute lookups
+        cur = self.cur
+        if not cur:
             return 0
-
-        # In multi-threaded environments, frames can get mismatched
-        if frame is not self.cur[-2]:
-            # Don't assert in threaded environments - frames can legitimately differ
-            if hasattr(frame, "f_back") and hasattr(self.cur[-2], "f_back") and frame is self.cur[-2].f_back:
-                self.trace_dispatch_return(self.cur[-2], 0)
+        prev_frame = cur[-2]
+        if not prev_frame:
+            return 0
+        # Cheap common case: strict identity match, else fast out, else cross-thread special case
+        if frame is not prev_frame:
+            if (
+                getattr(frame, "f_back", None) is not None
+                and getattr(prev_frame, "f_back", None) is not None
+                and frame is prev_frame.f_back
+            ):
+                # Same logic as before, avoid recursion if possible
+                self.trace_dispatch_return(prev_frame, 0)
             else:
-                # We're in a different thread or context, can't continue with this frame
                 return 0
-        # Prefix "r" means part of the Returning or exiting frame.
-        # Prefix "p" means part of the Previous or Parent or older frame.
+        rpt, rit, ret, rfn, _, rcur = cur
 
-        rpt, rit, ret, rfn, frame, rcur = self.cur
-
-        # Guard against invalid rcur (w threading)
         if not rcur:
             return 0
 
-        rit = rit + t
+        rit += t
         frame_total = rit + ret
-
-        ppt, pit, pet, pfn, pframe, pcur = rcur
-        self.cur = ppt, pit + rpt, pet + frame_total, pfn, pframe, pcur
+        ppt, pit, pet, pfn, _, pcur = rcur
+        self.cur = (ppt, pit + rpt, pet + frame_total, pfn, _, pcur)
 
         timings = self.timings
-        if rfn not in timings:
-            # w threading, rfn can be missing
-            timings[rfn] = 0, 0, 0, 0, {}
-        cc, ns, tt, ct, callers = timings[rfn]
-        if not ns:
-            # This is the only occurrence of the function on the stack.
-            # Else this is a (directly or indirectly) recursive call, and
-            # its cumulative time will get updated when the topmost call to
-            # it returns.
-            ct = ct + frame_total
-            cc = cc + 1
 
-        if pfn in callers:
-            # Increment call count between these functions
-            callers[pfn] = callers[pfn] + 1
-            # Note: This tracks stats such as the amount of time added to ct
-            # of this specific call, and the contribution to cc
-            # courtesy of this call.
+        # Use direct lookup and local variable
+        timing_entry = timings.get(rfn)
+        if timing_entry is None:
+            cc = ns = tt = ct = 0
+            callers = {}
+            timings[rfn] = (cc, ns, tt, ct, callers)
         else:
-            callers[pfn] = 1
+            cc, ns, tt, ct, callers = timing_entry
 
-        timings[rfn] = cc, ns - 1, tt + rit, ct, callers
+        if not ns:
+            ct += frame_total
+            cc += 1
 
+        # Fast path: reduce dict lookups
+        callers[pfn] = callers.get(pfn, 0) + 1
+
+        timings[rfn] = (cc, ns - 1, tt + rit, ct, callers)
         return 1
 
     dispatch: ClassVar[dict[str, Callable[[Tracer, FrameType, int], int]]] = {
