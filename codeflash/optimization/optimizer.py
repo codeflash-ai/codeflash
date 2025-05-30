@@ -84,6 +84,8 @@ class Optimizer:
         console.rule()
         if not env_utils.ensure_codeflash_api_key():
             return
+        if not env_utils.check_formatter_installed(self.args.formatter_cmds):
+            return
         function_optimizer = None
         file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
         num_optimizable_functions: int

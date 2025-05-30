@@ -151,6 +151,7 @@ init_typed = true
 warn_required_dynamic_aliases = true
 
 [tool.ruff]
+target-version = "py39"
 line-length = 120
 fix = true
 show-fixes = true
