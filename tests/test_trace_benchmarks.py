@@ -111,7 +111,6 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_Sorter_sorter():
         if function_name == "__init__":
             ret = code_to_optimize_bubble_sort_codeflash_trace_Sorter(*args[1:], **kwargs)
         else:
-            instance = args[0] # self
             ret = code_to_optimize_bubble_sort_codeflash_trace_Sorter.sorter(*args, **kwargs)
 
 def test_code_to_optimize_bubble_sort_codeflash_trace_Sorter_sort_class():
@@ -138,7 +137,6 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_Sorter___init__():
         if function_name == "__init__":
             ret = code_to_optimize_bubble_sort_codeflash_trace_Sorter(*args[1:], **kwargs)
         else:
-            instance = args[0] # self
             ret = code_to_optimize_bubble_sort_codeflash_trace_Sorter(*args, **kwargs)
 
 """
