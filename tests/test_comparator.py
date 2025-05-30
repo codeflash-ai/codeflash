@@ -702,6 +702,8 @@ def test_torch():
     assert comparator(gg, hh)
     assert not comparator(gg, ii)
 
+    # TODO compare torch layers
+
 
 def test_returns():
     a = Success(5)
