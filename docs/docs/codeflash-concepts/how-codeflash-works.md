@@ -53,7 +53,7 @@ Codeflash runs tests for the target function using either pytest or unittest fra
 
 #### Performance benchmarking
 
-Codeflash implements [several techniques](/codeflash-concepts/benchmarking.md) to measure code performance accurately. In particular, it runs multiple iterations of the code in a loop to determine the best performance with the minimum runtime. Codeflash compares the performance of the original code against the optimization, requiring at least a 10% speed improvement before considering it faster. This approach eliminates most runtime measurement variability, even on noisy CI systems and virtual machines. The final runtime Codeflash reports is the minimum total time it took to run all the test cases.
+Codeflash implements [several techniques](/codeflash-concepts/benchmarking.md) to measure code performance accurately. In particular, it runs multiple iterations of the code in a loop to determine the best performance with the minimum runtime. Codeflash compares the performance of the original code against the optimization, requiring at least a 10% speed improvement before considering it to be faster. This approach eliminates most runtime measurement variability, even on noisy CI systems and virtual machines. The final runtime Codeflash reports is the minimum total time it took to run all the test cases.
 
 ## Creating Pull Requests
 
