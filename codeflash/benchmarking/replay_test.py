@@ -116,7 +116,7 @@ trace_file_path = r"{trace_file}"
                 ret = {class_name_alias}(*args[1:], **kwargs)
             else:
                 instance = args[0] # self
-                ret = instance{method_name}(*args[1:], **kwargs)
+                ret = {class_name_alias}{method_name}(*args, **kwargs)
             """
     )
 
@@ -127,7 +127,7 @@ trace_file_path = r"{trace_file}"
             kwargs = pickle.loads(kwargs_pkl){filter_variables}
             if not args:
                 raise ValueError("No arguments provided for the method.")
-            ret = {class_name_alias}{method_name}(*args, **kwargs)
+            ret = {class_name_alias}{method_name}(*args[1:], **kwargs)
             """
     )
     test_static_method_body = textwrap.dedent(
