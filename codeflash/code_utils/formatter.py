@@ -26,8 +26,8 @@ def format_code(formatter_cmds: list[str], path: Path, capture_output: bool = Tr
         formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
         formatter_cmd_list = [path.as_posix() if chunk == file_token else chunk for chunk in formatter_cmd_list]
         try:
-            result = subprocess.run(formatter_cmd_list, capture_output=capture_output, check=False)
-            if result.returncode == 0:
+            result = subprocess.run(formatter_cmd_list, capture_output=True, check=False)
+            if result.returncode == 0 and capture_output:
                 console.rule(f"Formatted Successfully with: {formatter_name.replace('$file', path.name)}")
             else:
                 logger.error(f"Failed to format code with {' '.join(formatter_cmd_list)}")
