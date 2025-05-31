@@ -4,7 +4,11 @@ from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.config_consts import COVERAGE_THRESHOLD, MIN_IMPROVEMENT_THRESHOLD, MIN_TESTCASE_PASSED_THRESHOLD
+from codeflash.code_utils.config_consts import (
+    COVERAGE_THRESHOLD,
+    MIN_IMPROVEMENT_THRESHOLD,
+    MIN_TESTCASE_PASSED_THRESHOLD,
+)
 from codeflash.models.models import TestType
 
 if TYPE_CHECKING:
