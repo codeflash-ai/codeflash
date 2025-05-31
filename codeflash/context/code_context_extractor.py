@@ -4,10 +4,9 @@ import os
 from collections import defaultdict
 from itertools import chain
 from pathlib import Path  # noqa: TC003
+from typing import TYPE_CHECKING
 
-import jedi
 import libcst as cst
-from jedi.api.classes import Name  # noqa: TC002
 from libcst import CSTNode  # noqa: TC002
 
 from codeflash.cli_cmds.console import logger
@@ -23,6 +22,9 @@ from codeflash.models.models import (
     FunctionSource,
 )
 from codeflash.optimization.function_context import belongs_to_function_qualified
+
+if TYPE_CHECKING:
+    from jedi.api.classes import Name
 
 
 def get_code_optimization_context(
@@ -354,6 +356,8 @@ def extract_code_markdown_context_from_files(
 def get_function_to_optimize_as_function_source(
     function_to_optimize: FunctionToOptimize, project_root_path: Path
 ) -> FunctionSource:
+    import jedi
+
     # Use jedi to find function to optimize
     script = jedi.Script(path=function_to_optimize.file_path, project=jedi.Project(path=project_root_path))
 
@@ -389,6 +393,8 @@ def get_function_to_optimize_as_function_source(
 def get_function_sources_from_jedi(
     file_path_to_qualified_function_names: dict[Path, set[str]], project_root_path: Path
 ) -> tuple[dict[Path, set[FunctionSource]], list[FunctionSource]]:
+    import jedi
+
     file_path_to_function_source = defaultdict(set)
     function_source_list: list[FunctionSource] = []
     for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
