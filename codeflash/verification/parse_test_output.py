@@ -37,7 +37,7 @@ def parse_func(file_path: Path) -> XMLParser:
 
 
 matches_re = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!")
-cleaner_re = re.compile(r"!######.*?######!|-+\s*Captured\s+(Log|Out)\s*-+\n?")
+stdout_re = re.compile(r"!######.*?######!\n(.*)!\$######.*?######\$!", re.DOTALL)
 
 
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
@@ -268,7 +268,7 @@ def parse_test_xml(
             matches = matches_re.findall(sys_stdout)
 
             if sys_stdout:
-                sys_stdout = cleaner_re.sub("", sys_stdout).strip()
+                sys_stdout = stdout_re.search(sys_stdout).group(1)
 
             if not matches or not len(matches):
                 test_results.add(
