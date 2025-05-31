@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def format_code(formatter_cmds: list[str], path: Path) -> str:
+def format_code(formatter_cmds: list[str], path: Path, capture_output: bool = True) -> str:  # noqa
     # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
     formatter_name = formatter_cmds[0].lower()
     if not path.exists():
@@ -26,7 +26,7 @@ def format_code(formatter_cmds: list[str], path: Path) -> str:
         formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
         formatter_cmd_list = [path.as_posix() if chunk == file_token else chunk for chunk in formatter_cmd_list]
         try:
-            result = subprocess.run(formatter_cmd_list, capture_output=True, check=False)
+            result = subprocess.run(formatter_cmd_list, capture_output=capture_output, check=False)
             if result.returncode == 0:
                 console.rule(f"Formatted Successfully with: {formatter_name.replace('$file', path.name)}")
             else:
