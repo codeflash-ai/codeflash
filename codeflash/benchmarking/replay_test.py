@@ -115,8 +115,7 @@ trace_file_path = r"{trace_file}"
             if function_name == "__init__":
                 ret = {class_name_alias}(*args[1:], **kwargs)
             else:
-                instance = args[0] # self
-                ret = instance{method_name}(*args[1:], **kwargs)
+                ret = {class_name_alias}{method_name}(*args, **kwargs)
             """
     )
 
