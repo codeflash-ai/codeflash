@@ -111,8 +111,7 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_Sorter_sorter():
         if function_name == "__init__":
             ret = code_to_optimize_bubble_sort_codeflash_trace_Sorter(*args[1:], **kwargs)
         else:
-            instance = args[0] # self
-            ret = instance.sorter(*args[1:], **kwargs)
+            ret = code_to_optimize_bubble_sort_codeflash_trace_Sorter.sorter(*args, **kwargs)
 
 def test_code_to_optimize_bubble_sort_codeflash_trace_Sorter_sort_class():
     for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, benchmark_function_name="test_class_sort2", function_name="sort_class", file_path=r"{bubble_sort_path}", class_name="Sorter", num_to_get=100):
@@ -138,8 +137,7 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_Sorter___init__():
         if function_name == "__init__":
             ret = code_to_optimize_bubble_sort_codeflash_trace_Sorter(*args[1:], **kwargs)
         else:
-            instance = args[0] # self
-            ret = instance(*args[1:], **kwargs)
+            ret = code_to_optimize_bubble_sort_codeflash_trace_Sorter(*args, **kwargs)
 
 """
         assert test_class_sort_path.read_text("utf-8").strip()==test_class_sort_code.strip()
