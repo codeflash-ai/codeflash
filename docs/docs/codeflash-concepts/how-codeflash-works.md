@@ -38,9 +38,7 @@ Codeflash verifies these specific behaviors to be correct -
 
 Additionally, Codeflash checks for sufficient line coverage of the optimized code, increasing confidence in the testing process.
 
-Codeflash also evaluates that there is sufficient line coverage of the code under optimization. This provides more confidence with testing.
-
-We recommend manually reviewing the optimized code, since there might be important input cases that we haven’t verified where the behavior could differ.
+We recommend manually reviewing the optimized code since there might be important input cases that we haven’t verified where the behavior could differ.
 
 #### Test Generation
 
@@ -55,7 +53,7 @@ Codeflash runs tests for the target function using either pytest or unittest fra
 
 #### Performance benchmarking
 
-Codeflash implements several techniques to measure code performance accurately. In particular, it runs multiple iterations of the code in a loop to determine the best performance with the minimum runtime. Codeflash compares performance of the original code against the optimization, requiring at least a 10% speed improvement before considering it faster. This approach eliminates most runtime measurement variability, even on noisy CI systems and virtual machines. The final runtime Codeflash reports is the minimum total time it took to run all the test cases.
+Codeflash implements [several techniques](/codeflash-concepts/benchmarking.md) to measure code performance accurately. In particular, it runs multiple iterations of the code in a loop to determine the best performance with the minimum runtime. Codeflash compares the performance of the original code against the optimization, requiring at least a 10% speed improvement before considering it to be faster. This approach eliminates most runtime measurement variability, even on noisy CI systems and virtual machines. The final runtime Codeflash reports is the minimum total time it took to run all the test cases.
 
 ## Creating Pull Requests
 

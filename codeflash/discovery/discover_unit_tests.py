@@ -12,7 +12,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
-import jedi
 import pytest
 from pydantic.dataclasses import dataclass
 
@@ -281,6 +280,8 @@ def discover_parameters_unittest(function_name: str) -> tuple[bool, str, str | N
 def process_test_files(
     file_to_test_map: dict[Path, list[TestsInFile]], cfg: TestConfig
 ) -> dict[str, list[FunctionCalledInTest]]:
+    import jedi
+
     project_root_path = cfg.project_root_path
     test_framework = cfg.test_framework
 
