@@ -22,7 +22,7 @@ def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool =
         f.flush()
         tmp_file = Path(f.name)
         try:
-            format_code(formatter_cmds, tmp_file, capture_output=False)
+            format_code(formatter_cmds, tmp_file, print_status=False)
         except Exception:
             print(
                 "⚠️ Codeflash requires a code formatter to be installed in your environment, but none was found. Please install a supported formatter, verify the formatter-cmds in your codeflash pyproject.toml config and try again."

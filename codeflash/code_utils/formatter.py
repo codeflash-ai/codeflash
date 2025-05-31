@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def format_code(formatter_cmds: list[str], path: Path, capture_output: bool = True) -> str:  # noqa
+def format_code(formatter_cmds: list[str], path: Path, print_status: bool = True) -> str:  # noqa
     # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
     formatter_name = formatter_cmds[0].lower()
     if not path.exists():
@@ -28,7 +28,7 @@ def format_code(formatter_cmds: list[str], path: Path, capture_output: bool = Tr
         try:
             result = subprocess.run(formatter_cmd_list, capture_output=True, check=False)
             if result.returncode == 0:
-                if capture_output:
+                if print_status:
                     console.rule(f"Formatted Successfully with: {formatter_name.replace('$file', path.name)}")
             else:
                 logger.error(f"Failed to format code with {' '.join(formatter_cmd_list)}")
