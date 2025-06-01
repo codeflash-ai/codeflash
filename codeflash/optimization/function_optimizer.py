@@ -9,7 +9,7 @@ import uuid
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import TYPE_CHECKING
-
+import tempfile
 import isort
 import libcst as cst
 from rich.console import Group
@@ -71,6 +71,8 @@ from codeflash.verification.parse_test_output import parse_test_results
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests, run_line_profile_tests
 from codeflash.verification.verification_utils import get_test_file_path
 from codeflash.verification.verifier import generate_tests
+
+from codeflash.discovery.functions_to_optimize import CodeRangeFunctionVisitor
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -300,8 +302,16 @@ class FunctionOptimizer:
                     code_context=code_context, optimized_code=best_optimization.candidate.source_code
                 )
 
+                print("file_path_to_helper_classes\n", file_path_to_helper_classes)
+                filepaths_to_inspect = [
+                    self.function_to_optimize.file_path,
+                    *list({helper.file_path for helper in code_context.helper_functions}),
+                ]
+                print("filepaths_to_inspect\n", filepaths_to_inspect)
+                
                 new_code, new_helper_code = self.reformat_code_and_helpers(
-                    code_context.helper_functions, explanation.file_path, self.function_to_optimize_source_code
+                    code_context.helper_functions, explanation.file_path, self.function_to_optimize_source_code,
+                    opt_func_name=explanation.function_name
                 )
 
                 existing_tests = existing_tests_source_for(
@@ -590,25 +600,59 @@ class FunctionOptimizer:
                 f.write(helper_code)
 
     def reformat_code_and_helpers(
-        self, helper_functions: list[FunctionSource], path: Path, original_code: str
+        self, helper_functions: list[FunctionSource],
+        path: Path,
+        original_code: str,
+        opt_func_name: str
     ) -> tuple[str, dict[Path, str]]:
         should_sort_imports = not self.args.disable_imports_sorting
         if should_sort_imports and isort.code(original_code) != original_code:
             should_sort_imports = False
 
-        new_code = format_code(self.args.formatter_cmds, path)
-        if should_sort_imports:
-            new_code = sort_imports(new_code)
+        whole_file_content = path.read_text(encoding="utf8")
+        wrapper = cst.metadata.MetadataWrapper(cst.parse_module(whole_file_content))
+        visitor = CodeRangeFunctionVisitor(target_function_name=opt_func_name)
+        wrapper.visit(visitor)
+        
+        lines = whole_file_content.splitlines(keepends=True)
+        if visitor.start_line == None:
+            logger.error(f"Could not find function {opt_func_name} in {path}, aborting reformatting.")
+        else:
+            opt_func_source_lines = lines[visitor.start_line-1:visitor.end_line]
+            
+            # fix opt func identation
+            first_line = opt_func_source_lines[0]
+            first_line_indent = len(first_line) - len(first_line.lstrip()) # number of spaces before the first character
+            opt_func_source_lines[0] = opt_func_source_lines[0][first_line_indent:] # remove first line ident, so when we save the function code into a temp file, we don't get syntax errors
+            
+            with tempfile.NamedTemporaryFile(mode='w+', delete=True) as f:
+                f.write("".join(opt_func_source_lines))
+                f.flush()
+                tmp_file = Path(f.name)
+                formatted_func = format_code(self.args.formatter_cmds, tmp_file)
+                # apply the identation back to all lines of the formatted function
+                formatted_lines = formatted_func.splitlines(keepends=True)
+                for i in range(len(formatted_lines)):
+                    formatted_lines[i] = (" " * first_line_indent) + formatted_lines[i]
+                    
+                # replace the unformatted code with formatted ones
+                new_code = (
+                    "".join(lines[:visitor.start_line-1]) +
+                    "".join(formatted_lines) +
+                    "".join(lines[visitor.end_line:])
+                )
+                if should_sort_imports:
+                    new_code = sort_imports(new_code)
 
-        new_helper_code: dict[Path, str] = {}
-        helper_functions_paths = {hf.file_path for hf in helper_functions}
-        for module_abspath in helper_functions_paths:
-            formatted_helper_code = format_code(self.args.formatter_cmds, module_abspath)
-            if should_sort_imports:
-                formatted_helper_code = sort_imports(formatted_helper_code)
-            new_helper_code[module_abspath] = formatted_helper_code
+            new_helper_code: dict[Path, str] = {}
+            helper_functions_paths = {hf.file_path for hf in helper_functions}
+            for module_abspath in helper_functions_paths:
+                formatted_helper_code = format_code(self.args.formatter_cmds, module_abspath)
+                if should_sort_imports:
+                    formatted_helper_code = sort_imports(formatted_helper_code)
+                new_helper_code[module_abspath] = formatted_helper_code
 
-        return new_code, new_helper_code
+            return new_code, new_helper_code
 
     def replace_function_and_helpers_with_optimized_code(
         self, code_context: CodeOptimizationContext, optimized_code: str
