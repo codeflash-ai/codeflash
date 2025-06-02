@@ -15,6 +15,8 @@ import tomlkit
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_parser import find_pyproject_toml
 
+ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
+
 
 @contextmanager
 def custom_addopts() -> None:
