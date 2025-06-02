@@ -115,7 +115,7 @@ def suggest_changes(
         "existingTests": existing_tests,
         "generatedTests": generated_tests,
         "traceId": trace_id,
-        "coverage": coverage_message,
+        "coverage_message": coverage_message,
     }
     return make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
 
@@ -151,7 +151,7 @@ def create_pr(
         "existingTests": existing_tests,
         "generatedTests": generated_tests,
         "traceId": trace_id,
-        "coverage": coverage_message,
+        "coverage_message": coverage_message,
     }
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
@@ -187,10 +187,10 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
     try:
         req = make_cfapi_request(endpoint="/verify-existing-optimizations", method="POST", payload=information)
         if req.status_code == not_found:
-            logger.debug(req.json()["message"])
+            logger.debug(req.json()["error"])
             return {}
         if req.status_code == internal_server_error:
-            logger.error(req.json()["message"])
+            logger.error(req.json()["error"])
             return {}
         req.raise_for_status()
         content: dict[str, list[str]] = req.json()
