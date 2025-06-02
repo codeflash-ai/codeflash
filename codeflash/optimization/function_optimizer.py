@@ -1186,7 +1186,7 @@ class FunctionOptimizer:
             )
             return TestResults(), None
         if run_result.returncode != 0 and testing_type == TestingMode.BEHAVIOR:
-            logger.debug(
+            logger.info(
                 f"Nonzero return code {run_result.returncode} when running tests in "
                 f"{', '.join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n"
                 f"stdout: {run_result.stdout}\n"
