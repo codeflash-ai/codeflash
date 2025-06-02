@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import os
 import random
 import warnings
@@ -145,15 +146,56 @@ class FunctionToOptimize:
     def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
 
+    def get_code_context_hash(self) -> str:
+        """Generate a SHA-256 hash representing the code context of this function.
+
+        This hash includes the function's code content, file path, and qualified name
+        to uniquely identify the function for optimization tracking.
+        """
+        try:
+            with open(self.file_path, 'r', encoding='utf-8') as f:
+                file_content = f.read()
+
+            # Extract the function's code content
+            lines = file_content.splitlines()
+            if self.starting_line is not None and self.ending_line is not None:
+                # Use line numbers if available (1-indexed to 0-indexed)
+                function_content = '\n'.join(lines[self.starting_line - 1:self.ending_line])
+            else:
+                # Fallback: use the entire file content if line numbers aren't available
+                function_content = file_content
+
+            # Create a context string that includes:
+            # - File path (relative to make it portable)
+            # - Qualified function name
+            # - Function code content
+            context_parts = [
+                str(self.file_path.name),  # Just filename for portability
+                self.qualified_name,
+                function_content.strip()
+            ]
+
+            context_string = '\n---\n'.join(context_parts)
+
+            # Generate SHA-256 hash
+            return hashlib.sha256(context_string.encode('utf-8')).hexdigest()
+
+        except (OSError, IOError) as e:
+            logger.warning(f"Could not read file {self.file_path} for hashing: {e}")
+            # Fallback hash using available metadata
+            fallback_string = f"{self.file_path.name}:{self.qualified_name}"
+            return hashlib.sha256(fallback_string.encode('utf-8')).hexdigest()
+
+
 def get_functions_to_optimize(
-    optimize_all: str | None,
-    replay_test: str | None,
-    file: Path | None,
-    only_get_this_function: str | None,
-    test_cfg: TestConfig,
-    ignore_paths: list[Path],
-    project_root: Path,
-    module_root: Path,
+        optimize_all: str | None,
+        replay_test: str | None,
+        file: Path | None,
+        only_get_this_function: str | None,
+        test_cfg: TestConfig,
+        ignore_paths: list[Path],
+        project_root: Path,
+        module_root: Path,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     assert sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1, (
         "Only one of optimize_all, replay_test, or file should be provided"
@@ -186,7 +228,7 @@ def get_functions_to_optimize(
                 found_function = None
                 for fn in functions.get(file, []):
                     if only_function_name == fn.function_name and (
-                        class_name is None or class_name == fn.top_level_parent_name
+                            class_name is None or class_name == fn.top_level_parent_name
                     ):
                         found_function = fn
                 if found_function is None:
@@ -224,8 +266,8 @@ def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
                 function_to_optimize
                 for function_to_optimize in function_lines.functions
                 if (start_line := function_to_optimize.starting_line) is not None
-                and (end_line := function_to_optimize.ending_line) is not None
-                and any(start_line <= line <= end_line for line in modified_lines[path_str])
+                   and (end_line := function_to_optimize.ending_line) is not None
+                   and any(start_line <= line <= end_line for line in modified_lines[path_str])
             ]
     return modified_functions
 
@@ -258,7 +300,7 @@ def find_all_functions_in_file(file_path: Path) -> dict[Path, list[FunctionToOpt
 
 
 def get_all_replay_test_functions(
-    replay_test: Path, test_cfg: TestConfig, project_root_path: Path
+        replay_test: Path, test_cfg: TestConfig, project_root_path: Path
 ) -> dict[Path, list[FunctionToOptimize]]:
     function_tests = discover_unit_tests(test_cfg, discover_only_these_tests=[replay_test])
     # Get the absolute file paths for each function, excluding class name if present
@@ -273,7 +315,7 @@ def get_all_replay_test_functions(
         class_name = (
             module_path_parts[-1]
             if module_path_parts
-            and is_class_defined_in_file(
+               and is_class_defined_in_file(
                 module_path_parts[-1], Path(project_root_path, *module_path_parts[:-1]).with_suffix(".py")
             )
             else None
@@ -323,7 +365,8 @@ def ignored_submodule_paths(module_root: str) -> list[str]:
 
 class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
     def __init__(
-        self, file_name: Path, function_or_method_name: str, class_name: str | None = None, line_no: int | None = None
+            self, file_name: Path, function_or_method_name: str, class_name: str | None = None,
+            line_no: int | None = None
     ) -> None:
         self.file_name = file_name
         self.class_name = class_name
@@ -354,13 +397,13 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
                 if isinstance(body_node, ast.FunctionDef) and body_node.name == self.function_name:
                     self.is_top_level = True
                     if any(
-                        isinstance(decorator, ast.Name) and decorator.id == "classmethod"
-                        for decorator in body_node.decorator_list
+                            isinstance(decorator, ast.Name) and decorator.id == "classmethod"
+                            for decorator in body_node.decorator_list
                     ):
                         self.is_classmethod = True
                     elif any(
-                        isinstance(decorator, ast.Name) and decorator.id == "staticmethod"
-                        for decorator in body_node.decorator_list
+                            isinstance(decorator, ast.Name) and decorator.id == "staticmethod"
+                            for decorator in body_node.decorator_list
                     ):
                         self.is_staticmethod = True
                     return
@@ -369,13 +412,13 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
             # This way, if we don't have the class name, we can still find the static method
             for body_node in node.body:
                 if (
-                    isinstance(body_node, ast.FunctionDef)
-                    and body_node.name == self.function_name
-                    and body_node.lineno in {self.line_no, self.line_no + 1}
-                    and any(
-                        isinstance(decorator, ast.Name) and decorator.id == "staticmethod"
-                        for decorator in body_node.decorator_list
-                    )
+                        isinstance(body_node, ast.FunctionDef)
+                        and body_node.name == self.function_name
+                        and body_node.lineno in {self.line_no, self.line_no + 1}
+                        and any(
+                    isinstance(decorator, ast.Name) and decorator.id == "staticmethod"
+                    for decorator in body_node.decorator_list
+                )
                 ):
                     self.is_staticmethod = True
                     self.is_top_level = True
@@ -386,7 +429,7 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
 
 
 def inspect_top_level_functions_or_methods(
-    file_name: Path, function_or_method_name: str, class_name: str | None = None, line_no: int | None = None
+        file_name: Path, function_or_method_name: str, class_name: str | None = None, line_no: int | None = None
 ) -> FunctionProperties:
     with open(file_name, encoding="utf8") as file:
         try:
@@ -408,13 +451,93 @@ def inspect_top_level_functions_or_methods(
     )
 
 
+def check_optimization_status(
+        functions_by_file: dict[Path, list[FunctionToOptimize]],
+        owner: str,
+        repo: str,
+        pr_number: int
+) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
+    """Check which functions have already been optimized and filter them out.
+
+    This function calls the optimization API to:
+    1. Check which functions are already optimized
+    2. Log new function hashes to the database
+    3. Return only functions that need optimization
+
+    Args:
+        functions_by_file: Dictionary mapping file paths to lists of functions
+        owner: Repository owner
+        repo: Repository name
+        pr_number: Pull request number
+
+    Returns:
+        Tuple of (filtered_functions_dict, remaining_count)
+    """
+    import requests
+
+    # Build the code_contexts dictionary for the API call
+    code_contexts = {}
+    path_to_function_map = {}
+
+    for file_path, functions in functions_by_file.items():
+        for func in functions:
+            func_hash = func.get_code_context_hash()
+            # Use a unique path identifier that includes function info
+            path_key = f"{file_path}:{func.qualified_name}"
+            code_contexts[path_key] = func_hash
+            path_to_function_map[path_key] = (file_path, func)
+
+    if not code_contexts:
+        return {}, 0
+
+    try:
+        # Call the optimization check API
+        response = requests.post(
+            "http://your-api-endpoint/is_code_being_optimized_again",  # Replace with actual endpoint
+            json={
+                "owner": owner,
+                "repo": repo,
+                "pr_number": str(pr_number),
+                "code_contexts": code_contexts
+            },
+            timeout=30
+        )
+        response.raise_for_status()
+
+        result = response.json()
+        already_optimized_paths = set(result.get("already_optimized_paths", []))
+
+        logger.info(f"Found {len(already_optimized_paths)} already optimized functions")
+
+        # Filter out already optimized functions
+        filtered_functions = defaultdict(list)
+        remaining_count = 0
+
+        for path_key, (file_path, func) in path_to_function_map.items():
+            if path_key not in already_optimized_paths:
+                filtered_functions[file_path].append(func)
+                remaining_count += 1
+
+        return dict(filtered_functions), remaining_count
+
+    except Exception as e:
+        logger.warning(f"Failed to check optimization status: {e}")
+        logger.info("Proceeding with all functions (optimization check failed)")
+        # Return all functions if API call fails
+        total_count = sum(len(funcs) for funcs in functions_by_file.values())
+        return functions_by_file, total_count
+
+
 def filter_functions(
-    modified_functions: dict[Path, list[FunctionToOptimize]],
-    tests_root: Path,
-    ignore_paths: list[Path],
-    project_root: Path,
-    module_root: Path,
-    disable_logs: bool = False,
+        modified_functions: dict[Path, list[FunctionToOptimize]],
+        tests_root: Path,
+        ignore_paths: list[Path],
+        project_root: Path,
+        module_root: Path,
+        disable_logs: bool = False,
+        owner: str | None = None,
+        repo: str | None = None,
+        pr_number: int | None = None,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     blocklist_funcs = get_blocklisted_functions()
     # Remove any function that we don't want to optimize
@@ -432,6 +555,7 @@ def filter_functions(
     submodule_ignored_paths_count: int = 0
     tests_root_str = str(tests_root)
     module_root_str = str(module_root)
+
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
         file_path = str(file_path_path)
@@ -439,12 +563,12 @@ def filter_functions(
             test_functions_removed_count += len(functions)
             continue
         if file_path in ignore_paths or any(
-            file_path.startswith(str(ignore_path) + os.sep) for ignore_path in ignore_paths
+                file_path.startswith(str(ignore_path) + os.sep) for ignore_path in ignore_paths
         ):
             ignore_paths_removed_count += 1
             continue
         if file_path in submodule_paths or any(
-            file_path.startswith(str(submodule_path) + os.sep) for submodule_path in submodule_paths
+                file_path.startswith(str(submodule_path) + os.sep) for submodule_path in submodule_paths
         ):
             submodule_ignored_paths_count += 1
             continue
@@ -464,12 +588,24 @@ def filter_functions(
                 function
                 for function in functions
                 if not (
-                    function.file_path.name in blocklist_funcs
-                    and function.qualified_name in blocklist_funcs[function.file_path.name]
+                        function.file_path.name in blocklist_funcs
+                        and function.qualified_name in blocklist_funcs[function.file_path.name]
                 )
             ]
         filtered_modified_functions[file_path] = functions
         functions_count += len(functions)
+
+    # Convert to Path keys for optimization check
+    path_based_functions = {Path(k): v for k, v in filtered_modified_functions.items() if v}
+
+    # Check optimization status if repository info is provided
+    already_optimized_count = 0
+    if owner and repo and pr_number is not None:
+        path_based_functions, functions_count = check_optimization_status(
+            path_based_functions, owner, repo, pr_number
+        )
+        initial_count = sum(len(funcs) for funcs in filtered_modified_functions.values())
+        already_optimized_count = initial_count - functions_count
 
     if not disable_logs:
         log_info = {
@@ -479,13 +615,14 @@ def filter_functions(
             f"{non_modules_removed_count} function{'s' if non_modules_removed_count != 1 else ''} outside module-root": non_modules_removed_count,
             f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths": ignore_paths_removed_count,
             f"{submodule_ignored_paths_count} file{'s' if submodule_ignored_paths_count != 1 else ''} from ignored submodules": submodule_ignored_paths_count,
+            f"{already_optimized_count} already optimized function{'s' if already_optimized_count != 1 else ''}": already_optimized_count,
         }
         log_string = "\n".join([k for k, v in log_info.items() if v > 0])
         if log_string:
             logger.info(f"Ignoring: {log_string}")
             console.rule()
 
-    return {Path(k): v for k, v in filtered_modified_functions.items() if v}, functions_count
+    return path_based_functions, functions_count
 
 
 def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list[Path], module_root: Path) -> bool:
@@ -505,8 +642,8 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
     if submodule_paths is None:
         submodule_paths = ignored_submodule_paths(module_root)
     return not (
-        file_path in submodule_paths
-        or any(file_path.is_relative_to(submodule_path) for submodule_path in submodule_paths)
+            file_path in submodule_paths
+            or any(file_path.is_relative_to(submodule_path) for submodule_path in submodule_paths)
     )
 
 
