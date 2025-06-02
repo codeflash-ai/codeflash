@@ -302,13 +302,6 @@ class FunctionOptimizer:
                     code_context=code_context, optimized_code=best_optimization.candidate.source_code
                 )
 
-                print("file_path_to_helper_classes\n", file_path_to_helper_classes)
-                filepaths_to_inspect = [
-                    self.function_to_optimize.file_path,
-                    *list({helper.file_path for helper in code_context.helper_functions}),
-                ]
-                print("filepaths_to_inspect\n", filepaths_to_inspect)
-                
                 new_code, new_helper_code = self.reformat_code_and_helpers(
                     code_context.helper_functions, explanation.file_path, self.function_to_optimize_source_code,
                     opt_func_name=explanation.function_name
@@ -610,13 +603,20 @@ class FunctionOptimizer:
             should_sort_imports = False
 
         whole_file_content = path.read_text(encoding="utf8")
-        wrapper = cst.metadata.MetadataWrapper(cst.parse_module(whole_file_content))
+        wrapper: cst.metadata.MetadataWrapper | None = None
+        try:
+            wrapper = cst.metadata.MetadataWrapper(cst.parse_module(whole_file_content))
+        except cst.ParserSyntaxError as e:
+            logger.error(f"Syntax error detected, aborting reformatting.")
+            return original_code, {}
+
         visitor = CodeRangeFunctionVisitor(target_function_name=opt_func_name)
         wrapper.visit(visitor)
         
         lines = whole_file_content.splitlines(keepends=True)
         if visitor.start_line == None:
             logger.error(f"Could not find function {opt_func_name} in {path}, aborting reformatting.")
+            return original_code, {}
         else:
             opt_func_source_lines = lines[visitor.start_line-1:visitor.end_line]
             

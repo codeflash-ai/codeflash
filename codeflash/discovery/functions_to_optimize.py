@@ -80,27 +80,29 @@ class FunctionVisitor(cst.CSTVisitor):
                     ending_line=pos.end.line,
                 )
             )
-
 class CodeRangeFunctionVisitor(cst.CSTVisitor):
-    METADATA_DEPENDENCIES = (cst.metadata.PositionProvider, cst.metadata.QualifiedNameProvider)
-    
+    METADATA_DEPENDENCIES = (
+        cst.metadata.PositionProvider,
+        cst.metadata.QualifiedNameProvider,
+    )
+
     def __init__(self, target_function_name: str) -> None:
         super().__init__()
         self.target_func = target_function_name
-        self.current_path = []
         self.start_line: Optional[int] = None
         self.end_line: Optional[int] = None
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
-        qualified_names = {
-            str(qn.name) for qn in 
+        qualified_names = [
+            str(qn.name).replace(".<locals>", "") for qn in 
             self.get_metadata(cst.metadata.QualifiedNameProvider, node)
-        }
-        
+        ]
         if self.target_func in qualified_names:
-            position = self.get_metadata(cst.metadata.PositionProvider, node)
-            self.start_line = position.start.line
-            self.end_line = position.end.line
+            func_position = self.get_metadata(cst.metadata.PositionProvider, node)
+            decorators_count = len(node.decorators)
+            self.start_line = func_position.start.line - decorators_count
+            self.end_line = func_position.end.line
+            return False
 
 
 class FunctionWithReturnStatement(ast.NodeVisitor):
