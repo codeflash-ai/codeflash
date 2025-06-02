@@ -4,6 +4,7 @@ import os
 import tempfile
 from pathlib import Path
 
+from codeflash.code_utils.code_utils import ImportErrorPattern
 from codeflash.models.models import TestFile, TestFiles, TestType
 from codeflash.verification.parse_test_output import parse_test_xml
 from codeflash.verification.test_runner import run_behavioral_tests
@@ -143,6 +144,6 @@ def test_sort():
         results = parse_test_xml(
             test_xml_file_path=result_file, test_files=test_files, test_config=config, run_result=process
         )
-    match = re.search(r"^.*ModuleNotFoundError.*$", process.stdout, re.MULTILINE).group()
+    match = ImportErrorPattern.search(process.stdout).group()
     assert match=="E   ModuleNotFoundError: No module named 'torch'"
     result_file.unlink(missing_ok=True)

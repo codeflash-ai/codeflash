@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 import concurrent.futures
 import os
-import re
 import subprocess
 import time
 import uuid
@@ -24,6 +23,7 @@ from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
+    ImportErrorPattern,
     cleanup_paths,
     file_name_from_test_module_name,
     get_run_tmp_file,
@@ -1196,7 +1196,7 @@ class FunctionOptimizer:
             if "ModuleNotFoundError" in run_result.stdout:
                 from rich.text import Text
 
-                match = re.search(r"^.*ModuleNotFoundError.*$", run_result.stdout, re.MULTILINE).group()
+                match = ImportErrorPattern.search(run_result.stdout).group()
                 panel = Panel(Text.from_markup(f"⚠️  {match} ", style="bold red"), expand=False)
                 console.print(panel)
         if testing_type in {TestingMode.BEHAVIOR, TestingMode.PERFORMANCE}:
