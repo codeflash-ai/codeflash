@@ -22,7 +22,7 @@ def format_code(formatter_cmds: list[str], path: Path) -> str:
     if formatter_name == "disabled":
         return path.read_text(encoding="utf8")
     file_token = "$file"  # noqa: S105
-    for command in set(formatter_cmds):
+    for command in formatter_cmds:
         formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
         formatter_cmd_list = [path.as_posix() if chunk == file_token else chunk for chunk in formatter_cmd_list]
         try:

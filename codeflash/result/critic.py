@@ -4,7 +4,11 @@ from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.config_consts import COVERAGE_THRESHOLD, MIN_IMPROVEMENT_THRESHOLD
+from codeflash.code_utils.config_consts import (
+    COVERAGE_THRESHOLD,
+    MIN_IMPROVEMENT_THRESHOLD,
+    MIN_TESTCASE_PASSED_THRESHOLD,
+)
 from codeflash.models.models import TestType
 
 if TYPE_CHECKING:
@@ -50,7 +54,7 @@ def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool
     for test_type in report:
         pass_count += report[test_type]["passed"]
 
-    if pass_count >= 4:
+    if pass_count >= MIN_TESTCASE_PASSED_THRESHOLD:
         return True
     # If only one test passed, check if it's a REPLAY_TEST
     return bool(pass_count == 1 and report[TestType.REPLAY_TEST]["passed"] == 1)

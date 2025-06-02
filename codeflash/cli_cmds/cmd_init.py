@@ -514,7 +514,8 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         from importlib.resources import files
 
         benchmark_mode = False
-        if "benchmarks_root" in config:
+        benchmarks_root = config.get("benchmarks_root", "").strip()
+        if benchmarks_root and benchmarks_root != "":
             benchmark_mode = inquirer_wrapper(
                 inquirer.confirm,
                 message="⚡️It looks like you've configured a benchmarks_root in your config. Would you like to run the Github action in benchmark mode? "
@@ -720,7 +721,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         )
     elif formatter == "don't use a formatter":
         formatter_cmds.append("disabled")
-    check_formatter_installed(formatter_cmds)
+    check_formatter_installed(formatter_cmds, exit_on_failure=False)
     codeflash_section["formatter-cmds"] = formatter_cmds
     # Add the 'codeflash' section, ensuring 'tool' section exists
     tool_section = pyproject_data.get("tool", tomlkit.table())
