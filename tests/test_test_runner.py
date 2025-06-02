@@ -145,5 +145,5 @@ def test_sort():
             test_xml_file_path=result_file, test_files=test_files, test_config=config, run_result=process
         )
     match = ImportErrorPattern.search(process.stdout).group()
-    assert match=="E   ModuleNotFoundError: No module named 'torch'"
+    assert match=="ModuleNotFoundError: No module named 'torch'"
     result_file.unlink(missing_ok=True)
