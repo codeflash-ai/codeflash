@@ -72,7 +72,10 @@ def init_codeflash() -> None:
 
         if should_modify_pyproject_toml():
             setup_info: SetupInfo = collect_setup_info()
-
+            if Path(setup_info.module_root).resolve() == Path(setup_info.tests_root).resolve():
+                logger.warning(
+                    "It looks like your tests root is the same as your module root. This is not recommended and can lead to unexpected behavior."
+                )
             configure_pyproject_toml(setup_info)
 
         install_github_app()
