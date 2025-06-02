@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import ast
 import concurrent.futures
 import os
@@ -1186,12 +1188,20 @@ class FunctionOptimizer:
             )
             return TestResults(), None
         if run_result.returncode != 0 and testing_type == TestingMode.BEHAVIOR:
-            logger.info(
+            logger.debug(
                 f"Nonzero return code {run_result.returncode} when running tests in "
                 f"{', '.join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n"
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
+            if 'ModuleNotFoundError' in run_result.stdout:
+                from rich.text import Text
+                match = re.search(r'^.*ModuleNotFoundError.*$', run_result.stdout, re.MULTILINE).group()
+                panel = Panel(
+                    Text.from_markup(f"⚠️  {match} ", style="bold red"),
+                    expand=False,
+                )
+                console.print(panel)
         if testing_type in {TestingMode.BEHAVIOR, TestingMode.PERFORMANCE}:
             results, coverage_results = parse_test_results(
                 test_xml_path=result_file_path,
