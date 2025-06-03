@@ -11,12 +11,6 @@ from codeflash.cli_cmds.console import console, logger
 if TYPE_CHECKING:
     from pathlib import Path
 
-def get_nth_line(text: str, n: int) -> str | None:
-    for i, line in enumerate(text.splitlines(), start=1):
-        if i == n:
-            return line
-    return None
-
 def get_diff_output(cmd: list[str]) -> Optional[str]:
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
