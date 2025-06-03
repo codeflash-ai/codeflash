@@ -217,6 +217,8 @@ def foo():
 
 
 def _run_formatting_test(source_filename: str, should_content_change: bool):
+    if shutil.which("ruff") is None:
+        pytest.skip("ruff is not installed, skipping.")
     with tempfile.TemporaryDirectory() as test_dir_str:
         test_dir = Path(test_dir_str)
         this_file = Path(__file__).resolve()
@@ -262,7 +264,6 @@ def _run_formatting_test(source_filename: str, should_content_change: bool):
         )
         
         content = target_path.read_text()
-        
         if should_content_change:
             assert content != original, f"Expected content to change for {source_filename}"
         else:

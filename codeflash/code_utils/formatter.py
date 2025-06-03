@@ -4,7 +4,6 @@ import os
 import shlex
 import subprocess
 from typing import TYPE_CHECKING, Optional
-
 import isort
 
 from codeflash.cli_cmds.console import console, logger
@@ -12,37 +11,48 @@ from codeflash.cli_cmds.console import console, logger
 if TYPE_CHECKING:
     from pathlib import Path
 
-def get_diff_lines_output_by_black(filepath: str) -> Optional[str]:
+def get_nth_line(text: str, n: int) -> str | None:
+    for i, line in enumerate(text.splitlines(), start=1):
+        if i == n:
+            return line
+    return None
+
+def get_diff_output(cmd: list[str]) -> Optional[str]:
     try:
-        subprocess.run(['black', '--version'], check=True,
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        result = subprocess.run(
-            ['black', '--diff', filepath],
-            capture_output=True,
-            text=True
-        )
-        return result.stdout.strip() if result.stdout else None
-    except (FileNotFoundError):
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return result.stdout.strip() or None
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        if isinstance(e, subprocess.CalledProcessError):
+            # ruff returns 1 when the file needs formatting, and 0 when it is already formatted
+            is_ruff = cmd[0] == "ruff"
+            if e.returncode == 0 and is_ruff:
+                return ""
+            elif e.returncode == 1 and is_ruff:
+                return e.stdout.strip() or None
         return None
 
 
+def get_diff_lines_output_by_black(filepath: str) -> Optional[str]:
+    try:
+        import black  # type: ignore
+        return get_diff_output(['black', '--diff', filepath])
+    except ImportError:
+        return None
+
 def get_diff_lines_output_by_ruff(filepath: str) -> Optional[str]:
     try:
-        subprocess.run(['ruff', '--version'], check=True,
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        result = subprocess.run(
-            ['ruff', "format", '--diff', filepath],
-            capture_output=True,
-            text=True
-        )
-        return result.stdout.strip() if result.stdout else None
-    except (FileNotFoundError):
+        import ruff  # type: ignore
+        return get_diff_output(['ruff', 'format', '--diff', filepath])
+    except ImportError:
+        print("can't import ruff")
         return None
 
 
 def get_diff_lines_count(diff_output: str) -> int:
-    diff_lines = [line for line in diff_output.split('\n') 
-                  if line.startswith(('+', '-')) and not line.startswith(('+++', '---'))]
+    lines = diff_output.split('\n')
+    def is_diff_line(line: str) -> bool:
+        return line.startswith(('+', '-')) and not line.startswith(('+++', '---'))
+    diff_lines = [line for line in lines if is_diff_line(line)]
     return len(diff_lines)
 
 def is_safe_to_format(filepath: str, max_diff_lines: int = 100) -> bool:
@@ -54,9 +64,8 @@ def is_safe_to_format(filepath: str, max_diff_lines: int = 100) -> bool:
         logger.warning(f"black formatter not found, trying ruff instead...")
         diff_changes_stdout = get_diff_lines_output_by_ruff(filepath)
         if diff_changes_stdout is None:
-            msg = f"Both ruff, black formatters not found, skipping formatting diff check."
-            logger.warning(msg)
-            raise FileNotFoundError(msg)
+            logger.warning(f"Both ruff, black formatters not found, skipping formatting diff check.")
+            return False
     
     diff_lines_count = get_diff_lines_count(diff_changes_stdout)
     
@@ -73,7 +82,7 @@ def format_code(formatter_cmds: list[str], path: Path, print_status: bool = True
     if not path.exists():
         msg = f"File {path} does not exist. Cannot format the file."
         raise FileNotFoundError(msg)
-    if formatter_name == "disabled" or not is_safe_to_format(path):     # few -> False, large -> True
+    if formatter_name == "disabled" or not is_safe_to_format(str(path)):
         return path.read_text(encoding="utf8")
 
     file_token = "$file"  # noqa: S105
