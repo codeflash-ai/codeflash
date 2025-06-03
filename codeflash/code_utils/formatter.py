@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def should_format_file(filepath, max_lines_changed=50):
+def should_format_file(filepath, max_lines_changed=100):
         try:
             # check if black is installed
             subprocess.run(['black', '--version'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
