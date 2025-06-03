@@ -27,7 +27,7 @@ def get_diff_output(cmd: list[str]) -> Optional[str]:
             is_ruff = cmd[0] == "ruff"
             if e.returncode == 0 and is_ruff:
                 return ""
-            elif e.returncode == 1 and is_ruff:
+            if e.returncode == 1 and is_ruff:
                 return e.stdout.strip() or None
         return None
 
@@ -61,10 +61,10 @@ def is_safe_to_format(filepath: str, max_diff_lines: int = 100) -> bool:
     diff_changes_stdout = get_diff_lines_output_by_black(filepath)
 
     if diff_changes_stdout is None:
-        logger.warning(f"black formatter not found, trying ruff instead...")
+        logger.warning("black formatter not found, trying ruff instead...")
         diff_changes_stdout = get_diff_lines_output_by_ruff(filepath)
         if diff_changes_stdout is None:
-            logger.warning(f"Both ruff, black formatters not found, skipping formatting diff check.")
+            logger.warning("Both ruff, black formatters not found, skipping formatting diff check.")
             return False
     
     diff_lines_count = get_diff_lines_count(diff_changes_stdout)
@@ -72,8 +72,8 @@ def is_safe_to_format(filepath: str, max_diff_lines: int = 100) -> bool:
     if diff_lines_count > max_diff_lines:
         logger.debug(f"Skipping {filepath}: {diff_lines_count} lines would change (max: {max_diff_lines})")
         return False
-    else:
-        return True
+
+    return True
         
 
 def format_code(formatter_cmds: list[str], path: Path, print_status: bool = True) -> str:  # noqa
