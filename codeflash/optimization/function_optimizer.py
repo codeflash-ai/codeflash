@@ -657,6 +657,7 @@ class FunctionOptimizer:
         get_run_tmp_file(Path("test_return_values_0.sqlite")).unlink(missing_ok=True)
 
     def instrument_existing_tests(self, function_to_all_tests: dict[str, list[FunctionCalledInTest]]) -> set[Path]:
+        # TODO : ensure all existing decorators are present after instrumentation
         existing_test_files_count = 0
         replay_test_files_count = 0
         concolic_coverage_test_files_count = 0
