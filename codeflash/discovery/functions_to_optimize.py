@@ -15,14 +15,15 @@ import git
 import libcst as cst
 from pydantic.dataclasses import dataclass
 
-from codeflash.api.cfapi import get_blocklisted_functions
+from codeflash.api.cfapi import get_blocklisted_functions, make_cfapi_request
 from codeflash.cli_cmds.console import DEBUG_MODE, console, logger
 from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
     path_belongs_to_site_packages,
 )
-from codeflash.code_utils.git_utils import get_git_diff
+from codeflash.code_utils.env_utils import get_pr_number
+from codeflash.code_utils.git_utils import get_git_diff, get_repo_owner_and_name
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.models.models import FunctionParent
 from codeflash.telemetry.posthog_cf import ph
@@ -473,8 +474,7 @@ def check_optimization_status(
     Returns:
         Tuple of (filtered_functions_dict, remaining_count)
     """
-    import requests
-
+    logger.info("entering function")
     # Build the code_contexts dictionary for the API call
     code_contexts = {}
     path_to_function_map = {}
@@ -492,18 +492,18 @@ def check_optimization_status(
 
     try:
         # Call the optimization check API
-        response = requests.post(
-            "http://your-api-endpoint/is_code_being_optimized_again",  # Replace with actual endpoint
-            json={
+        logger.info("Checking status")
+        response = make_cfapi_request(
+            "/is-already-optimized",
+            "POST",
+            {
                 "owner": owner,
                 "repo": repo,
-                "pr_number": str(pr_number),
+                "pr_number": pr_number,
                 "code_contexts": code_contexts
-            },
-            timeout=30
+            }
         )
         response.raise_for_status()
-
         result = response.json()
         already_optimized_paths = set(result.get("already_optimized_paths", []))
 
@@ -535,10 +535,8 @@ def filter_functions(
         project_root: Path,
         module_root: Path,
         disable_logs: bool = False,
-        owner: str | None = None,
-        repo: str | None = None,
-        pr_number: int | None = None,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
+    logger.info("filtering functions boogaloo")
     blocklist_funcs = get_blocklisted_functions()
     # Remove any function that we don't want to optimize
 
@@ -600,6 +598,10 @@ def filter_functions(
 
     # Check optimization status if repository info is provided
     already_optimized_count = 0
+    repository = git.Repo(Path.cwd(), search_parent_directories=True)
+    owner, repo = get_repo_owner_and_name(repository)
+    pr_number = get_pr_number()
+    print(owner, repo, pr_number)
     if owner and repo and pr_number is not None:
         path_based_functions, functions_count = check_optimization_status(
             path_based_functions, owner, repo, pr_number
