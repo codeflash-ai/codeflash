@@ -30,6 +30,7 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
 
     raise ValueError(msg)
 
+
 def find_conftest() -> Union[Path, None]:
     # Find the conftest file on the root of the project
     dir_path = Path.cwd()

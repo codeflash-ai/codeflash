@@ -13,7 +13,7 @@ from tempfile import TemporaryDirectory
 import tomlkit
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.config_parser import find_pyproject_toml, find_conftest
+from codeflash.code_utils.config_parser import find_conftest, find_pyproject_toml
 
 
 @contextmanager
@@ -84,6 +84,7 @@ def add_addopts_to_pyproject() -> None:
         with Path.open(pyproject_file, "w", encoding="utf-8") as f:
             f.write(original_content)
 
+
 @contextmanager
 def rename_conftest() -> None:
     conftest_file = find_conftest()
@@ -97,6 +98,7 @@ def rename_conftest() -> None:
         # Restore original file
         if conftest_file.exists():
             tmp_conftest_file.rename(conftest_file)
+
 
 def encoded_tokens_len(s: str) -> int:
     """Return the approximate length of the encoded tokens.
