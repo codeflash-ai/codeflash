@@ -238,6 +238,10 @@ formatter-cmds = [
     "uvx ruff check --exit-zero --fix $file",
     "uvx ruff format $file",
 ]
+[tool.pytest.ini_options]
+markers = [
+    "no_autouse"
+]
 
 
 [build-system]
