@@ -367,6 +367,7 @@ from code_to_optimize.bubble_sort import sorter
 def test_sort():
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
     input = [5, 4, 3, 2, 1, 0]
+    print(datetime.datetime.now().isoformat())
     output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '2', codeflash_loop_index, input)
     assert output == [0, 1, 2, 3, 4, 5]
     input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
@@ -395,7 +396,7 @@ def test_sort():
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
             test_path,
-            [CodePosition(8, 13), CodePosition(12, 13)],
+            [CodePosition(8, 14), CodePosition(12, 14)],
             func,
             project_root_path,
             "pytest",
@@ -411,7 +412,7 @@ def test_sort():
 
         success, new_perf_test = inject_profiling_into_existing_test(
             test_path,
-            [CodePosition(6, 13), CodePosition(10, 13)],
+            [CodePosition(8, 14), CodePosition(12, 14)],
             func,
             project_root_path,
             "pytest",
@@ -461,7 +462,7 @@ def test_sort():
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
-        assert test_results[0].id.iteration_id == "1_0"
+        assert test_results[0].id.iteration_id == "2_0"
         assert test_results[0].id.test_class_name is None
         assert test_results[0].id.test_function_name == "test_sort"
         assert (
@@ -473,7 +474,7 @@ def test_sort():
         assert test_results[0].return_value == ([0, 1, 2, 3, 4, 5],)
 
         assert test_results[1].id.function_getting_tested == "sorter"
-        assert test_results[1].id.iteration_id == "4_0"
+        assert test_results[1].id.iteration_id == "5_0"
         assert test_results[1].id.test_class_name is None
         assert test_results[1].id.test_function_name == "test_sort"
         assert (
@@ -496,7 +497,7 @@ def test_sort():
             testing_time=0.1,
         )
         assert test_results_perf[0].id.function_getting_tested == "sorter"
-        assert test_results_perf[0].id.iteration_id == "1_0"
+        assert test_results_perf[0].id.iteration_id == "2_0"
         assert test_results_perf[0].id.test_class_name is None
         assert test_results_perf[0].id.test_function_name == "test_sort"
         assert (
@@ -514,7 +515,7 @@ result: [0, 1, 2, 3, 4, 5]
         )
 
         assert test_results_perf[1].id.function_getting_tested == "sorter"
-        assert test_results_perf[1].id.iteration_id == "4_0"
+        assert test_results_perf[1].id.iteration_id == "5_0"
         assert test_results_perf[1].id.test_class_name is None
         assert test_results_perf[1].id.test_function_name == "test_sort"
         assert (
@@ -565,7 +566,6 @@ def test_perfinjector_bubble_sort_parametrized_results() -> None:
     computed_fn_opt = False
     code = """from code_to_optimize.bubble_sort import sorter
 import pytest
-import datetime
 
 
 @pytest.mark.parametrize(
@@ -577,7 +577,6 @@ import datetime
     ],
 )
 def test_sort_parametrized(input, expected_output):
-    print(datetime.datetime.now().isoformat())
     output = sorter(input)
     assert output == expected_output
 """
@@ -613,7 +612,6 @@ def test_sort_parametrized(input, expected_output):
         """import gc
 import os
 import time
-import datetime
 
 import pytest
 
@@ -626,7 +624,6 @@ from code_to_optimize.bubble_sort import sorter
 @pytest.mark.parametrize('input, expected_output', [([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
 def test_sort_parametrized(input, expected_output):
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
-    print(datetime.datetime.now().isoformat())
     output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized', 'sorter', '0', codeflash_loop_index, input)
     assert output == expected_output
 """
@@ -652,11 +649,11 @@ def test_sort_parametrized(input, expected_output):
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(16, 13)], func, project_root_path, "pytest", mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(14, 13)], func, project_root_path, "pytest", mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(16, 13)], func, project_root_path, "pytest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(14, 13)], func, project_root_path, "pytest", mode=TestingMode.PERFORMANCE
         )
 
         os.chdir(original_cwd)
