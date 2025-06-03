@@ -36,8 +36,8 @@ def parse_func(file_path: Path) -> XMLParser:
     return parse(file_path, xml_parser)
 
 
-matches_re = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!")
-stdout_re = re.compile(r"!\$######.*?######\$!\n(.*)!######.*?######!", re.DOTALL)
+matches_re_start = re.compile(r"!\$######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######\$!\n")
+matches_re_end = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!")
 
 
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
@@ -265,14 +265,16 @@ def parse_test_xml(
                         timed_out = True
 
             sys_stdout = testcase.system_out or ""
-            matches = matches_re.findall(sys_stdout)
+            begin_matches = [match for match in matches_re_start.finditer(sys_stdout)]
+            end_matches = {}
+            for match in matches_re_end.finditer(sys_stdout):
+                groups = match.groups()
+                if len(groups[5].split(":")) > 1:
+                    iteration_id = groups[5].split(":")[0]
+                    groups = groups[:5] + (iteration_id,)
+                end_matches[groups] = match
 
-            if sys_stdout:
-                print("sys_stdout: ", sys_stdout)
-                stdout_match = stdout_re.search(sys_stdout)
-                sys_stdout = stdout_match.group(1) if stdout_match else ""
-
-            if not matches or not len(matches):
+            if not begin_matches or not begin_matches:
                 test_results.add(
                     FunctionTestInvocation(
                         loop_index=loop_index,
@@ -290,26 +292,36 @@ def parse_test_xml(
                         test_type=test_type,
                         return_value=None,
                         timed_out=timed_out,
-                        stdout=sys_stdout,
+                        stdout="",
                     )
                 )
 
             else:
-                for match in matches:
-                    split_val = match[5].split(":")
-                    if len(split_val) > 1:
-                        iteration_id = split_val[0]
-                        runtime = int(split_val[1])
+                for match_index, match in enumerate(begin_matches):
+                    groups = match.groups()
+                    end_match = end_matches.get(groups)
+                    iteration_id, runtime = groups[5], None
+                    if end_match:
+                        stdout = sys_stdout[match.end() : end_match.start()]
+                        split_val = end_match.groups()[5].split(":")
+                        if len(split_val) > 1:
+                            iteration_id = split_val[0]
+                            runtime = int(split_val[1])
+                        else:
+                            iteration_id, runtime = split_val[0], None
+                    elif match_index == len(begin_matches) - 1:
+                        stdout = sys_stdout[match.end() :]
                     else:
-                        iteration_id, runtime = split_val[0], None
+                        stdout = sys_stdout[match.end() : begin_matches[match_index + 1].start()]
+
                     test_results.add(
                         FunctionTestInvocation(
-                            loop_index=int(match[4]),
+                            loop_index=int(groups[4]),
                             id=InvocationId(
-                                test_module_path=match[0],
-                                test_class_name=None if match[1] == "" else match[1][:-1],
-                                test_function_name=match[2],
-                                function_getting_tested=match[3],
+                                test_module_path=groups[0],
+                                test_class_name=None if groups[1] == "" else groups[1][:-1],
+                                test_function_name=groups[2],
+                                function_getting_tested=groups[3],
                                 iteration_id=iteration_id,
                             ),
                             file_name=test_file_path,
@@ -319,7 +331,7 @@ def parse_test_xml(
                             test_type=test_type,
                             return_value=None,
                             timed_out=timed_out,
-                            stdout=sys_stdout,
+                            stdout=stdout,
                         )
                     )
 
