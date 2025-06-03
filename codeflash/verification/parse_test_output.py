@@ -265,7 +265,7 @@ def parse_test_xml(
                         timed_out = True
 
             sys_stdout = testcase.system_out or ""
-            begin_matches = [match for match in matches_re_start.finditer(sys_stdout)]
+            begin_matches = list(matches_re_start.finditer(sys_stdout))
             end_matches = {}
             for match in matches_re_end.finditer(sys_stdout):
                 groups = match.groups()
