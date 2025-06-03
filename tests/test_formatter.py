@@ -11,7 +11,6 @@ from codeflash.code_utils.formatter import format_code, sort_imports
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.optimization.function_optimizer import FunctionOptimizer
-from codeflash.optimization.function_optimizer import FunctionSource
 from codeflash.verification.verification_utils import TestConfig
 
 def test_remove_duplicate_imports():
@@ -258,9 +257,7 @@ def _run_formatting_test(source_filename: str, should_content_change: bool):
         )
         
         optimizer.reformat_code_and_helpers(
-            helper_functions=[
-                FunctionSource()
-            ],
+            helper_functions=[],
             path=target_path,
             original_code=optimizer.function_to_optimize_source_code,
         )

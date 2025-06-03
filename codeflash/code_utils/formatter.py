@@ -23,9 +23,6 @@ def should_format_file(filepath, max_lines_changed=50):
                 capture_output=True, 
                 text=True
             )
-            
-            if result.returncode == 0 and not result.stdout:
-                return False
                 
             diff_lines = [line for line in result.stdout.split('\n') 
                         if line.startswith(('+', '-')) and not line.startswith(('+++', '---'))]
