@@ -94,8 +94,6 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
             self.functions.append(
                 FunctionToOptimize(function_name=node.name, file_path=self.file_path, parents=self.ast_path[:])
             )
-        # Continue visiting the body of the function to find nested functions
-        self.generic_visit(node)
 
     def generic_visit(self, node: ast.AST) -> None:
         if isinstance(node, (FunctionDef, AsyncFunctionDef, ClassDef)):

@@ -23,6 +23,7 @@ from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
+    ImportErrorPattern,
     cleanup_paths,
     file_name_from_test_module_name,
     get_run_tmp_file,
@@ -392,7 +393,7 @@ class FunctionOptimizer:
             try:
                 candidate_index = 0
                 original_len = len(candidates)
-                while True:
+                while candidates:
                     done = True if future_line_profile_results is None else future_line_profile_results.done()
                     if done and (future_line_profile_results is not None):
                         line_profile_results = future_line_profile_results.result()
@@ -402,13 +403,7 @@ class FunctionOptimizer:
                             f"Added results from line profiler to candidates, total candidates now: {original_len}"
                         )
                         future_line_profile_results = None
-                    try:
-                        candidate = candidates.popleft()
-                    except IndexError:
-                        if done:
-                            break
-                        time.sleep(0.1)
-                        continue
+                    candidate = candidates.popleft()
                     candidate_index += 1
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
@@ -517,8 +512,17 @@ class FunctionOptimizer:
                     self.write_code_and_helpers(
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
-                    if done and not candidates:
-                        break
+                    if (not len(candidates)) and (
+                        not done
+                    ):  # all original candidates processed but lp results haven't been processed
+                        concurrent.futures.wait([future_line_profile_results])
+                        line_profile_results = future_line_profile_results.result()
+                        candidates.extend(line_profile_results)
+                        original_len += len(line_profile_results)
+                        logger.info(
+                            f"Added results from line profiler to candidates, total candidates now: {original_len}"
+                        )
+                        future_line_profile_results = None
             except KeyboardInterrupt as e:
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
@@ -1189,6 +1193,12 @@ class FunctionOptimizer:
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
+            if "ModuleNotFoundError" in run_result.stdout:
+                from rich.text import Text
+
+                match = ImportErrorPattern.search(run_result.stdout).group()
+                panel = Panel(Text.from_markup(f"⚠️  {match} ", style="bold red"), expand=False)
+                console.print(panel)
         if testing_type in {TestingMode.BEHAVIOR, TestingMode.PERFORMANCE}:
             results, coverage_results = parse_test_results(
                 test_xml_path=result_file_path,

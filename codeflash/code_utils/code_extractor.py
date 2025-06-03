@@ -5,7 +5,6 @@ import ast
 from typing import TYPE_CHECKING, Optional
 
 import libcst as cst
-import libcst.matchers as m
 from libcst.codemod import CodemodContext
 from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, RemoveImportsVisitor
 from libcst.helpers import calculate_module_and_package
@@ -248,6 +247,8 @@ class FutureAliasedImportTransformer(cst.CSTTransformer):
     def leave_ImportFrom(
         self, original_node: cst.ImportFrom, updated_node: cst.ImportFrom
     ) -> cst.BaseSmallStatement | cst.FlattenSentinel[cst.BaseSmallStatement] | cst.RemovalSentinel:
+        import libcst.matchers as m
+
         if (
             (updated_node_module := updated_node.module)
             and updated_node_module.value == "__future__"

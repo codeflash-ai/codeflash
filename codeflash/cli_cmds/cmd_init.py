@@ -201,7 +201,7 @@ def collect_setup_info() -> SetupInfo:
             path_type=inquirer.Path.DIRECTORY,
         )
         if custom_module_root_answer:
-            module_root = Path(curdir) / Path(custom_module_root_answer["path"])
+            module_root = Path(custom_module_root_answer["path"])
         else:
             apologize_and_exit()
     else:
@@ -514,7 +514,8 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         from importlib.resources import files
 
         benchmark_mode = False
-        if "benchmarks_root" in config:
+        benchmarks_root = config.get("benchmarks_root", "").strip()
+        if benchmarks_root and benchmarks_root != "":
             benchmark_mode = inquirer_wrapper(
                 inquirer.confirm,
                 message="⚡️It looks like you've configured a benchmarks_root in your config. Would you like to run the Github action in benchmark mode? "
@@ -537,7 +538,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
             existing_api_key = None
         click.prompt(
             f"Next, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.{LF}"
-            f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)}…{LF}"
+            f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} {LF}"
             f"Then, click 'New repository secret' to add your api key with the variable name CODEFLASH_API_KEY.{LF}"
             f"{'Here is your CODEFLASH_API_KEY: ' + existing_api_key + ' ' + LF}"
             if existing_api_key
@@ -720,7 +721,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         )
     elif formatter == "don't use a formatter":
         formatter_cmds.append("disabled")
-    check_formatter_installed(formatter_cmds)
+    check_formatter_installed(formatter_cmds, exit_on_failure=False)
     codeflash_section["formatter-cmds"] = formatter_cmds
     # Add the 'codeflash' section, ensuring 'tool' section exists
     tool_section = pyproject_data.get("tool", tomlkit.table())
@@ -746,7 +747,7 @@ def install_github_app() -> None:
 
     else:
         click.prompt(
-            f"Finally, you'll need install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
+            f"Finally, you'll need to install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
             f"I will attempt to open the github app page - https://github.com/apps/codeflash-ai/installations/select_target {LF}"
             f"Press Enter to open the page to let you install the app…{LF}",
             default="",

@@ -28,3 +28,8 @@
   --ifm-color-primary-lightest: #FFECB3;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }
+
+[data-theme='dark'] {
+  /* Attempt to override Algolia's own CSS variables for the selected item's background */
+  --docsearch-highlight-color: #d08e0d !important;
+}
