@@ -15,6 +15,7 @@ from codeflash.code_utils.git_utils import (
     get_repo_owner_and_name,
     git_root_dir,
 )
+from codeflash.code_utils.github_utils import github_pr_url
 from codeflash.github.PrComment import FileDiffContent, PrComment
 
 if TYPE_CHECKING:
@@ -77,7 +78,7 @@ def check_create_pr(
                 speedup_pct=explanation.speedup_pct,
                 winning_behavioral_test_results=explanation.winning_behavioral_test_results,
                 winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
-                benchmark_details=explanation.benchmark_details
+                benchmark_details=explanation.benchmark_details,
             ),
             existing_tests=existing_tests_source,
             generated_tests=generated_original_test_source,
@@ -124,7 +125,7 @@ def check_create_pr(
                 speedup_pct=explanation.speedup_pct,
                 winning_behavioral_test_results=explanation.winning_behavioral_test_results,
                 winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
-                benchmark_details=explanation.benchmark_details
+                benchmark_details=explanation.benchmark_details,
             ),
             existing_tests=existing_tests_source,
             generated_tests=generated_original_test_source,
@@ -132,7 +133,9 @@ def check_create_pr(
             coverage_message=coverage_message,
         )
         if response.ok:
-            logger.info(f"Successfully created a new PR #{response.text} with the optimized code.")
+            pr_id = response.text
+            pr_url = github_pr_url(owner, repo, pr_id)
+            logger.info(f"Successfully created a new PR #{pr_id} with the optimized code: {pr_url}")
         else:
             logger.error(
                 f"Optimization was successful, but I failed to create a PR with the optimized code."

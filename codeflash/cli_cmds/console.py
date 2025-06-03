@@ -12,7 +12,6 @@ from rich.progress import (
     MofNCompleteColumn,
     Progress,
     SpinnerColumn,
-    TaskProgressColumn,
     TextColumn,
     TimeElapsedColumn,
     TimeRemainingColumn,
@@ -31,15 +30,7 @@ DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 console = Console()
 logging.basicConfig(
     level=logging.INFO,
-    handlers=[
-        RichHandler(
-            rich_tracebacks=True,
-            markup=False,
-            console=console,
-            show_path=False,
-            show_time=False,
-        )
-    ],
+    handlers=[RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)],
     format=BARE_LOGGING_FORMAT,
 )
 
@@ -48,9 +39,7 @@ logging.getLogger("parso").setLevel(logging.WARNING)
 
 
 def paneled_text(
-    text: str,
-    panel_args: dict[str, str | bool] | None = None,
-    text_args: dict[str, str] | None = None,
+    text: str, panel_args: dict[str, str | bool] | None = None, text_args: dict[str, str] | None = None
 ) -> None:
     """Print text in a panel."""
     from rich.panel import Panel
@@ -77,9 +66,7 @@ spinners = cycle(SPINNER_TYPES)
 
 
 @contextmanager
-def progress_bar(
-    message: str, *, transient: bool = False
-) -> Generator[TaskID, None, None]:
+def progress_bar(message: str, *, transient: bool = False) -> Generator[TaskID, None, None]:
     """Display a progress bar with a spinner and elapsed time."""
     progress = Progress(
         SpinnerColumn(next(spinners)),
@@ -94,18 +81,12 @@ def progress_bar(
 
 
 @contextmanager
-def test_files_progress_bar(
-    total: int, description: str
-) -> Generator[tuple[Progress, TaskID], None, None]:
+def test_files_progress_bar(total: int, description: str) -> Generator[tuple[Progress, TaskID], None, None]:
     """Progress bar for test files."""
     with Progress(
         SpinnerColumn(next(spinners)),
         TextColumn("[progress.description]{task.description}"),
-        BarColumn(
-            complete_style="cyan",
-            finished_style="green",
-            pulse_style="yellow",
-        ),
+        BarColumn(complete_style="cyan", finished_style="green", pulse_style="yellow"),
         MofNCompleteColumn(),
         TimeElapsedColumn(),
         TimeRemainingColumn(),

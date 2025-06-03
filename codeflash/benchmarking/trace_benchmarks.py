@@ -9,7 +9,9 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 
 
-def trace_benchmarks_pytest(benchmarks_root: Path, tests_root:Path, project_root: Path, trace_file: Path, timeout:int = 300) -> None:
+def trace_benchmarks_pytest(
+    benchmarks_root: Path, tests_root: Path, project_root: Path, trace_file: Path, timeout: int = 300
+) -> None:
     benchmark_env = os.environ.copy()
     if "PYTHONPATH" not in benchmark_env:
         benchmark_env["PYTHONPATH"] = str(project_root)
@@ -43,6 +45,4 @@ def trace_benchmarks_pytest(benchmarks_root: Path, tests_root:Path, project_root
             error_section = match.group(1) if match else result.stdout
         else:
             error_section = result.stdout
-        logger.warning(
-            f"Error collecting benchmarks - Pytest Exit code: {result.returncode}, {error_section}"
-        )
+        logger.warning(f"Error collecting benchmarks - Pytest Exit code: {result.returncode}, {error_section}")

@@ -1,3 +1,5 @@
+# ruff: noqa: PGH003
+import array
 import ast
 import datetime
 import decimal
@@ -19,40 +21,40 @@ try:
 except ImportError:
     HAS_NUMPY = False
 try:
-    import sqlalchemy
+    import sqlalchemy  # type: ignore
 
     HAS_SQLALCHEMY = True
 except ImportError:
     HAS_SQLALCHEMY = False
 try:
-    import scipy
+    import scipy  # type: ignore
 
     HAS_SCIPY = True
 except ImportError:
     HAS_SCIPY = False
 
 try:
-    import pandas
+    import pandas  # type: ignore  # noqa: ICN001
 
     HAS_PANDAS = True
 except ImportError:
     HAS_PANDAS = False
 
 try:
-    import pyrsistent
+    import pyrsistent  # type: ignore
 
     HAS_PYRSISTENT = True
 except ImportError:
     HAS_PYRSISTENT = False
 try:
-    import torch
+    import torch  # type: ignore
 
     HAS_TORCH = True
 except ImportError:
     HAS_TORCH = False
 
 
-def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
+def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001, ANN401, FBT002, PLR0911
     """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
     try:
         if type(orig) is not type(new):
@@ -83,6 +85,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 frozenset,
                 enum.Enum,
                 type,
+                range,
             ),
         ):
             return orig == new
@@ -106,7 +109,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
         if HAS_SQLALCHEMY:
             try:
                 insp = sqlalchemy.inspection.inspect(orig)
-                insp = sqlalchemy.inspection.inspect(new)
+                insp = sqlalchemy.inspection.inspect(new)  # noqa: F841
                 orig_keys = orig.__dict__
                 new_keys = new.__dict__
                 for key in list(orig_keys.keys()):
@@ -114,14 +117,14 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                         continue
                     if key not in new_keys or not comparator(orig_keys[key], new_keys[key], superset_obj):
                         return False
-                return True
+                return True  # noqa: TRY300
 
             except sqlalchemy.exc.NoInspectionAvailable:
                 pass
         # scipy condition because dok_matrix type is also a instance of dict, but dict comparison doesn't work for it
         if isinstance(orig, dict) and not (HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix)):
             if superset_obj:
-                return all(k in new.keys() and comparator(v, new[k], superset_obj) for k, v in orig.items())
+                return all(k in new and comparator(v, new[k], superset_obj) for k, v in orig.items())
             if len(orig) != len(new):
                 return False
             for key in orig:
@@ -170,16 +173,23 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
         if HAS_PANDAS and pandas.isna(orig) and pandas.isna(new):
             return True
 
+        if isinstance(orig, array.array):
+            if orig.typecode != new.typecode:
+                return False
+            if len(orig) != len(new):
+                return False
+            return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
+
         # This should be at the end of all numpy checking
         try:
             if HAS_NUMPY and np.isnan(orig):
                 return np.isnan(new)
-        except Exception:
+        except Exception:  # noqa: S110
             pass
         try:
             if HAS_NUMPY and np.isinf(orig):
                 return np.isinf(new)
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
         if HAS_TORCH and isinstance(orig, torch.Tensor):
@@ -219,14 +229,14 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
         try:
             if hasattr(orig, "__eq__") and str(type(orig.__eq__)) == "<class 'method'>":
                 return orig == new
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
         # For class objects
         if hasattr(orig, "__dict__") and hasattr(new, "__dict__"):
             orig_keys = orig.__dict__
             new_keys = new.__dict__
-            if type(orig_keys) == types.MappingProxyType and type(new_keys) == types.MappingProxyType:
+            if type(orig_keys) == types.MappingProxyType and type(new_keys) == types.MappingProxyType:  # noqa: E721
                 # meta class objects
                 if orig != new:
                     return False
@@ -250,7 +260,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
             return True
         # TODO : Add other types here
         logger.warning(f"Unknown comparator input type: {type(orig)}")
-        return False
+        return False  # noqa: TRY300
     except RecursionError as e:
         logger.error(f"RecursionError while comparing objects: {e}")
         sentry_sdk.capture_exception(e)

@@ -76,7 +76,7 @@ class Tracer:
         self,
         output: str = "codeflash.trace",
         functions: list[str] | None = None,
-        disable: bool = False,
+        disable: bool = False,  # noqa: FBT001, FBT002
         config_file_path: Path | None = None,
         max_function_count: int = 256,
         timeout: int | None = None,  # seconds
@@ -242,7 +242,7 @@ class Tracer:
             overflow="ignore",
         )
 
-    def tracer_logic(self, frame: FrameType, event: str) -> None:
+    def tracer_logic(self, frame: FrameType, event: str) -> None:  # noqa: PLR0911
         if event != "call":
             return
         if self.timeout is not None and (time.time() - self.start_time) > self.timeout:
@@ -400,7 +400,7 @@ class Tracer:
                     class_name = arguments["self"].__class__.__name__
                 elif "cls" in arguments and hasattr(arguments["cls"], "__name__"):
                     class_name = arguments["cls"].__name__
-            except Exception:  # noqa: BLE001, S110
+            except Exception:  # noqa: S110
                 pass
 
             fn = (fcode.co_filename, fcode.co_firstlineno, fcode.co_name, class_name)
@@ -412,7 +412,7 @@ class Tracer:
             else:
                 timings[fn] = 0, 0, 0, 0, {}
             return 1  # noqa: TRY300
-        except Exception:  # noqa: BLE001
+        except Exception:
             # Handle any errors gracefully
             return 0
 
@@ -475,7 +475,7 @@ class Tracer:
             cc = cc + 1
 
         if pfn in callers:
-            callers[pfn] = callers[pfn] + 1  # hack: gather more
+            callers[pfn] = callers[pfn] + 1  # TODO: gather more
             # stats such as the amount of time added to ct courtesy
             # of this specific call, and the contribution to cc
             # courtesy of this call.
@@ -566,7 +566,7 @@ class Tracer:
 
                     # Store with new format
                     new_stats[new_func] = (cc, nc, tt, ct, new_callers)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     console.print(f"Error converting stats for {func}: {e}")
                     continue
 
@@ -603,7 +603,7 @@ class Tracer:
                         new_callers[new_caller_func] = count
 
                     new_timings[new_func] = (cc, ns, tt, ct, new_callers)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     console.print(f"Error converting timings for {func}: {e}")
                     continue
 
@@ -673,7 +673,7 @@ class Tracer:
 
             console.print(Align.center(table))
 
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             console.print(f"[bold red]Error in stats processing:[/bold red] {e}")
             console.print(f"Traced {self.trace_count:,} function calls")
             self.total_tt = 0
