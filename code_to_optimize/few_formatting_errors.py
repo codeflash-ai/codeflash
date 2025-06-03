@@ -1,6 +1,6 @@
 import os
 
-class BadlyFormattedClass(object):
+class UnformattedExampleClass(object):
     def __init__(
         self,
         name,

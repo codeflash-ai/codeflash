@@ -3,7 +3,7 @@ from typing import List,Dict,Optional,Union,Tuple,Any;import numpy as np;import 
 
 # This is a poorly formatted Python file with many style violations
 
-class   BadlyFormattedClass( object ):
+class   UnformattedExampleClass( object ):
     def __init__(self,name,age=None,email=None,phone=None,address=None,city=None,state=None,zip_code=None):
         self.name=name;self.age=age;self.email=email;self.phone=phone
         self.address=address;self.city=city;self.state=state;self.zip_code=zip_code
@@ -84,7 +84,7 @@ def generate_report(data,include_stats=True,include_charts=False,format_type='js
     
     return result
 
-class   DataProcessor  (  BadlyFormattedClass  )  :
+class   DataProcessor  (  UnformattedExampleClass  )  :
     def __init__(self,data_source,config=None,debug=False):
         super().__init__("DataProcessor")
         self.data_source=data_source;self.config=config or{};self.debug=debug
