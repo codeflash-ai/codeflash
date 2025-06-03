@@ -1,12 +1,17 @@
+import argparse
 import os
 import tempfile
 from pathlib import Path
 
 import pytest
+import shutil
 
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.formatter import format_code, sort_imports
 
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.optimization.function_optimizer import FunctionOptimizer
+from codeflash.verification.verification_utils import TestConfig
 
 def test_remove_duplicate_imports():
     """Test that duplicate imports are removed when should_sort_imports is True."""
@@ -209,3 +214,67 @@ def foo():
         tmp_path = tmp.name
         with pytest.raises(FileNotFoundError):
             format_code(formatter_cmds=["exit 1"], path=Path(tmp_path))
+
+
+def _run_formatting_test(source_filename: str, should_content_change: bool):
+    """Helper function to run formatting tests with common setup and teardown."""
+    with tempfile.TemporaryDirectory() as test_dir_str:
+        test_dir = Path(test_dir_str)
+        this_file = Path(__file__).resolve()
+        repo_root_dir = this_file.parent.parent
+        source_file = repo_root_dir / "code_to_optimize" / source_filename
+
+        original = source_file.read_text()
+        target_path = test_dir / "target.py"
+        
+        shutil.copy2(source_file, target_path)
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="process_data", 
+            parents=[], 
+            file_path=target_path
+        )
+
+        test_cfg = TestConfig(
+            tests_root=test_dir,
+            project_root_path=test_dir,
+            test_framework="pytest",
+            tests_project_rootdir=test_dir,
+        )
+
+        args = argparse.Namespace(
+            disable_imports_sorting=False,
+            formatter_cmds=[
+                "ruff check --exit-zero --fix $file",
+                "ruff format $file"
+            ],
+        )
+
+        optimizer = FunctionOptimizer(
+            function_to_optimize=function_to_optimize,
+            test_cfg=test_cfg,
+            args=args,
+        )
+        
+        optimizer.reformat_code_and_helpers(
+            helper_functions=[],
+            path=target_path,
+            original_code=optimizer.function_to_optimize_source_code,
+        )
+        
+        content = target_path.read_text()
+        
+        if should_content_change:
+            assert content != original, f"Expected content to change for {source_filename}"
+        else:
+            assert content == original, f"Expected content to remain unchanged for {source_filename}"
+
+
+def test_formatting_file_with_many_diffs():
+    """Test that files with many formatting errors are skipped (content unchanged)."""
+    _run_formatting_test("many_formatting_errors.py", should_content_change=False)
+
+
+def test_formatting_file_with_few_diffs():
+    """Test that files with few formatting errors are formatted (content changed)."""
+    _run_formatting_test("few_formatting_errors.py", should_content_change=True)

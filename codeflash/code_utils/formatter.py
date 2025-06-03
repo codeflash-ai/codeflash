@@ -13,14 +13,49 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+def should_format_file(filepath, max_lines_changed=50):
+        try:
+            # check if black is installed
+            subprocess.run(['black', '--version'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            result = subprocess.run(
+                ['black', '--diff', filepath], 
+                capture_output=True, 
+                text=True
+            )
+            
+            if result.returncode == 0 and not result.stdout:
+                return False
+                
+            diff_lines = [line for line in result.stdout.split('\n') 
+                        if line.startswith(('+', '-')) and not line.startswith(('+++', '---'))]
+            
+            changes_count = len(diff_lines)
+            
+            if changes_count > max_lines_changed:
+                logger.debug(f"Skipping {filepath}: {changes_count} lines would change (max: {max_lines_changed})")
+                return False
+            
+            return True
+            
+        except subprocess.CalledProcessError:
+            logger.warning(f"black command failed for {filepath}")
+            return False
+        except FileNotFoundError:
+            logger.warning("black is not installed. Skipping formatting check.")
+            return False
+
+
+
 def format_code(formatter_cmds: list[str], path: Path, print_status: bool = True) -> str:  # noqa
     # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
     formatter_name = formatter_cmds[0].lower()
     if not path.exists():
         msg = f"File {path} does not exist. Cannot format the file."
         raise FileNotFoundError(msg)
-    if formatter_name == "disabled":
+    if formatter_name == "disabled" or not should_format_file(path):
         return path.read_text(encoding="utf8")
+
     file_token = "$file"  # noqa: S105
     for command in formatter_cmds:
         formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
@@ -29,7 +64,7 @@ def format_code(formatter_cmds: list[str], path: Path, print_status: bool = True
             result = subprocess.run(formatter_cmd_list, capture_output=True, check=False)
             if result.returncode == 0:
                 if print_status:
-                    console.rule(f"Formatted Successfully with: {formatter_name.replace('$file', path.name)}")
+                    console.rule(f"Formatted Successfully with: {command.replace('$file', path.name)}")
             else:
                 logger.error(f"Failed to format code with {' '.join(formatter_cmd_list)}")
         except FileNotFoundError as e:
