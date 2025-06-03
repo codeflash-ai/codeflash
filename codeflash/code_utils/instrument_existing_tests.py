@@ -462,50 +462,96 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
         ),
         *(
             [
+                ast.Assign(
+                    targets=[
+                        ast.Name(id='test_stdout_tag', ctx=ast.Store())],
+                    value=ast.JoinedStr(
+                        values=[
+                            ast.FormattedValue(
+                                value=ast.Name(id='test_module_name', ctx=ast.Load()),
+                                conversion=-1),
+                            ast.Constant(value=':'),
+                            ast.FormattedValue(
+                                value=ast.IfExp(
+                                    test=ast.Name(id='test_class_name', ctx=ast.Load()),
+                                    body=ast.BinOp(
+                                        left=ast.Name(id='test_class_name', ctx=ast.Load()),
+                                        op=ast.Add(),
+                                        right=ast.Constant(value='.')),
+                                    orelse=ast.Constant(value='')),
+                                conversion=-1),
+                            ast.FormattedValue(
+                                value=ast.Name(id='test_name', ctx=ast.Load()),
+                                conversion=-1),
+                            ast.Constant(value=':'),
+                            ast.FormattedValue(
+                                value=ast.Name(id='function_name', ctx=ast.Load()),
+                                conversion=-1),
+                            ast.Constant(value=':'),
+                            ast.FormattedValue(
+                                value=ast.Name(id='loop_index', ctx=ast.Load()),
+                                conversion=-1),
+                            ast.Constant(value=':'),
+                            ast.FormattedValue(
+                                value=ast.Name(id='invocation_id', ctx=ast.Load()),
+                                conversion=-1)]),
+                lineno=lineno + 9,),
                 ast.Expr(
                     value=ast.Call(
-                        func=ast.Name(id="print", ctx=ast.Load()),
+                        func=ast.Name(id='print', ctx=ast.Load()),
                         args=[
                             ast.JoinedStr(
                                 values=[
-                                    ast.Constant(value="!######"),
+                                    ast.Constant(value='!$######'),
                                     ast.FormattedValue(
-                                        value=ast.Name(id="test_module_name", ctx=ast.Load()), conversion=-1
-                                    ),
-                                    ast.Constant(value=":"),
-                                    ast.FormattedValue(
-                                        value=ast.IfExp(
-                                            test=ast.Name(id="test_class_name", ctx=ast.Load()),
-                                            body=ast.BinOp(
-                                                left=ast.Name(id="test_class_name", ctx=ast.Load()),
-                                                op=ast.Add(),
-                                                right=ast.Constant(value="."),
-                                            ),
-                                            orelse=ast.Constant(value=""),
-                                        ),
-                                        conversion=-1,
-                                    ),
-                                    ast.FormattedValue(value=ast.Name(id="test_name", ctx=ast.Load()), conversion=-1),
-                                    ast.Constant(value=":"),
-                                    ast.FormattedValue(
-                                        value=ast.Name(id="function_name", ctx=ast.Load()), conversion=-1
-                                    ),
-                                    ast.Constant(value=":"),
-                                    ast.FormattedValue(value=ast.Name(id="loop_index", ctx=ast.Load()), conversion=-1),
-                                    ast.Constant(value=":"),
-                                    ast.FormattedValue(
-                                        value=ast.Name(id="invocation_id", ctx=ast.Load()), conversion=-1
-                                    ),
-                                    ast.Constant(value="######!"),
-                                ]
-                            )
-                        ],
-                        keywords=[],
-                    )
-                )
+                                        value=ast.Name(id='test_stdout_tag', ctx=ast.Load()),
+                                        conversion=-1),
+                                    ast.Constant(value='######$!')])],
+                        keywords=[])),
+                # ast.Expr(
+                #     value=ast.Call(
+                #         func=ast.Name(id="print", ctx=ast.Load()),
+                #         args=[
+                #             ast.JoinedStr(
+                #                 values=[
+                #                     ast.Constant(value="!######"),
+                #                     ast.FormattedValue(
+                #                         value=ast.Name(id="test_module_name", ctx=ast.Load()), conversion=-1
+                #                     ),
+                #                     ast.Constant(value=":"),
+                #                     ast.FormattedValue(
+                #                         value=ast.IfExp(
+                #                             test=ast.Name(id="test_class_name", ctx=ast.Load()),
+                #                             body=ast.BinOp(
+                #                                 left=ast.Name(id="test_class_name", ctx=ast.Load()),
+                #                                 op=ast.Add(),
+                #                                 right=ast.Constant(value="."),
+                #                             ),
+                #                             orelse=ast.Constant(value=""),
+                #                         ),
+                #                         conversion=-1,
+                #                     ),
+                #                     ast.FormattedValue(value=ast.Name(id="test_name", ctx=ast.Load()), conversion=-1),
+                #                     ast.Constant(value=":"),
+                #                     ast.FormattedValue(
+                #                         value=ast.Name(id="function_name", ctx=ast.Load()), conversion=-1
+                #                     ),
+                #                     ast.Constant(value=":"),
+                #                     ast.FormattedValue(value=ast.Name(id="loop_index", ctx=ast.Load()), conversion=-1),
+                #                     ast.Constant(value=":"),
+                #                     ast.FormattedValue(
+                #                         value=ast.Name(id="invocation_id", ctx=ast.Load()), conversion=-1
+                #                     ),
+                #                     ast.Constant(value="######!"),
+                #                 ]
+                #             )
+                #         ],
+                #         keywords=[],
+                #     )
+                # )
             ]
-            if mode == TestingMode.BEHAVIOR
-            else []
+            # if mode == TestingMode.BEHAVIOR
+            # else []
         ),
         ast.Assign(
             targets=[ast.Name(id="exception", ctx=ast.Store())], value=ast.Constant(value=None), lineno=lineno + 10
@@ -598,6 +644,18 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                 keywords=[],
             )
         ),
+        ast.Expr(
+            value=ast.Call(
+                func=ast.Name(id='print', ctx=ast.Load()),
+                args=[
+                    ast.JoinedStr(
+                        values=[
+                            ast.Constant(value='!######'),
+                            ast.FormattedValue(
+                                value=ast.Name(id='test_stdout_tag', ctx=ast.Load()),
+                                conversion=-1),
+                            ast.Constant(value='######!')])],
+                keywords=[])),
         *(
             [
                 ast.Expr(
