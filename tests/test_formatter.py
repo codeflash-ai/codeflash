@@ -217,7 +217,6 @@ def foo():
 
 
 def _run_formatting_test(source_filename: str, should_content_change: bool):
-    """Helper function to run formatting tests with common setup and teardown."""
     with tempfile.TemporaryDirectory() as test_dir_str:
         test_dir = Path(test_dir_str)
         this_file = Path(__file__).resolve()
