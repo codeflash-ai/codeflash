@@ -356,9 +356,7 @@ def test_sort():
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
         assert test_results[1].return_value == ([0, 1, 2, 3, 4, 5],)
-        out_str = (
-            """codeflash stdout : BubbleSorter.sorter() called\n\n\ncodeflash stdout : BubbleSorter.sorter() called"""
-        )
+        out_str = """codeflash stdout : BubbleSorter.sorter() called\n"""
         assert test_results[1].stdout == out_str
         assert compare_test_results(test_results, test_results)
         assert test_results[2].id.function_getting_tested == "BubbleSorter.__init__"
@@ -376,6 +374,7 @@ def test_sort():
         )
         assert test_results[3].runtime > 0
         assert test_results[3].did_pass
+        assert test_results[3].stdout == """codeflash stdout : BubbleSorter.sorter() called\n"""
 
         results2, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
