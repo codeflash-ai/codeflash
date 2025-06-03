@@ -39,10 +39,10 @@ def should_format_file(filepath, max_lines_changed=50):
             return True
             
         except subprocess.CalledProcessError:
-            logger.warning(f"black command failed for {filepath}")
+            logger.warning(f"black --diff command failed for {filepath}")
             return False
         except FileNotFoundError:
-            logger.warning("black is not installed. Skipping formatting check.")
+            logger.warning("black formatter is not installed. Skipping formatting diff check.")
             return False
 
 
