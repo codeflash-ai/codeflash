@@ -259,13 +259,12 @@ def _run_formatting_test(source_filename: str, should_content_change: bool):
             args=args,
         )
         
-        optimizer.reformat_code_and_helpers(
+        content, _ = optimizer.reformat_code_and_helpers(
             helper_functions=[],
             path=target_path,
             original_code=optimizer.function_to_optimize_source_code,
         )
         
-        content = target_path.read_text()
         if should_content_change:
             assert content != original, f"Expected content to change for {source_filename}"
         else:

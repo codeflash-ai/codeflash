@@ -4,6 +4,7 @@ import os
 import shlex
 import subprocess
 from typing import TYPE_CHECKING, Optional
+
 import isort
 
 from codeflash.cli_cmds.console import console, logger
@@ -11,64 +12,43 @@ from codeflash.cli_cmds.console import console, logger
 if TYPE_CHECKING:
     from pathlib import Path
 
-def get_diff_output(cmd: list[str]) -> Optional[str]:
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return result.stdout.strip() or None
-    except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        if isinstance(e, subprocess.CalledProcessError):
-            # ruff returns 1 when the file needs formatting, and 0 when it is already formatted
-            is_ruff = cmd[0] == "ruff"
-            if e.returncode == 0 and is_ruff:
-                return ""
-            if e.returncode == 1 and is_ruff:
-                return e.stdout.strip() or None
-        return None
 
-
-def get_diff_lines_output_by_black(filepath: str) -> Optional[str]:
+def get_diff_output_by_black(filepath: str, unformatted_content: str) -> Optional[str]:
     try:
-        import black  # type: ignore
-        return get_diff_output(['black', '--diff', filepath])
+        import black
+
+        formatted_content = black.format_file_contents(src_contents=unformatted_content, fast=True, mode=black.Mode())
+        return black.diff(unformatted_content, formatted_content, a_name=filepath, b_name=filepath)
     except ImportError:
-        return None
-
-def get_diff_lines_output_by_ruff(filepath: str) -> Optional[str]:
-    try:
-        import ruff  # type: ignore
-        return get_diff_output(['ruff', 'format', '--diff', filepath])
-    except ImportError:
-        print("can't import ruff")
         return None
 
 
 def get_diff_lines_count(diff_output: str) -> int:
-    lines = diff_output.split('\n')
+    lines = diff_output.split("\n")
+
     def is_diff_line(line: str) -> bool:
-        return line.startswith(('+', '-')) and not line.startswith(('+++', '---'))
+        return line.startswith(("+", "-")) and not line.startswith(("+++", "---"))
+
     diff_lines = [line for line in lines if is_diff_line(line)]
     return len(diff_lines)
 
-def is_safe_to_format(filepath: str, max_diff_lines: int = 100) -> bool:
-    diff_changes_stdout = None
 
-    diff_changes_stdout = get_diff_lines_output_by_black(filepath)
+def is_safe_to_format(filepath: str, content: str, max_diff_lines: int = 100) -> bool:
+    diff_changes_str = None
 
-    if diff_changes_stdout is None:
-        logger.warning("black formatter not found, trying ruff instead...")
-        diff_changes_stdout = get_diff_lines_output_by_ruff(filepath)
-        if diff_changes_stdout is None:
-            logger.warning("Both ruff, black formatters not found, skipping formatting diff check.")
-            return False
-    
-    diff_lines_count = get_diff_lines_count(diff_changes_stdout)
-    
+    diff_changes_str = get_diff_output_by_black(filepath, unformatted_content=content)
+
+    if diff_changes_str is None:
+        logger.warning("Looks like black formatter not found, make sure it is installed.")
+        return False
+
+    diff_lines_count = get_diff_lines_count(diff_changes_str)
     if diff_lines_count > max_diff_lines:
-        logger.debug(f"Skipping {filepath}: {diff_lines_count} lines would change (max: {max_diff_lines})")
+        logger.debug(f"Skipping formatting {filepath}: {diff_lines_count} lines would change (max: {max_diff_lines})")
         return False
 
     return True
-        
+
 
 def format_code(formatter_cmds: list[str], path: Path, print_status: bool = True) -> str:  # noqa
     # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
@@ -76,8 +56,9 @@ def format_code(formatter_cmds: list[str], path: Path, print_status: bool = True
     if not path.exists():
         msg = f"File {path} does not exist. Cannot format the file."
         raise FileNotFoundError(msg)
-    if formatter_name == "disabled" or not is_safe_to_format(str(path)):
-        return path.read_text(encoding="utf8")
+    file_content = path.read_text(encoding="utf8")
+    if formatter_name == "disabled" or not is_safe_to_format(filepath=str(path), content=file_content):
+        return file_content
 
     file_token = "$file"  # noqa: S105
     for command in formatter_cmds:
