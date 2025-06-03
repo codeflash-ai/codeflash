@@ -115,7 +115,7 @@ def suggest_changes(
         "existingTests": existing_tests,
         "generatedTests": generated_tests,
         "traceId": trace_id,
-        "coverage": coverage_message,
+        "coverage_message": coverage_message,
     }
     return make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
 
@@ -151,7 +151,7 @@ def create_pr(
         "existingTests": existing_tests,
         "generatedTests": generated_tests,
         "traceId": trace_id,
-        "coverage": coverage_message,
+        "coverage_message": coverage_message,
     }
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
