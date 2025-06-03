@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Union
 
 import tomlkit
 
@@ -29,6 +29,17 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
     msg = f"Could not find pyproject.toml in the current directory {Path.cwd()} or any of the parent directories. Please create it by running `poetry init`, or pass the path to pyproject.toml with the --config-file argument."
 
     raise ValueError(msg)
+
+def find_conftest() -> Union[Path, None]:
+    # Find the conftest file on the root of the project
+    dir_path = Path.cwd()
+    while dir_path != dir_path.parent:
+        config_file = dir_path / "conftest.py"
+        if config_file.exists():
+            return config_file
+        # Search for conftest.py in the parent directories
+        dir_path = dir_path.parent
+    return None
 
 
 def parse_config_file(
