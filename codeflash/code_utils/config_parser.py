@@ -31,15 +31,16 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
     raise ValueError(msg)
 
 
-def find_conftest() -> Union[Path, None]:
+def find_conftest(tests_path: Path) -> Union[Path, None]:
     # Find the conftest file on the root of the project
     dir_path = Path.cwd()
-    while dir_path != dir_path.parent:
-        config_file = dir_path / "conftest.py"
+    cur_path = tests_path
+    while cur_path != dir_path:
+        config_file = cur_path / "conftest.py"
         if config_file.exists():
             return config_file
         # Search for conftest.py in the parent directories
-        dir_path = dir_path.parent
+        cur_path = cur_path.parent
     return None
 
 

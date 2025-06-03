@@ -157,7 +157,7 @@ def discover_tests_pytest(
     project_root = cfg.project_root_path
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
-    with custom_addopts(), rename_conftest():
+    with custom_addopts(), rename_conftest(tests_root):
         result = subprocess.run(
             [
                 SAFE_SYS_EXECUTABLE,

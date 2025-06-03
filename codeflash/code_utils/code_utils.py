@@ -88,17 +88,18 @@ def add_addopts_to_pyproject() -> None:
 
 
 @contextmanager
-def rename_conftest() -> None:
-    conftest_file = find_conftest()
-    tmp_conftest_file = Path(conftest_file + ".tmp")
+def rename_conftest(tests_path: Path) -> None:
+    conftest_file = find_conftest(tests_path)
+    tmp_conftest_file = None
     try:
         # Rename original file
-        if conftest_file.exists():
+        if conftest_file:
+            tmp_conftest_file = Path(str(conftest_file) + ".tmp")
             conftest_file.rename(tmp_conftest_file)
         yield
     finally:
         # Restore original file
-        if conftest_file.exists():
+        if conftest_file:
             tmp_conftest_file.rename(conftest_file)
 
 

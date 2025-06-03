@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_utils import custom_addopts, get_run_tmp_file, rename_conftest
+from codeflash.code_utils.code_utils import custom_addopts, get_run_tmp_file
 from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
@@ -23,7 +23,7 @@ def execute_test_subprocess(
     cmd_list: list[str], cwd: Path, env: dict[str, str] | None, timeout: int = 600
 ) -> subprocess.CompletedProcess:
     """Execute a subprocess with the given command list, working directory, environment variables, and timeout."""
-    with custom_addopts(), rename_conftest():
+    with custom_addopts():
         logger.debug(f"executing test run with command: {' '.join(cmd_list)}")
         return subprocess.run(cmd_list, capture_output=True, cwd=cwd, env=env, text=True, timeout=timeout, check=False)
 
