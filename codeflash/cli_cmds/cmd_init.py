@@ -72,6 +72,7 @@ def init_codeflash() -> None:
 
         if should_modify_pyproject_toml():
             setup_info: SetupInfo = collect_setup_info()
+
             configure_pyproject_toml(setup_info)
 
         install_github_app()
@@ -239,9 +240,11 @@ def collect_setup_info() -> SetupInfo:
             apologize_and_exit()
     else:
         tests_root = Path(curdir) / Path(cast("str", tests_root_answer))
-    
+
+    tests_root = tests_root.relative_to(curdir)
+
     resolved_module_root = (Path(curdir) / Path(module_root)).resolve()
-    resolved_tests_root = (Path(curdir) / Path(module_root)).resolve()
+    resolved_tests_root = (Path(curdir) / Path(tests_root)).resolve()
     if  resolved_module_root == resolved_tests_root:
         logger.warning(
             "It looks like your tests root is the same as your module root. This is not recommended and can lead to unexpected behavior."
