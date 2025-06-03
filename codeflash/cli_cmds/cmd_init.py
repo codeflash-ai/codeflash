@@ -245,7 +245,7 @@ def collect_setup_info() -> SetupInfo:
 
     resolved_module_root = (Path(curdir) / Path(module_root)).resolve()
     resolved_tests_root = (Path(curdir) / Path(tests_root)).resolve()
-    if  resolved_module_root == resolved_tests_root:
+    if resolved_module_root == resolved_tests_root:
         logger.warning(
             "It looks like your tests root is the same as your module root. This is not recommended and can lead to unexpected behavior."
         )
