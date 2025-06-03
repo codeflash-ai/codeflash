@@ -217,8 +217,10 @@ def foo():
 
 
 def _run_formatting_test(source_filename: str, should_content_change: bool):
-    if shutil.which("ruff") is None:
-        pytest.skip("ruff is not installed, skipping.")
+    try:
+        import ruff  # type: ignore
+    except ImportError:
+        pytest.skip("ruff is not installed")
     with tempfile.TemporaryDirectory() as test_dir_str:
         test_dir = Path(test_dir_str)
         this_file = Path(__file__).resolve()
@@ -269,19 +271,12 @@ def _run_formatting_test(source_filename: str, should_content_change: bool):
         else:
             assert content == original, f"Expected content to remain unchanged for {source_filename}"
 
-def _ruff_or_black_installed() -> bool:
-    return shutil.which("black") is not None or shutil.which("ruff") is not None
-
 
 def test_formatting_file_with_many_diffs():
     """Test that files with many formatting errors are skipped (content unchanged)."""
-    if not _ruff_or_black_installed():
-        pytest.skip("Neither black nor ruff is installed, skipping formatting tests.")
     _run_formatting_test("many_formatting_errors.py", should_content_change=False)
 
 
 def test_formatting_file_with_few_diffs():
     """Test that files with few formatting errors are formatted (content changed)."""
-    if not _ruff_or_black_installed():
-        pytest.skip("Neither black nor ruff is installed, skipping formatting tests.")
     _run_formatting_test("few_formatting_errors.py", should_content_change=True)

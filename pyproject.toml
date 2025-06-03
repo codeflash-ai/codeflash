@@ -123,6 +123,7 @@ types-pexpect = "^4.9.0.20241208"
 types-unidiff = "^0.7.0.20240505"
 uv = ">=0.6.2"
 pre-commit = "^4.2.0"
+black = "^25.1.0"
 
 [tool.poetry.build]
 script = "codeflash/update_license_version.py"
