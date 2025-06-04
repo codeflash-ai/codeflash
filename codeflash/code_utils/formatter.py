@@ -24,13 +24,19 @@ def get_diff_output_by_black(filepath: str, unformatted_content: str) -> Optiona
 
 
 def get_diff_lines_count(diff_output: str) -> int:
-    lines = diff_output.split("\n")
-
-    def is_diff_line(line: str) -> bool:
-        return line.startswith(("+", "-")) and not line.startswith(("+++", "---"))
-
-    diff_lines = [line for line in lines if is_diff_line(line)]
-    return len(diff_lines)
+    # Process the string in a single pass, avoiding list allocations
+    count = 0
+    for line in diff_output.split("\n"):
+        if line:
+            ch = line[0]
+            # Only check for longer prefixes if line starts with '+' or '-'
+            if ch == "+":
+                if not line.startswith("+++"):
+                    count += 1
+            elif ch == "-":
+                if not line.startswith("---"):
+                    count += 1
+    return count
 
 
 def is_safe_to_format(filepath: str, content: str, max_diff_lines: int = 100) -> bool:
