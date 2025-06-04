@@ -476,12 +476,14 @@ def filter_functions(
         if blocklist_funcs:
             functions_tmp = []
             for function in _functions:
-                if not (
+                if (
                     function.file_path.name in blocklist_funcs
                     and function.qualified_name in blocklist_funcs[function.file_path.name]
                 ):
+                    # This function is in blocklist, we can skip it
                     blocklist_funcs_removed_count += 1
                     continue
+                # This function is NOT in blocklist. we can keep it
                 functions_tmp.append(function)
             _functions = functions_tmp
 
