@@ -65,7 +65,7 @@ def make_cfapi_request(
         except (ValueError, TypeError):
             error_message = response.text
 
-        logger.error(f"Error making request to Codeflash API: {error_message}")
+        logger.error(f"Error making request to Codeflash API (status {response.status_code}): {error_message}")
         return response
 
 
