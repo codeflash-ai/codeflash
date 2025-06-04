@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import isort
 
@@ -100,11 +100,16 @@ def get_diff_lines_count(diff_output: str) -> int:
     return len(diff_lines)
 
 
-def format_code(formatter_cmds: list[str], path: Path, optimized_function: str = "", print_status: bool = True) -> str:  # noqa
+def format_code(
+    formatter_cmds: list[str],
+    path: Union[str, Path],
+    optimized_function: str = "",
+    print_status: bool = True,  # noqa
+) -> str:
     with tempfile.TemporaryDirectory() as test_dir_str:
         max_diff_lines = 100
 
-        if type(path) is str:
+        if isinstance(path, str):
             path = Path(path)
 
         original_code = path.read_text(encoding="utf8")
