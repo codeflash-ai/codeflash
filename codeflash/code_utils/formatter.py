@@ -26,11 +26,12 @@ def get_diff_output_by_black(filepath: str, unformatted_content: str) -> Optiona
 def get_diff_lines_count(diff_output: str) -> int:
     lines = diff_output.split("\n")
 
+    # Inline and hoist the diff line check for performance
     def is_diff_line(line: str) -> bool:
         return line.startswith(("+", "-")) and not line.startswith(("+++", "---"))
 
-    diff_lines = [line for line in lines if is_diff_line(line)]
-    return len(diff_lines)
+    # Use generator expression with sum for reduced memory usage and speed
+    return sum(1 for line in lines if (line.startswith(("+", "-")) and not line.startswith(("+++", "---"))))
 
 
 def is_safe_to_format(filepath: str, content: str, max_diff_lines: int = 100) -> bool:
