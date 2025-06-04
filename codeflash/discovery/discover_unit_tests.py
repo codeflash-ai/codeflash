@@ -14,9 +14,16 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 import pytest
 from pydantic.dataclasses import dataclass
+from rich.panel import Panel
+from rich.text import Text
 
 from codeflash.cli_cmds.console import console, logger, test_files_progress_bar
-from codeflash.code_utils.code_utils import custom_addopts, get_run_tmp_file, module_name_from_file_path
+from codeflash.code_utils.code_utils import (
+    ImportErrorPattern,
+    custom_addopts,
+    get_run_tmp_file,
+    module_name_from_file_path,
+)
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_cache_db
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 
@@ -180,6 +187,10 @@ def discover_tests_pytest(
             logger.warning(
                 f"Failed to collect tests. Pytest Exit code: {exitcode}={pytest.ExitCode(exitcode).name}\n {error_section}"
             )
+            if "ModuleNotFoundError" in result.stdout:
+                match = ImportErrorPattern.search(result.stdout).group()
+                panel = Panel(Text.from_markup(f"⚠️  {match} ", style="bold red"), expand=False)
+                console.print(panel)
 
         elif 0 <= exitcode <= 5:
             logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}={pytest.ExitCode(exitcode).name}")
