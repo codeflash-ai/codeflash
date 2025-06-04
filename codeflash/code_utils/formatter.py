@@ -104,6 +104,9 @@ def format_code(formatter_cmds: list[str], path: Path, optimized_function: str =
     with tempfile.TemporaryDirectory() as test_dir_str:
         max_diff_lines = 100
 
+        if type(path) is str:
+            path = Path(path)
+
         original_code = path.read_text(encoding="utf8")
         # we dont' count the formatting diff for the optimized function as it should be well-formatted (if it's provided)
         original_code_without_opfunc = original_code.replace(optimized_function, "")
