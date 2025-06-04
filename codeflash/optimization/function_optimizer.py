@@ -605,7 +605,7 @@ class FunctionOptimizer:
             new_code = sort_imports(new_code)
 
         new_helper_code: dict[Path, str] = {}
-        helper_functions_paths = {hf.source_code for hf in helper_functions}
+        helper_functions_paths = {hf.file_path for hf in helper_functions}
         for module_abspath in helper_functions_paths:
             formatted_helper_code = format_code(self.args.formatter_cmds, module_abspath)
             if should_sort_imports:
