@@ -113,7 +113,7 @@ def format_code(
             path = Path(path)
 
         original_code = path.read_text(encoding="utf8")
-        # we dont' count the formatting diff for the optimized function as it should be well-formatted (if it's provided)
+        # we dont' count the formatting diff for the optimized function as it should be well-formatted
         original_code_without_opfunc = original_code.replace(optimized_function, "")
 
         original_temp = Path(test_dir_str) / "original_temp.py"
