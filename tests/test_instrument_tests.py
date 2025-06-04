@@ -37,7 +37,8 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
+    test_stdout_tag = f"{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}"
+    print(f"!$######{{test_stdout_tag}}######$!")
     exception = None
     gc.disable()
     try:
@@ -48,6 +49,7 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
         codeflash_duration = time.perf_counter_ns() - counter
         exception = e
     gc.enable()
+    print(f"!######{{test_stdout_tag}}######!")
     pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
     codeflash_con.commit()
@@ -66,6 +68,8 @@ codeflash_wrap_perfonly_string = """def codeflash_wrap(wrapped, test_module_name
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    test_stdout_tag = f"{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}"
+    print(f"!$######{{test_stdout_tag}}######$!")
     exception = None
     gc.disable()
     try:
@@ -76,7 +80,7 @@ codeflash_wrap_perfonly_string = """def codeflash_wrap(wrapped, test_module_name
         codeflash_duration = time.perf_counter_ns() - counter
         exception = e
     gc.enable()
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}:{{codeflash_duration}}######!")
+    print(f"!######{{test_stdout_tag}}:{{codeflash_duration}}######!")
     if exception:
         raise exception
     return return_value
@@ -126,10 +130,12 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
     """
     if sys.version_info < (3, 12):
-        expected += """print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")"""
+        expected += """test_stdout_tag = f"{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}"
+    """
     else:
-        expected += """print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!')"""
-    expected += """
+        expected += """test_stdout_tag = f'{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}'
+    """
+    expected += """print(f'!$######{{test_stdout_tag}}######$!')
     exception = None
     gc.disable()
     try:
@@ -140,6 +146,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_duration = time.perf_counter_ns() - counter
         exception = e
     gc.enable()
+    print(f'!######{{test_stdout_tag}}######!')
     pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
     codeflash_con.commit()
@@ -227,10 +234,12 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
     """
     if sys.version_info < (3, 12):
-        expected += """print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")"""
+        expected += """test_stdout_tag = f"{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}"
+    """
     else:
-        expected += """print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!')"""
-    expected += """
+        expected += """test_stdout_tag = f'{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}'
+    """
+    expected += """print(f'!$######{{test_stdout_tag}}######$!')
     exception = None
     gc.disable()
     try:
@@ -241,6 +250,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
         codeflash_duration = time.perf_counter_ns() - counter
         exception = e
     gc.enable()
+    print(f'!######{{test_stdout_tag}}######!')
     pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
     codeflash_con.commit()
@@ -287,10 +297,12 @@ def test_prepare_image_for_yolo():
 def test_perfinjector_bubble_sort_results() -> None:
     computed_fn_opt = False
     code = """from code_to_optimize.bubble_sort import sorter
+import datetime
 
 
 def test_sort():
     input = [5, 4, 3, 2, 1, 0]
+    print(datetime.datetime.now().isoformat())
     output = sorter(input)
     assert output == [0, 1, 2, 3, 4, 5]
 
@@ -299,7 +311,8 @@ def test_sort():
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
 
     expected = (
-        """import gc
+        """import datetime
+import gc
 import os
 import sqlite3
 import time
@@ -319,17 +332,19 @@ def test_sort():
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
     input = [5, 4, 3, 2, 1, 0]
-    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    print(datetime.datetime.now().isoformat())
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '2', codeflash_loop_index, codeflash_cur, codeflash_con, input)
     assert output == [0, 1, 2, 3, 4, 5]
     input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '5', codeflash_loop_index, codeflash_cur, codeflash_con, input)
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()
 """
     )
 
     expected_perfonly = (
-        """import gc
+        """import datetime
+import gc
 import os
 import time
 
@@ -342,10 +357,11 @@ from code_to_optimize.bubble_sort import sorter
 def test_sort():
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
     input = [5, 4, 3, 2, 1, 0]
-    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '1', codeflash_loop_index, input)
+    print(datetime.datetime.now().isoformat())
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '2', codeflash_loop_index, input)
     assert output == [0, 1, 2, 3, 4, 5]
     input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '4', codeflash_loop_index, input)
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '5', codeflash_loop_index, input)
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
 """
     )
@@ -370,7 +386,7 @@ def test_sort():
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
             test_path,
-            [CodePosition(6, 13), CodePosition(10, 13)],
+            [CodePosition(8, 14), CodePosition(12, 14)],
             func,
             project_root_path,
             "pytest",
@@ -386,7 +402,7 @@ def test_sort():
 
         success, new_perf_test = inject_profiling_into_existing_test(
             test_path,
-            [CodePosition(6, 13), CodePosition(10, 13)],
+            [CodePosition(8, 14), CodePosition(12, 14)],
             func,
             project_root_path,
             "pytest",
@@ -436,7 +452,7 @@ def test_sort():
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
-        assert test_results[0].id.iteration_id == "1_0"
+        assert test_results[0].id.iteration_id == "2_0"
         assert test_results[0].id.test_class_name is None
         assert test_results[0].id.test_function_name == "test_sort"
         assert (
@@ -448,7 +464,7 @@ def test_sort():
         assert test_results[0].return_value == ([0, 1, 2, 3, 4, 5],)
 
         assert test_results[1].id.function_getting_tested == "sorter"
-        assert test_results[1].id.iteration_id == "4_0"
+        assert test_results[1].id.iteration_id == "5_0"
         assert test_results[1].id.test_class_name is None
         assert test_results[1].id.test_function_name == "test_sort"
         assert (
@@ -471,7 +487,7 @@ def test_sort():
             testing_time=0.1,
         )
         assert test_results_perf[0].id.function_getting_tested == "sorter"
-        assert test_results_perf[0].id.iteration_id == "1_0"
+        assert test_results_perf[0].id.iteration_id == "2_0"
         assert test_results_perf[0].id.test_class_name is None
         assert test_results_perf[0].id.test_function_name == "test_sort"
         assert (
@@ -481,9 +497,15 @@ def test_sort():
         assert test_results_perf[0].runtime > 0
         assert test_results_perf[0].did_pass
         assert test_results_perf[0].return_value is None
+        assert (
+            test_results_perf[0].stdout
+            == """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5]
+"""
+        )
 
         assert test_results_perf[1].id.function_getting_tested == "sorter"
-        assert test_results_perf[1].id.iteration_id == "4_0"
+        assert test_results_perf[1].id.iteration_id == "5_0"
         assert test_results_perf[1].id.test_class_name is None
         assert test_results_perf[1].id.test_function_name == "test_sort"
         assert (
@@ -492,12 +514,11 @@ def test_sort():
         )
         assert test_results_perf[1].runtime > 0
         assert test_results_perf[1].did_pass
-        out_str = """codeflash stdout: Sorting list
-result: [0, 1, 2, 3, 4, 5]
 
-codeflash stdout: Sorting list
-result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
-        assert out_str == test_results_perf[1].stdout
+        out_str = """codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+"""
+        assert test_results_perf[1].stdout == out_str
         ctx_result = func_optimizer.get_code_optimization_context()
         code_context: CodeOptimizationContext = ctx_result.unwrap()
         original_helper_code: dict[Path, str] = {}
@@ -507,8 +528,7 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
         computed_fn_opt = True
-        line_profiler_output_file = add_decorator_imports(
-            func_optimizer.function_to_optimize, code_context)
+        line_profiler_output_file = add_decorator_imports(func_optimizer.function_to_optimize, code_context)
         line_profile_results, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.LINE_PROFILE,
             test_env=test_env,
@@ -517,14 +537,16 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
             pytest_min_loops=1,
             pytest_max_loops=1,
             testing_time=0.1,
-            line_profiler_output_file = line_profiler_output_file
+            line_profiler_output_file=line_profiler_output_file,
         )
         tmp_lpr = list(line_profile_results["timings"].keys())
-        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1]==2
+        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 2
     finally:
         if computed_fn_opt:
             func_optimizer.write_code_and_helpers(
-                func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
+                func_optimizer.function_to_optimize_source_code,
+                original_helper_code,
+                func_optimizer.function_to_optimize.file_path,
             )
         test_path.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
@@ -682,6 +704,12 @@ def test_sort_parametrized(input, expected_output):
         )
         assert test_results[0].runtime > 0
         assert test_results[0].did_pass
+        assert (
+            test_results[0].stdout
+            == """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5]
+"""
+        )
 
         assert test_results[1].id.function_getting_tested == "sorter"
         assert test_results[1].id.iteration_id == "0_1"
@@ -693,6 +721,12 @@ def test_sort_parametrized(input, expected_output):
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
+        assert (
+            test_results[1].stdout
+            == """codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+"""
+        )
 
         assert test_results[2].id.function_getting_tested == "sorter"
         assert test_results[2].id.iteration_id == "0_2"
@@ -738,7 +772,8 @@ def test_sort_parametrized(input, expected_output):
         assert test_results_perf[1].did_pass
 
         out_str = """codeflash stdout: Sorting list
-result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+"""
         assert out_str == test_results_perf[1].stdout
 
         assert test_results_perf[2].id.function_getting_tested == "sorter"
@@ -760,8 +795,7 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
         computed_fn_opt = True
-        line_profiler_output_file = add_decorator_imports(
-            func_optimizer.function_to_optimize, code_context)
+        line_profiler_output_file = add_decorator_imports(func_optimizer.function_to_optimize, code_context)
         line_profile_results, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.LINE_PROFILE,
             test_env=test_env,
@@ -770,14 +804,16 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
             pytest_min_loops=1,
             pytest_max_loops=1,
             testing_time=0.1,
-            line_profiler_output_file = line_profiler_output_file
+            line_profiler_output_file=line_profiler_output_file,
         )
         tmp_lpr = list(line_profile_results["timings"].keys())
-        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1]==3
+        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 3
     finally:
         if computed_fn_opt:
             func_optimizer.write_code_and_helpers(
-                func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
+                func_optimizer.function_to_optimize_source_code,
+                original_helper_code,
+                func_optimizer.function_to_optimize.file_path,
             )
         test_path.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
@@ -954,7 +990,10 @@ def test_sort_parametrized_loop(input, expected_output):
         assert test_results[0].runtime > 0
         assert test_results[0].did_pass
         assert test_results[0].return_value == ([0, 1, 2, 3, 4, 5],)
-
+        out_str = """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5]
+"""
+        assert test_results[0].stdout == out_str
         assert test_results[1].id.function_getting_tested == "sorter"
         assert test_results[1].id.iteration_id == "0_0_1"
         assert test_results[1].id.test_class_name is None
@@ -965,6 +1004,7 @@ def test_sort_parametrized_loop(input, expected_output):
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
+        assert test_results[1].stdout == out_str
 
         assert test_results[2].id.function_getting_tested == "sorter"
         assert test_results[2].id.iteration_id == "0_0_2"
@@ -976,6 +1016,10 @@ def test_sort_parametrized_loop(input, expected_output):
         )
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
+        out_str = """codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+"""
+        assert test_results[2].stdout == out_str
 
         assert test_results[3].id.function_getting_tested == "sorter"
         assert test_results[3].id.iteration_id == "0_0_3"
@@ -988,6 +1032,8 @@ def test_sort_parametrized_loop(input, expected_output):
         assert test_results[3].runtime > 0
         assert test_results[3].did_pass
 
+        assert test_results[3].stdout == out_str
+
         assert test_results[4].id.function_getting_tested == "sorter"
         assert test_results[4].id.iteration_id == "0_0_4"
         assert test_results[4].id.test_class_name is None
@@ -998,6 +1044,10 @@ def test_sort_parametrized_loop(input, expected_output):
         )
         assert test_results[4].runtime > 0
         assert test_results[4].did_pass
+        out_str = """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+"""
+        assert test_results[4].stdout == out_str
 
         assert test_results[5].id.function_getting_tested == "sorter"
         assert test_results[5].id.iteration_id == "0_0_5"
@@ -1009,6 +1059,7 @@ def test_sort_parametrized_loop(input, expected_output):
         )
         assert test_results[5].runtime > 0
         assert test_results[5].did_pass
+        assert test_results[5].stdout == out_str
 
         test_results, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
@@ -1099,8 +1150,7 @@ def test_sort_parametrized_loop(input, expected_output):
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
         computed_fn_opt = True
-        line_profiler_output_file = add_decorator_imports(
-            func_optimizer.function_to_optimize, code_context)
+        line_profiler_output_file = add_decorator_imports(func_optimizer.function_to_optimize, code_context)
         line_profile_results, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.LINE_PROFILE,
             test_env=test_env,
@@ -1109,14 +1159,16 @@ def test_sort_parametrized_loop(input, expected_output):
             pytest_min_loops=1,
             pytest_max_loops=1,
             testing_time=0.1,
-            line_profiler_output_file = line_profiler_output_file
+            line_profiler_output_file=line_profiler_output_file,
         )
         tmp_lpr = list(line_profile_results["timings"].keys())
-        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1]==6
+        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 6
     finally:
         if computed_fn_opt:
             func_optimizer.write_code_and_helpers(
-                func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
+                func_optimizer.function_to_optimize_source_code,
+                original_helper_code,
+                func_optimizer.function_to_optimize.file_path,
             )
         test_path.unlink(missing_ok=True)
         test_path_behavior.unlink(missing_ok=True)
@@ -1335,13 +1387,9 @@ def test_sort():
         assert test_results[0].return_value is None
         out_str = """codeflash stdout: Sorting list
 result: [0, 1, 2, 3, 4, 5]
+"""
 
-codeflash stdout: Sorting list
-result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
-
-codeflash stdout: Sorting list
-result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49]"""
-        assert test_results[1].stdout == out_str
+        assert test_results[0].stdout == out_str
         assert test_results[1].id.function_getting_tested == "sorter"
         assert test_results[1].id.iteration_id == "2_2_1"
         assert test_results[1].id.test_class_name is None
@@ -1352,6 +1400,10 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
+        out_str2 = """codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+"""
+        assert test_results[1].stdout == out_str2
 
         assert test_results[2].id.function_getting_tested == "sorter"
         assert test_results[2].id.iteration_id == "2_2_2"
@@ -1363,6 +1415,10 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
         )
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
+        out_str3 = """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+"""
+        assert test_results[2].stdout == out_str3
         ctx_result = func_optimizer.get_code_optimization_context()
         code_context: CodeOptimizationContext = ctx_result.unwrap()
         original_helper_code: dict[Path, str] = {}
@@ -1372,8 +1428,7 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
         computed_fn_opt = True
-        line_profiler_output_file = add_decorator_imports(
-            func_optimizer.function_to_optimize, code_context)
+        line_profiler_output_file = add_decorator_imports(func_optimizer.function_to_optimize, code_context)
         line_profile_results, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.LINE_PROFILE,
             test_env=test_env,
@@ -1382,14 +1437,16 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
             pytest_min_loops=1,
             pytest_max_loops=1,
             testing_time=0.1,
-            line_profiler_output_file = line_profiler_output_file
+            line_profiler_output_file=line_profiler_output_file,
         )
         tmp_lpr = list(line_profile_results["timings"].keys())
-        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1]==3
+        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 3
     finally:
         if computed_fn_opt is True:
             func_optimizer.write_code_and_helpers(
-                func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
+                func_optimizer.function_to_optimize_source_code,
+                original_helper_code,
+                func_optimizer.function_to_optimize.file_path,
             )
         test_path.unlink(missing_ok=True)
         test_path_perf.unlink(missing_ok=True)
@@ -1594,6 +1651,10 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[0].runtime > 0
         assert test_results[0].did_pass
         assert test_results[0].return_value == ([0, 1, 2, 3, 4, 5],)
+        out_str = """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5]
+"""
+        assert test_results[0].stdout == out_str
 
         assert test_results[1].id.function_getting_tested == "sorter"
         assert test_results[1].id.iteration_id == "4_0"
@@ -1605,6 +1666,10 @@ class TestPigLatin(unittest.TestCase):
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
+        out_str = """codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+"""
+        assert test_results[1].stdout == out_str
 
         assert test_results[2].id.function_getting_tested == "sorter"
         assert test_results[2].id.iteration_id == "7_0"
@@ -1657,6 +1722,10 @@ class TestPigLatin(unittest.TestCase):
         )
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
+        out_str = """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+"""
+        assert test_results[2].stdout == out_str
     finally:
         test_path.unlink(missing_ok=True)
         test_path_behavior.unlink(missing_ok=True)
@@ -1841,6 +1910,10 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[0].runtime > 0
         assert test_results[0].did_pass
         assert test_results[0].return_value == ([0, 1, 2, 3, 4, 5],)
+        out_str = """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5]
+"""
+        assert test_results[0].stdout == out_str
 
         assert test_results[1].id.function_getting_tested == "sorter"
         assert test_results[1].id.iteration_id == "0_1"
@@ -1852,6 +1925,10 @@ class TestPigLatin(unittest.TestCase):
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
+        out_str = """codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+"""
+        assert test_results[1].stdout == out_str
 
         assert test_results[2].id.function_getting_tested == "sorter"
         assert test_results[2].id.iteration_id == "0_2"
@@ -1863,6 +1940,10 @@ class TestPigLatin(unittest.TestCase):
         )
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
+        out_str = """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+"""
+        assert test_results[2].stdout == out_str
 
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
@@ -2092,6 +2173,10 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[0].runtime > 0
         assert test_results[0].did_pass
         assert test_results[0].return_value == ([0, 1, 2, 3, 4, 5],)
+        out_str = """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5]
+"""
+        assert test_results[0].stdout == out_str
 
         assert test_results[1].id.function_getting_tested == "sorter"
         assert test_results[1].id.iteration_id == "2_2_1"
@@ -2103,6 +2188,10 @@ class TestPigLatin(unittest.TestCase):
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
+        out_str = """codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+"""
+        assert test_results[1].stdout == out_str
 
         assert test_results[2].id.function_getting_tested == "sorter"
         assert test_results[2].id.iteration_id == "2_2_2"
@@ -2114,6 +2203,10 @@ class TestPigLatin(unittest.TestCase):
         )
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
+        out_str = """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+"""
+        assert test_results[2].stdout == out_str
 
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             test_env=test_env,
@@ -2341,6 +2434,10 @@ class TestPigLatin(unittest.TestCase):
         assert test_results[0].runtime > 0
         assert test_results[0].did_pass
         assert test_results[0].return_value == ([0, 1, 2, 3, 4, 5],)
+        out_str = """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5]
+"""
+        assert test_results[0].stdout == out_str
 
         assert test_results[1].id.function_getting_tested == "sorter"
         assert test_results[1].id.iteration_id == "0_0_1"
@@ -2352,6 +2449,10 @@ class TestPigLatin(unittest.TestCase):
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
+        out_str = """codeflash stdout: Sorting list
+result: [0, 1, 2, 3, 4, 5]
+"""
+        assert test_results[1].stdout == out_str
 
         assert test_results[2].id.function_getting_tested == "sorter"
         assert test_results[2].id.iteration_id == "0_0_2"
@@ -2363,6 +2464,10 @@ class TestPigLatin(unittest.TestCase):
         )
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
+        out_str = """codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+"""
+        assert test_results[2].stdout == out_str
 
         assert test_results[3].id.function_getting_tested == "sorter"
         assert test_results[3].id.iteration_id == "0_0_3"
@@ -2821,7 +2926,8 @@ def test_code_replacement10() -> None:
         assert code_context.testgen_context_code == get_code_output
     """
 
-    expected = """import gc
+    expected = (
+        """import gc
 import os
 import sqlite3
 import time
@@ -2831,39 +2937,9 @@ import dill as pickle
 from codeflash.optimization.optimizer import Optimizer
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
 """
-    if sys.version_info < (3, 12):
-        expected += """    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")"""
-    else:
-        expected += """    print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!')"""
-    expected += """
-    exception = None
-    gc.disable()
-    try:
-        counter = time.perf_counter_ns()
-        return_value = wrapped(*args, **kwargs)
-        codeflash_duration = time.perf_counter_ns() - counter
-    except Exception as e:
-        codeflash_duration = time.perf_counter_ns() - counter
-        exception = e
-    gc.enable()
-    pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
-    codeflash_con.commit()
-    if exception:
-        raise exception
-    return return_value
-
+        + codeflash_wrap_string
+        + """
 def test_code_replacement10() -> None:
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
@@ -2882,6 +2958,7 @@ def test_code_replacement10() -> None:
         assert code_context.testgen_context_code == get_code_output
     codeflash_con.close()
 """
+    )
 
     with tempfile.NamedTemporaryFile(mode="w") as f:
         f.write(code)
@@ -2899,7 +2976,7 @@ def test_code_replacement10() -> None:
         )
         os.chdir(original_cwd)
     assert success
-    assert new_test == expected.format(
+    assert new_test.replace('"', "'") == expected.replace('"', "'").format(
         module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
     )
 
