@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import difflib
 import os
-import re
 import shlex
 import shutil
 import subprocess
@@ -16,24 +15,26 @@ from codeflash.cli_cmds.console import console, logger
 
 
 def generate_unified_diff(original: str, modified: str, from_file: str, to_file: str) -> str:
-    line_pattern = re.compile(r"(.*?(?:\r\n|\n|\r|$))")
-
+    # Use built-in splitlines with keepends to preserve line endings, much faster than regex
     def split_lines(text: str) -> list[str]:
-        lines = [match[0] for match in line_pattern.finditer(text)]
-        if lines and lines[-1] == "":
-            lines.pop()
+        lines = text.splitlines(keepends=True)
+        # If text ends with a line ending, splitlines(keepends=True) includes an empty "" for the trailing empty line,
+        # but in practice difflib expects that (and removes it anyway). So, we do not need to pop.
         return lines
 
     original_lines = split_lines(original)
     modified_lines = split_lines(modified)
 
     diff_output = []
+    append = diff_output.append
+    extend = diff_output.extend
+
     for line in difflib.unified_diff(original_lines, modified_lines, fromfile=from_file, tofile=to_file, n=5):
         if line.endswith("\n"):
-            diff_output.append(line)
+            append(line)
         else:
-            diff_output.append(line + "\n")
-            diff_output.append("\\ No newline at end of file\n")
+            # This is extremely rare; use extend to reduce the number of list operations (slightly faster)
+            extend((line + "\n", "\\ No newline at end of file\n"))
 
     return "".join(diff_output)
 
