@@ -6,8 +6,10 @@ from codeflash.discovery.functions_to_optimize import (
     find_all_functions_in_file,
     get_functions_to_optimize,
     inspect_top_level_functions_or_methods,
+    filter_functions
 )
 from codeflash.verification.verification_utils import TestConfig
+from codeflash.code_utils.compat import codeflash_temp_dir
 
 
 def test_function_eligible_for_optimization() -> None:
@@ -313,3 +315,69 @@ def test_filter_files_optimized():
     assert filter_files_optimized(file_path_same_level, tests_root, ignore_paths, module_root)
     assert filter_files_optimized(file_path_different_level, tests_root, ignore_paths, module_root)
     assert not filter_files_optimized(file_path_above_level, tests_root, ignore_paths, module_root)
+
+def test_filter_functions():
+    with codeflash_temp_dir.joinpath("test_get_functions_to_optimize.py").open("w") as f:
+        f.write(
+"""
+import copy 
+
+def propagate_attributes(
+    nodes: dict[str, dict], edges: list[dict], source_node_id: str, attribute: str
+) -> dict[str, dict]:
+    modified_nodes = copy.deepcopy(nodes)
+
+    # Build an adjacency list for faster traversal
+    adjacency = {}
+    for edge in edges:
+        src = edge["source"]
+        tgt = edge["target"]
+        if src not in adjacency:
+            adjacency[src] = []
+        adjacency[src].append(tgt)
+
+    # Track visited nodes to avoid cycles
+    visited = set()
+
+    def traverse(node_id):
+        if node_id in visited:
+            return
+        visited.add(node_id)
+
+        # Propagate attribute from source node
+        if (
+            node_id != source_node_id
+            and source_node_id in modified_nodes
+            and attribute in modified_nodes[source_node_id]
+        ):
+            if node_id in modified_nodes:
+                modified_nodes[node_id][attribute] = modified_nodes[source_node_id][
+                    attribute
+                ]
+
+        # Continue propagation to neighbors
+        for neighbor in adjacency.get(node_id, []):
+            traverse(neighbor)
+
+    traverse(source_node_id)
+    return modified_nodes
+"""
+        )
+        f.flush()
+        test_config = TestConfig(
+            tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
+        )
+
+        file_path = codeflash_temp_dir.joinpath("test_get_functions_to_optimize.py")
+        discovered = find_all_functions_in_file(file_path)
+        modified_functions = {file_path: discovered[file_path]}
+        filtered, count = filter_functions(
+            modified_functions,
+            tests_root=Path("tests"),
+            ignore_paths=[],
+            project_root=file_path.parent,
+            module_root=file_path.parent,
+        )
+        function_names = [fn.function_name for fn in filtered.get(file_path, [])]
+        assert "propagate_attributes" in function_names
+        assert count == 1
