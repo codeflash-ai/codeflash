@@ -1,25 +1,8 @@
-import os, sys, json, datetime, math, random
-import requests
-from collections import defaultdict, OrderedDict
-from typing import List, Dict, Optional, Union, Tuple, Any
-import numpy as np
-import pandas as pd
-
-# This is a poorly formatted Python file with many style violations
+import math
 
 
-class UnformattedExampleClass(object):
-    def __init__(
-        self,
-        name,
-        age=None,
-        email=None,
-        phone=None,
-        address=None,
-        city=None,
-        state=None,
-        zip_code=None,
-    ):
+class UnformattedExampleClass:
+    def __init__(self, name, age=None, email=None, phone=None, address=None, city=None, state=None, zip_code=None):
         self.name = name
         self.age = age
         self.email = email
@@ -40,9 +23,7 @@ class UnformattedExampleClass(object):
         self.data.update(kwargs)
 
 
-def process_data(
-    data_list, filter_func=None, transform_func=None, sort_key=None, reverse=False
-):
+def process_data(data_list, filter_func=None, transform_func=None, sort_key=None, reverse=False):
     if not data_list:
         return []
     if filter_func:

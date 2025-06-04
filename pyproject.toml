@@ -93,7 +93,6 @@ crosshair-tool = ">=0.0.78"
 coverage = ">=7.6.4"
 line_profiler=">=4.2.0" #this is the minimum version which supports python 3.13
 platformdirs = ">=4.3.7"
-black = "^25.1.0"
 [tool.poetry.group.dev]
 optional = true
 

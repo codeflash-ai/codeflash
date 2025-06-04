@@ -263,6 +263,16 @@ def _run_formatting_test(source_filename: str, should_content_change: bool):
             helper_functions=[],
             path=target_path,
             original_code=optimizer.function_to_optimize_source_code,
+            # this is just for testing, but in practice, this would be an optimized function code and it will be well-formatted
+            optimized_function="""    def process(self):
+        data=self.load_data()
+        if not data:return{"success":False,"error":"No data loaded"}
+        
+        validated_data=self.validate_data(data)
+        processed_result=process_data(validated_data,
+                                    filter_func=lambda x:x.get('active',True),
+                                    transform_func=lambda x:{**x,'processed_at':datetime.datetime.now().isoformat()},
+                                    sort_key=lambda x:x.get('name',''))""",
         )
         
         if should_content_change:

@@ -302,7 +302,10 @@ class FunctionOptimizer:
                 )
 
                 new_code, new_helper_code = self.reformat_code_and_helpers(
-                    code_context.helper_functions, explanation.file_path, self.function_to_optimize_source_code
+                    code_context.helper_functions,
+                    explanation.file_path,
+                    self.function_to_optimize_source_code,
+                    optimized_function=best_optimization.candidate.source_code,
                 )
 
                 existing_tests = existing_tests_source_for(
@@ -591,18 +594,18 @@ class FunctionOptimizer:
                 f.write(helper_code)
 
     def reformat_code_and_helpers(
-        self, helper_functions: list[FunctionSource], path: Path, original_code: str
+        self, helper_functions: list[FunctionSource], path: Path, original_code: str, optimized_function: str
     ) -> tuple[str, dict[Path, str]]:
         should_sort_imports = not self.args.disable_imports_sorting
         if should_sort_imports and isort.code(original_code) != original_code:
             should_sort_imports = False
 
-        new_code = format_code(self.args.formatter_cmds, path)
+        new_code = format_code(self.args.formatter_cmds, path, optimized_function=optimized_function)
         if should_sort_imports:
             new_code = sort_imports(new_code)
 
         new_helper_code: dict[Path, str] = {}
-        helper_functions_paths = {hf.file_path for hf in helper_functions}
+        helper_functions_paths = {hf.source_code for hf in helper_functions}
         for module_abspath in helper_functions_paths:
             formatted_helper_code = format_code(self.args.formatter_cmds, module_abspath)
             if should_sort_imports:
