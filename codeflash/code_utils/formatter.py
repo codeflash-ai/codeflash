@@ -15,11 +15,11 @@ if TYPE_CHECKING:
 
 def get_diff_output_by_black(filepath: str, unformatted_content: str) -> Optional[str]:
     try:
-        from black import Mode, format_file_contents, output
+        from black import Mode, format_file_contents, output, report
 
         formatted_content = format_file_contents(src_contents=unformatted_content, fast=True, mode=Mode())
         return output.diff(unformatted_content, formatted_content, a_name=filepath, b_name=filepath)
-    except ImportError:
+    except (ImportError, report.NothingChanged):
         return None
 
 

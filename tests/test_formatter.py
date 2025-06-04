@@ -279,3 +279,7 @@ def test_formatting_file_with_many_diffs():
 def test_formatting_file_with_few_diffs():
     """Test that files with few formatting errors are formatted (content changed)."""
     _run_formatting_test("few_formatting_errors.py", should_content_change=True)
+
+def test_formatting_file_with_no_diffs():
+    """Test that files with no formatting errors are unchanged."""
+    _run_formatting_test("no_formatting_errors.py", should_content_change=False)
