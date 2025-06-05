@@ -31,18 +31,19 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
     raise ValueError(msg)
 
 
-def find_conftest_files(tests_path: Path) -> list[Path]:
-    # Find the conftest file on the root of the project
-    dir_path = Path.cwd()
-    cur_path = tests_path
-    list_of_conftest_files = []
-    while cur_path != dir_path:
-        config_file = cur_path / "conftest.py"
-        if config_file.exists():
-            list_of_conftest_files.append(config_file)
-        # Search for conftest.py in the parent directories
-        cur_path = cur_path.parent
-    return list_of_conftest_files
+def find_conftest_files(test_paths: list[Path]) -> list[Path]:
+    list_of_conftest_files = set()
+    for test_path in test_paths:
+        # Find the conftest file on the root of the project
+        dir_path = Path.cwd()
+        cur_path = test_path
+        while cur_path != dir_path:
+            config_file = cur_path / "conftest.py"
+            if config_file.exists():
+                list_of_conftest_files.add(config_file)
+            # Search for conftest.py in the parent directories
+            cur_path = cur_path.parent
+    return list(list_of_conftest_files)
 
 
 def parse_config_file(
