@@ -12,6 +12,10 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
 from codeflash.optimization.optimizer import Optimizer
 
+@pytest.fixture
+def temp_dir():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        yield Path(tmpdirname)
 
 class HelperClass:
     def __init__(self, name):
@@ -200,7 +204,7 @@ def sort_from_another_file(arr):
     assert read_only_context.strip() == expected_read_only_context.strip()
 
 
-def test_flavio_typed_code_helper() -> None:
+def test_flavio_typed_code_helper(temp_dir: Path) -> None:
     code = '''
 
 _P = ParamSpec("_P")
@@ -366,7 +370,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
             lifespan=self.__duration__,
         )
 '''
-    with tempfile.NamedTemporaryFile(mode="w") as f:
+    with (temp_dir / "temp_file.py").open(mode="w") as f:
         f.write(code)
         f.flush()
         file_path = Path(f.name).resolve()
