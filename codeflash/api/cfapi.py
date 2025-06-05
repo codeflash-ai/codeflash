@@ -6,7 +6,7 @@ import os
 import sys
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Dict
 
 import requests
 import sentry_sdk
@@ -204,18 +204,17 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
     return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
 
 
-def is_function_being_optimized_again(code_context: CodeOptimizationContext) -> bool:
+def is_function_being_optimized_again(owner: str, repo: str, pr_number: int, code_contexts: dict[str, str]) -> Dict:
     """Check if the function being optimized is being optimized again."""
-    pr_number = get_pr_number()
-    if pr_number is None:
-        # Only want to do this check during GH Actions
-        return False
-    owner, repo = get_repo_owner_and_name()
-    # TODO: Add file paths
-    rw_context_hash = hashlib.sha256(str(code_context.read_writable_code).encode()).hexdigest()
-
-    payload = {"owner": owner, "repo": repo, "pullNumber": pr_number, "code_hash": rw_context_hash}
-    response = make_cfapi_request(endpoint="/is-function-being-optimized-again", method="POST", payload=payload)
-    if not response.ok or response.text != "true":
-        logger.error(f"Error: {response.text}")
-        return False
+    response = make_cfapi_request(
+        "/is-already-optimized",
+        "POST",
+        {
+            "owner": owner,
+            "repo": repo,
+            "pr_number": pr_number,
+            "code_contexts": code_contexts
+        }
+    )
+    response.raise_for_status()
+    return response.json()

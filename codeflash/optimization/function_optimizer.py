@@ -145,9 +145,6 @@ class FunctionOptimizer:
         if has_any_async_functions(code_context.read_writable_code):
             return Failure("Codeflash does not support async functions in the code to optimize.")
 
-        if is_function_being_optimized_again(code_context=code_context):
-            return Failure("This code has already been optimized earlier")
-
         code_print(code_context.read_writable_code)
         generated_test_paths = [
             get_test_file_path(
