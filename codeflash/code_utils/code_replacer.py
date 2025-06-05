@@ -9,7 +9,6 @@ import libcst as cst
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_global_assignments, add_needed_imports_from_module
-from codeflash.code_utils.config_parser import find_conftest_files
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
@@ -34,17 +33,18 @@ def normalize_code(code: str) -> str:
     return ast.unparse(normalize_node(ast.parse(code)))
 
 
-def modify_autouse_fixture():
-    # find fixutre definition in conftetst.py (the one closest to the test)
-    # get fixtures present in override-fixtures in pyproject.toml
-    # add if marker closest return
-    conftest_files = find_conftest_files()
-    for cf_file in conftest_files:
-        #iterate over all functions in the file
-        # if function has autouse fixture, modify function to bypass with custom marker
-        pass
+# def modify_autouse_fixture():
+#     # find fixutre definition in conftetst.py (the one closest to the test)
+#     # get fixtures present in override-fixtures in pyproject.toml
+#     # add if marker closest return
+#     conftest_files = find_conftest_files()
+#     for cf_file in conftest_files:
+#         # iterate over all functions in the file
+#         # if function has autouse fixture, modify function to bypass with custom marker
+#         pass
 
-#reuse line profiler utils to add decorator and import to test fns
+
+# reuse line profiler utils to add decorator and import to test fns
 
 
 class OptimFunctionCollector(cst.CSTVisitor):
