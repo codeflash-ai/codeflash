@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional, TypeVar
 import libcst as cst
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module
+from codeflash.code_utils.code_extractor import add_global_assignments, add_needed_imports_from_module
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
@@ -82,7 +82,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
 
         return True
 
-    def leave_ClassDef(self, node: cst.ClassDef) -> None:
+    def leave_ClassDef(self, node: cst.ClassDef) -> None:  # noqa: ARG002
         if self.current_class:
             self.current_class = None
 
@@ -104,7 +104,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         )
         self.current_class = None
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:  # noqa: ARG002
         return False
 
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
@@ -133,7 +133,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
                 )
         return updated_node
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
         node = updated_node
         max_function_index = None
         class_index = None
@@ -220,7 +220,8 @@ def replace_function_definitions_in_module(
     )
     if is_zero_diff(source_code, new_code):
         return False
-    module_abspath.write_text(new_code, encoding="utf8")
+    code_with_global_assignments = add_global_assignments(optimized_code, new_code)
+    module_abspath.write_text(code_with_global_assignments, encoding="utf8")
     return True
 
 

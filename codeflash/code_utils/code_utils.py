@@ -2,12 +2,97 @@ from __future__ import annotations
 
 import ast
 import os
+import re
+import shutil
 import site
+from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import tomlkit
+
 from codeflash.cli_cmds.console import logger
+from codeflash.code_utils.config_parser import find_pyproject_toml
+
+ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
+
+
+@contextmanager
+def custom_addopts() -> None:
+    pyproject_file = find_pyproject_toml()
+    original_content = None
+    non_blacklist_plugin_args = ""
+
+    try:
+        # Read original file
+        if pyproject_file.exists():
+            with Path.open(pyproject_file, encoding="utf-8") as f:
+                original_content = f.read()
+                data = tomlkit.parse(original_content)
+            # Backup original addopts
+            original_addopts = data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("addopts", "")
+            # nothing to do if no addopts present
+            if original_addopts != "":
+                original_addopts = [x.strip() for x in original_addopts]
+                non_blacklist_plugin_args = re.sub(r"-n(?: +|=)\S+", "", " ".join(original_addopts)).split(" ")
+                non_blacklist_plugin_args = [x for x in non_blacklist_plugin_args if x != ""]
+                if non_blacklist_plugin_args != original_addopts:
+                    data["tool"]["pytest"]["ini_options"]["addopts"] = non_blacklist_plugin_args
+                    # Write modified file
+                    with Path.open(pyproject_file, "w", encoding="utf-8") as f:
+                        f.write(tomlkit.dumps(data))
+
+        yield
+
+    finally:
+        # Restore original file
+        if (
+            original_content
+            and pyproject_file.exists()
+            and tuple(original_addopts) not in {(), tuple(non_blacklist_plugin_args)}
+        ):
+            with Path.open(pyproject_file, "w", encoding="utf-8") as f:
+                f.write(original_content)
+
+
+@contextmanager
+def add_addopts_to_pyproject() -> None:
+    pyproject_file = find_pyproject_toml()
+    original_content = None
+    try:
+        # Read original file
+        if pyproject_file.exists():
+            with Path.open(pyproject_file, encoding="utf-8") as f:
+                original_content = f.read()
+                data = tomlkit.parse(original_content)
+            data["tool"]["pytest"] = {}
+            data["tool"]["pytest"]["ini_options"] = {}
+            data["tool"]["pytest"]["ini_options"]["addopts"] = [
+                "-n=auto",
+                "-n",
+                "1",
+                "-n 1",
+                "-n      1",
+                "-n      auto",
+            ]
+            with Path.open(pyproject_file, "w", encoding="utf-8") as f:
+                f.write(tomlkit.dumps(data))
+
+        yield
+
+    finally:
+        # Restore original file
+        with Path.open(pyproject_file, "w", encoding="utf-8") as f:
+            f.write(original_content)
+
+
+def encoded_tokens_len(s: str) -> int:
+    """Return the approximate length of the encoded tokens.
+
+    It's an approximation of BPE encoding (https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf).
+    """
+    return int(len(s) * 0.25)
 
 
 def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
@@ -118,4 +203,8 @@ def has_any_async_functions(code: str) -> bool:
 
 def cleanup_paths(paths: list[Path]) -> None:
     for path in paths:
-        path.unlink(missing_ok=True)
+        if path and path.exists():
+            if path.is_dir():
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                path.unlink(missing_ok=True)

@@ -117,7 +117,9 @@ def run_codeflash_command(
     return validated
 
 
-def build_command(cwd: pathlib.Path, config: TestConfig, test_root: pathlib.Path, benchmarks_root:pathlib.Path|None = None) -> list[str]:
+def build_command(
+    cwd: pathlib.Path, config: TestConfig, test_root: pathlib.Path, benchmarks_root: pathlib.Path | None = None
+) -> list[str]:
     python_path = "../../../codeflash/main.py" if "code_directories" in str(cwd) else "../codeflash/main.py"
 
     base_command = ["python", python_path, "--file", config.file_path, "--no-pr"]

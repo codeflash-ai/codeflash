@@ -12,7 +12,7 @@ from codeflash.code_utils.code_replacer import (
     replace_functions_in_file,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionParent
+from codeflash.models.models import CodeOptimizationContext, FunctionParent
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
@@ -32,6 +32,48 @@ class FakeFunctionSource:
     only_function_name: str
     source_code: str
     jedi_definition: JediDefinition
+
+
+class Args:
+    disable_imports_sorting = True
+    formatter_cmds = ["disabled"]
+
+
+def test_code_replacement_global_statements():
+    optimized_code = """import numpy as np
+inconsequential_var = '123'
+def sorter(arr):
+    return arr.sort()"""
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort_optimized.py").resolve()
+    original_code_str = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").read_text(
+        encoding="utf-8"
+    )
+    code_path.write_text(original_code_str, encoding="utf-8")
+    tests_root = Path("/Users/codeflash/Downloads/codeflash-dev/codeflash/code_to_optimize/tests/pytest/")
+    project_root_path = (Path(__file__).parent / "..").resolve()
+    func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
+    test_config = TestConfig(
+        tests_root=tests_root,
+        tests_project_rootdir=project_root_path,
+        project_root_path=project_root_path,
+        test_framework="pytest",
+        pytest_cmd="pytest",
+    )
+    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
+    original_helper_code: dict[Path, str] = {}
+    helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+    for helper_function_path in helper_function_paths:
+        with helper_function_path.open(encoding="utf8") as f:
+            helper_code = f.read()
+            original_helper_code[helper_function_path] = helper_code
+    func_optimizer.args = Args()
+    func_optimizer.replace_function_and_helpers_with_optimized_code(
+        code_context=code_context, optimized_code=optimized_code
+    )
+    final_output = code_path.read_text(encoding="utf-8")
+    assert "inconsequential_var = '123'" in final_output
+    code_path.unlink(missing_ok=True)
 
 
 def test_test_libcst_code_replacement() -> None:
@@ -74,7 +116,7 @@ print("Hello world")
 """
 
     function_name: str = "NewClass.new_function"
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=[function_name],
@@ -135,7 +177,7 @@ print("Hello world")
 """
 
     function_name: str = "NewClass.new_function"
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=[function_name],
@@ -196,7 +238,7 @@ print("Salut monde")
 """
 
     function_names: list[str] = ["other_function"]
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -260,7 +302,7 @@ print("Salut monde")
 """
 
     function_names: list[str] = ["yet_another_function", "other_function"]
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -313,7 +355,7 @@ def supersort(doink):
 """
 
     function_names: list[str] = ["sorter_deps"]
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -591,7 +633,7 @@ class CacheConfig(BaseConfig):
             )
 """
     function_names: list[str] = ["CacheSimilarityEvalConfig.from_config"]
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
 
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
@@ -662,7 +704,7 @@ def test_test_libcst_code_replacement8() -> None:
         return np.sum(a != b) / a.size
 '''
     function_names: list[str] = ["_EmbeddingDistanceChainMixin._hamming_distance"]
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -715,7 +757,7 @@ def totally_new_function(value: Optional[str]):
 print("Hello world")
 """
     function_name: str = "NewClass.__init__"
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=[function_name],
@@ -762,8 +804,7 @@ class MainClass:
         self.name = name
 
     def main_method(self):
-        return HelperClass(self.name).helper_method()
-"""
+        return HelperClass(self.name).helper_method()"""
     file_path = Path(__file__).resolve()
     func_top_optimize = FunctionToOptimize(
         function_name="main_method", file_path=file_path, parents=[FunctionParent("MainClass", "ClassDef")]
@@ -811,7 +852,7 @@ def test_code_replacement11() -> None:
 
     function_name: str = "Fu.foo"
     parents = (FunctionParent("Fu", "ClassDef"),)
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = {("foo", parents), ("real_bar", parents)}
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = {("foo", parents), ("real_bar", parents)}
     new_code: str = replace_functions_in_file(
         source_code=original_code,
         original_function_names=[function_name],
@@ -850,7 +891,7 @@ def test_code_replacement12() -> None:
         pass
 '''
 
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = []
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = []
     new_code: str = replace_functions_in_file(
         source_code=original_code,
         original_function_names=["Fu.real_bar"],
@@ -887,7 +928,7 @@ def test_test_libcst_code_replacement13() -> None:
 """
 
     function_names: list[str] = ["yet_another_function", "other_function"]
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = []
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = []
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -1098,8 +1139,8 @@ class TestResults(BaseModel):
         )
 
     assert (
-            new_code
-            == """from __future__ import annotations
+        new_code
+        == """from __future__ import annotations
 import sys
 from codeflash.verification.comparator import comparator
 from enum import Enum
@@ -1274,7 +1315,7 @@ def cosine_similarity_top_k(
 
     return ret_idxs, scores
 '''
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
 
     helper_functions = [
         FakeFunctionSource(
@@ -1304,8 +1345,8 @@ def cosine_similarity_top_k(
         project_root_path=Path(__file__).parent.parent.resolve(),
     )
     assert (
-            new_code
-            == '''import numpy as np
+        new_code
+        == '''import numpy as np
 from pydantic.dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 @dataclass(config=dict(arbitrary_types_allowed=True))
@@ -1363,8 +1404,8 @@ def cosine_similarity_top_k(
         )
 
     assert (
-            new_helper_code
-            == '''import numpy as np
+        new_helper_code
+        == '''import numpy as np
 from pydantic.dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 @dataclass(config=dict(arbitrary_types_allowed=True))
@@ -1575,7 +1616,7 @@ print("Hello world")
         "NewClass.new_function2",
         "NestedClass.nested_function",
     ]  # Nested classes should be ignored, even if provided as target
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -1609,9 +1650,8 @@ print("Hello world")
 
 print("Hello world")
 """
-
     function_names: list[str] = ["NewClass.__init__", "NewClass.__call__", "NewClass.new_function2"]
-    preexisting_objects: set[tuple[str, tuple[FunctionParent,...]]] = find_preexisting_objects(original_code)
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=function_names,
@@ -1621,3 +1661,474 @@ print("Hello world")
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == original_code
+
+def test_global_reassignment() -> None:
+    original_code = """a=1
+print("Hello world")
+def some_fn():
+    print("did noting")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+    """
+    optimized_code = """import numpy as np
+def some_fn():
+    a=np.zeros(10)
+    print("did something")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+a=2
+print("Hello world")
+    """
+    expected_code = """import numpy as np
+print("Hello world")
+
+a=2
+print("Hello world")
+def some_fn():
+    a=np.zeros(10)
+    print("did something")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+"""
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/global_var_original.py").resolve()
+    code_path.write_text(original_code, encoding="utf-8")
+    tests_root = Path("/Users/codeflash/Downloads/codeflash-dev/codeflash/code_to_optimize/tests/pytest/")
+    project_root_path = (Path(__file__).parent / "..").resolve()
+    func = FunctionToOptimize(function_name="some_fn", parents=[], file_path=code_path)
+    test_config = TestConfig(
+        tests_root=tests_root,
+        tests_project_rootdir=project_root_path,
+        project_root_path=project_root_path,
+        test_framework="pytest",
+        pytest_cmd="pytest",
+    )
+    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
+    original_helper_code: dict[Path, str] = {}
+    helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+    for helper_function_path in helper_function_paths:
+        with helper_function_path.open(encoding="utf8") as f:
+            helper_code = f.read()
+            original_helper_code[helper_function_path] = helper_code
+    func_optimizer.args = Args()
+    func_optimizer.replace_function_and_helpers_with_optimized_code(
+        code_context=code_context, optimized_code=optimized_code
+    )
+    new_code = code_path.read_text(encoding="utf-8")
+    code_path.unlink(missing_ok=True)
+    assert new_code.rstrip() == expected_code.rstrip()
+
+    original_code = """print("Hello world")
+def some_fn():
+    print("did noting")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+a=1
+"""
+    optimized_code = """a=2
+import numpy as np
+def some_fn():
+    a=np.zeros(10)
+    print("did something")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+print("Hello world")
+        """
+    expected_code = """import numpy as np
+print("Hello world")
+
+print("Hello world")
+def some_fn():
+    a=np.zeros(10)
+    print("did something")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+a=2    
+"""
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/global_var_original.py").resolve()
+    code_path.write_text(original_code, encoding="utf-8")
+    tests_root = Path("/Users/codeflash/Downloads/codeflash-dev/codeflash/code_to_optimize/tests/pytest/")
+    project_root_path = (Path(__file__).parent / "..").resolve()
+    func = FunctionToOptimize(function_name="some_fn", parents=[], file_path=code_path)
+    test_config = TestConfig(
+        tests_root=tests_root,
+        tests_project_rootdir=project_root_path,
+        project_root_path=project_root_path,
+        test_framework="pytest",
+        pytest_cmd="pytest",
+    )
+    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
+    original_helper_code: dict[Path, str] = {}
+    helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+    for helper_function_path in helper_function_paths:
+        with helper_function_path.open(encoding="utf8") as f:
+            helper_code = f.read()
+            original_helper_code[helper_function_path] = helper_code
+    func_optimizer.args = Args()
+    func_optimizer.replace_function_and_helpers_with_optimized_code(
+        code_context=code_context, optimized_code=optimized_code
+    )
+    new_code = code_path.read_text(encoding="utf-8")
+    code_path.unlink(missing_ok=True)
+    assert new_code.rstrip() == expected_code.rstrip()
+
+    original_code = """a=1
+print("Hello world")
+def some_fn():
+    print("did noting")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+"""
+    optimized_code = """import numpy as np
+a=2
+def some_fn():
+    a=np.zeros(10)
+    print("did something")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+a=3
+print("Hello world")
+    """
+    expected_code = """import numpy as np
+print("Hello world")
+
+a=3
+print("Hello world")
+def some_fn():
+    a=np.zeros(10)
+    print("did something")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+"""
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/global_var_original.py").resolve()
+    code_path.write_text(original_code, encoding="utf-8")
+    tests_root = Path("/Users/codeflash/Downloads/codeflash-dev/codeflash/code_to_optimize/tests/pytest/")
+    project_root_path = (Path(__file__).parent / "..").resolve()
+    func = FunctionToOptimize(function_name="some_fn", parents=[], file_path=code_path)
+    test_config = TestConfig(
+        tests_root=tests_root,
+        tests_project_rootdir=project_root_path,
+        project_root_path=project_root_path,
+        test_framework="pytest",
+        pytest_cmd="pytest",
+    )
+    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
+    original_helper_code: dict[Path, str] = {}
+    helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+    for helper_function_path in helper_function_paths:
+        with helper_function_path.open(encoding="utf8") as f:
+            helper_code = f.read()
+            original_helper_code[helper_function_path] = helper_code
+    func_optimizer.args = Args()
+    func_optimizer.replace_function_and_helpers_with_optimized_code(
+        code_context=code_context, optimized_code=optimized_code
+    )
+    new_code = code_path.read_text(encoding="utf-8")
+    code_path.unlink(missing_ok=True)
+    assert new_code.rstrip() == expected_code.rstrip()
+
+    original_code = """a=1
+print("Hello world")
+def some_fn():
+    print("did noting")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+"""
+    optimized_code = """a=2
+import numpy as np
+def some_fn():
+    a=np.zeros(10)
+    print("did something")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+print("Hello world")
+    """
+    expected_code = """import numpy as np
+print("Hello world")
+
+a=2
+print("Hello world")
+def some_fn():
+    a=np.zeros(10)
+    print("did something")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+"""
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/global_var_original.py").resolve()
+    code_path.write_text(original_code, encoding="utf-8")
+    tests_root = Path("/Users/codeflash/Downloads/codeflash-dev/codeflash/code_to_optimize/tests/pytest/")
+    project_root_path = (Path(__file__).parent / "..").resolve()
+    func = FunctionToOptimize(function_name="some_fn", parents=[], file_path=code_path)
+    test_config = TestConfig(
+        tests_root=tests_root,
+        tests_project_rootdir=project_root_path,
+        project_root_path=project_root_path,
+        test_framework="pytest",
+        pytest_cmd="pytest",
+    )
+    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
+    original_helper_code: dict[Path, str] = {}
+    helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+    for helper_function_path in helper_function_paths:
+        with helper_function_path.open(encoding="utf8") as f:
+            helper_code = f.read()
+            original_helper_code[helper_function_path] = helper_code
+    func_optimizer.args = Args()
+    func_optimizer.replace_function_and_helpers_with_optimized_code(
+        code_context=code_context, optimized_code=optimized_code
+    )
+    new_code = code_path.read_text(encoding="utf-8")
+    code_path.unlink(missing_ok=True)
+    assert new_code.rstrip() == expected_code.rstrip()
+
+    original_code = """a=1
+print("Hello world")
+def some_fn():
+    print("did noting")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+"""
+    optimized_code = """import numpy as np
+a=2
+def some_fn():
+    a=np.zeros(10)
+    print("did something")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+a=3
+print("Hello world")
+    """
+    expected_code = """import numpy as np
+print("Hello world")
+
+a=3
+print("Hello world")
+def some_fn():
+    a=np.zeros(10)
+    print("did something")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+"""
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/global_var_original.py").resolve()
+    code_path.write_text(original_code, encoding="utf-8")
+    tests_root = Path("/Users/codeflash/Downloads/codeflash-dev/codeflash/code_to_optimize/tests/pytest/")
+    project_root_path = (Path(__file__).parent / "..").resolve()
+    func = FunctionToOptimize(function_name="some_fn", parents=[], file_path=code_path)
+    test_config = TestConfig(
+        tests_root=tests_root,
+        tests_project_rootdir=project_root_path,
+        project_root_path=project_root_path,
+        test_framework="pytest",
+        pytest_cmd="pytest",
+    )
+    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
+    original_helper_code: dict[Path, str] = {}
+    helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+    for helper_function_path in helper_function_paths:
+        with helper_function_path.open(encoding="utf8") as f:
+            helper_code = f.read()
+            original_helper_code[helper_function_path] = helper_code
+    func_optimizer.args = Args()
+    func_optimizer.replace_function_and_helpers_with_optimized_code(
+        code_context=code_context, optimized_code=optimized_code
+    )
+    new_code = code_path.read_text(encoding="utf-8")
+    code_path.unlink(missing_ok=True)
+    assert new_code.rstrip() == expected_code.rstrip()
+
+    original_code = """if 2<3:
+    a=4
+else:
+    a=5
+print("Hello world")
+def some_fn():
+    print("did noting")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+"""
+    optimized_code = """import numpy as np
+if 1<2:
+    a=2
+else:
+    a=3
+a = 6    
+def some_fn():
+    a=np.zeros(10)
+    print("did something")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+print("Hello world")
+"""
+    expected_code = """import numpy as np
+print("Hello world")
+
+if 2<3:
+    a=4
+else:
+    a=5
+print("Hello world")
+def some_fn():
+    a=np.zeros(10)
+    print("did something")
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+    def __init__(self, name):
+        self.name = name
+    def __call__(self, value):
+        return "I am still old"
+    def new_function2(value):
+        return cst.ensure_type(value, str)
+
+a = 6
+"""
+    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/global_var_original.py").resolve()
+    code_path.write_text(original_code, encoding="utf-8")
+    tests_root = Path("/Users/codeflash/Downloads/codeflash-dev/codeflash/code_to_optimize/tests/pytest/")
+    project_root_path = (Path(__file__).parent / "..").resolve()
+    func = FunctionToOptimize(function_name="some_fn", parents=[], file_path=code_path)
+    test_config = TestConfig(
+        tests_root=tests_root,
+        tests_project_rootdir=project_root_path,
+        project_root_path=project_root_path,
+        test_framework="pytest",
+        pytest_cmd="pytest",
+    )
+    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
+    original_helper_code: dict[Path, str] = {}
+    helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+    for helper_function_path in helper_function_paths:
+        with helper_function_path.open(encoding="utf8") as f:
+            helper_code = f.read()
+            original_helper_code[helper_function_path] = helper_code
+    func_optimizer.args = Args()
+    func_optimizer.replace_function_and_helpers_with_optimized_code(
+        code_context=code_context, optimized_code=optimized_code
+    )
+    new_code = code_path.read_text(encoding="utf-8")
+    code_path.unlink(missing_ok=True)
+    assert new_code.rstrip() == expected_code.rstrip()

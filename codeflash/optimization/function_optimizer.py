@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 import concurrent.futures
 import os
-import shutil
 import subprocess
 import time
 import uuid
@@ -25,6 +24,7 @@ from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.code_utils.code_utils import (
+    ImportErrorPattern,
     cleanup_paths,
     file_name_from_test_module_name,
     get_run_tmp_file,
@@ -126,7 +126,7 @@ class FunctionOptimizer:
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
         self.replay_tests_dir = replay_tests_dir if replay_tests_dir else None
 
-    def optimize_function(self) -> Result[BestOptimization, str]:
+    def optimize_function(self) -> Result[BestOptimization, str]:  # noqa: PLR0911
         should_run_experiment = self.experiment_id is not None
         logger.debug(f"Function Trace ID: {self.function_trace_id}")
         ph("cli-optimize-function-start", {"function_trace_id": self.function_trace_id})
@@ -346,20 +346,6 @@ class FunctionOptimizer:
                             original_helper_code,
                             self.function_to_optimize.file_path,
                         )
-        for generated_test_path in generated_test_paths:
-            generated_test_path.unlink(missing_ok=True)
-        for generated_perf_test_path in generated_perf_test_paths:
-            generated_perf_test_path.unlink(missing_ok=True)
-        for test_paths in instrumented_unittests_created_for_function:
-            test_paths.unlink(missing_ok=True)
-        for fn in function_to_concolic_tests:
-            for test in function_to_concolic_tests[fn]:
-                if not test.tests_in_file.test_file.parent.exists():
-                    logger.warning(
-                        f"Concolic test directory {test.tests_in_file.test_file.parent} does not exist so could not be deleted."
-                    )
-                shutil.rmtree(test.tests_in_file.test_file.parent, ignore_errors=True)
-                break  # need to delete only one test directory
 
         if not best_optimization:
             return Failure(f"No best optimizations found for function {self.function_to_optimize.qualified_name}")
@@ -418,8 +404,8 @@ class FunctionOptimizer:
                             f"Added results from line profiler to candidates, total candidates now: {original_len}"
                         )
                         future_line_profile_results = None
-                    candidate_index += 1
                     candidate = candidates.popleft()
+                    candidate_index += 1
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
                     logger.info(f"Optimization candidate {candidate_index}/{original_len}:")
@@ -478,7 +464,7 @@ class FunctionOptimizer:
                                 f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
                             )
                             tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
-                            tree.add(f"Speedup ratio: {perf_gain + 1:.1f}X")
+                            tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
                             replay_perf_gain = {}
                             if self.args.benchmark:
                                 test_results_by_benchmark = (
@@ -527,7 +513,17 @@ class FunctionOptimizer:
                     self.write_code_and_helpers(
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
-
+                    if (not len(candidates)) and (
+                        not done
+                    ):  # all original candidates processed but lp results haven't been processed
+                        concurrent.futures.wait([future_line_profile_results])
+                        line_profile_results = future_line_profile_results.result()
+                        candidates.extend(line_profile_results)
+                        original_len += len(line_profile_results)
+                        logger.info(
+                            f"Added results from line profiler to candidates, total candidates now: {original_len}"
+                        )
+                        future_line_profile_results = None
             except KeyboardInterrupt as e:
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
@@ -591,9 +587,9 @@ class FunctionOptimizer:
     def write_code_and_helpers(original_code: str, original_helper_code: dict[Path, str], path: Path) -> None:
         with path.open("w", encoding="utf8") as f:
             f.write(original_code)
-        for module_abspath in original_helper_code:
+        for module_abspath, helper_code in original_helper_code.items():
             with Path(module_abspath).open("w", encoding="utf8") as f:
-                f.write(original_helper_code[module_abspath])
+                f.write(helper_code)
 
     def reformat_code_and_helpers(
         self, helper_functions: list[FunctionSource], path: Path, original_code: str
@@ -710,10 +706,10 @@ class FunctionOptimizer:
                     continue
                 # TODO: this naming logic should be moved to a function and made more standard
                 new_behavioral_test_path = Path(
-                    f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}"
+                    f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}"  # noqa: PTH122
                 )
                 new_perf_test_path = Path(
-                    f"{os.path.splitext(test_file)[0]}__perfonlyinstrumented{os.path.splitext(test_file)[1]}"
+                    f"{os.path.splitext(test_file)[0]}__perfonlyinstrumented{os.path.splitext(test_file)[1]}"  # noqa: PTH122
                 )
                 if injected_behavior_test is not None:
                     with new_behavioral_test_path.open("w", encoding="utf8") as _f:
@@ -757,7 +753,7 @@ class FunctionOptimizer:
         helper_functions: list[FunctionSource],
         generated_test_paths: list[Path],
         generated_perf_test_paths: list[Path],
-        run_experiment: bool = False,
+        run_experiment: bool = False,  # noqa: FBT001, FBT002
     ) -> Result[tuple[GeneratedTestsList, dict[str, list[FunctionCalledInTest]], OptimizationSet], str]:
         assert len(generated_test_paths) == N_TESTS_TO_GENERATE
         max_workers = N_TESTS_TO_GENERATE + 2 if not run_experiment else N_TESTS_TO_GENERATE + 3
@@ -858,7 +854,7 @@ class FunctionOptimizer:
         line_profile_results = {"timings": {}, "unit": 0, "str_out": ""}
         # For the original function - run the tests and get the runtime, plus coverage
         with progress_bar(f"Establishing original code baseline for {self.function_to_optimize.function_name}"):
-            assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}
+            assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
             success = True
 
             test_env = os.environ.copy()
@@ -1013,7 +1009,7 @@ class FunctionOptimizer:
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
     ) -> Result[OptimizedCandidateResult, str]:
-        assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}
+        assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
 
         with progress_bar("Testing optimization candidate"):
             test_env = os.environ.copy()
@@ -1198,6 +1194,12 @@ class FunctionOptimizer:
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
+            if "ModuleNotFoundError" in run_result.stdout:
+                from rich.text import Text
+
+                match = ImportErrorPattern.search(run_result.stdout).group()
+                panel = Panel(Text.from_markup(f"⚠️  {match} ", style="bold red"), expand=False)
+                console.print(panel)
         if testing_type in {TestingMode.BEHAVIOR, TestingMode.PERFORMANCE}:
             results, coverage_results = parse_test_results(
                 test_xml_path=result_file_path,
@@ -1243,3 +1245,25 @@ class FunctionOptimizer:
                 zip(generated_test_paths, generated_perf_test_paths)
             )
         ]
+
+    def cleanup_generated_files(self) -> None:
+        paths_to_cleanup = (
+            [
+                test_file.instrumented_behavior_file_path
+                for test_type in [
+                    TestType.GENERATED_REGRESSION,
+                    TestType.EXISTING_UNIT_TEST,
+                    TestType.CONCOLIC_COVERAGE_TEST,
+                ]
+                for test_file in self.test_files.get_by_type(test_type).test_files
+            ]
+            + [
+                test_file.benchmarking_file_path
+                for test_type in [TestType.GENERATED_REGRESSION, TestType.EXISTING_UNIT_TEST]
+                for test_file in self.test_files.get_by_type(test_type).test_files
+            ]
+            + [self.test_cfg.concolic_test_root_dir]
+        )
+        cleanup_paths(paths_to_cleanup)
+        if hasattr(get_run_tmp_file, "tmpdir"):
+            get_run_tmp_file.tmpdir.cleanup()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Optional
 
 import libcst as cst
 
@@ -35,7 +36,9 @@ def extract_names_from_targets(target: cst.CSTNode) -> list[str]:
     return names
 
 
-def collect_top_level_definitions(node: cst.CSTNode, definitions: dict[str, UsageInfo] = None) -> dict[str, UsageInfo]:
+def collect_top_level_definitions(
+    node: cst.CSTNode, definitions: Optional[dict[str, UsageInfo]] = None
+) -> dict[str, UsageInfo]:
     """Recursively collect all top-level variable, function, and class definitions."""
     if definitions is None:
         definitions = {}
@@ -142,13 +145,13 @@ class DependencyCollector(cst.CSTVisitor):
         self.function_depth += 1
 
     def _collect_annotation_dependencies(self, annotation: cst.Annotation) -> None:
-        """Extract dependencies from type annotations"""
+        """Extract dependencies from type annotations."""
         if hasattr(annotation, "annotation"):
             # Extract names from annotation (could be Name, Attribute, Subscript, etc.)
             self._extract_names_from_annotation(annotation.annotation)
 
     def _extract_names_from_annotation(self, node: cst.CSTNode) -> None:
-        """Extract names from a type annotation node"""
+        """Extract names from a type annotation node."""
         # Simple name reference like 'int', 'str', or custom type
         if isinstance(node, cst.Name):
             name = node.value
@@ -170,7 +173,7 @@ class DependencyCollector(cst.CSTVisitor):
                 self._extract_names_from_annotation(node.value)
             # No need to check the attribute name itself as it's likely not a top-level definition
 
-    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:
+    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:  # noqa: ARG002
         self.function_depth -= 1
 
         if self.function_depth == 0 and self.class_depth == 0:
@@ -187,7 +190,7 @@ class DependencyCollector(cst.CSTVisitor):
 
         self.class_depth += 1
 
-    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:
+    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:  # noqa: ARG002
         self.class_depth -= 1
 
         if self.class_depth == 0:
@@ -210,7 +213,7 @@ class DependencyCollector(cst.CSTVisitor):
                     # Use the first tracked name as the current top-level name (for dependency tracking)
                     self.current_top_level_name = tracked_names[0]
 
-    def leave_Assign(self, original_node: cst.Assign) -> None:
+    def leave_Assign(self, original_node: cst.Assign) -> None:  # noqa: ARG002
         if self.processing_variable:
             self.processing_variable = False
             self.current_variable_names.clear()
@@ -302,8 +305,8 @@ class QualifiedFunctionUsageMarker:
             self.mark_as_used_recursively(dep)
 
 
-def remove_unused_definitions_recursively(
-        node: cst.CSTNode, definitions: dict[str, UsageInfo]
+def remove_unused_definitions_recursively(  # noqa: PLR0911
+    node: cst.CSTNode, definitions: dict[str, UsageInfo]
 ) -> tuple[cst.CSTNode | None, bool]:
     """Recursively filter the node to remove unused definitions.
 
@@ -358,7 +361,10 @@ def remove_unused_definitions_recursively(
                             names = extract_names_from_targets(target.target)
                             for name in names:
                                 class_var_name = f"{class_name}.{name}"
-                                if class_var_name in definitions and definitions[class_var_name].used_by_qualified_function:
+                                if (
+                                    class_var_name in definitions
+                                    and definitions[class_var_name].used_by_qualified_function
+                                ):
                                     var_used = True
                                     method_or_var_used = True
                                     break

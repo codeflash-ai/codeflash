@@ -15,8 +15,9 @@ if TYPE_CHECKING:
     from codeflash.models.models import BenchmarkKey
 
 
-def validate_and_format_benchmark_table(function_benchmark_timings: dict[str, dict[BenchmarkKey, int]],
-                          total_benchmark_timings: dict[BenchmarkKey, int]) -> dict[str, list[tuple[BenchmarkKey, float, float, float]]]:
+def validate_and_format_benchmark_table(
+    function_benchmark_timings: dict[str, dict[BenchmarkKey, int]], total_benchmark_timings: dict[BenchmarkKey, int]
+) -> dict[str, list[tuple[BenchmarkKey, float, float, float]]]:
     function_to_result = {}
     # Process each function's benchmark data
     for func_path, test_times in function_benchmark_timings.items():
@@ -41,12 +42,11 @@ def validate_and_format_benchmark_table(function_benchmark_timings: dict[str, di
 
 
 def print_benchmark_table(function_to_results: dict[str, list[tuple[BenchmarkKey, float, float, float]]]) -> None:
-
     try:
         terminal_width = int(shutil.get_terminal_size().columns * 0.9)
     except Exception:
         terminal_width = 120  # Fallback width
-    console = Console(width = terminal_width)
+    console = Console(width=terminal_width)
     for func_path, sorted_tests in function_to_results.items():
         console.print()
         function_name = func_path.split(":")[-1]
@@ -67,30 +67,18 @@ def print_benchmark_table(function_to_results: dict[str, list[tuple[BenchmarkKey
             test_function = benchmark_key.function_name
 
             if total_time == 0.0:
-                table.add_row(
-                    module_path,
-                    test_function,
-                    "N/A",
-                    "N/A",
-                    "N/A"
-                )
+                table.add_row(module_path, test_function, "N/A", "N/A", "N/A")
             else:
-                table.add_row(
-                    module_path,
-                    test_function,
-                    f"{total_time:.3f}",
-                    f"{func_time:.3f}",
-                    f"{percentage:.2f}"
-                )
+                table.add_row(module_path, test_function, f"{total_time:.3f}", f"{func_time:.3f}", f"{percentage:.2f}")
 
         # Print the table
         console.print(table)
 
 
 def process_benchmark_data(
-        replay_performance_gain: dict[BenchmarkKey, float],
-        fto_benchmark_timings: dict[BenchmarkKey, int],
-        total_benchmark_timings: dict[BenchmarkKey, int]
+    replay_performance_gain: dict[BenchmarkKey, float],
+    fto_benchmark_timings: dict[BenchmarkKey, int],
+    total_benchmark_timings: dict[BenchmarkKey, int],
 ) -> Optional[ProcessedBenchmarkInfo]:
     """Process benchmark data and generate detailed benchmark information.
 
@@ -109,19 +97,25 @@ def process_benchmark_data(
     benchmark_details = []
 
     for benchmark_key, og_benchmark_timing in fto_benchmark_timings.items():
-
         total_benchmark_timing = total_benchmark_timings.get(benchmark_key, 0)
 
         if total_benchmark_timing == 0:
             continue  # Skip benchmarks with zero timing
 
         # Calculate expected new benchmark timing
-        expected_new_benchmark_timing = total_benchmark_timing - og_benchmark_timing + (
-                1 / (replay_performance_gain[benchmark_key] + 1)
-        ) * og_benchmark_timing
+        expected_new_benchmark_timing = (
+            total_benchmark_timing
+            - og_benchmark_timing
+            + (1 / (replay_performance_gain[benchmark_key] + 1)) * og_benchmark_timing
+        )
 
         # Calculate speedup
-        benchmark_speedup_percent = performance_gain(original_runtime_ns=total_benchmark_timing, optimized_runtime_ns=int(expected_new_benchmark_timing)) * 100
+        benchmark_speedup_percent = (
+            performance_gain(
+                original_runtime_ns=total_benchmark_timing, optimized_runtime_ns=int(expected_new_benchmark_timing)
+            )
+            * 100
+        )
 
         benchmark_details.append(
             BenchmarkDetail(
@@ -129,7 +123,7 @@ def process_benchmark_data(
                 test_function=benchmark_key.function_name,
                 original_timing=humanize_runtime(int(total_benchmark_timing)),
                 expected_new_timing=humanize_runtime(int(expected_new_benchmark_timing)),
-                speedup_percent=benchmark_speedup_percent
+                speedup_percent=benchmark_speedup_percent,
             )
         )
 

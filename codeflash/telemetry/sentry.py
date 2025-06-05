@@ -4,7 +4,7 @@ import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
 
 
-def init_sentry(enabled: bool = False, exclude_errors: bool = False) -> None:
+def init_sentry(enabled: bool = False, exclude_errors: bool = False) -> None:  # noqa: FBT001, FBT002
     if enabled:
         sentry_logging = LoggingIntegration(
             level=logging.INFO,  # Capture info and above as breadcrumbs
