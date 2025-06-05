@@ -1,6 +1,5 @@
 import tempfile
 from pathlib import Path
-import os
 import unittest.mock
 
 from codeflash.discovery.functions_to_optimize import (
@@ -12,7 +11,6 @@ from codeflash.discovery.functions_to_optimize import (
     get_all_files_and_functions
 )
 from codeflash.verification.verification_utils import TestConfig
-from codeflash.code_utils.compat import codeflash_temp_dir
 
 
 def test_function_eligible_for_optimization() -> None:
@@ -20,40 +18,39 @@ def test_function_eligible_for_optimization() -> None:
     a = 5
     return a**2
     """
-    functions_found = {}
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(function)
-        f.flush()
-        functions_found = find_all_functions_in_file(Path(f.name))
-    assert functions_found[Path(f.name)][0].function_name == "test_function_eligible_for_optimization"
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir) / "eligible.py"
+        with temp_path.open("w") as f:
+            f.write(function)
+        functions_found = find_all_functions_in_file(temp_path)
+        assert functions_found[temp_path][0].function_name == "test_function_eligible_for_optimization"
 
-    # Has no return statement
-    function = """def test_function_not_eligible_for_optimization():
+        # Has no return statement
+        function = """def test_function_not_eligible_for_optimization():
     a = 5
     print(a)
     """
-    functions_found = {}
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(function)
-        f.flush()
-        functions_found = find_all_functions_in_file(Path(f.name))
-    assert len(functions_found[Path(f.name)]) == 0
+        temp_path2 = Path(temp_dir) / "not_eligible.py"
+        with temp_path2.open("w") as f:
+            f.write(function)
+        functions_found = find_all_functions_in_file(temp_path2)
+        assert len(functions_found[temp_path2]) == 0
 
-
-    # we want to trigger an error in the function discovery
-    function = """def test_invalid_code():"""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(function)
-        f.flush()
-        functions_found = find_all_functions_in_file(Path(f.name))
-    assert functions_found == {}
+        # we want to trigger an error in the function discovery
+        function = """def test_invalid_code():"""
+        temp_path3 = Path(temp_dir) / "invalid.py"
+        with temp_path3.open("w") as f:
+            f.write(function)
+        functions_found = find_all_functions_in_file(temp_path3)
+        assert functions_found == {}
 
 
 
 
 def test_find_top_level_function_or_method():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir) / "test_file.py"
+        temp_path.write_text(
             """def functionA():
     def functionB():
         return 5
@@ -77,8 +74,7 @@ def non_classmethod_function(cls, name):
     return cls.name
     """
         )
-        f.flush()
-        path_obj_name = Path(f.name)
+        path_obj_name = temp_path
         assert inspect_top_level_functions_or_methods(path_obj_name, "functionA").is_top_level
         assert not inspect_top_level_functions_or_methods(path_obj_name, "functionB").is_top_level
         assert inspect_top_level_functions_or_methods(path_obj_name, "functionC", class_name="A").is_top_level
@@ -96,21 +92,21 @@ def non_classmethod_function(cls, name):
         assert not inspect_top_level_functions_or_methods(
             path_obj_name, "non_classmethod_function", class_name="AirbyteEntrypoint"
         ).is_top_level
-        # needed because this will be traced with a class_name being passed
 
     # we want to write invalid code to ensure that the function discovery does not crash
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir) / "invalid.py"
+        temp_path.write_text(
             """def functionA():
 """
         )
-        f.flush()
-        path_obj_name = Path(f.name)
+        path_obj_name = temp_path
         assert not inspect_top_level_functions_or_methods(path_obj_name, "functionA")
 
 def test_class_method_discovery():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir) / "test_class_method.py"
+        temp_path.write_text(
             """class A:
     def functionA():
         return True
@@ -124,11 +120,10 @@ class X:
 def functionA():
     return True"""
         )
-        f.flush()
         test_config = TestConfig(
             tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
         )
-        path_obj_name = Path(f.name)
+        path_obj_name = temp_path
         functions, functions_count = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
@@ -178,8 +173,9 @@ def functionA():
 
 
 def test_nested_function():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir) / "nested1.py"
+        temp_path.write_text(
 """
 import copy 
 
@@ -224,11 +220,10 @@ def propagate_attributes(
     return modified_nodes
 """
         )
-        f.flush()
         test_config = TestConfig(
             tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
         )
-        path_obj_name = Path(f.name)
+        path_obj_name = temp_path
         functions, functions_count = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
@@ -243,8 +238,8 @@ def propagate_attributes(
         assert len(functions) == 1
         assert functions_count == 1
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(
+        temp_path2 = Path(temp_dir) / "nested2.py"
+        temp_path2.write_text(
 """
 def outer_function():
     def inner_function():
@@ -253,11 +248,7 @@ def outer_function():
     return inner_function
 """
         )
-        f.flush()
-        test_config = TestConfig(
-            tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
-        )
-        path_obj_name = Path(f.name)
+        path_obj_name = temp_path2
         functions, functions_count = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
@@ -272,8 +263,8 @@ def outer_function():
         assert len(functions) == 1
         assert functions_count == 1
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(
+        temp_path3 = Path(temp_dir) / "nested3.py"
+        temp_path3.write_text(
 """
 def outer_function():
     def inner_function():
@@ -284,11 +275,7 @@ def outer_function():
     return inner_function, another_inner_function
 """
         )
-        f.flush()
-        test_config = TestConfig(
-            tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
-        )
-        path_obj_name = Path(f.name)
+        path_obj_name = temp_path3
         functions, functions_count = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
@@ -302,6 +289,7 @@ def outer_function():
 
         assert len(functions) == 1
         assert functions_count == 1
+
 
 
 def test_filter_files_optimized():
