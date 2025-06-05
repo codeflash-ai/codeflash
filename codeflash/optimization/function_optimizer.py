@@ -33,6 +33,7 @@ from codeflash.code_utils.code_utils import (
     get_run_tmp_file,
     has_any_async_functions,
     module_name_from_file_path,
+    restore_conftest,
 )
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
@@ -212,7 +213,8 @@ class FunctionOptimizer:
             for key in set(self.function_to_tests) | set(function_to_concolic_tests)
         }
         instrumented_unittests_created_for_function = self.instrument_existing_tests(function_to_all_tests)
-
+        # logger.debug("disabling all autouse fixtures associated with the test files")
+        original_conftest_content = modify_autouse_fixture(list(instrumented_unittests_created_for_function))
         # Get a dict of file_path_to_classes of fto and helpers_of_fto
         file_path_to_helper_classes = defaultdict(set)
         for function_source in code_context.helper_functions:
@@ -234,6 +236,7 @@ class FunctionOptimizer:
         )
 
         if not is_successful(baseline_result):
+            restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
             return Failure(baseline_result.failure())
 
@@ -241,6 +244,7 @@ class FunctionOptimizer:
         if isinstance(original_code_baseline, OriginalCodeBaseline) and not coverage_critic(
             original_code_baseline.coverage_results, self.args.test_framework
         ):
+            restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
             return Failure("The threshold for test coverage was not met.")
         # request for new optimizations but don't block execution, check for completion later
@@ -746,8 +750,6 @@ class FunctionOptimizer:
                 f"{concolic_coverage_test_files_count} concolic coverage test file"
                 f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
             )
-        logger.debug("disabling all autouse fixtures associated with the test files")
-        modify_autouse_fixture(list(unique_instrumented_test_files))
         logger.debug("add custom marker to all tests")
         add_custom_marker_to_all_tests(list(unique_instrumented_test_files))
         return unique_instrumented_test_files

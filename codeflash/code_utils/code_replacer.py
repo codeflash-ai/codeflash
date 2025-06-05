@@ -76,26 +76,27 @@ class AutouseFixtureModifier(cst.CSTTransformer):
 
 
 @contextlib.contextmanager
-def disable_autouse(test_path: Path) -> None:
+def disable_autouse(test_path: Path) -> str:
     file_content = test_path.read_text(encoding="utf-8")
-    try:
-        module = cst.parse_module(file_content)
-        disable_autouse_fixture = AutouseFixtureModifier()
-        modified_module = module.visit(disable_autouse_fixture)
-        test_path.write_text(modified_module.code, encoding="utf-8")
-    finally:
-        test_path.write_text(file_content, encoding="utf-8")
+    module = cst.parse_module(file_content)
+    disable_autouse_fixture = AutouseFixtureModifier()
+    modified_module = module.visit(disable_autouse_fixture)
+    test_path.write_text(modified_module.code, encoding="utf-8")
+    return file_content
 
 
-def modify_autouse_fixture(test_paths: list[Path]) -> None:
+def modify_autouse_fixture(test_paths: list[Path]) -> dict[Path, list[str]]:
     # find fixutre definition in conftetst.py (the one closest to the test)
     # get fixtures present in override-fixtures in pyproject.toml
     # add if marker closest return
+    file_content_map = {}
     conftest_files = find_conftest_files(test_paths)
     for cf_file in conftest_files:
         # iterate over all functions in the file
         # if function has autouse fixture, modify function to bypass with custom marker
-        disable_autouse(cf_file)
+        original_content = disable_autouse(cf_file)
+        file_content_map[cf_file] = original_content
+    return file_content_map
 
 
 # # reuse line profiler utils to add decorator and import to test fns
