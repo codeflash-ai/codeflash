@@ -238,6 +238,8 @@ formatter-cmds = [
     "uvx ruff check --exit-zero --fix $file",
     "uvx ruff format $file",
 ]
+override-fixtures = ["fixture1"] #autouse fixtures present in conftest.py which have to be disabled during test execution
+
 [tool.pytest.ini_options]
 markers = [
     "no_autouse"

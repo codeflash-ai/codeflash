@@ -88,6 +88,48 @@ def add_addopts_to_pyproject() -> None:
 
 
 @contextmanager
+def add_override_fixtures_to_pyproject() -> None:
+    pyproject_file = find_pyproject_toml()
+    try:
+        # Read original file
+        if pyproject_file.exists():
+            with Path.open(pyproject_file, encoding="utf-8") as f:
+                original_content = f.read()
+                data = tomlkit.parse(original_content)
+            # Backup original markers
+            original_fixtures = data.get("tool", {}).get("codeflash", {}).get("override-fixtures", [])
+            original_fixtures.append("please_put_your_fixtures_here")
+            data["tool"]["pytest"]["override-fixtures"]["markers"] = list(original_fixtures)
+            with Path.open(pyproject_file, "w", encoding="utf-8") as f:
+                f.write(tomlkit.dumps(data))
+        yield
+    finally:
+        with Path.open(pyproject_file, "w", encoding="utf-8") as f:
+            f.write(original_content)
+
+
+@contextmanager
+def add_custom_markers_to_pyproject() -> None:
+    pyproject_file = find_pyproject_toml()
+    try:
+        # Read original file
+        if pyproject_file.exists():
+            with Path.open(pyproject_file, encoding="utf-8") as f:
+                original_content = f.read()
+                data = tomlkit.parse(original_content)
+            # Backup original markers
+            original_markers = data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("markers", [])
+            original_markers.append("codeflash_no_autouse")
+            data["tool"]["pytest"]["ini_options"]["markers"] = list(original_markers)
+            with Path.open(pyproject_file, "w", encoding="utf-8") as f:
+                f.write(tomlkit.dumps(data))
+        yield
+    finally:
+        with Path.open(pyproject_file, "w", encoding="utf-8") as f:
+            f.write(original_content)
+
+
+@contextmanager
 def rename_conftest(tests_path: Path) -> None:
     conftest_file = find_conftest(tests_path)
     tmp_conftest_file = None

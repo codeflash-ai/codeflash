@@ -33,6 +33,13 @@ def normalize_code(code: str) -> str:
     return ast.unparse(normalize_node(ast.parse(code)))
 
 
+def modify_autouse_fixture():
+    # find fixutre definition in conftetst.py (the one closest to the test)
+    # get fixtures present in override-fixtures in pyproject.toml
+    # add if marker closest return
+    autousetransformer
+
+
 class OptimFunctionCollector(cst.CSTVisitor):
     METADATA_DEPENDENCIES = (cst.metadata.ParentNodeProvider,)
 
