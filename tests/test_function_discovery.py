@@ -10,39 +10,44 @@ from codeflash.discovery.functions_to_optimize import (
     filter_functions,
     get_all_files_and_functions
 )
+
+import pytest
 from codeflash.verification.verification_utils import TestConfig
 
+@pytest.fixture
+def temp_dir():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        yield Path(temp_dir)
 
-def test_function_eligible_for_optimization() -> None:
+def test_function_eligible_for_optimization(temp_dir: Path) -> None:
     function = """def test_function_eligible_for_optimization():
     a = 5
     return a**2
     """
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir) / "eligible.py"
-        with temp_path.open("w") as f:
-            f.write(function)
-        functions_found = find_all_functions_in_file(temp_path)
-        assert functions_found[temp_path][0].function_name == "test_function_eligible_for_optimization"
+    temp_path = temp_dir / "eligible.py"
+    with temp_path.open("w") as f:
+        f.write(function)
+    functions_found = find_all_functions_in_file(temp_path)
+    assert functions_found[temp_path][0].function_name == "test_function_eligible_for_optimization"
 
-        # Has no return statement
-        function = """def test_function_not_eligible_for_optimization():
+    # Has no return statement
+    function = """def test_function_not_eligible_for_optimization():
     a = 5
     print(a)
     """
-        temp_path2 = Path(temp_dir) / "not_eligible.py"
-        with temp_path2.open("w") as f:
-            f.write(function)
-        functions_found = find_all_functions_in_file(temp_path2)
-        assert len(functions_found[temp_path2]) == 0
+    temp_path2 = temp_dir / "not_eligible.py"
+    with temp_path2.open("w") as f:
+        f.write(function)
+    functions_found = find_all_functions_in_file(temp_path2)
+    assert len(functions_found[temp_path2]) == 0
 
-        # we want to trigger an error in the function discovery
-        function = """def test_invalid_code():"""
-        temp_path3 = Path(temp_dir) / "invalid.py"
-        with temp_path3.open("w") as f:
-            f.write(function)
-        functions_found = find_all_functions_in_file(temp_path3)
-        assert functions_found == {}
+    # we want to trigger an error in the function discovery
+    function = """def test_invalid_code():"""
+    temp_path3 = temp_dir / "invalid.py"
+    with temp_path3.open("w") as f:
+        f.write(function)
+    functions_found = find_all_functions_in_file(temp_path3)
+    assert functions_found == {}
 
 
 
