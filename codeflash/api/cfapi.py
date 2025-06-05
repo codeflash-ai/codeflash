@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import sys
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, Dict
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import requests
 import sentry_sdk
 from pydantic.json import pydantic_encoder
+from requests import Response
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
 from codeflash.code_utils.git_utils import get_repo_owner_and_name
-from codeflash.models.models import CodeOptimizationContext
 from codeflash.version import __version__
 
 if TYPE_CHECKING:
@@ -43,15 +42,26 @@ def make_cfapi_request(
     :return: The response object from the API.
     """
     url = f"{CFAPI_BASE_URL}/cfapi{endpoint}"
-    cfapi_headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
+
+    headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
     if extra_headers:
-        cfapi_headers.update(extra_headers)
-    if method.upper() == "POST":
-        json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
-        cfapi_headers["Content-Type"] = "application/json"
-        response = requests.post(url, data=json_payload, headers=cfapi_headers, timeout=60)
+        headers.update(extra_headers)
+    method_u = method.upper()
+
+    if method_u == "POST":
+        # Use native requests post JSON argument for faster serialization and header setting.
+        # Only use custom encoder if needed.
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=60)
+        except TypeError:
+            # Fallback to manual dumping in rare user-supplied object cases
+            json_payload = _json_dumps_fast(payload)
+            # Only add the header if it wasn't already in extra_headers
+            if "Content-Type" not in headers:
+                headers["Content-Type"] = "application/json"
+            response = requests.post(url, data=json_payload, headers=headers, timeout=60)
     else:
-        response = requests.get(url, headers=cfapi_headers, timeout=60)
+        response = requests.get(url, headers=headers, timeout=60)
     return response
 
 
@@ -200,12 +210,16 @@ def is_function_being_optimized_again(owner: str, repo: str, pr_number: int, cod
     response = make_cfapi_request(
         "/is-already-optimized",
         "POST",
-        {
-            "owner": owner,
-            "repo": repo,
-            "pr_number": pr_number,
-            "code_contexts": code_contexts
-        }
+        {"owner": owner, "repo": repo, "pr_number": pr_number, "code_contexts": code_contexts},
     )
     response.raise_for_status()
     return response.json()
+
+
+def _json_dumps_fast(payload):
+    # Try standard JSON serialization first
+    try:
+        return json.dumps(payload, indent=None)
+    except (TypeError, ValueError):
+        # Fallback to pydantic_encoder only if necessary
+        return json.dumps(payload, indent=None, default=pydantic_encoder)
