@@ -1,14 +1,23 @@
 from __future__ import annotations
 
 import ast
+import contextlib
 from collections import defaultdict
 from functools import lru_cache
 from typing import TYPE_CHECKING, Optional, TypeVar
 
+import isort
 import libcst as cst
+import libcst.matchers as m
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_extractor import add_global_assignments, add_needed_imports_from_module
+from codeflash.code_utils.code_extractor import (
+    add_global_assignments,
+    add_needed_imports_from_module,
+    get_function_qualified_names,
+)
+from codeflash.code_utils.config_parser import find_conftest_files
+from codeflash.code_utils.line_profile_utils import ImportAdder, add_decorator_to_qualified_function
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
@@ -33,18 +42,78 @@ def normalize_code(code: str) -> str:
     return ast.unparse(normalize_node(ast.parse(code)))
 
 
-# def modify_autouse_fixture():
-#     # find fixutre definition in conftetst.py (the one closest to the test)
-#     # get fixtures present in override-fixtures in pyproject.toml
-#     # add if marker closest return
-#     conftest_files = find_conftest_files()
-#     for cf_file in conftest_files:
-#         # iterate over all functions in the file
-#         # if function has autouse fixture, modify function to bypass with custom marker
-#         pass
+class AutouseFixtureModifier(cst.CSTTransformer):
+    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
+        # Matcher for '@fixture' or '@pytest.fixture'
+        fixture_decorator_func = m.Name("fixture") | m.Attribute(value=m.Name("pytest"), attr=m.Name("fixture"))
+
+        for decorator in original_node.decorators:
+            if m.matches(
+                decorator,
+                m.Decorator(
+                    decorator=m.Call(
+                        func=fixture_decorator_func, args=[m.Arg(value=m.Name("True"), keyword=m.Name("autouse"))]
+                    )
+                ),
+            ):
+                # Found a matching fixture with autouse=True
+
+                # 1. The original body of the function will become the 'else' block.
+                #    updated_node.body is an IndentedBlock, which is what cst.Else expects.
+                else_block = cst.Else(body=updated_node.body)
+
+                # 2. Create the new 'if' block that will exit the fixture early.
+                if_test = cst.parse_expression('request.node.get_closest_marker("no_autouse")')
+                yield_statement = cst.parse_statement("yield")
+                if_body = cst.IndentedBlock(body=[yield_statement])
+
+                # 3. Construct the full if/else statement.
+                new_if_statement = cst.If(test=if_test, body=if_body, orelse=else_block)
+
+                # 4. Replace the entire function's body with our new single statement.
+                return updated_node.with_changes(body=cst.IndentedBlock(body=[new_if_statement]))
+        return updated_node
 
 
-# reuse line profiler utils to add decorator and import to test fns
+@contextlib.contextmanager
+def disable_autouse(test_path: Path) -> None:
+    file_content = test_path.read_text(encoding="utf-8")
+    try:
+        module = cst.parse_module(file_content)
+        disable_autouse_fixture = AutouseFixtureModifier()
+        modified_module = module.visit(disable_autouse_fixture)
+        test_path.write_text(modified_module.code, encoding="utf-8")
+    finally:
+        test_path.write_text(file_content, encoding="utf-8")
+
+
+def modify_autouse_fixture(test_paths: list[Path]) -> None:
+    # find fixutre definition in conftetst.py (the one closest to the test)
+    # get fixtures present in override-fixtures in pyproject.toml
+    # add if marker closest return
+    conftest_files = find_conftest_files(test_paths)
+    for cf_file in conftest_files:
+        # iterate over all functions in the file
+        # if function has autouse fixture, modify function to bypass with custom marker
+        disable_autouse(cf_file)
+
+
+# # reuse line profiler utils to add decorator and import to test fns
+def add_custom_marker_to_all_tests(test_paths: list[Path]) -> None:
+    for test_path in test_paths:
+        # read file
+        file_content = test_path.read_text(encoding="utf-8")
+        module = cst.parse_module(file_content)
+        importadder = ImportAdder("import pytest")
+        modified_module = module.visit(importadder)
+        modified_module = isort.code(modified_module.code, float_to_top=True)
+        qualified_fn_names = get_function_qualified_names(test_path)
+        for fn_name in qualified_fn_names:
+            modified_module = add_decorator_to_qualified_function(
+                modified_module, fn_name, "pytest.mark.codeflash_no_autouse"
+            )
+        # write the modified module back to the file
+        test_path.write_text(modified_module.code, encoding="utf-8")
 
 
 class OptimFunctionCollector(cst.CSTVisitor):

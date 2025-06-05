@@ -21,7 +21,11 @@ from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
+from codeflash.code_utils.code_replacer import (
+    add_custom_marker_to_all_tests,
+    modify_autouse_fixture,
+    replace_function_definitions_in_module,
+)
 from codeflash.code_utils.code_utils import (
     ImportErrorPattern,
     cleanup_paths,
@@ -742,6 +746,10 @@ class FunctionOptimizer:
                 f"{concolic_coverage_test_files_count} concolic coverage test file"
                 f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
             )
+        logger.debug("disabling all autouse fixtures associated with the test files")
+        modify_autouse_fixture(list(unique_instrumented_test_files))
+        logger.debug("add custom marker to all tests")
+        add_custom_marker_to_all_tests(list(unique_instrumented_test_files))
         return unique_instrumented_test_files
 
     def generate_tests_and_optimizations(
