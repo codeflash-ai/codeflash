@@ -86,7 +86,6 @@ class TestsCache:
         line_number: int,
         col_number: int,
     ) -> None:
-        self.cur.execute("DELETE FROM discovered_tests WHERE file_path = ?", (file_path,))
         test_type_value = test_type.value if hasattr(test_type, "value") else test_type
         self.cur.execute(
             "INSERT INTO discovered_tests VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
