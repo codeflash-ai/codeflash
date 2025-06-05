@@ -18,7 +18,6 @@ from rich.syntax import Syntax
 from rich.tree import Tree
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
-from codeflash.api.cfapi import is_function_being_optimized_again
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
