@@ -626,7 +626,7 @@ class HelperClass:
         assert read_only_context.strip() == expected_read_only_context.strip()
 
 
-def test_example_class_token_limit_1() -> None:
+def test_example_class_token_limit_1(temp_dir: Path) -> None:
     docstring_filler = " ".join(
         ["This is a long docstring that will be used to fill up the token limit." for _ in range(1000)]
     )
@@ -651,7 +651,7 @@ class HelperClass:
     def helper_method(self):
         return self.x
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
+    with (temp_dir / "temp_file.py").open(mode="w") as f:
         f.write(code)
         f.flush()
         file_path = Path(f.name).resolve()
