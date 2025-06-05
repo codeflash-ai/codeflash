@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
 CODEFLASH_LOGO: str = (
-    f"{LF}"  # noqa: ISC003
+    f"{LF}"
     r"                   _          ___  _               _     " + f"{LF}"
     r"                  | |        / __)| |             | |    " + f"{LF}"
     r"  ____   ___    _ | |  ____ | |__ | |  ____   ___ | | _  " + f"{LF}"
@@ -723,11 +723,16 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         formatter_cmds.append("disabled")
     check_formatter_installed(formatter_cmds, exit_on_failure=False)
     codeflash_section["formatter-cmds"] = formatter_cmds
+    codeflash_section["override-fixtures"] = False  # don't override fixtures by default, let the user decide
     # Add the 'codeflash' section, ensuring 'tool' section exists
     tool_section = pyproject_data.get("tool", tomlkit.table())
     tool_section["codeflash"] = codeflash_section
     pyproject_data["tool"] = tool_section
-
+    if "tool.pytest.ini_options" not in pyproject_data:
+        pyproject_data["tool.pytest.ini_options"] = {}
+    if "markers" not in pyproject_data["tool.pytest.ini_options"]:
+        pyproject_data["tool.pytest.ini_options"]["markers"] = []
+    pyproject_data["tool.pytest.ini_options"]["markers"].append("codeflash_no_autouse")
     with toml_path.open("w", encoding="utf8") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
     click.echo(f"✅ Added Codeflash configuration to {toml_path}")

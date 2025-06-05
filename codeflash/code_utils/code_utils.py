@@ -13,7 +13,7 @@ from tempfile import TemporaryDirectory
 import tomlkit
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.config_parser import find_conftest, find_pyproject_toml
+from codeflash.code_utils.config_parser import find_pyproject_toml
 
 ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
 
@@ -85,64 +85,6 @@ def add_addopts_to_pyproject() -> None:
         # Restore original file
         with Path.open(pyproject_file, "w", encoding="utf-8") as f:
             f.write(original_content)
-
-
-@contextmanager
-def add_override_fixtures_to_pyproject() -> None:
-    pyproject_file = find_pyproject_toml()
-    try:
-        # Read original file
-        if pyproject_file.exists():
-            with Path.open(pyproject_file, encoding="utf-8") as f:
-                original_content = f.read()
-                data = tomlkit.parse(original_content)
-            # Backup original markers
-            original_fixtures = data.get("tool", {}).get("codeflash", {}).get("override-fixtures", [])
-            original_fixtures.append("please_put_your_fixtures_here")
-            data["tool"]["pytest"]["override-fixtures"]["markers"] = list(original_fixtures)
-            with Path.open(pyproject_file, "w", encoding="utf-8") as f:
-                f.write(tomlkit.dumps(data))
-        yield
-    finally:
-        with Path.open(pyproject_file, "w", encoding="utf-8") as f:
-            f.write(original_content)
-
-
-@contextmanager
-def add_custom_markers_to_pyproject() -> None:
-    pyproject_file = find_pyproject_toml()
-    try:
-        # Read original file
-        if pyproject_file.exists():
-            with Path.open(pyproject_file, encoding="utf-8") as f:
-                original_content = f.read()
-                data = tomlkit.parse(original_content)
-            # Backup original markers
-            original_markers = data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("markers", [])
-            original_markers.append("codeflash_no_autouse")
-            data["tool"]["pytest"]["ini_options"]["markers"] = list(original_markers)
-            with Path.open(pyproject_file, "w", encoding="utf-8") as f:
-                f.write(tomlkit.dumps(data))
-        yield
-    finally:
-        with Path.open(pyproject_file, "w", encoding="utf-8") as f:
-            f.write(original_content)
-
-
-@contextmanager
-def rename_conftest(tests_path: Path) -> None:
-    conftest_file = find_conftest(tests_path)
-    tmp_conftest_file = None
-    try:
-        # Rename original file
-        if conftest_file:
-            tmp_conftest_file = Path(str(conftest_file) + ".tmp")
-            conftest_file.rename(tmp_conftest_file)
-        yield
-    finally:
-        # Restore original file
-        if conftest_file:
-            tmp_conftest_file.rename(conftest_file)
 
 
 def encoded_tokens_len(s: str) -> int:

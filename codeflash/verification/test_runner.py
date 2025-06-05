@@ -53,7 +53,6 @@ def run_behavioral_tests(
                 )
             else:
                 test_files.append(str(file.instrumented_behavior_file_path))
-        test_files = ['/Users/codeflash/Downloads/codeflash-dev/codeflash/code_to_optimize/tests/pytest/test_bubble_sort__perfinstrumented.py']
         pytest_cmd_list = (
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
             if pytest_cmd == "pytest"

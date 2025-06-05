@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 import tomlkit
 
@@ -31,17 +31,18 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
     raise ValueError(msg)
 
 
-def find_conftest(tests_path: Path) -> Union[Path, None]:
+def find_conftest_files(tests_path: Path) -> list[Path]:
     # Find the conftest file on the root of the project
     dir_path = Path.cwd()
     cur_path = tests_path
+    list_of_conftest_files = []
     while cur_path != dir_path:
         config_file = cur_path / "conftest.py"
         if config_file.exists():
-            return config_file
+            list_of_conftest_files.append(config_file)
         # Search for conftest.py in the parent directories
         cur_path = cur_path.parent
-    return None
+    return list_of_conftest_files
 
 
 def parse_config_file(

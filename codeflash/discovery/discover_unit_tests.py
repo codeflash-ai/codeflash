@@ -23,7 +23,6 @@ from codeflash.code_utils.code_utils import (
     custom_addopts,
     get_run_tmp_file,
     module_name_from_file_path,
-    rename_conftest,
 )
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_cache_db
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
@@ -157,7 +156,7 @@ def discover_tests_pytest(
     project_root = cfg.project_root_path
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
-    with custom_addopts(), rename_conftest(tests_root):
+    with custom_addopts():
         result = subprocess.run(
             [
                 SAFE_SYS_EXECUTABLE,
