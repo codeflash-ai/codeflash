@@ -414,7 +414,9 @@ class FunctionOptimizer:
                     code_print(candidate.source_code)
                     try:
                         did_update = self.replace_function_and_helpers_with_optimized_code(
-                            code_context=code_context, optimized_code=candidate.source_code, original_helper_code=original_helper_code,
+                            code_context=code_context,
+                            optimized_code=candidate.source_code,
+                            original_helper_code=original_helper_code,
                         )
                         if not did_update:
                             logger.warning(
