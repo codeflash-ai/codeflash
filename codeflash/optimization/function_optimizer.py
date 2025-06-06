@@ -215,13 +215,9 @@ class FunctionOptimizer:
         instrumented_unittests_created_for_function = self.instrument_existing_tests(function_to_all_tests)
         if self.args.override_fixtures:
             logger.info("Disabling all autouse fixtures associated with the generated test files")
-            original_conftest_content = modify_autouse_fixture(
-                generated_test_paths + generated_perf_test_paths
-            )
+            original_conftest_content = modify_autouse_fixture(generated_test_paths + generated_perf_test_paths)
             logger.info("Add custom marker to generated test files")
-            add_custom_marker_to_all_tests(
-                generated_test_paths + generated_perf_test_paths
-            )
+            add_custom_marker_to_all_tests(generated_test_paths + generated_perf_test_paths)
 
         # Get a dict of file_path_to_classes of fto and helpers_of_fto
         file_path_to_helper_classes = defaultdict(set)
