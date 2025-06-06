@@ -31,6 +31,21 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
     raise ValueError(msg)
 
 
+def find_conftest_files(test_paths: list[Path]) -> list[Path]:
+    list_of_conftest_files = set()
+    for test_path in test_paths:
+        # Find the conftest file on the root of the project
+        dir_path = Path.cwd()
+        cur_path = test_path
+        while cur_path != dir_path:
+            config_file = cur_path / "conftest.py"
+            if config_file.exists():
+                list_of_conftest_files.add(config_file)
+            # Search for conftest.py in the parent directories
+            cur_path = cur_path.parent
+    return list(list_of_conftest_files)
+
+
 def parse_config_file(
     config_file_path: Path | None = None,
     override_formatter_check: bool = False,  # noqa: FBT001, FBT002
@@ -56,7 +71,12 @@ def parse_config_file(
     path_keys = ["module-root", "tests-root", "benchmarks-root"]
     path_list_keys = ["ignore-paths"]
     str_keys = {"pytest-cmd": "pytest", "git-remote": "origin"}
-    bool_keys = {"disable-telemetry": False, "disable-imports-sorting": False, "benchmark": False}
+    bool_keys = {
+        "override-fixtures": False,
+        "disable-telemetry": False,
+        "disable-imports-sorting": False,
+        "benchmark": False,
+    }
     list_str_keys = {"formatter-cmds": ["black $file"]}
 
     for key, default_value in str_keys.items():
