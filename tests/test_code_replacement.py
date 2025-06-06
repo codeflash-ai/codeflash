@@ -820,7 +820,7 @@ class MainClass:
     )
     func_optimizer = FunctionOptimizer(function_to_optimize=func_top_optimize, test_cfg=test_config)
     code_context = func_optimizer.get_code_optimization_context().unwrap()
-    assert code_context.testgen_context_code == get_code_output
+    assert code_context.testgen_context_code.rstrip() == get_code_output.rstrip()
 
 
 def test_code_replacement11() -> None:
@@ -2283,16 +2283,13 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def complex_fixture(request):
-    if request.node.get_closest_marker("codeflash_no_autouse"):
-        yield
-    else:
-        try:
-            setup_database()
-            configure_logging()
-            yield get_test_client()
-        finally:
-            cleanup_database()
-            reset_logging()
+    try:
+        setup_database()
+        configure_logging()
+        yield get_test_client()
+    finally:
+        cleanup_database()
+        reset_logging()
 '''
         expected_code = '''
 import pytest
@@ -2315,7 +2312,7 @@ def complex_fixture(request):
         modified_module = module.visit(modifier)
 
         code = modified_module.code
-        assert code.strip()==expected_code.strip()
+        assert code.rstrip()==expected_code.rstrip()
 
 
 class TestPytestMarkAdder:
