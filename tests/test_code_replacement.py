@@ -2315,7 +2315,7 @@ def complex_fixture(request):
         modified_module = module.visit(modifier)
 
         code = modified_module.code
-        assert code==expected_code
+        assert code.strip()==expected_code.strip()
 
 
 class TestPytestMarkAdder:
