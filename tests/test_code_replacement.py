@@ -1664,6 +1664,7 @@ print("Hello world")
     )
     assert new_code == original_code
 
+
 def test_global_reassignment() -> None:
     original_code = """a=1
 print("Hello world")
