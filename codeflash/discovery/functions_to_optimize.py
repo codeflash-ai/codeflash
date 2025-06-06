@@ -28,6 +28,7 @@ from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.models.models import FunctionParent
 from codeflash.telemetry.posthog_cf import ph
+from codeflash.code_utils.config_consts import REPEAT_OPTIMIZATION_PROBABILITY
 
 if TYPE_CHECKING:
     from libcst import CSTNode
@@ -506,6 +507,10 @@ def check_optimization_status(
             if path_key not in already_optimized_paths:
                 filtered_functions[file_path].append(func)
                 remaining_count += 1
+            else:
+                if random.random() < REPEAT_OPTIMIZATION_PROBABILITY:
+                    filtered_functions[file_path].append(func)
+                    remaining_count += 1
 
         return dict(filtered_functions), remaining_count
 
