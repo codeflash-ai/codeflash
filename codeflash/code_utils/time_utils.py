@@ -54,6 +54,8 @@ def humanize_runtime(time_in_ns: int) -> str:
 def format_time(nanoseconds: int) -> str:
     """Format nanoseconds into a human-readable string with 3 significant digits when needed."""
     # Define conversion factors and units
+    if type(nanoseconds) is not int:
+        raise TypeError("Input must be an integer.")
     conversions = [(1_000_000_000, "s"), (1_000_000, "ms"), (1_000, "μs"), (1, "ns")]
 
     # Handle nanoseconds case directly (no decimal formatting needed)
@@ -68,7 +70,7 @@ def format_time(nanoseconds: int) -> str:
 
             # Use integer formatting for values >= 100
             if int_value >= 100:
-                formatted_value = str(int_value)
+                formatted_value = f"{int_value:.0f}"
             # Format with precision for 3 significant digits
             elif value >= 100:
                 formatted_value = f"{value:.0f}"
