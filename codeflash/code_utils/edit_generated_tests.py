@@ -43,7 +43,7 @@ def add_runtime_comments_to_generated_tests(
     class RuntimeCommentTransformer(cst.CSTTransformer):
         def __init__(self) -> None:
             self.in_test_function = False
-            self.current_test_name = None
+            self.current_test_name: str | None = None
 
         def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
             if node.name.value.startswith("test_"):
