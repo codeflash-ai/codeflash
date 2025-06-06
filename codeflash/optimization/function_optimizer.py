@@ -213,8 +213,15 @@ class FunctionOptimizer:
             for key in set(self.function_to_tests) | set(function_to_concolic_tests)
         }
         instrumented_unittests_created_for_function = self.instrument_existing_tests(function_to_all_tests)
-        # logger.debug("disabling all autouse fixtures associated with the test files")
-        original_conftest_content = modify_autouse_fixture(list(instrumented_unittests_created_for_function))
+        logger.debug("disabling all autouse fixtures associated with the test files")
+        original_conftest_content = modify_autouse_fixture(
+            generated_test_paths + generated_perf_test_paths + list(instrumented_unittests_created_for_function)
+        )
+        logger.debug("add custom marker to all tests")
+        add_custom_marker_to_all_tests(
+            generated_test_paths + generated_perf_test_paths + list(instrumented_unittests_created_for_function)
+        )
+
         # Get a dict of file_path_to_classes of fto and helpers_of_fto
         file_path_to_helper_classes = defaultdict(set)
         for function_source in code_context.helper_functions:
@@ -750,8 +757,6 @@ class FunctionOptimizer:
                 f"{concolic_coverage_test_files_count} concolic coverage test file"
                 f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
             )
-        logger.debug("add custom marker to all tests")
-        add_custom_marker_to_all_tests(list(unique_instrumented_test_files))
         return unique_instrumented_test_files
 
     def generate_tests_and_optimizations(

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import contextlib
 from collections import defaultdict
 from functools import lru_cache
 from typing import TYPE_CHECKING, Optional, TypeVar
@@ -11,13 +10,9 @@ import libcst as cst
 import libcst.matchers as m
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_extractor import (
-    add_global_assignments,
-    add_needed_imports_from_module,
-    get_function_qualified_names,
-)
+from codeflash.code_utils.code_extractor import add_global_assignments, add_needed_imports_from_module
 from codeflash.code_utils.config_parser import find_conftest_files
-from codeflash.code_utils.line_profile_utils import ImportAdder, add_decorator_to_qualified_function
+from codeflash.code_utils.line_profile_utils import ImportAdder
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
@@ -42,6 +37,74 @@ def normalize_code(code: str) -> str:
     return ast.unparse(normalize_node(ast.parse(code)))
 
 
+class PytestMarkAdder(cst.CSTTransformer):
+    """Transformer that adds pytest marks to test functions."""
+
+    def __init__(self, mark_name: str) -> None:
+        super().__init__()
+        self.mark_name = mark_name
+        self.has_pytest_import = False
+
+    def visit_Module(self, node: cst.Module) -> None:
+        """Check if pytest is already imported."""
+        for statement in node.body:
+            if isinstance(statement, cst.SimpleStatementLine):
+                for stmt in statement.body:
+                    if isinstance(stmt, cst.Import):
+                        for import_alias in stmt.names:
+                            if isinstance(import_alias, cst.ImportAlias) and import_alias.name.value == "pytest":
+                                self.has_pytest_import = True
+                    elif isinstance(stmt, cst.ImportFrom) and stmt.module and stmt.module.value == "pytest":
+                        self.has_pytest_import = True
+
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+        """Add pytest import if not present."""
+        if not self.has_pytest_import:
+            # Create import statement
+            import_stmt = cst.SimpleStatementLine(body=[cst.Import(names=[cst.ImportAlias(name=cst.Name("pytest"))])])
+            # Add import at the beginning
+            updated_node = updated_node.with_changes(body=[import_stmt, *updated_node.body])
+        return updated_node
+
+    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:  # noqa: ARG002
+        """Add pytest mark to test functions."""
+        # Check if the mark already exists
+        for decorator in updated_node.decorators:
+            if self._is_pytest_mark(decorator.decorator, self.mark_name):
+                return updated_node
+
+        # Create the pytest mark decorator
+        mark_decorator = self._create_pytest_mark()
+
+        # Add the decorator
+        new_decorators = [*list(updated_node.decorators), mark_decorator]
+        return updated_node.with_changes(decorators=new_decorators)
+
+    def _is_pytest_mark(self, decorator: cst.BaseExpression, mark_name: str) -> bool:
+        """Check if a decorator is a specific pytest mark."""
+        if isinstance(decorator, cst.Attribute):
+            if (
+                isinstance(decorator.value, cst.Attribute)
+                and isinstance(decorator.value.value, cst.Name)
+                and decorator.value.value.value == "pytest"
+                and decorator.value.attr.value == "mark"
+                and decorator.attr.value == mark_name
+            ):
+                return True
+        elif isinstance(decorator, cst.Call) and isinstance(decorator.func, cst.Attribute):
+            return self._is_pytest_mark(decorator.func, mark_name)
+        return False
+
+    def _create_pytest_mark(self) -> cst.Decorator:
+        """Create a pytest mark decorator."""
+        # Base: pytest.mark.{mark_name}
+        mark_attr = cst.Attribute(
+            value=cst.Attribute(value=cst.Name("pytest"), attr=cst.Name("mark")), attr=cst.Name(self.mark_name)
+        )
+        decorator = mark_attr
+        return cst.Decorator(decorator=decorator)
+
+
 class AutouseFixtureModifier(cst.CSTTransformer):
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
         # Matcher for '@fixture' or '@pytest.fixture'
@@ -63,7 +126,7 @@ class AutouseFixtureModifier(cst.CSTTransformer):
                 else_block = cst.Else(body=updated_node.body)
 
                 # 2. Create the new 'if' block that will exit the fixture early.
-                if_test = cst.parse_expression('request.node.get_closest_marker("no_autouse")')
+                if_test = cst.parse_expression('request.node.get_closest_marker("codeflash_no_autouse")')
                 yield_statement = cst.parse_statement("yield")
                 if_body = cst.IndentedBlock(body=[yield_statement])
 
@@ -75,7 +138,6 @@ class AutouseFixtureModifier(cst.CSTTransformer):
         return updated_node
 
 
-@contextlib.contextmanager
 def disable_autouse(test_path: Path) -> str:
     file_content = test_path.read_text(encoding="utf-8")
     module = cst.parse_module(file_content)
@@ -107,13 +169,9 @@ def add_custom_marker_to_all_tests(test_paths: list[Path]) -> None:
         module = cst.parse_module(file_content)
         importadder = ImportAdder("import pytest")
         modified_module = module.visit(importadder)
-        modified_module = isort.code(modified_module.code, float_to_top=True)
-        qualified_fn_names = get_function_qualified_names(test_path)
-        for fn_name in qualified_fn_names:
-            modified_module = add_decorator_to_qualified_function(
-                modified_module, fn_name, "pytest.mark.codeflash_no_autouse"
-            )
-        # write the modified module back to the file
+        modified_module = cst.parse_module(isort.code(modified_module.code, float_to_top=True))
+        pytest_mark_adder = PytestMarkAdder("codeflash_no_autouse")
+        modified_module = modified_module.visit(pytest_mark_adder)
         test_path.write_text(modified_module.code, encoding="utf-8")
 
 

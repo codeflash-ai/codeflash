@@ -5,11 +5,9 @@ import ast
 from typing import TYPE_CHECKING, Optional
 
 import libcst as cst
-from libcst import MetadataWrapper
 from libcst.codemod import CodemodContext
 from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, RemoveImportsVisitor
 from libcst.helpers import calculate_module_and_package
-from libcst.metadata import FullyQualifiedNameProvider
 
 from codeflash.cli_cmds.console import logger
 from codeflash.models.models import FunctionParent
@@ -21,53 +19,6 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.models import FunctionSource
-
-
-class FunctionNameCollector(cst.CSTVisitor):
-    """A LibCST visitor that collects the fully qualified names of all functions."""
-
-    METADATA_DEPENDENCIES = (FullyQualifiedNameProvider,)
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.qualified_names: set[str] = set()
-
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
-        """Visits a function definition node and extracts its qualified name."""
-        try:
-            q_names = self.get_metadata(FullyQualifiedNameProvider, node)
-            for q_name in q_names:
-                self.qualified_names.add(q_name.name)
-        except KeyError:
-            # This can happen for functions defined in scopes where a qualified
-            # name cannot be determined.
-            pass
-
-
-def get_function_qualified_names(file_path: Path) -> list[str]:
-    """Parse a Python file and returns a list of fully qualified function names.
-
-    Args:
-        file_path: The path to the Python file.
-
-    Returns:
-        A list of string representations of the qualified function names.
-
-    """
-    with file_path.open("r") as f:
-        source_code = f.read()
-
-    # Parse the source code into a CST
-    module = cst.parse_module(source_code)
-
-    # Wrap the module with a metadata wrapper to enable name resolution
-    wrapper = MetadataWrapper(module)
-
-    # Create an instance of the visitor and visit the wrapped module
-    visitor = FunctionNameCollector()
-    wrapper.visit(visitor)
-
-    return list(visitor.qualified_names)
 
 
 class GlobalAssignmentCollector(cst.CSTVisitor):
