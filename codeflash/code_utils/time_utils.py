@@ -49,3 +49,42 @@ def humanize_runtime(time_in_ns: int) -> str:
         runtime_human = runtime_human_parts[0]
 
     return f"{runtime_human} {units}"
+
+
+def format_time(nanoseconds: int) -> str:
+    """Format nanoseconds into a human-readable string with 3 significant digits when needed."""
+
+    def count_significant_digits(num: int) -> int:
+        """Count significant digits in an integer."""
+        return len(str(abs(num)))
+
+    def format_with_precision(value: float, unit: str) -> str:
+        """Format a value with 3 significant digits precision."""
+        if value >= 100:
+            return f"{value:.0f}{unit}"
+        if value >= 10:
+            return f"{value:.1f}{unit}"
+        return f"{value:.2f}{unit}"
+
+    if nanoseconds < 1_000:
+        return f"{nanoseconds}ns"
+    if nanoseconds < 1_000_000:
+        # Convert to microseconds
+        microseconds_int = nanoseconds // 1_000
+        if count_significant_digits(microseconds_int) >= 3:
+            return f"{microseconds_int}μs"
+        microseconds_float = nanoseconds / 1_000
+        return format_with_precision(microseconds_float, "μs")
+    if nanoseconds < 1_000_000_000:
+        # Convert to milliseconds
+        milliseconds_int = nanoseconds // 1_000_000
+        if count_significant_digits(milliseconds_int) >= 3:
+            return f"{milliseconds_int}ms"
+        milliseconds_float = nanoseconds / 1_000_000
+        return format_with_precision(milliseconds_float, "ms")
+    # Convert to seconds
+    seconds_int = nanoseconds // 1_000_000_000
+    if count_significant_digits(seconds_int) >= 3:
+        return f"{seconds_int}s"
+    seconds_float = nanoseconds / 1_000_000_000
+    return format_with_precision(seconds_float, "s")

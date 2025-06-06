@@ -36,7 +36,10 @@ from codeflash.code_utils.config_consts import (
     N_TESTS_TO_GENERATE,
     TOTAL_LOOPING_TIME,
 )
-from codeflash.code_utils.edit_generated_tests import remove_functions_from_generated_tests
+from codeflash.code_utils.edit_generated_tests import (
+    add_runtime_comments_to_generated_tests,
+    remove_functions_from_generated_tests,
+)
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports
@@ -319,7 +322,7 @@ class FunctionOptimizer:
                         generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
                     )
                     # Add runtime comments to generated tests before creating the PR
-                    generated_tests = self.add_runtime_comments_to_generated_tests(
+                    generated_tests = add_runtime_comments_to_generated_tests(
                         generated_tests,
                         original_code_baseline.benchmarking_test_results,
                         best_optimization.winning_benchmarking_test_results,
@@ -1270,154 +1273,3 @@ class FunctionOptimizer:
         cleanup_paths(paths_to_cleanup)
         if hasattr(get_run_tmp_file, "tmpdir"):
             get_run_tmp_file.tmpdir.cleanup()
-
-    def add_runtime_comments_to_generated_tests(
-        self,
-        generated_tests: GeneratedTestsList,
-        original_test_results: TestResults,
-        optimized_test_results: TestResults,
-    ) -> GeneratedTestsList:
-        """Add runtime performance comments to function calls in generated tests."""
-
-        def format_time(nanoseconds: int) -> str:
-            """Format nanoseconds into a human-readable string with 3 significant digits when needed."""
-
-            def count_significant_digits(num: int) -> int:
-                """Count significant digits in an integer."""
-                return len(str(abs(num)))
-
-            def format_with_precision(value: float, unit: str) -> str:
-                """Format a value with 3 significant digits precision."""
-                if value >= 100:
-                    return f"{value:.0f}{unit}"
-                if value >= 10:
-                    return f"{value:.1f}{unit}"
-                return f"{value:.2f}{unit}"
-
-            if nanoseconds < 1_000:
-                return f"{nanoseconds}ns"
-            if nanoseconds < 1_000_000:
-                # Convert to microseconds
-                microseconds_int = nanoseconds // 1_000
-                if count_significant_digits(microseconds_int) >= 3:
-                    return f"{microseconds_int}μs"
-                microseconds_float = nanoseconds / 1_000
-                return format_with_precision(microseconds_float, "μs")
-            if nanoseconds < 1_000_000_000:
-                # Convert to milliseconds
-                milliseconds_int = nanoseconds // 1_000_000
-                if count_significant_digits(milliseconds_int) >= 3:
-                    return f"{milliseconds_int}ms"
-                milliseconds_float = nanoseconds / 1_000_000
-                return format_with_precision(milliseconds_float, "ms")
-            # Convert to seconds
-            seconds_int = nanoseconds // 1_000_000_000
-            if count_significant_digits(seconds_int) >= 3:
-                return f"{seconds_int}s"
-            seconds_float = nanoseconds / 1_000_000_000
-            return format_with_precision(seconds_float, "s")
-
-        # Create dictionaries for fast lookup of runtime data
-        original_runtime_by_test = original_test_results.usable_runtime_data_by_test_case()
-        optimized_runtime_by_test = optimized_test_results.usable_runtime_data_by_test_case()
-
-        class RuntimeCommentTransformer(cst.CSTTransformer):
-            def __init__(self):
-                self.in_test_function = False
-                self.current_test_name = None
-
-            def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
-                if node.name.value.startswith("test_"):
-                    self.in_test_function = True
-                    self.current_test_name = node.name.value
-                else:
-                    self.in_test_function = False
-                    self.current_test_name = None
-
-            def leave_FunctionDef(
-                self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef
-            ) -> cst.FunctionDef:
-                if original_node.name.value.startswith("test_"):
-                    self.in_test_function = False
-                    self.current_test_name = None
-                return updated_node
-
-            def leave_SimpleStatementLine(
-                self, original_node: cst.SimpleStatementLine, updated_node: cst.SimpleStatementLine
-            ) -> cst.SimpleStatementLine:
-                if not self.in_test_function or not self.current_test_name:
-                    return updated_node
-
-                # Look for assignment statements that assign to codeflash_output
-                # Handle both single statements and multiple statements on one line
-                codeflash_assignment_found = False
-                for stmt in updated_node.body:
-                    if isinstance(stmt, cst.Assign):
-                        if (
-                            len(stmt.targets) == 1
-                            and isinstance(stmt.targets[0].target, cst.Name)
-                            and stmt.targets[0].target.value == "codeflash_output"
-                        ):
-                            codeflash_assignment_found = True
-                            break
-
-                if codeflash_assignment_found:
-                    # Find matching test cases by looking for this test function name in the test results
-                    matching_original_times = []
-                    matching_optimized_times = []
-
-                    for invocation_id, runtimes in original_runtime_by_test.items():
-                        if invocation_id.test_function_name == self.current_test_name:
-                            matching_original_times.extend(runtimes)
-
-                    for invocation_id, runtimes in optimized_runtime_by_test.items():
-                        if invocation_id.test_function_name == self.current_test_name:
-                            matching_optimized_times.extend(runtimes)
-
-                    if matching_original_times and matching_optimized_times:
-                        original_time = min(matching_original_times)
-                        optimized_time = min(matching_optimized_times)
-
-                        # Create the runtime comment
-                        comment_text = f"# {format_time(original_time)} -> {format_time(optimized_time)}"
-
-                        # Add comment to the trailing whitespace
-                        new_trailing_whitespace = cst.TrailingWhitespace(
-                            whitespace=cst.SimpleWhitespace(" "),
-                            comment=cst.Comment(comment_text),
-                            newline=updated_node.trailing_whitespace.newline,
-                        )
-
-                        return updated_node.with_changes(trailing_whitespace=new_trailing_whitespace)
-
-                return updated_node
-
-        # Process each generated test
-        modified_tests = []
-        for test in generated_tests.generated_tests:
-            try:
-                # Parse the test source code
-                tree = cst.parse_module(test.generated_original_test_source)
-
-                # Transform the tree to add runtime comments
-                transformer = RuntimeCommentTransformer()
-                modified_tree = tree.visit(transformer)
-
-                # Convert back to source code
-                modified_source = modified_tree.code
-
-                # Create a new GeneratedTests object with the modified source
-                modified_test = GeneratedTests(
-                    generated_original_test_source=modified_source,
-                    instrumented_behavior_test_source=test.instrumented_behavior_test_source,
-                    instrumented_perf_test_source=test.instrumented_perf_test_source,
-                    behavior_file_path=test.behavior_file_path,
-                    perf_file_path=test.perf_file_path,
-                )
-                modified_tests.append(modified_test)
-            except Exception as e:
-                # If parsing fails, keep the original test
-                logger.debug(f"Failed to add runtime comments to test: {e}")
-                modified_tests.append(test)
-
-        return GeneratedTestsList(generated_tests=modified_tests)
