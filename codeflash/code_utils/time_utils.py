@@ -53,31 +53,33 @@ def humanize_runtime(time_in_ns: int) -> str:
 
 def format_time(nanoseconds: int) -> str:
     """Format nanoseconds into a human-readable string with 3 significant digits when needed."""
-    # Define conversion factors and units
-    conversions = [(1_000_000_000, "s"), (1_000_000, "ms"), (1_000, "μs"), (1, "ns")]
-
-    # Handle nanoseconds case directly (no decimal formatting needed)
+    # Fast path for small values
     if nanoseconds < 1_000:
         return f"{nanoseconds}ns"
 
-    # Find appropriate unit
-    for divisor, unit in conversions:
-        if nanoseconds >= divisor:
-            value = nanoseconds / divisor
-            int_value = nanoseconds // divisor
+    # Inline conversion check for speed: no for loop
+    if nanoseconds >= 1_000_000_000:
+        divisor, unit = 1_000_000_000, "s"
+    elif nanoseconds >= 1_000_000:
+        divisor, unit = 1_000_000, "ms"
+    elif nanoseconds >= 1_000:
+        divisor, unit = 1_000, "μs"
+    else:
+        # Should not happen, fallback to ns
+        return f"{nanoseconds}ns"
 
-            # Use integer formatting for values >= 100
-            if int_value >= 100:
-                formatted_value = str(int_value)
-            # Format with precision for 3 significant digits
-            elif value >= 100:
-                formatted_value = f"{value:.0f}"
-            elif value >= 10:
-                formatted_value = f"{value:.1f}"
-            else:
-                formatted_value = f"{value:.2f}"
+    value = nanoseconds / divisor
+    int_value = nanoseconds // divisor
 
-            return f"{formatted_value}{unit}"
+    # Use integer formatting for values >= 100
+    if int_value >= 100:
+        return str(int_value) + unit
+    # Format with precision for 3 significant digits
+    if value >= 100:
+        return f"{value:.0f}{unit}"
+    if value >= 10:
+        return f"{value:.1f}{unit}"
+    return f"{value:.2f}{unit}"
 
-    # This should never be reached, but included for completeness
-    return f"{nanoseconds}ns"
+
+_CONVERSION_UNITS = ((1_000_000_000, "s"), (1_000_000, "ms"), (1_000, "μs"))
