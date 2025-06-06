@@ -117,7 +117,9 @@ def helper_function_2(x):
     original_helper_code = {main_file: main_file.read_text()}
 
     # Apply optimization and test reversion
-    optimizer.replace_function_and_helpers_with_optimized_code(code_context, optimized_code_with_modified_helper, original_helper_code)
+    optimizer.replace_function_and_helpers_with_optimized_code(
+        code_context, optimized_code_with_modified_helper, original_helper_code
+    )
 
     # Check final file content
     final_content = main_file.read_text()
@@ -377,7 +379,7 @@ def helper_function_1(x):
 def helper_function_2(x):
     \"\"\"Second helper function.\"\"\"
     return x * 3
-"""
+""",
         }
 
         # Apply optimization and test reversion
@@ -426,7 +428,7 @@ def helper_function_1(x):
 def helper_function_2(x):
     \"\"\"Second helper function.\"\"\"
     return x * 3
-"""
+""",
         }
 
         # Apply optimization and test reversion
@@ -554,7 +556,9 @@ class Calculator:
         original_helper_code = {main_file: main_file.read_text()}
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, optimized_code_with_modified_helper, original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(
+            code_context, optimized_code_with_modified_helper, original_helper_code
+        )
 
         # Check final file content
         final_content = main_file.read_text()
@@ -693,7 +697,9 @@ class Processor:
         original_helper_code = {main_file: main_file.read_text()}
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, optimized_code_with_modified_helper, original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(
+            code_context, optimized_code_with_modified_helper, original_helper_code
+        )
 
         # Check final file content
         final_content = main_file.read_text()
@@ -729,7 +735,9 @@ class Processor:
         original_helper_code = {main_file: main_file.read_text()}
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, optimized_code_with_modified_helper, original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(
+            code_context, optimized_code_with_modified_helper, original_helper_code
+        )
 
         # Check final file content
         final_content = main_file.read_text()
@@ -994,8 +1002,9 @@ def entrypoint_function(n):
 
         # The exact unused functions may vary based on what helpers are discovered by Jedi
         # At minimum, we expect multiply to be detected as unused since it's not imported
-        print(f"Detected unused helpers: {unused_names}")
-        print(f"All helpers in context: {[h.qualified_name for h in code_context.helper_functions]}")
+        assert "multiply" in unused_names, "Expected multiply to be detected as unused"
+        assert "process_data" in unused_names, "Expected process_data to be detected as unused"
+        assert "subtract" not in unused_names, "Expected subtract not to be detected as unused"
 
         # Also test the complete replace_function_and_helpers_with_optimized_code workflow
         # First modify some helper files to simulate optimization changes
@@ -1042,7 +1051,7 @@ def subtract(x, y):
     \"\"\"Subtract function - should be unused.\"\"\"
     return x - y
 """,
-            processors_file: processors_file.read_text()
+            processors_file: processors_file.read_text(),
         }
 
         # Apply optimization and test reversion
@@ -1051,7 +1060,9 @@ def subtract(x, y):
         # Check main file content
         main_content = main_file.read_text()
         assert "(n * 2) + (n ** 2)" in main_content, "Entrypoint function should be optimized with inlined calculations"
-        assert "from math_helpers import add" in main_content, "Imports should be updated to only include used functions"
+        assert "from math_helpers import add" in main_content, (
+            "Imports should be updated to only include used functions"
+        )
 
         # Verify that unused helper files are reverted if they contained unused functions that were modified
         math_content = math_file.read_text()
@@ -1059,7 +1070,9 @@ def subtract(x, y):
         # If multiply was unused and modified, it should be reverted
         if "multiply" in unused_names:
             assert "return x * y" in math_content, "multiply should be reverted to original if it was unused"
-            assert "return x * y * 2" not in math_content, "multiply should NOT contain the modified version if it was unused"
+            assert "return x * y * 2" not in math_content, (
+                "multiply should NOT contain the modified version if it was unused"
+            )
 
     finally:
         # Cleanup
@@ -1145,9 +1158,6 @@ def entrypoint_function(n):
         # Should detect multiply_numbers and divide_numbers as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
 
-        print(f"Detected unused helpers: {unused_names}")
-        print(f"All helpers in context: {[h.qualified_name for h in code_context.helper_functions]}")
-
         # Check that multiply_numbers is detected as unused
         assert "multiply_numbers" in unused_names, f"Expected 'multiply_numbers' to be unused, got: {unused_names}"
 
@@ -1190,7 +1200,7 @@ def multiply_numbers(x, y):
 def divide_numbers(x, y):
     \"\"\"Divide function - should be unused.\"\"\"
     return x / y
-"""
+""",
         }
 
         # Apply optimization and test reversion
@@ -1249,7 +1259,7 @@ def multiply_numbers(x, y):
 def divide_numbers(x, y):
     \"\"\"Divide function - should be unused.\"\"\"
     return x / y
-"""
+""",
         }
 
         # Apply optimization and test reversion
@@ -1399,7 +1409,9 @@ class MathUtils:
         original_helper_code = {main_file: main_file.read_text()}
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, optimized_static_code_with_modified_helper, original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(
+            code_context, optimized_static_code_with_modified_helper, original_helper_code
+        )
 
         # Check final file content
         final_content = main_file.read_text()
