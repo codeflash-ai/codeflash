@@ -46,6 +46,7 @@ from codeflash.code_utils.line_profile_utils import add_decorator_imports
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
+from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.either import Failure, Success, is_successful
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
@@ -295,7 +296,9 @@ class FunctionOptimizer:
                 )
 
                 self.replace_function_and_helpers_with_optimized_code(
-                    code_context=code_context, optimized_code=best_optimization.candidate.source_code
+                    code_context=code_context,
+                    optimized_code=best_optimization.candidate.source_code,
+                    original_helper_code=original_helper_code,
                 )
 
                 new_code, new_helper_code = self.reformat_code_and_helpers(
@@ -418,7 +421,9 @@ class FunctionOptimizer:
                     code_print(candidate.source_code)
                     try:
                         did_update = self.replace_function_and_helpers_with_optimized_code(
-                            code_context=code_context, optimized_code=candidate.source_code
+                            code_context=code_context,
+                            optimized_code=candidate.source_code,
+                            original_helper_code=original_helper_code,
                         )
                         if not did_update:
                             logger.warning(
@@ -619,7 +624,7 @@ class FunctionOptimizer:
         return new_code, new_helper_code
 
     def replace_function_and_helpers_with_optimized_code(
-        self, code_context: CodeOptimizationContext, optimized_code: str
+        self, code_context: CodeOptimizationContext, optimized_code: str, original_helper_code: str
     ) -> bool:
         did_update = False
         read_writable_functions_by_file_path = defaultdict(set)
@@ -637,6 +642,12 @@ class FunctionOptimizer:
                 preexisting_objects=code_context.preexisting_objects,
                 project_root_path=self.project_root,
             )
+        unused_helpers = detect_unused_helper_functions(self.function_to_optimize, code_context, optimized_code)
+
+        # Revert unused helper functions to their original definitions
+        if unused_helpers:
+            revert_unused_helper_functions(self.project_root, unused_helpers, original_helper_code)
+
         return did_update
 
     def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
