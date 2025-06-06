@@ -551,40 +551,50 @@ def _analyze_imports_in_optimized_code(
     """
     imported_names_map = defaultdict(set)
 
-    # Create a lookup of helper functions by their simple names and file paths
-    helpers_by_name = defaultdict(list)
-    helpers_by_file = defaultdict(list)
-
+    # Precompute a two-level dict: module_name -> func_name -> [helpers]
+    helpers_by_file_and_func = defaultdict(dict)
+    helpers_by_file = defaultdict(list)  # preserved for "import module"
+    helpers_append = helpers_by_file_and_func.setdefault
     for helper in code_context.helper_functions:
-        if helper.jedi_definition.type != "class":
-            helpers_by_name[helper.only_function_name].append(helper)
+        jedi_type = helper.jedi_definition.type
+        if jedi_type != "class":
+            func_name = helper.only_function_name
             module_name = helper.file_path.stem
+            # Cache function lookup for this (module, func)
+            file_entry = helpers_by_file_and_func[module_name]
+            if func_name in file_entry:
+                file_entry[func_name].append(helper)
+            else:
+                file_entry[func_name] = [helper]
             helpers_by_file[module_name].append(helper)
 
-    # Analyze import statements in the optimized code
+    # Optimize attribute lookups and method binding outside the loop
+    helpers_by_file_and_func_get = helpers_by_file_and_func.get
+    helpers_by_file_get = helpers_by_file.get
+
     for node in ast.walk(optimized_ast):
         if isinstance(node, ast.ImportFrom):
             # Handle "from module import function" statements
-            if node.module:
-                module_name = node.module
-                for alias in node.names:
-                    imported_name = alias.asname if alias.asname else alias.name
-                    original_name = alias.name
-
-                    # Find helpers that match this import
-                    for helper in helpers_by_file.get(module_name, []):
-                        if helper.only_function_name == original_name:
-                            imported_names_map[imported_name].add(helper.qualified_name)
-                            imported_names_map[imported_name].add(helper.fully_qualified_name)
+            module_name = node.module
+            if module_name:
+                file_entry = helpers_by_file_and_func_get(module_name, None)
+                if file_entry:
+                    for alias in node.names:
+                        imported_name = alias.asname if alias.asname else alias.name
+                        original_name = alias.name
+                        helpers = file_entry.get(original_name, None)
+                        if helpers:
+                            for helper in helpers:
+                                imported_names_map[imported_name].add(helper.qualified_name)
+                                imported_names_map[imported_name].add(helper.fully_qualified_name)
 
         elif isinstance(node, ast.Import):
             # Handle "import module" statements
             for alias in node.names:
                 imported_name = alias.asname if alias.asname else alias.name
                 module_name = alias.name
-
-                # For "import module" statements, functions would be called as module.function
-                for helper in helpers_by_file.get(module_name, []):
+                for helper in helpers_by_file_get(module_name, []):
+                    # For "import module" statements, functions would be called as module.function
                     full_call = f"{imported_name}.{helper.only_function_name}"
                     imported_names_map[full_call].add(helper.qualified_name)
                     imported_names_map[full_call].add(helper.fully_qualified_name)
