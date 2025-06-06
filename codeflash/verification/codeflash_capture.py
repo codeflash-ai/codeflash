@@ -112,9 +112,8 @@ def codeflash_capture(function_name: str, tmp_dir_path: str, tests_root: str, is
 
             # Generate invocation id
             invocation_id = f"{line_id}_{codeflash_test_index}"
-            print(
-                f"!######{test_module_name}:{(test_class_name + '.' if test_class_name else '')}{test_name}:{function_name}:{loop_index}:{invocation_id}######!"
-            )
+            test_stdout_tag = f"{test_module_name}:{(test_class_name + '.' if test_class_name else '')}{test_name}:{function_name}:{loop_index}:{invocation_id}"
+            print(f"!$######{test_stdout_tag}######$!")
             # Connect to sqlite
             codeflash_con = sqlite3.connect(f"{tmp_dir_path}_{codeflash_iteration}.sqlite")
             codeflash_cur = codeflash_con.cursor()
@@ -131,6 +130,7 @@ def codeflash_capture(function_name: str, tmp_dir_path: str, tests_root: str, is
                 exception = e
             finally:
                 gc.enable()
+            print(f"!######{test_stdout_tag}######!")
 
             # Capture instance state after initialization
             if hasattr(args[0], "__dict__"):

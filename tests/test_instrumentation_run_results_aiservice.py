@@ -6,7 +6,6 @@ from argparse import Namespace
 from pathlib import Path
 
 import isort
-
 from code_to_optimize.bubble_sort_method import BubbleSorter
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -16,17 +15,18 @@ from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 
 # Used by aiservice instrumentation
-behavior_logging_code = """from __future__ import annotations
+behavior_logging_code = """
+from __future__ import annotations
 
 import gc
 import inspect
 import os
 import time
+import dill as pickle
 
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-import dill as pickle
 
 def codeflash_wrap(
     wrapped: Callable[..., Any],
@@ -48,8 +48,9 @@ def codeflash_wrap(
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f"{line_id}_{codeflash_test_index}"
+    test_stdout_tag = f"{test_module_name}:{(test_class_name + '.' if test_class_name else '')}{test_name}:{function_name}:{loop_index}:{invocation_id}"
     print(
-        f"!######{test_module_name}:{(test_class_name + '.' if test_class_name else '')}{test_name}:{function_name}:{loop_index}:{invocation_id}######!"
+        f"!$######{test_stdout_tag}######$!"
     )
     exception = None
     gc.disable()
@@ -61,6 +62,7 @@ def codeflash_wrap(
         codeflash_duration = time.perf_counter_ns() - counter
         exception = e
     gc.enable()
+    print(f"!######{test_stdout_tag}######!")
     iteration = os.environ["CODEFLASH_TEST_ITERATION"]
     with Path(
         "{codeflash_run_tmp_dir_client_side}", f"test_return_values_{iteration}.bin"
@@ -178,7 +180,7 @@ def test_single_element_list():
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
-        assert test_results[0].stdout == "codeflash stdout : BubbleSorter.sorter() called"
+        assert test_results[0].stdout == "codeflash stdout : BubbleSorter.sorter() called\n"
         assert test_results[0].id.test_function_name == "test_single_element_list"
         assert test_results[0].did_pass
         assert test_results[0].return_value[1]["arr"] == [42]
@@ -222,7 +224,7 @@ class BubbleSorter:
             test_results, test_results_mutated_attr
         )  # Without codeflash capture, the init state was not verified, and the results are verified as correct even with the attribute mutated
 
-        assert test_results_mutated_attr[0].stdout == "codeflash stdout : BubbleSorter.sorter() called"
+        assert test_results_mutated_attr[0].stdout == "codeflash stdout : BubbleSorter.sorter() called\n"
     finally:
         fto_path.write_text(original_code, "utf-8")
         test_path.unlink(missing_ok=True)
@@ -319,13 +321,13 @@ def test_single_element_list():
             testing_time=0.1,
         )
         # Verify instance_state result, which checks instance state right after __init__, using  codeflash_capture
+
+        # Verify function_to_optimize result
         assert test_results[0].id.function_getting_tested == "BubbleSorter.__init__"
         assert test_results[0].id.test_function_name == "test_single_element_list"
         assert test_results[0].did_pass
         assert test_results[0].return_value[0] == {"x": 0}
-        assert test_results[0].stdout == "codeflash stdout : BubbleSorter.sorter() called"
-
-        # Verify function_to_optimize result
+        assert test_results[0].stdout == ""
         assert test_results[1].id.function_getting_tested == "sorter"
         assert test_results[1].id.test_function_name == "test_single_element_list"
         assert test_results[1].did_pass
@@ -336,6 +338,12 @@ def test_single_element_list():
 
         # Check function return value
         assert test_results[1].return_value[2] == [1, 2, 3]
+        assert (
+            test_results[1].stdout
+            == """codeflash stdout : BubbleSorter.sorter() called
+"""
+        )
+
         # Replace with optimized code that mutated instance attribute
         optimized_code_mutated_attr = """
 import sys
@@ -393,7 +401,7 @@ class BubbleSorter:
         assert test_results_mutated_attr[0].id.function_getting_tested == "BubbleSorter.__init__"
         assert test_results_mutated_attr[0].return_value[0] == {"x": 1}
         assert test_results_mutated_attr[0].verification_type == VerificationType.INIT_STATE_FTO
-        assert test_results_mutated_attr[0].stdout == "codeflash stdout : BubbleSorter.sorter() called"
+        assert test_results_mutated_attr[0].stdout == ""
         assert not compare_test_results(
             test_results, test_results_mutated_attr
         )  # The test should fail because the instance attribute was mutated
@@ -445,7 +453,7 @@ class BubbleSorter:
         assert test_results_new_attr[0].id.function_getting_tested == "BubbleSorter.__init__"
         assert test_results_new_attr[0].return_value[0] == {"x": 0, "y": 2}
         assert test_results_new_attr[0].verification_type == VerificationType.INIT_STATE_FTO
-        assert test_results_new_attr[0].stdout == "codeflash stdout : BubbleSorter.sorter() called"
+        assert test_results_new_attr[0].stdout == ""
         # assert test_results_new_attr[1].return_value[1]["self"].x == 0 TODO: add self as input
         # assert test_results_new_attr[1].return_value[1]["self"].y == 2 TODO: add self as input
         assert compare_test_results(

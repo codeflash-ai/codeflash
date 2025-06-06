@@ -21,7 +21,11 @@ from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
+from codeflash.code_utils.code_replacer import (
+    add_custom_marker_to_all_tests,
+    modify_autouse_fixture,
+    replace_function_definitions_in_module,
+)
 from codeflash.code_utils.code_utils import (
     ImportErrorPattern,
     cleanup_paths,
@@ -29,6 +33,7 @@ from codeflash.code_utils.code_utils import (
     get_run_tmp_file,
     has_any_async_functions,
     module_name_from_file_path,
+    restore_conftest,
 )
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
@@ -36,13 +41,17 @@ from codeflash.code_utils.config_consts import (
     N_TESTS_TO_GENERATE,
     TOTAL_LOOPING_TIME,
 )
+from codeflash.code_utils.edit_generated_tests import (
+    add_runtime_comments_to_generated_tests,
+    remove_functions_from_generated_tests,
+)
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports
-from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
+from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.either import Failure, Success, is_successful
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
@@ -208,6 +217,11 @@ class FunctionOptimizer:
             for key in set(self.function_to_tests) | set(function_to_concolic_tests)
         }
         instrumented_unittests_created_for_function = self.instrument_existing_tests(function_to_all_tests)
+        if self.args.override_fixtures:
+            logger.info("Disabling all autouse fixtures associated with the generated test files")
+            original_conftest_content = modify_autouse_fixture(generated_test_paths + generated_perf_test_paths)
+            logger.info("Add custom marker to generated test files")
+            add_custom_marker_to_all_tests(generated_test_paths + generated_perf_test_paths)
 
         # Get a dict of file_path_to_classes of fto and helpers_of_fto
         file_path_to_helper_classes = defaultdict(set)
@@ -230,6 +244,8 @@ class FunctionOptimizer:
         )
 
         if not is_successful(baseline_result):
+            if self.args.override_fixtures:
+                restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
             return Failure(baseline_result.failure())
 
@@ -237,6 +253,8 @@ class FunctionOptimizer:
         if isinstance(original_code_baseline, OriginalCodeBaseline) and not coverage_critic(
             original_code_baseline.coverage_results, self.args.test_framework
         ):
+            if self.args.override_fixtures:
+                restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
             return Failure("The threshold for test coverage was not met.")
         # request for new optimizations but don't block execution, check for completion later
@@ -265,10 +283,6 @@ class FunctionOptimizer:
                 },
             )
 
-            generated_tests = remove_functions_from_generated_tests(
-                generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
-            )
-
             if best_optimization:
                 logger.info("Best candidate:")
                 code_print(best_optimization.candidate.source_code)
@@ -295,10 +309,10 @@ class FunctionOptimizer:
                     benchmark_details=processed_benchmark_info.benchmark_details if processed_benchmark_info else None,
                 )
 
-                self.log_successful_optimization(explanation, generated_tests, exp_type)
-
                 self.replace_function_and_helpers_with_optimized_code(
-                    code_context=code_context, optimized_code=best_optimization.candidate.source_code
+                    code_context=code_context,
+                    optimized_code=best_optimization.candidate.source_code,
+                    original_helper_code=original_helper_code,
                 )
 
                 new_code, new_helper_code = self.reformat_code_and_helpers(
@@ -320,6 +334,15 @@ class FunctionOptimizer:
                         original_code_baseline.coverage_results.build_message()
                         if original_code_baseline.coverage_results
                         else "Coverage data not available"
+                    )
+                    generated_tests = remove_functions_from_generated_tests(
+                        generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
+                    )
+                    # Add runtime comments to generated tests before creating the PR
+                    generated_tests = add_runtime_comments_to_generated_tests(
+                        generated_tests,
+                        original_code_baseline.benchmarking_test_results,
+                        best_optimization.winning_benchmarking_test_results,
                     )
                     generated_tests_str = "\n\n".join(
                         [test.generated_original_test_source for test in generated_tests.generated_tests]
@@ -345,7 +368,10 @@ class FunctionOptimizer:
                             original_helper_code,
                             self.function_to_optimize.file_path,
                         )
+                self.log_successful_optimization(explanation, generated_tests, exp_type)
 
+        if self.args.override_fixtures:
+            restore_conftest(original_conftest_content)
         if not best_optimization:
             return Failure(f"No best optimizations found for function {self.function_to_optimize.qualified_name}")
         return Success(best_optimization)
@@ -411,7 +437,9 @@ class FunctionOptimizer:
                     code_print(candidate.source_code)
                     try:
                         did_update = self.replace_function_and_helpers_with_optimized_code(
-                            code_context=code_context, optimized_code=candidate.source_code
+                            code_context=code_context,
+                            optimized_code=candidate.source_code,
+                            original_helper_code=original_helper_code,
                         )
                         if not did_update:
                             logger.warning(
@@ -612,7 +640,7 @@ class FunctionOptimizer:
         return new_code, new_helper_code
 
     def replace_function_and_helpers_with_optimized_code(
-        self, code_context: CodeOptimizationContext, optimized_code: str
+        self, code_context: CodeOptimizationContext, optimized_code: str, original_helper_code: str
     ) -> bool:
         did_update = False
         read_writable_functions_by_file_path = defaultdict(set)
@@ -630,6 +658,12 @@ class FunctionOptimizer:
                 preexisting_objects=code_context.preexisting_objects,
                 project_root_path=self.project_root,
             )
+        unused_helpers = detect_unused_helper_functions(self.function_to_optimize, code_context, optimized_code)
+
+        # Revert unused helper functions to their original definitions
+        if unused_helpers:
+            revert_unused_helper_functions(self.project_root, unused_helpers, original_helper_code)
+
         return did_update
 
     def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
