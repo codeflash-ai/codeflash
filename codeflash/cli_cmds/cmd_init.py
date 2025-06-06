@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
 CODEFLASH_LOGO: str = (
-    f"{LF}"  # noqa: ISC003
+    f"{LF}"
     r"                   _          ___  _               _     " + f"{LF}"
     r"                  | |        / __)| |             | |    " + f"{LF}"
     r"  ____   ___    _ | |  ____ | |__ | |  ____   ___ | | _  " + f"{LF}"

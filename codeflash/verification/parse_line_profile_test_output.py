@@ -46,7 +46,7 @@ def show_func(
         perhit_disp = "%5.1f" % (float(time) * scalar / nhits)
         if len(perhit_disp) > default_column_sizes["perhit"]:
             perhit_disp = "%5.1g" % (float(time) * scalar / nhits)
-        nhits_disp = "%d" % nhits  # noqa: UP031
+        nhits_disp = "%d" % nhits
         if len(nhits_disp) > default_column_sizes["hits"]:
             nhits_disp = f"{nhits:g}"
         display[lineno] = (nhits_disp, time_disp, perhit_disp, percent)

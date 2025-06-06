@@ -1,7 +1,6 @@
 """Tests for the add_runtime_comments_to_generated_tests functionality."""
 
 from pathlib import Path
-from unittest.mock import Mock
 
 from codeflash.code_utils.edit_generated_tests import add_runtime_comments_to_generated_tests
 from codeflash.models.models import (
@@ -13,20 +12,10 @@ from codeflash.models.models import (
     TestType,
     VerificationType,
 )
-from codeflash.optimization.function_optimizer import FunctionOptimizer
 
 
 class TestAddRuntimeComments:
     """Test cases for add_runtime_comments_to_generated_tests method."""
-
-    def setup_method(self):
-        """Set up test fixtures."""
-        # Create a mock FunctionOptimizer with minimal required attributes
-        self.optimizer = Mock(spec=FunctionOptimizer)
-        # We need to use the real implementation of the method
-        self.optimizer.add_runtime_comments_to_generated_tests = add_runtime_comments_to_generated_tests.__get__(
-            self.optimizer, FunctionOptimizer
-        )
 
     def create_test_invocation(
         self, test_function_name: str, runtime: int, loop_index: int = 1, iteration_id: str = "1", did_pass: bool = True
@@ -81,9 +70,7 @@ class TestAddRuntimeComments:
         optimized_test_results.add(optimized_invocation)
 
         # Test the functionality
-        result = self.optimizer.add_runtime_comments_to_generated_tests(
-            generated_tests, original_test_results, optimized_test_results
-        )
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_test_results, optimized_test_results)
 
         # Check that comments were added
         modified_source = result.generated_tests[0].generated_original_test_source
@@ -126,9 +113,7 @@ def helper_function():
         optimized_test_results.add(self.create_test_invocation("test_quick_sort", 600_000))
 
         # Test the functionality
-        result = self.optimizer.add_runtime_comments_to_generated_tests(
-            generated_tests, original_test_results, optimized_test_results
-        )
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_test_results, optimized_test_results)
 
         modified_source = result.generated_tests[0].generated_original_test_source
 
@@ -176,7 +161,7 @@ def helper_function():
             optimized_test_results.add(self.create_test_invocation("test_function", optimized_time))
 
             # Test the functionality
-            result = self.optimizer.add_runtime_comments_to_generated_tests(
+            result = add_runtime_comments_to_generated_tests(
                 generated_tests, original_test_results, optimized_test_results
             )
 
@@ -205,9 +190,7 @@ def helper_function():
         optimized_test_results = TestResults()
 
         # Test the functionality
-        result = self.optimizer.add_runtime_comments_to_generated_tests(
-            generated_tests, original_test_results, optimized_test_results
-        )
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_test_results, optimized_test_results)
 
         # Check that no comments were added
         modified_source = result.generated_tests[0].generated_original_test_source
@@ -238,9 +221,7 @@ def helper_function():
         # No optimized results
 
         # Test the functionality
-        result = self.optimizer.add_runtime_comments_to_generated_tests(
-            generated_tests, original_test_results, optimized_test_results
-        )
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_test_results, optimized_test_results)
 
         # Check that no comments were added
         modified_source = result.generated_tests[0].generated_original_test_source
@@ -277,9 +258,7 @@ def helper_function():
         optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 320_000, loop_index=3))
 
         # Test the functionality
-        result = self.optimizer.add_runtime_comments_to_generated_tests(
-            generated_tests, original_test_results, optimized_test_results
-        )
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_test_results, optimized_test_results)
 
         # Check that minimum times were used (500μs -> 300μs)
         modified_source = result.generated_tests[0].generated_original_test_source
@@ -310,9 +289,7 @@ def helper_function():
         optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 300_000))
 
         # Test the functionality
-        result = self.optimizer.add_runtime_comments_to_generated_tests(
-            generated_tests, original_test_results, optimized_test_results
-        )
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_test_results, optimized_test_results)
 
         # Check that no comments were added (no codeflash_output assignment)
         modified_source = result.generated_tests[0].generated_original_test_source
@@ -343,9 +320,7 @@ def helper_function():
         optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 300_000))
 
         # Test the functionality - should handle parse error gracefully
-        result = self.optimizer.add_runtime_comments_to_generated_tests(
-            generated_tests, original_test_results, optimized_test_results
-        )
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_test_results, optimized_test_results)
 
         # Check that original test is preserved when parsing fails
         modified_source = result.generated_tests[0].generated_original_test_source
@@ -392,9 +367,7 @@ def helper_function():
         optimized_test_results.add(self.create_test_invocation("test_quick_sort", 600_000))
 
         # Test the functionality
-        result = self.optimizer.add_runtime_comments_to_generated_tests(
-            generated_tests, original_test_results, optimized_test_results
-        )
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_test_results, optimized_test_results)
 
         # Check that comments were added to both test files
         modified_source_1 = result.generated_tests[0].generated_original_test_source
@@ -433,9 +406,7 @@ def helper_function():
         optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 300_000))
 
         # Test the functionality
-        result = self.optimizer.add_runtime_comments_to_generated_tests(
-            generated_tests, original_test_results, optimized_test_results
-        )
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_test_results, optimized_test_results)
 
         # Check that other attributes are preserved
         modified_test = result.generated_tests[0]
@@ -475,9 +446,7 @@ def helper_function():
         optimized_test_results.add(self.create_test_invocation("test_mutation_of_input", 14_000))  # 14μs
 
         # Test the functionality
-        result = self.optimizer.add_runtime_comments_to_generated_tests(
-            generated_tests, original_test_results, optimized_test_results
-        )
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_test_results, optimized_test_results)
 
         # Check that comments were added to the correct line
         modified_source = result.generated_tests[0].generated_original_test_source

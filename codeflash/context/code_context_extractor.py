@@ -3,17 +3,17 @@ from __future__ import annotations
 import os
 from collections import defaultdict
 from itertools import chain
-from pathlib import Path  # noqa: TC003
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import libcst as cst
-from libcst import CSTNode  # noqa: TC002
+from libcst import CSTNode
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
 from codeflash.code_utils.code_utils import encoded_tokens_len, get_qualified_name, path_belongs_to_site_packages
 from codeflash.context.unused_definition_remover import remove_unused_definitions_by_function_names
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import (
     CodeContextType,
     CodeOptimizationContext,
@@ -150,6 +150,7 @@ def extract_code_string_context_from_files(
     imports, and combines them.
 
     Args:
+    ----
         helpers_of_fto: Dictionary mapping file paths to sets of Function Sources of function to optimize and its helpers
         helpers_of_helpers: Dictionary mapping file paths to sets of Function Sources of helpers of helper functions
         project_root_path: Root path of the project
@@ -157,6 +158,7 @@ def extract_code_string_context_from_files(
         code_context_type: Type of code context to extract (READ_ONLY, READ_WRITABLE, or TESTGEN)
 
     Returns:
+    -------
         CodeString containing the extracted code context with necessary imports
 
     """  # noqa: D205
@@ -257,6 +259,7 @@ def extract_code_markdown_context_from_files(
     imports, and combines them into a structured markdown format.
 
     Args:
+    ----
         helpers_of_fto: Dictionary mapping file paths to sets of Function Sources of function to optimize and its helpers
         helpers_of_helpers: Dictionary mapping file paths to sets of Function Sources of helpers of helper functions
         project_root_path: Root path of the project
@@ -264,6 +267,7 @@ def extract_code_markdown_context_from_files(
         code_context_type: Type of code context to extract (READ_ONLY, READ_WRITABLE, or TESTGEN)
 
     Returns:
+    -------
         CodeStringsMarkdown containing the extracted code context with necessary imports,
         formatted for inclusion in markdown
 
@@ -502,7 +506,8 @@ def prune_cst_for_read_writable_code(  # noqa: PLR0911
 ) -> tuple[cst.CSTNode | None, bool]:
     """Recursively filter the node and its children to build the read-writable codeblock. This contains nodes that lead to target functions.
 
-    Returns:
+    Returns
+    -------
         (filtered_node, found_target):
           filtered_node: The modified CST node or None if it should be removed.
           found_target: True if a target function was found in this node's subtree.
@@ -586,7 +591,8 @@ def prune_cst_for_read_only_code(  # noqa: PLR0911
 ) -> tuple[cst.CSTNode | None, bool]:
     """Recursively filter the node for read-only context.
 
-    Returns:
+    Returns
+    -------
         (filtered_node, found_target):
           filtered_node: The modified CST node or None if it should be removed.
           found_target: True if a target function was found in this node's subtree.
@@ -690,7 +696,8 @@ def prune_cst_for_testgen_code(  # noqa: PLR0911
 ) -> tuple[cst.CSTNode | None, bool]:
     """Recursively filter the node for testgen context.
 
-    Returns:
+    Returns
+    -------
         (filtered_node, found_target):
           filtered_node: The modified CST node or None if it should be removed.
           found_target: True if a target function was found in this node's subtree.
