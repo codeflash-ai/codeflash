@@ -123,6 +123,7 @@ def process_pyproject_config(args: Namespace) -> Namespace:
         "disable_telemetry",
         "disable_imports_sorting",
         "git_remote",
+        "override_fixtures",
     ]
     for key in supported_keys:
         if key in pyproject_config and (
@@ -130,7 +131,6 @@ def process_pyproject_config(args: Namespace) -> Namespace:
             or not hasattr(args, key.replace("-", "_"))
         ):
             setattr(args, key.replace("-", "_"), pyproject_config[key])
-    args.override_fixtures = pyproject_config.get("override_fixtures", False)
     assert args.module_root is not None, "--module-root must be specified"
     assert Path(args.module_root).is_dir(), f"--module-root {args.module_root} must be a valid directory"
     assert args.tests_root is not None, "--tests-root must be specified"

@@ -54,8 +54,6 @@ class PytestMarkAdder(cst.CSTTransformer):
                         for import_alias in stmt.names:
                             if isinstance(import_alias, cst.ImportAlias) and import_alias.name.value == "pytest":
                                 self.has_pytest_import = True
-                    elif isinstance(stmt, cst.ImportFrom) and stmt.module and stmt.module.value == "pytest":
-                        self.has_pytest_import = True
 
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
         """Add pytest import if not present."""

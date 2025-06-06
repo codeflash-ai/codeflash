@@ -723,11 +723,11 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         formatter_cmds.append("disabled")
     check_formatter_installed(formatter_cmds, exit_on_failure=False)
     codeflash_section["formatter-cmds"] = formatter_cmds
-    codeflash_section["override-fixtures"] = False  # don't override fixtures by default, let the user decide
     # Add the 'codeflash' section, ensuring 'tool' section exists
     tool_section = pyproject_data.get("tool", tomlkit.table())
     tool_section["codeflash"] = codeflash_section
     pyproject_data["tool"] = tool_section
+
     with toml_path.open("w", encoding="utf8") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
     click.echo(f"✅ Added Codeflash configuration to {toml_path}")
