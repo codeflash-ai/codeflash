@@ -551,7 +551,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         assert read_only_context.strip() == expected_read_only_context.strip()
 
 
-def test_example_class() -> None:
+def test_example_class(temp_dir: Path) -> None:
     code = """
 class MyClass:
     \"\"\"A class with a helper method.\"\"\"
@@ -571,7 +571,7 @@ class HelperClass:
     def helper_method(self):
         return self.x
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
+    with (temp_dir / "test_example_class.py").open(mode="w") as f:
         f.write(code)
         f.flush()
         file_path = Path(f.name).resolve()
@@ -706,7 +706,7 @@ class HelperClass:
         assert read_only_context.strip() == expected_read_only_context.strip()
 
 
-def test_example_class_token_limit_2() -> None:
+def test_example_class_token_limit_2(temp_dir: Path) -> None:
     string_filler = " ".join(
         ["This is a long string that will be used to fill up the token limit." for _ in range(1000)]
     )
@@ -731,7 +731,7 @@ class HelperClass:
     def helper_method(self):
         return self.x
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
+    with (temp_dir / "temp_file2.py").open(mode="w") as f:
         f.write(code)
         f.flush()
         file_path = Path(f.name).resolve()
@@ -777,7 +777,7 @@ class HelperClass:
         assert read_only_context.strip() == expected_read_only_context.strip()
 
 
-def test_example_class_token_limit_3() -> None:
+def test_example_class_token_limit_3(temp_dir: Path) -> None:
     string_filler = " ".join(
         ["This is a long string that will be used to fill up the token limit." for _ in range(1000)]
     )
@@ -801,7 +801,7 @@ class HelperClass:
     def helper_method(self):
         return self.x
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
+    with (temp_dir / "temp_file3.py").open(mode="w") as f:
         f.write(code)
         f.flush()
         file_path = Path(f.name).resolve()
@@ -827,7 +827,7 @@ class HelperClass:
         with pytest.raises(ValueError, match="Read-writable code has exceeded token limit, cannot proceed"):
             code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
 
-def test_example_class_token_limit_4() -> None:
+def test_example_class_token_limit_4(temp_dir: Path) -> None:
     string_filler = " ".join(
         ["This is a long string that will be used to fill up the token limit." for _ in range(1000)]
     )
@@ -852,7 +852,7 @@ class HelperClass:
     def helper_method(self):
         return self.x
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
+    with (temp_dir / "temp_file4.py").open(mode="w") as f:
         f.write(code)
         f.flush()
         file_path = Path(f.name).resolve()
@@ -1249,7 +1249,7 @@ class DataProcessor:
     assert read_write_context.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
 
-def test_indirect_init_helper() -> None:
+def test_indirect_init_helper(temp_dir: Path) -> None:
     code = """
 class MyClass:
     def __init__(self):
@@ -1261,7 +1261,7 @@ class MyClass:
 def outside_method():
     return 1
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
+    with (temp_dir / "temp_file5.py").open(mode="w") as f:
         f.write(code)
         f.flush()
         file_path = Path(f.name).resolve()

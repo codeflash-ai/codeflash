@@ -213,11 +213,11 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
             lifespan=self.__duration__,
         )
 '''
-    with tempfile.NamedTemporaryFile(mode="w") as f:
-        f.write(code)
-        f.flush()
-        file_path = Path(f.name).resolve()
-        project_root_path = file_path.parent.resolve()
+    with tempfile.TemporaryDirectory() as tempdir:
+        temp_path = Path(tempdir)
+        file_path = temp_path / "flavio_code.py"
+        file_path.write_text(code)
+        project_root_path = temp_path.resolve()
         function_to_optimize = FunctionToOptimize(
             function_name="__call__",
             file_path=file_path,
