@@ -53,44 +53,36 @@ def humanize_runtime(time_in_ns: int) -> str:
 
 def format_time(nanoseconds: int) -> str:
     """Format nanoseconds into a human-readable string with 3 significant digits when needed."""
-
-    def count_significant_digits(num: int) -> int:
-        """Count significant digits in an integer."""
-        return len(str(abs(num)))
-
-    def format_with_precision(value: float, unit: str) -> str:
-        """Format a value with 3 significant digits precision."""
-        if value >= 100:
-            return f"{value:.0f}{unit}"
-        if value >= 10:
-            return f"{value:.1f}{unit}"
-        return f"{value:.2f}{unit}"
-
-    result = ""
+    # Inlined significant digit check: >= 3 digits if value >= 100
     if nanoseconds < 1_000:
-        result = f"{nanoseconds}ns"
-    elif nanoseconds < 1_000_000:
-        # Convert to microseconds
+        return f"{nanoseconds}ns"
+    if nanoseconds < 1_000_000:
         microseconds_int = nanoseconds // 1_000
-        if count_significant_digits(microseconds_int) >= 3:
-            result = f"{microseconds_int}μs"
-        else:
-            microseconds_float = nanoseconds / 1_000
-            result = format_with_precision(microseconds_float, "μs")
-    elif nanoseconds < 1_000_000_000:
-        # Convert to milliseconds
+        if microseconds_int >= 100:
+            return f"{microseconds_int}μs"
+        microseconds = nanoseconds / 1_000
+        # Format with precision: 3 significant digits
+        if microseconds >= 100:
+            return f"{microseconds:.0f}μs"
+        if microseconds >= 10:
+            return f"{microseconds:.1f}μs"
+        return f"{microseconds:.2f}μs"
+    if nanoseconds < 1_000_000_000:
         milliseconds_int = nanoseconds // 1_000_000
-        if count_significant_digits(milliseconds_int) >= 3:
-            result = f"{milliseconds_int}ms"
-        else:
-            milliseconds_float = nanoseconds / 1_000_000
-            result = format_with_precision(milliseconds_float, "ms")
-    else:
-        # Convert to seconds
-        seconds_int = nanoseconds // 1_000_000_000
-        if count_significant_digits(seconds_int) >= 3:
-            result = f"{seconds_int}s"
-        else:
-            seconds_float = nanoseconds / 1_000_000_000
-            result = format_with_precision(seconds_float, "s")
-    return result
+        if milliseconds_int >= 100:
+            return f"{milliseconds_int}ms"
+        milliseconds = nanoseconds / 1_000_000
+        if milliseconds >= 100:
+            return f"{milliseconds:.0f}ms"
+        if milliseconds >= 10:
+            return f"{milliseconds:.1f}ms"
+        return f"{milliseconds:.2f}ms"
+    seconds_int = nanoseconds // 1_000_000_000
+    if seconds_int >= 100:
+        return f"{seconds_int}s"
+    seconds = nanoseconds / 1_000_000_000
+    if seconds >= 100:
+        return f"{seconds:.0f}s"
+    if seconds >= 10:
+        return f"{seconds:.1f}s"
+    return f"{seconds:.2f}s"
