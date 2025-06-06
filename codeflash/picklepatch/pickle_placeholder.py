@@ -18,6 +18,7 @@ class PicklePlaceholder:
         """Initialize a placeholder for an unpicklable object.
 
         Args:
+        ----
             obj_type (str): The type name of the original object
             obj_str (str): String representation of the original object
             error_msg (str): The error message that occurred during pickling

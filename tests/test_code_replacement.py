@@ -70,7 +70,7 @@ def sorter(arr):
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code
+        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
     )
     final_output = code_path.read_text(encoding="utf-8")
     assert "inconsequential_var = '123'" in final_output
@@ -805,7 +805,8 @@ class MainClass:
         self.name = name
 
     def main_method(self):
-        return HelperClass(self.name).helper_method()"""
+        return HelperClass(self.name).helper_method()
+"""
     file_path = Path(__file__).resolve()
     func_top_optimize = FunctionToOptimize(
         function_name="main_method", file_path=file_path, parents=[FunctionParent("MainClass", "ClassDef")]
@@ -1140,8 +1141,8 @@ class TestResults(BaseModel):
         )
 
     assert (
-            new_code
-            == """from __future__ import annotations
+        new_code
+        == """from __future__ import annotations
 import sys
 from codeflash.verification.comparator import comparator
 from enum import Enum
@@ -1346,8 +1347,8 @@ def cosine_similarity_top_k(
         project_root_path=Path(__file__).parent.parent.resolve(),
     )
     assert (
-            new_code
-            == '''import numpy as np
+        new_code
+        == '''import numpy as np
 from pydantic.dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 @dataclass(config=dict(arbitrary_types_allowed=True))
@@ -1405,8 +1406,8 @@ def cosine_similarity_top_k(
         )
 
     assert (
-            new_helper_code
-            == '''import numpy as np
+        new_helper_code
+        == '''import numpy as np
 from pydantic.dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 @dataclass(config=dict(arbitrary_types_allowed=True))
@@ -1663,7 +1664,6 @@ print("Hello world")
     )
     assert new_code == original_code
 
-
 def test_global_reassignment() -> None:
     original_code = """a=1
 print("Hello world")
@@ -1735,7 +1735,7 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code
+        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -1811,7 +1811,7 @@ a=2
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code
+        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -1888,7 +1888,7 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code
+        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -1964,7 +1964,7 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code
+        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -2041,7 +2041,7 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code
+        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -2129,7 +2129,7 @@ a = 6
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code
+        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -2607,3 +2607,4 @@ def test_something():
         code = final_module.code
         # Should have both modifications
         assert code==expected_code
+
