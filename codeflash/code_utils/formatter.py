@@ -104,32 +104,39 @@ def format_code(
     formatter_cmds: list[str],
     path: Union[str, Path],
     optimized_function: str = "",
+    check_diff: bool = False,  # noqa
     print_status: bool = True,  # noqa
 ) -> str:
     with tempfile.TemporaryDirectory() as test_dir_str:
-        max_diff_lines = 100
-
         if isinstance(path, str):
             path = Path(path)
 
         original_code = path.read_text(encoding="utf8")
-        # we dont' count the formatting diff for the optimized function as it should be well-formatted
-        original_code_without_opfunc = original_code.replace(optimized_function, "")
+        original_code_lines = len(original_code.split("\n"))
 
-        original_temp = Path(test_dir_str) / "original_temp.py"
-        original_temp.write_text(original_code_without_opfunc, encoding="utf8")
+        if check_diff and original_code_lines > 50:
+            # we dont' count the formatting diff for the optimized function as it should be well-formatted
+            original_code_without_opfunc = original_code.replace(optimized_function, "")
 
-        formatted_temp, formatted_code = apply_formatter_cmds(
-            formatter_cmds, original_temp, test_dir_str, print_status=False
-        )
+            original_temp = Path(test_dir_str) / "original_temp.py"
+            original_temp.write_text(original_code_without_opfunc, encoding="utf8")
 
-        diff_output = generate_unified_diff(
-            original_code_without_opfunc, formatted_code, from_file=str(original_temp), to_file=str(formatted_temp)
-        )
-        diff_lines_count = get_diff_lines_count(diff_output)
-        if diff_lines_count > max_diff_lines:
-            logger.debug(f"Skipping formatting {path}: {diff_lines_count} lines would change (max: {max_diff_lines})")
-            return original_code
+            formatted_temp, formatted_code = apply_formatter_cmds(
+                formatter_cmds, original_temp, test_dir_str, print_status=False
+            )
+
+            diff_output = generate_unified_diff(
+                original_code_without_opfunc, formatted_code, from_file=str(original_temp), to_file=str(formatted_temp)
+            )
+            diff_lines_count = get_diff_lines_count(diff_output)
+
+            max_diff_lines = min(int(original_code_lines * 0.3), 50)
+
+            if diff_lines_count > max_diff_lines and max_diff_lines != -1:
+                logger.debug(
+                    f"Skipping formatting {path}: {diff_lines_count} lines would change (max: {max_diff_lines})"
+                )
+                return original_code
 
         _, formatted_code = apply_formatter_cmds(formatter_cmds, path, test_dir_str=None, print_status=print_status)
         logger.debug(f"Formatted {path} with commands: {formatter_cmds}")
