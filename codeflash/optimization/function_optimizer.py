@@ -36,10 +36,13 @@ from codeflash.code_utils.config_consts import (
     N_TESTS_TO_GENERATE,
     TOTAL_LOOPING_TIME,
 )
+from codeflash.code_utils.edit_generated_tests import (
+    add_runtime_comments_to_generated_tests,
+    remove_functions_from_generated_tests,
+)
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports
-from codeflash.code_utils.remove_generated_tests import remove_functions_from_generated_tests
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
@@ -266,10 +269,6 @@ class FunctionOptimizer:
                 },
             )
 
-            generated_tests = remove_functions_from_generated_tests(
-                generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
-            )
-
             if best_optimization:
                 logger.info("Best candidate:")
                 code_print(best_optimization.candidate.source_code)
@@ -295,8 +294,6 @@ class FunctionOptimizer:
                     file_path=self.function_to_optimize.file_path,
                     benchmark_details=processed_benchmark_info.benchmark_details if processed_benchmark_info else None,
                 )
-
-                self.log_successful_optimization(explanation, generated_tests, exp_type)
 
                 self.replace_function_and_helpers_with_optimized_code(
                     code_context=code_context,
@@ -324,6 +321,15 @@ class FunctionOptimizer:
                         if original_code_baseline.coverage_results
                         else "Coverage data not available"
                     )
+                    generated_tests = remove_functions_from_generated_tests(
+                        generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
+                    )
+                    # Add runtime comments to generated tests before creating the PR
+                    generated_tests = add_runtime_comments_to_generated_tests(
+                        generated_tests,
+                        original_code_baseline.benchmarking_test_results,
+                        best_optimization.winning_benchmarking_test_results,
+                    )
                     generated_tests_str = "\n\n".join(
                         [test.generated_original_test_source for test in generated_tests.generated_tests]
                     )
@@ -348,6 +354,7 @@ class FunctionOptimizer:
                             original_helper_code,
                             self.function_to_optimize.file_path,
                         )
+                self.log_successful_optimization(explanation, generated_tests, exp_type)
 
         if not best_optimization:
             return Failure(f"No best optimizations found for function {self.function_to_optimize.qualified_name}")

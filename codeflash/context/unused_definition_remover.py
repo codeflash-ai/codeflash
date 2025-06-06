@@ -318,10 +318,12 @@ def remove_unused_definitions_recursively(  # noqa: PLR0911
     """Recursively filter the node to remove unused definitions.
 
     Args:
+    ----
         node: The CST node to process
         definitions: Dictionary of definition info
 
     Returns:
+    -------
         (filtered_node, used_by_function):
           filtered_node: The modified CST node or None if it should be removed
           used_by_function: True if this node or any child is used by qualified functions
@@ -457,6 +459,7 @@ def remove_unused_definitions_by_function_names(code: str, qualified_function_na
     If a class is referenced by a qualified function, we keep the entire class.
 
     Args:
+    ----
         code: The code to process
         qualified_function_names: Set of function names to keep. For methods, use format 'classname.methodname'
 

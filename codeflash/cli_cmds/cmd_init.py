@@ -211,7 +211,7 @@ def collect_setup_info() -> SetupInfo:
     # Discover test directory
     default_tests_subdir = "tests"
     create_for_me_option = f"okay, create a tests{os.pathsep} directory for me!"
-    test_subdir_options = valid_subdirs
+    test_subdir_options = [sub_dir for sub_dir in valid_subdirs if sub_dir != module_root]
     if "tests" not in valid_subdirs:
         test_subdir_options.append(create_for_me_option)
     custom_dir_option = "enter a custom directory…"
@@ -240,7 +240,16 @@ def collect_setup_info() -> SetupInfo:
             apologize_and_exit()
     else:
         tests_root = Path(curdir) / Path(cast("str", tests_root_answer))
+
     tests_root = tests_root.relative_to(curdir)
+
+    resolved_module_root = (Path(curdir) / Path(module_root)).resolve()
+    resolved_tests_root = (Path(curdir) / Path(tests_root)).resolve()
+    if resolved_module_root == resolved_tests_root:
+        logger.warning(
+            "It looks like your tests root is the same as your module root. This is not recommended and can lead to unexpected behavior."
+        )
+
     ph("cli-tests-root-provided")
 
     # Autodiscover test framework
