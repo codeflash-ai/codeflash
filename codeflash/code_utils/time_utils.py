@@ -53,36 +53,31 @@ def humanize_runtime(time_in_ns: int) -> str:
 
 def format_time(nanoseconds: int) -> str:
     """Format nanoseconds into a human-readable string with 3 significant digits when needed."""
-    # Inlined significant digit check: >= 3 digits if value >= 100
+    # Define conversion factors and units
+    conversions = [(1_000_000_000, "s"), (1_000_000, "ms"), (1_000, "μs"), (1, "ns")]
+
+    # Handle nanoseconds case directly (no decimal formatting needed)
     if nanoseconds < 1_000:
         return f"{nanoseconds}ns"
-    if nanoseconds < 1_000_000:
-        microseconds_int = nanoseconds // 1_000
-        if microseconds_int >= 100:
-            return f"{microseconds_int}μs"
-        microseconds = nanoseconds / 1_000
-        # Format with precision: 3 significant digits
-        if microseconds >= 100:
-            return f"{microseconds:.0f}μs"
-        if microseconds >= 10:
-            return f"{microseconds:.1f}μs"
-        return f"{microseconds:.2f}μs"
-    if nanoseconds < 1_000_000_000:
-        milliseconds_int = nanoseconds // 1_000_000
-        if milliseconds_int >= 100:
-            return f"{milliseconds_int}ms"
-        milliseconds = nanoseconds / 1_000_000
-        if milliseconds >= 100:
-            return f"{milliseconds:.0f}ms"
-        if milliseconds >= 10:
-            return f"{milliseconds:.1f}ms"
-        return f"{milliseconds:.2f}ms"
-    seconds_int = nanoseconds // 1_000_000_000
-    if seconds_int >= 100:
-        return f"{seconds_int}s"
-    seconds = nanoseconds / 1_000_000_000
-    if seconds >= 100:
-        return f"{seconds:.0f}s"
-    if seconds >= 10:
-        return f"{seconds:.1f}s"
-    return f"{seconds:.2f}s"
+
+    # Find appropriate unit
+    for divisor, unit in conversions:
+        if nanoseconds >= divisor:
+            value = nanoseconds / divisor
+            int_value = nanoseconds // divisor
+
+            # Use integer formatting for values >= 100
+            if int_value >= 100:
+                formatted_value = str(int_value)
+            # Format with precision for 3 significant digits
+            elif value >= 100:
+                formatted_value = f"{value:.0f}"
+            elif value >= 10:
+                formatted_value = f"{value:.1f}"
+            else:
+                formatted_value = f"{value:.2f}"
+
+            return f"{formatted_value}{unit}"
+
+    # This should never be reached, but included for completeness
+    return f"{nanoseconds}ns"
