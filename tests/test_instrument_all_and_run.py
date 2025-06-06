@@ -123,7 +123,7 @@ def test_sort():
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values").resolve()),
         ).replace('"', "'")
 
         with test_path.open("w") as f:
@@ -276,22 +276,23 @@ def test_sort():
     fto = FunctionToOptimize(
         function_name="sorter", parents=[FunctionParent(name="BubbleSorter", type="ClassDef")], file_path=Path(fto_path)
     )
-    with tempfile.NamedTemporaryFile(mode="w") as f:
-        f.write(code)
-        f.flush()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        test_file_path = tmpdir_path / "test_class_method_full_instrumentation_temp.py"
+        test_file_path.write_text(code, encoding="utf-8")
 
         success, new_test = inject_profiling_into_existing_test(
-            Path(f.name), [CodePosition(7, 13), CodePosition(12, 13)], fto, Path(f.name).parent, "pytest"
+            test_file_path, [CodePosition(7, 13), CodePosition(12, 13)], fto, tmpdir_path.resolve(), "pytest"
         )
-    assert success
-    assert new_test.replace('"', "'") == expected.format(
-        module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
-    ).replace('"', "'")
-    tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/").resolve()
-    test_path = tests_root / "test_class_method_behavior_results_temp.py"
-    test_path_perf = tests_root / "test_class_method_behavior_results_perf_temp.py"
-    project_root_path = (Path(__file__).parent / "..").resolve()
+        assert success
+        assert new_test.replace('"', "'") == expected.format(
+            module_path=test_file_path.name, tmp_dir_path=get_run_tmp_file(Path("test_return_values").resolve())
+        ).replace('"', "'")
 
+        tests_root = tmpdir_path
+        test_path = tests_root / "test_class_method_behavior_results_temp.py"
+        test_path_perf = tests_root / "test_class_method_behavior_results_perf_temp.py"
+        project_root_path = (Path(__file__).parent / "..").resolve()
     try:
         new_test = expected.format(
             module_path="code_to_optimize.tests.pytest.test_class_method_behavior_results_temp",
