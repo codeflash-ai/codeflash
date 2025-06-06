@@ -74,9 +74,11 @@ class CodeFlashBenchmarkPlugin:
         """Process the trace file and extract timing data for all functions.
 
         Args:
+        ----
             trace_path: Path to the trace file
 
         Returns:
+        -------
             A nested dictionary where:
             - Outer keys are module_name.qualified_name (module.class.function)
             - Inner keys are of type BenchmarkKey
@@ -132,9 +134,11 @@ class CodeFlashBenchmarkPlugin:
         """Extract total benchmark timings from trace files.
 
         Args:
+        ----
             trace_path: Path to the trace file
 
         Returns:
+        -------
             A dictionary mapping where:
             - Keys are of type BenchmarkKey
             - Values are total benchmark timing in milliseconds (with overhead subtracted)
