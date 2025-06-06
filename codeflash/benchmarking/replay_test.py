@@ -55,12 +55,14 @@ def create_trace_replay_test_code(
     """Create a replay test for functions based on trace data.
 
     Args:
+    ----
         trace_file: Path to the SQLite database file
         functions_data: List of dictionaries with function info extracted from DB
         test_framework: 'pytest' or 'unittest'
         max_run_count: Maximum number of runs to include in the test
 
     Returns:
+    -------
         A string containing the test code
 
     """
@@ -218,12 +220,14 @@ def generate_replay_test(
     """Generate multiple replay tests from the traced function calls, grouped by benchmark.
 
     Args:
+    ----
         trace_file_path: Path to the SQLite database file
         output_dir: Directory to write the generated tests (if None, only returns the code)
         test_framework: 'pytest' or 'unittest'
         max_run_count: Maximum number of runs to include per function
 
     Returns:
+    -------
         Dictionary mapping benchmark names to generated test code
 
     """
