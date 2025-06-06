@@ -3,17 +3,15 @@ from __future__ import annotations
 import os
 from collections import defaultdict
 from itertools import chain
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import libcst as cst
-from libcst import CSTNode
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
 from codeflash.code_utils.code_utils import encoded_tokens_len, get_qualified_name, path_belongs_to_site_packages
 from codeflash.context.unused_definition_remover import remove_unused_definitions_by_function_names
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
 from codeflash.models.models import (
     CodeContextType,
     CodeOptimizationContext,
@@ -24,7 +22,10 @@ from codeflash.models.models import (
 from codeflash.optimization.function_context import belongs_to_function_qualified
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from jedi.api.classes import Name
+    from libcst import CSTNode
 
 
 def get_code_optimization_context(

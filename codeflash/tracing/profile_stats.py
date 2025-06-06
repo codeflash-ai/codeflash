@@ -55,7 +55,7 @@ class ProfileStats(pstats.Stats):
 
         print(indent, self.total_calls, "function calls", end=" ", file=self.stream)
         if self.total_calls != self.prim_calls:
-            print("(%d primitive calls)" % self.prim_calls, end=" ", file=self.stream)
+            print(f"({self.prim_calls:d} primitive calls)", end=" ", file=self.stream)
         time_unit = {"ns": "nanoseconds", "us": "microseconds", "ms": "milliseconds", "s": "seconds"}[self.time_unit]
         print(f"in {self.total_tt:.3f} {time_unit}", file=self.stream)
         print(file=self.stream)
