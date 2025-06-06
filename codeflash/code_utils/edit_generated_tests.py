@@ -41,7 +41,7 @@ def add_runtime_comments_to_generated_tests(
     optimized_runtime_by_test = optimized_test_results.usable_runtime_data_by_test_case()
 
     class RuntimeCommentTransformer(cst.CSTTransformer):
-        def __init__(self):
+        def __init__(self) -> None:
             self.in_test_function = False
             self.current_test_name = None
 
@@ -60,7 +60,9 @@ def add_runtime_comments_to_generated_tests(
             return updated_node
 
         def leave_SimpleStatementLine(
-            self, original_node: cst.SimpleStatementLine, updated_node: cst.SimpleStatementLine
+            self,
+            original_node: cst.SimpleStatementLine,  # noqa: ARG002
+            updated_node: cst.SimpleStatementLine,
         ) -> cst.SimpleStatementLine:
             if not self.in_test_function or not self.current_test_name:
                 return updated_node
@@ -69,14 +71,13 @@ def add_runtime_comments_to_generated_tests(
             # Handle both single statements and multiple statements on one line
             codeflash_assignment_found = False
             for stmt in updated_node.body:
-                if isinstance(stmt, cst.Assign):
-                    if (
-                        len(stmt.targets) == 1
-                        and isinstance(stmt.targets[0].target, cst.Name)
-                        and stmt.targets[0].target.value == "codeflash_output"
-                    ):
-                        codeflash_assignment_found = True
-                        break
+                if isinstance(stmt, cst.Assign) and (
+                    len(stmt.targets) == 1
+                    and isinstance(stmt.targets[0].target, cst.Name)
+                    and stmt.targets[0].target.value == "codeflash_output"
+                ):
+                    codeflash_assignment_found = True
+                    break
 
             if codeflash_assignment_found:
                 # Find matching test cases by looking for this test function name in the test results

@@ -66,25 +66,31 @@ def format_time(nanoseconds: int) -> str:
             return f"{value:.1f}{unit}"
         return f"{value:.2f}{unit}"
 
+    result = ""
     if nanoseconds < 1_000:
-        return f"{nanoseconds}ns"
-    if nanoseconds < 1_000_000:
+        result = f"{nanoseconds}ns"
+    elif nanoseconds < 1_000_000:
         # Convert to microseconds
         microseconds_int = nanoseconds // 1_000
         if count_significant_digits(microseconds_int) >= 3:
-            return f"{microseconds_int}μs"
-        microseconds_float = nanoseconds / 1_000
-        return format_with_precision(microseconds_float, "μs")
-    if nanoseconds < 1_000_000_000:
+            result = f"{microseconds_int}μs"
+        else:
+            microseconds_float = nanoseconds / 1_000
+            result = format_with_precision(microseconds_float, "μs")
+    elif nanoseconds < 1_000_000_000:
         # Convert to milliseconds
         milliseconds_int = nanoseconds // 1_000_000
         if count_significant_digits(milliseconds_int) >= 3:
-            return f"{milliseconds_int}ms"
-        milliseconds_float = nanoseconds / 1_000_000
-        return format_with_precision(milliseconds_float, "ms")
-    # Convert to seconds
-    seconds_int = nanoseconds // 1_000_000_000
-    if count_significant_digits(seconds_int) >= 3:
-        return f"{seconds_int}s"
-    seconds_float = nanoseconds / 1_000_000_000
-    return format_with_precision(seconds_float, "s")
+            result = f"{milliseconds_int}ms"
+        else:
+            milliseconds_float = nanoseconds / 1_000_000
+            result = format_with_precision(milliseconds_float, "ms")
+    else:
+        # Convert to seconds
+        seconds_int = nanoseconds // 1_000_000_000
+        if count_significant_digits(seconds_int) >= 3:
+            result = f"{seconds_int}s"
+        else:
+            seconds_float = nanoseconds / 1_000_000_000
+            result = format_with_precision(seconds_float, "s")
+    return result

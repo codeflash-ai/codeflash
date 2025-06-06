@@ -191,7 +191,8 @@ ignore = [
     "T201",
     "PGH004",
     "S301",
-    "D104"
+    "D104",
+    "PERF203"
 ]
 
 [tool.ruff.lint.flake8-type-checking]

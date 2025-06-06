@@ -386,7 +386,7 @@ def get_function_to_optimize_as_function_source(
                     source_code=name.get_line_code(),
                     jedi_definition=name,
                 )
-        except Exception as e:  # noqa: PERF203
+        except Exception as e:
             logger.exception(f"Error while getting function source: {e}")
             continue
     raise ValueError(
