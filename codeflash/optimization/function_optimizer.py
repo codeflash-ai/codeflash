@@ -213,14 +213,15 @@ class FunctionOptimizer:
             for key in set(self.function_to_tests) | set(function_to_concolic_tests)
         }
         instrumented_unittests_created_for_function = self.instrument_existing_tests(function_to_all_tests)
-        logger.debug("disabling all autouse fixtures associated with the test files")
-        original_conftest_content = modify_autouse_fixture(
-            generated_test_paths + generated_perf_test_paths + list(instrumented_unittests_created_for_function)
-        )
-        logger.debug("add custom marker to all tests")
-        add_custom_marker_to_all_tests(
-            generated_test_paths + generated_perf_test_paths + list(instrumented_unittests_created_for_function)
-        )
+        if self.args.override_fixtures:
+            logger.debug("disabling all autouse fixtures associated with the test files")
+            original_conftest_content = modify_autouse_fixture(
+                generated_test_paths + generated_perf_test_paths + list(instrumented_unittests_created_for_function)
+            )
+            logger.debug("add custom marker to all tests")
+            add_custom_marker_to_all_tests(
+                generated_test_paths + generated_perf_test_paths + list(instrumented_unittests_created_for_function)
+            )
 
         # Get a dict of file_path_to_classes of fto and helpers_of_fto
         file_path_to_helper_classes = defaultdict(set)
@@ -243,7 +244,8 @@ class FunctionOptimizer:
         )
 
         if not is_successful(baseline_result):
-            restore_conftest(original_conftest_content)
+            if self.args.override_fixtures:
+                restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
             return Failure(baseline_result.failure())
 
@@ -251,7 +253,8 @@ class FunctionOptimizer:
         if isinstance(original_code_baseline, OriginalCodeBaseline) and not coverage_critic(
             original_code_baseline.coverage_results, self.args.test_framework
         ):
-            restore_conftest(original_conftest_content)
+            if self.args.override_fixtures:
+                restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
             return Failure("The threshold for test coverage was not met.")
         # request for new optimizations but don't block execution, check for completion later
@@ -360,7 +363,8 @@ class FunctionOptimizer:
                             original_helper_code,
                             self.function_to_optimize.file_path,
                         )
-
+        if self.args.override_fixtures:
+            restore_conftest(original_conftest_content)
         if not best_optimization:
             return Failure(f"No best optimizations found for function {self.function_to_optimize.qualified_name}")
         return Success(best_optimization)

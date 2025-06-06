@@ -16,7 +16,6 @@ import inquirer.themes
 import tomlkit
 from git import InvalidGitRepositoryError, Repo
 from pydantic.dataclasses import dataclass
-from tomlkit import table
 
 from codeflash.api.cfapi import is_github_app_installed_on_repo
 from codeflash.cli_cmds.cli_common import apologize_and_exit, inquirer_wrapper, inquirer_wrapper_path
@@ -35,7 +34,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
 CODEFLASH_LOGO: str = (
-    f"{LF}"  # noqa : ISC003
+    f"{LF}"  # noqa: ISC003
     r"                   _          ___  _               _     " + f"{LF}"
     r"                  | |        / __)| |             | |    " + f"{LF}"
     r"  ____   ___    _ | |  ____ | |__ | |  ____   ___ | | _  " + f"{LF}"
@@ -728,16 +727,6 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     # Add the 'codeflash' section, ensuring 'tool' section exists
     tool_section = pyproject_data.get("tool", tomlkit.table())
     tool_section["codeflash"] = codeflash_section
-    pyproject_data["tool"] = tool_section
-    # Create [tool.pytest.ini_options] if it doesn't exist
-    tool_section = pyproject_data.get("tool", table())
-    pytest_section = tool_section.get("pytest", table())
-    ini_options = pytest_section.get("ini_options", table())
-    # Define or overwrite the 'markers' array
-    ini_options["markers"] = ["codeflash_no_autouse"]
-    # Set updated sections back
-    pytest_section["ini_options"] = ini_options
-    tool_section["pytest"] = pytest_section
     pyproject_data["tool"] = tool_section
     with toml_path.open("w", encoding="utf8") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))

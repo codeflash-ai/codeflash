@@ -71,7 +71,12 @@ def parse_config_file(
     path_keys = ["module-root", "tests-root", "benchmarks-root"]
     path_list_keys = ["ignore-paths"]
     str_keys = {"pytest-cmd": "pytest", "git-remote": "origin"}
-    bool_keys = {"disable-telemetry": False, "disable-imports-sorting": False, "benchmark": False}
+    bool_keys = {
+        "override-fixtures": False,
+        "disable-telemetry": False,
+        "disable-imports-sorting": False,
+        "benchmark": False,
+    }
     list_str_keys = {"formatter-cmds": ["black $file"]}
 
     for key, default_value in str_keys.items():
