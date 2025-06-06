@@ -3,14 +3,20 @@ from __future__ import annotations
 import ast
 from collections import defaultdict
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
+from typing import TYPE_CHECKING, Optional
 
 import libcst as cst
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
-from codeflash.models.models import CodeOptimizationContext, FunctionSource
+
+if TYPE_CHECKING:
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.models.models import CodeOptimizationContext, FunctionSource
 
 
 @dataclass
@@ -493,11 +499,12 @@ def print_definitions(definitions: dict[str, UsageInfo]) -> None:
 
 
 def revert_unused_helper_functions(
-    project_root, unused_helpers: list[FunctionSource], original_helper_code: dict[Path, str]
+    project_root: Path, unused_helpers: list[FunctionSource], original_helper_code: dict[Path, str]
 ) -> None:
     """Revert unused helper functions back to their original definitions.
 
     Args:
+        project_root: project_root
         unused_helpers: List of unused helper functions to revert
         original_helper_code: Dictionary mapping file paths to their original code
 
@@ -516,9 +523,6 @@ def revert_unused_helper_functions(
     for file_path, helpers_in_file in unused_helpers_by_file.items():
         if file_path in original_helper_code:
             try:
-                # Read current file content
-                current_code = file_path.read_text(encoding="utf8")
-
                 # Get original code for this file
                 original_code = original_helper_code[file_path]
 
@@ -557,7 +561,6 @@ def _analyze_imports_in_optimized_code(
     # Precompute a two-level dict: module_name -> func_name -> [helpers]
     helpers_by_file_and_func = defaultdict(dict)
     helpers_by_file = defaultdict(list)  # preserved for "import module"
-    helpers_append = helpers_by_file_and_func.setdefault
     for helper in code_context.helper_functions:
         jedi_type = helper.jedi_definition.type
         if jedi_type != "class":
@@ -606,11 +609,12 @@ def _analyze_imports_in_optimized_code(
 
 
 def detect_unused_helper_functions(
-    function_to_optimize, code_context: CodeOptimizationContext, optimized_code: str
+    function_to_optimize: FunctionToOptimize, code_context: CodeOptimizationContext, optimized_code: str
 ) -> list[FunctionSource]:
     """Detect helper functions that are no longer called by the optimized entrypoint function.
 
     Args:
+        function_to_optimize: The function to optimize
         code_context: The code optimization context containing helper functions
         optimized_code: The optimized code to analyze
 
@@ -702,8 +706,9 @@ def detect_unused_helper_functions(
                     logger.debug(f"Helper function {helper_qualified_name} is still called in optimized code")
                     logger.debug(f"  Called via: {possible_call_names.intersection(called_function_names)}")
 
-        return unused_helpers
+        ret_val = unused_helpers
 
     except Exception as e:
         logger.debug(f"Error detecting unused helper functions: {e}")
-        return []
+        ret_val = []
+    return ret_val
