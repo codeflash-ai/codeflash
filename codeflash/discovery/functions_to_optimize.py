@@ -268,7 +268,7 @@ def find_all_functions_in_file(file_path: Path) -> dict[Path, list[FunctionToOpt
 def get_all_replay_test_functions(
     replay_test: Path, test_cfg: TestConfig, project_root_path: Path
 ) -> dict[Path, list[FunctionToOptimize]]:
-    function_tests = discover_unit_tests(test_cfg, discover_only_these_tests=[replay_test])
+    function_tests, _ = discover_unit_tests(test_cfg, discover_only_these_tests=[replay_test])
     # Get the absolute file paths for each function, excluding class name if present
     filtered_valid_functions = defaultdict(list)
     file_to_functions_map = defaultdict(list)

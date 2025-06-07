@@ -48,7 +48,7 @@ class Optimizer:
         self,
         function_to_optimize: FunctionToOptimize,
         function_to_optimize_ast: ast.FunctionDef | None = None,
-        function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
+        function_to_tests: dict[str, set[FunctionCalledInTest]] | None = None,
         function_to_optimize_source_code: str | None = "",
         function_benchmark_timings: dict[str, dict[BenchmarkKey, float]] | None = None,
         total_benchmark_timings: dict[BenchmarkKey, float] | None = None,
@@ -162,8 +162,9 @@ class Optimizer:
 
             console.rule()
             start_time = time.time()
-            function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
-            num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
+            function_to_tests, num_discovered_tests = discover_unit_tests(
+                self.test_cfg, file_to_funcs_to_optimize=file_to_funcs_to_optimize
+            )
             console.rule()
             logger.info(
                 f"Discovered {num_discovered_tests} existing unit tests in {(time.time() - start_time):.1f}s at {self.test_cfg.tests_root}"
