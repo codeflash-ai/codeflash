@@ -22,13 +22,13 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
     path_belongs_to_site_packages,
 )
+from codeflash.code_utils.config_consts import REPEAT_OPTIMIZATION_PROBABILITY
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.git_utils import get_git_diff, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.models.models import FunctionParent
 from codeflash.telemetry.posthog_cf import ph
-from codeflash.code_utils.config_consts import REPEAT_OPTIMIZATION_PROBABILITY
 
 if TYPE_CHECKING:
     from libcst import CSTNode
@@ -460,9 +460,7 @@ def inspect_top_level_functions_or_methods(
     )
 
 
-def check_optimization_status(
-    functions_by_file: dict[Path, list[FunctionToOptimize]], owner: str, repo: str, pr_number: int
-) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
+def check_optimization_status(functions_by_file: dict[Path, list[FunctionToOptimize]]) -> list[tuple[str, str]]:
     """Check which functions have already been optimized and filter them out.
 
     This function calls the optimization API to:
@@ -480,7 +478,19 @@ def check_optimization_status(
         Tuple of (filtered_functions_dict, remaining_count)
 
     """
-    # Build the code_contexts dictionary for the API call
+    # Check optimization status if repository info is provided
+    # already_optimized_count = 0
+    try:
+        repository = git.Repo(search_parent_directories=True)
+        owner, repo = get_repo_owner_and_name(repository)
+    except git.exc.InvalidGitRepositoryError:
+        logger.warning("No git repository found")
+        owner, repo = None, None
+    pr_number = get_pr_number()
+
+    if not owner or not repo or pr_number is None:
+        return []
+
     code_contexts = {}
     path_to_function_map = {}
 
@@ -497,29 +507,13 @@ def check_optimization_status(
 
     try:
         result = is_function_being_optimized_again(owner, repo, pr_number, code_contexts)
-        already_optimized_paths = set(result.get("already_optimized_paths", []))
-
-        # Filter out already optimized functions
-        filtered_functions = defaultdict(list)
-        remaining_count = 0
-
-        for path_key, (file_path, func) in path_to_function_map.items():
-            if path_key not in already_optimized_paths:
-                filtered_functions[file_path].append(func)
-                remaining_count += 1
-            else:
-                if random.random() < REPEAT_OPTIMIZATION_PROBABILITY:
-                    logger.info(f"Attempting more optimization on {path_key}")
-                    filtered_functions[file_path].append(func)
-                    remaining_count += 1
-
-        return dict(filtered_functions), remaining_count
+        already_optimized_paths: list[tuple[str, str]] = result.get("already_optimized_paths", [])
+        return already_optimized_paths
 
     except Exception as e:
         logger.warning(f"Failed to check optimization status: {e}")
         # Return all functions if API call fails
-        total_count = sum(len(funcs) for funcs in functions_by_file.values())
-        return functions_by_file, total_count
+        return []
 
 
 def filter_functions(
@@ -531,33 +525,25 @@ def filter_functions(
     previous_checkpoint_functions: dict[Path, dict[str, Any]] | None = None,
     disable_logs: bool = False,  # noqa: FBT001, FBT002
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
+    filtered_modified_functions: dict[str, list[FunctionToOptimize]] = {}
     blocklist_funcs = get_blocklisted_functions()
-    already_optimized_count = 0
-    path_based_functions = {Path(k): v for k, v in modified_functions.items() if v}
-    try:
-        repository = git.Repo(Path.cwd(), search_parent_directories=True)
-        owner, repo = get_repo_owner_and_name(repository)
-    except git.exc.InvalidGitRepositoryError:
-        logger.warning("No git repository found")
-        owner, repo = None, None
-    pr_number = get_pr_number()
-    if owner and repo and pr_number is not None:
-        path_based_functions, functions_count = check_optimization_status(path_based_functions, owner, repo, pr_number)
     logger.debug(f"Blocklisted functions: {blocklist_funcs}")
     # Remove any function that we don't want to optimize
+    already_optimized_paths = check_optimization_status(modified_functions)
 
     # Ignore files with submodule path, cache the submodule paths
     submodule_paths = ignored_submodule_paths(module_root)
 
-    filtered_modified_functions: dict[str, list[FunctionToOptimize]] = {}
     functions_count: int = 0
     test_functions_removed_count: int = 0
     non_modules_removed_count: int = 0
     site_packages_removed_count: int = 0
     ignore_paths_removed_count: int = 0
     malformed_paths_count: int = 0
+    already_optimized_count: int = 0
     submodule_ignored_paths_count: int = 0
     blocklist_funcs_removed_count: int = 0
+    already_optimized_paths_removed_count: int = 0
     previous_checkpoint_functions_removed_count: int = 0
     tests_root_str = str(tests_root)
     module_root_str = str(module_root)
@@ -590,6 +576,7 @@ def filter_functions(
         except SyntaxError:
             malformed_paths_count += 1
             continue
+
         if blocklist_funcs:
             functions_tmp = []
             for function in _functions:
@@ -603,6 +590,17 @@ def filter_functions(
                 # This function is NOT in blocklist. we can keep it
                 functions_tmp.append(function)
             _functions = functions_tmp
+        functions_tmp = []
+        for function in _functions:
+            if (
+                function.file_path.name,
+                function.qualified_name,
+            ) in already_optimized_paths and random.random() > REPEAT_OPTIMIZATION_PROBABILITY:
+                # This function is in blocklist, we can skip it with a probability
+                already_optimized_paths_removed_count += 1
+                continue
+            functions_tmp.append(function)
+        _functions = functions_tmp
 
         if previous_checkpoint_functions:
             functions_tmp = []
@@ -615,14 +613,6 @@ def filter_functions(
 
         filtered_modified_functions[file_path] = _functions
         functions_count += len(_functions)
-
-    # Convert to Path keys for optimization check
-
-
-    # Check optimization status if repository info is provided
-
-        initial_count = sum(len(funcs) for funcs in filtered_modified_functions.values())
-        already_optimized_count = initial_count - functions_count
 
     if not disable_logs:
         log_info = {
@@ -641,7 +631,7 @@ def filter_functions(
             logger.info(f"Ignoring: {log_string}")
             console.rule()
 
-    return path_based_functions, functions_count
+    return {Path(k): v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 
 def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list[Path], module_root: Path) -> bool:
