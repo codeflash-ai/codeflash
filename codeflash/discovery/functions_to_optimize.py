@@ -509,6 +509,7 @@ def check_optimization_status(
                 remaining_count += 1
             else:
                 if random.random() < REPEAT_OPTIMIZATION_PROBABILITY:
+                    logger.info(f"Attempting more optimization on {path_key}")
                     filtered_functions[file_path].append(func)
                     remaining_count += 1
 
