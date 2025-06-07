@@ -375,17 +375,8 @@ class FunctionOptimizer:
                 self.log_successful_optimization(explanation, generated_tests, exp_type)
 
         # Add function to code context hash if in gh actions
-        try:
-            repository = git.Repo(Path.cwd(), search_parent_directories=True)
-            owner, repo = get_repo_owner_and_name(repository)
-        except git.exc.InvalidGitRepositoryError:
-            logger.warning("No git repository found")
-            owner, repo = None, None
-        pr_number = get_pr_number()
 
-        if owner and repo and pr_number is not None:
-            code_context_hash = self.function_to_optimize.get_code_context_hash()
-            add_code_context_hash(owner, repo, pr_number, code_context_hash)
+        add_code_context_hash(self.function_to_optimize.get_code_context_hash())
 
         if self.args.override_fixtures:
             restore_conftest(original_conftest_content)

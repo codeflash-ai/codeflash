@@ -159,6 +159,7 @@ class FunctionToOptimize:
 
             # Extract the function's code content
             lines = file_content.splitlines()
+            print("starting and ending line ", self.starting_line, self.ending_line)
             if self.starting_line is not None and self.ending_line is not None:
                 # Use line numbers if available (1-indexed to 0-indexed)
                 function_content = "\n".join(lines[self.starting_line - 1 : self.ending_line])
@@ -460,7 +461,7 @@ def inspect_top_level_functions_or_methods(
     )
 
 
-def check_optimization_status(functions_by_file: dict[Path, list[FunctionToOptimize]]) -> list[tuple[str, str]]:
+def check_optimization_status(functions_by_file: dict[Path, list[FunctionToOptimize]], project_root_path: Path) -> set[tuple[str, str]]:
     """Check which functions have already been optimized and filter them out.
 
     This function calls the optimization API to:
@@ -497,22 +498,21 @@ def check_optimization_status(functions_by_file: dict[Path, list[FunctionToOptim
         for func in functions:
             func_hash = func.get_code_context_hash()
             # Use a unique path identifier that includes function info
-            path_key = f"{file_path}:{func.qualified_name}"
-            code_contexts[path_key] = func_hash
-            path_to_function_map[path_key] = (file_path, func)
+            code_contexts.append({"file_path": Path(file_path).relative_to(project_root_path),
+                                  "function_name": func.qualified_name, "code_hash": func_hash})
 
     if not code_contexts:
-        return {}, 0
+        return set(tuple())
 
     try:
         result = is_function_being_optimized_again(owner, repo, pr_number, code_contexts)
-        already_optimized_paths: list[tuple[str, str]] = result.get("already_optimized_paths", [])
-        return already_optimized_paths
+        already_optimized_paths: list[tuple[str, str]] = result.get("already_optimized_tuples", [])
+        return set(( project_root_path / Path(path[0]), path[1]) for path in already_optimized_paths)
 
     except Exception as e:
         logger.warning(f"Failed to check optimization status: {e}")
         # Return all functions if API call fails
-        return []
+        return set(tuple())
 
 
 def filter_functions(
@@ -625,6 +625,7 @@ def filter_functions(
             f"{already_optimized_count} already optimized function{'s' if already_optimized_count != 1 else ''}": already_optimized_count,
             f"{blocklist_funcs_removed_count} function{'s' if blocklist_funcs_removed_count != 1 else ''} as previously optimized": blocklist_funcs_removed_count,
             f"{previous_checkpoint_functions_removed_count} function{'s' if previous_checkpoint_functions_removed_count != 1 else ''} skipped from checkpoint": previous_checkpoint_functions_removed_count,
+            f"{already_optimized_paths_removed_count} function{'s' if already_optimized_paths_removed_count != 1 else ''} as previously attempted optimization": already_optimized_paths_removed_count,
         }
         log_string = "\n".join([k for k, v in log_info.items() if v > 0])
         if log_string:
