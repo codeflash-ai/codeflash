@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import sys
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, Dict
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import requests
 import sentry_sdk
@@ -15,7 +14,6 @@ from pydantic.json import pydantic_encoder
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
 from codeflash.code_utils.git_utils import get_repo_owner_and_name
-from codeflash.models.models import CodeOptimizationContext
 from codeflash.version import __version__
 
 if TYPE_CHECKING:
@@ -200,12 +198,7 @@ def is_function_being_optimized_again(owner: str, repo: str, pr_number: int, cod
     response = make_cfapi_request(
         "/is-already-optimized",
         "POST",
-        {
-            "owner": owner,
-            "repo": repo,
-            "pr_number": pr_number,
-            "code_contexts": code_contexts
-        }
+        {"owner": owner, "repo": repo, "pr_number": pr_number, "code_contexts": code_contexts},
     )
     response.raise_for_status()
     return response.json()
