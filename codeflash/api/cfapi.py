@@ -209,3 +209,17 @@ def is_function_being_optimized_again(owner: str, repo: str, pr_number: int, cod
     )
     response.raise_for_status()
     return response.json()
+
+def add_code_context_hash(owner: str, repo: str, pr_number: int, code_context_hash: str) -> Response:
+    """Add code context to the DB cache"""
+    response = make_cfapi_request(
+        "/add-code-hash",
+        "POST",
+        {
+            "owner": owner,
+            "repo": repo,
+            "pr_number": pr_number,
+            "code_context_hash": code_context_hash
+        }
+    )
+    return response

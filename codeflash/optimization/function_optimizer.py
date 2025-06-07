@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import git
 import concurrent.futures
 import os
 import subprocess
@@ -18,6 +19,7 @@ from rich.syntax import Syntax
 from rich.tree import Tree
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
+from codeflash.api.cfapi import add_code_context_hash
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
@@ -50,6 +52,8 @@ from codeflash.code_utils.instrument_existing_tests import inject_profiling_into
 from codeflash.code_utils.line_profile_utils import add_decorator_imports
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
+from codeflash.code_utils.env_utils import get_pr_number
+from codeflash.code_utils.git_utils import get_repo_owner_and_name
 from codeflash.context import code_context_extractor
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.either import Failure, Success, is_successful
@@ -369,6 +373,19 @@ class FunctionOptimizer:
                             self.function_to_optimize.file_path,
                         )
                 self.log_successful_optimization(explanation, generated_tests, exp_type)
+
+        # Add function to code context hash if in gh actions
+        try:
+            repository = git.Repo(Path.cwd(), search_parent_directories=True)
+            owner, repo = get_repo_owner_and_name(repository)
+        except git.exc.InvalidGitRepositoryError:
+            logger.warning("No git repository found")
+            owner, repo = None, None
+        pr_number = get_pr_number()
+
+        if owner and repo and pr_number is not None:
+            code_context_hash = self.function_to_optimize.get_code_context_hash()
+            add_code_context_hash(owner, repo, pr_number, code_context_hash)
 
         if self.args.override_fixtures:
             restore_conftest(original_conftest_content)

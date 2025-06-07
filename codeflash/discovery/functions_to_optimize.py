@@ -532,6 +532,17 @@ def filter_functions(
     disable_logs: bool = False,  # noqa: FBT001, FBT002
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     blocklist_funcs = get_blocklisted_functions()
+    already_optimized_count = 0
+    path_based_functions = {Path(k): v for k, v in modified_functions.items() if v}
+    try:
+        repository = git.Repo(Path.cwd(), search_parent_directories=True)
+        owner, repo = get_repo_owner_and_name(repository)
+    except git.exc.InvalidGitRepositoryError:
+        logger.warning("No git repository found")
+        owner, repo = None, None
+    pr_number = get_pr_number()
+    if owner and repo and pr_number is not None:
+        path_based_functions, functions_count = check_optimization_status(path_based_functions, owner, repo, pr_number)
     logger.debug(f"Blocklisted functions: {blocklist_funcs}")
     # Remove any function that we don't want to optimize
 
@@ -606,19 +617,10 @@ def filter_functions(
         functions_count += len(_functions)
 
     # Convert to Path keys for optimization check
-    path_based_functions = {Path(k): v for k, v in filtered_modified_functions.items() if v}
+
 
     # Check optimization status if repository info is provided
-    already_optimized_count = 0
-    try:
-        repository = git.Repo(Path.cwd(), search_parent_directories=True)
-        owner, repo = get_repo_owner_and_name(repository)
-    except git.exc.InvalidGitRepositoryError:
-        logger.warning("No git repository found")
-        owner, repo = None, None
-    pr_number = get_pr_number()
-    if owner and repo and pr_number is not None:
-        path_based_functions, functions_count = check_optimization_status(path_based_functions, owner, repo, pr_number)
+
         initial_count = sum(len(funcs) for funcs in filtered_modified_functions.values())
         already_optimized_count = initial_count - functions_count
 
