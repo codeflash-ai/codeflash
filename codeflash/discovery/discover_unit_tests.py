@@ -1,6 +1,7 @@
 # ruff: noqa: SLF001
 from __future__ import annotations
 
+import ast
 import hashlib
 import os
 import pickle
@@ -11,6 +12,9 @@ import unittest
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
+
+if TYPE_CHECKING:
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 import pytest
 from pydantic.dataclasses import dataclass
@@ -137,8 +141,163 @@ class TestsCache:
         self.connection.close()
 
 
+class ImportAnalyzer(ast.NodeVisitor):
+    """AST-based analyzer to find all imports in a test file."""
+
+    def __init__(self, function_names_to_find: set[str]) -> None:
+        self.function_names_to_find = function_names_to_find
+        self.imported_names: set[str] = set()
+        self.imported_modules: set[str] = set()
+        self.found_target_functions: set[str] = set()
+
+    def visit_Import(self, node: ast.Import) -> None:
+        """Handle 'import module' statements."""
+        for alias in node.names:
+            module_name = alias.asname if alias.asname else alias.name
+            self.imported_modules.add(module_name)
+            self.imported_names.add(module_name)
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """Handle 'from module import name' statements."""
+        if node.module:
+            self.imported_modules.add(node.module)
+
+        for alias in node.names:
+            if alias.name == "*":
+                # Star imports - we can't know what's imported, so be conservative
+                self.imported_names.add("*")
+            else:
+                imported_name = alias.asname if alias.asname else alias.name
+                self.imported_names.add(imported_name)
+
+                # Check if this import matches any target function
+                if alias.name in self.function_names_to_find:
+                    self.found_target_functions.add(alias.name)
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        """Handle dynamic imports like importlib.import_module() or __import__()."""
+        if isinstance(node.func, ast.Name) and node.func.id == "__import__" and node.args:
+            # __import__("module_name")
+            if isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                self.imported_modules.add(node.args[0].value)
+        elif (isinstance(node.func, ast.Attribute)
+              and isinstance(node.func.value, ast.Name)
+              and node.func.value.id == "importlib"
+              and node.func.attr == "import_module"
+              and node.args):
+            # importlib.import_module("module_name")
+            if isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                self.imported_modules.add(node.args[0].value)
+        self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        """Check if any name usage matches our target functions."""
+        if node.id in self.function_names_to_find:
+            self.found_target_functions.add(node.id)
+        self.generic_visit(node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        """Handle module.function_name patterns."""
+        if node.attr in self.function_names_to_find:
+            self.found_target_functions.add(node.attr)
+        self.generic_visit(node)
+
+
+def analyze_imports_in_test_file(test_file_path: Path, target_functions: set[str]) -> tuple[bool, set[str]]:
+    """Analyze imports in a test file to determine if it might test any target functions.
+
+    Args:
+        test_file_path: Path to the test file
+        target_functions: Set of function names we're looking for
+
+    Returns:
+        Tuple of (should_process_with_jedi, found_function_names)
+
+    """
+    try:
+        with test_file_path.open("r", encoding="utf-8") as f:
+            content = f.read()
+
+        tree = ast.parse(content, filename=str(test_file_path))
+        analyzer = ImportAnalyzer(target_functions)
+        analyzer.visit(tree)
+
+        # If we found direct function matches, definitely process
+        if analyzer.found_target_functions:
+            return True, analyzer.found_target_functions
+
+        # If there are star imports, we need to be conservative
+        if "*" in analyzer.imported_names:
+            return True, set()
+
+        # Check for direct name matches first (higher priority)
+        name_matches = analyzer.imported_names & target_functions
+        if name_matches:
+            return True, name_matches
+
+        # If no direct matches, check if any imported modules could contain our target functions
+        # This is a heuristic - we look for common patterns
+        potential_matches = set()
+        for module in analyzer.imported_modules:
+            # Check if module name suggests it could contain target functions
+            for func_name in target_functions:
+                # Only match if the module name is a prefix of the function qualified name
+                func_parts = func_name.split(".")
+                if len(func_parts) > 1 and module == func_parts[0]:
+                    # Module matches the first part of qualified name (e.g., mycode in mycode.target_function)
+                    # But only if we don't have specific import information suggesting otherwise
+                    potential_matches.add(func_name)
+                elif any(part in module for part in func_name.split("_")) and len(func_name.split("_")) > 1:
+                    # Function name parts match module name (for underscore-separated names)
+                    potential_matches.add(func_name)
+
+        # Only use heuristic matches if we haven't found specific function imports that contradict them
+        return bool(potential_matches), potential_matches
+
+    except (SyntaxError, UnicodeDecodeError, OSError) as e:
+        logger.debug(f"Failed to analyze imports in {test_file_path}: {e}")
+        # If we can't parse the file, be conservative and process it
+        return True, set()
+
+
+def filter_test_files_by_imports(
+    file_to_test_map: dict[Path, list[TestsInFile]],
+    target_functions: set[str]
+) -> tuple[dict[Path, list[TestsInFile]], dict[Path, set[str]]]:
+    """Filter test files based on import analysis to reduce Jedi processing.
+
+    Args:
+        file_to_test_map: Original mapping of test files to test functions
+        target_functions: Set of function names we're optimizing
+
+    Returns:
+        Tuple of (filtered_file_map, import_analysis_results)
+
+    """
+    if not target_functions:
+        # If no target functions specified, process all files
+        return file_to_test_map, {}
+
+    filtered_map = {}
+    import_results = {}
+
+    for test_file, test_functions in file_to_test_map.items():
+        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        import_results[test_file] = found_functions
+
+        if should_process:
+            filtered_map[test_file] = test_functions
+        else:
+            logger.debug(f"Skipping {test_file} - no relevant imports found")
+
+    logger.info(f"Import filter: Processing {len(filtered_map)}/{len(file_to_test_map)} test files")
+    return filtered_map, import_results
+
+
 def discover_unit_tests(
-    cfg: TestConfig, discover_only_these_tests: list[Path] | None = None
+    cfg: TestConfig, discover_only_these_tests: list[Path] | None = None, functions_to_optimize: list[FunctionToOptimize] | None = None
 ) -> dict[str, list[FunctionCalledInTest]]:
     framework_strategies: dict[str, Callable] = {"pytest": discover_tests_pytest, "unittest": discover_tests_unittest}
     strategy = framework_strategies.get(cfg.test_framework, None)
@@ -146,11 +305,11 @@ def discover_unit_tests(
         error_message = f"Unsupported test framework: {cfg.test_framework}"
         raise ValueError(error_message)
 
-    return strategy(cfg, discover_only_these_tests)
+    return strategy(cfg, discover_only_these_tests, functions_to_optimize)
 
 
 def discover_tests_pytest(
-    cfg: TestConfig, discover_only_these_tests: list[Path] | None = None
+    cfg: TestConfig, discover_only_these_tests: list[Path] | None = None, functions_to_optimize: list[FunctionToOptimize] | None = None
 ) -> dict[Path, list[FunctionCalledInTest]]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
@@ -220,11 +379,11 @@ def discover_tests_pytest(
             continue
         file_to_test_map[test_obj.test_file].append(test_obj)
     # Within these test files, find the project functions they are referring to and return their names/locations
-    return process_test_files(file_to_test_map, cfg)
+    return process_test_files(file_to_test_map, cfg, functions_to_optimize)
 
 
 def discover_tests_unittest(
-    cfg: TestConfig, discover_only_these_tests: list[str] | None = None
+    cfg: TestConfig, discover_only_these_tests: list[str] | None = None, functions_to_optimize: list[FunctionToOptimize] | None = None
 ) -> dict[Path, list[FunctionCalledInTest]]:
     tests_root: Path = cfg.tests_root
     loader: unittest.TestLoader = unittest.TestLoader()
@@ -277,7 +436,7 @@ def discover_tests_unittest(
                     details = get_test_details(test)
                     if details is not None:
                         file_to_test_map[str(details.test_file)].append(details)
-    return process_test_files(file_to_test_map, cfg)
+    return process_test_files(file_to_test_map, cfg, functions_to_optimize)
 
 
 def discover_parameters_unittest(function_name: str) -> tuple[bool, str, str | None]:
@@ -289,12 +448,28 @@ def discover_parameters_unittest(function_name: str) -> tuple[bool, str, str | N
 
 
 def process_test_files(
-    file_to_test_map: dict[Path, list[TestsInFile]], cfg: TestConfig
+    file_to_test_map: dict[Path, list[TestsInFile]], cfg: TestConfig, functions_to_optimize: list[FunctionToOptimize] | None = None
 ) -> dict[str, list[FunctionCalledInTest]]:
     import jedi
 
     project_root_path = cfg.project_root_path
     test_framework = cfg.test_framework
+
+    # Apply import filter if functions to optimize are provided
+    if functions_to_optimize:
+        # Extract target function names from FunctionToOptimize objects
+        # Include both qualified names and simple function names for better matching
+        target_function_names = set()
+        for func in functions_to_optimize:
+            target_function_names.add(func.qualified_name_with_modules_from_root(project_root_path))
+            target_function_names.add(func.function_name)  # Add simple name too
+            # Also add qualified name without module
+            if func.parents:
+                target_function_names.add(f"{func.parents[0].name}.{func.function_name}")
+        
+        logger.debug(f"Target functions for import filtering: {target_function_names}")
+        file_to_test_map, import_results = filter_test_files_by_imports(file_to_test_map, target_function_names)
+        logger.debug(f"Import analysis results: {len(import_results)} files analyzed")
 
     function_to_test_map = defaultdict(set)
     jedi_project = jedi.Project(path=project_root_path)

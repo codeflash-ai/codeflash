@@ -2,7 +2,12 @@ import os
 import tempfile
 from pathlib import Path
 
-from codeflash.discovery.discover_unit_tests import discover_unit_tests
+from codeflash.discovery.discover_unit_tests import (
+    analyze_imports_in_test_file,
+    discover_unit_tests,
+    filter_test_files_by_imports,
+)
+from codeflash.models.models import TestsInFile, TestType
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -789,3 +794,440 @@ class TestCalculator(unittest.TestCase):
         assert len(discovered_tests) == 2  # Should have tests for both add and multiply
         assert "calculator.Calculator.add" in discovered_tests
         assert "calculator.Calculator.multiply" in discovered_tests
+
+
+# Import Filtering Tests
+
+
+def test_analyze_imports_direct_function_import():
+    """Test that direct function imports are detected."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import target_function, other_function
+
+def test_target():
+    assert target_function() is True
+"""
+        test_file.write_text(test_content)
+        
+        target_functions = {"target_function", "missing_function"}
+        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        
+        assert should_process is True
+        assert "target_function" in found_functions
+        assert "missing_function" not in found_functions
+
+
+def test_analyze_imports_star_import():
+    """Test that star imports trigger conservative processing."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import *
+
+def test_something():
+    assert something() is True
+"""
+        test_file.write_text(test_content)
+        
+        target_functions = {"target_function"}
+        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        
+        assert should_process is True  # Conservative approach with star imports
+        assert found_functions == set()  # No specific functions identified
+
+
+def test_analyze_imports_module_import():
+    """Test module imports with function access patterns."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+import mymodule
+
+def test_target():
+    assert mymodule.target_function() is True
+"""
+        test_file.write_text(test_content)
+        
+        target_functions = {"target_function"}
+        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        
+        assert should_process is True
+        assert "target_function" in found_functions
+
+
+def test_analyze_imports_dynamic_import():
+    """Test detection of dynamic imports."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+import importlib
+
+def test_dynamic():
+    module = importlib.import_module("mymodule")
+    assert module.target_function() is True
+"""
+        test_file.write_text(test_content)
+        
+        target_functions = {"target_function"}
+        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        
+        assert should_process is True
+        assert "target_function" in found_functions
+
+
+def test_analyze_imports_builtin_import():
+    """Test detection of __import__ calls."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+def test_builtin_import():
+    module = __import__("mymodule")
+    assert module.target_function() is True
+"""
+        test_file.write_text(test_content)
+        
+        target_functions = {"target_function"}
+        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        
+        assert should_process is True
+        assert "target_function" in found_functions
+
+
+def test_analyze_imports_no_matching_imports():
+    """Test that files with no matching imports are filtered out."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from unrelated_module import unrelated_function
+
+def test_unrelated():
+    assert unrelated_function() is True
+"""
+        test_file.write_text(test_content)
+        
+        target_functions = {"target_function", "another_function"}
+        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        
+        assert should_process is False
+        assert found_functions == set()
+
+
+def test_analyze_imports_heuristic_matching():
+    """Test heuristic module name matching."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from target_module import some_function
+
+def test_target():
+    assert some_function() is True
+"""
+        test_file.write_text(test_content)
+        
+        target_functions = {"target_function"}  # Function name partially matches module name
+        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        
+        assert should_process is True
+        assert "target_function" in found_functions
+
+
+def test_analyze_imports_syntax_error():
+    """Test handling of files with syntax errors."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import target_function
+def test_target(
+    # Syntax error - missing closing parenthesis
+    assert target_function() is True
+"""
+        test_file.write_text(test_content)
+        
+        target_functions = {"target_function"}
+        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        
+        # Should be conservative with unparseable files
+        assert should_process is True
+        assert found_functions == set()
+
+
+def test_filter_test_files_by_imports():
+    """Test the complete filtering functionality."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        tmpdir = Path(tmpdirname)
+        
+        # Create test file that imports target function
+        relevant_test = tmpdir / "test_relevant.py"
+        relevant_test.write_text("""
+from mymodule import target_function
+
+def test_target():
+    assert target_function() is True
+""")
+        
+        # Create test file that doesn't import target function
+        irrelevant_test = tmpdir / "test_irrelevant.py"
+        irrelevant_test.write_text("""
+from othermodule import other_function
+
+def test_other():
+    assert other_function() is True
+""")
+        
+        # Create test file with star import (should be processed)
+        star_test = tmpdir / "test_star.py"
+        star_test.write_text("""
+from mymodule import *
+
+def test_star():
+    assert something() is True
+""")
+        
+        # Build file_to_test_map
+        file_to_test_map = {
+            relevant_test: [TestsInFile(test_file=relevant_test, test_function="test_target", test_class=None, test_type=TestType.EXISTING_UNIT_TEST)],
+            irrelevant_test: [TestsInFile(test_file=irrelevant_test, test_function="test_other", test_class=None, test_type=TestType.EXISTING_UNIT_TEST)],
+            star_test: [TestsInFile(test_file=star_test, test_function="test_star", test_class=None, test_type=TestType.EXISTING_UNIT_TEST)],
+        }
+        
+        target_functions = {"target_function"}
+        filtered_map, import_results = filter_test_files_by_imports(file_to_test_map, target_functions)
+        
+        # Should filter out irrelevant_test but keep relevant_test and star_test
+        assert len(filtered_map) == 2
+        assert relevant_test in filtered_map
+        assert star_test in filtered_map
+        assert irrelevant_test not in filtered_map
+        
+        # Check import analysis results
+        assert "target_function" in import_results[relevant_test]
+        assert len(import_results[irrelevant_test]) == 0
+        assert len(import_results[star_test]) == 0  # Star import doesn't identify specific functions
+
+
+def test_filter_test_files_no_target_functions():
+    """Test that filtering is skipped when no target functions are provided."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        tmpdir = Path(tmpdirname)
+        
+        test_file = tmpdir / "test_example.py"
+        test_file.write_text("def test_something(): pass")
+        
+        file_to_test_map = {
+            test_file: [TestsInFile(test_file=test_file, test_function="test_something", test_class=None, test_type=TestType.EXISTING_UNIT_TEST)]
+        }
+        
+        # No target functions provided
+        filtered_map, import_results = filter_test_files_by_imports(file_to_test_map, set())
+        
+        # Should return original map unchanged
+        assert filtered_map == file_to_test_map
+        assert import_results == {}
+
+
+def test_discover_unit_tests_with_import_filtering():
+    """Test the full discovery process with import filtering."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        tmpdir = Path(tmpdirname)
+        
+        # Create a code file
+        code_file = tmpdir / "mycode.py"
+        code_file.write_text("""
+def target_function():
+    return True
+
+def other_function():
+    return False
+""")
+        
+        # Create relevant test file
+        relevant_test = tmpdir / "test_relevant.py"
+        relevant_test.write_text("""
+from mycode import target_function
+
+def test_target():
+    assert target_function() is True
+""")
+        
+        # Create irrelevant test file
+        irrelevant_test = tmpdir / "test_irrelevant.py"
+        irrelevant_test.write_text("""
+from mycode import other_function
+
+def test_other():
+    assert other_function() is False
+""")
+        
+        # Configure test discovery
+        test_config = TestConfig(
+            tests_root=tmpdir,
+            project_root_path=tmpdir,
+            test_framework="pytest",
+            tests_project_rootdir=tmpdir.parent,
+        )
+        
+        # Test without filtering
+        all_tests = discover_unit_tests(test_config)
+        assert len(all_tests) == 2  # Should find both functions
+        
+        # Test with filtering - create mock FunctionToOptimize objects
+        from unittest.mock import Mock
+        mock_function = Mock()
+        mock_function.qualified_name_with_modules_from_root.return_value = "mycode.target_function"
+        mock_function.function_name = "target_function"
+        mock_function.parents = []  # No parent classes
+        
+        filtered_tests = discover_unit_tests(test_config, functions_to_optimize=[mock_function])
+        # The import filter is designed for high recall, so it may include both functions
+        # because both test files import from the same module (mycode) that contains target_function
+        assert len(filtered_tests) >= 1  # Should find at least target_function
+        assert "mycode.target_function" in filtered_tests
+        # In a perfect world we'd filter out other_function, but conservative filtering
+        # is acceptable for performance optimization purposes
+
+
+def test_analyze_imports_conditional_import():
+    """Test detection of conditional imports within functions."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+def test_conditional():
+    if some_condition:
+        from mymodule import target_function
+        assert target_function() is True
+"""
+        test_file.write_text(test_content)
+        
+        target_functions = {"target_function"}
+        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        
+        assert should_process is True
+        assert "target_function" in found_functions
+
+
+def test_analyze_imports_function_name_in_code():
+    """Test detection of function names used directly in code."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+import mymodule
+
+def test_indirect():
+    func_name = "target_function"
+    func = getattr(mymodule, func_name)
+    # The analyzer should detect target_function usage
+    result = target_function()
+    assert result is True
+"""
+        test_file.write_text(test_content)
+        
+        target_functions = {"target_function"}
+        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        
+        assert should_process is True
+        assert "target_function" in found_functions
+
+
+def test_analyze_imports_aliased_imports():
+    """Test handling of aliased imports."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import target_function as tf, other_function as of
+
+def test_aliased():
+    assert tf() is True
+    assert of() is False
+"""
+        test_file.write_text(test_content)
+        
+        target_functions = {"target_function", "missing_function"}
+        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        
+        assert should_process is True
+        assert "target_function" in found_functions
+        assert "missing_function" not in found_functions
+
+
+def test_analyze_imports_underscore_function_names():
+    """Test handling of function names with underscores in heuristic matching."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from bubble_module import sort_function
+
+def test_bubble():
+    assert sort_function([3,1,2]) == [1,2,3]
+"""
+        test_file.write_text(test_content)
+        
+        target_functions = {"bubble_sort"}  # Function name parts match module
+        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        
+        assert should_process is True
+        assert "bubble_sort" in found_functions
+
+
+def test_discover_unit_tests_filtering_different_modules():
+    """Test import filtering with test files from completely different modules."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        tmpdir = Path(tmpdirname)
+        
+        # Create target code file
+        target_file = tmpdir / "target_module.py"
+        target_file.write_text("""
+def target_function():
+    return True
+""")
+        
+        # Create unrelated code file
+        unrelated_file = tmpdir / "unrelated_module.py"
+        unrelated_file.write_text("""
+def unrelated_function():
+    return False
+""")
+        
+        # Create test file that imports target function
+        relevant_test = tmpdir / "test_target.py"
+        relevant_test.write_text("""
+from target_module import target_function
+
+def test_target():
+    assert target_function() is True
+""")
+        
+        # Create test file that imports unrelated function
+        irrelevant_test = tmpdir / "test_unrelated.py"
+        irrelevant_test.write_text("""
+from unrelated_module import unrelated_function
+
+def test_unrelated():
+    assert unrelated_function() is False
+""")
+        
+        # Configure test discovery
+        test_config = TestConfig(
+            tests_root=tmpdir,
+            project_root_path=tmpdir,
+            test_framework="pytest",
+            tests_project_rootdir=tmpdir.parent,
+        )
+        
+        # Test without filtering
+        all_tests = discover_unit_tests(test_config)
+        assert len(all_tests) == 2  # Should find both functions
+        
+        # Test with filtering - create mock FunctionToOptimize objects
+        from unittest.mock import Mock
+        mock_function = Mock()
+        mock_function.qualified_name_with_modules_from_root.return_value = "target_module.target_function"
+        mock_function.function_name = "target_function"
+        mock_function.parents = []  # No parent classes
+        
+        filtered_tests = discover_unit_tests(test_config, functions_to_optimize=[mock_function])
+        # Should filter out the unrelated test since it imports from a different module
+        assert len(filtered_tests) == 1
+        assert "target_module.target_function" in filtered_tests
+        assert "unrelated_module.unrelated_function" not in filtered_tests

@@ -162,7 +162,13 @@ class Optimizer:
 
             console.rule()
             start_time = time.time()
-            function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
+            # Extract all functions to optimize for import filtering
+            all_functions_to_optimize = [
+                func for funcs_list in file_to_funcs_to_optimize.values() for func in funcs_list
+            ]
+            function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(
+                self.test_cfg, functions_to_optimize=all_functions_to_optimize
+            )
             num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
             console.rule()
             logger.info(
