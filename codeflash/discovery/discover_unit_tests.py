@@ -294,23 +294,10 @@ def _process_single_test_file(
     functions: list[TestsInFile],
     cfg: TestConfig,
     jedi_project: jedi.Project,
-    tests_cache: TestsCache,
     function_to_test_map: defaultdict,
 ) -> None:
     project_root_path = cfg.project_root_path
     test_framework = cfg.test_framework
-    file_hash = TestsCache.compute_file_hash(test_file)
-    cached_tests = tests_cache.get_tests_for_file(str(test_file), file_hash)
-    if cached_tests:
-        self_cur = tests_cache.cur
-        self_cur.execute(
-            "SELECT qualified_name_with_modules_from_root FROM discovered_tests WHERE file_path = ? AND file_hash = ?",
-            (str(test_file), file_hash),
-        )
-        qualified_names = [row[0] for row in self_cur.fetchall()]
-        for cached, qualified_name in zip(cached_tests, qualified_names):
-            function_to_test_map[qualified_name].add(cached)
-        return
 
     try:
         script = jedi.Script(path=test_file, project=jedi_project)
@@ -431,18 +418,6 @@ def _process_single_test_file(
                 )
                 qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
 
-                tests_cache.insert_test(
-                    file_path=str(test_file),
-                    file_hash=file_hash,
-                    qualified_name_with_modules_from_root=qualified_name_with_modules_from_root,
-                    function_name=scope,
-                    test_class=scope_test_class,
-                    test_function=scope_test_function,
-                    test_type=test_type,
-                    line_number=name.line,
-                    col_number=name.column,
-                )
-
                 function_to_test_map[qualified_name_with_modules_from_root].add(
                     FunctionCalledInTest(
                         tests_in_file=TestsInFile(
@@ -461,15 +436,13 @@ def process_test_files(
 ) -> dict[str, list[FunctionCalledInTest]]:
     function_to_test_map = defaultdict(set)
     jedi_project = jedi.Project(path=cfg.project_root_path)
-    tests_cache = TestsCache()
 
     with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
         progress,
         task_id,
     ):
         for test_file, functions in file_to_test_map.items():
-            _process_single_test_file(test_file, functions, cfg, jedi_project, tests_cache, function_to_test_map)
+            _process_single_test_file(test_file, functions, cfg, jedi_project, function_to_test_map)
             progress.advance(task_id)
 
-    tests_cache.close()
     return {function: list(tests) for function, tests in function_to_test_map.items()}
