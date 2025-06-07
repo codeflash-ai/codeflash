@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import os
 import random
 import warnings
@@ -14,14 +15,16 @@ import git
 import libcst as cst
 from pydantic.dataclasses import dataclass
 
-from codeflash.api.cfapi import get_blocklisted_functions
+from codeflash.api.cfapi import get_blocklisted_functions, is_function_being_optimized_again
 from codeflash.cli_cmds.console import DEBUG_MODE, console, logger
 from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
     path_belongs_to_site_packages,
 )
-from codeflash.code_utils.git_utils import get_git_diff
+from codeflash.code_utils.config_consts import REPEAT_OPTIMIZATION_PROBABILITY
+from codeflash.code_utils.env_utils import get_pr_number
+from codeflash.code_utils.git_utils import get_git_diff, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.models.models import FunctionParent
@@ -143,6 +146,47 @@ class FunctionToOptimize:
 
     def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
+
+    def get_code_context_hash(self) -> str:
+        """Generate a SHA-256 hash representing the code context of this function.
+
+        This hash includes the function's code content, file path, and qualified name
+        to uniquely identify the function for optimization tracking.
+        """
+        try:
+            with open(self.file_path, encoding="utf-8") as f:
+                file_content = f.read()
+
+            # Extract the function's code content
+            lines = file_content.splitlines()
+            print("starting and ending line ", self.starting_line, self.ending_line)
+            if self.starting_line is not None and self.ending_line is not None:
+                # Use line numbers if available (1-indexed to 0-indexed)
+                function_content = "\n".join(lines[self.starting_line - 1 : self.ending_line])
+            else:
+                # Fallback: use the entire file content if line numbers aren't available
+                function_content = file_content
+
+            # Create a context string that includes:
+            # - File path (relative to make it portable)
+            # - Qualified function name
+            # - Function code content
+            context_parts = [
+                str(self.file_path.name),  # Just filename for portability
+                self.qualified_name,
+                function_content.strip(),
+            ]
+
+            context_string = "\n---\n".join(context_parts)
+
+            # Generate SHA-256 hash
+            return hashlib.sha256(context_string.encode("utf-8")).hexdigest()
+
+        except OSError as e:
+            logger.warning(f"Could not read file {self.file_path} for hashing: {e}")
+            # Fallback hash using available metadata
+            fallback_string = f"{self.file_path.name}:{self.qualified_name}"
+            return hashlib.sha256(fallback_string.encode("utf-8")).hexdigest()
 
 
 def get_functions_to_optimize(
@@ -417,6 +461,60 @@ def inspect_top_level_functions_or_methods(
     )
 
 
+def check_optimization_status(functions_by_file: dict[Path, list[FunctionToOptimize]], project_root_path: Path) -> set[tuple[str, str]]:
+    """Check which functions have already been optimized and filter them out.
+
+    This function calls the optimization API to:
+    1. Check which functions are already optimized
+    2. Log new function hashes to the database
+    3. Return only functions that need optimization
+
+    Args:
+        functions_by_file: Dictionary mapping file paths to lists of functions
+        owner: Repository owner
+        repo: Repository name
+        pr_number: Pull request number
+
+    Returns:
+        Tuple of (filtered_functions_dict, remaining_count)
+
+    """
+    # Check optimization status if repository info is provided
+    # already_optimized_count = 0
+    try:
+        repository = git.Repo(search_parent_directories=True)
+        owner, repo = get_repo_owner_and_name(repository)
+    except git.exc.InvalidGitRepositoryError:
+        logger.warning("No git repository found")
+        owner, repo = None, None
+    pr_number = get_pr_number()
+
+    if not owner or not repo or pr_number is None:
+        return []
+
+    code_contexts = []
+
+    for file_path, functions in functions_by_file.items():
+        for func in functions:
+            func_hash = func.get_code_context_hash()
+            # Use a unique path identifier that includes function info
+            code_contexts.append({"file_path": Path(file_path).relative_to(project_root_path),
+                                  "function_name": func.qualified_name, "code_hash": func_hash})
+
+    if not code_contexts:
+        return set(tuple())
+
+    try:
+        result = is_function_being_optimized_again(owner, repo, pr_number, code_contexts)
+        already_optimized_paths: list[tuple[str, str]] = result.get("already_optimized_tuples", [])
+        return set(( project_root_path / Path(path[0]), path[1]) for path in already_optimized_paths)
+
+    except Exception as e:
+        logger.warning(f"Failed to check optimization status: {e}")
+        # Return all functions if API call fails
+        return set(tuple())
+
+
 def filter_functions(
     modified_functions: dict[Path, list[FunctionToOptimize]],
     tests_root: Path,
@@ -426,25 +524,30 @@ def filter_functions(
     previous_checkpoint_functions: dict[Path, dict[str, Any]] | None = None,
     disable_logs: bool = False,  # noqa: FBT001, FBT002
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
+    filtered_modified_functions: dict[str, list[FunctionToOptimize]] = {}
     blocklist_funcs = get_blocklisted_functions()
     logger.debug(f"Blocklisted functions: {blocklist_funcs}")
     # Remove any function that we don't want to optimize
+    already_optimized_paths = check_optimization_status(modified_functions, project_root)
+
 
     # Ignore files with submodule path, cache the submodule paths
     submodule_paths = ignored_submodule_paths(module_root)
 
-    filtered_modified_functions: dict[str, list[FunctionToOptimize]] = {}
     functions_count: int = 0
     test_functions_removed_count: int = 0
     non_modules_removed_count: int = 0
     site_packages_removed_count: int = 0
     ignore_paths_removed_count: int = 0
     malformed_paths_count: int = 0
+    already_optimized_count: int = 0
     submodule_ignored_paths_count: int = 0
     blocklist_funcs_removed_count: int = 0
+    already_optimized_paths_removed_count: int = 0
     previous_checkpoint_functions_removed_count: int = 0
     tests_root_str = str(tests_root)
     module_root_str = str(module_root)
+
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
         _functions = functions
@@ -473,6 +576,7 @@ def filter_functions(
         except SyntaxError:
             malformed_paths_count += 1
             continue
+
         if blocklist_funcs:
             functions_tmp = []
             for function in _functions:
@@ -486,6 +590,17 @@ def filter_functions(
                 # This function is NOT in blocklist. we can keep it
                 functions_tmp.append(function)
             _functions = functions_tmp
+        functions_tmp = []
+        for function in _functions:
+            if (
+                function.file_path,
+                function.qualified_name,
+            ) in already_optimized_paths and random.random() > REPEAT_OPTIMIZATION_PROBABILITY:
+                # This function is in blocklist, we can skip it with a probability
+                already_optimized_paths_removed_count += 1
+                continue
+            functions_tmp.append(function)
+        _functions = functions_tmp
 
         if previous_checkpoint_functions:
             functions_tmp = []
@@ -507,8 +622,10 @@ def filter_functions(
             f"{non_modules_removed_count} function{'s' if non_modules_removed_count != 1 else ''} outside module-root": non_modules_removed_count,
             f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths": ignore_paths_removed_count,
             f"{submodule_ignored_paths_count} file{'s' if submodule_ignored_paths_count != 1 else ''} from ignored submodules": submodule_ignored_paths_count,
+            f"{already_optimized_count} already optimized function{'s' if already_optimized_count != 1 else ''}": already_optimized_count,
             f"{blocklist_funcs_removed_count} function{'s' if blocklist_funcs_removed_count != 1 else ''} as previously optimized": blocklist_funcs_removed_count,
             f"{previous_checkpoint_functions_removed_count} function{'s' if previous_checkpoint_functions_removed_count != 1 else ''} skipped from checkpoint": previous_checkpoint_functions_removed_count,
+            f"{already_optimized_paths_removed_count} function{'s' if already_optimized_paths_removed_count != 1 else ''} as previously attempted optimization": already_optimized_paths_removed_count,
         }
         log_string = "\n".join([k for k, v in log_info.items() if v > 0])
         if log_string:
