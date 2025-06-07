@@ -294,7 +294,6 @@ def _process_single_test_file(
     functions: list[TestsInFile],
     cfg: TestConfig,
     jedi_project: jedi.Project,
-    goto_cache: dict,
     tests_cache: TestsCache,
     function_to_test_map: defaultdict,
 ) -> None:
@@ -400,13 +399,8 @@ def _process_single_test_file(
         if scope not in test_functions_by_name:
             continue
 
-        cache_key = (name.full_name, name.module_name)
         try:
-            if cache_key in goto_cache:
-                definition = goto_cache[cache_key]
-            else:
-                definition = name.goto(follow_imports=True, follow_builtin_imports=False)
-                goto_cache[cache_key] = definition
+            definition = name.goto(follow_imports=True, follow_builtin_imports=False)
         except Exception as e:
             logger.debug(str(e))
             continue
@@ -467,7 +461,6 @@ def process_test_files(
 ) -> dict[str, list[FunctionCalledInTest]]:
     function_to_test_map = defaultdict(set)
     jedi_project = jedi.Project(path=cfg.project_root_path)
-    goto_cache = {}
     tests_cache = TestsCache()
 
     with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
@@ -475,9 +468,7 @@ def process_test_files(
         task_id,
     ):
         for test_file, functions in file_to_test_map.items():
-            _process_single_test_file(
-                test_file, functions, cfg, jedi_project, goto_cache, tests_cache, function_to_test_map
-            )
+            _process_single_test_file(test_file, functions, cfg, jedi_project, tests_cache, function_to_test_map)
             progress.advance(task_id)
 
     tests_cache.close()
