@@ -475,18 +475,10 @@ def process_test_files(
     project_root_path = cfg.project_root_path
     test_framework = cfg.test_framework
 
-    # Apply import filter if functions to optimize are provided
     if functions_to_optimize:
-        # Extract target function names from FunctionToOptimize objects
-        # Include both qualified names and simple function names for better matching
         target_function_names = set()
         for func in functions_to_optimize:
-            target_function_names.add(func.qualified_name_with_modules_from_root(project_root_path))
-            target_function_names.add(func.function_name)  # Add simple name too
-            # Also add qualified name without module
-            if func.parents:
-                target_function_names.add(f"{func.parents[0].name}.{func.function_name}")
-
+            target_function_names.add(func.qualified_name)
         logger.debug(f"Target functions for import filtering: {target_function_names}")
         file_to_test_map, import_results = filter_test_files_by_imports(file_to_test_map, target_function_names)
         logger.debug(f"Import analysis results: {len(import_results)} files analyzed")
