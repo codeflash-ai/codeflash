@@ -491,8 +491,7 @@ def check_optimization_status(functions_by_file: dict[Path, list[FunctionToOptim
     if not owner or not repo or pr_number is None:
         return []
 
-    code_contexts = {}
-    path_to_function_map = {}
+    code_contexts = []
 
     for file_path, functions in functions_by_file.items():
         for func in functions:
@@ -529,7 +528,8 @@ def filter_functions(
     blocklist_funcs = get_blocklisted_functions()
     logger.debug(f"Blocklisted functions: {blocklist_funcs}")
     # Remove any function that we don't want to optimize
-    already_optimized_paths = check_optimization_status(modified_functions)
+    already_optimized_paths = check_optimization_status(modified_functions, project_root)
+
 
     # Ignore files with submodule path, cache the submodule paths
     submodule_paths = ignored_submodule_paths(module_root)
@@ -593,7 +593,7 @@ def filter_functions(
         functions_tmp = []
         for function in _functions:
             if (
-                function.file_path.name,
+                function.file_path,
                 function.qualified_name,
             ) in already_optimized_paths and random.random() > REPEAT_OPTIMIZATION_PROBABILITY:
                 # This function is in blocklist, we can skip it with a probability

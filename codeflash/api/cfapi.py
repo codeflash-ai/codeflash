@@ -5,7 +5,7 @@ import os
 import sys
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, List
 
 import requests
 import sentry_sdk
@@ -193,7 +193,7 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
     return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
 
 
-def is_function_being_optimized_again(owner: str, repo: str, pr_number: int, code_contexts: dict[str, str]) -> Dict:
+def is_function_being_optimized_again(owner: str, repo: str, pr_number: int, code_contexts: List[Dict[str, str]]) -> Dict:
     """Check if the function being optimized is being optimized again."""
     response = make_cfapi_request(
         "/is-already-optimized",
