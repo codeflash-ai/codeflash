@@ -126,8 +126,8 @@ class FunctionToOptimize:
     function_name: str
     file_path: Path
     parents: list[FunctionParent]  # list[ClassDef | FunctionDef | AsyncFunctionDef]
-    starting_line: int | None = None
-    ending_line: int | None = None
+    starting_line: Optional[int] = None
+    ending_line: Optional[int] = None
 
     @property
     def top_level_parent_name(self) -> str:
