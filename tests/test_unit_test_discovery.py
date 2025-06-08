@@ -1206,15 +1206,13 @@ def test_unrelated():
         all_tests, _ = discover_unit_tests(test_config)
         assert len(all_tests) == 2  # Should find both functions
         
-        # Test with filtering - create mock FunctionToOptimize objects
-        from unittest.mock import Mock
-        mock_function = Mock()
-        mock_function.qualified_name_with_modules_from_root.return_value = "target_module.target_function"
-        mock_function.function_name = "target_function"
-        mock_function.parents = []  # No parent classes
+        fto = FunctionToOptimize(
+            function_name="target_function",
+            file_path=target_file,
+            parents=[],
+        )
 
-        filtered_tests, _ = discover_unit_tests(test_config, file_to_funcs_to_optimize={target_file: [mock_function]})
-        # Should filter out the unrelated test since it imports from a different module
+        filtered_tests, _ = discover_unit_tests(test_config, file_to_funcs_to_optimize={target_file: [fto]})
         assert len(filtered_tests) == 1
         assert "target_module.target_function" in filtered_tests
         assert "unrelated_module.unrelated_function" not in filtered_tests
