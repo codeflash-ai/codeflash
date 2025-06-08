@@ -148,6 +148,7 @@ class ImportAnalyzer(ast.NodeVisitor):
         self.imported_names: set[str] = set()
         self.imported_modules: set[str] = set()
         self.found_target_functions: set[str] = set()
+        self.qualified_names_called: set[str] = set()
 
     def visit_Import(self, node: ast.Import) -> None:
         """Handle 'import module' statements."""
@@ -164,13 +165,16 @@ class ImportAnalyzer(ast.NodeVisitor):
 
         for alias in node.names:
             if alias.name == "*":
-                # Star imports - we can't know what's imported, so be conservative
-                self.imported_names.add("*")
-            else:
-                imported_name = alias.asname if alias.asname else alias.name
-                self.imported_names.add(imported_name)
-                if alias.name in self.function_names_to_find:
-                    self.found_target_functions.add(alias.name)
+                continue
+            imported_name = alias.asname if alias.asname else alias.name
+            self.imported_names.add(imported_name)
+            if alias.name in self.function_names_to_find:
+                self.found_target_functions.add(alias.name)
+            # Check for qualified name matches
+            if node.module:
+                qualified_name = f"{node.module}.{alias.name}"
+                if qualified_name in self.function_names_to_find:
+                    self.found_target_functions.add(qualified_name)
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
@@ -207,6 +211,9 @@ class ImportAnalyzer(ast.NodeVisitor):
         """Handle module.function_name patterns."""
         if node.attr in self.function_names_to_find:
             self.found_target_functions.add(node.attr)
+            if isinstance(node.value, ast.Name):
+                qualified_name = f"{node.value.id}.{node.attr}"
+                self.qualified_names_called.add(qualified_name)
         self.generic_visit(node)
 
 
@@ -232,37 +239,10 @@ def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: s
         analyzer = ImportAnalyzer(target_functions)
         analyzer.visit(tree)
 
-        # If we found direct function matches, definitely process
         if analyzer.found_target_functions:
             return True, analyzer.found_target_functions
 
-        # If there are star imports, we need to be conservative
-        if "*" in analyzer.imported_names:
-            return True, set()
-
-        # Check for direct name matches first (higher priority)
-        name_matches = analyzer.imported_names & target_functions
-        if name_matches:
-            return True, name_matches
-
-        # If no direct matches, check if any imported modules could contain our target functions
-        # This is a heuristic - we look for common patterns
-        potential_matches = set()
-        for module in analyzer.imported_modules:
-            # Check if module name suggests it could contain target functions
-            for func_name in target_functions:
-                # Only match if the module name is a prefix of the function qualified name
-                func_parts = func_name.split(".")
-                if len(func_parts) > 1 and module == func_parts[0]:
-                    # Module matches the first part of qualified name (e.g., mycode in mycode.target_function)
-                    # But only if we don't have specific import information suggesting otherwise
-                    potential_matches.add(func_name)
-                elif any(part in module for part in func_name.split("_")) and len(func_name.split("_")) > 1:
-                    # Function name parts match module name (for underscore-separated names)
-                    potential_matches.add(func_name)
-
-        # Only use heuristic matches if we haven't found specific function imports that contradict them
-        return bool(potential_matches), potential_matches
+        return False, set()  # noqa: TRY300
 
     except (SyntaxError, UnicodeDecodeError, OSError) as e:
         logger.debug(f"Failed to analyze imports in {test_file_path}: {e}")
@@ -283,7 +263,6 @@ def filter_test_files_by_imports(
 
     """
     if not target_functions:
-        # If no target functions specified, process all files
         return file_to_test_map, {}
 
     filtered_map = {}
@@ -479,7 +458,7 @@ def process_test_files(
         target_function_names = set()
         for func in functions_to_optimize:
             target_function_names.add(func.qualified_name)
-        logger.debug(f"Target functions for import filtering: {target_function_names}")
+        logger.info(f"Target functions for import filtering: {target_function_names}")
         file_to_test_map, import_results = filter_test_files_by_imports(file_to_test_map, target_function_names)
         logger.debug(f"Import analysis results: {len(import_results)} files analyzed")
 
