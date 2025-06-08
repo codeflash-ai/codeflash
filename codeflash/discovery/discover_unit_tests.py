@@ -217,7 +217,7 @@ class ImportAnalyzer(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: set[str]) -> tuple[bool, set[str]]:
+def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: set[str]) -> bool:
     """Analyze imports in a test file to determine if it might test any target functions.
 
     Args:
@@ -225,7 +225,7 @@ def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: s
         target_functions: Set of function names we're looking for
 
     Returns:
-        Tuple of (should_process_with_jedi, found_function_names)
+        bool: True if the test file should be processed (contains relevant imports), False otherwise
 
     """
     if isinstance(test_file_path, str):
@@ -239,14 +239,11 @@ def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: s
         analyzer = ImportAnalyzer(target_functions)
         analyzer.visit(tree)
 
-        if analyzer.found_target_functions:
-            return True, analyzer.found_target_functions
-
-        return False, set()  # noqa: TRY300
+        return bool(analyzer.found_target_functions)
 
     except (SyntaxError, UnicodeDecodeError, OSError) as e:
         logger.debug(f"Failed to analyze imports in {test_file_path}: {e}")
-        return True, set()
+        return True
 
 
 def filter_test_files_by_imports(
@@ -268,16 +265,15 @@ def filter_test_files_by_imports(
     logger.debug(f"Target functions for import filtering: {target_functions}")
 
     filtered_map = {}
-    num_analyzed = 0
 
     for test_file, test_functions in file_to_test_map.items():
-        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
-        num_analyzed += 1
-
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
         if should_process:
             filtered_map[test_file] = test_functions
 
-    logger.debug(f"analyzed {num_analyzed} test files for imports, filtered down to {len(filtered_map)} relevant files")
+    logger.debug(
+        f"analyzed {len(file_to_test_map)} test files for imports, filtered down to {len(filtered_map)} relevant files"
+    )
     return filtered_map
 
 

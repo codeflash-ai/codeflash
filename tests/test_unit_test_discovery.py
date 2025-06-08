@@ -811,11 +811,9 @@ def test_target():
         test_file.write_text(test_content)
         
         target_functions = {"target_function", "missing_function"}
-        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
         
         assert should_process is True
-        assert "target_function" in found_functions
-        assert "missing_function" not in found_functions
 
 
 def test_analyze_imports_star_import():
@@ -831,10 +829,9 @@ def test_something():
         test_file.write_text(test_content)
         
         target_functions = {"target_function"}
-        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
         
         assert should_process is False
-        assert found_functions == set()
 
 
 def test_analyze_imports_module_import():
@@ -850,10 +847,9 @@ def test_target():
         test_file.write_text(test_content)
         
         target_functions = {"target_function"}
-        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
         
         assert should_process is True
-        assert "target_function" in found_functions
 
 
 def test_analyze_imports_dynamic_import():
@@ -870,10 +866,9 @@ def test_dynamic():
         test_file.write_text(test_content)
         
         target_functions = {"target_function"}
-        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
         
         assert should_process is True
-        assert "target_function" in found_functions
 
 
 def test_analyze_imports_builtin_import():
@@ -888,10 +883,9 @@ def test_builtin_import():
         test_file.write_text(test_content)
         
         target_functions = {"target_function"}
-        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
         
         assert should_process is True
-        assert "target_function" in found_functions
 
 
 def test_analyze_imports_no_matching_imports():
@@ -907,9 +901,8 @@ def test_unrelated():
         test_file.write_text(test_content)
         
         target_functions = {"target_function", "another_function"}
-        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
         assert should_process is False
-        assert found_functions == set()
 
 
 def test_analyze_qualified_names():
@@ -924,9 +917,8 @@ def test_target():
         test_file.write_text(test_content)
         
         target_functions = {"target_module.some_function"}
-        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
         assert should_process is True
-        assert "target_module.some_function" in found_functions
 
 
 
@@ -943,11 +935,10 @@ def test_target(
         test_file.write_text(test_content)
         
         target_functions = {"target_function"}
-        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
         
         # Should be conservative with unparseable files
         assert should_process is True
-        assert found_functions == set()
 
 
 def test_filter_test_files_by_imports():
@@ -1085,10 +1076,9 @@ def test_conditional():
         test_file.write_text(test_content)
         
         target_functions = {"target_function"}
-        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
         
         assert should_process is True
-        assert "target_function" in found_functions
 
 
 def test_analyze_imports_function_name_in_code():
@@ -1108,10 +1098,9 @@ def test_indirect():
         test_file.write_text(test_content)
         
         target_functions = {"target_function"}
-        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
         
         assert should_process is True
-        assert "target_function" in found_functions
 
 
 def test_analyze_imports_aliased_imports():
@@ -1128,11 +1117,9 @@ def test_aliased():
         test_file.write_text(test_content)
         
         target_functions = {"target_function", "missing_function"}
-        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
         
         assert should_process is True
-        assert "target_function" in found_functions
-        assert "missing_function" not in found_functions
 
 
 def test_analyze_imports_underscore_function_names():
@@ -1147,10 +1134,9 @@ def test_bubble():
         test_file.write_text(test_content)
         
         target_functions = {"bubble_sort"}
-        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
         
         assert should_process is False
-        assert "bubble_sort" not in found_functions
 
 def test_discover_unit_tests_filtering_different_modules():
     """Test import filtering with test files from completely different modules."""
