@@ -988,17 +988,13 @@ def test_star():
         }
         
         target_functions = {"target_function"}
-        filtered_map, import_results = filter_test_files_by_imports(file_to_test_map, target_functions)
+        filtered_map = filter_test_files_by_imports(file_to_test_map, target_functions)
         
         # Should filter out irrelevant_test
         assert len(filtered_map) == 1
         assert relevant_test in filtered_map
         assert irrelevant_test not in filtered_map
         
-        # Check import analysis results
-        assert "target_function" in import_results[relevant_test]
-        assert len(import_results[irrelevant_test]) == 0
-        assert len(import_results[star_test]) == 0
 
 
 def test_filter_test_files_no_target_functions():
@@ -1014,11 +1010,10 @@ def test_filter_test_files_no_target_functions():
         }
         
         # No target functions provided
-        filtered_map, import_results = filter_test_files_by_imports(file_to_test_map, set())
+        filtered_map =  filter_test_files_by_imports(file_to_test_map, set())
         
         # Should return original map unchanged
         assert filtered_map == file_to_test_map
-        assert import_results == {}
 
 
 def test_discover_unit_tests_with_import_filtering():

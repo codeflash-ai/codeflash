@@ -251,7 +251,7 @@ def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: s
 
 def filter_test_files_by_imports(
     file_to_test_map: dict[Path, list[TestsInFile]], target_functions: set[str]
-) -> tuple[dict[Path, list[TestsInFile]], dict[Path, set[str]]]:
+) -> dict[Path, list[TestsInFile]]:
     """Filter test files based on import analysis to reduce Jedi processing.
 
     Args:
@@ -259,26 +259,26 @@ def filter_test_files_by_imports(
         target_functions: Set of function names we're optimizing
 
     Returns:
-        Tuple of (filtered_file_map, import_analysis_results)
+        Filtered mapping of test files to test functions
 
     """
     if not target_functions:
-        return file_to_test_map, {}
+        return file_to_test_map
+
+    logger.debug(f"Target functions for import filtering: {target_functions}")
 
     filtered_map = {}
-    import_results = {}
+    num_analyzed = 0
 
     for test_file, test_functions in file_to_test_map.items():
         should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
-        import_results[test_file] = found_functions
+        num_analyzed += 1
 
         if should_process:
             filtered_map[test_file] = test_functions
-        else:
-            logger.debug(f"Skipping {test_file} - no relevant imports found")
 
-    logger.debug(f"Import filter: Processing {len(filtered_map)}/{len(file_to_test_map)} test files")
-    return filtered_map, import_results
+    logger.debug(f"analyzed {num_analyzed} test files for imports, filtered down to {len(filtered_map)} relevant files")
+    return filtered_map
 
 
 def discover_unit_tests(
@@ -455,12 +455,8 @@ def process_test_files(
     test_framework = cfg.test_framework
 
     if functions_to_optimize:
-        target_function_names = set()
-        for func in functions_to_optimize:
-            target_function_names.add(func.qualified_name)
-        logger.debug(f"Target functions for import filtering: {target_function_names}")
-        file_to_test_map, import_results = filter_test_files_by_imports(file_to_test_map, target_function_names)
-        logger.debug(f"Import analysis results: {len(import_results)} files analyzed")
+        target_function_names = {func.qualified_name for func in functions_to_optimize}
+        file_to_test_map = filter_test_files_by_imports(file_to_test_map, target_function_names)
 
     function_to_test_map = defaultdict(set)
     num_discovered_tests = 0
