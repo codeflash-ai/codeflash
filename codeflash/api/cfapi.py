@@ -3,19 +3,19 @@ from __future__ import annotations
 import json
 import os
 import sys
-import git
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, List
+from typing import TYPE_CHECKING, Any, Optional
 
+import git
 import requests
 import sentry_sdk
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
-from codeflash.version import __version__
 from codeflash.code_utils.git_utils import get_repo_owner_and_name
+from codeflash.version import __version__
 
 if TYPE_CHECKING:
     from requests import Response
@@ -194,7 +194,9 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
     return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
 
 
-def is_function_being_optimized_again(owner: str, repo: str, pr_number: int, code_contexts: List[Dict[str, str]]) -> Dict:
+def is_function_being_optimized_again(
+    owner: str, repo: str, pr_number: int, code_contexts: list[dict[str, str]]
+) -> dict:
     """Check if the function being optimized is being optimized again."""
     response = make_cfapi_request(
         "/is-already-optimized",
@@ -204,8 +206,9 @@ def is_function_being_optimized_again(owner: str, repo: str, pr_number: int, cod
     response.raise_for_status()
     return response.json()
 
-def add_code_context_hash( code_context_hash: str):
-    """Add code context to the DB cache"""
+
+def add_code_context_hash(code_context_hash: str) -> None:
+    """Add code context to the DB cache."""
     pr_number = get_pr_number()
     if pr_number is None:
         return
@@ -215,16 +218,9 @@ def add_code_context_hash( code_context_hash: str):
     except git.exc.InvalidGitRepositoryError:
         return
 
-
     if owner and repo and pr_number is not None:
         make_cfapi_request(
             "/add-code-hash",
             "POST",
-            {
-                "owner": owner,
-                "repo": repo,
-                "pr_number": pr_number,
-                "code_context_hash": code_context_hash
-            }
+            {"owner": owner, "repo": repo, "pr_number": pr_number, "code_hash": code_context_hash},
         )
-

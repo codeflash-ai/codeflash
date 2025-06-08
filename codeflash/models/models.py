@@ -158,6 +158,7 @@ class CodeOptimizationContext(BaseModel):
     read_writable_code: str = Field(min_length=1)
     read_only_context_code: str = ""
     hashing_code_context: str = ""
+    hashing_code_context_hash: str = ""
     helper_functions: list[FunctionSource]
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]]
 

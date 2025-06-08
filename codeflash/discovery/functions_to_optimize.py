@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import hashlib
 import os
 import random
 import warnings
@@ -446,7 +445,7 @@ def check_optimization_status(function_to_optimize: FunctionToOptimize, code_con
 
     code_contexts = []
 
-    func_hash = hashlib.sha256(code_context.hashing_code_context.encode("utf-8")).hexdigest()
+    func_hash = code_context.hashing_code_context_hash
     # Use a unique path identifier that includes function info
 
     code_contexts.append(

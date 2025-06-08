@@ -156,7 +156,7 @@ class FunctionOptimizer:
         if has_any_async_functions(code_context.read_writable_code):
             return Failure("Codeflash does not support async functions in the code to optimize.")
         if check_optimization_status(self.function_to_optimize, code_context):
-            return Failure("This function has already been optimized, skipping.")
+            return Failure("This function has previously been optimized, skipping.")
 
         code_print(code_context.read_writable_code)
         generated_test_paths = [
@@ -377,7 +377,7 @@ class FunctionOptimizer:
 
         # Add function to code context hash if in gh actions
 
-        add_code_context_hash(self.function_to_optimize.get_code_context_hash())
+        add_code_context_hash(code_context.hashing_code_context_hash)
 
         if self.args.override_fixtures:
             restore_conftest(original_conftest_content)
@@ -689,6 +689,7 @@ class FunctionOptimizer:
                 read_writable_code=new_code_ctx.read_writable_code,
                 read_only_context_code=new_code_ctx.read_only_context_code,
                 hashing_code_context=new_code_ctx.hashing_code_context,
+                hashing_code_context_hash=new_code_ctx.hashing_code_context_hash,
                 helper_functions=new_code_ctx.helper_functions,  # only functions that are read writable
                 preexisting_objects=new_code_ctx.preexisting_objects,
             )

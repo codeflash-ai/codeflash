@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 from collections import defaultdict
 from itertools import chain
@@ -132,12 +133,15 @@ def get_code_optimization_context(
         testgen_context_code_tokens = encoded_tokens_len(testgen_context_code)
         if testgen_context_code_tokens > testgen_token_limit:
             raise ValueError("Testgen code context has exceeded token limit, cannot proceed")
+    code_hash_context = hashing_code_context.markdown
+    code_hash = hashlib.sha256(code_hash_context.encode("utf-8")).hexdigest()
 
     return CodeOptimizationContext(
         testgen_context_code=testgen_context_code,
         read_writable_code=final_read_writable_code,
         read_only_context_code=read_only_context_code,
-        hashing_code_context=hashing_code_context.markdown,
+        hashing_code_context=code_hash_context,
+        hashing_code_context_hash=code_hash,
         helper_functions=helpers_of_fto_list,
         preexisting_objects=preexisting_objects,
     )
