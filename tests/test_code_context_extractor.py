@@ -2137,3 +2137,338 @@ except ImportError:
 """
         assert read_write_context.strip() == expected_read_write_context.strip()
         assert read_only_context.strip() == expected_read_only_context.strip()
+
+
+from __future__ import annotations
+
+
+def test_hashing_code_context_removes_imports_docstrings_and_init() -> None:
+    """Test that hashing context removes imports, docstrings, and __init__ methods properly."""
+    code = '''
+import os
+import sys
+from pathlib import Path
+
+class MyClass:
+    """A class with a docstring."""
+    def __init__(self, value):
+        """Initialize with a value."""
+        self.value = value
+
+    def target_method(self):
+        """Target method with docstring."""
+        result = self.helper_method()
+        helper_cls = HelperClass()
+        data = helper_cls.process_data()
+        return self.value * 2
+
+    def helper_method(self):
+        """Helper method with docstring."""
+        return self.value + 1
+
+class HelperClass:
+    """Helper class docstring."""
+    def __init__(self):
+        """Helper init method."""
+        self.data = "test"
+
+    def process_data(self):
+        """Process data method."""
+        return self.data.upper()
+
+def standalone_function():
+    """Standalone function."""
+    return "standalone"
+'''
+    with tempfile.NamedTemporaryFile(mode="w") as f:
+        f.write(code)
+        f.flush()
+        file_path = Path(f.name).resolve()
+        opt = Optimizer(
+            Namespace(
+                project_root=file_path.parent.resolve(),
+                disable_telemetry=True,
+                tests_root="tests",
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=Path().resolve(),
+            )
+        )
+        function_to_optimize = FunctionToOptimize(
+            function_name="target_method",
+            file_path=file_path,
+            parents=[FunctionParent(name="MyClass", type="ClassDef")],
+            starting_line=None,
+            ending_line=None,
+        )
+
+        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+        hashing_context = code_ctx.hashing_code_context
+
+        # Expected behavior based on current implementation:
+        # - Should not contain imports
+        # - Should remove docstrings from target functions (but currently doesn't - this is a bug)
+        # - Should not contain __init__ methods
+        # - Should contain target function and helper methods that are actually called
+        # - Should be formatted as markdown
+
+        # Test that it's formatted as markdown
+        assert hashing_context.startswith("```python:")
+        assert hashing_context.endswith("```")
+
+        # Test basic structure requirements
+        assert "import" not in hashing_context  # Should not contain imports
+        assert "__init__" not in hashing_context  # Should not contain __init__ methods
+        assert "target_method" in hashing_context  # Should contain target function
+        assert "standalone_function" not in hashing_context  # Should not contain unused functions
+
+        # Test that helper functions are included when they're called
+        assert "helper_method" in hashing_context  # Should contain called helper method
+        assert "process_data" in hashing_context  # Should contain called helper method
+
+        # Test for docstring removal (this should pass when implementation is fixed)
+        # Currently this will fail because docstrings are not being removed properly
+        assert '"""Target method with docstring."""' not in hashing_context, (
+            "Docstrings should be removed from target functions"
+        )
+        assert '"""Helper method with docstring."""' not in hashing_context, (
+            "Docstrings should be removed from helper functions"
+        )
+        assert '"""Process data method."""' not in hashing_context, (
+            "Docstrings should be removed from helper class methods"
+        )
+
+
+def test_hashing_code_context_with_nested_classes() -> None:
+    """Test that hashing context handles nested classes properly (should exclude them)."""
+    code = '''
+class OuterClass:
+    """Outer class docstring."""
+    def __init__(self):
+        """Outer init."""
+        self.value = 1
+
+    def target_method(self):
+        """Target method."""
+        return self.NestedClass().nested_method()
+
+    class NestedClass:
+        """Nested class - should be excluded."""
+        def __init__(self):
+            self.nested_value = 2
+
+        def nested_method(self):
+            return self.nested_value
+'''
+    with tempfile.NamedTemporaryFile(mode="w") as f:
+        f.write(code)
+        f.flush()
+        file_path = Path(f.name).resolve()
+        opt = Optimizer(
+            Namespace(
+                project_root=file_path.parent.resolve(),
+                disable_telemetry=True,
+                tests_root="tests",
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=Path().resolve(),
+            )
+        )
+        function_to_optimize = FunctionToOptimize(
+            function_name="target_method",
+            file_path=file_path,
+            parents=[FunctionParent(name="OuterClass", type="ClassDef")],
+            starting_line=None,
+            ending_line=None,
+        )
+
+        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+        hashing_context = code_ctx.hashing_code_context
+
+        # Test basic requirements
+        assert hashing_context.startswith("```python:")
+        assert hashing_context.endswith("```")
+        assert "target_method" in hashing_context
+        assert "__init__" not in hashing_context  # Should not contain __init__ methods
+
+        # Verify nested classes are excluded from the hashing context
+        # The prune_cst_for_code_hashing function should not recurse into nested classes
+        assert "class NestedClass:" not in hashing_context  # Nested class definition should not be present
+
+        # The target method will reference NestedClass, but the actual nested class definition should not be included
+        # The call to self.NestedClass().nested_method() should be in the target method but the nested class itself excluded
+        target_method_call_present = "self.NestedClass().nested_method()" in hashing_context
+        assert target_method_call_present, "The target method should contain the call to nested class"
+
+        # But the actual nested method definition should not be present
+        nested_method_definition_present = "def nested_method(self):" in hashing_context
+        assert not nested_method_definition_present, "Nested method definition should not be present in hashing context"
+
+
+def test_hashing_code_context_hash_consistency() -> None:
+    """Test that the same code produces the same hash."""
+    code = """
+class TestClass:
+    def target_method(self):
+        return "test"
+"""
+    with tempfile.NamedTemporaryFile(mode="w") as f:
+        f.write(code)
+        f.flush()
+        file_path = Path(f.name).resolve()
+        opt = Optimizer(
+            Namespace(
+                project_root=file_path.parent.resolve(),
+                disable_telemetry=True,
+                tests_root="tests",
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=Path().resolve(),
+            )
+        )
+        function_to_optimize = FunctionToOptimize(
+            function_name="target_method",
+            file_path=file_path,
+            parents=[FunctionParent(name="TestClass", type="ClassDef")],
+            starting_line=None,
+            ending_line=None,
+        )
+
+        # Generate context twice
+        code_ctx1 = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+        code_ctx2 = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+
+        # Hash should be consistent
+        assert code_ctx1.hashing_code_context_hash == code_ctx2.hashing_code_context_hash
+        assert code_ctx1.hashing_code_context == code_ctx2.hashing_code_context
+
+        # Hash should be valid SHA256
+        import hashlib
+
+        expected_hash = hashlib.sha256(code_ctx1.hashing_code_context.encode("utf-8")).hexdigest()
+        assert code_ctx1.hashing_code_context_hash == expected_hash
+
+
+def test_hashing_code_context_different_code_different_hash() -> None:
+    """Test that different code produces different hashes."""
+    code1 = """
+class TestClass:
+    def target_method(self):
+        return "test1"
+"""
+    code2 = """
+class TestClass:
+    def target_method(self):
+        return "test2"
+"""
+
+    with tempfile.NamedTemporaryFile(mode="w") as f1, tempfile.NamedTemporaryFile(mode="w") as f2:
+        f1.write(code1)
+        f1.flush()
+        f2.write(code2)
+        f2.flush()
+
+        file_path1 = Path(f1.name).resolve()
+        file_path2 = Path(f2.name).resolve()
+
+        opt1 = Optimizer(
+            Namespace(
+                project_root=file_path1.parent.resolve(),
+                disable_telemetry=True,
+                tests_root="tests",
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=Path().resolve(),
+            )
+        )
+        opt2 = Optimizer(
+            Namespace(
+                project_root=file_path2.parent.resolve(),
+                disable_telemetry=True,
+                tests_root="tests",
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=Path().resolve(),
+            )
+        )
+
+        function_to_optimize1 = FunctionToOptimize(
+            function_name="target_method",
+            file_path=file_path1,
+            parents=[FunctionParent(name="TestClass", type="ClassDef")],
+            starting_line=None,
+            ending_line=None,
+        )
+        function_to_optimize2 = FunctionToOptimize(
+            function_name="target_method",
+            file_path=file_path2,
+            parents=[FunctionParent(name="TestClass", type="ClassDef")],
+            starting_line=None,
+            ending_line=None,
+        )
+
+        code_ctx1 = get_code_optimization_context(function_to_optimize1, opt1.args.project_root)
+        code_ctx2 = get_code_optimization_context(function_to_optimize2, opt2.args.project_root)
+
+        # Different code should produce different hashes
+        assert code_ctx1.hashing_code_context_hash != code_ctx2.hashing_code_context_hash
+        assert code_ctx1.hashing_code_context != code_ctx2.hashing_code_context
+
+
+def test_hashing_code_context_format_is_markdown() -> None:
+    """Test that hashing context is formatted as markdown."""
+    code = """
+class SimpleClass:
+    def simple_method(self):
+        return 42
+"""
+    with tempfile.NamedTemporaryFile(mode="w") as f:
+        f.write(code)
+        f.flush()
+        file_path = Path(f.name).resolve()
+        opt = Optimizer(
+            Namespace(
+                project_root=file_path.parent.resolve(),
+                disable_telemetry=True,
+                tests_root="tests",
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=Path().resolve(),
+            )
+        )
+        function_to_optimize = FunctionToOptimize(
+            function_name="simple_method",
+            file_path=file_path,
+            parents=[FunctionParent(name="SimpleClass", type="ClassDef")],
+            starting_line=None,
+            ending_line=None,
+        )
+
+        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+        hashing_context = code_ctx.hashing_code_context
+
+        # Should be formatted as markdown code block
+        assert hashing_context.startswith("```python:")
+        assert hashing_context.endswith("```")
+
+        # Should contain the relative file path in the markdown header
+        relative_path = file_path.relative_to(opt.args.project_root)
+        assert str(relative_path) in hashing_context
+
+        # Should contain the actual code between the markdown markers
+        lines = hashing_context.strip().split("\n")
+        assert lines[0].startswith("```python:")
+        assert lines[-1] == "```"
+
+        # Code should be between the markers
+        code_lines = lines[1:-1]
+        code_content = "\n".join(code_lines)
+        assert "class SimpleClass:" in code_content
+        assert "def simple_method(self):" in code_content
+        assert "return 42" in code_content
