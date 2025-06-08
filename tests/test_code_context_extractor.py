@@ -1114,11 +1114,9 @@ class DataProcessor:
 class DataProcessor:
 
     def process_data(self, raw_data: str) -> str:
-        \"\"\"Process raw data by converting it to uppercase.\"\"\"
         return raw_data.upper()
 
     def add_prefix(self, data: str, prefix: str = "PREFIX_") -> str:
-        \"\"\"Add a prefix to the processed data.\"\"\"
         return prefix + data
 ```
 ```python:{path_to_file.relative_to(project_root)}
@@ -1220,11 +1218,9 @@ class DataTransformer:
 class DataProcessor:
 
     def process_data(self, raw_data: str) -> str:
-        \"\"\"Process raw data by converting it to uppercase.\"\"\"
         return raw_data.upper()
 
     def transform_data(self, data: str) -> str:
-        \"\"\"Transform the processed data\"\"\"
         return DataTransformer().transform(data)
 ```
 ```python:{path_to_file.relative_to(project_root)}
@@ -1309,11 +1305,16 @@ class DataProcessor:
 
 """
     expected_hashing_context = f"""
+```python:transform_utils.py
+class DataTransformer:
+
+    def transform_using_own_method(self, data):
+        return self.transform(data)
+```
 ```python:{path_to_utils.relative_to(project_root)}
 class DataProcessor:
 
     def transform_data_own_method(self, data: str) -> str:
-        \"\"\"Transform the processed data using own method\"\"\"
         return DataTransformer().transform_using_own_method(data)
 ```
 """
@@ -1379,11 +1380,16 @@ class DataProcessor:
 ```
 """
     expected_hashing_context = f"""
+```python:transform_utils.py
+class DataTransformer:
+
+    def transform_using_same_file_function(self, data):
+        return update_data(data)
+```
 ```python:{path_to_utils.relative_to(project_root)}
 class DataProcessor:
 
     def transform_data_same_file_function(self, data: str) -> str:
-        \"\"\"Transform the processed data using a function from the same file\"\"\"
         return DataTransformer().transform_using_same_file_function(data)
 ```
 """
