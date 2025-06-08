@@ -146,7 +146,8 @@ class ImportAnalyzer(ast.NodeVisitor):
     def __init__(self, function_names_to_find: set[str]) -> None:
         self.function_names_to_find = function_names_to_find
         self.found_any_target_function: bool = False
-        self.imported_modules: set[str] = set()  # Track imported modules for usage analysis
+        self.found_qualified_name = None
+        self.imported_modules: set[str] = set()
         self.has_dynamic_imports: bool = False
         self.wildcard_modules: set[str] = set()
 
@@ -166,11 +167,13 @@ class ImportAnalyzer(ast.NodeVisitor):
             # Check if module itself is a target qualified name
             if module_name in self.function_names_to_find:
                 self.found_any_target_function = True
+                self.found_qualified_name = module_name
                 return
             # Check if any target qualified name starts with this module
             for target_func in self.function_names_to_find:
                 if target_func.startswith(f"{module_name}."):
                     self.found_any_target_function = True
+                    self.found_qualified_name = target_func
                     return
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
@@ -195,11 +198,13 @@ class ImportAnalyzer(ast.NodeVisitor):
                 # Check if imported name is a target qualified name
                 if alias.name in self.function_names_to_find:
                     self.found_any_target_function = True
+                    self.found_qualified_name = alias.name
                     return
                 # Check if module.name forms a target qualified name
                 qualified_name = f"{node.module}.{alias.name}"
                 if qualified_name in self.function_names_to_find:
                     self.found_any_target_function = True
+                    self.found_qualified_name = qualified_name
                     return
 
     def visit_Attribute(self, node: ast.Attribute) -> None:
@@ -214,12 +219,14 @@ class ImportAnalyzer(ast.NodeVisitor):
             and node.attr in self.function_names_to_find
         ):
             self.found_any_target_function = True
+            self.found_qualified_name = node.attr
             return
 
         # Check if this is accessing a target function through a dynamically imported module
         # Only if we've detected dynamic imports are being used
         if self.has_dynamic_imports and node.attr in self.function_names_to_find:
             self.found_any_target_function = True
+            self.found_qualified_name = node.attr
             return
 
         self.generic_visit(node)
@@ -235,6 +242,7 @@ class ImportAnalyzer(ast.NodeVisitor):
 
         if node.id in self.function_names_to_find:
             self.found_any_target_function = True
+            self.found_qualified_name = node.id
             return
 
         # Check if this name could come from a wildcard import
@@ -243,6 +251,7 @@ class ImportAnalyzer(ast.NodeVisitor):
                 # Check if target_func is from this wildcard module and name matches
                 if target_func.startswith(f"{wildcard_module}.") and target_func.endswith(f".{node.id}"):
                     self.found_any_target_function = True
+                    self.found_qualified_name = target_func
                     return
 
         self.generic_visit(node)
@@ -266,7 +275,11 @@ def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: s
         logger.debug(f"Failed to analyze imports in {test_file_path}: {e}")
         return True
     else:
-        return analyzer.found_any_target_function
+        if analyzer.found_any_target_function:
+            logger.debug(f"Test file {test_file_path} imports target function: {analyzer.found_qualified_name}")
+            return True
+        logger.debug(f"Test file {test_file_path} does not import any target functions.")
+        return False
 
 
 def filter_test_files_by_imports(
@@ -288,7 +301,6 @@ def filter_test_files_by_imports(
     logger.debug(f"Target functions for import filtering: {target_functions}")
 
     filtered_map = {}
-
     for test_file, test_functions in file_to_test_map.items():
         should_process = analyze_imports_in_test_file(test_file, target_functions)
         if should_process:
@@ -315,7 +327,6 @@ def discover_unit_tests(
     functions_to_optimize = None
     if file_to_funcs_to_optimize:
         functions_to_optimize = [func for funcs_list in file_to_funcs_to_optimize.values() for func in funcs_list]
-
     function_to_tests, num_discovered_tests = strategy(cfg, discover_only_these_tests, functions_to_optimize)
     return function_to_tests, num_discovered_tests
 
