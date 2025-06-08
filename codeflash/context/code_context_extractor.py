@@ -32,8 +32,8 @@ if TYPE_CHECKING:
 def get_code_optimization_context(
     function_to_optimize: FunctionToOptimize,
     project_root_path: Path,
-    optim_token_limit: int = 8000,
-    testgen_token_limit: int = 8000,
+    optim_token_limit: int = 16000,
+    testgen_token_limit: int = 16000,
 ) -> CodeOptimizationContext:
     # Get FunctionSource representation of helpers of FTO
     helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(
