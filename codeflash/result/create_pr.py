@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 def existing_tests_source_for(
     function_qualified_name_with_modules_from_root: str,
-    function_to_tests: dict[str, list[FunctionCalledInTest]],
+    function_to_tests: dict[str, set[FunctionCalledInTest]],
     tests_root: Path,
 ) -> str:
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
