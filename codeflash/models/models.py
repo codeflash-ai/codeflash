@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from rich.tree import Tree
 
@@ -136,7 +136,7 @@ class ProcessedBenchmarkInfo:
 
 class CodeString(BaseModel):
     code: Annotated[str, AfterValidator(validate_python_code)]
-    file_path: Path | None = None
+    file_path: Optional[Path] = None
 
 
 class CodeStringsMarkdown(BaseModel):
