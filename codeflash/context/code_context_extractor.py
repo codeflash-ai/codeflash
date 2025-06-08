@@ -322,16 +322,14 @@ def extract_code_markdown_context_from_files(
             continue
         if code_context.strip():
             if code_context_type != CodeContextType.HASHING:
-                code_context = (
-                    add_needed_imports_from_module(
-                        src_module_code=original_code,
-                        dst_module_code=code_context,
-                        src_path=file_path,
-                        dst_path=file_path,
-                        project_root=project_root_path,
-                        helper_functions=list(
-                            helpers_of_fto.get(file_path, set()) | helpers_of_helpers.get(file_path, set())
-                        ),
+                code_context = add_needed_imports_from_module(
+                    src_module_code=original_code,
+                    dst_module_code=code_context,
+                    src_path=file_path,
+                    dst_path=file_path,
+                    project_root=project_root_path,
+                    helper_functions=list(
+                        helpers_of_fto.get(file_path, set()) | helpers_of_helpers.get(file_path, set())
                     ),
                 )
             code_string_context = CodeString(code=code_context, file_path=file_path.relative_to(project_root_path))
@@ -357,15 +355,13 @@ def extract_code_markdown_context_from_files(
 
         if code_context.strip():
             if code_context_type != CodeContextType.HASHING:
-                code_context = (
-                    add_needed_imports_from_module(
-                        src_module_code=original_code,
-                        dst_module_code=code_context,
-                        src_path=file_path,
-                        dst_path=file_path,
-                        project_root=project_root_path,
-                        helper_functions=list(helpers_of_helpers_no_overlap.get(file_path, set())),
-                    ),
+                code_context = add_needed_imports_from_module(
+                    src_module_code=original_code,
+                    dst_module_code=code_context,
+                    src_path=file_path,
+                    dst_path=file_path,
+                    project_root=project_root_path,
+                    helper_functions=list(helpers_of_helpers_no_overlap.get(file_path, set())),
                 )
             code_string_context = CodeString(code=code_context, file_path=file_path.relative_to(project_root_path))
             code_context_markdown.code_strings.append(code_string_context)
