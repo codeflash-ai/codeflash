@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import concurrent.futures
 import os
+import random
 import subprocess
 import time
 import uuid
@@ -40,6 +41,7 @@ from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
     N_CANDIDATES,
     N_TESTS_TO_GENERATE,
+    REPEAT_OPTIMIZATION_PROBABILITY,
     TOTAL_LOOPING_TIME,
 )
 from codeflash.code_utils.edit_generated_tests import (
@@ -155,7 +157,13 @@ class FunctionOptimizer:
 
         if has_any_async_functions(code_context.read_writable_code):
             return Failure("Codeflash does not support async functions in the code to optimize.")
-        if check_optimization_status(self.function_to_optimize, code_context):
+        # Random here means that we still attempt optimization with a fractional chance to see if
+        # last time we could not find an optimization, maybe this time we do.
+        # Random is before as a performance optimization, swapping the two 'and' statements has the same effect
+        if (
+            random.random() > REPEAT_OPTIMIZATION_PROBABILITY  # noqa: S311
+            and check_optimization_status(self.function_to_optimize, code_context)
+        ):
             return Failure("This function has previously been optimized, skipping.")
 
         code_print(code_context.read_writable_code)
