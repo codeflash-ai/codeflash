@@ -279,7 +279,7 @@ class FunctionOptimizer:
         # adding to control and experiment set but with same traceid
         best_optimization = None
         for _u, (candidates, exp_type) in enumerate(
-            zip([optimizations_set.control, optimizations_set.experiment], ["EXP0", "EXP1"], strict=False)
+            zip([optimizations_set.control, optimizations_set.experiment], ["EXP0", "EXP1"])
         ):
             if candidates is None:
                 continue
@@ -1299,7 +1299,7 @@ class FunctionOptimizer:
                 test_perf_path,
             )
             for test_index, (test_path, test_perf_path) in enumerate(
-                zip(generated_test_paths, generated_perf_test_paths, strict=False)
+                zip(generated_test_paths, generated_perf_test_paths)
             )
         ]
 
