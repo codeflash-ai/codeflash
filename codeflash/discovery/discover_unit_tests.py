@@ -458,7 +458,7 @@ def process_test_files(
         target_function_names = set()
         for func in functions_to_optimize:
             target_function_names.add(func.qualified_name)
-        logger.info(f"Target functions for import filtering: {target_function_names}")
+        logger.debug(f"Target functions for import filtering: {target_function_names}")
         file_to_test_map, import_results = filter_test_files_by_imports(file_to_test_map, target_function_names)
         logger.debug(f"Import analysis results: {len(import_results)} files analyzed")
 
