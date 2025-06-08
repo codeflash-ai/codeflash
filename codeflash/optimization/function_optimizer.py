@@ -61,7 +61,6 @@ from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
     CodeOptimizationContext,
-    FunctionCalledInTest,
     GeneratedTests,
     GeneratedTestsList,
     OptimizationSet,
@@ -91,7 +90,13 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.either import Result
-    from codeflash.models.models import BenchmarkKey, CoverageData, FunctionSource, OptimizedCandidate
+    from codeflash.models.models import (
+        BenchmarkKey,
+        CoverageData,
+        FunctionCalledInTest,
+        FunctionSource,
+        OptimizedCandidate,
+    )
     from codeflash.verification.verification_utils import TestConfig
 
 
@@ -101,7 +106,7 @@ class FunctionOptimizer:
         function_to_optimize: FunctionToOptimize,
         test_cfg: TestConfig,
         function_to_optimize_source_code: str = "",
-        function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
+        function_to_tests: dict[str, set[FunctionCalledInTest]] | None = None,
         function_to_optimize_ast: ast.FunctionDef | None = None,
         aiservice_client: AiServiceClient | None = None,
         function_benchmark_timings: dict[BenchmarkKey, int] | None = None,
@@ -226,7 +231,7 @@ class FunctionOptimizer:
 
         function_to_optimize_qualified_name = self.function_to_optimize.qualified_name
         function_to_all_tests = {
-            key: self.function_to_tests.get(key, []) + function_to_concolic_tests.get(key, [])
+            key: self.function_to_tests.get(key, set()) | function_to_concolic_tests.get(key, set())
             for key in set(self.function_to_tests) | set(function_to_concolic_tests)
         }
         instrumented_unittests_created_for_function = self.instrument_existing_tests(function_to_all_tests)
@@ -709,7 +714,7 @@ class FunctionOptimizer:
         get_run_tmp_file(Path("test_return_values_0.bin")).unlink(missing_ok=True)
         get_run_tmp_file(Path("test_return_values_0.sqlite")).unlink(missing_ok=True)
 
-    def instrument_existing_tests(self, function_to_all_tests: dict[str, list[FunctionCalledInTest]]) -> set[Path]:
+    def instrument_existing_tests(self, function_to_all_tests: dict[str, set[FunctionCalledInTest]]) -> set[Path]:
         existing_test_files_count = 0
         replay_test_files_count = 0
         concolic_coverage_test_files_count = 0
@@ -720,7 +725,7 @@ class FunctionOptimizer:
             logger.info(f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.")
             console.rule()
         else:
-            test_file_invocation_positions = defaultdict(list[FunctionCalledInTest])
+            test_file_invocation_positions = defaultdict(list)
             for tests_in_file in function_to_all_tests.get(func_qualname):
                 test_file_invocation_positions[
                     (tests_in_file.tests_in_file.test_file, tests_in_file.tests_in_file.test_type)
@@ -806,7 +811,7 @@ class FunctionOptimizer:
         generated_test_paths: list[Path],
         generated_perf_test_paths: list[Path],
         run_experiment: bool = False,  # noqa: FBT001, FBT002
-    ) -> Result[tuple[GeneratedTestsList, dict[str, list[FunctionCalledInTest]], OptimizationSet], str]:
+    ) -> Result[tuple[GeneratedTestsList, dict[str, set[FunctionCalledInTest]], OptimizationSet], str]:
         assert len(generated_test_paths) == N_TESTS_TO_GENERATE
         max_workers = N_TESTS_TO_GENERATE + 2 if not run_experiment else N_TESTS_TO_GENERATE + 3
         console.rule()

@@ -1,6 +1,7 @@
 # ruff: noqa: SLF001
 from __future__ import annotations
 
+import ast
 import hashlib
 import os
 import pickle
@@ -11,6 +12,9 @@ import unittest
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
+
+if TYPE_CHECKING:
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 import pytest
 from pydantic.dataclasses import dataclass
@@ -86,7 +90,6 @@ class TestsCache:
         line_number: int,
         col_number: int,
     ) -> None:
-        self.cur.execute("DELETE FROM discovered_tests WHERE file_path = ?", (file_path,))
         test_type_value = test_type.value if hasattr(test_type, "value") else test_type
         self.cur.execute(
             "INSERT INTO discovered_tests VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -137,21 +140,172 @@ class TestsCache:
         self.connection.close()
 
 
+class ImportAnalyzer(ast.NodeVisitor):
+    """AST-based analyzer to find all imports in a test file."""
+
+    def __init__(self, function_names_to_find: set[str]) -> None:
+        self.function_names_to_find = function_names_to_find
+        self.imported_names: set[str] = set()
+        self.imported_modules: set[str] = set()
+        self.found_target_functions: set[str] = set()
+        self.qualified_names_called: set[str] = set()
+
+    def visit_Import(self, node: ast.Import) -> None:
+        """Handle 'import module' statements."""
+        for alias in node.names:
+            module_name = alias.asname if alias.asname else alias.name
+            self.imported_modules.add(module_name)
+            self.imported_names.add(module_name)
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """Handle 'from module import name' statements."""
+        if node.module:
+            self.imported_modules.add(node.module)
+
+        for alias in node.names:
+            if alias.name == "*":
+                continue
+            imported_name = alias.asname if alias.asname else alias.name
+            self.imported_names.add(imported_name)
+            if alias.name in self.function_names_to_find:
+                self.found_target_functions.add(alias.name)
+            # Check for qualified name matches
+            if node.module:
+                qualified_name = f"{node.module}.{alias.name}"
+                if qualified_name in self.function_names_to_find:
+                    self.found_target_functions.add(qualified_name)
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        """Handle dynamic imports like importlib.import_module() or __import__()."""
+        if (
+            isinstance(node.func, ast.Name)
+            and node.func.id == "__import__"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
+            # __import__("module_name")
+            self.imported_modules.add(node.args[0].value)
+        elif (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "importlib"
+            and node.func.attr == "import_module"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
+            # importlib.import_module("module_name")
+            self.imported_modules.add(node.args[0].value)
+        self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        """Check if any name usage matches our target functions."""
+        if node.id in self.function_names_to_find:
+            self.found_target_functions.add(node.id)
+        self.generic_visit(node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        """Handle module.function_name patterns."""
+        if node.attr in self.function_names_to_find:
+            self.found_target_functions.add(node.attr)
+            if isinstance(node.value, ast.Name):
+                qualified_name = f"{node.value.id}.{node.attr}"
+                self.qualified_names_called.add(qualified_name)
+        self.generic_visit(node)
+
+
+def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: set[str]) -> tuple[bool, set[str]]:
+    """Analyze imports in a test file to determine if it might test any target functions.
+
+    Args:
+        test_file_path: Path to the test file
+        target_functions: Set of function names we're looking for
+
+    Returns:
+        Tuple of (should_process_with_jedi, found_function_names)
+
+    """
+    if isinstance(test_file_path, str):
+        test_file_path = Path(test_file_path)
+
+    try:
+        with test_file_path.open("r", encoding="utf-8") as f:
+            content = f.read()
+
+        tree = ast.parse(content, filename=str(test_file_path))
+        analyzer = ImportAnalyzer(target_functions)
+        analyzer.visit(tree)
+
+        if analyzer.found_target_functions:
+            return True, analyzer.found_target_functions
+
+        return False, set()  # noqa: TRY300
+
+    except (SyntaxError, UnicodeDecodeError, OSError) as e:
+        logger.debug(f"Failed to analyze imports in {test_file_path}: {e}")
+        return True, set()
+
+
+def filter_test_files_by_imports(
+    file_to_test_map: dict[Path, list[TestsInFile]], target_functions: set[str]
+) -> tuple[dict[Path, list[TestsInFile]], dict[Path, set[str]]]:
+    """Filter test files based on import analysis to reduce Jedi processing.
+
+    Args:
+        file_to_test_map: Original mapping of test files to test functions
+        target_functions: Set of function names we're optimizing
+
+    Returns:
+        Tuple of (filtered_file_map, import_analysis_results)
+
+    """
+    if not target_functions:
+        return file_to_test_map, {}
+
+    filtered_map = {}
+    import_results = {}
+
+    for test_file, test_functions in file_to_test_map.items():
+        should_process, found_functions = analyze_imports_in_test_file(test_file, target_functions)
+        import_results[test_file] = found_functions
+
+        if should_process:
+            filtered_map[test_file] = test_functions
+        else:
+            logger.debug(f"Skipping {test_file} - no relevant imports found")
+
+    logger.debug(f"Import filter: Processing {len(filtered_map)}/{len(file_to_test_map)} test files")
+    return filtered_map, import_results
+
+
 def discover_unit_tests(
-    cfg: TestConfig, discover_only_these_tests: list[Path] | None = None
-) -> dict[str, list[FunctionCalledInTest]]:
+    cfg: TestConfig,
+    discover_only_these_tests: list[Path] | None = None,
+    file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None = None,
+) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
     framework_strategies: dict[str, Callable] = {"pytest": discover_tests_pytest, "unittest": discover_tests_unittest}
     strategy = framework_strategies.get(cfg.test_framework, None)
     if not strategy:
         error_message = f"Unsupported test framework: {cfg.test_framework}"
         raise ValueError(error_message)
 
-    return strategy(cfg, discover_only_these_tests)
+    # Extract all functions to optimize for import filtering
+    functions_to_optimize = None
+    if file_to_funcs_to_optimize:
+        functions_to_optimize = [func for funcs_list in file_to_funcs_to_optimize.values() for func in funcs_list]
+
+    function_to_tests, num_discovered_tests = strategy(cfg, discover_only_these_tests, functions_to_optimize)
+    return function_to_tests, num_discovered_tests
 
 
 def discover_tests_pytest(
-    cfg: TestConfig, discover_only_these_tests: list[Path] | None = None
-) -> dict[Path, list[FunctionCalledInTest]]:
+    cfg: TestConfig,
+    discover_only_these_tests: list[Path] | None = None,
+    functions_to_optimize: list[FunctionToOptimize] | None = None,
+) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
 
@@ -220,12 +374,14 @@ def discover_tests_pytest(
             continue
         file_to_test_map[test_obj.test_file].append(test_obj)
     # Within these test files, find the project functions they are referring to and return their names/locations
-    return process_test_files(file_to_test_map, cfg)
+    return process_test_files(file_to_test_map, cfg, functions_to_optimize)
 
 
 def discover_tests_unittest(
-    cfg: TestConfig, discover_only_these_tests: list[str] | None = None
-) -> dict[Path, list[FunctionCalledInTest]]:
+    cfg: TestConfig,
+    discover_only_these_tests: list[str] | None = None,
+    functions_to_optimize: list[FunctionToOptimize] | None = None,
+) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
     tests_root: Path = cfg.tests_root
     loader: unittest.TestLoader = unittest.TestLoader()
     tests: unittest.TestSuite = loader.discover(str(tests_root))
@@ -277,7 +433,7 @@ def discover_tests_unittest(
                     details = get_test_details(test)
                     if details is not None:
                         file_to_test_map[str(details.test_file)].append(details)
-    return process_test_files(file_to_test_map, cfg)
+    return process_test_files(file_to_test_map, cfg, functions_to_optimize)
 
 
 def discover_parameters_unittest(function_name: str) -> tuple[bool, str, str | None]:
@@ -289,47 +445,50 @@ def discover_parameters_unittest(function_name: str) -> tuple[bool, str, str | N
 
 
 def process_test_files(
-    file_to_test_map: dict[Path, list[TestsInFile]], cfg: TestConfig
-) -> dict[str, list[FunctionCalledInTest]]:
+    file_to_test_map: dict[Path, list[TestsInFile]],
+    cfg: TestConfig,
+    functions_to_optimize: list[FunctionToOptimize] | None = None,
+) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
     import jedi
 
     project_root_path = cfg.project_root_path
     test_framework = cfg.test_framework
 
+    if functions_to_optimize:
+        target_function_names = set()
+        for func in functions_to_optimize:
+            target_function_names.add(func.qualified_name)
+        logger.debug(f"Target functions for import filtering: {target_function_names}")
+        file_to_test_map, import_results = filter_test_files_by_imports(file_to_test_map, target_function_names)
+        logger.debug(f"Import analysis results: {len(import_results)} files analyzed")
+
     function_to_test_map = defaultdict(set)
+    num_discovered_tests = 0
     jedi_project = jedi.Project(path=project_root_path)
-    goto_cache = {}
-    tests_cache = TestsCache()
 
     with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
         progress,
         task_id,
     ):
         for test_file, functions in file_to_test_map.items():
-            file_hash = TestsCache.compute_file_hash(test_file)
-            cached_tests = tests_cache.get_tests_for_file(str(test_file), file_hash)
-            if cached_tests:
-                self_cur = tests_cache.cur
-                self_cur.execute(
-                    "SELECT qualified_name_with_modules_from_root FROM discovered_tests WHERE file_path = ? AND file_hash = ?",
-                    (str(test_file), file_hash),
-                )
-                qualified_names = [row[0] for row in self_cur.fetchall()]
-                for cached, qualified_name in zip(cached_tests, qualified_names):
-                    function_to_test_map[qualified_name].add(cached)
-                progress.advance(task_id)
-                continue
-
             try:
                 script = jedi.Script(path=test_file, project=jedi_project)
                 test_functions = set()
 
-                all_names = script.get_names(all_scopes=True, references=True)
-                all_defs = script.get_names(all_scopes=True, definitions=True)
-                all_names_top = script.get_names(all_scopes=True)
+                # Single call to get all names with references and definitions
+                all_names = script.get_names(all_scopes=True, references=True, definitions=True)
 
-                top_level_functions = {name.name: name for name in all_names_top if name.type == "function"}
-                top_level_classes = {name.name: name for name in all_names_top if name.type == "class"}
+                # Filter once and create lookup dictionaries
+                top_level_functions = {}
+                top_level_classes = {}
+                all_defs = []
+
+                for name in all_names:
+                    if name.type == "function":
+                        top_level_functions[name.name] = name
+                        all_defs.append(name)
+                    elif name.type == "class":
+                        top_level_classes[name.name] = name
             except Exception as e:
                 logger.debug(f"Failed to get jedi script for {test_file}: {e}")
                 progress.advance(task_id)
@@ -394,31 +553,23 @@ def process_test_files(
                                         )
                                     )
 
-            test_functions_list = list(test_functions)
-            test_functions_raw = [elem.function_name for elem in test_functions_list]
-
             test_functions_by_name = defaultdict(list)
-            for i, func_name in enumerate(test_functions_raw):
-                test_functions_by_name[func_name].append(i)
+            for func in test_functions:
+                test_functions_by_name[func.function_name].append(func)
 
-            for name in all_names:
-                if name.full_name is None:
-                    continue
-                m = FUNCTION_NAME_REGEX.search(name.full_name)
-                if not m:
-                    continue
+            test_function_names_set = set(test_functions_by_name.keys())
+            relevant_names = []
 
-                scope = m.group(1)
-                if scope not in test_functions_by_name:
-                    continue
+            names_with_full_name = [name for name in all_names if name.full_name is not None]
 
-                cache_key = (name.full_name, name.module_name)
+            for name in names_with_full_name:
+                match = FUNCTION_NAME_REGEX.search(name.full_name)
+                if match and match.group(1) in test_function_names_set:
+                    relevant_names.append((name, match.group(1)))
+
+            for name, scope in relevant_names:
                 try:
-                    if cache_key in goto_cache:
-                        definition = goto_cache[cache_key]
-                    else:
-                        definition = name.goto(follow_imports=True, follow_builtin_imports=False)
-                        goto_cache[cache_key] = definition
+                    definition = name.goto(follow_imports=True, follow_builtin_imports=False)
                 except Exception as e:
                     logger.debug(str(e))
                     continue
@@ -426,54 +577,42 @@ def process_test_files(
                 if not definition or definition[0].type != "function":
                     continue
 
-                definition_path = str(definition[0].module_path)
+                definition_obj = definition[0]
+                definition_path = str(definition_obj.module_path)
+
+                project_root_str = str(project_root_path)
                 if (
-                    definition_path.startswith(str(project_root_path) + os.sep)
-                    and definition[0].module_name != name.module_name
-                    and definition[0].full_name is not None
+                    definition_path.startswith(project_root_str + os.sep)
+                    and definition_obj.module_name != name.module_name
+                    and definition_obj.full_name is not None
                 ):
-                    for index in test_functions_by_name[scope]:
-                        scope_test_function = test_functions_list[index].function_name
-                        scope_test_class = test_functions_list[index].test_class
-                        scope_parameters = test_functions_list[index].parameters
-                        test_type = test_functions_list[index].test_type
+                    # Pre-compute common values outside the inner loop
+                    module_prefix = definition_obj.module_name + "."
+                    full_name_without_module_prefix = definition_obj.full_name.replace(module_prefix, "", 1)
+                    qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition_obj.module_path, project_root_path)}.{full_name_without_module_prefix}"
 
-                        if scope_parameters is not None:
+                    for test_func in test_functions_by_name[scope]:
+                        if test_func.parameters is not None:
                             if test_framework == "pytest":
-                                scope_test_function += "[" + scope_parameters + "]"
-                            if test_framework == "unittest":
-                                scope_test_function += "_" + scope_parameters
-
-                        full_name_without_module_prefix = definition[0].full_name.replace(
-                            definition[0].module_name + ".", "", 1
-                        )
-                        qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition[0].module_path, project_root_path)}.{full_name_without_module_prefix}"
-
-                        tests_cache.insert_test(
-                            file_path=str(test_file),
-                            file_hash=file_hash,
-                            qualified_name_with_modules_from_root=qualified_name_with_modules_from_root,
-                            function_name=scope,
-                            test_class=scope_test_class,
-                            test_function=scope_test_function,
-                            test_type=test_type,
-                            line_number=name.line,
-                            col_number=name.column,
-                        )
+                                scope_test_function = f"{test_func.function_name}[{test_func.parameters}]"
+                            else:  # unittest
+                                scope_test_function = f"{test_func.function_name}_{test_func.parameters}"
+                        else:
+                            scope_test_function = test_func.function_name
 
                         function_to_test_map[qualified_name_with_modules_from_root].add(
                             FunctionCalledInTest(
                                 tests_in_file=TestsInFile(
                                     test_file=test_file,
-                                    test_class=scope_test_class,
+                                    test_class=test_func.test_class,
                                     test_function=scope_test_function,
-                                    test_type=test_type,
+                                    test_type=test_func.test_type,
                                 ),
                                 position=CodePosition(line_no=name.line, col_no=name.column),
                             )
                         )
+                        num_discovered_tests += 1
 
             progress.advance(task_id)
 
-    tests_cache.close()
-    return {function: list(tests) for function, tests in function_to_test_map.items()}
+    return dict(function_to_test_map), num_discovered_tests
