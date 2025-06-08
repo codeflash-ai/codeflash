@@ -4,7 +4,7 @@ import hashlib
 import os
 from collections import defaultdict
 from itertools import chain
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import libcst as cst
 
@@ -625,20 +625,24 @@ def prune_cst_for_code_hashing(  # noqa: PLR0911
         if not isinstance(node.body, cst.IndentedBlock):
             raise ValueError("ClassDef body is not an IndentedBlock")  # noqa: TRY004
         class_prefix = f"{prefix}.{node.name.value}" if prefix else node.name.value
-        new_body = []
+        new_class_body: list[cst.CSTNode] = []
         found_target = False
 
         for stmt in node.body.body:
             if isinstance(stmt, cst.FunctionDef):
                 qualified_name = f"{class_prefix}.{stmt.name.value}"
                 if qualified_name in target_functions:
-                    stmt_with_changes = stmt.with_changes(body=remove_docstring_from_body(stmt.body))
-                    new_body.append(stmt_with_changes)
+                    stmt_with_changes = stmt.with_changes(
+                        body=remove_docstring_from_body(cast("cst.IndentedBlock", stmt.body))
+                    )
+                    new_class_body.append(stmt_with_changes)
                     found_target = True
         # If no target functions found, remove the class entirely
-        if not new_body or not found_target:
+        if not new_class_body or not found_target:
             return None, False
-        return node.with_changes(body=cst.IndentedBlock(new_body)) if new_body else None, found_target
+        return node.with_changes(
+            body=cst.IndentedBlock(cast("list[cst.BaseStatement]", new_class_body))
+        ) if new_class_body else None, found_target
 
     # For other nodes, we preserve them only if they contain target functions in their children.
     section_names = get_section_names(node)

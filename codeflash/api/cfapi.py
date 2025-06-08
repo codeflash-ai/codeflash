@@ -196,7 +196,7 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
 
 def is_function_being_optimized_again(
     owner: str, repo: str, pr_number: int, code_contexts: list[dict[str, str]]
-) -> dict:
+) -> Any:  # noqa: ANN401
     """Check if the function being optimized is being optimized again."""
     response = make_cfapi_request(
         "/is-already-optimized",
