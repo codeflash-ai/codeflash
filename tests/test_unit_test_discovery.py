@@ -834,6 +834,96 @@ def test_something():
         assert should_process is False
 
 
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import *
+
+def test_target():
+    assert target_function() is True
+"""
+        test_file.group
+        test_file.write_text(test_content)
+        
+        target_functions = {"mymodule.target_function"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+        
+        assert should_process is True
+
+
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import *
+
+def test_target():
+    assert target_function_extended() is True
+"""
+        test_file.write_text(test_content)
+        
+        # Should not match - target_function != target_function_extended  
+        target_functions = {"mymodule.target_function"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+        
+        assert should_process is False
+
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import *
+
+def test_something():
+    x = 42
+    assert x == 42
+"""
+        test_file.write_text(test_content)
+        
+        target_functions = {"mymodule.target_function"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+        
+        assert should_process is False
+
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import *
+
+def test_something():
+    message = "calling target_function"
+    assert "target_function" in message
+"""
+        test_file.write_text(test_content)
+        
+        target_functions = {"mymodule.target_function"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+        
+        # String literals are ast.Constant nodes, not ast.Name nodes, so they don't match
+        assert should_process is False
+
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import target_function
+from othermodule import *
+
+def test_target():
+    assert target_function() is True
+    assert other_func() is True
+"""
+        test_file.write_text(test_content)
+        
+        target_functions = {"mymodule.target_function", "othermodule.other_func"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+        
+        assert should_process is True
+
+
+
+
 def test_analyze_imports_module_import():
     """Test module imports with function access patterns."""
     with tempfile.TemporaryDirectory() as tmpdirname:
