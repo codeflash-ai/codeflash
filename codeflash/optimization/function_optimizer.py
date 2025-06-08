@@ -53,6 +53,7 @@ from codeflash.code_utils.static_analysis import get_first_top_level_function_or
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
+from codeflash.discovery.functions_to_optimize import check_optimization_status
 from codeflash.either import Failure, Success, is_successful
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
@@ -151,8 +152,11 @@ class FunctionOptimizer:
             with helper_function_path.open(encoding="utf8") as f:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
+
         if has_any_async_functions(code_context.read_writable_code):
             return Failure("Codeflash does not support async functions in the code to optimize.")
+        if check_optimization_status(self.function_to_optimize, code_context):
+            return Failure("This function has already been optimized, skipping.")
 
         code_print(code_context.read_writable_code)
         generated_test_paths = [
