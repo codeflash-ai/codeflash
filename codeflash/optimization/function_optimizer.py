@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import git
 import concurrent.futures
 import os
 import subprocess
@@ -52,8 +51,6 @@ from codeflash.code_utils.instrument_existing_tests import inject_profiling_into
 from codeflash.code_utils.line_profile_utils import add_decorator_imports
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.code_utils.env_utils import get_pr_number
-from codeflash.code_utils.git_utils import get_repo_owner_and_name
 from codeflash.context import code_context_extractor
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.either import Failure, Success, is_successful
@@ -265,7 +262,7 @@ class FunctionOptimizer:
         # adding to control and experiment set but with same traceid
         best_optimization = None
         for _u, (candidates, exp_type) in enumerate(
-            zip([optimizations_set.control, optimizations_set.experiment], ["EXP0", "EXP1"])
+            zip([optimizations_set.control, optimizations_set.experiment], ["EXP0", "EXP1"], strict=False)
         ):
             if candidates is None:
                 continue
@@ -687,6 +684,7 @@ class FunctionOptimizer:
                 testgen_context_code=new_code_ctx.testgen_context_code,
                 read_writable_code=new_code_ctx.read_writable_code,
                 read_only_context_code=new_code_ctx.read_only_context_code,
+                hashing_code_context=new_code_ctx.hashing_code_context,
                 helper_functions=new_code_ctx.helper_functions,  # only functions that are read writable
                 preexisting_objects=new_code_ctx.preexisting_objects,
             )
@@ -1283,7 +1281,7 @@ class FunctionOptimizer:
                 test_perf_path,
             )
             for test_index, (test_path, test_perf_path) in enumerate(
-                zip(generated_test_paths, generated_perf_test_paths)
+                zip(generated_test_paths, generated_perf_test_paths, strict=False)
             )
         ]
 

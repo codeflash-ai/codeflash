@@ -16,7 +16,7 @@ from collections.abc import Collection
 from enum import Enum, IntEnum
 from pathlib import Path
 from re import Pattern
-from typing import Annotated, Optional, cast
+from typing import Annotated, cast
 
 from jedi.api.classes import Name
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
@@ -77,10 +77,10 @@ class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
     helper_functions: list[FunctionSource]
     runtime: int
-    replay_performance_gain: Optional[dict[BenchmarkKey, float]] = None
+    replay_performance_gain: dict[BenchmarkKey, float] | None = None
     winning_behavioral_test_results: TestResults
     winning_benchmarking_test_results: TestResults
-    winning_replay_benchmarking_test_results: Optional[TestResults] = None
+    winning_replay_benchmarking_test_results: TestResults | None = None
 
 
 @dataclass(frozen=True)
@@ -136,7 +136,7 @@ class ProcessedBenchmarkInfo:
 
 class CodeString(BaseModel):
     code: Annotated[str, AfterValidator(validate_python_code)]
-    file_path: Optional[Path] = None
+    file_path: Path | None = None
 
 
 class CodeStringsMarkdown(BaseModel):
@@ -157,6 +157,7 @@ class CodeOptimizationContext(BaseModel):
     testgen_context_code: str = ""
     read_writable_code: str = Field(min_length=1)
     read_only_context_code: str = ""
+    hashing_code_context: str = ""
     helper_functions: list[FunctionSource]
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]]
 
@@ -165,6 +166,7 @@ class CodeContextType(str, Enum):
     READ_WRITABLE = "READ_WRITABLE"
     READ_ONLY = "READ_ONLY"
     TESTGEN = "TESTGEN"
+    HASHING = "HASHING"
 
 
 class OptimizedCandidateResult(BaseModel):
@@ -172,7 +174,7 @@ class OptimizedCandidateResult(BaseModel):
     best_test_runtime: int
     behavior_test_results: TestResults
     benchmarking_test_results: TestResults
-    replay_benchmarking_test_results: Optional[dict[BenchmarkKey, TestResults]] = None
+    replay_benchmarking_test_results: dict[BenchmarkKey, TestResults] | None = None
     optimization_candidate_index: int
     total_candidate_timing: int
 
@@ -192,10 +194,10 @@ class GeneratedTestsList(BaseModel):
 class TestFile(BaseModel):
     instrumented_behavior_file_path: Path
     benchmarking_file_path: Path = None
-    original_file_path: Optional[Path] = None
-    original_source: Optional[str] = None
+    original_file_path: Path | None = None
+    original_source: str | None = None
     test_type: TestType
-    tests_in_file: Optional[list[TestsInFile]] = None
+    tests_in_file: list[TestsInFile] | None = None
 
 
 class TestFiles(BaseModel):
@@ -238,13 +240,13 @@ class TestFiles(BaseModel):
 
 class OptimizationSet(BaseModel):
     control: list[OptimizedCandidate]
-    experiment: Optional[list[OptimizedCandidate]]
+    experiment: list[OptimizedCandidate] | None
 
 
 @dataclass(frozen=True)
 class TestsInFile:
     test_file: Path
-    test_class: Optional[str]
+    test_class: str | None
     test_function: str
     test_type: TestType
 
@@ -277,10 +279,10 @@ class FunctionParent:
 class OriginalCodeBaseline(BaseModel):
     behavioral_test_results: TestResults
     benchmarking_test_results: TestResults
-    replay_benchmarking_test_results: Optional[dict[BenchmarkKey, TestResults]] = None
+    replay_benchmarking_test_results: dict[BenchmarkKey, TestResults] | None = None
     line_profile_results: dict
     runtime: int
-    coverage_results: Optional[CoverageData]
+    coverage_results: CoverageData | None
 
 
 class CoverageStatus(Enum):
@@ -299,7 +301,7 @@ class CoverageData:
     graph: dict[str, dict[str, Collection[object]]]
     code_context: CodeOptimizationContext
     main_func_coverage: FunctionCoverage
-    dependent_func_coverage: Optional[FunctionCoverage]
+    dependent_func_coverage: FunctionCoverage | None
     status: CoverageStatus
     blank_re: Pattern[str] = re.compile(r"\s*(#|$)")
     else_re: Pattern[str] = re.compile(r"\s*else\s*:\s*(#|$)")
@@ -407,10 +409,10 @@ class TestType(Enum):
 @dataclass(frozen=True)
 class InvocationId:
     test_module_path: str  # The fully qualified name of the test module
-    test_class_name: Optional[str]  # The name of the class where the test is defined
-    test_function_name: Optional[str]  # The name of the test_function. Does not include the components of the file_name
+    test_class_name: str | None  # The name of the class where the test is defined
+    test_function_name: str | None  # The name of the test_function. Does not include the components of the file_name
     function_getting_tested: str
-    iteration_id: Optional[str]
+    iteration_id: str | None
 
     # test_module_path:TestSuiteClass.test_function_name:function_tested:iteration_id
     def id(self) -> str:
@@ -421,7 +423,7 @@ class InvocationId:
         )
 
     @staticmethod
-    def from_str_id(string_id: str, iteration_id: Optional[str] = None) -> InvocationId:
+    def from_str_id(string_id: str, iteration_id: str | None = None) -> InvocationId:
         components = string_id.split(":")
         assert len(components) == 4
         second_components = components[1].split(".")
@@ -446,13 +448,13 @@ class FunctionTestInvocation:
     id: InvocationId  # The fully qualified name of the function invocation (id)
     file_name: Path  # The file where the test is defined
     did_pass: bool  # Whether the test this function invocation was part of, passed or failed
-    runtime: Optional[int]  # Time in nanoseconds
+    runtime: int | None  # Time in nanoseconds
     test_framework: str  # unittest or pytest
     test_type: TestType
-    return_value: Optional[object]  # The return value of the function invocation
-    timed_out: Optional[bool]
-    verification_type: Optional[str] = VerificationType.FUNCTION_CALL
-    stdout: Optional[str] = None
+    return_value: object | None  # The return value of the function invocation
+    timed_out: bool | None
+    verification_type: str | None = VerificationType.FUNCTION_CALL
+    stdout: str | None = None
 
     @property
     def unique_invocation_loop_id(self) -> str:
