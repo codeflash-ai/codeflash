@@ -613,7 +613,7 @@ def prune_cst_for_code_hashing(  # noqa: PLR0911
     if isinstance(node, cst.FunctionDef):
         qualified_name = f"{prefix}.{node.name.value}" if prefix else node.name.value
         if qualified_name in target_functions:
-            new_body = remove_docstring_from_body(node.body)
+            new_body = remove_docstring_from_body(node.body) if isinstance(node.body, cst.IndentedBlock) else node.body
             return node.with_changes(body=new_body), True
         return None, False
 
@@ -632,14 +632,13 @@ def prune_cst_for_code_hashing(  # noqa: PLR0911
             if isinstance(stmt, cst.FunctionDef):
                 qualified_name = f"{class_prefix}.{stmt.name.value}"
                 if qualified_name in target_functions:
-                    new_body.append(stmt)
+                    stmt_with_changes = stmt.with_changes(body=remove_docstring_from_body(stmt.body))
+                    new_body.append(stmt_with_changes)
                     found_target = True
         # If no target functions found, remove the class entirely
         if not new_body or not found_target:
             return None, False
-        return node.with_changes(
-            body=remove_docstring_from_body(node.body.with_changes(body=new_body))
-        ) if new_body else None, True
+        return node.with_changes(body=cst.IndentedBlock(new_body)) if new_body else None, found_target
 
     # For other nodes, we preserve them only if they contain target functions in their children.
     section_names = get_section_names(node)
