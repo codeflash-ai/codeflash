@@ -169,7 +169,7 @@ class FunctionOptimizer:
             random.random() > REPEAT_OPTIMIZATION_PROBABILITY  # noqa: S311
             and check_optimization_status(self.function_to_optimize, code_context)
         ):
-            return Failure("This function has previously been optimized, skipping.")
+            return Failure("Function optimization previously attempted, skipping.")
 
         code_print(code_context.read_writable_code)
         generated_test_paths = [
