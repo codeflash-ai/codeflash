@@ -48,6 +48,7 @@ from codeflash.code_utils.edit_generated_tests import (
     add_runtime_comments_to_generated_tests,
     remove_functions_from_generated_tests,
 )
+from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports
@@ -188,6 +189,7 @@ class FunctionOptimizer:
         with progress_bar(
             f"Generating new tests and optimizations for function {self.function_to_optimize.function_name}",
             transient=True,
+            revert_to_print=bool(get_pr_number()),
         ):
             generated_results = self.generate_tests_and_optimizations(
                 testgen_context_code=code_context.testgen_context_code,

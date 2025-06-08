@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
+from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.either import is_successful
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
@@ -110,7 +111,11 @@ class Optimizer:
             from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
             from codeflash.benchmarking.utils import print_benchmark_table, validate_and_format_benchmark_table
 
-            with progress_bar(f"Running benchmarks in {self.args.benchmarks_root}", transient=True):
+            with progress_bar(
+                f"Running benchmarks in {self.args.benchmarks_root}",
+                transient=True,
+                revert_to_print=bool(get_pr_number()),
+            ):
                 # Insert decorator
                 file_path_to_source_code = defaultdict(str)
                 for file in file_to_funcs_to_optimize:
