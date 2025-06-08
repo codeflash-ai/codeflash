@@ -2139,9 +2139,6 @@ except ImportError:
         assert read_only_context.strip() == expected_read_only_context.strip()
 
 
-from __future__ import annotations
-
-
 def test_hashing_code_context_removes_imports_docstrings_and_init() -> None:
     """Test that hashing context removes imports, docstrings, and __init__ methods properly."""
     code = '''
