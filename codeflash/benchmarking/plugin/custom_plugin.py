@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Callable, Protocol
 
 import pytest
 
 
-class CodeFlashBenchmarkDummyPlugin:
+class GroupProtocol(Protocol):
+    """A protocol for objects with a 'name' attribute."""
+
+    name: str
+
+
+class CodeFlashBenchmarkCustomPlugin:
     @staticmethod
     def pytest_plugin_registered(plugin, manager) -> None:  # noqa: ANN001
         # Not necessary since run with -p no:benchmark, but just in case
@@ -21,27 +27,29 @@ class CodeFlashBenchmarkDummyPlugin:
         )
 
     # Benchmark fixture
-    class DummyBenchmark:
-        """A dummy benchmark object that mimics pytest-benchmark's interface."""
+    class CustomBenchmark:
+        """A custom benchmark object that mimics pytest-benchmark's interface."""
 
         def __init__(self) -> None:
             self.stats = {}
 
-        def __call__(self, func: Callable, *args: tuple[Any, ...], **kwargs: dict) -> Any:
+        def __call__(self, func: Callable, *args, **kwargs):  # type: ignore  # noqa: ANN002, ANN003, ANN204, PGH003
             """Call the function and return its result without benchmarking."""
             return func(*args, **kwargs)
 
-        def pedantic(
+        def pedantic(  # noqa: ANN201
             self,
-            target: Callable,
-            args: tuple = (),
-            kwargs: dict = None,
-            iterations: int = 1,
-            rounds: int = 1,
-            warmup_rounds: int = 0,
-            setup: Callable = None,
-        ) -> Any:
+            target,  # noqa: ANN001
+            args,  # noqa: ANN001
+            kwargs,  # noqa: ANN001
+            iterations: int = 1,  # noqa: ARG002
+            rounds: int = 1,  # noqa: ARG002
+            warmup_rounds: int = 0,  # noqa: ARG002
+            setup=None,  # noqa: ANN001
+        ):
             """Mimics the pedantic method of pytest-benchmark."""
+            if kwargs is None:
+                kwargs = {}
             if setup:
                 setup()
             if kwargs is None:
@@ -49,27 +57,27 @@ class CodeFlashBenchmarkDummyPlugin:
             return target(*args, **kwargs)
 
         @property
-        def group(self):
-            """Return a dummy group object."""
-            return type("Group", (), {"name": "dummy"})()
+        def group(self) -> GroupProtocol:
+            """Return a custom group object."""
+            return type("Group", (), {"name": "custom"})()
 
         @property
-        def name(self):
-            """Return a dummy name."""
-            return "dummy_benchmark"
+        def name(self) -> str:
+            """Return a custom name."""
+            return "custom_benchmark"
 
         @property
-        def fullname(self):
-            """Return a dummy fullname."""
-            return "dummy::benchmark"
+        def fullname(self) -> str:
+            """Return a custom fullname."""
+            return "custom::benchmark"
 
         @property
-        def params(self):
+        def params(self) -> dict:
             """Return empty params."""
             return {}
 
         @property
-        def extra_info(self):
+        def extra_info(self) -> dict:
             """Return empty extra info."""
             return {}
 
@@ -82,7 +90,7 @@ class CodeFlashBenchmarkDummyPlugin:
                 return request.getfixturevalue("benchmark")
             except (pytest.FixtureLookupError, AttributeError):
                 pass
-        return CodeFlashBenchmarkDummyPlugin.DummyBenchmark(request)
+        return CodeFlashBenchmarkCustomPlugin.CustomBenchmark(request)
 
 
-codeflash_benchmark_plugin = CodeFlashBenchmarkDummyPlugin()
+codeflash_benchmark_plugin = CodeFlashBenchmarkCustomPlugin()
