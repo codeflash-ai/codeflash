@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import os
 from collections import defaultdict
 from itertools import chain
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import libcst as cst
 
@@ -31,8 +32,8 @@ if TYPE_CHECKING:
 def get_code_optimization_context(
     function_to_optimize: FunctionToOptimize,
     project_root_path: Path,
-    optim_token_limit: int = 8000,
-    testgen_token_limit: int = 8000,
+    optim_token_limit: int = 16000,
+    testgen_token_limit: int = 16000,
 ) -> CodeOptimizationContext:
     # Get FunctionSource representation of helpers of FTO
     helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(
@@ -72,6 +73,13 @@ def get_code_optimization_context(
         project_root_path,
         remove_docstrings=False,
         code_context_type=CodeContextType.READ_ONLY,
+    )
+    hashing_code_context = extract_code_markdown_context_from_files(
+        helpers_of_fto_dict,
+        helpers_of_helpers_dict,
+        project_root_path,
+        remove_docstrings=True,
+        code_context_type=CodeContextType.HASHING,
     )
 
     # Handle token limits
@@ -125,11 +133,15 @@ def get_code_optimization_context(
         testgen_context_code_tokens = encoded_tokens_len(testgen_context_code)
         if testgen_context_code_tokens > testgen_token_limit:
             raise ValueError("Testgen code context has exceeded token limit, cannot proceed")
+    code_hash_context = hashing_code_context.markdown
+    code_hash = hashlib.sha256(code_hash_context.encode("utf-8")).hexdigest()
 
     return CodeOptimizationContext(
         testgen_context_code=testgen_context_code,
         read_writable_code=final_read_writable_code,
         read_only_context_code=read_only_context_code,
+        hashing_code_context=code_hash_context,
+        hashing_code_context_hash=code_hash,
         helper_functions=helpers_of_fto_list,
         preexisting_objects=preexisting_objects,
     )
@@ -309,8 +321,8 @@ def extract_code_markdown_context_from_files(
             logger.debug(f"Error while getting read-only code: {e}")
             continue
         if code_context.strip():
-            code_context_with_imports = CodeString(
-                code=add_needed_imports_from_module(
+            if code_context_type != CodeContextType.HASHING:
+                code_context = add_needed_imports_from_module(
                     src_module_code=original_code,
                     dst_module_code=code_context,
                     src_path=file_path,
@@ -319,10 +331,9 @@ def extract_code_markdown_context_from_files(
                     helper_functions=list(
                         helpers_of_fto.get(file_path, set()) | helpers_of_helpers.get(file_path, set())
                     ),
-                ),
-                file_path=file_path.relative_to(project_root_path),
-            )
-            code_context_markdown.code_strings.append(code_context_with_imports)
+                )
+            code_string_context = CodeString(code=code_context, file_path=file_path.relative_to(project_root_path))
+            code_context_markdown.code_strings.append(code_string_context)
     # Extract code from file paths containing helpers of helpers
     for file_path, helper_function_sources in helpers_of_helpers_no_overlap.items():
         try:
@@ -343,18 +354,17 @@ def extract_code_markdown_context_from_files(
             continue
 
         if code_context.strip():
-            code_context_with_imports = CodeString(
-                code=add_needed_imports_from_module(
+            if code_context_type != CodeContextType.HASHING:
+                code_context = add_needed_imports_from_module(
                     src_module_code=original_code,
                     dst_module_code=code_context,
                     src_path=file_path,
                     dst_path=file_path,
                     project_root=project_root_path,
                     helper_functions=list(helpers_of_helpers_no_overlap.get(file_path, set())),
-                ),
-                file_path=file_path.relative_to(project_root_path),
-            )
-            code_context_markdown.code_strings.append(code_context_with_imports)
+                )
+            code_string_context = CodeString(code=code_context, file_path=file_path.relative_to(project_root_path))
+            code_context_markdown.code_strings.append(code_string_context)
     return code_context_markdown
 
 
@@ -492,6 +502,8 @@ def parse_code_and_prune_cst(
         filtered_node, found_target = prune_cst_for_testgen_code(
             module, target_functions, helpers_of_helper_functions, remove_docstrings=remove_docstrings
         )
+    elif code_context_type == CodeContextType.HASHING:
+        filtered_node, found_target = prune_cst_for_code_hashing(module, target_functions)
     else:
         raise ValueError(f"Unknown code_context_type: {code_context_type}")  # noqa: EM102
 
@@ -572,6 +584,90 @@ def prune_cst_for_read_writable_code(  # noqa: PLR0911
                 updates[section] = new_children
         elif original_content is not None:
             filtered, found_target = prune_cst_for_read_writable_code(original_content, target_functions, prefix)
+            if found_target:
+                found_any_target = True
+                if filtered:
+                    updates[section] = filtered
+
+    if not found_any_target:
+        return None, False
+
+    return (node.with_changes(**updates) if updates else node), True
+
+
+def prune_cst_for_code_hashing(  # noqa: PLR0911
+    node: cst.CSTNode, target_functions: set[str], prefix: str = ""
+) -> tuple[cst.CSTNode | None, bool]:
+    """Recursively filter the node and its children to build the read-writable codeblock. This contains nodes that lead to target functions.
+
+    Returns
+    -------
+        (filtered_node, found_target):
+          filtered_node: The modified CST node or None if it should be removed.
+          found_target: True if a target function was found in this node's subtree.
+
+    """
+    if isinstance(node, (cst.Import, cst.ImportFrom)):
+        return None, False
+
+    if isinstance(node, cst.FunctionDef):
+        qualified_name = f"{prefix}.{node.name.value}" if prefix else node.name.value
+        if qualified_name in target_functions:
+            new_body = remove_docstring_from_body(node.body) if isinstance(node.body, cst.IndentedBlock) else node.body
+            return node.with_changes(body=new_body), True
+        return None, False
+
+    if isinstance(node, cst.ClassDef):
+        # Do not recurse into nested classes
+        if prefix:
+            return None, False
+        # Assuming always an IndentedBlock
+        if not isinstance(node.body, cst.IndentedBlock):
+            raise ValueError("ClassDef body is not an IndentedBlock")  # noqa: TRY004
+        class_prefix = f"{prefix}.{node.name.value}" if prefix else node.name.value
+        new_class_body: list[cst.CSTNode] = []
+        found_target = False
+
+        for stmt in node.body.body:
+            if isinstance(stmt, cst.FunctionDef):
+                qualified_name = f"{class_prefix}.{stmt.name.value}"
+                if qualified_name in target_functions:
+                    stmt_with_changes = stmt.with_changes(
+                        body=remove_docstring_from_body(cast("cst.IndentedBlock", stmt.body))
+                    )
+                    new_class_body.append(stmt_with_changes)
+                    found_target = True
+        # If no target functions found, remove the class entirely
+        if not new_class_body or not found_target:
+            return None, False
+        return node.with_changes(
+            body=cst.IndentedBlock(cast("list[cst.BaseStatement]", new_class_body))
+        ) if new_class_body else None, found_target
+
+    # For other nodes, we preserve them only if they contain target functions in their children.
+    section_names = get_section_names(node)
+    if not section_names:
+        return node, False
+
+    updates: dict[str, list[cst.CSTNode] | cst.CSTNode] = {}
+    found_any_target = False
+
+    for section in section_names:
+        original_content = getattr(node, section, None)
+        if isinstance(original_content, (list, tuple)):
+            new_children = []
+            section_found_target = False
+            for child in original_content:
+                filtered, found_target = prune_cst_for_code_hashing(child, target_functions, prefix)
+                if filtered:
+                    new_children.append(filtered)
+                section_found_target |= found_target
+
+            if section_found_target:
+                found_any_target = True
+                updates[section] = new_children
+        elif original_content is not None:
+            filtered, found_target = prune_cst_for_code_hashing(original_content, target_functions, prefix)
             if found_target:
                 found_any_target = True
                 if filtered:
