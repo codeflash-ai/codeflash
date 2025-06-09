@@ -107,7 +107,7 @@ class AiServiceClient:
             "python_version": platform.python_version(),
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
-            "current_username" : get_last_commit_author_if_pr_exists(None),
+            "current_username": get_last_commit_author_if_pr_exists(None),
             "repo_owner": git_repo_owner,
             "repo_name": git_repo_name,
         }

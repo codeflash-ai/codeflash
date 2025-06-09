@@ -390,8 +390,7 @@ class FunctionOptimizer:
                 else:
                     # Mark optimization success since no PR will be created
                     mark_optimization_success(
-                        trace_id=self.function_trace_id,
-                        is_optimization_found=best_optimization is not None
+                        trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
                     )
                 self.log_successful_optimization(explanation, generated_tests, exp_type)
 
