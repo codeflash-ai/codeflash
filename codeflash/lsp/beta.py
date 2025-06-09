@@ -40,6 +40,29 @@ def get_optimizable_functions(
     return path_to_qualified_names
 
 
+@server.feature("optimizeFunction")
+def optimize_function(server: CodeflashLanguageServer, params: OptimizeFunctionParams) -> dict[str, str]:
+    file_path = Path(uris.to_fs_path(params.textDocument.uri))
+    server.optimizer.args.function = params.functionName
+    server.optimizer.args.file = file_path
+    optimizable_funcs, _ = server.optimizer.get_optimizable_functions()
+    if not optimizable_funcs:
+        return {"functionName": params.functionName, "status": "not found", "args": None}
+    fto = optimizable_funcs.popitem()[1][0]
+    server.optimizer.current_function_being_optimized = fto
+    return {"functionName": params.functionName, "status": "success", "info": fto.server_info}
+
+
+@server.feature("second_step_in_optimize_function")
+def second_step_in_optimize_function(server: CodeflashLanguageServer, params: OptimizeFunctionParams) -> dict[str, str]:  # noqa: ARG001
+    return {
+        "functionName": params.functionName,
+        "status": "success",
+        "generated_tests": "5",
+        "generated_optimizations": "3",
+    }
+
+
 if __name__ == "__main__":
     from codeflash.cli_cmds.console import console
 
