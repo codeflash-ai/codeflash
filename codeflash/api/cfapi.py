@@ -224,3 +224,18 @@ def add_code_context_hash(code_context_hash: str) -> None:
             "POST",
             {"owner": owner, "repo": repo, "pr_number": pr_number, "code_hash": code_context_hash},
         )
+
+def mark_optimization_success(trace_id: str, is_optimization_found: bool) -> Response:
+    """Mark an optimization event as success or not.
+
+    :param trace_id: The unique identifier for the optimization event.
+    :param is_optimization_found: Boolean indicating whether the optimization was found.
+    :return: The response object from the API.
+    """
+    payload = {
+        "trace_id": trace_id,
+        "is_optimization_found": is_optimization_found,
+    }
+    return make_cfapi_request(
+        endpoint="/mark-as-success", method="POST", payload=payload
+    )
