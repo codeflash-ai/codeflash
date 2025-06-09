@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import tempfile
 from argparse import Namespace
 from collections import defaultdict
@@ -618,7 +619,7 @@ class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
             return func(*args, **kwargs)
         result_pair = self.get(key=key)
         if result_pair is not None:
-            cached_time, result = result_pair
+            {"cached_time, result = result_pair" if sys.version_info >= (3, 11) else "(cached_time, result) = result_pair"}
             if not os.environ.get('RE_CACHE') and datetime.datetime.now() < cached_time + lifespan:
                 try:
                     return self.decode(data=result)
