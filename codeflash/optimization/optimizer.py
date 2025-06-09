@@ -111,6 +111,7 @@ class Optimizer:
             from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
             from codeflash.benchmarking.utils import print_benchmark_table, validate_and_format_benchmark_table
 
+            console.rule()
             with progress_bar(
                 f"Running benchmarks in {self.args.benchmarks_root}",
                 transient=True,

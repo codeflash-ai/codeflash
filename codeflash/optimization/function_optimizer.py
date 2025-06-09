@@ -56,7 +56,7 @@ from codeflash.code_utils.static_analysis import get_first_top_level_function_or
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
-from codeflash.discovery.functions_to_optimize import check_optimization_status
+from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
@@ -166,9 +166,8 @@ class FunctionOptimizer:
         # Random here means that we still attempt optimization with a fractional chance to see if
         # last time we could not find an optimization, maybe this time we do.
         # Random is before as a performance optimization, swapping the two 'and' statements has the same effect
-        if (
-            random.random() > REPEAT_OPTIMIZATION_PROBABILITY  # noqa: S311
-            and check_optimization_status(self.function_to_optimize, code_context)
+        if random.random() > REPEAT_OPTIMIZATION_PROBABILITY and was_function_previously_optimized(  # noqa: S311
+            self.function_to_optimize, code_context
         ):
             return Failure("Function optimization previously attempted, skipping.")
 

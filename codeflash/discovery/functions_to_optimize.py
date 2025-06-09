@@ -419,7 +419,9 @@ def inspect_top_level_functions_or_methods(
     )
 
 
-def check_optimization_status(function_to_optimize: FunctionToOptimize, code_context: CodeOptimizationContext) -> bool:
+def was_function_previously_optimized(
+    function_to_optimize: FunctionToOptimize, code_context: CodeOptimizationContext
+) -> bool:
     """Check which functions have already been optimized and filter them out.
 
     This function calls the optimization API to:
