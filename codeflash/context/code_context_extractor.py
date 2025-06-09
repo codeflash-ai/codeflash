@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import os
 from collections import defaultdict
@@ -510,7 +511,10 @@ def parse_code_and_prune_cst(
     if not found_target:
         raise ValueError("No target functions found in the provided code")
     if filtered_node and isinstance(filtered_node, cst.Module):
-        return str(filtered_node.code)
+        code = str(filtered_node.code)
+        if code_context_type == CodeContextType.HASHING:
+            code = ast.unparse(ast.parse(code))  # Makes it standard
+        return code
     return ""
 
 
