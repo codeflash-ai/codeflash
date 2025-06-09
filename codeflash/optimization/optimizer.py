@@ -9,30 +9,21 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
-from codeflash.benchmarking.instrument_codeflash_trace import instrument_codeflash_trace_decorator
-from codeflash.benchmarking.plugin.plugin import CodeFlashBenchmarkPlugin
-from codeflash.benchmarking.replay_test import generate_replay_test
-from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
-from codeflash.benchmarking.utils import print_benchmark_table, validate_and_format_benchmark_table
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
-from codeflash.code_utils.code_replacer import normalize_code, normalize_node
-from codeflash.code_utils.code_utils import cleanup_paths
-from codeflash.code_utils.static_analysis import analyze_imported_modules, get_first_top_level_function_or_method_ast
-from codeflash.discovery.discover_unit_tests import discover_unit_tests
-from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
+from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.either import is_successful
 from codeflash.models.models import ValidCode
-from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
 
 if TYPE_CHECKING:
     from argparse import Namespace
 
+    from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.models import BenchmarkKey, FunctionCalledInTest
+    from codeflash.optimization.function_optimizer import FunctionOptimizer
 
 
 class Optimizer:
@@ -58,11 +49,13 @@ class Optimizer:
         self,
         function_to_optimize: FunctionToOptimize,
         function_to_optimize_ast: ast.FunctionDef | None = None,
-        function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
+        function_to_tests: dict[str, set[FunctionCalledInTest]] | None = None,
         function_to_optimize_source_code: str | None = "",
         function_benchmark_timings: dict[str, dict[BenchmarkKey, float]] | None = None,
         total_benchmark_timings: dict[BenchmarkKey, float] | None = None,
     ) -> FunctionOptimizer:
+        from codeflash.optimization.function_optimizer import FunctionOptimizer
+
         return FunctionOptimizer(
             function_to_optimize=function_to_optimize,
             test_cfg=self.test_cfg,
@@ -77,6 +70,16 @@ class Optimizer:
         )
 
     def run(self) -> None:
+        from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
+        from codeflash.code_utils.code_replacer import normalize_code, normalize_node
+        from codeflash.code_utils.code_utils import cleanup_paths
+        from codeflash.code_utils.static_analysis import (
+            analyze_imported_modules,
+            get_first_top_level_function_or_method_ast,
+        )
+        from codeflash.discovery.discover_unit_tests import discover_unit_tests
+        from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
+
         ph("cli-optimize-run-start")
         logger.info("Running optimizer.")
         console.rule()
@@ -102,7 +105,18 @@ class Optimizer:
         function_benchmark_timings: dict[str, dict[BenchmarkKey, int]] = {}
         total_benchmark_timings: dict[BenchmarkKey, int] = {}
         if self.args.benchmark and num_optimizable_functions > 0:
-            with progress_bar(f"Running benchmarks in {self.args.benchmarks_root}", transient=True):
+            from codeflash.benchmarking.instrument_codeflash_trace import instrument_codeflash_trace_decorator
+            from codeflash.benchmarking.plugin.plugin import CodeFlashBenchmarkPlugin
+            from codeflash.benchmarking.replay_test import generate_replay_test
+            from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
+            from codeflash.benchmarking.utils import print_benchmark_table, validate_and_format_benchmark_table
+
+            console.rule()
+            with progress_bar(
+                f"Running benchmarks in {self.args.benchmarks_root}",
+                transient=True,
+                revert_to_print=bool(get_pr_number()),
+            ):
                 # Insert decorator
                 file_path_to_source_code = defaultdict(str)
                 for file in file_to_funcs_to_optimize:
@@ -154,8 +168,9 @@ class Optimizer:
 
             console.rule()
             start_time = time.time()
-            function_to_tests: dict[str, list[FunctionCalledInTest]] = discover_unit_tests(self.test_cfg)
-            num_discovered_tests: int = sum([len(value) for value in function_to_tests.values()])
+            function_to_tests, num_discovered_tests = discover_unit_tests(
+                self.test_cfg, file_to_funcs_to_optimize=file_to_funcs_to_optimize
+            )
             console.rule()
             logger.info(
                 f"Discovered {num_discovered_tests} existing unit tests in {(time.time() - start_time):.1f}s at {self.test_cfg.tests_root}"

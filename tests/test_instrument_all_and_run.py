@@ -25,7 +25,8 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")
+    test_stdout_tag = f"{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}"
+    print(f"!$######{{test_stdout_tag}}######$!")
     exception = None
     gc.disable()
     try:
@@ -36,6 +37,7 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
         codeflash_duration = time.perf_counter_ns() - counter
         exception = e
     gc.enable()
+    print(f"!######{{test_stdout_tag}}######!")
     pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
     codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
     codeflash_con.commit()
@@ -170,9 +172,8 @@ def test_sort():
 
         out_str = """codeflash stdout: Sorting list
 result: [0, 1, 2, 3, 4, 5]
-
-codeflash stdout: Sorting list
-result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
+"""
+        assert test_results[0].stdout == out_str
         assert out_str == test_results[0].stdout
         assert test_results[0].id.function_getting_tested == "sorter"
         assert test_results[0].id.iteration_id == "1_0"
@@ -185,7 +186,10 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
         assert test_results[0].runtime > 0
         assert test_results[0].did_pass
         assert test_results[0].return_value == ([0, 1, 2, 3, 4, 5],)
-        assert out_str == test_results[1].stdout.strip()
+        out_str = """codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+"""
+        assert out_str == test_results[1].stdout
 
         assert test_results[1].id.function_getting_tested == "sorter"
         assert test_results[1].id.iteration_id == "4_0"
@@ -197,6 +201,10 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
+        out_str = """codeflash stdout: Sorting list
+result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+"""
+        assert test_results[1].stdout == out_str
         results2, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
@@ -208,10 +216,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
         )
         out_str = """codeflash stdout: Sorting list
 result: [0, 1, 2, 3, 4, 5]
-
-codeflash stdout: Sorting list
-result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
-        assert out_str == results2[0].stdout.strip()
+"""
+        assert out_str == results2[0].stdout
         assert compare_test_results(test_results, results2)
     finally:
         fto_path.write_text(original_code, "utf-8")
@@ -234,7 +240,8 @@ def test_sort():
     output = sort_class.sorter(input)
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
 
-    expected = """import gc
+    expected = (
+        """import gc
 import os
 import sqlite3
 import time
@@ -244,40 +251,9 @@ import dill as pickle
 from code_to_optimize.bubble_sort_method import BubbleSorter
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    """
-    if sys.version_info < (3, 12):
-        expected += """print(f"!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!")"""
-    else:
-        expected += """print(f'!######{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}######!')"""
-    expected += """
-    exception = None
-    gc.disable()
-    try:
-        counter = time.perf_counter_ns()
-        return_value = wrapped(*args, **kwargs)
-        codeflash_duration = time.perf_counter_ns() - counter
-    except Exception as e:
-        codeflash_duration = time.perf_counter_ns() - counter
-        exception = e
-    gc.enable()
-    pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
-    codeflash_con.commit()
-    if exception:
-        raise exception
-    return return_value
 """
-    expected += """
+        + codeflash_wrap_string
+        + """
 def test_sort():
     codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
     codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
@@ -294,6 +270,7 @@ def test_sort():
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()
 """
+    )
     fto_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort_method.py").resolve()
     original_code = fto_path.read_text("utf-8")
     fto = FunctionToOptimize(
@@ -379,7 +356,7 @@ def test_sort():
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
         assert test_results[1].return_value == ([0, 1, 2, 3, 4, 5],)
-        out_str = """codeflash stdout : BubbleSorter.sorter() called\n\n\ncodeflash stdout : BubbleSorter.sorter() called"""
+        out_str = """codeflash stdout : BubbleSorter.sorter() called\n"""
         assert test_results[1].stdout == out_str
         assert compare_test_results(test_results, test_results)
         assert test_results[2].id.function_getting_tested == "BubbleSorter.__init__"
@@ -397,6 +374,7 @@ def test_sort():
         )
         assert test_results[3].runtime > 0
         assert test_results[3].did_pass
+        assert test_results[3].stdout == """codeflash stdout : BubbleSorter.sorter() called\n"""
 
         results2, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,

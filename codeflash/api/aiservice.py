@@ -123,7 +123,7 @@ class AiServiceClient:
 
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
-            logger.info(f"Generated {len(optimizations_json)} candidates.")
+            logger.info(f"Generated {len(optimizations_json)} candidate optimizations.")
             console.rule()
             end_time = time.perf_counter()
             logger.debug(f"Generating optimizations took {end_time - start_time:.2f} seconds.")
@@ -194,7 +194,7 @@ class AiServiceClient:
 
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
-            logger.info(f"Generated {len(optimizations_json)} candidates.")
+            logger.info(f"Generated {len(optimizations_json)} candidate optimizations.")
             console.rule()
             return [
                 OptimizedCandidate(

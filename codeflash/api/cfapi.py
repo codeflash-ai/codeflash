@@ -7,6 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
+import git
 import requests
 import sentry_sdk
 from pydantic.json import pydantic_encoder
@@ -115,7 +116,7 @@ def suggest_changes(
         "existingTests": existing_tests,
         "generatedTests": generated_tests,
         "traceId": trace_id,
-        "coverage": coverage_message,
+        "coverage_message": coverage_message,
     }
     return make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
 
@@ -151,7 +152,7 @@ def create_pr(
         "existingTests": existing_tests,
         "generatedTests": generated_tests,
         "traceId": trace_id,
-        "coverage": coverage_message,
+        "coverage_message": coverage_message,
     }
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
@@ -179,19 +180,10 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
     if pr_number is None:
         return {}
 
-    not_found = 404
-    internal_server_error = 500
-
     owner, repo = get_repo_owner_and_name()
     information = {"pr_number": pr_number, "repo_owner": owner, "repo_name": repo}
     try:
         req = make_cfapi_request(endpoint="/verify-existing-optimizations", method="POST", payload=information)
-        if req.status_code == not_found:
-            logger.debug(req.json()["message"])
-            return {}
-        if req.status_code == internal_server_error:
-            logger.error(req.json()["message"])
-            return {}
         req.raise_for_status()
         content: dict[str, list[str]] = req.json()
     except Exception as e:
@@ -200,3 +192,35 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
         return {}
 
     return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
+
+
+def is_function_being_optimized_again(
+    owner: str, repo: str, pr_number: int, code_contexts: list[dict[str, str]]
+) -> Any:  # noqa: ANN401
+    """Check if the function being optimized is being optimized again."""
+    response = make_cfapi_request(
+        "/is-already-optimized",
+        "POST",
+        {"owner": owner, "repo": repo, "pr_number": pr_number, "code_contexts": code_contexts},
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def add_code_context_hash(code_context_hash: str) -> None:
+    """Add code context to the DB cache."""
+    pr_number = get_pr_number()
+    if pr_number is None:
+        return
+    try:
+        owner, repo = get_repo_owner_and_name()
+        pr_number = get_pr_number()
+    except git.exc.InvalidGitRepositoryError:
+        return
+
+    if owner and repo and pr_number is not None:
+        make_cfapi_request(
+            "/add-code-hash",
+            "POST",
+            {"owner": owner, "repo": repo, "pr_number": pr_number, "code_hash": code_context_hash},
+        )
