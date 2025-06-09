@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import concurrent.futures
 import os
+import random
 import subprocess
 import time
 import uuid
@@ -18,6 +19,7 @@ from rich.syntax import Syntax
 from rich.tree import Tree
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
+from codeflash.api.cfapi import add_code_context_hash
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
@@ -39,12 +41,14 @@ from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
     N_CANDIDATES,
     N_TESTS_TO_GENERATE,
+    REPEAT_OPTIMIZATION_PROBABILITY,
     TOTAL_LOOPING_TIME,
 )
 from codeflash.code_utils.edit_generated_tests import (
     add_runtime_comments_to_generated_tests,
     remove_functions_from_generated_tests,
 )
+from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, sort_imports
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports
@@ -52,12 +56,12 @@ from codeflash.code_utils.static_analysis import get_first_top_level_function_or
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
+from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
     CodeOptimizationContext,
-    FunctionCalledInTest,
     GeneratedTests,
     GeneratedTestsList,
     OptimizationSet,
@@ -87,7 +91,13 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.either import Result
-    from codeflash.models.models import BenchmarkKey, CoverageData, FunctionSource, OptimizedCandidate
+    from codeflash.models.models import (
+        BenchmarkKey,
+        CoverageData,
+        FunctionCalledInTest,
+        FunctionSource,
+        OptimizedCandidate,
+    )
     from codeflash.verification.verification_utils import TestConfig
 
 
@@ -97,7 +107,7 @@ class FunctionOptimizer:
         function_to_optimize: FunctionToOptimize,
         test_cfg: TestConfig,
         function_to_optimize_source_code: str = "",
-        function_to_tests: dict[str, list[FunctionCalledInTest]] | None = None,
+        function_to_tests: dict[str, set[FunctionCalledInTest]] | None = None,
         function_to_optimize_ast: ast.FunctionDef | None = None,
         aiservice_client: AiServiceClient | None = None,
         function_benchmark_timings: dict[BenchmarkKey, int] | None = None,
@@ -150,8 +160,16 @@ class FunctionOptimizer:
             with helper_function_path.open(encoding="utf8") as f:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
+
         if has_any_async_functions(code_context.read_writable_code):
             return Failure("Codeflash does not support async functions in the code to optimize.")
+        # Random here means that we still attempt optimization with a fractional chance to see if
+        # last time we could not find an optimization, maybe this time we do.
+        # Random is before as a performance optimization, swapping the two 'and' statements has the same effect
+        if random.random() > REPEAT_OPTIMIZATION_PROBABILITY and was_function_previously_optimized(  # noqa: S311
+            self.function_to_optimize, code_context
+        ):
+            return Failure("Function optimization previously attempted, skipping.")
 
         code_print(code_context.read_writable_code)
         generated_test_paths = [
@@ -170,6 +188,7 @@ class FunctionOptimizer:
         with progress_bar(
             f"Generating new tests and optimizations for function {self.function_to_optimize.function_name}",
             transient=True,
+            revert_to_print=bool(get_pr_number()),
         ):
             generated_results = self.generate_tests_and_optimizations(
                 testgen_context_code=code_context.testgen_context_code,
@@ -213,7 +232,7 @@ class FunctionOptimizer:
 
         function_to_optimize_qualified_name = self.function_to_optimize.qualified_name
         function_to_all_tests = {
-            key: self.function_to_tests.get(key, []) + function_to_concolic_tests.get(key, [])
+            key: self.function_to_tests.get(key, set()) | function_to_concolic_tests.get(key, set())
             for key in set(self.function_to_tests) | set(function_to_concolic_tests)
         }
         instrumented_unittests_created_for_function = self.instrument_existing_tests(function_to_all_tests)
@@ -369,6 +388,10 @@ class FunctionOptimizer:
                             self.function_to_optimize.file_path,
                         )
                 self.log_successful_optimization(explanation, generated_tests, exp_type)
+
+        # Add function to code context hash if in gh actions
+
+        add_code_context_hash(code_context.hashing_code_context_hash)
 
         if self.args.override_fixtures:
             restore_conftest(original_conftest_content)
@@ -679,6 +702,8 @@ class FunctionOptimizer:
                 testgen_context_code=new_code_ctx.testgen_context_code,
                 read_writable_code=new_code_ctx.read_writable_code,
                 read_only_context_code=new_code_ctx.read_only_context_code,
+                hashing_code_context=new_code_ctx.hashing_code_context,
+                hashing_code_context_hash=new_code_ctx.hashing_code_context_hash,
                 helper_functions=new_code_ctx.helper_functions,  # only functions that are read writable
                 preexisting_objects=new_code_ctx.preexisting_objects,
             )
@@ -690,7 +715,7 @@ class FunctionOptimizer:
         get_run_tmp_file(Path("test_return_values_0.bin")).unlink(missing_ok=True)
         get_run_tmp_file(Path("test_return_values_0.sqlite")).unlink(missing_ok=True)
 
-    def instrument_existing_tests(self, function_to_all_tests: dict[str, list[FunctionCalledInTest]]) -> set[Path]:
+    def instrument_existing_tests(self, function_to_all_tests: dict[str, set[FunctionCalledInTest]]) -> set[Path]:
         existing_test_files_count = 0
         replay_test_files_count = 0
         concolic_coverage_test_files_count = 0
@@ -701,7 +726,7 @@ class FunctionOptimizer:
             logger.info(f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.")
             console.rule()
         else:
-            test_file_invocation_positions = defaultdict(list[FunctionCalledInTest])
+            test_file_invocation_positions = defaultdict(list)
             for tests_in_file in function_to_all_tests.get(func_qualname):
                 test_file_invocation_positions[
                     (tests_in_file.tests_in_file.test_file, tests_in_file.tests_in_file.test_type)
@@ -787,7 +812,7 @@ class FunctionOptimizer:
         generated_test_paths: list[Path],
         generated_perf_test_paths: list[Path],
         run_experiment: bool = False,  # noqa: FBT001, FBT002
-    ) -> Result[tuple[GeneratedTestsList, dict[str, list[FunctionCalledInTest]], OptimizationSet], str]:
+    ) -> Result[tuple[GeneratedTestsList, dict[str, set[FunctionCalledInTest]], OptimizationSet], str]:
         assert len(generated_test_paths) == N_TESTS_TO_GENERATE
         max_workers = N_TESTS_TO_GENERATE + 2 if not run_experiment else N_TESTS_TO_GENERATE + 3
         console.rule()

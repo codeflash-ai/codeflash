@@ -14,14 +14,15 @@ import git
 import libcst as cst
 from pydantic.dataclasses import dataclass
 
-from codeflash.api.cfapi import get_blocklisted_functions
+from codeflash.api.cfapi import get_blocklisted_functions, is_function_being_optimized_again
 from codeflash.cli_cmds.console import DEBUG_MODE, console, logger
 from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
     path_belongs_to_site_packages,
 )
-from codeflash.code_utils.git_utils import get_git_diff
+from codeflash.code_utils.env_utils import get_pr_number
+from codeflash.code_utils.git_utils import get_git_diff, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.models.models import FunctionParent
@@ -31,6 +32,7 @@ if TYPE_CHECKING:
     from libcst import CSTNode
     from libcst.metadata import CodeRange
 
+    from codeflash.models.models import CodeOptimizationContext
     from codeflash.verification.verification_utils import TestConfig
 
 
@@ -268,7 +270,7 @@ def find_all_functions_in_file(file_path: Path) -> dict[Path, list[FunctionToOpt
 def get_all_replay_test_functions(
     replay_test: Path, test_cfg: TestConfig, project_root_path: Path
 ) -> dict[Path, list[FunctionToOptimize]]:
-    function_tests = discover_unit_tests(test_cfg, discover_only_these_tests=[replay_test])
+    function_tests, _ = discover_unit_tests(test_cfg, discover_only_these_tests=[replay_test])
     # Get the absolute file paths for each function, excluding class name if present
     filtered_valid_functions = defaultdict(list)
     file_to_functions_map = defaultdict(list)
@@ -417,6 +419,59 @@ def inspect_top_level_functions_or_methods(
     )
 
 
+def was_function_previously_optimized(
+    function_to_optimize: FunctionToOptimize, code_context: CodeOptimizationContext
+) -> bool:
+    """Check which functions have already been optimized and filter them out.
+
+    This function calls the optimization API to:
+    1. Check which functions are already optimized
+    2. Log new function hashes to the database
+    3. Return only functions that need optimization
+
+    Returns:
+        Tuple of (filtered_functions_dict, remaining_count)
+
+    """
+    # Check optimization status if repository info is provided
+    # already_optimized_count = 0
+    try:
+        owner, repo = get_repo_owner_and_name()
+    except git.exc.InvalidGitRepositoryError:
+        logger.warning("No git repository found")
+        owner, repo = None, None
+    pr_number = get_pr_number()
+
+    if not owner or not repo or pr_number is None:
+        return False
+
+    code_contexts = []
+
+    func_hash = code_context.hashing_code_context_hash
+    # Use a unique path identifier that includes function info
+
+    code_contexts.append(
+        {
+            "file_path": function_to_optimize.file_path,
+            "function_name": function_to_optimize.qualified_name,
+            "code_hash": func_hash,
+        }
+    )
+
+    if not code_contexts:
+        return False
+
+    try:
+        result = is_function_being_optimized_again(owner, repo, pr_number, code_contexts)
+        already_optimized_paths: list[tuple[str, str]] = result.get("already_optimized_tuples", [])
+        return len(already_optimized_paths) > 0
+
+    except Exception as e:
+        logger.warning(f"Failed to check optimization status: {e}")
+        # Return all functions if API call fails
+        return False
+
+
 def filter_functions(
     modified_functions: dict[Path, list[FunctionToOptimize]],
     tests_root: Path,
@@ -426,14 +481,15 @@ def filter_functions(
     previous_checkpoint_functions: dict[Path, dict[str, Any]] | None = None,
     disable_logs: bool = False,  # noqa: FBT001, FBT002
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
+    filtered_modified_functions: dict[str, list[FunctionToOptimize]] = {}
     blocklist_funcs = get_blocklisted_functions()
     logger.debug(f"Blocklisted functions: {blocklist_funcs}")
     # Remove any function that we don't want to optimize
+    # already_optimized_paths = check_optimization_status(modified_functions, project_root)
 
     # Ignore files with submodule path, cache the submodule paths
     submodule_paths = ignored_submodule_paths(module_root)
 
-    filtered_modified_functions: dict[str, list[FunctionToOptimize]] = {}
     functions_count: int = 0
     test_functions_removed_count: int = 0
     non_modules_removed_count: int = 0
@@ -445,6 +501,7 @@ def filter_functions(
     previous_checkpoint_functions_removed_count: int = 0
     tests_root_str = str(tests_root)
     module_root_str = str(module_root)
+
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
         _functions = functions
@@ -473,6 +530,7 @@ def filter_functions(
         except SyntaxError:
             malformed_paths_count += 1
             continue
+
         if blocklist_funcs:
             functions_tmp = []
             for function in _functions:

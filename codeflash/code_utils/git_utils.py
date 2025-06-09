@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from functools import cache
 from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -79,6 +80,7 @@ def get_git_remotes(repo: Repo) -> list[str]:
     return [remote.name for remote in repository.remotes]
 
 
+@cache
 def get_repo_owner_and_name(repo: Repo | None = None, git_remote: str | None = "origin") -> tuple[str, str]:
     remote_url = get_remote_url(repo, git_remote)  # call only once
     remote_url = remote_url.removesuffix(".git") if remote_url.endswith(".git") else remote_url
