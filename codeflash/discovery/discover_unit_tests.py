@@ -178,34 +178,38 @@ class ImportAnalyzer(ast.NodeVisitor):
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         """Handle 'from module import name' statements."""
-        if self.found_any_target_function:
+        if self.found_any_target_function or not node.module:
             return
 
-        if not node.module:
-            return
+        module = node.module
+        target_functions = self.function_names_to_find
+        imported_modules = self.imported_modules
+        wildcard_modules = self.wildcard_modules
 
         for alias in node.names:
-            if alias.name == "*":
-                self.wildcard_modules.add(node.module)
-            else:
-                imported_name = alias.asname if alias.asname else alias.name
-                self.imported_modules.add(imported_name)
+            alias_name = alias.name
 
-                # Check for dynamic import functions
-                if node.module == "importlib" and alias.name == "import_module":
-                    self.has_dynamic_imports = True
+            if alias_name == "*":
+                wildcard_modules.add(module)
+                continue
 
-                # Check if imported name is a target qualified name
-                if alias.name in self.function_names_to_find:
-                    self.found_any_target_function = True
-                    self.found_qualified_name = alias.name
-                    return
-                # Check if module.name forms a target qualified name
-                qualified_name = f"{node.module}.{alias.name}"
-                if qualified_name in self.function_names_to_find:
-                    self.found_any_target_function = True
-                    self.found_qualified_name = qualified_name
-                    return
+            imported_name = alias.asname or alias_name
+            imported_modules.add(imported_name)
+
+            # Fast detect dynamic import
+            if module == "importlib" and alias_name == "import_module":
+                self.has_dynamic_imports = True
+
+            # Check both short and qualified names using direct set membership
+            if alias_name in target_functions:
+                self.found_any_target_function = True
+                self.found_qualified_name = alias_name
+                return
+            qualified_name = f"{module}.{alias_name}"
+            if qualified_name in target_functions:
+                self.found_any_target_function = True
+                self.found_qualified_name = qualified_name
+                return
 
     def visit_Attribute(self, node: ast.Attribute) -> None:
         """Handle attribute access like module.function_name."""
