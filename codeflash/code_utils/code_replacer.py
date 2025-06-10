@@ -40,50 +40,68 @@ class BenchmarkFunctionRemover(ast.NodeTransformer):
             if self._is_benchmark_marker(decorator):
                 return True
 
-        # Check function body for benchmark usage
-        return any(isinstance(stmt, ast.Call) and self._is_benchmark_call(stmt) for stmt in ast.walk(node))
+        # Efficient function body benchmark usage investigation
+        # Instead of ast.walk and generator, avoid all-node memory
+        stack = list(getattr(node, "body", []))
+        while stack:
+            curr = stack.pop()
+            # Fast path: ast.Call nodes to check for benchmark
+            if isinstance(curr, ast.Call) and self._is_benchmark_call(curr):
+                return True
+            # For containers, add their children quickly
+            for field, value in ast.iter_fields(curr):
+                if isinstance(value, list):
+                    stack.extend(value)
+                elif isinstance(value, ast.AST):
+                    stack.append(value)
+        return False
 
     def _is_benchmark_marker(self, decorator: ast.expr) -> bool:
         """Check if decorator is a benchmark-related pytest marker."""
         if isinstance(decorator, ast.Call):
-            if isinstance(decorator.func, ast.Attribute):
+            fn = decorator.func
+            if isinstance(fn, ast.Attribute):
+                fv = fn.value
                 # Check for @pytest.mark.benchmark
                 if (
-                    isinstance(decorator.func.value, ast.Attribute)
-                    and isinstance(decorator.func.value.value, ast.Name)
-                    and decorator.func.value.value.id == "pytest"
-                    and decorator.func.value.attr == "mark"
-                    and decorator.func.attr == "benchmark"
+                    isinstance(fv, ast.Attribute)
+                    and isinstance(fv.value, ast.Name)
+                    and fv.value.id == "pytest"
+                    and fv.attr == "mark"
+                    and fn.attr == "benchmark"
                 ):
                     return True
-            elif isinstance(decorator.func, ast.Name) and decorator.func.id == "benchmark":
+            elif isinstance(fn, ast.Name) and fn.id == "benchmark":
                 return True
         elif isinstance(decorator, ast.Attribute):
+            v = decorator.value
             # Check for @pytest.mark.benchmark (without call)
             if (
-                isinstance(decorator.value, ast.Attribute)
-                and isinstance(decorator.value.value, ast.Name)
-                and decorator.value.value.id == "pytest"
-                and decorator.value.attr == "mark"
+                isinstance(v, ast.Attribute)
+                and isinstance(v.value, ast.Name)
+                and v.value.id == "pytest"
+                and v.attr == "mark"
                 and decorator.attr == "benchmark"
             ):
                 return True
         elif isinstance(decorator, ast.Name) and decorator.id == "benchmark":
             return True
-
         return False
 
     @staticmethod
     def _is_benchmark_call(call: ast.Call) -> bool:
         """Check if a call is using the benchmark fixture."""
-        if isinstance(call.func, ast.Name) and call.func.id == "benchmark":
+        fn = call.func
+        if isinstance(fn, ast.Name):
+            return fn.id == "benchmark"
+        if (
+            isinstance(fn, ast.Attribute)
+            and fn.attr in ("benchmark", "__call__")
+            and isinstance(fn.value, ast.Name)
+            and fn.value.id == "benchmark"
+        ):
             return True
-        return bool(
-            isinstance(call.func, ast.Attribute)
-            and call.func.attr in ["benchmark", "__call__"]
-            and isinstance(call.func.value, ast.Name)
-            and call.func.value.id == "benchmark"
-        )
+        return False
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> Optional[AST]:
         """Visit function definitions and remove if they use benchmark fixture."""
