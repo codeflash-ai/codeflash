@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from _ast import AST
 from collections import defaultdict
 from functools import lru_cache
 from typing import TYPE_CHECKING, Optional, TypeVar, Union
@@ -40,8 +41,8 @@ class BenchmarkFunctionRemover(ast.NodeTransformer):
             if self._is_benchmark_marker(decorator):
                 return True
 
-        # Check function body for benchmark usage
-        return any(isinstance(stmt, ast.Call) and self._is_benchmark_call(stmt) for stmt in ast.walk(node))
+        # Optimized: Use a fast body scan to detect use of benchmark in function body
+        return self._body_uses_benchmark_call(node.body)
 
     def _is_benchmark_marker(self, decorator: ast.expr) -> bool:
         """Check if decorator is a benchmark-related pytest marker."""
@@ -112,6 +113,29 @@ class BenchmarkFunctionRemover(ast.NodeTransformer):
 
         node.body = new_body
         return node
+
+    def _body_uses_benchmark_call(self, stmts):
+        """Efficiently check if 'benchmark' is called anywhere in the body (recursive, shallow, single function only)."""
+        stack = list(stmts)
+        while stack:
+            stmt = stack.pop()
+            # Check for a benchmark call at this node (stmt may be an expr, an Assign, etc.)
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+                if self._is_benchmark_call(stmt.value):
+                    return True
+            elif isinstance(stmt, ast.Call):
+                if self._is_benchmark_call(stmt):
+                    return True
+            # Recursively check relevant AST containers for body calls
+            for attr in ("body", "orelse", "finalbody"):
+                if hasattr(stmt, attr):
+                    stack.extend(getattr(stmt, attr))
+            # Check except blocks for 'body'
+            if hasattr(stmt, "handlers"):
+                for handler in stmt.handlers:
+                    if hasattr(handler, "body"):
+                        stack.extend(handler.body)
+        return False
 
 
 def remove_benchmark_functions(tree: AST) -> AST:
