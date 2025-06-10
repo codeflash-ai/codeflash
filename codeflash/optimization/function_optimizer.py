@@ -651,7 +651,9 @@ class FunctionOptimizer:
         if should_sort_imports and isort.code(original_code) != original_code:
             should_sort_imports = False
 
-        new_code = format_code(self.args.formatter_cmds, path, optimized_function=optimized_function, check_diff=True)
+        new_code = format_code(
+            self.args.formatter_cmds, path, optimized_function=optimized_function, check_formatting_diff=True
+        )
         if should_sort_imports:
             new_code = sort_imports(new_code)
 
@@ -660,7 +662,7 @@ class FunctionOptimizer:
             module_abspath = hp.file_path
             hp_source_code = hp.source_code
             formatted_helper_code = format_code(
-                self.args.formatter_cmds, module_abspath, optimized_function=hp_source_code, check_diff=True
+                self.args.formatter_cmds, module_abspath, optimized_function=hp_source_code, check_formatting_diff=True
             )
             if should_sort_imports:
                 formatted_helper_code = sort_imports(formatted_helper_code)

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import difflib
 import os
-import re
 import shlex
 import shutil
 import subprocess
@@ -16,24 +15,25 @@ from codeflash.cli_cmds.console import console, logger
 
 
 def generate_unified_diff(original: str, modified: str, from_file: str, to_file: str) -> str:
-    line_pattern = re.compile(r"(.*?(?:\r\n|\n|\r|$))")
-
+    # Use built-in splitlines with keepends to preserve line endings, much faster than regex
     def split_lines(text: str) -> list[str]:
-        lines = [match[0] for match in line_pattern.finditer(text)]
-        if lines and lines[-1] == "":
-            lines.pop()
-        return lines
+        # If text ends with a line ending, splitlines(keepends=True) includes an empty "" for the trailing empty line,
+        # but in practice difflib expects that (and removes it anyway). So, we do not need to pop.
+        return text.splitlines(keepends=True)
 
     original_lines = split_lines(original)
     modified_lines = split_lines(modified)
 
     diff_output = []
+    append = diff_output.append
+    extend = diff_output.extend
+
     for line in difflib.unified_diff(original_lines, modified_lines, fromfile=from_file, tofile=to_file, n=5):
         if line.endswith("\n"):
-            diff_output.append(line)
+            append(line)
         else:
-            diff_output.append(line + "\n")
-            diff_output.append("\\ No newline at end of file\n")
+            # This is extremely rare; use extend to reduce the number of list operations (slightly faster)
+            extend((line + "\n", "\\ No newline at end of file\n"))
 
     return "".join(diff_output)
 
@@ -104,7 +104,7 @@ def format_code(
     formatter_cmds: list[str],
     path: Union[str, Path],
     optimized_function: str = "",
-    check_diff: bool = False,  # noqa
+    check_formatting_diff: bool = False,  # noqa
     print_status: bool = True,  # noqa
 ) -> str:
     with tempfile.TemporaryDirectory() as test_dir_str:
@@ -114,7 +114,7 @@ def format_code(
         original_code = path.read_text(encoding="utf8")
         original_code_lines = len(original_code.split("\n"))
 
-        if check_diff and original_code_lines > 50:
+        if check_formatting_diff and original_code_lines > 50:
             # we dont' count the formatting diff for the optimized function as it should be well-formatted
             original_code_without_opfunc = original_code.replace(optimized_function, "")
 
@@ -129,10 +129,13 @@ def format_code(
                 original_code_without_opfunc, formatted_code, from_file=str(original_temp), to_file=str(formatted_temp)
             )
             diff_lines_count = get_diff_lines_count(diff_output)
+            print(f"Diff lines count: {diff_lines_count}")
 
+            # if the diff is more than 30% of the original code, we skip formatting
+            # we set a max of 50 lines to avoid formatting large files with small changes
             max_diff_lines = min(int(original_code_lines * 0.3), 50)
 
-            if diff_lines_count > max_diff_lines and max_diff_lines != -1:
+            if diff_lines_count > max_diff_lines:
                 logger.debug(
                     f"Skipping formatting {path}: {diff_lines_count} lines would change (max: {max_diff_lines})"
                 )
