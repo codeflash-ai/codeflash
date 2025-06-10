@@ -11,30 +11,35 @@ class TestGitUtils(unittest.TestCase):
     def test_test_get_repo_owner_and_name(self, mock_get_remote_url):
         # Test with a standard GitHub HTTPS URL
         mock_get_remote_url.return_value = "https://github.com/owner/repo.git"
+        get_repo_owner_and_name.cache_clear()
         owner, repo_name = get_repo_owner_and_name()
         assert owner == "owner"
         assert repo_name == "repo"
 
         # Test with a GitHub SSH URL
         mock_get_remote_url.return_value = "git@github.com:owner/repo.git"
+        get_repo_owner_and_name.cache_clear()
         owner, repo_name = get_repo_owner_and_name()
         assert owner == "owner"
         assert repo_name == "repo"
 
         # Test with another GitHub SSH URL
         mock_get_remote_url.return_value = "git@github.com:codeflash-ai/posthog.git"
+        get_repo_owner_and_name.cache_clear()
         owner, repo_name = get_repo_owner_and_name()
         assert owner == "codeflash-ai"
         assert repo_name == "posthog"
 
         # Test with a URL without the .git suffix
         mock_get_remote_url.return_value = "https://github.com/owner/repo"
+        get_repo_owner_and_name.cache_clear()
         owner, repo_name = get_repo_owner_and_name()
         assert owner == "owner"
         assert repo_name == "repo"
 
         # Test with another GitHub SSH URL
         mock_get_remote_url.return_value = "git@github.com:codeflash-ai/posthog/"
+        get_repo_owner_and_name.cache_clear()
         owner, repo_name = get_repo_owner_and_name()
         assert owner == "codeflash-ai"
         assert repo_name == "posthog"

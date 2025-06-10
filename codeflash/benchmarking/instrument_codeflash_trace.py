@@ -76,10 +76,12 @@ def add_codeflash_decorator_to_code(code: str, functions_to_optimize: list[Funct
     """Add codeflash_trace to a function.
 
     Args:
+    ----
         code: The source code as a string
         functions_to_optimize: List of FunctionToOptimize instances containing function details
 
     Returns:
+    -------
         The modified source code as a string
 
     """

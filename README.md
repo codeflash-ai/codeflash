@@ -65,10 +65,10 @@ https://github.com/user-attachments/assets/38f44f4e-be1c-4f84-8db9-63d5ee3e61e5
 
 Join our community for support and discussions. If you have any questions, feel free to reach out to us using one of the following methods:
 
+- [Free live Installation Support](https://calendly.com/codeflash-saurabh/codeflash-setup)
 - [Join our Discord](https://www.codeflash.ai/discord)
 - [Follow us on Twitter](https://x.com/codeflashAI)
 - [Follow us on Linkedin](https://www.linkedin.com/in/saurabh-misra/)
-- [Email founders](mailto:saurabh@codeflash.ai)
 
 ## License
 

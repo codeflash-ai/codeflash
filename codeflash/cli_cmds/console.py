@@ -66,18 +66,34 @@ spinners = cycle(SPINNER_TYPES)
 
 
 @contextmanager
-def progress_bar(message: str, *, transient: bool = False) -> Generator[TaskID, None, None]:
-    """Display a progress bar with a spinner and elapsed time."""
-    progress = Progress(
-        SpinnerColumn(next(spinners)),
-        *Progress.get_default_columns(),
-        TimeElapsedColumn(),
-        console=console,
-        transient=transient,
-    )
-    task = progress.add_task(message, total=None)
-    with progress:
-        yield task
+def progress_bar(
+    message: str, *, transient: bool = False, revert_to_print: bool = False
+) -> Generator[TaskID, None, None]:
+    """Display a progress bar with a spinner and elapsed time.
+
+    If revert_to_print is True, falls back to printing a single logger.info message
+    instead of showing a progress bar.
+    """
+    if revert_to_print:
+        logger.info(message)
+
+        # Create a fake task ID since we still need to yield something
+        class DummyTask:
+            def __init__(self) -> None:
+                self.id = 0
+
+        yield DummyTask().id
+    else:
+        progress = Progress(
+            SpinnerColumn(next(spinners)),
+            *Progress.get_default_columns(),
+            TimeElapsedColumn(),
+            console=console,
+            transient=transient,
+        )
+        task = progress.add_task(message, total=None)
+        with progress:
+            yield task
 
 
 @contextmanager

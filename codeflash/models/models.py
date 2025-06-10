@@ -157,6 +157,8 @@ class CodeOptimizationContext(BaseModel):
     testgen_context_code: str = ""
     read_writable_code: str = Field(min_length=1)
     read_only_context_code: str = ""
+    hashing_code_context: str = ""
+    hashing_code_context_hash: str = ""
     helper_functions: list[FunctionSource]
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]]
 
@@ -165,6 +167,7 @@ class CodeContextType(str, Enum):
     READ_WRITABLE = "READ_WRITABLE"
     READ_ONLY = "READ_ONLY"
     TESTGEN = "TESTGEN"
+    HASHING = "HASHING"
 
 
 class OptimizedCandidateResult(BaseModel):
@@ -421,7 +424,7 @@ class InvocationId:
         )
 
     @staticmethod
-    def from_str_id(string_id: str, iteration_id: Optional[str] = None) -> InvocationId:
+    def from_str_id(string_id: str, iteration_id: str | None = None) -> InvocationId:
         components = string_id.split(":")
         assert len(components) == 4
         second_components = components[1].split(".")

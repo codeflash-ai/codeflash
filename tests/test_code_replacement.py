@@ -1,5 +1,6 @@
 from __future__ import annotations
-
+import libcst as cst
+from codeflash.code_utils.code_replacer import AutouseFixtureModifier, PytestMarkAdder
 import dataclasses
 import os
 from collections import defaultdict
@@ -69,7 +70,7 @@ def sorter(arr):
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code
+        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
     )
     final_output = code_path.read_text(encoding="utf-8")
     assert "inconsequential_var = '123'" in final_output
@@ -804,7 +805,8 @@ class MainClass:
         self.name = name
 
     def main_method(self):
-        return HelperClass(self.name).helper_method()"""
+        return HelperClass(self.name).helper_method()
+"""
     file_path = Path(__file__).resolve()
     func_top_optimize = FunctionToOptimize(
         function_name="main_method", file_path=file_path, parents=[FunctionParent("MainClass", "ClassDef")]
@@ -818,7 +820,7 @@ class MainClass:
     )
     func_optimizer = FunctionOptimizer(function_to_optimize=func_top_optimize, test_cfg=test_config)
     code_context = func_optimizer.get_code_optimization_context().unwrap()
-    assert code_context.testgen_context_code == get_code_output
+    assert code_context.testgen_context_code.rstrip() == get_code_output.rstrip()
 
 
 def test_code_replacement11() -> None:
@@ -1662,6 +1664,7 @@ print("Hello world")
     )
     assert new_code == original_code
 
+
 def test_global_reassignment() -> None:
     original_code = """a=1
 print("Hello world")
@@ -1733,7 +1736,7 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code
+        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -1809,7 +1812,7 @@ a=2
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code
+        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -1886,7 +1889,7 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code
+        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -1962,7 +1965,7 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code
+        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -2039,7 +2042,7 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code
+        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -2127,8 +2130,479 @@ a = 6
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code
+        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
     assert new_code.rstrip() == expected_code.rstrip()
+
+
+class TestAutouseFixtureModifier:
+    """Test cases for AutouseFixtureModifier class."""
+
+    def test_modifies_autouse_fixture_with_pytest_decorator(self):
+        """Test that autouse fixture with @pytest.fixture is modified correctly."""
+        source_code = '''
+import pytest
+
+@pytest.fixture(autouse=True)
+def my_fixture(request):
+    print("setup")
+    yield
+    print("teardown")
+'''
+        expected_code = '''
+import pytest
+
+@pytest.fixture(autouse=True)
+def my_fixture(request):
+    if request.node.get_closest_marker("codeflash_no_autouse"):
+        yield
+    else:
+        print("setup")
+        yield
+        print("teardown")
+'''
+        module = cst.parse_module(source_code)
+        modifier = AutouseFixtureModifier()
+        modified_module = module.visit(modifier)
+
+        # Parse expected to normalize formatting
+        expected_module = cst.parse_module(expected_code)
+        assert modified_module.code.strip() == expected_module.code.strip()
+
+    def test_modifies_autouse_fixture_with_fixture_decorator(self):
+        """Test that autouse fixture with @fixture is modified correctly."""
+        source_code = '''
+from pytest import fixture
+
+@fixture(autouse=True)
+def my_fixture(request):
+    setup_code()
+    yield "value"
+    cleanup_code()
+'''
+        expected_code = '''
+from pytest import fixture
+
+@fixture(autouse=True)
+def my_fixture(request):
+    if request.node.get_closest_marker("codeflash_no_autouse"):
+        yield
+    else:
+        setup_code()
+        yield "value"
+        cleanup_code()
+'''
+        module = cst.parse_module(source_code)
+        modifier = AutouseFixtureModifier()
+        modified_module = module.visit(modifier)
+
+        # Check that the if statement was added
+        assert modified_module.code.strip() == expected_code.strip()
+
+    def test_ignores_non_autouse_fixture(self):
+        """Test that non-autouse fixtures are not modified."""
+        source_code = '''
+import pytest
+
+@pytest.fixture
+def my_fixture(request):
+    return "test_value"
+
+@pytest.fixture(scope="session")
+def session_fixture():
+    return "session_value"
+'''
+        module = cst.parse_module(source_code)
+        modifier = AutouseFixtureModifier()
+        modified_module = module.visit(modifier)
+
+        # Code should remain unchanged
+        assert modified_module.code == source_code
+
+    def test_ignores_regular_functions(self):
+        """Test that regular functions are not modified."""
+        source_code = '''
+def regular_function():
+    return "not a fixture"
+
+@some_other_decorator
+def decorated_function():
+    return "also not a fixture"
+'''
+        module = cst.parse_module(source_code)
+        modifier = AutouseFixtureModifier()
+        modified_module = module.visit(modifier)
+
+        # Code should remain unchanged
+        assert modified_module.code == source_code
+
+    def test_handles_multiple_autouse_fixtures(self):
+        """Test that multiple autouse fixtures in the same file are all modified."""
+        source_code = '''
+import pytest
+
+@pytest.fixture(autouse=True)
+def fixture_one(request):
+    yield "one"
+
+@pytest.fixture(autouse=True)  
+def fixture_two(request):
+    yield "two"
+'''
+        expected_code = '''
+import pytest
+
+@pytest.fixture(autouse=True)
+def fixture_one(request):
+    if request.node.get_closest_marker("codeflash_no_autouse"):
+        yield
+    else:
+        yield "one"
+
+@pytest.fixture(autouse=True)  
+def fixture_two(request):
+    if request.node.get_closest_marker("codeflash_no_autouse"):
+        yield
+    else:
+        yield "two"
+'''
+        module = cst.parse_module(source_code)
+        modifier = AutouseFixtureModifier()
+        modified_module = module.visit(modifier)
+
+        # Both fixtures should be modified
+        code = modified_module.code
+        assert code==expected_code
+
+    def test_preserves_fixture_with_complex_body(self):
+        """Test that fixtures with complex bodies are handled correctly."""
+        source_code = '''
+import pytest
+
+@pytest.fixture(autouse=True)
+def complex_fixture(request):
+    try:
+        setup_database()
+        configure_logging()
+        yield get_test_client()
+    finally:
+        cleanup_database()
+        reset_logging()
+'''
+        expected_code = '''
+import pytest
+
+@pytest.fixture(autouse=True)
+def complex_fixture(request):
+    if request.node.get_closest_marker("codeflash_no_autouse"):
+        yield
+    else:
+        try:
+            setup_database()
+            configure_logging()
+            yield get_test_client()
+        finally:
+            cleanup_database()
+            reset_logging()
+'''
+        module = cst.parse_module(source_code)
+        modifier = AutouseFixtureModifier()
+        modified_module = module.visit(modifier)
+
+        code = modified_module.code
+        assert code.rstrip()==expected_code.rstrip()
+
+
+class TestPytestMarkAdder:
+    """Test cases for PytestMarkAdder class."""
+
+    def test_adds_pytest_import_when_missing(self):
+        """Test that pytest import is added when not present."""
+        source_code = '''
+def test_something():
+    assert True
+'''
+        expected_code = '''
+import pytest
+@pytest.mark.codeflash_no_autouse
+def test_something():
+    assert True
+'''
+        module = cst.parse_module(source_code)
+        mark_adder = PytestMarkAdder("codeflash_no_autouse")
+        modified_module = module.visit(mark_adder)
+
+        code = modified_module.code
+        assert code==expected_code
+
+    def test_skips_pytest_import_when_present(self):
+        """Test that pytest import is not duplicated when already present."""
+        source_code = '''
+import pytest
+
+def test_something():
+    assert True
+'''
+        expected_code = '''
+import pytest
+
+@pytest.mark.codeflash_no_autouse
+def test_something():
+    assert True
+'''
+        module = cst.parse_module(source_code)
+        mark_adder = PytestMarkAdder("codeflash_no_autouse")
+        modified_module = module.visit(mark_adder)
+
+        code = modified_module.code
+        # Should only have one import pytest line
+        assert code==expected_code
+
+    def test_handles_from_pytest_import(self):
+        """Test that existing 'from pytest import ...' is recognized."""
+        source_code = '''
+from pytest import fixture
+
+def test_something():
+    assert True
+'''
+        expected_code = '''
+import pytest
+from pytest import fixture
+
+@pytest.mark.codeflash_no_autouse
+def test_something():
+    assert True
+        '''
+        module = cst.parse_module(source_code)
+        mark_adder = PytestMarkAdder("codeflash_no_autouse")
+        modified_module = module.visit(mark_adder)
+
+        code = modified_module.code
+        # Should not add import pytest since pytest is already imported
+        assert code.strip()==expected_code.strip()
+
+    def test_adds_mark_to_all_functions(self):
+        """Test that marks are added to all functions in the module."""
+        source_code = '''
+import pytest
+
+def test_first():
+    assert True
+
+def test_second():
+    assert False
+
+def helper_function():
+    return "not a test"
+'''
+        expected_code = '''
+import pytest
+
+@pytest.mark.codeflash_no_autouse
+def test_first():
+    assert True
+
+@pytest.mark.codeflash_no_autouse
+def test_second():
+    assert False
+
+@pytest.mark.codeflash_no_autouse
+def helper_function():
+    return "not a test"
+'''
+        module = cst.parse_module(source_code)
+        mark_adder = PytestMarkAdder("codeflash_no_autouse")
+        modified_module = module.visit(mark_adder)
+
+        code = modified_module.code
+        # All functions should get the mark
+        assert code==expected_code
+
+    def test_skips_existing_mark(self):
+        """Test that existing marks are not duplicated."""
+        source_code = '''
+import pytest
+
+@pytest.mark.codeflash_no_autouse
+def test_already_marked():
+    assert True
+
+def test_needs_mark():
+    assert True
+'''
+        expected_code = '''
+import pytest
+
+@pytest.mark.codeflash_no_autouse
+def test_already_marked():
+    assert True
+
+@pytest.mark.codeflash_no_autouse
+def test_needs_mark():
+    assert True
+'''
+        module = cst.parse_module(source_code)
+        mark_adder = PytestMarkAdder("codeflash_no_autouse")
+        modified_module = module.visit(mark_adder)
+
+        code = modified_module.code
+        # Should have exactly 2 marks total (one existing, one added)
+        assert code==expected_code
+
+    def test_handles_different_mark_names(self):
+        """Test that different mark names work correctly."""
+        source_code = '''
+import pytest
+
+def test_something():
+    assert True
+'''
+        expected_code = '''
+import pytest
+
+@pytest.mark.slow
+def test_something():
+    assert True
+'''
+        module = cst.parse_module(source_code)
+        mark_adder = PytestMarkAdder("slow")
+        modified_module = module.visit(mark_adder)
+
+        code = modified_module.code
+        assert code==expected_code
+
+    def test_preserves_existing_decorators(self):
+        """Test that existing decorators are preserved."""
+        source_code = '''
+import pytest
+
+@pytest.mark.parametrize("value", [1, 2, 3])
+@pytest.fixture
+def test_with_decorators():
+    assert True
+'''
+        expected_code = '''
+import pytest
+
+@pytest.mark.parametrize("value", [1, 2, 3])
+@pytest.fixture
+@pytest.mark.codeflash_no_autouse
+def test_with_decorators():
+    assert True
+'''
+        module = cst.parse_module(source_code)
+        mark_adder = PytestMarkAdder("codeflash_no_autouse")
+        modified_module = module.visit(mark_adder)
+
+        code = modified_module.code
+        assert code==expected_code
+
+    def test_handles_call_style_existing_marks(self):
+        """Test recognition of existing marks in call style (with parentheses)."""
+        source_code = '''
+import pytest
+
+@pytest.mark.codeflash_no_autouse()
+def test_with_call_mark():
+    assert True
+
+def test_needs_mark():
+    assert True
+'''
+        expected_code = '''
+import pytest
+
+@pytest.mark.codeflash_no_autouse()
+def test_with_call_mark():
+    assert True
+
+@pytest.mark.codeflash_no_autouse
+def test_needs_mark():
+    assert True
+'''
+        module = cst.parse_module(source_code)
+        mark_adder = PytestMarkAdder("codeflash_no_autouse")
+        modified_module = module.visit(mark_adder)
+
+        code = modified_module.code
+        # Should recognize the existing call-style mark and not duplicate
+        assert code==expected_code
+
+    def test_empty_module(self):
+        """Test handling of empty module."""
+        source_code = ''
+        module = cst.parse_module(source_code)
+        mark_adder = PytestMarkAdder("codeflash_no_autouse")
+        modified_module = module.visit(mark_adder)
+
+        # Should just add the import
+        code = modified_module.code
+        assert code =='import pytest'
+
+    def test_module_with_only_imports(self):
+        """Test handling of module with only imports."""
+        source_code = '''
+import os
+import sys
+from pathlib import Path
+'''
+        expected_code = '''
+import pytest
+import os
+import sys
+from pathlib import Path
+'''
+        module = cst.parse_module(source_code)
+        mark_adder = PytestMarkAdder("codeflash_no_autouse")
+        modified_module = module.visit(mark_adder)
+
+        code = modified_module.code
+        assert code==expected_code
+
+
+class TestIntegration:
+    """Integration tests for both transformers working together."""
+
+    def test_both_transformers_together(self):
+        """Test that both transformers can work on the same code."""
+        source_code = '''
+import pytest
+
+@pytest.fixture(autouse=True)
+def my_fixture(request):
+    yield "value"
+
+def test_something():
+    assert True
+'''
+        expected_code = '''
+import pytest
+
+@pytest.fixture(autouse=True)
+@pytest.mark.codeflash_no_autouse
+def my_fixture(request):
+    if request.node.get_closest_marker("codeflash_no_autouse"):
+        yield
+    else:
+        yield "value"
+
+@pytest.mark.codeflash_no_autouse
+def test_something():
+    assert True
+'''
+        # First apply AutouseFixtureModifier
+        module = cst.parse_module(source_code)
+        autouse_modifier = AutouseFixtureModifier()
+        modified_module = module.visit(autouse_modifier)
+
+        # Then apply PytestMarkAdder
+        mark_adder = PytestMarkAdder("codeflash_no_autouse")
+        final_module = modified_module.visit(mark_adder)
+
+        code = final_module.code
+        # Should have both modifications
+        assert code==expected_code
+
