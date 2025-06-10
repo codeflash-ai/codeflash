@@ -98,7 +98,12 @@ class AiServiceClient:
 
         """
         start_time = time.perf_counter()
-        git_repo_owner, git_repo_name = get_repo_owner_and_name()
+        try:
+            git_repo_owner, git_repo_name = get_repo_owner_and_name()
+        except Exception as e:
+            logger.warning(f"Could not determine repo owner and name: {e}")
+            git_repo_owner, git_repo_name = None, None
+
         payload = {
             "source_code": source_code,
             "dependency_code": dependency_code,
