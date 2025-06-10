@@ -599,7 +599,14 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
 
 
 def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
-    return any(isinstance(node, ast.Return) for node in ast.walk(function_node))
+    # Custom DFS, return True as soon as a Return node is found
+    stack = [function_node]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, ast.Return):
+            return True
+        stack.extend(ast.iter_child_nodes(node))
+    return False
 
 
 def function_is_a_property(function_node: FunctionDef | AsyncFunctionDef) -> bool:
