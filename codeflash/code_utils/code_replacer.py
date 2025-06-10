@@ -45,31 +45,25 @@ class BenchmarkFunctionRemover(ast.NodeTransformer):
 
     def _is_benchmark_marker(self, decorator: ast.expr) -> bool:
         """Check if decorator is a benchmark-related pytest marker."""
-        if isinstance(decorator, ast.Call):
-            if isinstance(decorator.func, ast.Attribute):
-                # Check for @pytest.mark.benchmark
-                if (
-                    isinstance(decorator.func.value, ast.Attribute)
-                    and isinstance(decorator.func.value.value, ast.Name)
-                    and decorator.func.value.value.id == "pytest"
-                    and decorator.func.value.attr == "mark"
-                    and decorator.func.attr == "benchmark"
-                ):
-                    return True
-            elif isinstance(decorator.func, ast.Name) and decorator.func.id == "benchmark":
-                return True
-        elif isinstance(decorator, ast.Attribute):
-            # Check for @pytest.mark.benchmark (without call)
-            if (
-                isinstance(decorator.value, ast.Attribute)
-                and isinstance(decorator.value.value, ast.Name)
-                and decorator.value.value.id == "pytest"
-                and decorator.value.attr == "mark"
-                and decorator.attr == "benchmark"
-            ):
-                return True
-        elif isinstance(decorator, ast.Name) and decorator.id == "benchmark":
-            return True
+        # Cache type and attributes to minimize repeated isinstance/lookups
+        if type(decorator) is ast.Call:
+            func = decorator.func
+            if type(func) is ast.Attribute:
+                val = func.value
+                if type(val) is ast.Attribute:
+                    val_val = val.value
+                    if type(val_val) is ast.Name:
+                        return val_val.id == "pytest" and val.attr == "mark" and func.attr == "benchmark"
+            elif type(func) is ast.Name:
+                return func.id == "benchmark"
+        elif type(decorator) is ast.Attribute:
+            val = decorator.value
+            if type(val) is ast.Attribute:
+                val_val = val.value
+                if type(val_val) is ast.Name:
+                    return val_val.id == "pytest" and val.attr == "mark" and decorator.attr == "benchmark"
+        elif type(decorator) is ast.Name:
+            return decorator.id == "benchmark"
 
         return False
 
