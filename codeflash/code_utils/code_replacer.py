@@ -76,14 +76,15 @@ class BenchmarkFunctionRemover(ast.NodeTransformer):
     @staticmethod
     def _is_benchmark_call(call: ast.Call) -> bool:
         """Check if a call is using the benchmark fixture."""
-        if isinstance(call.func, ast.Name) and call.func.id == "benchmark":
-            return True
-        return bool(
-            isinstance(call.func, ast.Attribute)
-            and call.func.attr in ["benchmark", "__call__"]
-            and isinstance(call.func.value, ast.Name)
-            and call.func.value.id == "benchmark"
-        )
+        func = call.func
+        if isinstance(func, ast.Name):
+            return func.id == "benchmark"
+        if isinstance(func, ast.Attribute):
+            if func.attr not in {"benchmark", "__call__"}:
+                return False
+            value = func.value
+            return isinstance(value, ast.Name) and value.id == "benchmark"
+        return False
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> Optional[AST]:
         """Visit function definitions and remove if they use benchmark fixture."""
