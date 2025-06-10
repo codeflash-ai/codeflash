@@ -1,4 +1,4 @@
-﻿import ast
+import ast
 from pathlib import Path
 
 from codeflash.code_utils.static_analysis import (

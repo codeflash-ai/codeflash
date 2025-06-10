@@ -208,3 +208,8 @@ def cleanup_paths(paths: list[Path]) -> None:
                 shutil.rmtree(path, ignore_errors=True)
             else:
                 path.unlink(missing_ok=True)
+
+
+def restore_conftest(path_to_content_map: dict[Path, str]) -> None:
+    for path, file_content in path_to_content_map.items():
+        path.write_text(file_content, encoding="utf8")

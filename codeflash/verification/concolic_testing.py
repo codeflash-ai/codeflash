@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 def generate_concolic_tests(
     test_cfg: TestConfig, args: Namespace, function_to_optimize: FunctionToOptimize, function_to_optimize_ast: ast.AST
-) -> tuple[dict[str, list[FunctionCalledInTest]], str]:
+) -> tuple[dict[str, set[FunctionCalledInTest]], str]:
     start_time = time.perf_counter()
     function_to_concolic_tests = {}
     concolic_test_suite_code = ""
@@ -78,8 +78,7 @@ def generate_concolic_tests(
                 test_framework=args.test_framework,
                 pytest_cmd=args.pytest_cmd,
             )
-            function_to_concolic_tests = discover_unit_tests(concolic_test_cfg)
-            num_discovered_concolic_tests: int = sum([len(value) for value in function_to_concolic_tests.values()])
+            function_to_concolic_tests, num_discovered_concolic_tests = discover_unit_tests(concolic_test_cfg)
             logger.info(
                 f"Created {num_discovered_concolic_tests} "
                 f"concolic unit test case{'s' if num_discovered_concolic_tests != 1 else ''} "
