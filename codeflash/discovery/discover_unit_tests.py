@@ -151,27 +151,39 @@ class ImportAnalyzer(ast.NodeVisitor):
         self.has_dynamic_imports: bool = False
         self.wildcard_modules: set[str] = set()
 
+        # Build a mapping from module names to all target_funcs starting with module_name
+        self._module_prefix_map = {}
+        for func in function_names_to_find:
+            if "." in func:
+                prefix = func.split(".", 1)[0]
+                self._module_prefix_map.setdefault(prefix, set()).add(func)
+
     def visit_Import(self, node: ast.Import) -> None:
         """Handle 'import module' statements."""
         if self.found_any_target_function:
             return
 
+        module_prefix_map = self._module_prefix_map
+        function_names_to_find = self.function_names_to_find
+        imported_modules = self.imported_modules
+
         for alias in node.names:
             module_name = alias.asname if alias.asname else alias.name
-            self.imported_modules.add(module_name)
+            imported_modules.add(module_name)
 
-            # Check for dynamic import modules
             if alias.name == "importlib":
                 self.has_dynamic_imports = True
 
-            # Check if module itself is a target qualified name
-            if module_name in self.function_names_to_find:
+            if module_name in function_names_to_find:
                 self.found_any_target_function = True
                 self.found_qualified_name = module_name
                 return
-            # Check if any target qualified name starts with this module
-            for target_func in self.function_names_to_find:
-                if target_func.startswith(f"{module_name}."):
+
+            # New: quickly check if any function starts with this module_name + '.'
+            if module_name in module_prefix_map:
+                # No need to check startswith, as all have this name as prefix.
+                # However, need to confirm it's really imported as such
+                for target_func in module_prefix_map[module_name]:
                     self.found_any_target_function = True
                     self.found_qualified_name = target_func
                     return
