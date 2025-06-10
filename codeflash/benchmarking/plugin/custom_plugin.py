@@ -3,6 +3,10 @@ from typing import Any, Callable, Optional
 import pytest
 
 
+def pytest_configure(config) -> None:  # noqa: ANN001
+    config.addinivalue_line("markers", "benchmark")
+
+
 @pytest.fixture
 def benchmark(request):  # noqa: ANN201, ANN001
     class CustomBenchmark:
@@ -66,4 +70,8 @@ def benchmark(request):  # noqa: ANN201, ANN001
             return request.getfixturevalue("benchmark")
         except (pytest.FixtureLookupError, AttributeError):
             pass
-    return CustomBenchmark()
+    custom_benchmark = CustomBenchmark()
+    if request.node.get_closest_marker("benchmark"):
+        # Return our custom benchmark for tests marked with @pytest.mark.benchmark
+        return custom_benchmark
+    return custom_benchmark
