@@ -36,12 +36,23 @@ class BenchmarkFunctionRemover(ast.NodeTransformer):
                 return True
 
         # Check for pytest markers that might indicate benchmarking
+        is_benchmark_marker = self._is_benchmark_marker
         for decorator in node.decorator_list:
-            if self._is_benchmark_marker(decorator):
+            if is_benchmark_marker(decorator):
                 return True
 
-        # Check function body for benchmark usage
-        return any(isinstance(stmt, ast.Call) and self._is_benchmark_call(stmt) for stmt in ast.walk(node))
+        # Fast scan: only check first-level statements for obvious benchmark fixture usage
+        _is_benchmark_call = self._is_benchmark_call
+        body = node.body
+        for stmt in body:
+            # Check for benchmark(…) as a direct expression or statement
+            # This avoids deep recursion and excessive ast.walk
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call) and _is_benchmark_call(stmt.value):
+                return True
+            if isinstance(stmt, ast.Call) and _is_benchmark_call(stmt):
+                return True
+
+        return False
 
     def _is_benchmark_marker(self, decorator: ast.expr) -> bool:
         """Check if decorator is a benchmark-related pytest marker."""
@@ -99,16 +110,16 @@ class BenchmarkFunctionRemover(ast.NodeTransformer):
 
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
         """Visit class definitions and remove benchmark methods."""
-        original_body = node.body[:]
+        original_body = node.body
         new_body = []
+        append = new_body.append
 
         for item in original_body:
             if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if not self._uses_benchmark_fixture(item):
-                    new_body.append(self.visit(item))
-
+                    append(self.visit(item))
             else:
-                new_body.append(self.visit(item))
+                append(self.visit(item))
 
         node.body = new_body
         return node
