@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import isort
 
 from codeflash.cli_cmds.console import logger
+from codeflash.code_utils.code_replacer import remove_benchmark_functions
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestingMode, VerificationType
@@ -355,6 +356,8 @@ def inject_profiling_into_existing_test(
     if test_framework == "unittest":
         new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
     tree.body = [*new_imports, create_wrapper_function(mode), *tree.body]
+    # remove benchmark functions
+    tree = remove_benchmark_functions(tree)
     return True, isort.code(ast.unparse(tree), float_to_top=True)
 
 

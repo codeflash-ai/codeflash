@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 from collections import defaultdict
 from functools import lru_cache
-from typing import TYPE_CHECKING, Optional, TypeVar
+from typing import TYPE_CHECKING, Optional, TypeVar, Union
 
 import isort
 import libcst as cst
@@ -16,12 +16,122 @@ from codeflash.code_utils.line_profile_utils import ImportAdder
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
+    from _ast import AST
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.models import CodeOptimizationContext, OptimizedCandidate, ValidCode
 
 ASTNodeT = TypeVar("ASTNodeT", bound=ast.AST)
+
+
+class BenchmarkFunctionRemover(ast.NodeTransformer):
+    """AST transformer that removes functions using pytest-benchmark fixture."""
+
+    def _uses_benchmark_fixture(self, node: Union[ast.FunctionDef, ast.AsyncFunctionDef]) -> bool:
+        """Check if a function uses the benchmark fixture."""
+        # Check function arguments for 'benchmark' parameter
+        for arg in node.args.args:
+            if arg.arg == "benchmark":
+                return True
+
+        # Check for pytest markers that might indicate benchmarking
+        for decorator in node.decorator_list:
+            if self._is_benchmark_marker(decorator):
+                return True
+
+        # Check function body for benchmark usage
+        return any(isinstance(stmt, ast.Call) and self._is_benchmark_call(stmt) for stmt in ast.walk(node))
+
+    def _is_benchmark_marker(self, decorator: ast.expr) -> bool:
+        """Check if decorator is a benchmark-related pytest marker."""
+        if isinstance(decorator, ast.Call):
+            if isinstance(decorator.func, ast.Attribute):
+                # Check for @pytest.mark.benchmark
+                if (
+                    isinstance(decorator.func.value, ast.Attribute)
+                    and isinstance(decorator.func.value.value, ast.Name)
+                    and decorator.func.value.value.id == "pytest"
+                    and decorator.func.value.attr == "mark"
+                    and decorator.func.attr == "benchmark"
+                ):
+                    return True
+            elif isinstance(decorator.func, ast.Name) and decorator.func.id == "benchmark":
+                return True
+        elif isinstance(decorator, ast.Attribute):
+            # Check for @pytest.mark.benchmark (without call)
+            if (
+                isinstance(decorator.value, ast.Attribute)
+                and isinstance(decorator.value.value, ast.Name)
+                and decorator.value.value.id == "pytest"
+                and decorator.value.attr == "mark"
+                and decorator.attr == "benchmark"
+            ):
+                return True
+        elif isinstance(decorator, ast.Name) and decorator.id == "benchmark":
+            return True
+
+        return False
+
+    @staticmethod
+    def _is_benchmark_call(call: ast.Call) -> bool:
+        """Check if a call is using the benchmark fixture."""
+        if isinstance(call.func, ast.Name) and call.func.id == "benchmark":
+            return True
+        return bool(
+            isinstance(call.func, ast.Attribute)
+            and call.func.attr in ["benchmark", "__call__"]
+            and isinstance(call.func.value, ast.Name)
+            and call.func.value.id == "benchmark"
+        )
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> Optional[AST]:
+        """Visit function definitions and remove if they use benchmark fixture."""
+        if self._uses_benchmark_fixture(node):
+            return None  # Remove the function
+        return self.generic_visit(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> Optional[AST]:
+        """Visit async function definitions and remove if they use benchmark fixture."""
+        if self._uses_benchmark_fixture(node):
+            return None  # Remove the function
+        return self.generic_visit(node)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
+        """Visit class definitions and remove benchmark methods."""
+        original_body = node.body[:]
+        new_body = []
+
+        for item in original_body:
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if not self._uses_benchmark_fixture(item):
+                    new_body.append(self.visit(item))
+
+            else:
+                new_body.append(self.visit(item))
+
+        node.body = new_body
+        return node
+
+
+def remove_benchmark_functions(tree: AST) -> AST:
+    """Remove benchmark functions from Python source code.
+
+    Args:
+        tree: Python source code as ast module
+
+    Returns:
+        Tuple of (modified_source_code, set_of_removed_function_names)
+
+    """
+    try:
+        # Create and apply the transformer
+        remover = BenchmarkFunctionRemover()
+        return remover.visit(tree)
+
+    except Exception as e:
+        print(f"Error processing code: {e}")
+        return tree
 
 
 def normalize_node(node: ASTNodeT) -> ASTNodeT:
