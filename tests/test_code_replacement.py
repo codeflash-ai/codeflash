@@ -2630,13 +2630,12 @@ def test_performance(benchmark):
 def test_normal():
     assert True
 """
+        expected = """def test_normal():
+    assert True"""
         tree = ast.parse(source)
         result = self.remover.visit(tree)
 
-        # Should only have one function left
-        functions = [node for node in result.body if isinstance(node, ast.FunctionDef)]
-        assert len(functions) == 1
-        assert functions[0].name == "test_normal"
+        assert ast.unparse(result) == expected
 
     def test_removes_async_function_with_benchmark_parameter(self):
         """Test that async functions with 'benchmark' parameter are removed."""
@@ -2648,13 +2647,13 @@ async def test_async_performance(benchmark):
 async def test_async_normal():
     assert True
 """
+        expected = """async def test_async_normal():
+    assert True"""
         tree = ast.parse(source)
         result = self.remover.visit(tree)
 
         # Should only have one async function left
-        functions = [node for node in result.body if isinstance(node, ast.AsyncFunctionDef)]
-        assert len(functions) == 1
-        assert functions[0].name == "test_async_normal"
+        assert ast.unparse(result) == expected
 
     def test_removes_function_with_pytest_mark_benchmark_decorator(self):
         """Test that functions with @pytest.mark.benchmark decorator are removed."""
@@ -2668,13 +2667,14 @@ def test_with_benchmark_marker():
 def test_normal():
     pass
 """
+        expected = """import pytest
+
+def test_normal():
+    pass"""
         tree = ast.parse(source)
         result = self.remover.visit(tree)
 
-        # Should have import and one function
-        functions = [node for node in result.body if isinstance(node, ast.FunctionDef)]
-        assert len(functions) == 1
-        assert functions[0].name == "test_normal"
+        assert ast.unparse(result) == expected
 
     def test_removes_function_with_benchmark_decorator_call(self):
         """Test that functions with @pytest.mark.benchmark() decorator are removed."""
@@ -2689,12 +2689,15 @@ def test_with_benchmark_marker_call():
 def test_normal_with_marker():
     pass
 """
+        expected = """import pytest
+
+@pytest.mark.parametrize('x', [1, 2, 3])
+def test_normal_with_marker():
+    pass"""
         tree = ast.parse(source)
         result = self.remover.visit(tree)
 
-        functions = [node for node in result.body if isinstance(node, ast.FunctionDef)]
-        assert len(functions) == 1
-        assert functions[0].name == "test_normal_with_marker"
+        assert ast.unparse(result) == expected
 
     def test_removes_function_with_simple_benchmark_decorator(self):
         """Test that functions with @benchmark decorator are removed."""
@@ -2706,12 +2709,12 @@ def test_simple_benchmark():
 def test_normal():
     pass
 """
+        expected = """def test_normal():
+    pass"""
         tree = ast.parse(source)
         result = self.remover.visit(tree)
 
-        functions = [node for node in result.body if isinstance(node, ast.FunctionDef)]
-        assert len(functions) == 1
-        assert functions[0].name == "test_normal"
+        assert ast.unparse(result) == expected
 
     def test_removes_function_with_benchmark_call_in_body(self):
         """Test that functions calling benchmark() in body are removed."""
@@ -2724,12 +2727,13 @@ def test_normal():
     some_other_function()
     assert True
 """
+        expected = """def test_normal():
+    some_other_function()
+    assert True"""
         tree = ast.parse(source)
         result = self.remover.visit(tree)
 
-        functions = [node for node in result.body if isinstance(node, ast.FunctionDef)]
-        assert len(functions) == 1
-        assert functions[0].name == "test_normal"
+        assert ast.unparse(result) == expected
 
     def test_removes_benchmark_methods_from_class(self):
         """Test that benchmark methods are removed from classes."""
@@ -2746,13 +2750,11 @@ class TestClass:
     def test_decorated_benchmark(self):
         pass
 """
+        expected = """class TestClass:\n    \n    def test_normal_method(self):\n        assert True"""
         tree = ast.parse(source)
         result = self.remover.visit(tree)
 
-        class_node = result.body[0]
-        methods = [node for node in class_node.body if isinstance(node, ast.FunctionDef)]
-        assert len(methods) == 1
-        assert methods[0].name == "test_normal_method"
+        assert ast.dump(result) == ast.dump(ast.parse(expected))
 
     def test_preserves_non_benchmark_functions(self):
         """Test that non-benchmark functions are preserved."""
@@ -2767,14 +2769,22 @@ def helper_function(param1, param2):
 def test_parametrized(x):
     assert x > 0
 """
+        expected = """
+def test_normal_function():
+    assert True
+
+def helper_function(param1, param2):
+    return param1 + param2
+
+@pytest.mark.parametrize("x", [1, 2, 3])
+def test_parametrized(x):
+    assert x > 0
+"""
         tree = ast.parse(source)
-        original_functions = [node.name for node in tree.body if isinstance(node, ast.FunctionDef)]
 
         result = self.remover.visit(tree)
-        result_functions = [node.name for node in result.body if isinstance(node, ast.FunctionDef)]
 
-        assert len(result_functions) == 3
-        assert set(result_functions) == set(original_functions)
+        assert ast.dump(result) == ast.dump(ast.parse(expected))
 
     def test_handles_empty_class(self):
         """Test handling of classes that become empty after removing benchmark methods."""
@@ -2784,11 +2794,11 @@ class TestBenchmarks:
     def test_only_benchmark(self):
         pass
 """
+        expected = """class TestBenchmarks:"""
         tree = ast.parse(source)
         result = self.remover.visit(tree)
 
-        class_node = result.body[0]
-        assert len(class_node.body) == 0
+        assert ast.unparse(result) == expected
 
     def test_handles_mixed_decorators(self):
         """Test functions with multiple decorators including benchmark."""
@@ -2802,12 +2812,13 @@ def test_multiple_decorators(x):
 def test_normal_with_decorator(y):
     pass
 """
+        expected = """@pytest.mark.parametrize('y', [3, 4])
+def test_normal_with_decorator(y):
+    pass"""
         tree = ast.parse(source)
         result = self.remover.visit(tree)
 
-        functions = [node for node in result.body if isinstance(node, ast.FunctionDef)]
-        assert len(functions) == 1
-        assert functions[0].name == "test_normal_with_decorator"
+        assert ast.unparse(result) == expected
 
 
 class TestRemoveBenchmarkFunctions:
@@ -2823,12 +2834,14 @@ def test_benchmark(benchmark):
     result = benchmark(some_function)
     assert result
 """
+        expected = """
+def test_normal():
+    assert True
+"""
         tree = ast.parse(source)
         result = remove_benchmark_functions(tree)
 
-        functions = [node for node in result.body if isinstance(node, ast.FunctionDef)]
-        assert len(functions) == 1
-        assert functions[0].name == "test_normal"
+        assert ast.dump(result) == ast.dump(ast.parse(expected))
 
     def test_remove_benchmark_functions_handles_exception(self, capsys):
         """Test that exceptions are handled gracefully."""
@@ -2884,30 +2897,24 @@ def standalone_function():
 async def test_async_benchmark():
     await some_async_function()
 """
+        expected = """
+import pytest
+from some_module import some_function
+
+class TestPerformance:
+    def setup_method(self):
+        self.data = [1, 2, 3, 4, 5]
+
+    def test_normal_operation(self):
+        assert len(self.data) == 5
+
+def standalone_function():
+    return "not a test"
+"""
         tree = ast.parse(source)
         result = remove_benchmark_functions(tree)
 
-        # Check that imports and standalone function are preserved
-        imports = [node for node in result.body if isinstance(node, (ast.Import, ast.ImportFrom))]
-        assert len(imports) == 2
-
-        # Check class methods
-        class_node = [node for node in result.body if isinstance(node, ast.ClassDef)][0]
-        methods = [node for node in class_node.body if isinstance(node, ast.FunctionDef)]
-        method_names = [method.name for method in methods]
-        assert "setup_method" in method_names
-        assert "test_normal_operation" in method_names
-        assert "test_benchmark_operation" not in method_names
-        assert "test_with_benchmark_param" not in method_names
-
-        # Check standalone function is preserved
-        functions = [node for node in result.body if isinstance(node, ast.FunctionDef)]
-        assert any(func.name == "standalone_function" for func in functions)
-
-        # Check async benchmark function is removed
-        async_functions = [node for node in result.body if isinstance(node, ast.AsyncFunctionDef)]
-        assert len(async_functions) == 0
-
+        assert ast.dump(result) == ast.dump(ast.parse(expected))
 
 class TestBenchmarkDetectionMethods:
     """Test the individual detection methods."""
