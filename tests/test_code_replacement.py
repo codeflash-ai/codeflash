@@ -2733,7 +2733,7 @@ def test_normal():
         tree = ast.parse(source)
         result = self.remover.visit(tree)
 
-        assert ast.unparse(result) == expected
+        assert ast.dump(result) == ast.dump(ast.parse(expected))
 
     def test_removes_benchmark_methods_from_class(self):
         """Test that benchmark methods are removed from classes."""
