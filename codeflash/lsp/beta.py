@@ -89,6 +89,21 @@ def third_step_in_optimize_function(server: CodeflashLanguageServer, params: Opt
     }
 
 
+@server.feature("fourth_step_in_optimize_function")
+def fourth_step_in_optimize_function(server: CodeflashLanguageServer, params: OptimizeFunctionParams) -> dict[str, str]:
+    current_function_optimizer = server.optimizer.current_function_optimizer
+
+    if not current_function_optimizer:
+        return {"functionName": params.functionName, "status": "error", "message": "No function optimizer found"}
+
+    optimized_code = current_function_optimizer.optimize_function()
+
+    if not optimized_code:
+        return {"functionName": params.functionName, "status": "error", "message": "Optimization failed"}
+
+    return {"functionName": params.functionName, "status": "success", "optimized_code": optimized_code}
+
+
 if __name__ == "__main__":
     from codeflash.cli_cmds.console import console
 
