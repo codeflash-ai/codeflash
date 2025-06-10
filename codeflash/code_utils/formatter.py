@@ -137,7 +137,7 @@ def format_code(
                     f"Skipping formatting {path}: {diff_lines_count} lines would change (max: {max_diff_lines})"
                 )
                 return original_code
-
+        # ToDO : We can avoid formatting the whole file again and only formatting the optimized code standalone and replace in formatted file above.
         _, formatted_code = apply_formatter_cmds(formatter_cmds, path, test_dir_str=None, print_status=print_status)
         logger.debug(f"Formatted {path} with commands: {formatter_cmds}")
         return formatted_code
