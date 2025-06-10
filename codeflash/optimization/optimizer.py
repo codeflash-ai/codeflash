@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
+from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.either import is_successful
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
@@ -71,7 +72,6 @@ class Optimizer:
     def run(self) -> None:
         from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
         from codeflash.code_utils.code_replacer import normalize_code, normalize_node
-        from codeflash.code_utils.code_utils import cleanup_paths
         from codeflash.code_utils.static_analysis import (
             analyze_imported_modules,
             get_first_top_level_function_or_method_ast,
@@ -110,7 +110,12 @@ class Optimizer:
             from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
             from codeflash.benchmarking.utils import print_benchmark_table, validate_and_format_benchmark_table
 
-            with progress_bar(f"Running benchmarks in {self.args.benchmarks_root}", transient=True):
+            console.rule()
+            with progress_bar(
+                f"Running benchmarks in {self.args.benchmarks_root}",
+                transient=True,
+                revert_to_print=bool(get_pr_number()),
+            ):
                 # Insert decorator
                 file_path_to_source_code = defaultdict(str)
                 for file in file_to_funcs_to_optimize:
@@ -277,14 +282,22 @@ class Optimizer:
             if function_optimizer:
                 function_optimizer.cleanup_generated_files()
 
-            if self.test_cfg.concolic_test_root_dir:
-                cleanup_paths([self.test_cfg.concolic_test_root_dir])
+            self.cleanup_temporary_paths()
+
+    def cleanup_temporary_paths(self) -> None:
+        from codeflash.code_utils.code_utils import cleanup_paths
+
+        cleanup_paths([self.test_cfg.concolic_test_root_dir, self.replay_tests_dir])
 
 
 def run_with_args(args: Namespace) -> None:
+    optimizer = None
     try:
         optimizer = Optimizer(args)
         optimizer.run()
     except KeyboardInterrupt:
-        logger.warning("Keyboard interrupt received. Exiting, please wait…")
+        logger.warning("Keyboard interrupt received. Cleaning up and exiting, please wait…")
+        if optimizer:
+            optimizer.cleanup_temporary_paths()
+
         raise SystemExit from None
