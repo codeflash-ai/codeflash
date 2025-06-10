@@ -54,12 +54,38 @@ def optimize_function(server: CodeflashLanguageServer, params: OptimizeFunctionP
 
 
 @server.feature("second_step_in_optimize_function")
-def second_step_in_optimize_function(server: CodeflashLanguageServer, params: OptimizeFunctionParams) -> dict[str, str]:  # noqa: ARG001
+def second_step_in_optimize_function(server: CodeflashLanguageServer, params: OptimizeFunctionParams) -> dict[str, str]:
+    current_function = server.optimizer.current_function_being_optimized
+
+    optimizable_funcs = {current_function.file_path: [current_function]}
+
+    function_to_tests, num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
+    # mocking in order to get things going
+    return {"functionName": params.functionName, "status": "success", "generated_tests": str(num_discovered_tests)}
+
+
+@server.feature("third_step_in_optimize_function")
+def third_step_in_optimize_function(server: CodeflashLanguageServer, params: OptimizeFunctionParams) -> dict[str, str]:
+    current_function = server.optimizer.current_function_being_optimized
+
+    module_prep_result = server.optimizer.prepare_module_for_optimization(current_function.file_path)
+
+    validated_original_code, original_module_ast = module_prep_result
+
+    function_optimizer = server.optimizer.create_function_optimizer(
+        current_function,
+        function_to_optimize_source_code=validated_original_code[current_function.file_path].source_code,
+        original_module_ast=original_module_ast,
+        original_module_path=current_function.file_path,
+    )
+
+    server.optimizer.current_function_optimizer = function_optimizer
+
     return {
         "functionName": params.functionName,
         "status": "success",
-        "generated_tests": "5",
-        "generated_optimizations": "3",
+        "message": "Function optimizer created successfully",
+        "extra": function_optimizer.function_to_tests,
     }
 
 
