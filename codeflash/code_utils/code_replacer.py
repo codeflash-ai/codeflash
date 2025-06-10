@@ -43,7 +43,8 @@ class BenchmarkFunctionRemover(ast.NodeTransformer):
         # Check function body for benchmark usage
         return any(isinstance(stmt, ast.Call) and self._is_benchmark_call(stmt) for stmt in ast.walk(node))
 
-    def _is_benchmark_marker(self, decorator: ast.expr) -> bool:
+    @staticmethod
+    def _is_benchmark_marker(decorator: ast.expr) -> bool:
         """Check if decorator is a benchmark-related pytest marker."""
         if isinstance(decorator, ast.Call):
             if isinstance(decorator.func, ast.Attribute):
