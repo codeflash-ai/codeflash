@@ -32,10 +32,4 @@ jobs:
         run: uvx poetry install --with dev
 
       - name: Unit tests
-        run: uvx poetry run pytest tests/ --cov --cov-report=xml --benchmark-skip -m "not ci_skip"
-
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
-        if: matrix.python-version == '3.12.1'
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+        run: uvx poetry run pytest tests/ --benchmark-skip -m "not ci_skip"

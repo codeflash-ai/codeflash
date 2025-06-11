@@ -1705,25 +1705,6 @@ elasticsearch = ["elasticsearch"]
 histogram = ["pygal", "pygaljs", "setuptools"]
 
 [[package]]
-name = "pytest-cov"
-version = "6.1.1"
-description = "Pytest plugin for measuring coverage."
-optional = false
-python-versions = ">=3.9"
-groups = ["dev"]
-files = [
-    {file = "pytest_cov-6.1.1-py3-none-any.whl", hash = "sha256:bddf29ed2d0ab6f4df17b4c55b0a657287db8684af9c42ea546b21b1041b3dde"},
-    {file = "pytest_cov-6.1.1.tar.gz", hash = "sha256:46935f7aaefba760e716c2ebfbe1c216240b9592966e7da99ea8292d4d3e2a0a"},
-]
-
-[package.dependencies]
-coverage = {version = ">=7.5", extras = ["toml"]}
-pytest = ">=4.6"
-
-[package.extras]
-testing = ["fields", "hunter", "process-tests", "pytest-xdist", "virtualenv"]
-
-[[package]]
 name = "pytest-timeout"
 version = "2.4.0"
 description = "pytest plugin to abort hanging tests"
@@ -2686,4 +2667,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9"
-content-hash = "1a73e9db33e3884cf1cc6e3371816aebd20831845ef9bf671be315e659480e86"
+content-hash = "2a3d21343a2bbe712cc2272f26fe6b7adcb793f9bcd99c67ce4fbc9709416218"
