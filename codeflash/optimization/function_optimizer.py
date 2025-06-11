@@ -173,14 +173,21 @@ class FunctionOptimizer:
 
         return Success((should_run_experiment, code_context, original_helper_code))
 
-    def optimize_function(self) -> Result[BestOptimization, str]:
-        initialization_result = self.can_be_optimized()
-        if not is_successful(initialization_result):
-            return Failure(initialization_result.failure())
-
-        should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
-
-        code_print(code_context.read_writable_code)
+    def generate_and_instrument_tests(
+        self, code_context: CodeOptimizationContext, *, should_run_experiment: bool
+    ) -> Result[
+        tuple[
+            GeneratedTestsList,
+            dict[str, set[FunctionCalledInTest]],
+            str,
+            OptimizationSet,
+            list[Path],
+            list[Path],
+            set[Path],
+            dict | None,
+        ]
+    ]:
+        """Generate and instrument tests, returning all necessary data for optimization."""
         generated_test_paths = [
             get_test_file_path(
                 self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
@@ -211,6 +218,7 @@ class FunctionOptimizer:
 
         if not is_successful(generated_results):
             return Failure(generated_results.failure())
+
         generated_tests: GeneratedTestsList
         optimizations_set: OptimizationSet
         generated_tests, function_to_concolic_tests, concolic_test_str, optimizations_set = generated_results.unwrap()
@@ -239,17 +247,63 @@ class FunctionOptimizer:
             logger.info(f"Generated test {count_tests}/{count_tests}:")
             code_print(concolic_test_str)
 
-        function_to_optimize_qualified_name = self.function_to_optimize.qualified_name
         function_to_all_tests = {
             key: self.function_to_tests.get(key, set()) | function_to_concolic_tests.get(key, set())
             for key in set(self.function_to_tests) | set(function_to_concolic_tests)
         }
         instrumented_unittests_created_for_function = self.instrument_existing_tests(function_to_all_tests)
+
+        original_conftest_content = None
         if self.args.override_fixtures:
             logger.info("Disabling all autouse fixtures associated with the generated test files")
             original_conftest_content = modify_autouse_fixture(generated_test_paths + generated_perf_test_paths)
             logger.info("Add custom marker to generated test files")
             add_custom_marker_to_all_tests(generated_test_paths + generated_perf_test_paths)
+
+        return Success(
+            (
+                generated_tests,
+                function_to_concolic_tests,
+                concolic_test_str,
+                optimizations_set,
+                generated_test_paths,
+                generated_perf_test_paths,
+                instrumented_unittests_created_for_function,
+                original_conftest_content,
+            )
+        )
+
+    def optimize_function(self) -> Result[BestOptimization, str]:
+        initialization_result = self.can_be_optimized()
+        if not is_successful(initialization_result):
+            return Failure(initialization_result.failure())
+
+        should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
+
+        code_print(code_context.read_writable_code)
+
+        test_setup_result = self.generate_and_instrument_tests(  # also generates optimizations
+            code_context, should_run_experiment=should_run_experiment
+        )
+        if not is_successful(test_setup_result):
+            return Failure(test_setup_result.failure())
+
+        (
+            generated_tests,
+            function_to_concolic_tests,
+            concolic_test_str,
+            optimizations_set,
+            generated_test_paths,
+            generated_perf_test_paths,
+            instrumented_unittests_created_for_function,
+            original_conftest_content,
+        ) = test_setup_result.unwrap()
+
+        function_to_optimize_qualified_name = self.function_to_optimize.qualified_name
+        function_to_all_tests = {
+            key: self.function_to_tests.get(key, set()) | function_to_concolic_tests.get(key, set())
+            for key in set(self.function_to_tests) | set(function_to_concolic_tests)
+        }
 
         # Get a dict of file_path_to_classes of fto and helpers_of_fto
         file_path_to_helper_classes = defaultdict(set)
@@ -260,7 +314,7 @@ class FunctionOptimizer:
             ):
                 file_path_to_helper_classes[function_source.file_path].add(function_source.qualified_name.split(".")[0])
 
-        baseline_result = self.establish_original_code_baseline(  # this needs better typing
+        baseline_result = self.establish_original_code_baseline(
             code_context=code_context,
             original_helper_code=original_helper_code,
             file_path_to_helper_classes=file_path_to_helper_classes,
@@ -838,7 +892,7 @@ class FunctionOptimizer:
         console.rule()
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit the test generation task as future
-            future_tests = self.generate_and_instrument_tests(
+            future_tests = self.submit_test_generation_tasks(
                 executor,
                 testgen_context_code,
                 [definition.fully_qualified_name for definition in helper_functions],
@@ -1296,7 +1350,7 @@ class FunctionOptimizer:
             results, coverage_results = parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
         return results, coverage_results
 
-    def generate_and_instrument_tests(
+    def submit_test_generation_tasks(
         self,
         executor: concurrent.futures.ThreadPoolExecutor,
         source_code_being_tested: str,

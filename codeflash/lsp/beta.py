@@ -90,11 +90,26 @@ def third_step_in_optimize_function(server: CodeflashLanguageServer, params: Opt
 
     should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
 
+    test_setup_result = function_optimizer.generate_and_instrument_tests(
+        code_context, should_run_experiment=should_run_experiment
+    )
+    if not is_successful(test_setup_result):
+        return {"functionName": params.functionName, "status": "error", "message": test_setup_result.failure()}
+    (
+        generated_tests,
+        function_to_concolic_tests,
+        concolic_test_str,
+        optimizations_set,
+        generated_test_paths,
+        generated_perf_test_paths,
+        instrumented_unittests_created_for_function,
+        original_conftest_content,
+    ) = test_setup_result.unwrap()
     return {
         "functionName": params.functionName,
         "status": "success",
         "message": "Function can be optimized",
-        "extra": original_helper_code,
+        "extra": "none",
     }
 
 
