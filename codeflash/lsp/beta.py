@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from pygls import uris
 
+from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
 
 if TYPE_CHECKING:
@@ -80,28 +81,21 @@ def third_step_in_optimize_function(server: CodeflashLanguageServer, params: Opt
     )
 
     server.optimizer.current_function_optimizer = function_optimizer
+    if not function_optimizer:
+        return {"functionName": params.functionName, "status": "error", "message": "No function optimizer found"}
+
+    initialization_result = function_optimizer.can_be_optimized()
+    if not is_successful(initialization_result):
+        return {"functionName": params.functionName, "status": "error", "message": initialization_result.failure()}
+
+    should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
 
     return {
         "functionName": params.functionName,
         "status": "success",
-        "message": "Function optimizer created successfully",
-        "extra": function_optimizer.function_to_tests,
+        "message": "Function can be optimized",
+        "extra": original_helper_code,
     }
-
-
-@server.feature("fourth_step_in_optimize_function")
-def fourth_step_in_optimize_function(server: CodeflashLanguageServer, params: OptimizeFunctionParams) -> dict[str, str]:
-    current_function_optimizer = server.optimizer.current_function_optimizer
-
-    if not current_function_optimizer:
-        return {"functionName": params.functionName, "status": "error", "message": "No function optimizer found"}
-
-    optimized_code = current_function_optimizer.optimize_function()
-
-    if not optimized_code:
-        return {"functionName": params.functionName, "status": "error", "message": "Optimization failed"}
-
-    return {"functionName": params.functionName, "status": "success", "optimized_code": optimized_code}
 
 
 if __name__ == "__main__":

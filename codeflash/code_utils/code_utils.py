@@ -216,7 +216,5 @@ def restore_conftest(path_to_content_map: dict[Path, str]) -> None:
         path.write_text(file_content, encoding="utf8")
 
 
-def exit_with_message(message: str, *, error_on_exit: bool = False) -> None:
-    paneled_text(message, panel_args={"style": "red"})
-
-    sys.exit(1 if error_on_exit else 0)
+async def dummy_async_function() -> None:
+    """Provide a dummy async function for testing purposes."""
