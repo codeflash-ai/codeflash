@@ -127,11 +127,31 @@ def third_step_in_optimize_function(server: CodeflashLanguageServer, params: Opt
         file_path_to_helper_classes,
     ) = baseline_setup_result.unwrap()
 
+    best_optimization = function_optimizer.find_and_process_best_optimization(
+        optimizations_set=optimizations_set,
+        code_context=code_context,
+        original_code_baseline=original_code_baseline,
+        original_helper_code=original_helper_code,
+        file_path_to_helper_classes=file_path_to_helper_classes,
+        function_to_optimize_qualified_name=function_to_optimize_qualified_name,
+        function_to_all_tests=function_to_all_tests,
+        generated_tests=generated_tests,
+        test_functions_to_remove=test_functions_to_remove,
+        concolic_test_str=concolic_test_str,
+    )
+
+    if not best_optimization:
+        return {
+            "functionName": params.functionName,
+            "status": "error",
+            "message": f"No best optimizations found for function {function_to_optimize_qualified_name}",
+        }
+
     return {
         "functionName": params.functionName,
         "status": "success",
-        "message": "Baseline established successfully",
-        "extra": f"Runtime: {original_code_baseline.runtime}ns",
+        "message": "Optimization completed successfully",
+        "extra": f"Speedup: {original_code_baseline.runtime / best_optimization.runtime:.2f}x faster",
     }
 
 
