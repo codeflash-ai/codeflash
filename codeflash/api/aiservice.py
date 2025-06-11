@@ -11,6 +11,7 @@ from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key
+from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.models.models import OptimizedCandidate
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
@@ -97,6 +98,12 @@ class AiServiceClient:
 
         """
         start_time = time.perf_counter()
+        try:
+            git_repo_owner, git_repo_name = get_repo_owner_and_name()
+        except Exception as e:
+            logger.warning(f"Could not determine repo owner and name: {e}")
+            git_repo_owner, git_repo_name = None, None
+
         payload = {
             "source_code": source_code,
             "dependency_code": dependency_code,
@@ -105,6 +112,9 @@ class AiServiceClient:
             "python_version": platform.python_version(),
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
+            "current_username": get_last_commit_author_if_pr_exists(None),
+            "repo_owner": git_repo_owner,
+            "repo_name": git_repo_name,
         }
 
         logger.info("Generating optimized candidates…")
