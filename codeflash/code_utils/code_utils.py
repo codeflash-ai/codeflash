@@ -33,7 +33,7 @@ def custom_addopts() -> None:
             # Backup original addopts
             original_addopts = data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("addopts", "")
             # nothing to do if no addopts present
-            if original_addopts != "":
+            if original_addopts != "" and isinstance(original_addopts, list):
                 original_addopts = [x.strip() for x in original_addopts]
                 non_blacklist_plugin_args = re.sub(r"-n(?: +|=)\S+", "", " ".join(original_addopts)).split(" ")
                 non_blacklist_plugin_args = [x for x in non_blacklist_plugin_args if x != ""]
