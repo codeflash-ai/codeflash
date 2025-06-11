@@ -19,7 +19,7 @@ from rich.syntax import Syntax
 from rich.tree import Tree
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
-from codeflash.api.cfapi import add_code_context_hash
+from codeflash.api.cfapi import add_code_context_hash, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
@@ -390,6 +390,11 @@ class FunctionOptimizer:
                             original_helper_code,
                             self.function_to_optimize.file_path,
                         )
+                else:
+                    # Mark optimization success since no PR will be created
+                    mark_optimization_success(
+                        trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
+                    )
                 self.log_successful_optimization(explanation, generated_tests, exp_type)
 
         # Add function to code context hash if in gh actions
