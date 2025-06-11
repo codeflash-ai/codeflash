@@ -17,6 +17,7 @@ from pydantic.dataclasses import dataclass
 from codeflash.api.cfapi import get_blocklisted_functions, is_function_being_optimized_again
 from codeflash.cli_cmds.console import DEBUG_MODE, console, logger
 from codeflash.code_utils.code_utils import (
+    exit_with_message,
     is_class_defined_in_file,
     module_name_from_file_path,
     path_belongs_to_site_packages,
@@ -179,8 +180,9 @@ def get_functions_to_optimize(
             if only_get_this_function is not None:
                 split_function = only_get_this_function.split(".")
                 if len(split_function) > 2:
-                    msg = "Function name should be in the format 'function_name' or 'class_name.function_name'"
-                    raise ValueError(msg)
+                    exit_with_message(
+                        "Function name should be in the format 'function_name' or 'class_name.function_name'"
+                    )
                 if len(split_function) == 2:
                     class_name, only_function_name = split_function
                 else:
@@ -193,8 +195,9 @@ def get_functions_to_optimize(
                     ):
                         found_function = fn
                 if found_function is None:
-                    msg = f"Function {only_function_name} not found in file {file} or the function does not have a 'return' statement or is a property"
-                    raise ValueError(msg)
+                    exit_with_message(
+                        f"Function {only_function_name} not found in file {file}\nor the function does not have a 'return' statement or is a property"
+                    )
                 functions[file] = [found_function]
         else:
             logger.info("Finding all functions modified in the current git diff ...")
@@ -599,7 +602,14 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
 
 
 def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
-    return any(isinstance(node, ast.Return) for node in ast.walk(function_node))
+    # Custom DFS, return True as soon as a Return node is found
+    stack = [function_node]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, ast.Return):
+            return True
+        stack.extend(ast.iter_child_nodes(node))
+    return False
 
 
 def function_is_a_property(function_node: FunctionDef | AsyncFunctionDef) -> bool:
