@@ -379,7 +379,7 @@ class Tracer:
                     del arguments_copy["self"]
                 local_vars = pickle.dumps(arguments_copy, protocol=pickle.HIGHEST_PROTOCOL)
                 sys.setrecursionlimit(original_recursion_limit)
-            except (TypeError, pickle.PicklingError, AttributeError, RecursionError, OSError):
+            except Exception:
                 # we retry with dill if pickle fails. It's slower but more comprehensive
                 try:
                     sys.setrecursionlimit(10000)  # Ensure limit is high for dill too
@@ -390,7 +390,7 @@ class Tracer:
                     )
                     sys.setrecursionlimit(original_recursion_limit)
 
-                except (TypeError, dill.PicklingError, AttributeError, RecursionError, OSError):
+                except Exception:
                     self.function_count[function_qualified_name] -= 1
                     return
 
