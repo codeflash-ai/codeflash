@@ -5,7 +5,6 @@ import os
 import re
 import shutil
 import site
-import sys
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -13,7 +12,7 @@ from tempfile import TemporaryDirectory
 
 import tomlkit
 
-from codeflash.cli_cmds.console import logger, paneled_text
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_parser import find_pyproject_toml
 
 ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
