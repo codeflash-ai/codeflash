@@ -42,7 +42,7 @@ def parse_args() -> Namespace:
     )
     parser.add_argument("--test-framework", choices=["pytest", "unittest"], default="pytest")
     parser.add_argument("--config-file", type=str, help="Path to the pyproject.toml with codeflash configs.")
-    parser.add_argument("--replay-test", type=str, help="Path to replay test to optimize functions from")
+    parser.add_argument("--replay-test", type=str, nargs="+", help="Paths to replay test to optimize functions from")
     parser.add_argument(
         "--no-pr", action="store_true", help="Do not create a PR for the optimization, only update the code locally."
     )
@@ -98,10 +98,11 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
             owner, repo = get_repo_owner_and_name()
             require_github_app_or_exit(owner, repo)
     if args.replay_test:
-        if not Path(args.replay_test).is_file():
-            logger.error(f"Replay test file {args.replay_test} does not exist")
-            sys.exit(1)
-        args.replay_test = Path(args.replay_test).resolve()
+        for test_path in args.replay_test:
+            if not Path(test_path).is_file():
+                logger.error(f"Replay test file {test_path} does not exist")
+                sys.exit(1)
+        args.replay_test = [Path(replay_test).resolve() for replay_test in args.replay_test]
 
     return args
 

@@ -149,7 +149,7 @@ class FunctionToOptimize:
 
 def get_functions_to_optimize(
     optimize_all: str | None,
-    replay_test: str | None,
+    replay_test: list[Path] | None,
     file: Path | None,
     only_get_this_function: str | None,
     test_cfg: TestConfig,
@@ -168,7 +168,7 @@ def get_functions_to_optimize(
             logger.info("Finding all functions in the module '%s'…", optimize_all)
             console.rule()
             functions = get_all_files_and_functions(Path(optimize_all))
-        elif replay_test is not None:
+        elif replay_test:
             functions = get_all_replay_test_functions(
                 replay_test=replay_test, test_cfg=test_cfg, project_root_path=project_root
             )
@@ -268,9 +268,9 @@ def find_all_functions_in_file(file_path: Path) -> dict[Path, list[FunctionToOpt
 
 
 def get_all_replay_test_functions(
-    replay_test: Path, test_cfg: TestConfig, project_root_path: Path
+    replay_test: list[Path], test_cfg: TestConfig, project_root_path: Path
 ) -> dict[Path, list[FunctionToOptimize]]:
-    function_tests, _ = discover_unit_tests(test_cfg, discover_only_these_tests=[replay_test])
+    function_tests, _ = discover_unit_tests(test_cfg, discover_only_these_tests=replay_test)
     # Get the absolute file paths for each function, excluding class name if present
     filtered_valid_functions = defaultdict(list)
     file_to_functions_map = defaultdict(list)
