@@ -144,7 +144,7 @@ class FunctionOptimizer:
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
         self.replay_tests_dir = replay_tests_dir if replay_tests_dir else None
 
-    def optimize_function(self) -> Result[BestOptimization, str]:  # noqa: PLR0911
+    def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
         logger.debug(f"Function Trace ID: {self.function_trace_id}")
         ph("cli-optimize-function-start", {"function_trace_id": self.function_trace_id})
@@ -170,6 +170,15 @@ class FunctionOptimizer:
             self.function_to_optimize, code_context
         ):
             return Failure("Function optimization previously attempted, skipping.")
+
+        return Success((should_run_experiment, code_context, original_helper_code))
+
+    def optimize_function(self) -> Result[BestOptimization, str]:
+        initialization_result = self.can_be_optimized()
+        if not is_successful(initialization_result):
+            return Failure(initialization_result.failure())
+
+        should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
 
         code_print(code_context.read_writable_code)
         generated_test_paths = [
