@@ -105,11 +105,33 @@ def third_step_in_optimize_function(server: CodeflashLanguageServer, params: Opt
         instrumented_unittests_created_for_function,
         original_conftest_content,
     ) = test_setup_result.unwrap()
+
+    baseline_setup_result = function_optimizer.setup_and_establish_baseline(
+        code_context=code_context,
+        original_helper_code=original_helper_code,
+        function_to_concolic_tests=function_to_concolic_tests,
+        generated_test_paths=generated_test_paths,
+        generated_perf_test_paths=generated_perf_test_paths,
+        instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
+        original_conftest_content=original_conftest_content,
+    )
+
+    if not is_successful(baseline_setup_result):
+        return {"functionName": params.functionName, "status": "error", "message": baseline_setup_result.failure()}
+
+    (
+        function_to_optimize_qualified_name,
+        function_to_all_tests,
+        original_code_baseline,
+        test_functions_to_remove,
+        file_path_to_helper_classes,
+    ) = baseline_setup_result.unwrap()
+
     return {
         "functionName": params.functionName,
         "status": "success",
-        "message": "Function can be optimized",
-        "extra": "none",
+        "message": "Baseline established successfully",
+        "extra": f"Runtime: {original_code_baseline.runtime}ns",
     }
 
 

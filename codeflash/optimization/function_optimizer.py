@@ -299,46 +299,27 @@ class FunctionOptimizer:
             original_conftest_content,
         ) = test_setup_result.unwrap()
 
-        function_to_optimize_qualified_name = self.function_to_optimize.qualified_name
-        function_to_all_tests = {
-            key: self.function_to_tests.get(key, set()) | function_to_concolic_tests.get(key, set())
-            for key in set(self.function_to_tests) | set(function_to_concolic_tests)
-        }
-
-        # Get a dict of file_path_to_classes of fto and helpers_of_fto
-        file_path_to_helper_classes = defaultdict(set)
-        for function_source in code_context.helper_functions:
-            if (
-                function_source.qualified_name != self.function_to_optimize.qualified_name
-                and "." in function_source.qualified_name
-            ):
-                file_path_to_helper_classes[function_source.file_path].add(function_source.qualified_name.split(".")[0])
-
-        baseline_result = self.establish_original_code_baseline(
+        baseline_setup_result = self.setup_and_establish_baseline(
             code_context=code_context,
             original_helper_code=original_helper_code,
-            file_path_to_helper_classes=file_path_to_helper_classes,
+            function_to_concolic_tests=function_to_concolic_tests,
+            generated_test_paths=generated_test_paths,
+            generated_perf_test_paths=generated_perf_test_paths,
+            instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
+            original_conftest_content=original_conftest_content,
         )
 
-        console.rule()
-        paths_to_cleanup = (
-            generated_test_paths + generated_perf_test_paths + list(instrumented_unittests_created_for_function)
-        )
+        if not is_successful(baseline_setup_result):
+            return Failure(baseline_setup_result.failure())
 
-        if not is_successful(baseline_result):
-            if self.args.override_fixtures:
-                restore_conftest(original_conftest_content)
-            cleanup_paths(paths_to_cleanup)
-            return Failure(baseline_result.failure())
+        (
+            function_to_optimize_qualified_name,
+            function_to_all_tests,
+            original_code_baseline,
+            test_functions_to_remove,
+            file_path_to_helper_classes,
+        ) = baseline_setup_result.unwrap()
 
-        original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
-        if isinstance(original_code_baseline, OriginalCodeBaseline) and not coverage_critic(
-            original_code_baseline.coverage_results, self.args.test_framework
-        ):
-            if self.args.override_fixtures:
-                restore_conftest(original_conftest_content)
-            cleanup_paths(paths_to_cleanup)
-            return Failure("The threshold for test coverage was not met.")
         # request for new optimizations but don't block execution, check for completion later
         # adding to control and experiment set but with same traceid
         best_optimization = None
@@ -974,6 +955,70 @@ class FunctionOptimizer:
                 function_to_concolic_tests,
                 concolic_test_str,
                 OptimizationSet(control=candidates, experiment=candidates_experiment),
+            )
+        )
+
+    def setup_and_establish_baseline(
+        self,
+        code_context: CodeOptimizationContext,
+        original_helper_code: dict[Path, str],
+        function_to_concolic_tests: dict[str, set[FunctionCalledInTest]],
+        generated_test_paths: list[Path],
+        generated_perf_test_paths: list[Path],
+        instrumented_unittests_created_for_function: set[Path],
+        original_conftest_content: str | None,
+    ) -> Result[
+        tuple[str, dict[str, set[FunctionCalledInTest]], OriginalCodeBaseline, list[str], dict[Path, set[str]]], str
+    ]:
+        """Set up baseline context and establish original code baseline."""
+        function_to_optimize_qualified_name = self.function_to_optimize.qualified_name
+        function_to_all_tests = {
+            key: self.function_to_tests.get(key, set()) | function_to_concolic_tests.get(key, set())
+            for key in set(self.function_to_tests) | set(function_to_concolic_tests)
+        }
+
+        # Get a dict of file_path_to_classes of fto and helpers_of_fto
+        file_path_to_helper_classes = defaultdict(set)
+        for function_source in code_context.helper_functions:
+            if (
+                function_source.qualified_name != self.function_to_optimize.qualified_name
+                and "." in function_source.qualified_name
+            ):
+                file_path_to_helper_classes[function_source.file_path].add(function_source.qualified_name.split(".")[0])
+
+        baseline_result = self.establish_original_code_baseline(
+            code_context=code_context,
+            original_helper_code=original_helper_code,
+            file_path_to_helper_classes=file_path_to_helper_classes,
+        )
+
+        console.rule()
+        paths_to_cleanup = (
+            generated_test_paths + generated_perf_test_paths + list(instrumented_unittests_created_for_function)
+        )
+
+        if not is_successful(baseline_result):
+            if self.args.override_fixtures:
+                restore_conftest(original_conftest_content)
+            cleanup_paths(paths_to_cleanup)
+            return Failure(baseline_result.failure())
+
+        original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
+        if isinstance(original_code_baseline, OriginalCodeBaseline) and not coverage_critic(
+            original_code_baseline.coverage_results, self.args.test_framework
+        ):
+            if self.args.override_fixtures:
+                restore_conftest(original_conftest_content)
+            cleanup_paths(paths_to_cleanup)
+            return Failure("The threshold for test coverage was not met.")
+
+        return Success(
+            (
+                function_to_optimize_qualified_name,
+                function_to_all_tests,
+                original_code_baseline,
+                test_functions_to_remove,
+                file_path_to_helper_classes,
             )
         )
 
