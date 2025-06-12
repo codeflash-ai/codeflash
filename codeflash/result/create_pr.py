@@ -31,64 +31,62 @@ def existing_tests_source_for(
     optimized_test_results: Optional[TestResults] = None,
 ) -> str:
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
+    if not test_files:
+        return ""
     existing_tests_unique = set()
+    # a lot of loops, need to do in a single loop
+    #original_runtime_by_test = original_test_results.usable_runtime_data_by_test_case()
+    #optimized_runtime_by_test = optimized_test_results.usable_runtime_data_by_test_case()
+    # Group test cases by test file
+    test_files_grouped = {}
+    for test_file in test_files:
+        file_path = Path(test_file.tests_in_file.test_file)
+        relative_path = str(file_path.relative_to(tests_root))
 
-    if test_files:
-        # Group test cases by test file
-        test_files_grouped = {}
-        for test_file in test_files:
-            file_path = Path(test_file.tests_in_file.test_file)
-            relative_path = str(file_path.relative_to(tests_root))
+        if relative_path not in test_files_grouped:
+            test_files_grouped[relative_path] = []
+        test_files_grouped.setdefault(relative_path,[]).append(test_file)
 
-            if relative_path not in test_files_grouped:
-                test_files_grouped[relative_path] = []
-            test_files_grouped[relative_path].append(test_file)
+    # Create detailed report for each test file
+    # for relative_path, tests_in_file in sorted(test_files_grouped.items()):
+        file_line = f"- {relative_path}"
 
-        # Create detailed report for each test file
-        for relative_path, tests_in_file in sorted(test_files_grouped.items()):
-            file_line = f"- {relative_path}"
+        # Add test case details with timing information if available
+        #if original_test_results and optimized_test_results:
+        test_case_details = []
+        # Collect test function names for this file
+        test_functions_in_file = {test_file.tests_in_file.test_function for test_file in tests_in_file}
 
-            # Add test case details with timing information if available
-            if original_test_results and optimized_test_results:
-                test_case_details = []
+        # Create timing report for each test function
+        for test_function_name in sorted(test_functions_in_file):
+            # Find matching runtime data
+            original_runtimes = []
+            optimized_runtimes = []
 
-                # Use the same pattern as add_runtime_comments_to_generated_tests
-                original_runtime_by_test = original_test_results.usable_runtime_data_by_test_case()
-                optimized_runtime_by_test = optimized_test_results.usable_runtime_data_by_test_case()
+            for invocation_id, runtimes in original_runtime_by_test.items():
+                if invocation_id.test_function_name == test_function_name:
+                    original_runtimes.extend(runtimes)
 
-                # Collect test function names for this file
-                test_functions_in_file = {test_file.tests_in_file.test_function for test_file in tests_in_file}
+            for invocation_id, runtimes in optimized_runtime_by_test.items():
+                if invocation_id.test_function_name == test_function_name:
+                    optimized_runtimes.extend(runtimes)
 
-                # Create timing report for each test function
-                for test_function_name in sorted(test_functions_in_file):
-                    # Find matching runtime data
-                    original_runtimes = []
-                    optimized_runtimes = []
+            if original_runtimes and optimized_runtimes:
+                # Use minimum timing like the generated tests function does
+                original_time = min(original_runtimes)
+                optimized_time = min(optimized_runtimes)
 
-                    for invocation_id, runtimes in original_runtime_by_test.items():
-                        if invocation_id.test_function_name == test_function_name:
-                            original_runtimes.extend(runtimes)
+                from codeflash.code_utils.time_utils import format_time
 
-                    for invocation_id, runtimes in optimized_runtime_by_test.items():
-                        if invocation_id.test_function_name == test_function_name:
-                            optimized_runtimes.extend(runtimes)
+                original_str = format_time(original_time)
+                optimized_str = format_time(optimized_time)
 
-                    if original_runtimes and optimized_runtimes:
-                        # Use minimum timing like the generated tests function does
-                        original_time = min(original_runtimes)
-                        optimized_time = min(optimized_runtimes)
+                test_case_details.append(f"    - {test_function_name}: {original_str} -> {optimized_str}")
 
-                        from codeflash.code_utils.time_utils import format_time
+        if test_case_details:
+            file_line += "\n" + "\n".join(test_case_details)
 
-                        original_str = format_time(original_time)
-                        optimized_str = format_time(optimized_time)
-
-                        test_case_details.append(f"    - {test_function_name}: {original_str} -> {optimized_str}")
-
-                if test_case_details:
-                    file_line += "\n" + "\n".join(test_case_details)
-
-            existing_tests_unique.add(file_line)
+        existing_tests_unique.add(file_line)
 
     return "\n".join(sorted(existing_tests_unique))
 
