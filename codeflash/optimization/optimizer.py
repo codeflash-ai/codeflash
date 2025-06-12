@@ -91,14 +91,16 @@ class Optimizer:
 
         owner, repo = get_repo_owner_and_name()
 
-        pr_info = cfapi.get_pr_info(owner, repo, int(get_pr_number()))
-        if pr_info is None:
-            logger.warning(f"Could not find {owner}/{repo}#{get_pr_number()}.")
-            return
-        is_draft = pr_info["draft"]
-        if is_draft:
-            logger.warning("PR is in draft mode, skipping optimization")
-            return
+        pr_number = get_pr_number()
+        if pr_number is not None:
+            pr_info = cfapi.get_pr_info(owner, repo, pr_number)
+            if pr_info is None:
+                logger.warning(f"Could not find {owner}/{repo}#{pr_number}.")
+                return
+            is_draft = pr_info["draft"]
+            if is_draft:
+                logger.warning("PR is in draft mode, skipping optimization")
+                return
 
         function_optimizer = None
         file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
