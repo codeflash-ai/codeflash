@@ -191,7 +191,7 @@ def run_line_profile_tests(
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
-        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin,codeflash.benchmarking.plugin"
+        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
         blocklist_args = [f"-p no:{plugin}" for plugin in BENCHMARKING_BLOCKLISTED_PLUGINS]
         pytest_test_env["LINE_PROFILE"] = "1"
         results = execute_test_subprocess(
@@ -252,7 +252,7 @@ def run_benchmarking_tests(
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
-        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin,codeflash.benchmarking.plugin"
+        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
         blocklist_args = [f"-p no:{plugin}" for plugin in BENCHMARKING_BLOCKLISTED_PLUGINS]
         results = execute_test_subprocess(
             pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
