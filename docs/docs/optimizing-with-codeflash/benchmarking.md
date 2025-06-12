@@ -13,7 +13,7 @@ Codeflash will then calculate the impact (if any) of any optimization on the per
 
 1. **Create a benchmarks root** 
 
-    Create a directory for benchmarks. This directory must be a sub directory of your tests directory.
+    Create a directory for benchmarks. 
 
    In your pyproject.toml, add the path to the 'benchmarks-root' section.
     ```yaml
