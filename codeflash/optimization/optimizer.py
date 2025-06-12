@@ -8,10 +8,12 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from codeflash.api import cfapi
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.env_utils import get_pr_number
+from codeflash.code_utils.git_utils import get_repo_owner_and_name
 from codeflash.either import is_successful
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
@@ -86,6 +88,18 @@ class Optimizer:
             return
         if not env_utils.check_formatter_installed(self.args.formatter_cmds):
             return
+
+        owner, repo = get_repo_owner_and_name()
+
+        pr_info = cfapi.get_pr_info(owner, repo, int(get_pr_number()))
+        if pr_info is None:
+            logger.warning(f"Could not find {owner}/{repo}#{get_pr_number()}.")
+            return
+        is_draft = pr_info["draft"]
+        if is_draft:
+            logger.warning("PR is in draft mode, skipping optimization")
+            return
+
         function_optimizer = None
         file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
         num_optimizable_functions: int
