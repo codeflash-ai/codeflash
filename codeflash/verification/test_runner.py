@@ -74,7 +74,7 @@ def run_behavioral_tests(
 
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = (
-            "codeflash.verification.pytest_plugin,codeflash.benchmarking.plugin.custom_plugin"
+            "codeflash.verification.pytest_plugin"
         )
 
         if enable_coverage:
@@ -194,7 +194,7 @@ def run_line_profile_tests(
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = (
-            "codeflash.verification.pytest_plugin,codeflash.benchmarking.plugin.custom_plugin"
+            "codeflash.verification.pytest_plugin,codeflash.benchmarking.plugin"
         )
         blocklist_args = [f"-p no:{plugin}" for plugin in BENCHMARKING_BLOCKLISTED_PLUGINS]
         pytest_test_env["LINE_PROFILE"] = "1"
@@ -257,7 +257,7 @@ def run_benchmarking_tests(
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = (
-            "codeflash.verification.pytest_plugin,codeflash.benchmarking.plugin.custom_plugin"
+            "codeflash.verification.pytest_plugin,codeflash.benchmarking.plugin"
         )
         blocklist_args = [f"-p no:{plugin}" for plugin in BENCHMARKING_BLOCKLISTED_PLUGINS]
         results = execute_test_subprocess(
