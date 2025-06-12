@@ -128,7 +128,7 @@ class Optimizer:
                         trace_file.unlink()
 
                     self.replay_tests_dir = Path(
-                        tempfile.mkdtemp(prefix="codeflash_replay_tests_", dir=self.args.benchmarks_root)
+                        tempfile.mkdtemp(prefix="codeflash_replay_tests_", dir=self.args.tests_root)
                     )
                     trace_benchmarks_pytest(
                         self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file
