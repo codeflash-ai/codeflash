@@ -147,6 +147,8 @@ def third_step_in_optimize_function(server: CodeflashLanguageServer, params: Opt
             "message": f"No best optimizations found for function {function_to_optimize_qualified_name}",
         }
 
+    optimized_source = best_optimization.candidate.source_code  # noqa: F841
+
     return {
         "functionName": params.functionName,
         "status": "success",
