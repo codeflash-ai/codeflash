@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 from enum import Enum
 from pathlib import Path
+from time import sleep
 from typing import TYPE_CHECKING, TypeVar
 
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -141,6 +142,7 @@ def get_first_top_level_function_or_method_ast(
 def function_kind(node: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[FunctionParent]) -> FunctionKind | None:
     if not parents or parents[0].type in ["FunctionDef", "AsyncFunctionDef"]:
         return FunctionKind.FUNCTION
+    sleep(1)
     if parents[0].type == "ClassDef":
         for decorator in node.decorator_list:
             if isinstance(decorator, ast.Name):
