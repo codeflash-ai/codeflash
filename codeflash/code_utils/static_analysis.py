@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, TypeVar
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from codeflash.models.models import FunctionParent
+
 if TYPE_CHECKING:
     from codeflash.models.models import FunctionParent
 
@@ -139,14 +141,19 @@ def get_first_top_level_function_or_method_ast(
 
 
 def function_kind(node: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[FunctionParent]) -> FunctionKind | None:
-    if not parents or parents[0].type in ["FunctionDef", "AsyncFunctionDef"]:
+    if not parents:
         return FunctionKind.FUNCTION
-    if parents[0].type == "ClassDef":
+    parent_type = parents[0].type
+    if parent_type in {"FunctionDef", "AsyncFunctionDef"}:
+        return FunctionKind.FUNCTION
+    if parent_type == "ClassDef":
+        # Search for known decorators efficiently
         for decorator in node.decorator_list:
             if isinstance(decorator, ast.Name):
-                if decorator.id == "classmethod":
+                dec_id = decorator.id
+                if dec_id == "classmethod":
                     return FunctionKind.CLASS_METHOD
-                if decorator.id == "staticmethod":
+                if dec_id == "staticmethod":
                     return FunctionKind.STATIC_METHOD
         return FunctionKind.INSTANCE_METHOD
     return None
