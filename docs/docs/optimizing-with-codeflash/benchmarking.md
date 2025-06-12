@@ -3,7 +3,7 @@ sidebar_position: 5
 ---
 # Using Benchmarks
 
-Codeflash is able the determine the impact of an optimization on predefined benchmarks, when used in benchmark mode.
+Codeflash is able to determine the impact of an optimization on predefined benchmarks, when used in benchmark mode.
 
 Benchmark mode is an easy way for users to define workflows that are performance-critical and need to be optimized.
 For example, if a user has an important function that requires minimal latency, the user can define a benchmark for that function.
@@ -13,7 +13,7 @@ Codeflash will then calculate the impact (if any) of any optimization on the per
 
 1. **Create a benchmarks root** 
 
-    Create a directory for benchmarks. 
+    Create a directory for benchmarks if it does not already exist. 
 
    In your pyproject.toml, add the path to the 'benchmarks-root' section.
     ```yaml
