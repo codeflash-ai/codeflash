@@ -8,6 +8,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import git
+
 from codeflash.api import cfapi
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import console, logger, progress_bar
@@ -89,11 +91,12 @@ class Optimizer:
         if not env_utils.check_formatter_installed(self.args.formatter_cmds):
             return
 
-        owner, repo = get_repo_owner_and_name()
+        repo = git.Repo(search_parent_directories=True)
+        owner, repo_name = get_repo_owner_and_name(repo)
 
         pr_number = get_pr_number()
         if pr_number is not None:
-            pr_info = cfapi.get_pr_info(owner, repo, pr_number)
+            pr_info = cfapi.get_pr_info(owner, repo_name, pr_number)
             if pr_info is None:
                 logger.warning(f"Could not find {owner}/{repo}#{pr_number}.")
                 return
