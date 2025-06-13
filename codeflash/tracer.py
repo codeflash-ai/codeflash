@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import contextlib
+import datetime
 import importlib.machinery
 import io
 import json
@@ -190,7 +191,10 @@ class Tracer:
             "INSERT INTO metadata VALUES (?, ?)",
             ("functions_filter", json.dumps(self.functions) if self.functions else None),
         )
-        cur.execute("INSERT INTO metadata VALUES (?, ?)", ("timestamp", str(int(time.time()))))
+        cur.execute(
+            "INSERT INTO metadata VALUES (?, ?)",
+            ("timestamp", datetime.datetime.now(datetime.timezone.utc).isoformat()),
+        )
         cur.execute("INSERT INTO metadata VALUES (?, ?)", ("project_root", str(self.project_root)))
         console.rule("Codeflash: Traced Program Output Begin", style="bold blue")
         frame = sys._getframe(0)  # Get this frame and simulate a call to it  # noqa: SLF001
