@@ -19,7 +19,7 @@ from codeflash.code_utils.github_utils import github_pr_url
 from codeflash.github.PrComment import FileDiffContent, PrComment
 
 if TYPE_CHECKING:
-    from codeflash.models.models import FunctionCalledInTest
+    from codeflash.models.models import FunctionCalledInTest, TestResults
     from codeflash.result.explanation import Explanation
 
 
@@ -27,12 +27,67 @@ def existing_tests_source_for(
     function_qualified_name_with_modules_from_root: str,
     function_to_tests: dict[str, set[FunctionCalledInTest]],
     tests_root: Path,
+    original_test_results: Optional[TestResults] = None,
+    optimized_test_results: Optional[TestResults] = None,
 ) -> str:
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
+    if not test_files:
+        return ""
     existing_tests_unique = set()
-    if test_files:
-        for test_file in test_files:
-            existing_tests_unique.add("- " + str(Path(test_file.tests_in_file.test_file).relative_to(tests_root)))
+    # a lot of loops, need to do in a single loop
+    #original_runtime_by_test = original_test_results.usable_runtime_data_by_test_case()
+    #optimized_runtime_by_test = optimized_test_results.usable_runtime_data_by_test_case()
+    # Group test cases by test file
+    test_files_grouped = {}
+    for test_file in test_files:
+        file_path = Path(test_file.tests_in_file.test_file)
+        relative_path = str(file_path.relative_to(tests_root))
+
+        if relative_path not in test_files_grouped:
+            test_files_grouped[relative_path] = []
+        test_files_grouped.setdefault(relative_path,[]).append(test_file)
+
+    # Create detailed report for each test file
+    # for relative_path, tests_in_file in sorted(test_files_grouped.items()):
+        file_line = f"- {relative_path}"
+
+        # Add test case details with timing information if available
+        #if original_test_results and optimized_test_results:
+        test_case_details = []
+        # Collect test function names for this file
+        test_functions_in_file = {test_file.tests_in_file.test_function for test_file in tests_in_file}
+
+        # Create timing report for each test function
+        for test_function_name in sorted(test_functions_in_file):
+            # Find matching runtime data
+            original_runtimes = []
+            optimized_runtimes = []
+
+            for invocation_id, runtimes in original_runtime_by_test.items():
+                if invocation_id.test_function_name == test_function_name:
+                    original_runtimes.extend(runtimes)
+
+            for invocation_id, runtimes in optimized_runtime_by_test.items():
+                if invocation_id.test_function_name == test_function_name:
+                    optimized_runtimes.extend(runtimes)
+
+            if original_runtimes and optimized_runtimes:
+                # Use minimum timing like the generated tests function does
+                original_time = min(original_runtimes)
+                optimized_time = min(optimized_runtimes)
+
+                from codeflash.code_utils.time_utils import format_time
+
+                original_str = format_time(original_time)
+                optimized_str = format_time(optimized_time)
+
+                test_case_details.append(f"    - {test_function_name}: {original_str} -> {optimized_str}")
+
+        if test_case_details:
+            file_line += "\n" + "\n".join(test_case_details)
+
+        existing_tests_unique.add(file_line)
+
     return "\n".join(sorted(existing_tests_unique))
 
 

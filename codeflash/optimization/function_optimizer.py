@@ -341,12 +341,6 @@ class FunctionOptimizer:
                     optimized_function=best_optimization.candidate.source_code,
                 )
 
-                existing_tests = existing_tests_source_for(
-                    self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
-                    function_to_all_tests,
-                    tests_root=self.test_cfg.tests_root,
-                )
-
                 original_code_combined = original_helper_code.copy()
                 original_code_combined[explanation.file_path] = self.function_to_optimize_source_code
                 new_code_combined = new_helper_code.copy()
@@ -368,6 +362,13 @@ class FunctionOptimizer:
                     )
                     generated_tests_str = "\n\n".join(
                         [test.generated_original_test_source for test in generated_tests.generated_tests]
+                    )
+                    existing_tests = existing_tests_source_for(
+                        self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
+                        function_to_all_tests,
+                        tests_root=self.test_cfg.tests_root,
+                        original_test_results=original_code_baseline.benchmarking_test_results,
+                        optimized_test_results=best_optimization.winning_benchmarking_test_results,
                     )
                     if concolic_test_str:
                         generated_tests_str += "\n\n" + concolic_test_str
