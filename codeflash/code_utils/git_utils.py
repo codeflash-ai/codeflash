@@ -23,41 +23,56 @@ if TYPE_CHECKING:
     from git import Repo
 
 
-def get_git_diff(repo_directory: Path = Path.cwd(), uncommitted_changes: bool = False) -> dict[str, list[int]]:  # noqa: B008, FBT001, FBT002
+def get_git_diff(
+    repo_directory: Path = Path.cwd(),  # noqa: B008
+    uncommitted_changes: bool = False,  # noqa: FBT001, FBT002
+    base_branch: str | None = None,
+) -> dict[str, list[int]]:
     repository = git.Repo(repo_directory, search_parent_directories=True)
     commit = repository.head.commit
-    if uncommitted_changes:
-        uni_diff_text = repository.git.diff(None, "HEAD", ignore_blank_lines=True, ignore_space_at_eol=True)
-    else:
-        uni_diff_text = repository.git.diff(
-            commit.hexsha + "^1", commit.hexsha, ignore_blank_lines=True, ignore_space_at_eol=True
-        )
-    patch_set = PatchSet(StringIO(uni_diff_text))
-    change_list: dict[str, list[int]] = {}  # list of changes
-    for patched_file in patch_set:
-        file_path: Path = Path(patched_file.path)
-        if file_path.suffix != ".py":
-            continue
-        file_path = Path(repository.working_dir) / file_path
-        logger.debug(f"file name: {file_path}")
+    try:
+        if uncommitted_changes:
+            uni_diff_text = repository.git.diff(None, "HEAD", ignore_blank_lines=True, ignore_space_at_eol=True)
+        elif base_branch is not None:
+            uni_diff_text = repository.git.diff(
+                f"origin/{base_branch}...HEAD", ignore_blank_lines=True, ignore_space_at_eol=True
+            )
+        else:
+            uni_diff_text = repository.git.diff(
+                commit.hexsha + "^1", commit.hexsha, ignore_blank_lines=True, ignore_space_at_eol=True
+            )
+        patch_set = PatchSet(StringIO(uni_diff_text))
+        change_list: dict[str, list[int]] = {}  # list of changes
+        for patched_file in patch_set:
+            file_path: Path = Path(patched_file.path)
+            if file_path.suffix != ".py":
+                continue
+            file_path = Path(repository.working_dir) / file_path
+            logger.debug(f"file name: {file_path}")
 
-        add_line_no: list[int] = [
-            line.target_line_no for hunk in patched_file for line in hunk if line.is_added and line.value.strip() != ""
-        ]  # the row number of deleted lines
+            add_line_no: list[int] = [
+                line.target_line_no
+                for hunk in patched_file
+                for line in hunk
+                if line.is_added and line.value.strip() != ""
+            ]  # the row number of deleted lines
 
-        logger.debug(f"added lines: {add_line_no}")
+            logger.debug(f"added lines: {add_line_no}")
 
-        del_line_no: list[int] = [
-            line.source_line_no
-            for hunk in patched_file
-            for line in hunk
-            if line.is_removed and line.value.strip() != ""
-        ]  # the row number of added lines
+            del_line_no: list[int] = [
+                line.source_line_no
+                for hunk in patched_file
+                for line in hunk
+                if line.is_removed and line.value.strip() != ""
+            ]  # the row number of added lines
 
-        logger.debug(f"deleted lines: {del_line_no}")
+            logger.debug(f"deleted lines: {del_line_no}")
 
-        change_list[file_path] = add_line_no
-    return change_list
+            change_list[file_path] = add_line_no
+            return change_list
+    except Exception as e:
+        logger.error(f"Error getting git diff: {e}")
+        return {}
 
 
 def get_current_branch(repo: Repo | None = None) -> str:

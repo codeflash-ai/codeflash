@@ -158,6 +158,7 @@ def get_functions_to_optimize(
     project_root: Path,
     module_root: Path,
     previous_checkpoint_functions: dict[str, dict[str, str]] | None = None,
+    pr_base_branch: str | None = None,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     assert sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1, (
         "Only one of optimize_all, replay_test, or file should be provided"
@@ -201,8 +202,11 @@ def get_functions_to_optimize(
                 functions[file] = [found_function]
         else:
             logger.info("Finding all functions modified in the current git diff ...")
+            if get_pr_number() is None:
+                pr_base_branch = None
             ph("cli-optimizing-git-diff")
-            functions = get_functions_within_git_diff()
+            functions = get_functions_within_git_diff(base_branch=pr_base_branch)
+            print(functions.keys())
         filtered_modified_functions, functions_count = filter_functions(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )
@@ -217,8 +221,8 @@ def get_functions_to_optimize(
         return filtered_modified_functions, functions_count
 
 
-def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
-    modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=False)
+def get_functions_within_git_diff(base_branch: str | None = None) -> dict[str, list[FunctionToOptimize]]:
+    modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=False, base_branch=base_branch)
     modified_functions: dict[str, list[FunctionToOptimize]] = {}
     for path_str, lines_in_file in modified_lines.items():
         path = Path(path_str)

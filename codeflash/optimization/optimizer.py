@@ -100,6 +100,7 @@ class Optimizer:
             project_root=self.args.project_root,
             module_root=self.args.module_root,
             previous_checkpoint_functions=self.args.previous_checkpoint_functions,
+            pr_base_branch=self.args.base_branch,
         )
         function_benchmark_timings: dict[str, dict[BenchmarkKey, int]] = {}
         total_benchmark_timings: dict[BenchmarkKey, int] = {}

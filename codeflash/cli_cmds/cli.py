@@ -62,6 +62,7 @@ def parse_args() -> Namespace:
         type=str,
         help="Path to the directory of the project, where all the pytest-benchmark tests are located.",
     )
+    parser.add_argument("--base-branch", type=str, help="The base branch to compare the current branch to")
     args: Namespace = parser.parse_args()
     return process_and_validate_cmd_args(args)
 
@@ -121,6 +122,7 @@ def process_pyproject_config(args: Namespace) -> Namespace:
         "disable_imports_sorting",
         "git_remote",
         "override_fixtures",
+        "base_branch",
     ]
     for key in supported_keys:
         if key in pyproject_config and (
