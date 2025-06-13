@@ -8,10 +8,14 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import git
+
+from codeflash.api import cfapi
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.env_utils import get_pr_number
+from codeflash.code_utils.git_utils import get_repo_owner_and_name
 from codeflash.either import is_successful
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
@@ -86,6 +90,11 @@ class Optimizer:
             return
         if not env_utils.check_formatter_installed(self.args.formatter_cmds):
             return
+
+        if is_pr_draft():
+            logger.warning("PR is in draft mode, skipping optimization")
+            return
+
         function_optimizer = None
         file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
         num_optimizable_functions: int
@@ -301,3 +310,21 @@ def run_with_args(args: Namespace) -> None:
             optimizer.cleanup_temporary_paths()
 
         raise SystemExit from None
+
+
+def is_pr_draft() -> bool:
+    try:
+        repo = git.Repo(search_parent_directories=True)
+        owner, repo_name = get_repo_owner_and_name(repo)
+
+        pr_number = get_pr_number()
+        if pr_number is not None:
+            pr_info = cfapi.get_pr_info(owner, repo_name, pr_number)
+            if pr_info is None:
+                logger.warning(f"Could not find {owner}/{repo}#{pr_number}.")
+                return False
+            is_draft = pr_info["draft"]
+            if is_draft:
+                return True
+    except git.exc.InvalidGitRepositoryError:
+        return False
