@@ -164,14 +164,13 @@ cython_debug/
 .aider*
 /js/common/node_modules/
 /node_modules/
-*.xml
 *.pem
 
 # Ruff cache
 .ruff_cache/
 
 # IDE settings
-.idea/
+
 .vscode/
 
 # Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio, WebStorm and Rider
