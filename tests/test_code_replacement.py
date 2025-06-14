@@ -1,6 +1,6 @@
 from __future__ import annotations
 import libcst as cst
-from codeflash.code_utils.code_replacer import AutouseFixtureModifier, PytestMarkAdder
+from codeflash.code_utils.code_replacer import AutouseFixtureModifier, PytestMarkAdder, AddRequestArgument
 import dataclasses
 import os
 from collections import defaultdict
@@ -2564,15 +2564,15 @@ from pathlib import Path
 
 
 class TestIntegration:
-    """Integration tests for both transformers working together."""
+    """Integration tests for all transformers working together."""
 
-    def test_both_transformers_together(self):
-        """Test that both transformers can work on the same code."""
+    def test_all_transformers_together(self):
+        """Test that all three transformers can work on the same code."""
         source_code = '''
 import pytest
 
 @pytest.fixture(autouse=True)
-def my_fixture(request):
+def my_fixture():
     yield "value"
 
 def test_something():
@@ -2593,16 +2593,481 @@ def my_fixture(request):
 def test_something():
     assert True
 '''
-        # First apply AutouseFixtureModifier
+        # First apply AddRequestArgument
         module = cst.parse_module(source_code)
-        autouse_modifier = AutouseFixtureModifier()
-        modified_module = module.visit(autouse_modifier)
+        request_adder = AddRequestArgument()
+        modified_module = module.visit(request_adder)
 
-        # Then apply PytestMarkAdder
+        # Then apply AutouseFixtureModifier
+        autouse_modifier = AutouseFixtureModifier()
+        modified_module = modified_module.visit(autouse_modifier)
+
+        # Finally apply PytestMarkAdder
         mark_adder = PytestMarkAdder("codeflash_no_autouse")
         final_module = modified_module.visit(mark_adder)
 
-        code = final_module.code
-        # Should have both modifications
-        assert code==expected_code
+        # Compare complete strings
+        assert final_module.code == expected_code
 
+    def test_transformers_with_existing_request_parameter(self):
+        """Test transformers when request parameter already exists."""
+        source_code = '''
+import pytest
+
+@pytest.fixture(autouse=True)
+def my_fixture(request):
+    setup_code()
+    yield "value"
+    cleanup_code()
+
+def test_something():
+    assert True
+'''
+        expected_code = '''
+import pytest
+
+@pytest.fixture(autouse=True)
+@pytest.mark.codeflash_no_autouse
+def my_fixture(request):
+    if request.node.get_closest_marker("codeflash_no_autouse"):
+        yield
+    else:
+        setup_code()
+        yield "value"
+        cleanup_code()
+
+@pytest.mark.codeflash_no_autouse
+def test_something():
+    assert True
+'''
+        # Apply all transformers in sequence
+        module = cst.parse_module(source_code)
+        request_adder = AddRequestArgument()
+        modified_module = module.visit(request_adder)
+
+        autouse_modifier = AutouseFixtureModifier()
+        modified_module = modified_module.visit(autouse_modifier)
+
+        mark_adder = PytestMarkAdder("codeflash_no_autouse")
+        final_module = modified_module.visit(mark_adder)
+
+        # Compare complete strings
+        assert final_module.code == expected_code
+
+    def test_transformers_with_self_parameter(self):
+        """Test transformers when fixture has self parameter."""
+        source_code = '''
+import pytest
+
+@pytest.fixture(autouse=True)
+def my_fixture(self):
+    yield "value"
+
+def test_something():
+    assert True
+'''
+        expected_code = '''
+import pytest
+
+@pytest.fixture(autouse=True)
+@pytest.mark.codeflash_no_autouse
+def my_fixture(self, request):
+    if request.node.get_closest_marker("codeflash_no_autouse"):
+        yield
+    else:
+        yield "value"
+
+@pytest.mark.codeflash_no_autouse
+def test_something():
+    assert True
+'''
+        # Apply all transformers in sequence
+        module = cst.parse_module(source_code)
+        request_adder = AddRequestArgument()
+        modified_module = module.visit(request_adder)
+
+        autouse_modifier = AutouseFixtureModifier()
+        modified_module = modified_module.visit(autouse_modifier)
+
+        mark_adder = PytestMarkAdder("codeflash_no_autouse")
+        final_module = modified_module.visit(mark_adder)
+
+        # Compare complete strings
+        assert final_module.code == expected_code
+
+    def test_transformers_with_multiple_fixtures(self):
+        """Test transformers with multiple autouse fixtures."""
+        source_code = '''
+import pytest
+
+@pytest.fixture(autouse=True)
+def fixture_one():
+    yield "one"
+
+@pytest.fixture(autouse=True)
+def fixture_two(self, param):
+    yield "two"
+
+@pytest.fixture
+def regular_fixture():
+    return "regular"
+
+def test_something():
+    assert True
+'''
+        expected_code = '''
+import pytest
+
+@pytest.fixture(autouse=True)
+@pytest.mark.codeflash_no_autouse
+def fixture_one(request):
+    if request.node.get_closest_marker("codeflash_no_autouse"):
+        yield
+    else:
+        yield "one"
+
+@pytest.fixture(autouse=True)
+@pytest.mark.codeflash_no_autouse
+def fixture_two(self, request, param):
+    if request.node.get_closest_marker("codeflash_no_autouse"):
+        yield
+    else:
+        yield "two"
+
+@pytest.fixture
+@pytest.mark.codeflash_no_autouse
+def regular_fixture():
+    return "regular"
+
+@pytest.mark.codeflash_no_autouse
+def test_something():
+    assert True
+'''
+        # Apply all transformers in sequence
+        module = cst.parse_module(source_code)
+        request_adder = AddRequestArgument()
+        modified_module = module.visit(request_adder)
+
+        autouse_modifier = AutouseFixtureModifier()
+        modified_module = modified_module.visit(autouse_modifier)
+
+        mark_adder = PytestMarkAdder("codeflash_no_autouse")
+        final_module = modified_module.visit(mark_adder)
+
+        # Compare complete strings
+        assert final_module.code == expected_code
+
+
+
+
+class TestAddRequestArgument:
+    """Test cases for AddRequestArgument transformer."""
+
+    def test_adds_request_to_autouse_fixture_no_existing_args(self):
+        """Test adding request argument to autouse fixture with no existing arguments."""
+        source_code = '''
+@fixture(autouse=True)
+def my_fixture():
+    pass
+'''
+        expected = '''
+@fixture(autouse=True)
+def my_fixture(request):
+    pass
+'''
+
+        module = cst.parse_module(source_code)
+        transformer = AddRequestArgument()
+        modified_module = module.visit(transformer)
+
+        assert modified_module.code.strip() == expected.strip()
+
+    def test_adds_request_to_pytest_fixture_autouse(self):
+        """Test adding request argument to pytest.fixture with autouse=True."""
+        source_code = '''
+@pytest.fixture(autouse=True)
+def my_fixture():
+    pass
+'''
+        expected = '''
+@pytest.fixture(autouse=True)
+def my_fixture(request):
+    pass
+'''
+
+        module = cst.parse_module(source_code)
+        transformer = AddRequestArgument()
+        modified_module = module.visit(transformer)
+
+        assert modified_module.code.strip() == expected.strip()
+
+    def test_adds_request_after_self_parameter(self):
+        """Test adding request argument after self parameter."""
+        source_code = '''
+@fixture(autouse=True)
+def my_fixture(self):
+    pass
+'''
+        expected = '''
+@fixture(autouse=True)
+def my_fixture(self, request):
+    pass
+'''
+
+        module = cst.parse_module(source_code)
+        transformer = AddRequestArgument()
+        modified_module = module.visit(transformer)
+
+        assert modified_module.code.strip() == expected.strip()
+
+    def test_adds_request_after_cls_parameter(self):
+        """Test adding request argument after cls parameter."""
+        source_code = '''
+@fixture(autouse=True)
+def my_fixture(cls):
+    pass
+'''
+        expected = '''
+@fixture(autouse=True)
+def my_fixture(cls, request):
+    pass
+'''
+
+        module = cst.parse_module(source_code)
+        transformer = AddRequestArgument()
+        modified_module = module.visit(transformer)
+
+        assert modified_module.code.strip() == expected.strip()
+
+    def test_adds_request_before_other_parameters(self):
+        """Test adding request argument before other parameters (not self/cls)."""
+        source_code = '''
+@fixture(autouse=True)
+def my_fixture(param1, param2):
+    pass
+'''
+        expected = '''
+@fixture(autouse=True)
+def my_fixture(request, param1, param2):
+    pass
+'''
+
+        module = cst.parse_module(source_code)
+        transformer = AddRequestArgument()
+        modified_module = module.visit(transformer)
+
+        assert modified_module.code.strip() == expected.strip()
+
+    def test_adds_request_after_self_with_other_parameters(self):
+        """Test adding request argument after self with other parameters."""
+        source_code = '''
+@fixture(autouse=True)
+def my_fixture(self, param1, param2):
+    pass
+'''
+        expected = '''
+@fixture(autouse=True)
+def my_fixture(self, request, param1, param2):
+    pass
+'''
+
+        module = cst.parse_module(source_code)
+        transformer = AddRequestArgument()
+        modified_module = module.visit(transformer)
+
+        assert modified_module.code.strip() == expected.strip()
+
+    def test_skips_when_request_already_present(self):
+        """Test that request argument is not added when already present."""
+        source_code = '''
+@fixture(autouse=True)
+def my_fixture(request):
+    pass
+'''
+        expected = '''
+@fixture(autouse=True)
+def my_fixture(request):
+    pass
+'''
+
+        module = cst.parse_module(source_code)
+        transformer = AddRequestArgument()
+        modified_module = module.visit(transformer)
+
+        assert modified_module.code.strip() == expected.strip()
+
+    def test_skips_when_request_present_with_other_args(self):
+        """Test that request argument is not added when already present with other args."""
+        source_code = '''
+@fixture(autouse=True)
+def my_fixture(self, request, param1):
+    pass
+'''
+        expected = '''
+@fixture(autouse=True)
+def my_fixture(self, request, param1):
+    pass
+'''
+
+        module = cst.parse_module(source_code)
+        transformer = AddRequestArgument()
+        modified_module = module.visit(transformer)
+
+        assert modified_module.code.strip() == expected.strip()
+
+    def test_ignores_non_autouse_fixture(self):
+        """Test that non-autouse fixtures are not modified."""
+        source_code = '''
+@fixture
+def my_fixture():
+    pass
+'''
+        expected = '''
+@fixture
+def my_fixture():
+    pass
+'''
+
+        module = cst.parse_module(source_code)
+        transformer = AddRequestArgument()
+        modified_module = module.visit(transformer)
+
+        assert modified_module.code.strip() == expected.strip()
+
+    def test_ignores_fixture_with_autouse_false(self):
+        """Test that fixtures with autouse=False are not modified."""
+        source_code = '''
+@fixture(autouse=False)
+def my_fixture():
+    pass
+'''
+        expected = '''
+@fixture(autouse=False)
+def my_fixture():
+    pass
+'''
+
+        module = cst.parse_module(source_code)
+        transformer = AddRequestArgument()
+        modified_module = module.visit(transformer)
+
+        assert modified_module.code.strip() == expected.strip()
+
+    def test_ignores_regular_function(self):
+        """Test that regular functions are not modified."""
+        source_code = '''
+def my_function():
+    pass
+'''
+        expected = '''
+def my_function():
+    pass
+'''
+
+        module = cst.parse_module(source_code)
+        transformer = AddRequestArgument()
+        modified_module = module.visit(transformer)
+
+        assert modified_module.code.strip() == expected.strip()
+
+    def test_handles_multiple_autouse_fixtures(self):
+        """Test handling multiple autouse fixtures in the same module."""
+        source_code = '''
+@fixture(autouse=True)
+def fixture1():
+    pass
+
+@pytest.fixture(autouse=True)
+def fixture2(self):
+    pass
+
+@fixture(autouse=True)
+def fixture3(request):
+    pass
+'''
+        expected = '''
+@fixture(autouse=True)
+def fixture1(request):
+    pass
+
+@pytest.fixture(autouse=True)
+def fixture2(self, request):
+    pass
+
+@fixture(autouse=True)
+def fixture3(request):
+    pass
+'''
+
+        module = cst.parse_module(source_code)
+        transformer = AddRequestArgument()
+        modified_module = module.visit(transformer)
+
+        assert modified_module.code.strip() == expected.strip()
+
+    def test_handles_fixture_with_other_decorators(self):
+        """Test handling fixture with other decorators."""
+        source_code = '''
+@some_decorator
+@fixture(autouse=True)
+@another_decorator
+def my_fixture():
+    pass
+'''
+        expected = '''
+@some_decorator
+@fixture(autouse=True)
+@another_decorator
+def my_fixture(request):
+    pass
+'''
+
+        module = cst.parse_module(source_code)
+        transformer = AddRequestArgument()
+        modified_module = module.visit(transformer)
+
+        assert modified_module.code.strip() == expected.strip()
+
+    def test_preserves_function_body_and_docstring(self):
+        """Test that function body and docstring are preserved."""
+        source_code = '''
+@fixture(autouse=True)
+def my_fixture():
+    """This is a docstring."""
+    x = 1
+    y = 2
+    return x + y
+'''
+        expected = '''
+@fixture(autouse=True)
+def my_fixture(request):
+    """This is a docstring."""
+    x = 1
+    y = 2
+    return x + y
+'''
+
+        module = cst.parse_module(source_code)
+        transformer = AddRequestArgument()
+        modified_module = module.visit(transformer)
+
+        assert modified_module.code.strip() == expected.strip()
+
+    def test_handles_fixture_with_additional_arguments(self):
+        """Test handling fixture with additional keyword arguments."""
+        source_code = '''
+@fixture(autouse=True, scope="session")
+def my_fixture():
+    pass
+'''
+        expected = '''
+@fixture(autouse=True, scope="session")
+def my_fixture(request):
+    pass
+'''
+
+        module = cst.parse_module(source_code)
+        transformer = AddRequestArgument()
+        modified_module = module.visit(transformer)
+
+        assert modified_module.code.strip() == expected.strip()
