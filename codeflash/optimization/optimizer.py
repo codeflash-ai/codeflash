@@ -310,6 +310,7 @@ def run_with_args(args: Namespace) -> None:
 
 
 def is_pr_draft() -> bool:
+    """Check if the PR is draft. in the github action context."""
     try:
         event_path = os.getenv("GITHUB_EVENT_PATH")
         pr_number = get_pr_number()
