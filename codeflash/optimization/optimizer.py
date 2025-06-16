@@ -317,7 +317,7 @@ def is_pr_draft() -> bool:
         if pr_number is not None and event_path:
             with Path(event_path).open() as f:
                 event_data = json.load(f)
-            return event_data["pull_request"]["draft"]
+            return bool(event_data["pull_request"]["draft"])
         return False  # noqa
     except Exception as e:
         logger.warning(f"Error checking if PR is draft: {e}")
