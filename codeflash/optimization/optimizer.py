@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import os
 import tempfile
 import time
@@ -8,14 +9,10 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import git
-
-from codeflash.api import cfapi
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.env_utils import get_pr_number
-from codeflash.code_utils.git_utils import get_repo_owner_and_name
 from codeflash.either import is_successful
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
@@ -314,17 +311,13 @@ def run_with_args(args: Namespace) -> None:
 
 def is_pr_draft() -> bool:
     try:
-        repo = git.Repo(search_parent_directories=True)
-        owner, repo_name = get_repo_owner_and_name(repo)
-
+        event_path = os.getenv("GITHUB_EVENT_PATH")
         pr_number = get_pr_number()
-        if pr_number is not None:
-            pr_info = cfapi.get_pr_info(owner, repo_name, pr_number)
-            if pr_info is None:
-                logger.warning(f"Could not find {owner}/{repo}#{pr_number}.")
-                return False
-            is_draft = pr_info["draft"]
-            if is_draft:
-                return True
-    except git.exc.InvalidGitRepositoryError:
+        if pr_number is not None and event_path:
+            with Path(event_path).open() as f:
+                event_data = json.load(f)
+            return event_data["pull_request"]["draft"]
+        return False  # noqa
+    except Exception as e:
+        logger.warning(f"Error checking if PR is draft: {e}")
         return False

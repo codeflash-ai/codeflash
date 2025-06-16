@@ -250,13 +250,3 @@ def mark_optimization_success(trace_id: str, *, is_optimization_found: bool) -> 
     """
     payload = {"trace_id": trace_id, "is_optimization_found": is_optimization_found}
     return make_cfapi_request(endpoint="/mark-as-success", method="POST", payload=payload)
-
-
-def get_pr_info(owner: str, repo: str, pr_number: int) -> Any:  # noqa
-    """Get information about a pull request."""
-    response = make_cfapi_request(
-        endpoint=f"/get-pr-info?owner={owner}&repo={repo}&pr_number={pr_number}", method="GET"
-    )
-    if response.ok:
-        return response.json()
-    return None
