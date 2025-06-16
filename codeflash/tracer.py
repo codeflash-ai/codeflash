@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import contextlib
+import datetime
 import importlib.machinery
 import io
 import json
@@ -81,6 +82,7 @@ class Tracer:
         config_file_path: Path | None = None,
         max_function_count: int = 256,
         timeout: int | None = None,  # seconds
+        command: str | None = None,
     ) -> None:
         """Use this class to trace function calls.
 
@@ -91,6 +93,7 @@ class Tracer:
         :param max_function_count: Maximum number of times to trace one function
         :param timeout: Timeout in seconds for the tracer, if the traced code takes more than this time, then tracing
                     stops and normal execution continues. If this is None then no timeout applies
+        :param command: The command that initiated the tracing (for metadata storage)
         """
         if functions is None:
             functions = []
@@ -148,6 +151,9 @@ class Tracer:
         assert "test_framework" in self.config, "Please specify 'test-framework' in pyproject.toml config file"
         self.t = self.timer()
 
+        # Store command information for metadata table
+        self.command = command if command else " ".join(sys.argv)
+
     def __enter__(self) -> None:
         if self.disable:
             return
@@ -174,6 +180,22 @@ class Tracer:
             "CREATE TABLE function_calls(type TEXT, function TEXT, classname TEXT, filename TEXT, "
             "line_number INTEGER, last_frame_address INTEGER, time_ns INTEGER, args BLOB)"
         )
+
+        # Create metadata table to store command information
+        cur.execute("CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT)")
+
+        # Store command metadata
+        cur.execute("INSERT INTO metadata VALUES (?, ?)", ("command", self.command))
+        cur.execute("INSERT INTO metadata VALUES (?, ?)", ("program_name", self.file_being_called_from))
+        cur.execute(
+            "INSERT INTO metadata VALUES (?, ?)",
+            ("functions_filter", json.dumps(self.functions) if self.functions else None),
+        )
+        cur.execute(
+            "INSERT INTO metadata VALUES (?, ?)",
+            ("timestamp", datetime.datetime.now(datetime.timezone.utc).isoformat()),
+        )
+        cur.execute("INSERT INTO metadata VALUES (?, ?)", ("project_root", str(self.project_root)))
         console.rule("Codeflash: Traced Program Output Begin", style="bold blue")
         frame = sys._getframe(0)  # Get this frame and simulate a call to it  # noqa: SLF001
         self.dispatch["call"](self, frame, 0)
@@ -842,6 +864,7 @@ def main() -> ArgumentParser:
                 max_function_count=args.max_function_count,
                 timeout=args.tracer_timeout,
                 config_file_path=args.codeflash_config,
+                command=" ".join(sys.argv),
             ).runctx(code, globs, None)
 
         except BrokenPipeError as exc:
