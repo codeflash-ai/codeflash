@@ -4,6 +4,7 @@ import json
 import os
 import platform
 import time
+from importlib.metadata import packages_distributions
 from typing import TYPE_CHECKING, Any
 
 import requests
@@ -182,6 +183,8 @@ class AiServiceClient:
             "python_version": platform.python_version(),
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
+            "lsp_mode": console.quiet,  # if quiet mode is enabled, then we're in LSP mode
+            "installed_packages": list(packages_distributions().keys()),
         }
 
         logger.info("Generating optimized candidates…")

@@ -25,6 +25,10 @@ if TYPE_CHECKING:
 def generate_concolic_tests(
     test_cfg: TestConfig, args: Namespace, function_to_optimize: FunctionToOptimize, function_to_optimize_ast: ast.AST
 ) -> tuple[dict[str, set[FunctionCalledInTest]], str]:
+    # Skip concolic test generation when running under LSP
+    if console.quiet:
+        return {}, ""
+
     start_time = time.perf_counter()
     function_to_concolic_tests = {}
     concolic_test_suite_code = ""

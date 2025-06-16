@@ -19,7 +19,7 @@ class OptimizableFunctionsParams:
 
 
 @dataclass
-class OptimizeFunctionParams:
+class FunctionOptimizationParams:
     textDocument: types.TextDocumentIdentifier  # noqa: N815
     functionName: str  # noqa: N815
 
@@ -41,8 +41,10 @@ def get_optimizable_functions(
     return path_to_qualified_names
 
 
-@server.feature("optimizeFunction")
-def optimize_function(server: CodeflashLanguageServer, params: OptimizeFunctionParams) -> dict[str, str]:
+@server.feature("initializeFunctionOptimization")
+def initialize_function_optimization(
+    server: CodeflashLanguageServer, params: FunctionOptimizationParams
+) -> dict[str, str]:
     file_path = Path(uris.to_fs_path(params.textDocument.uri))
     server.optimizer.args.function = params.functionName
     server.optimizer.args.file = file_path
@@ -54,8 +56,8 @@ def optimize_function(server: CodeflashLanguageServer, params: OptimizeFunctionP
     return {"functionName": params.functionName, "status": "success", "info": fto.server_info}
 
 
-@server.feature("second_step_in_optimize_function")
-def second_step_in_optimize_function(server: CodeflashLanguageServer, params: OptimizeFunctionParams) -> dict[str, str]:
+@server.feature("discoverFunctionTests")
+def discover_function_tests(server: CodeflashLanguageServer, params: FunctionOptimizationParams) -> dict[str, str]:
     current_function = server.optimizer.current_function_being_optimized
 
     optimizable_funcs = {current_function.file_path: [current_function]}
@@ -65,8 +67,10 @@ def second_step_in_optimize_function(server: CodeflashLanguageServer, params: Op
     return {"functionName": params.functionName, "status": "success", "generated_tests": str(num_discovered_tests)}
 
 
-@server.feature("third_step_in_optimize_function")
-def third_step_in_optimize_function(server: CodeflashLanguageServer, params: OptimizeFunctionParams) -> dict[str, str]:
+@server.feature("performFunctionOptimization")
+def perform_function_optimization(
+    server: CodeflashLanguageServer, params: FunctionOptimizationParams
+) -> dict[str, str]:
     current_function = server.optimizer.current_function_being_optimized
 
     module_prep_result = server.optimizer.prepare_module_for_optimization(current_function.file_path)
