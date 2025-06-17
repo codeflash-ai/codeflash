@@ -42,12 +42,17 @@ def existing_tests_source_for(
     rel_tests_root = tests_root.relative_to(module_root)
     original_tests_to_runtimes = {}
     optimized_tests_to_runtimes = {}
+    non_generated_tests = set()
+    for test_file in test_files:
+        non_generated_tests.add(Path(test_file.tests_in_file.test_file).relative_to(tests_root))
     # TODO confirm that original and optimized have the same keys
     all_invocation_ids = original_runtimes_all.keys() | optimized_runtimes_all.keys()
     for invocation_id in all_invocation_ids:
         rel_path = (
             Path(invocation_id.test_module_path.replace(".", os.sep)).with_suffix(".py").relative_to(rel_tests_root)
         )
+        if rel_path not in non_generated_tests:
+            continue
         if rel_path not in original_tests_to_runtimes:
             original_tests_to_runtimes[rel_path] = {}
         if rel_path not in optimized_tests_to_runtimes:
@@ -84,7 +89,23 @@ def existing_tests_source_for(
                 print_original_runtime = "NaN"
             else:
                 print_original_runtime = format_time(original_tests_to_runtimes[filename][qualified_name])
-            output += f"    - {qualified_name}: {print_original_runtime} -> {print_optimized_runtime}\n"
+            arrow = "\\rightarrow"
+            if (
+                original_tests_to_runtimes[filename][qualified_name] != 0
+                and optimized_tests_to_runtimes[filename][qualified_name] != 0
+            ):
+                greater = (
+                    optimized_tests_to_runtimes[filename][qualified_name]
+                    > original_tests_to_runtimes[filename][qualified_name]
+                )
+                if greater:
+                    output += f"    - $$\\color{{red}}{qualified_name}: {print_original_runtime} {arrow} {print_optimized_runtime}$$\n"
+                else:
+                    output += f"    - $$\\color{{green}}{qualified_name}: {print_original_runtime} {arrow} {print_optimized_runtime}$$\n"
+            else:
+                # one of them is NaN
+                output += f"    - $$\\color{{blue}}{qualified_name}: {print_original_runtime} {arrow} {print_optimized_runtime}$$\n"
+            # output += f"$$\\colorbox{{pink}}\{{    - {qualified_name}: {print_original_runtime} {arrow} {print_optimized_runtime}}}$$\n"
         output += "\n"
     return output
 
