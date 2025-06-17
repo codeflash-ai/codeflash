@@ -6,7 +6,7 @@ import libcst as cst
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.time_utils import format_time
-from codeflash.models.models import GeneratedTests, GeneratedTestsList
+from codeflash.models.models import GeneratedTests, GeneratedTestsList, InvocationId
 from codeflash.result.critic import performance_gain
 from codeflash.verification.verification_utils import TestConfig
 
@@ -37,7 +37,10 @@ def remove_functions_from_generated_tests(
 
 
 def add_runtime_comments_to_generated_tests(
-    test_cfg: TestConfig, generated_tests: GeneratedTestsList, original_runtimes: dict, optimized_runtimes: dict
+    test_cfg: TestConfig,
+    generated_tests: GeneratedTestsList,
+    original_runtimes: dict[InvocationId, list[int]],
+    optimized_runtimes: dict[InvocationId, list[int]],
 ) -> GeneratedTestsList:
     """Add runtime performance comments to function calls in generated tests."""
     tests_root = test_cfg.tests_root
@@ -48,7 +51,7 @@ def add_runtime_comments_to_generated_tests(
     class RuntimeCommentTransformer(cst.CSTTransformer):
         def __init__(self, test: GeneratedTests, tests_root: Path, rel_tests_root: Path) -> None:
             self.test = test
-            self.context_stack = []
+            self.context_stack: list[str] = []
             self.tests_root = tests_root
             self.rel_tests_root = rel_tests_root
 
@@ -93,7 +96,7 @@ def add_runtime_comments_to_generated_tests(
                 # TODO : will not work if there are multiple test cases with the same name, match filename + test class + test function name
                 for invocation_id, runtimes in original_runtimes.items():
                     qualified_name = (
-                        invocation_id.test_class_name + "." + invocation_id.test_function_name
+                        invocation_id.test_class_name + "." + invocation_id.test_function_name  # type: ignore[operator]
                         if invocation_id.test_class_name
                         else invocation_id.test_function_name
                     )
@@ -110,7 +113,7 @@ def add_runtime_comments_to_generated_tests(
 
                 for invocation_id, runtimes in optimized_runtimes.items():
                     qualified_name = (
-                        invocation_id.test_class_name + "." + invocation_id.test_function_name
+                        invocation_id.test_class_name + "." + invocation_id.test_function_name  # type: ignore[operator]
                         if invocation_id.test_class_name
                         else invocation_id.test_function_name
                     )

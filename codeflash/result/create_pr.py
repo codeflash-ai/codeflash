@@ -22,7 +22,7 @@ from codeflash.github.PrComment import FileDiffContent, PrComment
 from codeflash.result.critic import performance_gain
 
 if TYPE_CHECKING:
-    from codeflash.models.models import FunctionCalledInTest
+    from codeflash.models.models import FunctionCalledInTest, InvocationId
     from codeflash.result.explanation import Explanation
     from codeflash.verification.verification_utils import TestConfig
 
@@ -31,8 +31,8 @@ def existing_tests_source_for(
     function_qualified_name_with_modules_from_root: str,
     function_to_tests: dict[str, set[FunctionCalledInTest]],
     test_cfg: TestConfig,
-    original_runtimes_all: dict,
-    optimized_runtimes_all: dict,
+    original_runtimes_all: dict[InvocationId, list[int]],
+    optimized_runtimes_all: dict[InvocationId, list[int]],
 ) -> str:
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
     if not test_files:
@@ -41,8 +41,8 @@ def existing_tests_source_for(
     tests_root = test_cfg.tests_root
     module_root = test_cfg.project_root_path
     rel_tests_root = tests_root.relative_to(module_root)
-    original_tests_to_runtimes = {}
-    optimized_tests_to_runtimes = {}
+    original_tests_to_runtimes: dict[Path, dict[str, int]] = {}
+    optimized_tests_to_runtimes: dict[Path, dict[str, int]] = {}
     non_generated_tests = set()
     for test_file in test_files:
         non_generated_tests.add(Path(test_file.tests_in_file.test_file).relative_to(tests_root))
@@ -59,18 +59,18 @@ def existing_tests_source_for(
         if rel_path not in optimized_tests_to_runtimes:
             optimized_tests_to_runtimes[rel_path] = {}
         qualified_name = (
-            invocation_id.test_class_name + "." + invocation_id.test_function_name
+            invocation_id.test_class_name + "." + invocation_id.test_function_name  # type: ignore[operator]
             if invocation_id.test_class_name
             else invocation_id.test_function_name
         )
         if qualified_name not in original_tests_to_runtimes[rel_path]:
-            original_tests_to_runtimes[rel_path][qualified_name] = 0
+            original_tests_to_runtimes[rel_path][qualified_name] = 0  # type: ignore[index]
         if qualified_name not in optimized_tests_to_runtimes[rel_path]:
-            optimized_tests_to_runtimes[rel_path][qualified_name] = 0
+            optimized_tests_to_runtimes[rel_path][qualified_name] = 0  # type: ignore[index]
         if invocation_id in original_runtimes_all:
-            original_tests_to_runtimes[rel_path][qualified_name] += min(original_runtimes_all[invocation_id])
+            original_tests_to_runtimes[rel_path][qualified_name] += min(original_runtimes_all[invocation_id])  # type: ignore[index]
         if invocation_id in optimized_runtimes_all:
-            optimized_tests_to_runtimes[rel_path][qualified_name] += min(optimized_runtimes_all[invocation_id])
+            optimized_tests_to_runtimes[rel_path][qualified_name] += min(optimized_runtimes_all[invocation_id])  # type: ignore[index]
     # parse into string
     all_rel_paths = (
         original_tests_to_runtimes.keys()
