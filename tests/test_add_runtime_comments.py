@@ -12,6 +12,7 @@ from codeflash.models.models import (
     TestType,
     VerificationType,
 )
+from codeflash.verification.verification_utils import TestConfig
 
 
 class TestAddRuntimeComments:
@@ -48,6 +49,18 @@ class TestAddRuntimeComments:
     assert codeflash_output == [1, 2, 3]
 """
 
+        """test_cfg: TestConfig,
+    generated_tests: GeneratedTestsList,
+    original_runtimes: dict[InvocationId, list[int]],
+    optimized_runtimes: dict[InvocationId, list[int]]"""
+        project_root_path = file_path.parent.resolve()
+        test_config = TestConfig(
+            tests_root="tests",
+            tests_project_rootdir=Path.cwd(),
+            project_root_path=project_root_path,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
         generated_test = GeneratedTests(
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",

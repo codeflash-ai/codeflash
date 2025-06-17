@@ -99,9 +99,12 @@ def existing_tests_source_for(
                     optimized_tests_to_runtimes[filename][qualified_name]
                     > original_tests_to_runtimes[filename][qualified_name]
                 )
-                perf_gain = performance_gain(
-                    original_runtime_ns=original_tests_to_runtimes[filename][qualified_name],
-                    optimized_runtime_ns=optimized_tests_to_runtimes[filename][qualified_name],
+                perf_gain = (
+                    performance_gain(
+                        original_runtime_ns=original_tests_to_runtimes[filename][qualified_name],
+                        optimized_runtime_ns=optimized_tests_to_runtimes[filename][qualified_name],
+                    )
+                    * 100
                 )
                 if greater:
                     output += f"    - {qualified_name}: {print_original_runtime} {arrow} {print_optimized_runtime} $$\\color{{red}}({perf_gain:.2f}\\\\%)$$\n"
