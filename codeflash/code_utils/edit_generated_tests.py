@@ -7,6 +7,7 @@ import libcst as cst
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.time_utils import format_time
 from codeflash.models.models import GeneratedTests, GeneratedTestsList
+from codeflash.result.critic import performance_gain
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -127,9 +128,9 @@ def add_runtime_comments_to_generated_tests(
                 if matching_original_times and matching_optimized_times:
                     original_time = min(matching_original_times)
                     optimized_time = min(matching_optimized_times)
-
+                    perf_gain = performance_gain(original_runtime_ns=original_time, optimized_runtime_ns=optimized_time)
                     # Create the runtime comment
-                    comment_text = f"# {format_time(original_time)} -> {format_time(optimized_time)}"
+                    comment_text = f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain:.2f}%)"
 
                     # Add comment to the trailing whitespace
                     new_trailing_whitespace = cst.TrailingWhitespace(

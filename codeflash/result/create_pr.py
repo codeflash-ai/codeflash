@@ -19,6 +19,7 @@ from codeflash.code_utils.git_utils import (
 from codeflash.code_utils.github_utils import github_pr_url
 from codeflash.code_utils.time_utils import format_time
 from codeflash.github.PrComment import FileDiffContent, PrComment
+from codeflash.result.critic import performance_gain
 
 if TYPE_CHECKING:
     from codeflash.models.models import FunctionCalledInTest
@@ -89,7 +90,7 @@ def existing_tests_source_for(
                 print_original_runtime = "NaN"
             else:
                 print_original_runtime = format_time(original_tests_to_runtimes[filename][qualified_name])
-            arrow = "\\rightarrow"
+            arrow = "->"
             if (
                 original_tests_to_runtimes[filename][qualified_name] != 0
                 and optimized_tests_to_runtimes[filename][qualified_name] != 0
@@ -98,13 +99,17 @@ def existing_tests_source_for(
                     optimized_tests_to_runtimes[filename][qualified_name]
                     > original_tests_to_runtimes[filename][qualified_name]
                 )
+                perf_gain = performance_gain(
+                    original_runtime_ns=original_tests_to_runtimes[filename][qualified_name],
+                    optimized_runtime_ns=optimized_tests_to_runtimes[filename][qualified_name],
+                )
                 if greater:
-                    output += f"    - $$\\color{{red}}{qualified_name}: {print_original_runtime} {arrow} {print_optimized_runtime}$$\n"
+                    output += f"    - {qualified_name}: {print_original_runtime} {arrow} {print_optimized_runtime} $$\\color{{red}}({perf_gain:.2f}\\\\%)$$\n"
                 else:
-                    output += f"    - $$\\color{{green}}{qualified_name}: {print_original_runtime} {arrow} {print_optimized_runtime}$$\n"
+                    output += f"    - {qualified_name}: {print_original_runtime} {arrow} {print_optimized_runtime} $$\\color{{green}}({perf_gain:.2f}\\\\%)$$\n"
             else:
                 # one of them is NaN
-                output += f"    - $$\\color{{blue}}{qualified_name}: {print_original_runtime} {arrow} {print_optimized_runtime}$$\n"
+                output += f"    - {qualified_name}: {print_original_runtime} {arrow} {print_optimized_runtime}\n"
             # output += f"$$\\colorbox{{pink}}\{{    - {qualified_name}: {print_original_runtime} {arrow} {print_optimized_runtime}}}$$\n"
         output += "\n"
     return output
