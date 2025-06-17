@@ -37,6 +37,7 @@ def add_runtime_comments_to_generated_tests(
 ) -> GeneratedTestsList:
     """Add runtime performance comments to function calls in generated tests."""
 
+    # TODO: reduce for loops to one
     class RuntimeCommentTransformer(cst.CSTTransformer):
         def __init__(self) -> None:
             self.in_test_function = False
@@ -80,7 +81,7 @@ def add_runtime_comments_to_generated_tests(
                 # Find matching test cases by looking for this test function name in the test results
                 matching_original_times = []
                 matching_optimized_times = []
-
+                # TODO : will not work if there are multiple test cases with the same name, match filename + test class + test function name
                 for invocation_id, runtimes in original_runtimes.items():
                     if invocation_id.test_function_name == self.current_test_name:
                         matching_original_times.extend(runtimes)
