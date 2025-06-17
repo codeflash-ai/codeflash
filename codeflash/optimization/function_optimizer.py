@@ -362,7 +362,7 @@ class FunctionOptimizer:
                     )
                     # Add runtime comments to generated tests before creating the PR
                     generated_tests = add_runtime_comments_to_generated_tests(
-                        generated_tests, original_runtime_by_test, optimized_runtime_by_test
+                        self.test_cfg, generated_tests, original_runtime_by_test, optimized_runtime_by_test
                     )
                     generated_tests_str = "\n\n".join(
                         [test.generated_original_test_source for test in generated_tests.generated_tests]
