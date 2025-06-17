@@ -4,7 +4,7 @@ import libcst as cst
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.time_utils import format_time
-from codeflash.models.models import GeneratedTests, GeneratedTestsList, TestResults
+from codeflash.models.models import GeneratedTests, GeneratedTestsList
 
 
 def remove_functions_from_generated_tests(
@@ -33,12 +33,9 @@ def remove_functions_from_generated_tests(
 
 
 def add_runtime_comments_to_generated_tests(
-    generated_tests: GeneratedTestsList, original_test_results: TestResults, optimized_test_results: TestResults
+    generated_tests: GeneratedTestsList, original_runtimes: dict, optimized_runtimes: dict
 ) -> GeneratedTestsList:
     """Add runtime performance comments to function calls in generated tests."""
-    # Create dictionaries for fast lookup of runtime data
-    original_runtime_by_test = original_test_results.usable_runtime_data_by_test_case()
-    optimized_runtime_by_test = optimized_test_results.usable_runtime_data_by_test_case()
 
     class RuntimeCommentTransformer(cst.CSTTransformer):
         def __init__(self) -> None:
@@ -84,11 +81,11 @@ def add_runtime_comments_to_generated_tests(
                 matching_original_times = []
                 matching_optimized_times = []
 
-                for invocation_id, runtimes in original_runtime_by_test.items():
+                for invocation_id, runtimes in original_runtimes.items():
                     if invocation_id.test_function_name == self.current_test_name:
                         matching_original_times.extend(runtimes)
 
-                for invocation_id, runtimes in optimized_runtime_by_test.items():
+                for invocation_id, runtimes in optimized_runtimes.items():
                     if invocation_id.test_function_name == self.current_test_name:
                         matching_optimized_times.extend(runtimes)
 

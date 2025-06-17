@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -16,79 +17,76 @@ from codeflash.code_utils.git_utils import (
     git_root_dir,
 )
 from codeflash.code_utils.github_utils import github_pr_url
+from codeflash.code_utils.time_utils import format_time
 from codeflash.github.PrComment import FileDiffContent, PrComment
 
 if TYPE_CHECKING:
-    from codeflash.models.models import FunctionCalledInTest, TestResults
+    from codeflash.models.models import FunctionCalledInTest
     from codeflash.result.explanation import Explanation
+    from codeflash.verification.verification_utils import TestConfig
 
 
 def existing_tests_source_for(
     function_qualified_name_with_modules_from_root: str,
     function_to_tests: dict[str, set[FunctionCalledInTest]],
-    tests_root: Path,
-    original_test_results: Optional[TestResults] = None,
-    optimized_test_results: Optional[TestResults] = None,
+    test_cfg: TestConfig,
+    original_runtimes_all: dict,
+    optimized_runtimes_all: dict,
 ) -> str:
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
     if not test_files:
         return ""
-    existing_tests_unique = set()
-    # a lot of loops, need to do in a single loop
-    #original_runtime_by_test = original_test_results.usable_runtime_data_by_test_case()
-    #optimized_runtime_by_test = optimized_test_results.usable_runtime_data_by_test_case()
-    # Group test cases by test file
-    test_files_grouped = {}
-    for test_file in test_files:
-        file_path = Path(test_file.tests_in_file.test_file)
-        relative_path = str(file_path.relative_to(tests_root))
-
-        if relative_path not in test_files_grouped:
-            test_files_grouped[relative_path] = []
-        test_files_grouped.setdefault(relative_path,[]).append(test_file)
-
-    # Create detailed report for each test file
-    # for relative_path, tests_in_file in sorted(test_files_grouped.items()):
-        file_line = f"- {relative_path}"
-
-        # Add test case details with timing information if available
-        #if original_test_results and optimized_test_results:
-        test_case_details = []
-        # Collect test function names for this file
-        test_functions_in_file = {test_file.tests_in_file.test_function for test_file in tests_in_file}
-
-        # Create timing report for each test function
-        for test_function_name in sorted(test_functions_in_file):
-            # Find matching runtime data
-            original_runtimes = []
-            optimized_runtimes = []
-
-            for invocation_id, runtimes in original_runtime_by_test.items():
-                if invocation_id.test_function_name == test_function_name:
-                    original_runtimes.extend(runtimes)
-
-            for invocation_id, runtimes in optimized_runtime_by_test.items():
-                if invocation_id.test_function_name == test_function_name:
-                    optimized_runtimes.extend(runtimes)
-
-            if original_runtimes and optimized_runtimes:
-                # Use minimum timing like the generated tests function does
-                original_time = min(original_runtimes)
-                optimized_time = min(optimized_runtimes)
-
-                from codeflash.code_utils.time_utils import format_time
-
-                original_str = format_time(original_time)
-                optimized_str = format_time(optimized_time)
-
-                test_case_details.append(f"    - {test_function_name}: {original_str} -> {optimized_str}")
-
-        if test_case_details:
-            file_line += "\n" + "\n".join(test_case_details)
-
-        existing_tests_unique.add(file_line)
-
-    return "\n".join(sorted(existing_tests_unique))
+    output = ""
+    tests_root = test_cfg.tests_root
+    module_root = test_cfg.project_root_path
+    rel_tests_root = tests_root.relative_to(module_root)
+    original_tests_to_runtimes = {}
+    optimized_tests_to_runtimes = {}
+    # TODO confirm that original and optimized have the same keys
+    all_invocation_ids = original_runtimes_all.keys() | optimized_runtimes_all.keys()
+    for invocation_id in all_invocation_ids:
+        rel_path = (
+            Path(invocation_id.test_module_path.replace(".", os.sep)).with_suffix(".py").relative_to(rel_tests_root)
+        )
+        if rel_path not in original_tests_to_runtimes:
+            original_tests_to_runtimes[rel_path] = {}
+        if rel_path not in optimized_tests_to_runtimes:
+            optimized_tests_to_runtimes[rel_path] = {}
+        qualified_name = (
+            invocation_id.test_class_name + "." + invocation_id.test_function_name
+            if invocation_id.test_class_name
+            else invocation_id.test_function_name
+        )
+        if qualified_name not in original_tests_to_runtimes[rel_path]:
+            original_tests_to_runtimes[rel_path][qualified_name] = 0
+        if qualified_name not in optimized_tests_to_runtimes[rel_path]:
+            optimized_tests_to_runtimes[rel_path][qualified_name] = 0
+        if invocation_id in original_runtimes_all:
+            original_tests_to_runtimes[rel_path][qualified_name] += min(original_runtimes_all[invocation_id])
+        if invocation_id in optimized_runtimes_all:
+            optimized_tests_to_runtimes[rel_path][qualified_name] += min(optimized_runtimes_all[invocation_id])
+    # parse into string
+    all_rel_paths = (
+        original_tests_to_runtimes.keys()
+    )  # both will have the same keys as some default values are assigned in the previous loop
+    for filename in sorted(all_rel_paths):
+        output += f"- {filename}\n"
+        all_qualified_names = original_tests_to_runtimes[
+            filename
+        ].keys()  # both will have the same keys as some default values are assigned in the previous loop
+        for qualified_name in sorted(all_qualified_names):
+            # if not present in optimized output nan
+            if optimized_tests_to_runtimes[filename][qualified_name] == 0:
+                print_optimized_runtime = "NaN"
+            else:
+                print_optimized_runtime = format_time(optimized_tests_to_runtimes[filename][qualified_name])
+            if original_tests_to_runtimes[filename][qualified_name] == 0:
+                print_original_runtime = "NaN"
+            else:
+                print_original_runtime = format_time(original_tests_to_runtimes[filename][qualified_name])
+            output += f"    - {qualified_name}: {print_original_runtime} -> {print_optimized_runtime}\n"
+        output += "\n"
+    return output
 
 
 def check_create_pr(
