@@ -557,6 +557,7 @@ class TestResults(BaseModel):
 
     def usable_runtime_data_by_test_case(self) -> dict[InvocationId, list[int]]:
         # Efficient single traversal, directly accumulating into a dict.
+        # can track mins here and only sums can be return in total_passed_runtime
         by_id: dict[InvocationId, list[int]] = {}
         for result in self.test_results:
             if result.did_pass:

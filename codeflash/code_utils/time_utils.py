@@ -85,3 +85,15 @@ def format_time(nanoseconds: int) -> str:
 
     # This should never be reached, but included for completeness
     return f"{nanoseconds}ns"
+
+
+def format_perf(percentage: float) -> str:
+    """Format percentage into a human-readable string with 3 significant digits when needed."""
+    percentage_abs = abs(percentage)
+    if percentage_abs >= 100:
+        return f"{percentage:.0f}"
+    if percentage_abs >= 10:
+        return f"{percentage:.1f}"
+    if percentage_abs >= 1:
+        return f"{percentage:.2f}"
+    return f"{percentage:.3f}"
