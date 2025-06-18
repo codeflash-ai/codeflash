@@ -131,20 +131,22 @@ def add_runtime_comments_to_generated_tests(
                 if matching_original_times and matching_optimized_times:
                     original_time = min(matching_original_times)
                     optimized_time = min(matching_optimized_times)
-                    perf_gain = format_perf(
-                        performance_gain(original_runtime_ns=original_time, optimized_runtime_ns=optimized_time) * 100
-                    )
-                    # Create the runtime comment
-                    comment_text = f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}%)"
+                    if original_time != 0 and optimized_time != 0:
+                        perf_gain = format_perf(
+                            performance_gain(original_runtime_ns=original_time, optimized_runtime_ns=optimized_time)
+                            * 100
+                        )
+                        # Create the runtime comment
+                        comment_text = f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}%)"
 
-                    # Add comment to the trailing whitespace
-                    new_trailing_whitespace = cst.TrailingWhitespace(
-                        whitespace=cst.SimpleWhitespace(" "),
-                        comment=cst.Comment(comment_text),
-                        newline=updated_node.trailing_whitespace.newline,
-                    )
+                        # Add comment to the trailing whitespace
+                        new_trailing_whitespace = cst.TrailingWhitespace(
+                            whitespace=cst.SimpleWhitespace(" "),
+                            comment=cst.Comment(comment_text),
+                            newline=updated_node.trailing_whitespace.newline,
+                        )
 
-                    return updated_node.with_changes(trailing_whitespace=new_trailing_whitespace)
+                        return updated_node.with_changes(trailing_whitespace=new_trailing_whitespace)
 
             return updated_node
 
