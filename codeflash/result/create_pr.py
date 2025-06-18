@@ -38,7 +38,7 @@ def existing_tests_source_for(
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
     if not test_files:
         return ""
-    output = ""
+    output: str = ""
     rows = []
     headers = ["Test File::Test Function", "Original ⏱️", "Optimized ⏱️", "Improvement"]
     tests_root = test_cfg.tests_root
@@ -134,7 +134,7 @@ def existing_tests_source_for(
         headers=headers, tabular_data=rows, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
     )
     output += "\n"
-    return output  # type: ignore[no-any-return]
+    return output
 
 
 def check_create_pr(
