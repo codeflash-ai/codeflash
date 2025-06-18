@@ -530,7 +530,7 @@ def helper_function():
         )
 
         expected_source = '''def test_function():
-    codeflash_output = some_function() # 1.00s -> 500ms (100%)
+    codeflash_output = some_function() # 1.00s -> 500ms (100% faster)
     assert codeflash_output == expected
 '''
 
@@ -573,7 +573,7 @@ def helper_function():
 
         expected_source = '''class TestClass:
     def test_function(self):
-        codeflash_output = some_function() # 2.00s -> 1.00s (100%)
+        codeflash_output = some_function() # 2.00s -> 1.00s (100% faster)
         assert codeflash_output == expected
 '''
 
@@ -617,9 +617,9 @@ def helper_function():
 
         expected_source = '''def test_function():
     setup_data = prepare_test()
-    codeflash_output = some_function() # 1.50s -> 750ms (100%)
+    codeflash_output = some_function() # 1.50s -> 750ms (100% faster)
     assert codeflash_output == expected
-    codeflash_output = another_function() # 1.50s -> 750ms (100%)
+    codeflash_output = another_function() # 1.50s -> 750ms (100% faster)
     assert codeflash_output == expected2
 '''
 
@@ -759,12 +759,12 @@ def helper_function():
         )
 
         expected_source1 = '''def test_function1():
-    codeflash_output = some_function() # 1.00s -> 500ms (100%)
+    codeflash_output = some_function() # 1.00s -> 500ms (100% faster)
     assert codeflash_output == expected
 '''
 
         expected_source2 = '''def test_function2():
-    codeflash_output = another_function() # 2.00s -> 800ms (150%)
+    codeflash_output = another_function() # 2.00s -> 800ms (150% faster)
     assert codeflash_output == expected
 '''
 
@@ -805,7 +805,7 @@ def helper_function():
         )
 
         expected_source = '''def test_function():
-    codeflash_output = some_function() # 1.00s -> 1.50s (-33.3%)
+    codeflash_output = some_function() # 1.00s -> 1.50s (33.3% slower)
     assert codeflash_output == expected
 '''
 

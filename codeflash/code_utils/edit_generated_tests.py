@@ -133,11 +133,16 @@ def add_runtime_comments_to_generated_tests(
                     optimized_time = min(matching_optimized_times)
                     if original_time != 0 and optimized_time != 0:
                         perf_gain = format_perf(
-                            performance_gain(original_runtime_ns=original_time, optimized_runtime_ns=optimized_time)
-                            * 100
+                            abs(
+                                performance_gain(original_runtime_ns=original_time, optimized_runtime_ns=optimized_time)
+                                * 100
+                            )
                         )
+                        status = "slower" if optimized_time > original_time else "faster"
                         # Create the runtime comment
-                        comment_text = f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}%)"
+                        comment_text = (
+                            f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
+                        )
 
                         # Add comment to the trailing whitespace
                         new_trailing_whitespace = cst.TrailingWhitespace(
