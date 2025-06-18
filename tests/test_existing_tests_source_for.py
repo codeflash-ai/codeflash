@@ -64,9 +64,9 @@ class TestExistingTestsSourceFor:
             optimized_runtimes
         )
 
-        expected = """| Test File::Test Function                  | Original ⏱️   | Optimized ⏱️   | Improvement   |
-|:------------------------------------------|:--------------|:---------------|:--------------|
-| `test_module.py::TestClass.test_function` | 1.00ms        | 500μs          | ✅100.00%     |
+        expected = """| Test File::Test Function                  | Original ⏱️   | Optimized ⏱️   | Speedup   |
+|:------------------------------------------|:--------------|:---------------|:----------|
+| `test_module.py::TestClass.test_function` | 1.00ms        | 500μs          | ✅100%    |
 """
 
         assert result == expected
@@ -91,9 +91,9 @@ class TestExistingTestsSourceFor:
             optimized_runtimes
         )
 
-        expected = """| Test File::Test Function                  | Original ⏱️   | Optimized ⏱️   | Improvement   |
-|:------------------------------------------|:--------------|:---------------|:--------------|
-| `test_module.py::TestClass.test_function` | 500μs         | 1.00ms         | ⚠️-50.00%     |
+        expected = """| Test File::Test Function                  | Original ⏱️   | Optimized ⏱️   | Speedup   |
+|:------------------------------------------|:--------------|:---------------|:----------|
+| `test_module.py::TestClass.test_function` | 500μs         | 1.00ms         | ⚠️-50.0%  |
 """
 
         assert result == expected
@@ -123,9 +123,9 @@ class TestExistingTestsSourceFor:
             optimized_runtimes
         )
 
-        expected = """| Test File::Test Function          | Original ⏱️   | Optimized ⏱️   | Improvement   |
-|:----------------------------------|:--------------|:---------------|:--------------|
-| `test_module.py::test_standalone` | 1.00ms        | 800μs          | ✅25.00%      |
+        expected = """| Test File::Test Function          | Original ⏱️   | Optimized ⏱️   | Speedup   |
+|:----------------------------------|:--------------|:---------------|:----------|
+| `test_module.py::test_standalone` | 1.00ms        | 800μs          | ✅25.0%   |
 """
 
         assert result == expected
@@ -148,9 +148,8 @@ class TestExistingTestsSourceFor:
             optimized_runtimes
         )
 
-        expected = """| Test File::Test Function                  |   Original ⏱️ | Optimized ⏱️   | Improvement   |
-|:------------------------------------------|--------------:|:---------------|:--------------|
-| `test_module.py::TestClass.test_function` |           nan | 500μs          | ❌            |
+        expected = """| Test File::Test Function   | Original ⏱️   | Optimized ⏱️   | Speedup   |
+|----------------------------|---------------|----------------|-----------|
 """
 
         assert result == expected
@@ -173,9 +172,8 @@ class TestExistingTestsSourceFor:
             optimized_runtimes
         )
 
-        expected = """| Test File::Test Function                  | Original ⏱️   |   Optimized ⏱️ | Improvement   |
-|:------------------------------------------|:--------------|---------------:|:--------------|
-| `test_module.py::TestClass.test_function` | 1.00ms        |            nan | ❌            |
+        expected = """| Test File::Test Function   | Original ⏱️   | Optimized ⏱️   | Speedup   |
+|----------------------------|---------------|----------------|-----------|
 """
 
         assert result == expected
@@ -212,10 +210,10 @@ class TestExistingTestsSourceFor:
             optimized_runtimes
         )
 
-        expected = """| Test File::Test Function                             | Original ⏱️   | Optimized ⏱️   | Improvement   |
-|:-----------------------------------------------------|:--------------|:---------------|:--------------|
-| `test_another.py::TestAnother.test_another_function` | 2.00ms        | 1.50ms         | ✅33.33%      |
-| `test_module.py::TestClass.test_function`            | 1.00ms        | 800μs          | ✅25.00%      |
+        expected = """| Test File::Test Function                             | Original ⏱️   | Optimized ⏱️   | Speedup   |
+|:-----------------------------------------------------|:--------------|:---------------|:----------|
+| `test_another.py::TestAnother.test_another_function` | 2.00ms        | 1.50ms         | ✅33.3%   |
+| `test_module.py::TestClass.test_function`            | 1.00ms        | 800μs          | ✅25.0%   |
 """
 
         assert result == expected
@@ -240,9 +238,9 @@ class TestExistingTestsSourceFor:
             optimized_runtimes
         )
 
-        expected = """| Test File::Test Function                  | Original ⏱️   | Optimized ⏱️   | Improvement   |
-|:------------------------------------------|:--------------|:---------------|:--------------|
-| `test_module.py::TestClass.test_function` | 800μs         | 500μs          | ✅60.00%      |
+        expected = """| Test File::Test Function                  | Original ⏱️   | Optimized ⏱️   | Speedup   |
+|:------------------------------------------|:--------------|:---------------|:----------|
+| `test_module.py::TestClass.test_function` | 800μs         | 500μs          | ✅60.0%   |
 """
 
         assert result == expected
@@ -276,9 +274,9 @@ class TestExistingTestsSourceFor:
             optimized_runtimes
         )
 
-        expected = """| Test File::Test Function                                                | Original ⏱️   | Optimized ⏱️   | Improvement   |
-|:------------------------------------------------------------------------|:--------------|:---------------|:--------------|
-| `integration/test_complex_module.py::TestComplex.test_complex_function` | 1.00ms        | 750μs          | ✅33.33%      |
+        expected = """| Test File::Test Function                                                | Original ⏱️   | Optimized ⏱️   | Speedup   |
+|:------------------------------------------------------------------------|:--------------|:---------------|:----------|
+| `integration/test_complex_module.py::TestComplex.test_complex_function` | 1.00ms        | 750μs          | ✅33.3%   |
 """
 
         assert result == expected
@@ -303,9 +301,8 @@ class TestExistingTestsSourceFor:
             optimized_runtimes
         )
 
-        expected = """| Test File::Test Function                  |   Original ⏱️ |   Optimized ⏱️ | Improvement   |
-|:------------------------------------------|--------------:|---------------:|:--------------|
-| `test_module.py::TestClass.test_function` |           nan |            nan | ❌            |
+        expected = """| Test File::Test Function   | Original ⏱️   | Optimized ⏱️   | Speedup   |
+|----------------------------|---------------|----------------|-----------|
 """
 
         assert result == expected
@@ -343,9 +340,9 @@ class TestExistingTestsSourceFor:
         )
 
         # Should only include the non-generated test
-        expected = """| Test File::Test Function                  | Original ⏱️   | Optimized ⏱️   | Improvement   |
-|:------------------------------------------|:--------------|:---------------|:--------------|
-| `test_module.py::TestClass.test_function` | 1.00ms        | 800μs          | ✅25.00%      |
+        expected = """| Test File::Test Function                  | Original ⏱️   | Optimized ⏱️   | Speedup   |
+|:------------------------------------------|:--------------|:---------------|:----------|
+| `test_module.py::TestClass.test_function` | 1.00ms        | 800μs          | ✅25.0%   |
 """
 
         assert result == expected

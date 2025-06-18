@@ -18,7 +18,7 @@ from codeflash.code_utils.git_utils import (
 )
 from codeflash.code_utils.github_utils import github_pr_url
 from codeflash.code_utils.tabulate import tabulate
-from codeflash.code_utils.time_utils import format_time
+from codeflash.code_utils.time_utils import format_perf, format_time
 from codeflash.github.PrComment import FileDiffContent, PrComment
 from codeflash.result.critic import performance_gain
 
@@ -40,7 +40,7 @@ def existing_tests_source_for(
         return ""
     output: str = ""
     rows = []
-    headers = ["Test File::Test Function", "Original ⏱️", "Optimized ⏱️", "Improvement"]
+    headers = ["Test File::Test Function", "Original ⏱️", "Optimized ⏱️", "Speedup"]
     tests_root = test_cfg.tests_root
     module_root = test_cfg.project_root_path
     rel_tests_root = tests_root.relative_to(module_root)
@@ -84,23 +84,17 @@ def existing_tests_source_for(
         ].keys()  # both will have the same keys as some default values are assigned in the previous loop
         for qualified_name in sorted(all_qualified_names):
             # if not present in optimized output nan
-            if optimized_tests_to_runtimes[filename][qualified_name] == 0:
-                print_optimized_runtime = "NaN"
-            else:
-                print_optimized_runtime = format_time(optimized_tests_to_runtimes[filename][qualified_name])
-            if original_tests_to_runtimes[filename][qualified_name] == 0:
-                print_original_runtime = "NaN"
-            else:
-                print_original_runtime = format_time(original_tests_to_runtimes[filename][qualified_name])
             if (
                 original_tests_to_runtimes[filename][qualified_name] != 0
                 and optimized_tests_to_runtimes[filename][qualified_name] != 0
             ):
+                print_optimized_runtime = format_time(optimized_tests_to_runtimes[filename][qualified_name])
+                print_original_runtime = format_time(original_tests_to_runtimes[filename][qualified_name])
                 greater = (
                     optimized_tests_to_runtimes[filename][qualified_name]
                     > original_tests_to_runtimes[filename][qualified_name]
                 )
-                perf_gain = (
+                perf_gain = format_perf(
                     performance_gain(
                         original_runtime_ns=original_tests_to_runtimes[filename][qualified_name],
                         optimized_runtime_ns=optimized_tests_to_runtimes[filename][qualified_name],
@@ -113,7 +107,7 @@ def existing_tests_source_for(
                             f"`{filename}::{qualified_name}`",
                             f"{print_original_runtime}",
                             f"{print_optimized_runtime}",
-                            f"⚠️{perf_gain:.2f}%",
+                            f"⚠️{perf_gain}%",
                         ]
                     )
                 else:
@@ -122,14 +116,9 @@ def existing_tests_source_for(
                             f"`{filename}::{qualified_name}`",
                             f"{print_original_runtime}",
                             f"{print_optimized_runtime}",
-                            f"✅{perf_gain:.2f}%",
+                            f"✅{perf_gain}%",
                         ]
                     )
-            else:
-                # one of them is NaN
-                rows.append(
-                    [f"`{filename}::{qualified_name}`", f"{print_original_runtime}", f"{print_optimized_runtime}", "❌"]
-                )
     output += tabulate(  # type: ignore[no-untyped-call]
         headers=headers, tabular_data=rows, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
     )
