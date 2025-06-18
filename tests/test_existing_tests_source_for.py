@@ -1,390 +1,353 @@
-from __future__ import annotations
-
 import os
 from pathlib import Path
-from typing import NamedTuple
+from unittest.mock import Mock
 
 import pytest
 
 from codeflash.result.create_pr import existing_tests_source_for
 
 
-class MockInvocationId(NamedTuple):
-    test_module_path: str
-    test_class_name: str | None
-    test_function_name: str
-
-
-class MockTestsInFile(NamedTuple):
-    test_file: str
-
-
-class MockFunctionCalledInTest(NamedTuple):
-    tests_in_file: MockTestsInFile
-
-
-class MockTestConfig(NamedTuple):
-    tests_root: Path
-    project_root_path: Path
-
-
 class TestExistingTestsSourceFor:
     """Test cases for existing_tests_source_for function."""
 
-    def test_no_test_files_found(self):
-        """Test when no test files are found for the function."""
-        function_qualified_name = "module.function_name"
+    def setup_method(self):
+        """Set up test fixtures."""
+        # Mock test config
+        self.test_cfg = Mock()
+        self.test_cfg.tests_root = Path("/project/tests")
+        self.test_cfg.project_root_path = Path("/project")
+
+        # Mock invocation ID
+        self.mock_invocation_id = Mock()
+        self.mock_invocation_id.test_module_path = "tests.test_module"
+        self.mock_invocation_id.test_class_name = "TestClass"
+        self.mock_invocation_id.test_function_name = "test_function"
+
+        # Mock function called in test
+        self.mock_function_called_in_test = Mock()
+        self.mock_function_called_in_test.tests_in_file = Mock()
+        self.mock_function_called_in_test.tests_in_file.test_file = "/project/tests/test_module.py"
+
+    def test_no_test_files_returns_empty_string(self):
+        """Test that function returns empty string when no test files exist."""
         function_to_tests = {}
-        test_cfg = MockTestConfig(
-            tests_root=Path("/project/tests"),
-            project_root_path=Path("/project")
-        )
         original_runtimes = {}
         optimized_runtimes = {}
 
         result = existing_tests_source_for(
-            function_qualified_name,
+            "module.function",
             function_to_tests,
-            test_cfg,
+            self.test_cfg,
             original_runtimes,
             optimized_runtimes
         )
 
         assert result == ""
 
-    def test_single_test_file_with_function_test(self):
-        """Test with a single test file containing one test function."""
-        function_qualified_name = "module.function_name"
-        test_file_path = "/project/tests/test_module.py"
-
+    def test_single_test_with_improvement(self):
+        """Test single test showing performance improvement."""
         function_to_tests = {
-            function_qualified_name: {
-                MockFunctionCalledInTest(
-                    tests_in_file=MockTestsInFile(test_file=test_file_path)
-                )
-            }
+            "module.function": {self.mock_function_called_in_test}
         }
-
-        test_cfg = MockTestConfig(
-            tests_root=Path("/project/tests"),
-            project_root_path=Path("/project")
-        )
-
-        invocation_id = MockInvocationId(
-            test_module_path="tests.test_module",
-            test_class_name=None,
-            test_function_name="test_function"
-        )
-
-        original_runtimes = {invocation_id: [1000000, 1100000, 900000]}  # 1ms, 1.1ms, 0.9ms
-        optimized_runtimes = {invocation_id: [500000, 600000, 400000]}   # 0.5ms, 0.6ms, 0.4ms
-
-        result = existing_tests_source_for(
-            function_qualified_name,
-            function_to_tests,
-            test_cfg,
-            original_runtimes,
-            optimized_runtimes
-        )
-
-        expected = """- test_module.py
-    - test_function: 900μs -> 400μs $\\color{green}(55.56\\%)$
-
-"""
-        assert result == expected
-
-    def test_single_test_file_with_class_test(self):
-        """Test with a single test file containing a test method in a class."""
-        function_qualified_name = "module.function_name"
-        test_file_path = "/project/tests/test_module.py"
-
-        function_to_tests = {
-            function_qualified_name: {
-                MockFunctionCalledInTest(
-                    tests_in_file=MockTestsInFile(test_file=test_file_path)
-                )
-            }
-        }
-
-        test_cfg = MockTestConfig(
-            tests_root=Path("/project/tests"),
-            project_root_path=Path("/project")
-        )
-
-        invocation_id = MockInvocationId(
-            test_module_path="tests.test_module",
-            test_class_name="TestClass",
-            test_function_name="test_method"
-        )
-
-        original_runtimes = {invocation_id: [2000000]}  # 2ms
-        optimized_runtimes = {invocation_id: [3000000]}  # 3ms (slower)
-
-        result = existing_tests_source_for(
-            function_qualified_name,
-            function_to_tests,
-            test_cfg,
-            original_runtimes,
-            optimized_runtimes
-        )
-
-        expected = """- test_module.py
-    - TestClass.test_method: 2.00ms -> 3.00ms $\\color{red}(-50.00\\%)$
-
-"""
-        assert result == expected
-
-    def test_multiple_test_files_and_methods(self):
-        """Test with multiple test files and multiple test methods."""
-        function_qualified_name = "module.function_name"
-        test_file_path1 = "/project/tests/test_module1.py"
-        test_file_path2 = "/project/tests/test_module2.py"
-
-        function_to_tests = {
-            function_qualified_name: {
-                MockFunctionCalledInTest(
-                    tests_in_file=MockTestsInFile(test_file=test_file_path1)
-                ),
-                MockFunctionCalledInTest(
-                    tests_in_file=MockTestsInFile(test_file=test_file_path2)
-                )
-            }
-        }
-
-        test_cfg = MockTestConfig(
-            tests_root=Path("/project/tests"),
-            project_root_path=Path("/project")
-        )
-
-        invocation_id1 = MockInvocationId(
-            test_module_path="tests.test_module1",
-            test_class_name=None,
-            test_function_name="test_function1"
-        )
-
-        invocation_id2 = MockInvocationId(
-            test_module_path="tests.test_module1",
-            test_class_name="TestClass",
-            test_function_name="test_method1"
-        )
-
-        invocation_id3 = MockInvocationId(
-            test_module_path="tests.test_module2",
-            test_class_name=None,
-            test_function_name="test_function2"
-        )
-
         original_runtimes = {
-            invocation_id1: [1000000],  # 1ms
-            invocation_id2: [2000000],  # 2ms
-            invocation_id3: [500000]    # 0.5ms
+            self.mock_invocation_id: [1000000]  # 1ms in nanoseconds
         }
         optimized_runtimes = {
-            invocation_id1: [800000],   # 0.8ms
-            invocation_id2: [1500000],  # 1.5ms
-            invocation_id3: [400000]    # 0.4ms
+            self.mock_invocation_id: [500000]   # 0.5ms in nanoseconds
         }
 
         result = existing_tests_source_for(
-            function_qualified_name,
+            "module.function",
             function_to_tests,
-            test_cfg,
+            self.test_cfg,
             original_runtimes,
             optimized_runtimes
         )
 
-        expected = """- test_module1.py
-    - TestClass.test_method1: 2.00ms -> 1.50ms $\\color{green}(25.00\\%)$
-    - test_function1: 1.00ms -> 800μs $\\color{green}(20.00\\%)$
-
-- test_module2.py
-    - test_function2: 500μs -> 400μs $\\color{green}(20.00\\%)$
-
+        expected = """| Test File::Test Function                  | Original ⏱️   | Optimized ⏱️   | Improvement   |
+|:------------------------------------------|:--------------|:---------------|:--------------|
+| `test_module.py::TestClass.test_function` | 1.00ms        | 500μs          | ✅100.00%     |
 """
+
         assert result == expected
 
-    def test_missing_runtime_data(self):
-        """Test when runtime data is missing for some tests."""
-        function_qualified_name = "module.function_name"
-        test_file_path = "/project/tests/test_module.py"
-
+    def test_single_test_with_regression(self):
+        """Test single test showing performance regression."""
         function_to_tests = {
-            function_qualified_name: {
-                MockFunctionCalledInTest(
-                    tests_in_file=MockTestsInFile(test_file=test_file_path)
-                )
-            }
+            "module.function": {self.mock_function_called_in_test}
         }
-
-        test_cfg = MockTestConfig(
-            tests_root=Path("/project/tests"),
-            project_root_path=Path("/project")
-        )
-
-        invocation_id1 = MockInvocationId(
-            test_module_path="tests.test_module",
-            test_class_name=None,
-            test_function_name="test_with_original_only"
-        )
-
-        invocation_id2 = MockInvocationId(
-            test_module_path="tests.test_module",
-            test_class_name=None,
-            test_function_name="test_with_optimized_only"
-        )
-
-        original_runtimes = {invocation_id1: [1000000]}  # Only original
-        optimized_runtimes = {invocation_id2: [500000]}  # Only optimized
-
-        result = existing_tests_source_for(
-            function_qualified_name,
-            function_to_tests,
-            test_cfg,
-            original_runtimes,
-            optimized_runtimes
-        )
-
-        expected = """- test_module.py
-    - test_with_optimized_only: NaN -> 500μs
-    - test_with_original_only: 1.00ms -> NaN
-
-"""
-        assert result == expected
-
-    def test_nested_test_directory(self):
-        """Test with nested test directories."""
-        function_qualified_name = "module.function_name"
-        test_file_path = "/project/tests/unit/test_module.py"
-
-        function_to_tests = {
-            function_qualified_name: {
-                MockFunctionCalledInTest(
-                    tests_in_file=MockTestsInFile(test_file=test_file_path)
-                )
-            }
-        }
-
-        test_cfg = MockTestConfig(
-            tests_root=Path("/project/tests"),
-            project_root_path=Path("/project")
-        )
-
-        invocation_id = MockInvocationId(
-            test_module_path="tests.unit.test_module",
-            test_class_name=None,
-            test_function_name="test_function"
-        )
-
-        original_runtimes = {invocation_id: [1000000]}
-        optimized_runtimes = {invocation_id: [800000]}
-
-        result = existing_tests_source_for(
-            function_qualified_name,
-            function_to_tests,
-            test_cfg,
-            original_runtimes,
-            optimized_runtimes
-        )
-
-        expected = """- unit/test_module.py
-    - test_function: 1.00ms -> 800μs $\\color{green}(20.00\\%)$
-
-"""
-        assert result == expected
-
-    def test_multiple_invocations_same_test(self):
-        """Test when the same test has multiple invocations (runtimes are summed)."""
-        function_qualified_name = "module.function_name"
-        test_file_path = "/project/tests/test_module.py"
-
-        function_to_tests = {
-            function_qualified_name: {
-                MockFunctionCalledInTest(
-                    tests_in_file=MockTestsInFile(test_file=test_file_path)
-                )
-            }
-        }
-
-        test_cfg = MockTestConfig(
-            tests_root=Path("/project/tests"),
-            project_root_path=Path("/project")
-        )
-
-        # Same test function with multiple invocations
-        invocation_id1 = MockInvocationId(
-            test_module_path="tests.test_module",
-            test_class_name=None,
-            test_function_name="test_function"
-        )
-
-        invocation_id2 = MockInvocationId(
-            test_module_path="tests.test_module",
-            test_class_name=None,
-            test_function_name="test_function"
-        )
-
         original_runtimes = {
-            invocation_id1: [1000000, 1200000],  # min: 1ms
-            invocation_id2: [800000, 900000]     # min: 0.8ms
+            self.mock_invocation_id: [500000]   # 0.5ms in nanoseconds
         }
         optimized_runtimes = {
-            invocation_id1: [600000, 700000],    # min: 0.6ms
-            invocation_id2: [400000, 500000]     # min: 0.4ms
+            self.mock_invocation_id: [1000000]  # 1ms in nanoseconds
         }
 
         result = existing_tests_source_for(
-            function_qualified_name,
+            "module.function",
             function_to_tests,
-            test_cfg,
+            self.test_cfg,
             original_runtimes,
             optimized_runtimes
         )
 
-        # Total original: 1ms + 0.8ms = 1.8ms
-        # Total optimized: 0.6ms + 0.4ms = 1ms
-        expected = """- test_module.py
-    - test_function: 1.80ms -> 1.00ms $\\color{green}(44.44\\%)$
-
+        expected = """| Test File::Test Function                  | Original ⏱️   | Optimized ⏱️   | Improvement   |
+|:------------------------------------------|:--------------|:---------------|:--------------|
+| `test_module.py::TestClass.test_function` | 500μs         | 1.00ms         | ⚠️-50.00%     |
 """
+
+        assert result == expected
+
+    def test_test_without_class_name(self):
+        """Test function without class name (standalone test function)."""
+        mock_invocation_no_class = Mock()
+        mock_invocation_no_class.test_module_path = "tests.test_module"
+        mock_invocation_no_class.test_class_name = None
+        mock_invocation_no_class.test_function_name = "test_standalone"
+
+        function_to_tests = {
+            "module.function": {self.mock_function_called_in_test}
+        }
+        original_runtimes = {
+            mock_invocation_no_class: [1000000]
+        }
+        optimized_runtimes = {
+            mock_invocation_no_class: [800000]
+        }
+
+        result = existing_tests_source_for(
+            "module.function",
+            function_to_tests,
+            self.test_cfg,
+            original_runtimes,
+            optimized_runtimes
+        )
+
+        expected = """| Test File::Test Function          | Original ⏱️   | Optimized ⏱️   | Improvement   |
+|:----------------------------------|:--------------|:---------------|:--------------|
+| `test_module.py::test_standalone` | 1.00ms        | 800μs          | ✅25.00%      |
+"""
+
+        assert result == expected
+
+    def test_missing_original_runtime(self):
+        """Test when original runtime is missing (shows NaN)."""
+        function_to_tests = {
+            "module.function": {self.mock_function_called_in_test}
+        }
+        original_runtimes = {}
+        optimized_runtimes = {
+            self.mock_invocation_id: [500000]
+        }
+
+        result = existing_tests_source_for(
+            "module.function",
+            function_to_tests,
+            self.test_cfg,
+            original_runtimes,
+            optimized_runtimes
+        )
+
+        expected = """| Test File::Test Function                  |   Original ⏱️ | Optimized ⏱️   | Improvement   |
+|:------------------------------------------|--------------:|:---------------|:--------------|
+| `test_module.py::TestClass.test_function` |           nan | 500μs          | ❌            |
+"""
+
+        assert result == expected
+
+    def test_missing_optimized_runtime(self):
+        """Test when optimized runtime is missing (shows NaN)."""
+        function_to_tests = {
+            "module.function": {self.mock_function_called_in_test}
+        }
+        original_runtimes = {
+            self.mock_invocation_id: [1000000]
+        }
+        optimized_runtimes = {}
+
+        result = existing_tests_source_for(
+            "module.function",
+            function_to_tests,
+            self.test_cfg,
+            original_runtimes,
+            optimized_runtimes
+        )
+
+        expected = """| Test File::Test Function                  | Original ⏱️   |   Optimized ⏱️ | Improvement   |
+|:------------------------------------------|:--------------|---------------:|:--------------|
+| `test_module.py::TestClass.test_function` | 1.00ms        |            nan | ❌            |
+"""
+
+        assert result == expected
+
+    def test_multiple_tests_sorted_output(self):
+        """Test multiple tests with sorted output by filename and function name."""
+        # Create second test file
+        mock_function_called_2 = Mock()
+        mock_function_called_2.tests_in_file = Mock()
+        mock_function_called_2.tests_in_file.test_file = "/project/tests/test_another.py"
+
+        mock_invocation_2 = Mock()
+        mock_invocation_2.test_module_path = "tests.test_another"
+        mock_invocation_2.test_class_name = "TestAnother"
+        mock_invocation_2.test_function_name = "test_another_function"
+
+        function_to_tests = {
+            "module.function": {self.mock_function_called_in_test, mock_function_called_2}
+        }
+        original_runtimes = {
+            self.mock_invocation_id: [1000000],
+            mock_invocation_2: [2000000]
+        }
+        optimized_runtimes = {
+            self.mock_invocation_id: [800000],
+            mock_invocation_2: [1500000]
+        }
+
+        result = existing_tests_source_for(
+            "module.function",
+            function_to_tests,
+            self.test_cfg,
+            original_runtimes,
+            optimized_runtimes
+        )
+
+        expected = """| Test File::Test Function                             | Original ⏱️   | Optimized ⏱️   | Improvement   |
+|:-----------------------------------------------------|:--------------|:---------------|:--------------|
+| `test_another.py::TestAnother.test_another_function` | 2.00ms        | 1.50ms         | ✅33.33%      |
+| `test_module.py::TestClass.test_function`            | 1.00ms        | 800μs          | ✅25.00%      |
+"""
+
+        assert result == expected
+
+    def test_multiple_runtimes_uses_minimum(self):
+        """Test that function uses minimum runtime when multiple measurements exist."""
+        function_to_tests = {
+            "module.function": {self.mock_function_called_in_test}
+        }
+        original_runtimes = {
+            self.mock_invocation_id: [1000000, 1200000, 800000]  # min: 800000
+        }
+        optimized_runtimes = {
+            self.mock_invocation_id: [600000, 700000, 500000]    # min: 500000
+        }
+
+        result = existing_tests_source_for(
+            "module.function",
+            function_to_tests,
+            self.test_cfg,
+            original_runtimes,
+            optimized_runtimes
+        )
+
+        expected = """| Test File::Test Function                  | Original ⏱️   | Optimized ⏱️   | Improvement   |
+|:------------------------------------------|:--------------|:---------------|:--------------|
+| `test_module.py::TestClass.test_function` | 800μs         | 500μs          | ✅60.00%      |
+"""
+
+        assert result == expected
+
+    def test_complex_module_path_conversion(self):
+        """Test conversion of complex module paths to file paths."""
+        mock_invocation_complex = Mock()
+        mock_invocation_complex.test_module_path = "tests.integration.test_complex_module"
+        mock_invocation_complex.test_class_name = "TestComplex"
+        mock_invocation_complex.test_function_name = "test_complex_function"
+
+        mock_function_complex = Mock()
+        mock_function_complex.tests_in_file = Mock()
+        mock_function_complex.tests_in_file.test_file = f"/project/tests/integration/test_complex_module.py"
+
+        function_to_tests = {
+            "module.function": {mock_function_complex}
+        }
+        original_runtimes = {
+            mock_invocation_complex: [1000000]
+        }
+        optimized_runtimes = {
+            mock_invocation_complex: [750000]
+        }
+
+        result = existing_tests_source_for(
+            "module.function",
+            function_to_tests,
+            self.test_cfg,
+            original_runtimes,
+            optimized_runtimes
+        )
+
+        expected = """| Test File::Test Function                                                | Original ⏱️   | Optimized ⏱️   | Improvement   |
+|:------------------------------------------------------------------------|:--------------|:---------------|:--------------|
+| `integration/test_complex_module.py::TestComplex.test_complex_function` | 1.00ms        | 750μs          | ✅33.33%      |
+"""
+
         assert result == expected
 
     def test_zero_runtime_values(self):
         """Test handling of zero runtime values."""
-        function_qualified_name = "module.function_name"
-        test_file_path = "/project/tests/test_module.py"
-
         function_to_tests = {
-            function_qualified_name: {
-                MockFunctionCalledInTest(
-                    tests_in_file=MockTestsInFile(test_file=test_file_path)
-                )
-            }
+            "module.function": {self.mock_function_called_in_test}
+        }
+        original_runtimes = {
+            self.mock_invocation_id: [0]
+        }
+        optimized_runtimes = {
+            self.mock_invocation_id: [0]
         }
 
-        test_cfg = MockTestConfig(
-            tests_root=Path("/project/tests"),
-            project_root_path=Path("/project")
-        )
-
-        invocation_id = MockInvocationId(
-            test_module_path="tests.test_module",
-            test_class_name=None,
-            test_function_name="test_function"
-        )
-
-        original_runtimes = {invocation_id: [0]}
-        optimized_runtimes = {invocation_id: [0]}
-
         result = existing_tests_source_for(
-            function_qualified_name,
+            "module.function",
             function_to_tests,
-            test_cfg,
+            self.test_cfg,
             original_runtimes,
             optimized_runtimes
         )
 
-        expected = """- test_module.py
-    - test_function: NaN -> NaN
-
+        expected = """| Test File::Test Function                  |   Original ⏱️ |   Optimized ⏱️ | Improvement   |
+|:------------------------------------------|--------------:|---------------:|:--------------|
+| `test_module.py::TestClass.test_function` |           nan |            nan | ❌            |
 """
+
         assert result == expected
+
+    def test_filters_out_generated_tests(self):
+        """Test that generated tests are filtered out and only non-generated tests are included."""
+        # Create a test that would be filtered out (not in non_generated_tests)
+        mock_generated_test = Mock()
+        mock_generated_test.tests_in_file = Mock()
+        mock_generated_test.tests_in_file.test_file = "/project/tests/generated_test.py"
+
+        mock_generated_invocation = Mock()
+        mock_generated_invocation.test_module_path = "tests.generated_test"
+        mock_generated_invocation.test_class_name = "TestGenerated"
+        mock_generated_invocation.test_function_name = "test_generated"
+
+        function_to_tests = {
+            "module.function": {self.mock_function_called_in_test}
+        }
+        original_runtimes = {
+            self.mock_invocation_id: [1000000],
+            mock_generated_invocation: [500000]  # This should be filtered out
+        }
+        optimized_runtimes = {
+            self.mock_invocation_id: [800000],
+            mock_generated_invocation: [400000]  # This should be filtered out
+        }
+
+        result = existing_tests_source_for(
+            "module.function",
+            function_to_tests,
+            self.test_cfg,
+            original_runtimes,
+            optimized_runtimes
+        )
+
+        # Should only include the non-generated test
+        expected = """| Test File::Test Function                  | Original ⏱️   | Optimized ⏱️   | Improvement   |
+|:------------------------------------------|:--------------|:---------------|:--------------|
+| `test_module.py::TestClass.test_function` | 1.00ms        | 800μs          | ✅25.00%      |
+"""
+
+        assert result == expected
+
+

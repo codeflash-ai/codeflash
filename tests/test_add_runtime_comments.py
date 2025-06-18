@@ -14,28 +14,34 @@ def test_config():
     """Create a mock TestConfig for testing."""
     config = Mock(spec=TestConfig)
     config.project_root_path = Path("/project")
+    config.test_framework= "pytest"
+    config.tests_project_rootdir = Path("/project/tests")
     config.tests_root = Path("/project/tests")
     return config
 
 
-@pytest.fixture
-def sample_invocation_id():
-    """Create a sample InvocationId for testing."""
-    return InvocationId(
-        test_module_path="tests.test_module",
-        test_class_name="TestClass",
-        test_function_name="test_function",
-    )
-
-
-@pytest.fixture
-def sample_invocation_id_no_class():
-    """Create a sample InvocationId without class for testing."""
-    return InvocationId(
-        test_module_path="tests.test_module",
-        test_class_name=None,
-        test_function_name="test_function",
-    )
+# @pytest.fixture
+# def sample_invocation_id():
+#     """Create a sample InvocationId for testing."""
+#     return InvocationId(
+#                 test_module_path="test_module_path",
+#                 test_class_name="test_class_name",
+#                 test_function_name="test_function_name",
+#                 function_getting_tested="function_getting_tested",
+#                 iteration_id="0",
+#             )
+#
+#
+# @pytest.fixture
+# def sample_invocation_id_no_class():
+#     """Create a sample InvocationId without class for testing."""
+#     return InvocationId(
+#                 test_module_path="test_module_path",
+#                 test_class_name=None,
+#                 test_function_name="test_function_name",
+#                 function_getting_tested="function_getting_tested",
+#                 iteration_id="0",
+#             )
 
 
 class TestAddRuntimeCommentsToGeneratedTests:
@@ -60,6 +66,8 @@ class TestAddRuntimeCommentsToGeneratedTests:
             test_module_path="tests.test_module",
             test_class_name=None,
             test_function_name="test_function",
+            function_getting_tested="some_function",
+            iteration_id="0",
         )
 
         original_runtimes = {invocation_id: [1000000000, 1200000000]}  # 1s, 1.2s in nanoseconds
@@ -70,7 +78,7 @@ class TestAddRuntimeCommentsToGeneratedTests:
         )
 
         expected_source = '''def test_function():
-    codeflash_output = some_function() # 1.00s -> 500.00ms (50.00%)
+    codeflash_output = some_function() # 1.00s -> 500ms (100.00%)
     assert codeflash_output == expected
 '''
 
@@ -99,6 +107,9 @@ class TestAddRuntimeCommentsToGeneratedTests:
             test_module_path="tests.test_module",
             test_class_name="TestClass",
             test_function_name="test_function",
+            function_getting_tested="some_function",
+            iteration_id="0",
+
         )
 
         original_runtimes = {invocation_id: [2000000000]}  # 2s in nanoseconds
@@ -110,7 +121,7 @@ class TestAddRuntimeCommentsToGeneratedTests:
 
         expected_source = '''class TestClass:
     def test_function(self):
-        codeflash_output = some_function() # 2.00s -> 1.00s (50.00%)
+        codeflash_output = some_function() # 2.00s -> 1.00s (100.00%)
         assert codeflash_output == expected
 '''
 
@@ -141,6 +152,8 @@ class TestAddRuntimeCommentsToGeneratedTests:
             test_module_path="tests.test_module",
             test_class_name=None,
             test_function_name="test_function",
+            function_getting_tested="some_function",
+            iteration_id="0",
         )
 
         original_runtimes = {invocation_id: [1500000000]}  # 1.5s in nanoseconds
@@ -152,9 +165,9 @@ class TestAddRuntimeCommentsToGeneratedTests:
 
         expected_source = '''def test_function():
     setup_data = prepare_test()
-    codeflash_output = some_function() # 1.50s -> 750.00ms (50.00%)
+    codeflash_output = some_function() # 1.50s -> 750ms (100.00%)
     assert codeflash_output == expected
-    codeflash_output = another_function() # 1.50s -> 750.00ms (50.00%)
+    codeflash_output = another_function() # 1.50s -> 750ms (100.00%)
     assert codeflash_output == expected2
 '''
 
@@ -183,6 +196,8 @@ class TestAddRuntimeCommentsToGeneratedTests:
             test_module_path="tests.other_module",
             test_class_name=None,
             test_function_name="other_function",
+            function_getting_tested="some_other_function",
+            iteration_id="0",
         )
 
         original_runtimes = {invocation_id: [1000000000]}
@@ -217,6 +232,8 @@ class TestAddRuntimeCommentsToGeneratedTests:
             test_module_path="tests.test_module",
             test_class_name=None,
             test_function_name="test_function",
+            function_getting_tested="some_function",
+            iteration_id="0",
         )
 
         original_runtimes = {invocation_id: [1000000000]}
@@ -264,12 +281,16 @@ class TestAddRuntimeCommentsToGeneratedTests:
             test_module_path="tests.test_module1",
             test_class_name=None,
             test_function_name="test_function1",
+            function_getting_tested="some_function",
+            iteration_id="0",
         )
 
         invocation_id2 = InvocationId(
             test_module_path="tests.test_module2",
             test_class_name=None,
             test_function_name="test_function2",
+            function_getting_tested="another_function",
+            iteration_id = "0",
         )
 
         original_runtimes = {
@@ -286,12 +307,12 @@ class TestAddRuntimeCommentsToGeneratedTests:
         )
 
         expected_source1 = '''def test_function1():
-    codeflash_output = some_function() # 1.00s -> 500.00ms (50.00%)
+    codeflash_output = some_function() # 1.00s -> 500ms (100.00%)
     assert codeflash_output == expected
 '''
 
         expected_source2 = '''def test_function2():
-    codeflash_output = another_function() # 2.00s -> 800.00ms (60.00%)
+    codeflash_output = another_function() # 2.00s -> 800ms (150.00%)
     assert codeflash_output == expected
 '''
 
@@ -320,6 +341,8 @@ class TestAddRuntimeCommentsToGeneratedTests:
             test_module_path="tests.test_module",
             test_class_name=None,
             test_function_name="test_function",
+            function_getting_tested="some_function",
+            iteration_id="0",
         )
 
         original_runtimes = {invocation_id: [1000000000]}  # 1s
@@ -330,7 +353,7 @@ class TestAddRuntimeCommentsToGeneratedTests:
         )
 
         expected_source = '''def test_function():
-    codeflash_output = some_function() # 1.00s -> 1.50s (-50.00%)
+    codeflash_output = some_function() # 1.00s -> 1.50s (-33.33%)
     assert codeflash_output == expected
 '''
 

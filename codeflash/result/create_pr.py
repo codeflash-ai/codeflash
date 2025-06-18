@@ -17,6 +17,7 @@ from codeflash.code_utils.git_utils import (
     git_root_dir,
 )
 from codeflash.code_utils.github_utils import github_pr_url
+from codeflash.code_utils.tabulate import tabulate
 from codeflash.code_utils.time_utils import format_time
 from codeflash.github.PrComment import FileDiffContent, PrComment
 from codeflash.result.critic import performance_gain
@@ -38,6 +39,8 @@ def existing_tests_source_for(
     if not test_files:
         return ""
     output = ""
+    rows = []
+    headers = ["Test File::Test Function", "Original ⏱️", "Optimized ⏱️", "Improvement"]
     tests_root = test_cfg.tests_root
     module_root = test_cfg.project_root_path
     rel_tests_root = tests_root.relative_to(module_root)
@@ -76,7 +79,6 @@ def existing_tests_source_for(
         original_tests_to_runtimes.keys()
     )  # both will have the same keys as some default values are assigned in the previous loop
     for filename in sorted(all_rel_paths):
-        output += f"- {filename}\n"
         all_qualified_names = original_tests_to_runtimes[
             filename
         ].keys()  # both will have the same keys as some default values are assigned in the previous loop
@@ -90,7 +92,6 @@ def existing_tests_source_for(
                 print_original_runtime = "NaN"
             else:
                 print_original_runtime = format_time(original_tests_to_runtimes[filename][qualified_name])
-            arrow = "->"
             if (
                 original_tests_to_runtimes[filename][qualified_name] != 0
                 and optimized_tests_to_runtimes[filename][qualified_name] != 0
@@ -107,14 +108,32 @@ def existing_tests_source_for(
                     * 100
                 )
                 if greater:
-                    output += f"    - {qualified_name}: {print_original_runtime} {arrow} {print_optimized_runtime} $$\\color{{red}}({perf_gain:.2f}\\\\%)$$\n"
+                    rows.append(
+                        [
+                            f"`{filename}::{qualified_name}`",
+                            f"{print_original_runtime}",
+                            f"{print_optimized_runtime}",
+                            f"⚠️{perf_gain:.2f}%",
+                        ]
+                    )
                 else:
-                    output += f"    - {qualified_name}: {print_original_runtime} {arrow} {print_optimized_runtime} $$\\color{{green}}({perf_gain:.2f}\\\\%)$$\n"
+                    rows.append(
+                        [
+                            f"`{filename}::{qualified_name}`",
+                            f"{print_original_runtime}",
+                            f"{print_optimized_runtime}",
+                            f"✅{perf_gain:.2f}%",
+                        ]
+                    )
             else:
                 # one of them is NaN
-                output += f"    - {qualified_name}: {print_original_runtime} {arrow} {print_optimized_runtime}\n"
-            # output += f"$$\\colorbox{{pink}}\{{    - {qualified_name}: {print_original_runtime} {arrow} {print_optimized_runtime}}}$$\n"
-        output += "\n"
+                rows.append(
+                    [f"`{filename}::{qualified_name}`", f"{print_original_runtime}", f"{print_optimized_runtime}", "❌"]
+                )
+    output += tabulate(
+        headers=headers, tabular_data=rows, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
+    )
+    output += "\n"
     return output
 
 
