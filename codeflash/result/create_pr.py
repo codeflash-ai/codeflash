@@ -130,11 +130,11 @@ def existing_tests_source_for(
                 rows.append(
                     [f"`{filename}::{qualified_name}`", f"{print_original_runtime}", f"{print_optimized_runtime}", "❌"]
                 )
-    output += tabulate(
+    output += tabulate(  # type: ignore[no-untyped-call]
         headers=headers, tabular_data=rows, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
     )
     output += "\n"
-    return output
+    return output  # type: ignore[no-any-return]
 
 
 def check_create_pr(
