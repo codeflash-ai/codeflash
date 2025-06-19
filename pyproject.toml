@@ -1,11 +1,11 @@
 [project]
 name = "codeflash"
-version = "0.0.0"
+dynamic = ["version"]
 description = "Client for codeflash.ai - automatic code performance optimization, powered by AI"
 authors = [{ name = "CodeFlash Inc.", email = "contact@codeflash.ai" }]
 requires-python = ">=3.9"
 readme = "README.md"
-license = "BSL-1.1"
+license = {text = "BSL-1.1"}
 keywords = [
     "codeflash",
     "performance",
@@ -258,18 +258,21 @@ split-on-trailing-comma = false
 docstring-code-format = true
 skip-magic-trailing-comma = true
 
-[tool.poetry-dynamic-versioning]
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
 enable = true
 style = "pep440"
 vcs = "git"
 
-[tool.poetry-dynamic-versioning.substitution]
+[tool.uv-dynamic-versioning.substitution]
 files = ["codeflash/version.py"]
 
-[tool.poetry-dynamic-versioning.files."codeflash/version.py"]
+[tool.uv-dynamic-versioning.files."codeflash/version.py"]
 persistent-substitution = true
 initial-content = """
-  # These version placeholders will be replaced by poetry-dynamic-versioning during `poetry build`.
+  # These version placeholders will be replaced by uv-dynamic-versioning during build.
   __version__ = "0.0.0"
   __version_tuple__ = (0, 0, 0)
 """
@@ -285,5 +288,5 @@ formatter-cmds = [
 ]
 
 [build-system]
-requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.2.0,<2.0.0"]
-build-backend = "poetry_dynamic_versioning.backend"
+requires = ["hatchling", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
