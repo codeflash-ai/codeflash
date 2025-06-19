@@ -61,11 +61,8 @@ jobs:
 
       - name: Install dependencies (CLI)
         run: |
-          uv tool install poetry
-          uv venv
-          source .venv/bin/activate
-          poetry install --with dev
-
+          uv sync
+    
       - name: Remove .git
         run: |
           if [ -d ".git" ]; then
@@ -85,5 +82,4 @@ jobs:
       - name: Run Codeflash to optimize code
         id: optimize_code
         run: |
-          source .venv/bin/activate
-          poetry run python tests/scripts/end_to_end_test_bubblesort_pytest.py
+          uv run python tests/scripts/end_to_end_test_bubblesort_pytest.py

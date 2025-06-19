@@ -25,11 +25,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           version: "0.5.30"
-      - name: install poetry as a tool
-        run: uv tool install poetry
 
       - name: install dependencies
-        run: uvx poetry install --with dev
+        run: uv sync
 
       - name: Unit tests
-        run: uvx poetry run pytest tests/ --benchmark-skip -m "not ci_skip"
+        run: uv run pytest tests/ --benchmark-skip -m "not ci_skip"
