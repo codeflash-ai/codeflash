@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import os
-import sys
 import tempfile
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
 from codeflash.cli_cmds.console import logger
+from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
 
@@ -22,13 +22,12 @@ def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool =
         f.flush()
         tmp_file = Path(f.name)
         try:
-            format_code(formatter_cmds, tmp_file, print_status=False)
+            format_code(formatter_cmds, tmp_file, print_status=False, exit_on_failure=exit_on_failure)
         except Exception:
-            print(
-                "⚠️ Codeflash requires a code formatter to be installed in your environment, but none was found. Please install a supported formatter, verify the formatter-cmds in your codeflash pyproject.toml config and try again."
+            exit_with_message(
+                "⚠️ Codeflash requires a code formatter to be installed in your environment, but none was found. Please install a supported formatter, verify the formatter-cmds in your codeflash pyproject.toml config and try again.",
+                error_on_exit=True,
             )
-            if exit_on_failure:
-                sys.exit(1)
     return return_code
 
 

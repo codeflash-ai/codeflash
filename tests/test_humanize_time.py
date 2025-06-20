@@ -1,4 +1,5 @@
 from codeflash.code_utils.time_utils import humanize_runtime, format_time
+from codeflash.code_utils.time_utils import format_perf
 import pytest
 
 
@@ -173,3 +174,102 @@ class TestFormatTime:
         # You might want to modify based on expected behavior
         with pytest.raises((ValueError, TypeError)) or pytest.warns():
             format_time(-1000)
+
+
+class TestFormatPerf:
+    """Test cases for the format_perf function."""
+
+    def test_format_perf_large_values_above_100(self):
+        """Test formatting for values above 100 (no decimal places)."""
+        assert format_perf(150.789) == "151"
+        assert format_perf(999.999) == "1000"
+        assert format_perf(100.1) == "100"
+        assert format_perf(500) == "500"
+        assert format_perf(1000.5) == "1000"
+
+    def test_format_perf_medium_values_10_to_100(self):
+        """Test formatting for values between 10 and 100 (1 decimal place)."""
+        assert format_perf(99.99) == "100.0"
+        assert format_perf(50.789) == "50.8"
+        assert format_perf(10.1) == "10.1"
+        assert format_perf(25.0) == "25.0"
+        assert format_perf(33.333) == "33.3"
+
+    def test_format_perf_small_values_1_to_10(self):
+        """Test formatting for values between 1 and 10 (2 decimal places)."""
+        assert format_perf(9.999) == "10.00"
+        assert format_perf(5.789) == "5.79"
+        assert format_perf(1.1) == "1.10"
+        assert format_perf(2.0) == "2.00"
+        assert format_perf(7.123) == "7.12"
+
+    def test_format_perf_very_small_values_below_1(self):
+        """Test formatting for values below 1 (3 decimal places)."""
+        assert format_perf(0.999) == "0.999"
+        assert format_perf(0.5) == "0.500"
+        assert format_perf(0.123) == "0.123"
+        assert format_perf(0.001) == "0.001"
+        assert format_perf(0.0) == "0.000"
+
+    def test_format_perf_negative_values(self):
+        """Test formatting for negative values (uses absolute value for comparison)."""
+        assert format_perf(-150.789) == "-151"
+        assert format_perf(-50.789) == "-50.8"
+        assert format_perf(-5.789) == "-5.79"
+        assert format_perf(-0.999) == "-0.999"
+        assert format_perf(-0.0) == "-0.000"
+
+    def test_format_perf_boundary_values(self):
+        """Test formatting for exact boundary values."""
+        assert format_perf(100.0) == "100"
+        assert format_perf(10.0) == "10.0"
+        assert format_perf(1.0) == "1.00"
+        assert format_perf(-100.0) == "-100"
+        assert format_perf(-10.0) == "-10.0"
+        assert format_perf(-1.0) == "-1.00"
+
+    def test_format_perf_integer_inputs(self):
+        """Test formatting with integer inputs."""
+        assert format_perf(150) == "150"
+        assert format_perf(50) == "50.0"
+        assert format_perf(5) == "5.00"
+        assert format_perf(0) == "0.000"
+        assert format_perf(-150) == "-150"
+        assert format_perf(-50) == "-50.0"
+        assert format_perf(-5) == "-5.00"
+
+    def test_format_perf_float_inputs(self):
+        """Test formatting with float inputs."""
+        assert format_perf(123.456) == "123"
+        assert format_perf(12.3456) == "12.3"
+        assert format_perf(1.23456) == "1.23"
+        assert format_perf(0.123456) == "0.123"
+
+    def test_format_perf_edge_cases(self):
+        """Test formatting for edge cases and special values."""
+        # Very large numbers
+        assert format_perf(999999.99) == "1000000"
+        assert format_perf(1000000) == "1000000"
+
+        # Very small positive numbers
+        assert format_perf(0.0001) == "0.000"
+        assert format_perf(0.00001) == "0.000"
+
+        # Numbers very close to boundaries
+        assert format_perf(99.9999) == "100.0"
+        assert format_perf(9.9999) == "10.00"
+        assert format_perf(0.9999) == "1.000"
+
+    def test_format_perf_rounding_behavior(self):
+        """Test that rounding behavior is consistent."""
+        # Test rounding up
+        assert format_perf(100.5) == "100"
+        assert format_perf(10.55) == "10.6"
+        assert format_perf(1.555) == "1.55"
+        assert format_perf(0.1555) == "0.155"
+
+        # Test rounding down
+        assert format_perf(100.4) == "100"
+        assert format_perf(10.54) == "10.5"
+        assert format_perf(1.554) == "1.55"
+        assert format_perf(0.1554) == "0.155"

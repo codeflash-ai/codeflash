@@ -43,6 +43,7 @@ def apply_formatter_cmds(
     path: Path,
     test_dir_str: Optional[str],
     print_status: bool,  # noqa
+    exit_on_failure: bool = True,  # noqa
 ) -> tuple[Path, str]:
     # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
     formatter_name = cmds[0].lower()
@@ -84,8 +85,8 @@ def apply_formatter_cmds(
                 expand=False,
             )
             console.print(panel)
-
-            raise e from None
+            if exit_on_failure:
+                raise e from None
 
     return file_path, file_path.read_text(encoding="utf8")
 
@@ -104,8 +105,9 @@ def format_code(
     formatter_cmds: list[str],
     path: Union[str, Path],
     optimized_function: str = "",
-    check_formatting_diff: bool = False,  # noqa
+    check_diff: bool = False,  # noqa
     print_status: bool = True,  # noqa
+    exit_on_failure: bool = True,  # noqa
 ) -> str:
     with tempfile.TemporaryDirectory() as test_dir_str:
         if isinstance(path, str):
@@ -114,7 +116,7 @@ def format_code(
         original_code = path.read_text(encoding="utf8")
         original_code_lines = len(original_code.split("\n"))
 
-        if check_formatting_diff and original_code_lines > 50:
+        if check_diff and original_code_lines > 50:
             # we dont' count the formatting diff for the optimized function as it should be well-formatted
             original_code_without_opfunc = original_code.replace(optimized_function, "")
 
@@ -129,7 +131,6 @@ def format_code(
                 original_code_without_opfunc, formatted_code, from_file=str(original_temp), to_file=str(formatted_temp)
             )
             diff_lines_count = get_diff_lines_count(diff_output)
-            print(f"Diff lines count: {diff_lines_count}")
 
             # if the diff is more than 30% of the original code, we skip formatting
             # we set a max of 50 lines to avoid formatting large files with small changes
@@ -141,7 +142,9 @@ def format_code(
                 )
                 return original_code
         # TODO : We can avoid formatting the whole file again and only formatting the optimized code standalone and replace in formatted file above.
-        _, formatted_code = apply_formatter_cmds(formatter_cmds, path, test_dir_str=None, print_status=print_status)
+        _, formatted_code = apply_formatter_cmds(
+            formatter_cmds, path, test_dir_str=None, print_status=print_status, exit_on_failure=exit_on_failure
+        )
         logger.debug(f"Formatted {path} with commands: {formatter_cmds}")
         return formatted_code
 

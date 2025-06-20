@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -176,3 +177,20 @@ def remove_git_worktrees(worktree_root: Path | None, worktrees: list[Path]) -> N
         logger.warning(f"Error removing worktrees: {e}")
     if worktree_root:
         shutil.rmtree(worktree_root)
+
+
+def get_last_commit_author_if_pr_exists(repo: Repo | None = None) -> str | None:
+    """Return the author's name of the last commit in the current branch if PR_NUMBER is set.
+
+    Otherwise, return None.
+    """
+    if "PR_NUMBER" not in os.environ:
+        return None
+    try:
+        repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+        last_commit = repository.head.commit
+    except Exception:
+        logger.exception("Failed to get last commit author.")
+        return None
+    else:
+        return last_commit.author.name

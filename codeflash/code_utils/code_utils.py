@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import site
+import sys
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -12,7 +13,7 @@ from tempfile import TemporaryDirectory
 
 import tomlkit
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import logger, paneled_text
 from codeflash.code_utils.config_parser import find_pyproject_toml
 
 ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
@@ -33,7 +34,7 @@ def custom_addopts() -> None:
             # Backup original addopts
             original_addopts = data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("addopts", "")
             # nothing to do if no addopts present
-            if original_addopts != "":
+            if original_addopts != "" and isinstance(original_addopts, list):
                 original_addopts = [x.strip() for x in original_addopts]
                 non_blacklist_plugin_args = re.sub(r"-n(?: +|=)\S+", "", " ".join(original_addopts)).split(" ")
                 non_blacklist_plugin_args = [x for x in non_blacklist_plugin_args if x != ""]
@@ -213,3 +214,9 @@ def cleanup_paths(paths: list[Path]) -> None:
 def restore_conftest(path_to_content_map: dict[Path, str]) -> None:
     for path, file_content in path_to_content_map.items():
         path.write_text(file_content, encoding="utf8")
+
+
+def exit_with_message(message: str, *, error_on_exit: bool = False) -> None:
+    paneled_text(message, panel_args={"style": "red"})
+
+    sys.exit(1 if error_on_exit else 0)

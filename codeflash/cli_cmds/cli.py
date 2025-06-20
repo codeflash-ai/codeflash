@@ -8,6 +8,7 @@ from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
+from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.version import __version__ as version
 
@@ -42,7 +43,7 @@ def parse_args() -> Namespace:
     )
     parser.add_argument("--test-framework", choices=["pytest", "unittest"], default="pytest")
     parser.add_argument("--config-file", type=str, help="Path to the pyproject.toml with codeflash configs.")
-    parser.add_argument("--replay-test", type=str, help="Path to replay test to optimize functions from")
+    parser.add_argument("--replay-test", type=str, nargs="+", help="Paths to replay test to optimize functions from")
     parser.add_argument(
         "--no-pr", action="store_true", help="Do not create a PR for the optimization, only update the code locally."
     )
@@ -83,25 +84,22 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
         sys.exit()
     if not check_running_in_git_repo(module_root=args.module_root):
         if not confirm_proceeding_with_no_git_repo():
-            logger.critical("No git repository detected and user aborted run. Exiting...")
-            sys.exit(1)
+            exit_with_message("No git repository detected and user aborted run. Exiting...", error_on_exit=True)
         args.no_pr = True
     if args.function and not args.file:
-        logger.error("If you specify a --function, you must specify the --file it is in")
-        sys.exit(1)
+        exit_with_message("If you specify a --function, you must specify the --file it is in", error_on_exit=True)
     if args.file:
         if not Path(args.file).exists():
-            logger.error(f"File {args.file} does not exist")
-            sys.exit(1)
+            exit_with_message(f"File {args.file} does not exist", error_on_exit=True)
         args.file = Path(args.file).resolve()
         if not args.no_pr:
             owner, repo = get_repo_owner_and_name()
             require_github_app_or_exit(owner, repo)
     if args.replay_test:
-        if not Path(args.replay_test).is_file():
-            logger.error(f"Replay test file {args.replay_test} does not exist")
-            sys.exit(1)
-        args.replay_test = Path(args.replay_test).resolve()
+        for test_path in args.replay_test:
+            if not Path(test_path).is_file():
+                exit_with_message(f"Replay test file {test_path} does not exist", error_on_exit=True)
+        args.replay_test = [Path(replay_test).resolve() for replay_test in args.replay_test]
 
     return args
 
@@ -110,8 +108,7 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     try:
         pyproject_config, pyproject_file_path = parse_config_file(args.config_file)
     except ValueError as e:
-        logger.error(e)
-        sys.exit(1)
+        exit_with_message(f"Error parsing config file: {e}", error_on_exit=True)
     supported_keys = [
         "module_root",
         "tests_root",
@@ -139,9 +136,6 @@ def process_pyproject_config(args: Namespace) -> Namespace:
         assert args.benchmarks_root is not None, "--benchmarks-root must be specified when running with --benchmark"
         assert Path(args.benchmarks_root).is_dir(), (
             f"--benchmarks-root {args.benchmarks_root} must be a valid directory"
-        )
-        assert Path(args.benchmarks_root).resolve().is_relative_to(Path(args.tests_root).resolve()), (
-            f"--benchmarks-root {args.benchmarks_root} must be a subdirectory of --tests-root {args.tests_root}"
         )
         if env_utils.get_pr_number() is not None:
             import git
@@ -206,8 +200,7 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
             )
             apologize_and_exit()
         if not args.no_pr and not check_and_push_branch(git_repo):
-            logger.critical("❌ Branch is not pushed. Exiting...")
-            sys.exit(1)
+            exit_with_message("Branch is not pushed...", error_on_exit=True)
         owner, repo = get_repo_owner_and_name(git_repo)
         if not args.no_pr:
             require_github_app_or_exit(owner, repo)

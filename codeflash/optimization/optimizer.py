@@ -72,7 +72,6 @@ class Optimizer:
     def run(self) -> None:
         from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
         from codeflash.code_utils.code_replacer import normalize_code, normalize_node
-        from codeflash.code_utils.code_utils import cleanup_paths
         from codeflash.code_utils.static_analysis import (
             analyze_imported_modules,
             get_first_top_level_function_or_method_ast,
@@ -129,7 +128,7 @@ class Optimizer:
                         trace_file.unlink()
 
                     self.replay_tests_dir = Path(
-                        tempfile.mkdtemp(prefix="codeflash_replay_tests_", dir=self.args.benchmarks_root)
+                        tempfile.mkdtemp(prefix="codeflash_replay_tests_", dir=self.args.tests_root)
                     )
                     trace_benchmarks_pytest(
                         self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file
@@ -283,14 +282,22 @@ class Optimizer:
             if function_optimizer:
                 function_optimizer.cleanup_generated_files()
 
-            if self.test_cfg.concolic_test_root_dir:
-                cleanup_paths([self.test_cfg.concolic_test_root_dir])
+            self.cleanup_temporary_paths()
+
+    def cleanup_temporary_paths(self) -> None:
+        from codeflash.code_utils.code_utils import cleanup_paths
+
+        cleanup_paths([self.test_cfg.concolic_test_root_dir, self.replay_tests_dir])
 
 
 def run_with_args(args: Namespace) -> None:
+    optimizer = None
     try:
         optimizer = Optimizer(args)
         optimizer.run()
     except KeyboardInterrupt:
-        logger.warning("Keyboard interrupt received. Exiting, please wait…")
+        logger.warning("Keyboard interrupt received. Cleaning up and exiting, please wait…")
+        if optimizer:
+            optimizer.cleanup_temporary_paths()
+
         raise SystemExit from None
