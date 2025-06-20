@@ -40,4 +40,4 @@ jobs:
       - name: ⚡️Codeflash Optimization
         id: optimize_code
         run: |
-          uv run --benchmark
+          uv run codeflash --benchmark
