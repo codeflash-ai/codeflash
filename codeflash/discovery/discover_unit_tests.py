@@ -195,17 +195,25 @@ class ImportAnalyzer(ast.NodeVisitor):
                 if node.module == "importlib" and alias.name == "import_module":
                     self.has_dynamic_imports = True
 
-                # Check if imported name is a target qualified name
-                if alias.name in self.function_names_to_find:
-                    self.found_any_target_function = True
-                    self.found_qualified_name = alias.name
-                    return
-                # Check if module.name forms a target qualified name
-                qualified_name = f"{node.module}.{alias.name}"
-                if qualified_name in self.function_names_to_find:
-                    self.found_any_target_function = True
-                    self.found_qualified_name = qualified_name
-                    return
+            qualified_name = f"{node.module}.{alias.name}"
+            potential_matches = {alias.name, qualified_name}
+
+            if any(name in self.function_names_to_find for name in potential_matches):
+                self.found_any_target_function = True
+                self.found_qualified_name = next(
+                    name for name in potential_matches if name in self.function_names_to_find
+                )
+                return
+
+            qualified_prefix = qualified_name + "."
+            if any(target_func.startswith(qualified_prefix) for target_func in self.function_names_to_find):
+                self.found_any_target_function = True
+                self.found_qualified_name = next(
+                    target_func
+                    for target_func in self.function_names_to_find
+                    if target_func.startswith(qualified_prefix)
+                )
+                return
 
     def visit_Attribute(self, node: ast.Attribute) -> None:
         """Handle attribute access like module.function_name."""
