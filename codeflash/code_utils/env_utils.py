@@ -92,8 +92,8 @@ def is_end_to_end() -> bool:
 
 @lru_cache(maxsize=1)
 def get_cached_gh_event_data() -> dict[str,]:
-    event_path = os.getenv("GITHUB_EVENT_PATH")
+    event_path = os.environ.get("GITHUB_EVENT_PATH")
     if not event_path:
         return {}
-    with Path(event_path).open() as f:
+    with open(event_path, encoding="utf-8") as f:
         return json.load(f)
