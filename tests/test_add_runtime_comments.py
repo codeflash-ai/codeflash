@@ -60,9 +60,6 @@ class TestAddRuntimeComments:
             behavior_file_path=Path("/project/tests/test_module.py"),
             perf_file_path=Path("/project/tests/test_module_perf.py"),
         )
-        """add_runtime_comments_to_generated_tests(
-            test_config, generated_tests, original_runtimes, optimized_runtimes
-        )"""
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
 
         # Create test results
@@ -70,8 +67,8 @@ class TestAddRuntimeComments:
         optimized_test_results = TestResults()
 
         # Add test invocations with different runtimes
-        original_invocation = self.create_test_invocation("test_bubble_sort", 500_000)  # 500μs
-        optimized_invocation = self.create_test_invocation("test_bubble_sort", 300_000)  # 300μs
+        original_invocation = self.create_test_invocation("test_bubble_sort", 500_000, iteration_id='0')  # 500μs
+        optimized_invocation = self.create_test_invocation("test_bubble_sort", 300_000, iteration_id='0')  # 300μs
 
         original_test_results.add(original_invocation)
         optimized_test_results.add(optimized_invocation)
@@ -114,11 +111,11 @@ def helper_function():
         optimized_test_results = TestResults()
 
         # Add test invocations for both test functions
-        original_test_results.add(self.create_test_invocation("test_bubble_sort", 500_000))
-        original_test_results.add(self.create_test_invocation("test_quick_sort", 800_000))
+        original_test_results.add(self.create_test_invocation("test_bubble_sort", 500_000, iteration_id='0'))
+        original_test_results.add(self.create_test_invocation("test_quick_sort", 800_000, iteration_id='0'))
 
-        optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 300_000))
-        optimized_test_results.add(self.create_test_invocation("test_quick_sort", 600_000))
+        optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 300_000, iteration_id='0'))
+        optimized_test_results.add(self.create_test_invocation("test_quick_sort", 600_000, iteration_id='0'))
 
         original_runtimes = original_test_results.usable_runtime_data_by_test_case()
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
@@ -150,6 +147,7 @@ def helper_function():
 
         for original_time, optimized_time, expected_comment in test_cases:
             test_source = """def test_function():
+    #this comment will be removed in ast form
     codeflash_output = some_function()
     assert codeflash_output is not None
 """
@@ -168,8 +166,8 @@ def helper_function():
             original_test_results = TestResults()
             optimized_test_results = TestResults()
 
-            original_test_results.add(self.create_test_invocation("test_function", original_time))
-            optimized_test_results.add(self.create_test_invocation("test_function", optimized_time))
+            original_test_results.add(self.create_test_invocation("test_function", original_time, iteration_id='0'))
+            optimized_test_results.add(self.create_test_invocation("test_function", optimized_time, iteration_id='0'))
 
             original_runtimes = original_test_results.usable_runtime_data_by_test_case()
             optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
@@ -233,7 +231,7 @@ def helper_function():
         original_test_results = TestResults()
         optimized_test_results = TestResults()
 
-        original_test_results.add(self.create_test_invocation("test_bubble_sort", 500_000))
+        original_test_results.add(self.create_test_invocation("test_bubble_sort", 500_000, iteration_id='0'))
         # No optimized results
         original_runtimes = original_test_results.usable_runtime_data_by_test_case()
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
@@ -266,13 +264,13 @@ def helper_function():
         optimized_test_results = TestResults()
 
         # Add multiple runs with different runtimes
-        original_test_results.add(self.create_test_invocation("test_bubble_sort", 600_000, loop_index=1))
-        original_test_results.add(self.create_test_invocation("test_bubble_sort", 500_000, loop_index=2))
-        original_test_results.add(self.create_test_invocation("test_bubble_sort", 550_000, loop_index=3))
+        original_test_results.add(self.create_test_invocation("test_bubble_sort", 600_000, loop_index=1,iteration_id='0'))
+        original_test_results.add(self.create_test_invocation("test_bubble_sort", 500_000, loop_index=2,iteration_id='0'))
+        original_test_results.add(self.create_test_invocation("test_bubble_sort", 550_000, loop_index=3,iteration_id='0'))
 
-        optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 350_000, loop_index=1))
-        optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 300_000, loop_index=2))
-        optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 320_000, loop_index=3))
+        optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 350_000, loop_index=1,iteration_id='0'))
+        optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 300_000, loop_index=2,iteration_id='0'))
+        optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 320_000, loop_index=3,iteration_id='0'))
 
         original_runtimes = original_test_results.usable_runtime_data_by_test_case()
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
@@ -304,8 +302,8 @@ def helper_function():
         original_test_results = TestResults()
         optimized_test_results = TestResults()
 
-        original_test_results.add(self.create_test_invocation("test_bubble_sort", 500_000))
-        optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 300_000))
+        original_test_results.add(self.create_test_invocation("test_bubble_sort", 500_000,iteration_id='-1'))
+        optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 300_000,iteration_id='-1'))
 
         original_runtimes = original_test_results.usable_runtime_data_by_test_case()
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
@@ -320,9 +318,9 @@ def helper_function():
     def test_invalid_python_code_handling(self, test_config):
         """Test behavior when test source code is invalid Python."""
         test_source = """def test_bubble_sort(:
-    codeflash_output = bubble_sort([3, 1, 2])
+        codeflash_output = bubble_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
-"""  # Invalid syntax: extra colon
+"""  # Invalid syntax: extra indentation
 
         generated_test = GeneratedTests(
             generated_original_test_source=test_source,
@@ -338,8 +336,8 @@ def helper_function():
         original_test_results = TestResults()
         optimized_test_results = TestResults()
 
-        original_test_results.add(self.create_test_invocation("test_bubble_sort", 500_000))
-        optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 300_000))
+        original_test_results.add(self.create_test_invocation("test_bubble_sort", 500_000,iteration_id='0'))
+        optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 300_000,iteration_id='0'))
 
         original_runtimes = original_test_results.usable_runtime_data_by_test_case()
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
@@ -359,6 +357,9 @@ def helper_function():
 """
 
         test_source_2 = """def test_quick_sort():
+    a=1
+    b=2
+    c=3
     codeflash_output = quick_sort([5, 2, 8])
     assert codeflash_output == [2, 5, 8]
 """
@@ -385,11 +386,11 @@ def helper_function():
         original_test_results = TestResults()
         optimized_test_results = TestResults()
 
-        original_test_results.add(self.create_test_invocation("test_bubble_sort", 500_000))
-        original_test_results.add(self.create_test_invocation("test_quick_sort", 800_000))
+        original_test_results.add(self.create_test_invocation("test_bubble_sort", 500_000,iteration_id='0'))
+        original_test_results.add(self.create_test_invocation("test_quick_sort", 800_000,iteration_id='3'))
 
-        optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 300_000))
-        optimized_test_results.add(self.create_test_invocation("test_quick_sort", 600_000))
+        optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 300_000,iteration_id='0'))
+        optimized_test_results.add(self.create_test_invocation("test_quick_sort", 600_000,iteration_id='3'))
 
         original_runtimes = original_test_results.usable_runtime_data_by_test_case()
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
@@ -430,8 +431,8 @@ def helper_function():
         original_test_results = TestResults()
         optimized_test_results = TestResults()
 
-        original_test_results.add(self.create_test_invocation("test_bubble_sort", 500_000))
-        optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 300_000))
+        original_test_results.add(self.create_test_invocation("test_bubble_sort", 500_000,iteration_id='0'))
+        optimized_test_results.add(self.create_test_invocation("test_bubble_sort", 300_000,iteration_id='0'))
 
         original_runtimes = original_test_results.usable_runtime_data_by_test_case()
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
@@ -472,8 +473,8 @@ def helper_function():
         original_test_results = TestResults()
         optimized_test_results = TestResults()
 
-        original_test_results.add(self.create_test_invocation("test_mutation_of_input", 19_000))  # 19μs
-        optimized_test_results.add(self.create_test_invocation("test_mutation_of_input", 14_000))  # 14μs
+        original_test_results.add(self.create_test_invocation("test_mutation_of_input", 19_000,iteration_id='1'))  # 19μs
+        optimized_test_results.add(self.create_test_invocation("test_mutation_of_input", 14_000,iteration_id='1'))  # 14μs
 
         original_runtimes = original_test_results.usable_runtime_data_by_test_case()
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
@@ -600,16 +601,23 @@ def helper_function():
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
 
-        invocation_id = InvocationId(
+        invocation_id1 = InvocationId(
             test_module_path="tests.test_module",
             test_class_name=None,
             test_function_name="test_function",
             function_getting_tested="some_function",
-            iteration_id="0",
+            iteration_id="1",
+        )
+        invocation_id2 = InvocationId(
+            test_module_path="tests.test_module",
+            test_class_name=None,
+            test_function_name="test_function",
+            function_getting_tested="another_function",
+            iteration_id="3",
         )
 
-        original_runtimes = {invocation_id: [1500000000]}  # 1.5s in nanoseconds
-        optimized_runtimes = {invocation_id: [750000000]}  # 0.75s in nanoseconds
+        original_runtimes = {invocation_id1: [1500000000], invocation_id2: [10]}  # 1.5s in nanoseconds
+        optimized_runtimes = {invocation_id1: [750000000], invocation_id2: [5]}  # 0.75s in nanoseconds
 
         result = add_runtime_comments_to_generated_tests(
             test_config, generated_tests, original_runtimes, optimized_runtimes
@@ -619,7 +627,7 @@ def helper_function():
     setup_data = prepare_test()
     codeflash_output = some_function() # 1.50s -> 750ms (100% faster)
     assert codeflash_output == expected
-    codeflash_output = another_function() # 1.50s -> 750ms (100% faster)
+    codeflash_output = another_function() # 10ns -> 5ns (100% faster)
     assert codeflash_output == expected2
 '''
 
