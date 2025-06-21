@@ -5,6 +5,7 @@ import os
 import random
 import warnings
 from _ast import AsyncFunctionDef, ClassDef, FunctionDef
+from argparse import Namespace
 from collections import defaultdict
 from functools import cache
 from pathlib import Path
@@ -26,7 +27,7 @@ from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.git_utils import get_git_diff, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
-from codeflash.models.models import FunctionParent
+from codeflash.models.models import CodeOptimizationContext, FunctionParent
 from codeflash.telemetry.posthog_cf import ph
 
 if TYPE_CHECKING:
@@ -438,39 +439,32 @@ def was_function_previously_optimized(
         Tuple of (filtered_functions_dict, remaining_count)
 
     """
-    # Check optimization status if repository info is provided
-    # already_optimized_count = 0
     try:
         owner, repo = get_repo_owner_and_name()
     except git.exc.InvalidGitRepositoryError:
         logger.warning("No git repository found")
         owner, repo = None, None
-    pr_number = get_pr_number()
 
-    if not owner or not repo or pr_number is None or getattr(args, "no_pr", False):
+    pr_number = get_pr_number()
+    no_pr_flag = getattr(args, "no_pr", False)
+    # Short-circuit if info missing
+    if not owner or not repo or pr_number is None or no_pr_flag:
         return False
 
-    code_contexts = []
-
     func_hash = code_context.hashing_code_context_hash
-    # Use a unique path identifier that includes function info
 
-    code_contexts.append(
+    code_contexts = [
         {
             "file_path": function_to_optimize.file_path,
             "function_name": function_to_optimize.qualified_name,
             "code_hash": func_hash,
         }
-    )
-
-    if not code_contexts:
-        return False
+    ]
 
     try:
         result = is_function_being_optimized_again(owner, repo, pr_number, code_contexts)
-        already_optimized_paths: list[tuple[str, str]] = result.get("already_optimized_tuples", [])
+        already_optimized_paths = result.get("already_optimized_tuples", [])
         return len(already_optimized_paths) > 0
-
     except Exception as e:
         logger.warning(f"Failed to check optimization status: {e}")
         # Return all functions if API call fails
