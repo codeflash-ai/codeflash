@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from functools import lru_cache
@@ -64,6 +65,10 @@ def ensure_codeflash_api_key() -> bool:
 
 @lru_cache(maxsize=1)
 def get_pr_number() -> Optional[int]:
+    event_data = get_cached_gh_event_data()
+    gh_pr_number = event_data["number"]
+    if gh_pr_number is not None:
+        return int(gh_pr_number)
     pr_number = os.environ.get("CODEFLASH_PR_NUMBER")
     if not pr_number:
         return None
@@ -73,8 +78,8 @@ def get_pr_number() -> Optional[int]:
 def ensure_pr_number() -> bool:
     if not get_pr_number():
         msg = (
-            "CODEFLASH_PR_NUMBER not found in environment variables; make sure the Github Action is setting this so "
-            "Codeflash can comment on the right PR"
+            "Codeflash couldn't detect your pull request number. Are you running Codeflash within a GitHub Action?"
+            "If not, please set the CODEFLASH_PR_NUMBER environment variable to ensure Codeflash can comment on the correct PR."
         )
         raise OSError(msg)
     return True
@@ -83,3 +88,12 @@ def ensure_pr_number() -> bool:
 @lru_cache(maxsize=1)
 def is_end_to_end() -> bool:
     return bool(os.environ.get("CODEFLASH_END_TO_END"))
+
+
+@lru_cache(maxsize=1)
+def get_cached_gh_event_data() -> dict[str,]:
+    event_path = os.getenv("GITHUB_EVENT_PATH")
+    if not event_path:
+        return {}
+    with Path(event_path).open() as f:
+        return json.load(f)
