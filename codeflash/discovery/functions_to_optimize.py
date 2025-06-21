@@ -447,7 +447,7 @@ def was_function_previously_optimized(
         owner, repo = None, None
     pr_number = get_pr_number()
 
-    if not owner or not repo or pr_number is None or args.no_pr:
+    if not owner or not repo or pr_number is None or getattr(args, "no_pr", False):
         return False
 
     code_contexts = []
