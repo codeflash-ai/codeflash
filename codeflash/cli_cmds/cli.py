@@ -62,6 +62,8 @@ def parse_args() -> Namespace:
         type=str,
         help="Path to the directory of the project, where all the pytest-benchmark tests are located.",
     )
+    parser.add_argument("--no-draft", default=False, action="store_true", help="Skip optimization for draft PRs")
+
     args: Namespace = parser.parse_args()
     return process_and_validate_cmd_args(args)
 
