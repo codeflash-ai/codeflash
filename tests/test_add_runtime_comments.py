@@ -777,6 +777,8 @@ def helper_function():
         test_source = '''def test_function():
     codeflash_output = some_function()
     assert codeflash_output == expected
+    codeflash_output = some_function()
+    assert codeflash_output == expected
 '''
 
         generated_test = GeneratedTests(
@@ -789,7 +791,7 @@ def helper_function():
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
 
-        invocation_id = InvocationId(
+        invocation_id1 = InvocationId(
             test_module_path="tests.test_module",
             test_class_name=None,
             test_function_name="test_function",
@@ -797,8 +799,16 @@ def helper_function():
             iteration_id="0",
         )
 
-        original_runtimes = {invocation_id: [1000000000]}  # 1s
-        optimized_runtimes = {invocation_id: [1500000000]} # 1.5s (slower!)
+        invocation_id2 = InvocationId(
+            test_module_path="tests.test_module",
+            test_class_name=None,
+            test_function_name="test_function",
+            function_getting_tested="some_function",
+            iteration_id="2",
+        )
+
+        original_runtimes = {invocation_id1: [1000000000], invocation_id2: [2]}  # 1s
+        optimized_runtimes = {invocation_id1: [1500000000], invocation_id2: [1]} # 1.5s (slower!)
 
         result = add_runtime_comments_to_generated_tests(
             test_config, generated_tests, original_runtimes, optimized_runtimes
@@ -806,6 +816,8 @@ def helper_function():
 
         expected_source = '''def test_function():
     codeflash_output = some_function() # 1.00s -> 1.50s (33.3% slower)
+    assert codeflash_output == expected
+    codeflash_output = some_function() # 2ns -> 1ns (100% faster)
     assert codeflash_output == expected
 '''
 
