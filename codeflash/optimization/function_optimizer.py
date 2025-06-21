@@ -167,7 +167,7 @@ class FunctionOptimizer:
         # last time we could not find an optimization, maybe this time we do.
         # Random is before as a performance optimization, swapping the two 'and' statements has the same effect
         if random.random() > REPEAT_OPTIMIZATION_PROBABILITY and was_function_previously_optimized(  # noqa: S311
-            self.function_to_optimize, code_context
+            self.function_to_optimize, code_context, self.args
         ):
             return Failure("Function optimization previously attempted, skipping.")
 
