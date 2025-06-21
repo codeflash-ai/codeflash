@@ -30,12 +30,14 @@ class PicklePatcher:
         """Safely pickle an object, replacing unpicklable parts with placeholders.
 
         Args:
+        ----
             obj: The object to pickle
             protocol: The pickle protocol version to use
             max_depth: Maximum recursion depth
             **kwargs: Additional arguments for pickle/dill.dumps
 
         Returns:
+        -------
             bytes: Pickled data with placeholders for unpicklable objects
 
         """
@@ -46,9 +48,11 @@ class PicklePatcher:
         """Unpickle data that may contain placeholders.
 
         Args:
+        ----
             pickled_data: Pickled data with possible placeholders
 
         Returns:
+        -------
             The unpickled object with placeholders for unpicklable parts
 
         """
@@ -59,11 +63,13 @@ class PicklePatcher:
         """Create a placeholder for an unpicklable object.
 
         Args:
+        ----
             obj: The original unpicklable object
             error_msg: Error message explaining why it couldn't be pickled
             path: Path to this object in the object graph
 
         Returns:
+        -------
             PicklePlaceholder: A placeholder object
 
         """
@@ -91,12 +97,14 @@ class PicklePatcher:
         """Try to pickle an object using pickle first, then dill. If both fail, create a placeholder.
 
         Args:
+        ----
             obj: The object to pickle
             path: Path to this object in the object graph
             protocol: The pickle protocol version to use
             **kwargs: Additional arguments for pickle/dill.dumps
 
         Returns:
+        -------
             tuple: (success, result) where success is a boolean and result is either:
                 - Pickled bytes if successful
                 - Error message if not successful
@@ -123,6 +131,7 @@ class PicklePatcher:
         """Recursively try to pickle an object, replacing unpicklable parts with placeholders.
 
         Args:
+        ----
             obj: The object to pickle
             max_depth: Maximum recursion depth
             path: Current path in the object graph
@@ -130,6 +139,7 @@ class PicklePatcher:
             **kwargs: Additional arguments for pickle/dill.dumps
 
         Returns:
+        -------
             bytes: Pickled data with placeholders for unpicklable objects
 
         """
@@ -185,6 +195,7 @@ class PicklePatcher:
         """Handle pickling for dictionary objects.
 
         Args:
+        ----
             obj_dict: The dictionary to pickle
             max_depth: Maximum recursion depth
             error_msg: Error message from the original pickling attempt
@@ -193,6 +204,7 @@ class PicklePatcher:
             **kwargs: Additional arguments for pickle/dill.dumps
 
         Returns:
+        -------
             bytes: Pickled data with placeholders for unpicklable objects
 
         """
@@ -249,6 +261,7 @@ class PicklePatcher:
         """Handle pickling for sequence types (list, tuple, set).
 
         Args:
+        ----
             obj_seq: The sequence to pickle
             max_depth: Maximum recursion depth
             error_msg: Error message from the original pickling attempt
@@ -257,6 +270,7 @@ class PicklePatcher:
             **kwargs: Additional arguments for pickle/dill.dumps
 
         Returns:
+        -------
             bytes: Pickled data with placeholders for unpicklable objects
 
         """
@@ -305,6 +319,7 @@ class PicklePatcher:
         """Handle pickling for custom objects with __dict__.
 
         Args:
+        ----
             obj: The object to pickle
             max_depth: Maximum recursion depth
             error_msg: Error message from the original pickling attempt
@@ -313,6 +328,7 @@ class PicklePatcher:
             **kwargs: Additional arguments for pickle/dill.dumps
 
         Returns:
+        -------
             bytes: Pickled data with placeholders for unpicklable objects
 
         """

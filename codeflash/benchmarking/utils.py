@@ -83,11 +83,13 @@ def process_benchmark_data(
     """Process benchmark data and generate detailed benchmark information.
 
     Args:
+    ----
         replay_performance_gain: The performance gain from replay
         fto_benchmark_timings: Function to optimize benchmark timings
         total_benchmark_timings: Total benchmark timings
 
     Returns:
+    -------
         ProcessedBenchmarkInfo containing processed benchmark details
 
     """

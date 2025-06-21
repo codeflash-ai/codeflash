@@ -16,6 +16,7 @@ tests-root = "tests"
 test-framework = "pytest"
 formatter-cmds = ["black $file"]
 # optional configuration
+benchmarks-root = "tests/benchmarks" # Required when running with --benchmark
 ignore-paths = ["my_module/build/"]
 pytest-cmd = "pytest"
 disable-imports-sorting = false
@@ -29,6 +30,7 @@ Required Options:
 - `test-framework`: The test framework you use for your project. Codeflash supports `pytest` and `unittest`.
 
 Optional Configuration:
+- `benchmarks-root`: The directory where your benchmarks are located. Codeflash will use this directory to discover existing benchmarks. Note that this option is required when running with `--benchmark`.
 - `ignore-paths`: A list of paths withing the `module-root` to ignore when optimizing code. Codeflash will not optimize code in these paths. Useful for ignoring build directories or other generated code. You can also leave this empty if not needed.
 - `pytest-cmd`: The command to run your tests. Defaults to `pytest`. You can specify extra commandline arguments here for pytest.
 - `formatter-cmds`: The command line to run your code formatter or linter. Defaults to `["black $file"]`. In the command line `$file` refers to the current file being optimized. The assumption with using tools here is that they overwrite the same file and returns a zero exit code. You can also specify multiple tools here that run in a chain as a toml array. You can also disable code formatting by setting this to `["disabled"]`.

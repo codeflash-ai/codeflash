@@ -29,7 +29,7 @@ codeflash/code_utils/time_utils.py
 codeflash/code_utils/env_utils.py
 codeflash/code_utils/config_consts.py
 codeflash/code_utils/static_analysis.py
-codeflash/code_utils/remove_generated_tests.py
+codeflash/code_utils/edit_generated_tests.py
 codeflash/cli_cmds/console_constants.py
 codeflash/cli_cmds/logging_config.py
 codeflash/cli_cmds/__init__.py

@@ -24,6 +24,7 @@ class LineProfilerDecoratorAdder(cst.CSTTransformer):
         """Initialize the transformer.
 
         Args:
+        ----
             qualified_name: The fully qualified name of the function to add the decorator to (e.g., "MyClass.nested_func.target_func").
             decorator_name: The name of the decorator to add.
 
@@ -144,11 +145,13 @@ def add_decorator_to_qualified_function(module: cst.Module, qualified_name: str,
     """Add a decorator to a function with the exact qualified name in the source code.
 
     Args:
+    ----
         module: The Python source code as a CST module.
         qualified_name: The fully qualified name of the function to add the decorator to (e.g., "MyClass.nested_func.target_func").
         decorator_name: The name of the decorator to add.
 
     Returns:
+    -------
         The modified CST module.
 
     """

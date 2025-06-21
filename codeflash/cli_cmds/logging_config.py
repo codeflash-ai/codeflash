@@ -27,7 +27,7 @@ def set_level(level: int, *, echo_setting: bool = True) -> None:
                 ],
                 force=True,
             )
-            logging.info("Verbose DEBUG logging enabled")  # noqa: LOG015
+            logging.info("Verbose DEBUG logging enabled")
         else:
-            logging.info("Logging level set to INFO")  # noqa: LOG015
+            logging.info("Logging level set to INFO")
     console.rule()

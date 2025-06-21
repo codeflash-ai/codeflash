@@ -25,6 +25,7 @@ class CodeflashTrace:
         """Set up the database connection for direct writing.
 
         Args:
+        ----
             trace_path: Path to the trace database file
 
         """
@@ -52,6 +53,7 @@ class CodeflashTrace:
         """Write function call data directly to the database.
 
         Args:
+        ----
             data: List of function call data tuples to write
 
         """
@@ -94,9 +96,11 @@ class CodeflashTrace:
         """Use as a decorator to trace function execution.
 
         Args:
+        ----
             func: The function to be decorated
 
         Returns:
+        -------
             The wrapped function
 
         """

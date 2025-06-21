@@ -7,6 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
+import git
 import requests
 import sentry_sdk
 from pydantic.json import pydantic_encoder
@@ -44,13 +45,31 @@ def make_cfapi_request(
     cfapi_headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
     if extra_headers:
         cfapi_headers.update(extra_headers)
-    if method.upper() == "POST":
-        json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
-        cfapi_headers["Content-Type"] = "application/json"
-        response = requests.post(url, data=json_payload, headers=cfapi_headers, timeout=60)
-    else:
-        response = requests.get(url, headers=cfapi_headers, timeout=60)
-    return response
+    try:
+        if method.upper() == "POST":
+            json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
+            cfapi_headers["Content-Type"] = "application/json"
+            response = requests.post(url, data=json_payload, headers=cfapi_headers, timeout=60)
+        else:
+            response = requests.get(url, headers=cfapi_headers, timeout=60)
+        response.raise_for_status()
+        return response  # noqa: TRY300
+    except requests.exceptions.HTTPError:
+        # response may be either a string or JSON, so we handle both cases
+        error_message = ""
+        try:
+            json_response = response.json()
+            if "error" in json_response:
+                error_message = json_response["error"]
+            elif "message" in json_response:
+                error_message = json_response["message"]
+        except (ValueError, TypeError):
+            error_message = response.text
+
+        logger.error(
+            f"CF_API_Error:: making request to Codeflash API (url: {url}, method: {method}, status {response.status_code}): {error_message}"
+        )
+        return response
 
 
 @lru_cache(maxsize=1)
@@ -164,10 +183,7 @@ def is_github_app_installed_on_repo(owner: str, repo: str) -> bool:
     :return: The response object.
     """
     response = make_cfapi_request(endpoint=f"/is-github-app-installed?repo={repo}&owner={owner}", method="GET")
-    if not response.ok or response.text != "true":
-        logger.error(f"Error: {response.text}")
-        return False
-    return True
+    return response.ok and response.text == "true"
 
 
 def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
@@ -191,3 +207,46 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
         return {}
 
     return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
+
+
+def is_function_being_optimized_again(
+    owner: str, repo: str, pr_number: int, code_contexts: list[dict[str, str]]
+) -> Any:  # noqa: ANN401
+    """Check if the function being optimized is being optimized again."""
+    response = make_cfapi_request(
+        "/is-already-optimized",
+        "POST",
+        {"owner": owner, "repo": repo, "pr_number": pr_number, "code_contexts": code_contexts},
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def add_code_context_hash(code_context_hash: str) -> None:
+    """Add code context to the DB cache."""
+    pr_number = get_pr_number()
+    if pr_number is None:
+        return
+    try:
+        owner, repo = get_repo_owner_and_name()
+        pr_number = get_pr_number()
+    except git.exc.InvalidGitRepositoryError:
+        return
+
+    if owner and repo and pr_number is not None:
+        make_cfapi_request(
+            "/add-code-hash",
+            "POST",
+            {"owner": owner, "repo": repo, "pr_number": pr_number, "code_hash": code_context_hash},
+        )
+
+
+def mark_optimization_success(trace_id: str, *, is_optimization_found: bool) -> Response:
+    """Mark an optimization event as success or not.
+
+    :param trace_id: The unique identifier for the optimization event.
+    :param is_optimization_found: Boolean indicating whether the optimization was found.
+    :return: The response object from the API.
+    """
+    payload = {"trace_id": trace_id, "is_optimization_found": is_optimization_found}
+    return make_cfapi_request(endpoint="/mark-as-success", method="POST", payload=payload)

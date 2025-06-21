@@ -35,13 +35,9 @@ jobs:
 
       - name: 📦 Install dependencies (CLI)
         run: |
-          uv tool install poetry
-          uv venv
-          source .venv/bin/activate
-          poetry install --with dev
+          uv sync
 
       - name: ⚡️Codeflash Optimization
         id: optimize_code
         run: |
-          source .venv/bin/activate
-          poetry run codeflash --benchmark
+          uv run codeflash --benchmark

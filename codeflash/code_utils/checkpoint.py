@@ -47,6 +47,7 @@ class CodeflashRunCheckpoint:
         """Add a function to the checkpoint after it has been processed.
 
         Args:
+        ----
             function_fully_qualified_name: The fully qualified name of the function
             status: Status of optimization (e.g., "optimized", "failed", "skipped")
             additional_info: Any additional information to store about the function
@@ -104,7 +105,8 @@ class CodeflashRunCheckpoint:
 def get_all_historical_functions(module_root: Path, checkpoint_dir: Path) -> dict[str, dict[str, str]]:
     """Get information about all processed functions, regardless of status.
 
-    Returns:
+    Returns
+    -------
         Dictionary mapping function names to their processing information
 
     """
