@@ -1,8 +1,7 @@
 name: end-to-end-test
 
 on:
-  # Use pull_request_target for everything to ensure access to secrets
-  pull_request_target:
+  pull_request:
     paths:
       - '**'  # Trigger for all paths
 
@@ -61,13 +60,9 @@ jobs:
 
       - name: Install dependencies (CLI)
         run: |
-          uv tool install poetry
-          uv venv
-          source .venv/bin/activate
-          poetry install --with dev
+          uv sync
 
       - name: Run Codeflash to optimize code
         id: optimize_code
         run: |
-          source .venv/bin/activate
-          poetry run python tests/scripts/end_to_end_test_bubblesort_unittest.py
+          uv run python tests/scripts/end_to_end_test_bubblesort_unittest.py
