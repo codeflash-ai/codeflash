@@ -129,7 +129,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
     """
-    if sys.version_info < (3, 12):
+    if sys.version_info > (3, 12):
         expected += """test_stdout_tag = f"{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}"
     """
     else:
@@ -233,7 +233,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
     """
-    if sys.version_info < (3, 12):
+    if sys.version_info >  (3, 12):
         expected += """test_stdout_tag = f"{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}"
     """
     else:
