@@ -263,7 +263,7 @@ class Tracer:
             if self.function_count[
                 str(function.file_name)
                 + ":"
-                + (function.class_name + ":" if function.class_name else "")
+                + (function.class_name + "." if function.class_name else "")
                 + function.function_name
             ]
             > 0
@@ -353,7 +353,7 @@ class Tracer:
             return
         if function_qualified_name not in self.function_count:
             # seeing this function for the first time
-            self.function_count[function_qualified_name] = 0
+            self.function_count[function_qualified_name] = 1
             file_valid = filter_files_optimized(
                 file_path=file_name,
                 tests_root=Path(self.config["tests_root"]),

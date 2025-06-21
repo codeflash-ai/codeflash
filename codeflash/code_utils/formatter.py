@@ -43,6 +43,7 @@ def apply_formatter_cmds(
     path: Path,
     test_dir_str: Optional[str],
     print_status: bool,  # noqa
+    exit_on_failure: bool = True,  # noqa
 ) -> tuple[Path, str]:
     # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
     formatter_name = cmds[0].lower()
@@ -84,8 +85,8 @@ def apply_formatter_cmds(
                 expand=False,
             )
             console.print(panel)
-
-            raise e from None
+            if exit_on_failure:
+                raise e from None
 
     return file_path, file_path.read_text(encoding="utf8")
 
@@ -106,6 +107,7 @@ def format_code(
     optimized_function: str = "",
     check_diff: bool = False,  # noqa
     print_status: bool = True,  # noqa
+    exit_on_failure: bool = True,  # noqa
 ) -> str:
     with tempfile.TemporaryDirectory() as test_dir_str:
         if isinstance(path, str):
@@ -138,7 +140,9 @@ def format_code(
                 )
                 return original_code
         # TODO : We can avoid formatting the whole file again and only formatting the optimized code standalone and replace in formatted file above.
-        _, formatted_code = apply_formatter_cmds(formatter_cmds, path, test_dir_str=None, print_status=print_status)
+        _, formatted_code = apply_formatter_cmds(
+            formatter_cmds, path, test_dir_str=None, print_status=print_status, exit_on_failure=exit_on_failure
+        )
         logger.debug(f"Formatted {path} with commands: {formatter_cmds}")
         return formatted_code
 
