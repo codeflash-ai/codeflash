@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import os
 import re
+from functools import lru_cache
 from pathlib import Path
 from textwrap import dedent
 from typing import TYPE_CHECKING, Union
@@ -126,7 +127,7 @@ class CfoVisitor(ast.NodeVisitor):
 
 
 def find_codeflash_output_assignments(source_code: str) -> list[int]:
-    tree = ast.parse(source_code)
+    tree = _parse_source(source_code)
     visitor = CfoVisitor(source_code)
     visitor.visit(tree)
     return visitor.results
@@ -303,3 +304,9 @@ def add_runtime_comments_to_generated_tests(
             modified_tests.append(test)
 
     return GeneratedTestsList(generated_tests=modified_tests)
+
+
+@lru_cache(maxsize=128)
+def _parse_source(source_code: str):
+    # Memoized parsing to avoid repeated expensive AST construction
+    return ast.parse(source_code)
