@@ -54,14 +54,25 @@ class CfoVisitor(ast.NodeVisitor):
         self.source_lines = source_code.splitlines()
         self.results: list[int] = []  # map actual line number to line number in ast
 
-    def _is_codeflash_output_target(self, target: Union[ast.expr, list]) -> bool:  # type: ignore[type-arg]
+    def _is_codeflash_output_target(self, target: Union[ast.expr, list]) -> bool:
         """Check if the assignment target is the variable 'codeflash_output'."""
-        if isinstance(target, ast.Name):
+        t_type = type(target)
+        if t_type is ast.Name:
             return target.id == "codeflash_output"
-        if isinstance(target, (ast.Tuple, ast.List)):
+        if t_type is ast.Tuple or t_type is ast.List:
             # Handle tuple/list unpacking: a, codeflash_output, b = values
-            return any(self._is_codeflash_output_target(elt) for elt in target.elts)
-        if isinstance(target, (ast.Subscript, ast.Attribute)):
+            # Flatten elts (avoid generator, avoid recursion if not necessary):
+            elts = target.elts
+            for elt in elts:
+                if type(elt) is ast.Name:
+                    if elt.id == "codeflash_output":
+                        return True
+                elif type(elt) is ast.Tuple or type(elt) is ast.List:
+                    # Recursively check nested tuples/lists, but avoid generator
+                    if self._is_codeflash_output_target(elt):
+                        return True
+            return False
+        if t_type is ast.Subscript or t_type is ast.Attribute:
             # Not a simple variable assignment
             return False
         return False
