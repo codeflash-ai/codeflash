@@ -220,3 +220,7 @@ def exit_with_message(message: str, *, error_on_exit: bool = False) -> None:
     paneled_text(message, panel_args={"style": "red"})
 
     sys.exit(1 if error_on_exit else 0)
+
+
+async def dummy_async_function() -> None:
+    """Provide a dummy async function for testing purposes."""
