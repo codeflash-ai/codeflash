@@ -322,6 +322,7 @@ def filter_test_files_by_imports(
     """
     if not target_functions:
         return file_to_test_map
+    return file_to_test_map # added as a temporary fix, can be removed
 
     logger.debug(f"Target functions for import filtering: {target_functions}")
 
