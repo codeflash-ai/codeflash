@@ -154,7 +154,7 @@ from codeflash.benchmarking.replay_test import get_next_arg_and_return
 from codeflash.picklepatch.pickle_patcher import PicklePatcher as pickle
 
 functions = ['compute_and_sort', 'sorter']
-trace_file_path = r"{output_file}"
+trace_file_path = r"{output_file.as_posix()}"
 
 def test_code_to_optimize_process_and_bubble_sort_codeflash_trace_compute_and_sort():
     for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, benchmark_function_name="test_compute_and_sort", function_name="compute_and_sort", file_path=r"{process_and_bubble_sort_path}", num_to_get=100):

@@ -13,6 +13,11 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
+@pytest.fixture
+def temp_dir():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        yield Path(tmpdirname)
+
 def test_remove_duplicate_imports():
     """Test that duplicate imports are removed when should_sort_imports is True."""
     original_code = "import os\nimport os\n"
@@ -36,17 +41,15 @@ def test_sorting_imports():
     assert new_code == "import os\nimport sys\nimport unittest\n"
 
 
-def test_sort_imports_without_formatting():
+def test_sort_imports_without_formatting(temp_dir):
     """Test that imports are sorted when formatting is disabled and should_sort_imports is True."""
-    with tempfile.NamedTemporaryFile() as tmp:
-        tmp.write(b"import sys\nimport unittest\nimport os\n")
-        tmp.flush()
-        tmp_path = Path(tmp.name)
+    temp_file = temp_dir / "test_file.py"
+    temp_file.write_text("import sys\nimport unittest\nimport os\n")
 
-        new_code = format_code(formatter_cmds=["disabled"], path=tmp_path)
-        assert new_code is not None
-        new_code = sort_imports(new_code)
-        assert new_code == "import os\nimport sys\nimport unittest\n"
+    new_code = format_code(formatter_cmds=["disabled"], path=temp_file)
+    assert new_code is not None
+    new_code = sort_imports(new_code)
+    assert new_code == "import os\nimport sys\nimport unittest\n"
 
 
 def test_dedup_and_sort_imports_deduplicates():
@@ -100,7 +103,7 @@ def foo():
     assert actual == expected
 
 
-def test_formatter_cmds_non_existent():
+def test_formatter_cmds_non_existent(temp_dir):
     """Test that default formatter-cmds is used when it doesn't exist in the toml."""
     config_data = """
 [tool.codeflash]
@@ -109,24 +112,18 @@ tests-root = "tests"
 test-framework = "pytest"
 ignore-paths = []
 """
+    config_file = temp_dir / "config.toml"
+    config_file.write_text(config_data)
 
-    with tempfile.NamedTemporaryFile(suffix=".toml", delete=False) as tmp:
-        tmp.write(config_data.encode())
-        tmp.flush()
-        tmp_path = Path(tmp.name)
-
-    try:
-        config, _ = parse_config_file(tmp_path)
-        assert config["formatter_cmds"] == ["black $file"]
-    finally:
-        os.remove(tmp_path)
+    config, _ = parse_config_file(config_file)
+    assert config["formatter_cmds"] == ["black $file"]
 
     try:
         import black
     except ImportError:
         pytest.skip("black is not installed")
 
-    original_code = b"""
+    original_code = """
 import os
 import sys
 def foo():
@@ -136,23 +133,21 @@ import sys
 
 
 def foo():
-    return os.path.join(sys.path[0], "bar")
+    return os.path.join(sys.path[0], \"bar\")
 """
-    with tempfile.NamedTemporaryFile() as tmp:
-        tmp.write(original_code)
-        tmp.flush()
-        tmp_path = tmp.name
+    temp_file = temp_dir / "test_file.py"
+    temp_file.write_text(original_code)
 
-        actual = format_code(formatter_cmds=["black $file"], path=Path(tmp_path))
-        assert actual == expected
+    actual = format_code(formatter_cmds=["black $file"], path=temp_file)
+    assert actual == expected
 
 
-def test_formatter_black():
+def test_formatter_black(temp_dir):
     try:
         import black
     except ImportError:
         pytest.skip("black is not installed")
-    original_code = b"""
+    original_code = """
 import os
 import sys    
 def foo():
@@ -162,23 +157,21 @@ import sys
 
 
 def foo():
-    return os.path.join(sys.path[0], "bar")
+    return os.path.join(sys.path[0], \"bar\")
 """
-    with tempfile.NamedTemporaryFile() as tmp:
-        tmp.write(original_code)
-        tmp.flush()
-        tmp_path = tmp.name
+    temp_file = temp_dir / "test_file.py"
+    temp_file.write_text(original_code)
 
-        actual = format_code(formatter_cmds=["black $file"], path=Path(tmp_path))
-        assert actual == expected
+    actual = format_code(formatter_cmds=["black $file"], path=temp_file)
+    assert actual == expected
 
 
-def test_formatter_ruff():
+def test_formatter_ruff(temp_dir):
     try:
         import ruff  # type: ignore
     except ImportError:
         pytest.skip("ruff is not installed")
-    original_code = b"""
+    original_code = """
 import os
 import sys    
 def foo():
@@ -188,32 +181,29 @@ import sys
 
 
 def foo():
-    return os.path.join(sys.path[0], "bar")
+    return os.path.join(sys.path[0], \"bar\")
 """
-    with tempfile.NamedTemporaryFile(suffix=".py") as tmp:
-        tmp.write(original_code)
-        tmp.flush()
-        tmp_path = tmp.name
+    temp_file = temp_dir / "test_file.py"
+    temp_file.write_text(original_code)
 
-        actual = format_code(
-            formatter_cmds=["ruff check --exit-zero --fix $file", "ruff format $file"], path=Path(tmp_path)
-        )
-        assert actual == expected
+    actual = format_code(
+        formatter_cmds=["ruff check --exit-zero --fix $file", "ruff format $file"], path=temp_file
+    )
+    assert actual == expected
 
 
-def test_formatter_error():
+def test_formatter_error(temp_dir):
     original_code = """
 import os
 import sys
 def foo():
     return os.path.join(sys.path[0], 'bar')"""
     expected = original_code
-    with tempfile.NamedTemporaryFile("w") as tmp:
-        tmp.write(original_code)
-        tmp.flush()
-        tmp_path = tmp.name
-        with pytest.raises(FileNotFoundError):
-            format_code(formatter_cmds=["exit 1"], path=Path(tmp_path))
+    temp_file = temp_dir / "test_file.py"
+    temp_file.write_text(original_code)
+
+    with pytest.raises(FileNotFoundError):
+        format_code(formatter_cmds=["exit 1"], path=temp_file)
 
 
 def _run_formatting_test(source_code: str, should_content_change: bool, expected = None, optimized_function: str = ""):

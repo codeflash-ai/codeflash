@@ -123,7 +123,7 @@ def test_sort():
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
 
         with test_path.open("w") as f:
@@ -276,16 +276,16 @@ def test_sort():
     fto = FunctionToOptimize(
         function_name="sorter", parents=[FunctionParent(name="BubbleSorter", type="ClassDef")], file_path=Path(fto_path)
     )
-    with tempfile.NamedTemporaryFile(mode="w") as f:
-        f.write(code)
-        f.flush()
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        tmp_test_path = Path(tmpdirname) / "test_class_method_behavior_results_temp.py"
+        tmp_test_path.write_text(code, encoding="utf-8")
 
         success, new_test = inject_profiling_into_existing_test(
-            Path(f.name), [CodePosition(7, 13), CodePosition(12, 13)], fto, Path(f.name).parent, "pytest"
+            tmp_test_path, [CodePosition(7, 13), CodePosition(12, 13)], fto, tmp_test_path.parent, "pytest"
         )
     assert success
     assert new_test.replace('"', "'") == expected.format(
-        module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
+        module_path=tmp_test_path.stem, tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
     ).replace('"', "'")
     tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/").resolve()
     test_path = tests_root / "test_class_method_behavior_results_temp.py"
@@ -295,7 +295,7 @@ def test_sort():
     try:
         new_test = expected.format(
             module_path="code_to_optimize.tests.pytest.test_class_method_behavior_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         )
 
         with test_path.open("w") as f:
