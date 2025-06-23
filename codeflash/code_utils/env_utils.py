@@ -5,7 +5,7 @@ import os
 import tempfile
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import exit_with_message
@@ -91,7 +91,7 @@ def is_end_to_end() -> bool:
 
 
 @lru_cache(maxsize=1)
-def get_cached_gh_event_data() -> dict[str,]:
+def get_cached_gh_event_data() -> dict[str, Any]:
     event_path = os.getenv("GITHUB_EVENT_PATH")
     if not event_path:
         return {}
