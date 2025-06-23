@@ -96,4 +96,4 @@ def get_cached_gh_event_data() -> dict[str, Any]:
     if not event_path:
         return {}
     with Path(event_path).open() as f:
-        return json.load(f)
+        return json.load(f)  # type: ignore  # noqa
