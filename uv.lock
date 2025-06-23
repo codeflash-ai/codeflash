@@ -180,7 +180,6 @@ wheels = [
 
 [[package]]
 name = "codeflash"
-version = "0.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -671,6 +670,7 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/57/88/6a268028a297751ed73be8e291f12aa727caf22adbc218e8dfbafcc974af/junitparser-3.2.0.tar.gz", hash = "sha256:b05e89c27e7b74b3c563a078d6e055d95cf397444f8f689b0ca616ebda0b3c65", size = 20073, upload-time = "2024-09-01T04:07:42.291Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5a/f9/321d566c9f2af81fdb4bb3d5900214116b47be9e26b82219da8b818d9da9/junitparser-3.2.0-py2.py3-none-any.whl", hash = "sha256:e14fdc0a999edfc15889b637390e8ef6ca09a49532416d3bd562857d42d4b96d", size = 13394, upload-time = "2024-09-01T04:07:40.541Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/41/15ec4177fa8d63f72bb12d1827304e0a8da17f24f9105aa526361ce9c2b0/junitparser-3.2.0-py3-none-any.whl", hash = "sha256:0342becf5f912da22c7889283ed95b8d30023d3e4c7237c17bdab41c13c39946", size = 14563, upload-time = "2025-06-22T19:22:31.586Z" },
 ]
 
 [[package]]
