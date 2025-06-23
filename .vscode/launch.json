@@ -1,0 +1,26 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "main replay test",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "codeflash/main.py",
+            "console": "integratedTerminal",
+            "args": ["--replay-test","tests/test_model_run_py__replay_test_0.py"]
+        },
+
+        {
+            "name": "main all",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "codeflash/main.py",
+            "console": "integratedTerminal",
+            "args": ["--replay-test","tests/test_model_run_py__replay_test_0.py"]
+        }
+    ]
+}
