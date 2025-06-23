@@ -122,7 +122,7 @@ def build_command(
 ) -> list[str]:
     python_path = "../../../codeflash/main.py" if "code_directories" in str(cwd) else "../codeflash/main.py"
 
-    base_command = ["uv", "run", python_path, "--file", config.file_path, "--no-pr"]
+    base_command = ["python", python_path, "--file", config.file_path, "--no-pr"]
 
     if config.function_name:
         base_command.extend(["--function", config.function_name])
