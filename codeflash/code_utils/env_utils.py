@@ -48,6 +48,7 @@ def get_codeflash_api_key() -> str:
                 "For external contributors, please ensure you've added your own API key to your fork's repository secrets and set it as the CODEFLASH_API_KEY environment variable.\n"
                 f"{api_secret_docs_message}"
             )
+            exit_with_message(msg)
         raise OSError(msg)
     if not api_key.startswith("cf-"):
         msg = (
