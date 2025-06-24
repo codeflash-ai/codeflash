@@ -12,6 +12,8 @@ from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServe
 if TYPE_CHECKING:
     from lsprotocol import types
 
+    from codeflash.models.models import GeneratedTestsList, OptimizationSet
+
 
 @dataclass
 class OptimizableFunctionsParams:
@@ -65,6 +67,67 @@ def discover_function_tests(server: CodeflashLanguageServer, params: FunctionOpt
     function_to_tests, num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
     # mocking in order to get things going
     return {"functionName": params.functionName, "status": "success", "generated_tests": str(num_discovered_tests)}
+
+
+@server.feature("prepareOptimization")
+def prepare_optimization(server: CodeflashLanguageServer, params: FunctionOptimizationParams) -> dict[str, str]:
+    current_function = server.optimizer.current_function_being_optimized
+
+    module_prep_result = server.optimizer.prepare_module_for_optimization(current_function.file_path)
+    validated_original_code, original_module_ast = module_prep_result
+
+    function_optimizer = server.optimizer.create_function_optimizer(
+        current_function,
+        function_to_optimize_source_code=validated_original_code[current_function.file_path].source_code,
+        original_module_ast=original_module_ast,
+        original_module_path=current_function.file_path,
+    )
+
+    server.optimizer.current_function_optimizer = function_optimizer
+    if not function_optimizer:
+        return {"functionName": params.functionName, "status": "error", "message": "No function optimizer found"}
+
+    initialization_result = function_optimizer.can_be_optimized()
+    if not is_successful(initialization_result):
+        return {"functionName": params.functionName, "status": "error", "message": initialization_result.failure()}
+
+    return {"functionName": params.functionName, "status": "success", "message": "Optimization preparation completed"}
+
+
+@server.feature("generateTests")
+def generate_tests(server: CodeflashLanguageServer, params: FunctionOptimizationParams) -> dict[str, str]:
+    function_optimizer = server.optimizer.current_function_optimizer
+    if not function_optimizer:
+        return {"functionName": params.functionName, "status": "error", "message": "No function optimizer found"}
+
+    initialization_result = function_optimizer.can_be_optimized()
+    if not is_successful(initialization_result):
+        return {"functionName": params.functionName, "status": "error", "message": initialization_result.failure()}
+
+    should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
+
+    test_setup_result = function_optimizer.generate_and_instrument_tests(
+        code_context, should_run_experiment=should_run_experiment
+    )
+    if not is_successful(test_setup_result):
+        return {"functionName": params.functionName, "status": "error", "message": test_setup_result.failure()}
+    generated_tests_list: GeneratedTestsList
+    optimizations_set: OptimizationSet
+    generated_tests_list, _, concolic__test_str, optimizations_set = test_setup_result.unwrap()
+
+    generated_tests: list[str] = [
+        generated_test.generated_original_test_source for generated_test in generated_tests_list.generated_tests
+    ]
+    optimizations_dict = {
+        candidate.optimization_id: {"source_code": candidate.source_code, "explanation": candidate.explanation}
+        for candidate in optimizations_set.control + optimizations_set.experiment
+    }
+
+    return {
+        "functionName": params.functionName,
+        "status": "success",
+        "message": {"generated_tests": generated_tests, "optimizations": optimizations_dict},
+    }
 
 
 @server.feature("performFunctionOptimization")

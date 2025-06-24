@@ -143,6 +143,9 @@ class FunctionOptimizer:
         self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
         self.replay_tests_dir = replay_tests_dir if replay_tests_dir else None
+        self.generate_and_instrument_tests_results: (
+            tuple[GeneratedTestsList, dict[str, set[FunctionCalledInTest]], OptimizationSet] | None
+        ) = None
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -840,15 +843,14 @@ class FunctionOptimizer:
             logger.info(f"Generated {len(tests)} tests for {self.function_to_optimize.function_name}")
             console.rule()
             generated_tests = GeneratedTestsList(generated_tests=tests)
-
-        return Success(
-            (
-                generated_tests,
-                function_to_concolic_tests,
-                concolic_test_str,
-                OptimizationSet(control=candidates, experiment=candidates_experiment),
-            )
+        result = (
+            generated_tests,
+            function_to_concolic_tests,
+            concolic_test_str,
+            OptimizationSet(control=candidates, experiment=candidates_experiment),
         )
+        self.generate_and_instrument_tests_results = result
+        return Success(result)
 
     def setup_and_establish_baseline(
         self,
