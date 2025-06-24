@@ -10,16 +10,19 @@ import platform
 import re
 import sys
 import time
+import uuid
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
-from unittest import TestCase
+from unittest import TestCase, mock
 
 # PyTest Imports
 import pytest
 from pluggy import HookspecMarker
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from _pytest.config import Config, Parser
     from _pytest.main import Session
     from _pytest.python import Metafunc
@@ -136,6 +139,29 @@ def pytest_addoption(parser: Parser) -> None:
 def pytest_configure(config: Config) -> None:
     config.addinivalue_line("markers", "loops(n): run the given test function `n` times.")
     config.pluginmanager.register(PytestLoops(config), PytestLoops.name)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def deterministic_environment() -> Generator[None, None, None]:
+    with (
+        mock.patch.multiple(
+            "time",
+            time=mock.MagicMock(return_value=1750778657.008457),
+            monotonic=mock.MagicMock(side_effect=[1.0, 2.0, 3.0]),
+        ),
+        mock.patch.multiple("random", random=mock.MagicMock(return_value=0.5), randint=mock.MagicMock(return_value=42)),
+        mock.patch.multiple(
+            "uuid",
+            uuid1=mock.MagicMock(return_value=uuid.UUID("8f9b1416-5117-11f0-a1b5-c0b5d70a98e7")),
+            uuid4=mock.MagicMock(return_value=uuid.UUID("81d8c509-bdc7-4fe8-b29d-ed3fdc7eacba")),
+        ),
+        mock.patch(
+            "time.sleep",
+            return_value=None,  # ignore sleep calls
+        ),
+        mock.patch("time.perf_counter", return_value=123.456),
+    ):
+        yield
 
 
 class PytestLoops:
