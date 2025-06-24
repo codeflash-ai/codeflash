@@ -9,7 +9,7 @@ import os
 import platform
 import re
 import sys
-import time
+import time as _time_module
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -74,6 +74,12 @@ if platform.system() == "Linux":
     resource.setrlimit(resource.RLIMIT_AS, (memory_limit, memory_limit))
 
 
+# Store references to original functions before any patching
+_ORIGINAL_TIME_TIME = _time_module.time
+_ORIGINAL_PERF_COUNTER = _time_module.perf_counter
+_ORIGINAL_TIME_SLEEP = _time_module.sleep
+
+
 # Apply deterministic patches for reproducible test execution
 def _apply_deterministic_patches() -> None:
     """Apply patches to make all sources of randomness deterministic."""
@@ -82,7 +88,7 @@ def _apply_deterministic_patches() -> None:
     import time
     import uuid
 
-    # Store original functions
+    # Store original functions (these are already saved globally above)
     _original_time = time.time
     _original_perf_counter = time.perf_counter
     _original_datetime_now = datetime.datetime.now
@@ -269,7 +275,7 @@ class PytestLoops:
         if session.config.option.collectonly:
             return True
 
-        start_time: float = time.time()
+        start_time: float = _ORIGINAL_TIME_TIME()
         total_time: float = self._get_total_time(session)
 
         count: int = 0
@@ -296,7 +302,7 @@ class PytestLoops:
                     raise session.Interrupted(session.shouldstop)
             if self._timed_out(session, start_time, count):
                 break  # exit loop
-            time.sleep(self._get_delay_time(session))
+            _ORIGINAL_TIME_SLEEP(self._get_delay_time(session))
         return True
 
     def _clear_lru_caches(self, item: pytest.Item) -> None:
@@ -395,7 +401,7 @@ class PytestLoops:
         """
         return count >= session.config.option.codeflash_max_loops or (
             count >= session.config.option.codeflash_min_loops
-            and time.time() - start_time > self._get_total_time(session)
+            and _ORIGINAL_TIME_TIME() - start_time > self._get_total_time(session)
         )
 
     @pytest.fixture
