@@ -10,6 +10,7 @@ import requests
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.code_utils.code_utils import get_installed_packages
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.models.models import OptimizedCandidate
@@ -27,6 +28,7 @@ class AiServiceClient:
     def __init__(self) -> None:
         self.base_url = self.get_aiservice_base_url()
         self.headers = {"Authorization": f"Bearer {get_codeflash_api_key()}", "Connection": "close"}
+        self.installed_packages = get_installed_packages()
 
     def get_aiservice_base_url(self) -> str:
         if os.environ.get("CODEFLASH_AIS_SERVER", default="prod").lower() == "local":
@@ -66,6 +68,8 @@ class AiServiceClient:
         """
         url = f"{self.base_url}/ai{endpoint}"
         if method.upper() == "POST":
+            if self.installed_packages:
+                payload["installed_packages"] = self.installed_packages
             json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
             headers = {**self.headers, "Content-Type": "application/json"}
             response = requests.post(url, data=json_payload, headers=headers, timeout=timeout)

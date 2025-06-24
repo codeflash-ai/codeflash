@@ -245,13 +245,10 @@ blacklist_installed_pkgs = {
 }
 
 
-def get_installed_packages() -> set[str]:
+def get_installed_packages() -> list[str]:
     pkgs = importlib.metadata.packages_distributions().keys()
-    return {
+    return [
         pkg
         for pkg in pkgs
         if not any(blacklisted in pkg for blacklisted in blacklist_installed_pkgs) and not pkg.startswith("_")
-    }
-
-
-print(get_installed_packages())
+    ]
