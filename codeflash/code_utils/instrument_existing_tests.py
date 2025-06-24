@@ -347,6 +347,7 @@ def inject_profiling_into_existing_test(
         ast.Import(names=[ast.alias(name="time")]),
         ast.Import(names=[ast.alias(name="gc")]),
         ast.Import(names=[ast.alias(name="os")]),
+        ast.Import(names=[ast.alias(name="torch")])
     ]
     if mode == TestingMode.BEHAVIOR:
         new_imports.extend(
@@ -524,16 +525,45 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
         ast.Try(
             body=[
                 ast.Assign(
-                    targets=[ast.Name(id="counter", ctx=ast.Store())],
+                    targets=[
+                        ast.Name(id='start', ctx=ast.Store())],
                     value=ast.Call(
                         func=ast.Attribute(
-                            value=ast.Name(id="time", ctx=ast.Load()), attr="perf_counter_ns", ctx=ast.Load()
-                        ),
+                            value=ast.Attribute(
+                                value=ast.Name(id='torch', ctx=ast.Load()),
+                                attr='cuda',
+                                ctx=ast.Load()),
+                            attr='Event',
+                            ctx=ast.Load()),
                         args=[],
-                        keywords=[],
-                    ),
-                    lineno=lineno + 11,
-                ),
+                        keywords=[
+                            ast.keyword(
+                                arg='enable_timing',
+                                value=ast.Constant(value=True))]), lineno=lineno + 11),
+                ast.Assign(
+                    targets=[
+                        ast.Name(id='end', ctx=ast.Store())],
+                    value=ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Attribute(
+                                value=ast.Name(id='torch', ctx=ast.Load()),
+                                attr='cuda',
+                                ctx=ast.Load()),
+                            attr='Event',
+                            ctx=ast.Load()),
+                        args=[],
+                        keywords=[
+                            ast.keyword(
+                                arg='enable_timing',
+                                value=ast.Constant(value=True))]), lineno=lineno + 12),
+                ast.Expr(
+                    value=ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Name(id='start', ctx=ast.Load()),
+                            attr='record',
+                            ctx=ast.Load()),
+                        args=[],
+                        keywords=[]), lineno=lineno+13),
                 ast.Assign(
                     targets=[ast.Name(id="return_value", ctx=ast.Store())],
                     value=ast.Call(
@@ -541,23 +571,41 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                         args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
                         keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
                     ),
-                    lineno=lineno + 12,
+                    lineno=lineno + 13,
                 ),
+                ast.Expr(
+                    value=ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Name(id='end', ctx=ast.Load()),
+                            attr='record',
+                            ctx=ast.Load()),
+                        args=[],
+                        keywords=[]), lineno=lineno + 14),
+                ast.Expr(
+                    value=ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Attribute(
+                                value=ast.Name(id='torch', ctx=ast.Load()),
+                                attr='cuda',
+                                ctx=ast.Load()),
+                            attr='synchronize',
+                            ctx=ast.Load()),
+                        args=[],
+                        keywords=[]),lineno=lineno + 15),
                 ast.Assign(
-                    targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],
+                    targets=[
+                        ast.Name(id='codeflash_duration', ctx=ast.Store())],
                     value=ast.BinOp(
                         left=ast.Call(
                             func=ast.Attribute(
-                                value=ast.Name(id="time", ctx=ast.Load()), attr="perf_counter_ns", ctx=ast.Load()
-                            ),
-                            args=[],
-                            keywords=[],
-                        ),
-                        op=ast.Sub(),
-                        right=ast.Name(id="counter", ctx=ast.Load()),
-                    ),
-                    lineno=lineno + 13,
-                ),
+                                value=ast.Name(id='start', ctx=ast.Load()),
+                                attr='elapsed_time',
+                                ctx=ast.Load()),
+                            args=[
+                                ast.Name(id='end', ctx=ast.Load())],
+                            keywords=[]),
+                        op=ast.Mult(),
+                        right=ast.Constant(value=1000000)), lineno = lineno + 16),
             ],
             handlers=[
                 ast.ExceptHandler(
@@ -565,29 +613,26 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                     name="e",
                     body=[
                         ast.Assign(
-                            targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],
+                            targets=[
+                                ast.Name(id='codeflash_duration', ctx=ast.Store())],
                             value=ast.BinOp(
                                 left=ast.Call(
                                     func=ast.Attribute(
-                                        value=ast.Name(id="time", ctx=ast.Load()),
-                                        attr="perf_counter_ns",
-                                        ctx=ast.Load(),
-                                    ),
-                                    args=[],
-                                    keywords=[],
-                                ),
-                                op=ast.Sub(),
-                                right=ast.Name(id="counter", ctx=ast.Load()),
-                            ),
-                            lineno=lineno + 15,
-                        ),
+                                        value=ast.Name(id='start', ctx=ast.Load()),
+                                        attr='elapsed_time',
+                                        ctx=ast.Load()),
+                                    args=[
+                                        ast.Name(id='end', ctx=ast.Load())],
+                                    keywords=[]),
+                                op=ast.Mult(),
+                                right=ast.Constant(value=1000000)), lineno=lineno + 18),
                         ast.Assign(
                             targets=[ast.Name(id="exception", ctx=ast.Store())],
                             value=ast.Name(id="e", ctx=ast.Load()),
-                            lineno=lineno + 13,
+                            lineno=lineno + 16,
                         ),
                     ],
-                    lineno=lineno + 14,
+                    lineno=lineno + 17,
                 )
             ],
             orelse=[],

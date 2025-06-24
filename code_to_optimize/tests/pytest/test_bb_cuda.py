@@ -1,7 +1,7 @@
 from code_to_optimize.bubble_sort_cuda import sorter_cuda
 
 
-def test_sort():
+def test_sorter_cuda():
     input = [5, 4, 3, 2, 1, 0]
     output = sorter_cuda(input)
     assert output == [0, 1, 2, 3, 4, 5]
