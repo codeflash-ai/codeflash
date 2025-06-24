@@ -595,27 +595,10 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                 ast.Assign(
                     targets=[
                         ast.Name(id='codeflash_duration', ctx=ast.Store())],
-                    value=ast.BinOp(
-                        left=ast.Call(
-                            func=ast.Attribute(
-                                value=ast.Name(id='start', ctx=ast.Load()),
-                                attr='elapsed_time',
-                                ctx=ast.Load()),
-                            args=[
-                                ast.Name(id='end', ctx=ast.Load())],
-                            keywords=[]),
-                        op=ast.Mult(),
-                        right=ast.Constant(value=1000000)), lineno = lineno + 16),
-            ],
-            handlers=[
-                ast.ExceptHandler(
-                    type=ast.Name(id="Exception", ctx=ast.Load()),
-                    name="e",
-                    body=[
-                        ast.Assign(
-                            targets=[
-                                ast.Name(id='codeflash_duration', ctx=ast.Store())],
-                            value=ast.BinOp(
+                    value=ast.Call(
+                        func=ast.Name(id='int', ctx=ast.Load()),
+                        args=[
+                            ast.BinOp(
                                 left=ast.Call(
                                     func=ast.Attribute(
                                         value=ast.Name(id='start', ctx=ast.Load()),
@@ -625,7 +608,32 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                                         ast.Name(id='end', ctx=ast.Load())],
                                     keywords=[]),
                                 op=ast.Mult(),
-                                right=ast.Constant(value=1000000)), lineno=lineno + 18),
+                                right=ast.Constant(value=1000000))],
+                        keywords=[]), lineno = lineno + 16),
+            ],
+            handlers=[
+                ast.ExceptHandler(
+                    type=ast.Name(id="Exception", ctx=ast.Load()),
+                    name="e",
+                    body=[
+                        ast.Assign(
+                            targets=[
+                                ast.Name(id='codeflash_duration', ctx=ast.Store())],
+                            value=ast.Call(
+                                func=ast.Name(id='int', ctx=ast.Load()),
+                                args=[
+                                    ast.BinOp(
+                                        left=ast.Call(
+                                            func=ast.Attribute(
+                                                value=ast.Name(id='start', ctx=ast.Load()),
+                                                attr='elapsed_time',
+                                                ctx=ast.Load()),
+                                            args=[
+                                                ast.Name(id='end', ctx=ast.Load())],
+                                            keywords=[]),
+                                        op=ast.Mult(),
+                                        right=ast.Constant(value=1000000))],
+                                keywords=[]), lineno=lineno + 18),
                         ast.Assign(
                             targets=[ast.Name(id="exception", ctx=ast.Store())],
                             value=ast.Name(id="e", ctx=ast.Load()),
