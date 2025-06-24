@@ -45,6 +45,7 @@ class Optimizer:
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.replay_tests_dir = None
         self.functions_checkpoint: CodeflashRunCheckpoint | None = None
+        self.current_function_optimizer: FunctionOptimizer | None = None
 
     def create_function_optimizer(
         self,
@@ -265,7 +266,9 @@ class Optimizer:
                             function_to_tests,
                             validated_original_code[original_module_path].source_code,
                         )
-
+                    self.current_function_optimizer = (
+                        function_optimizer  # needed to clean up from the outside of this function
+                    )
                     best_optimization = function_optimizer.optimize_function()
                     if self.functions_checkpoint:
                         self.functions_checkpoint.add_function_to_checkpoint(
@@ -292,6 +295,9 @@ class Optimizer:
 
     def cleanup_temporary_paths(self) -> None:
         from codeflash.code_utils.code_utils import cleanup_paths
+
+        if self.current_function_optimizer:
+            self.current_function_optimizer.cleanup_generated_files()
 
         cleanup_paths([self.test_cfg.concolic_test_root_dir, self.replay_tests_dir])
 

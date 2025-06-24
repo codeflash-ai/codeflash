@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
 CODEFLASH_LOGO: str = (
-    f"{LF}"  # noqa: ISC003
+    f"{LF}"
     r"                   _          ___  _               _     " + f"{LF}"
     r"                  | |        / __)| |             | |    " + f"{LF}"
     r"  ____   ___    _ | |  ____ | |__ | |  ____   ___ | | _  " + f"{LF}"
@@ -941,6 +941,8 @@ def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test
     command = ["codeflash", "--file", "bubble_sort.py", "--function", "sorter"]
     if args.no_pr:
         command.append("--no-pr")
+    if args.verbose:
+        command.append("--verbose")
 
     logger.info("Running sample optimization…")
     console.rule()
@@ -953,7 +955,7 @@ def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test
             if process.stdout:
                 for line in process.stdout:
                     stripped = line.strip()
-                    console.print(stripped)
+                    console.out(stripped)
                     output.append(stripped)
             process.wait()
         console.rule()
