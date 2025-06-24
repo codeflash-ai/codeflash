@@ -12,6 +12,9 @@ from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
 
+# Global cache to store the loaded event data to avoid redundant file reads
+_event_data_cache: dict[str, Any] | None = None
+
 
 def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool = True) -> bool:  # noqa
     return_code = True
@@ -94,18 +97,24 @@ def is_end_to_end() -> bool:
     return bool(os.environ.get("CODEFLASH_END_TO_END"))
 
 
-@lru_cache(maxsize=1)
 def is_repo_a_fork() -> bool:
     event = get_cached_gh_event_data()
     if event is None:
         return False
-    return bool(event["repository"]["fork"])
+    return event["repository"].get("fork", False)
 
 
-@lru_cache(maxsize=1)
 def get_cached_gh_event_data() -> dict[str, Any] | None:
+    global _event_data_cache
+    if _event_data_cache is not None:
+        return _event_data_cache
     event_path = os.getenv("GITHUB_EVENT_PATH")
     if not event_path:
         return None
-    with Path(event_path).open() as f:
-        return json.load(f)  # type: ignore  # noqa
+    try:
+        with Path(event_path).open() as f:
+            _event_data_cache = json.load(f)  # type: ignore  # noqa
+            return _event_data_cache
+    except Exception:
+        _event_data_cache = None
+        return None
