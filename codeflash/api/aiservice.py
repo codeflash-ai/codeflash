@@ -68,6 +68,7 @@ class AiServiceClient:
         """
         url = f"{self.base_url}/ai{endpoint}"
         if method.upper() == "POST":
+            assert payload is not None, "Payload must be provided for POST requests"
             if self.installed_packages:
                 payload["installed_packages"] = self.installed_packages
             json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
