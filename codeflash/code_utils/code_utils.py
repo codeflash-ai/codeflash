@@ -246,16 +246,20 @@ blacklist_installed_pkgs = {
 
 def get_installed_packages() -> list[str]:
     try:
-        import importlib.metadata as importlib_metadata
-    except ImportError:
         try:
-            import importlib_metadata
+            import importlib.metadata as importlib_metadata
         except ImportError:
-            return []
+            import importlib_metadata
+    except ImportError:
+        return []
 
-    pkgs = importlib_metadata.packages_distributions().keys()
+    try:
+        pkgs = importlib_metadata.packages_distributions().keys()
+    except AttributeError:
+        pkgs = [dist.metadata.get("Name", "") for dist in importlib_metadata.distributions()]
+
     return [
         pkg
         for pkg in pkgs
-        if not any(blacklisted in pkg for blacklisted in blacklist_installed_pkgs) and not pkg.startswith("_")
+        if pkg and not pkg.startswith("_") and not any(blacklisted in pkg for blacklisted in blacklist_installed_pkgs)
     ]
