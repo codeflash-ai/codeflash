@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import importlib.metadata
 import os
 import re
 import shutil
@@ -246,7 +245,15 @@ blacklist_installed_pkgs = {
 
 
 def get_installed_packages() -> list[str]:
-    pkgs = importlib.metadata.packages_distributions().keys()
+    try:
+        import importlib.metadata as importlib_metadata
+    except ImportError:
+        try:
+            import importlib_metadata
+        except ImportError:
+            return []
+
+    pkgs = importlib_metadata.packages_distributions().keys()
     return [
         pkg
         for pkg in pkgs
