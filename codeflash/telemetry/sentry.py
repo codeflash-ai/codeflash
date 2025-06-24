@@ -12,6 +12,7 @@ def init_sentry(enabled: bool = False, exclude_errors: bool = False) -> None:  #
             if exclude_errors
             else logging.ERROR,  # Otherwise, error logs will create sentry events
         )
+
         sentry_sdk.init(
             dsn="https://4b9a1902f9361b48c04376df6483bc96@o4506833230561280.ingest.sentry.io/4506833262477312",
             integrations=[sentry_logging],
@@ -22,4 +23,5 @@ def init_sentry(enabled: bool = False, exclude_errors: bool = False) -> None:  #
             # of sampled transactions.
             # We recommend adjusting this value in production.
             profiles_sample_rate=1.0,
+            ignore_errors=[KeyboardInterrupt],
         )
