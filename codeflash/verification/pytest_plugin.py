@@ -189,7 +189,8 @@ def _apply_deterministic_patches() -> None:
         pass
 
 
-_apply_deterministic_patches()
+# Note: Deterministic patches are applied conditionally, not globally
+# They should only be applied when running CodeFlash optimization tests
 
 
 def pytest_addoption(parser: Parser) -> None:
@@ -254,6 +255,9 @@ def pytest_addoption(parser: Parser) -> None:
 def pytest_configure(config: Config) -> None:
     config.addinivalue_line("markers", "loops(n): run the given test function `n` times.")
     config.pluginmanager.register(PytestLoops(config), PytestLoops.name)
+
+    # Apply deterministic patches when the plugin is configured
+    _apply_deterministic_patches()
 
 
 class PytestLoops:
