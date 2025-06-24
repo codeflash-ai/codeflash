@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import exit_with_message
@@ -34,11 +35,19 @@ def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool =
 @lru_cache(maxsize=1)
 def get_codeflash_api_key() -> str:
     api_key = os.environ.get("CODEFLASH_API_KEY") or read_api_key_from_shell_config()
+    api_secret_docs_message = "For more information, refer to the documentation at [https://docs.codeflash.ai/getting-started/codeflash-github-actions#add-your-api-key-to-your-repository-secrets]."  # noqa
     if not api_key:
         msg = (
             "I didn't find a Codeflash API key in your environment.\nYou can generate one at "
-            "https://app.codeflash.ai/app/apikeys ,\nthen set it as a CODEFLASH_API_KEY environment variable."
+            "https://app.codeflash.ai/app/apikeys ,\nthen set it as a CODEFLASH_API_KEY environment variable.\n"
+            f"{api_secret_docs_message}"
         )
+        if is_repo_a_fork():
+            msg = (
+                "Codeflash API key not detected in your environment. It appears you're running Codeflash from a GitHub fork.\n"
+                "For external contributors, please ensure you've added your own API key to your fork's repository secrets and set it as the CODEFLASH_API_KEY environment variable.\n"
+                f"{api_secret_docs_message}"
+            )
         raise OSError(msg)
     if not api_key.startswith("cf-"):
         msg = (
@@ -83,3 +92,20 @@ def ensure_pr_number() -> bool:
 @lru_cache(maxsize=1)
 def is_end_to_end() -> bool:
     return bool(os.environ.get("CODEFLASH_END_TO_END"))
+
+
+@lru_cache(maxsize=1)
+def is_repo_a_fork() -> bool:
+    event = get_cached_gh_event_data()
+    if event is None:
+        return False
+    return bool(event["repository"]["fork"])
+
+
+@lru_cache(maxsize=1)
+def get_cached_gh_event_data() -> dict[str, Any] | None:
+    event_path = os.getenv("GITHUB_EVENT_PATH")
+    if not event_path:
+        return None
+    with Path(event_path).open() as f:
+        return json.load(f)  # type: ignore  # noqa
