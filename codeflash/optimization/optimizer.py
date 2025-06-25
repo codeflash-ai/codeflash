@@ -45,6 +45,7 @@ class Optimizer:
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.replay_tests_dir = None
         self.functions_checkpoint: CodeflashRunCheckpoint | None = None
+        self.current_function_being_optimized: FunctionToOptimize | None = None  # current only for the LSP
         self.current_function_optimizer: FunctionOptimizer | None = None
 
     def run_benchmarks(
