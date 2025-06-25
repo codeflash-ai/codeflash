@@ -131,8 +131,34 @@ class Optimizer:
         function_to_optimize_source_code: str | None = "",
         function_benchmark_timings: dict[str, dict[BenchmarkKey, float]] | None = None,
         total_benchmark_timings: dict[BenchmarkKey, float] | None = None,
-    ) -> FunctionOptimizer:
+        original_module_ast: ast.Module | None = None,
+        original_module_path: Path | None = None,
+    ) -> FunctionOptimizer | None:
+        from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
         from codeflash.optimization.function_optimizer import FunctionOptimizer
+
+        if function_to_optimize_ast is None and original_module_ast is not None:
+            function_to_optimize_ast = get_first_top_level_function_or_method_ast(
+                function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
+            )
+            if function_to_optimize_ast is None:
+                logger.info(
+                    f"Function {function_to_optimize.qualified_name} not found in {original_module_path}.\n"
+                    f"Skipping optimization."
+                )
+                return None
+
+        qualified_name_w_module = function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
+
+        function_specific_timings = None
+        if (
+            hasattr(self.args, "benchmark")
+            and self.args.benchmark
+            and function_benchmark_timings
+            and qualified_name_w_module in function_benchmark_timings
+            and total_benchmark_timings
+        ):
+            function_specific_timings = function_benchmark_timings[qualified_name_w_module]
 
         return FunctionOptimizer(
             function_to_optimize=function_to_optimize,
@@ -142,18 +168,15 @@ class Optimizer:
             function_to_optimize_ast=function_to_optimize_ast,
             aiservice_client=self.aiservice_client,
             args=self.args,
-            function_benchmark_timings=function_benchmark_timings if function_benchmark_timings else None,
-            total_benchmark_timings=total_benchmark_timings if total_benchmark_timings else None,
+            function_benchmark_timings=function_specific_timings,
+            total_benchmark_timings=total_benchmark_timings if function_specific_timings else None,
             replay_tests_dir=self.replay_tests_dir,
         )
 
     def run(self) -> None:
         from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
         from codeflash.code_utils.code_replacer import normalize_code, normalize_node
-        from codeflash.code_utils.static_analysis import (
-            analyze_imported_modules,
-            get_first_top_level_function_or_method_ast,
-        )
+        from codeflash.code_utils.static_analysis import analyze_imported_modules
         from codeflash.discovery.discover_unit_tests import discover_unit_tests
 
         ph("cli-optimize-run-start")
@@ -245,40 +268,17 @@ class Optimizer:
                         f"{function_to_optimize.qualified_name}"
                     )
                     console.rule()
-                    if not (
-                        function_to_optimize_ast := get_first_top_level_function_or_method_ast(
-                            function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
-                        )
-                    ):
-                        logger.info(
-                            f"Function {function_to_optimize.qualified_name} not found in {original_module_path}.\n"
-                            f"Skipping optimization."
-                        )
-                        continue
-                    qualified_name_w_module = function_to_optimize.qualified_name_with_modules_from_root(
-                        self.args.project_root
+
+                    function_optimizer = self.create_function_optimizer(
+                        function_to_optimize,
+                        function_to_tests=function_to_tests,
+                        function_to_optimize_source_code=validated_original_code[original_module_path].source_code,
+                        function_benchmark_timings=function_benchmark_timings,
+                        total_benchmark_timings=total_benchmark_timings,
+                        original_module_ast=original_module_ast,
+                        original_module_path=original_module_path,
                     )
-                    if (
-                        self.args.benchmark
-                        and function_benchmark_timings
-                        and qualified_name_w_module in function_benchmark_timings
-                        and total_benchmark_timings
-                    ):
-                        function_optimizer = self.create_function_optimizer(
-                            function_to_optimize,
-                            function_to_optimize_ast,
-                            function_to_tests,
-                            validated_original_code[original_module_path].source_code,
-                            function_benchmark_timings[qualified_name_w_module],
-                            total_benchmark_timings,
-                        )
-                    else:
-                        function_optimizer = self.create_function_optimizer(
-                            function_to_optimize,
-                            function_to_optimize_ast,
-                            function_to_tests,
-                            validated_original_code[original_module_path].source_code,
-                        )
+
                     self.current_function_optimizer = (
                         function_optimizer  # needed to clean up from the outside of this function
                     )
