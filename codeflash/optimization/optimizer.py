@@ -173,10 +173,54 @@ class Optimizer:
             replay_tests_dir=self.replay_tests_dir,
         )
 
-    def run(self) -> None:
-        from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
+    def prepare_module_for_optimization(
+        self, original_module_path: Path
+    ) -> tuple[dict[Path, ValidCode], ast.Module] | None:
         from codeflash.code_utils.code_replacer import normalize_code, normalize_node
         from codeflash.code_utils.static_analysis import analyze_imported_modules
+
+        logger.info(f"Examining file {original_module_path!s}…")
+        console.rule()
+
+        original_module_code: str = original_module_path.read_text(encoding="utf8")
+        try:
+            original_module_ast = ast.parse(original_module_code)
+        except SyntaxError as e:
+            logger.warning(f"Syntax error parsing code in {original_module_path}: {e}")
+            logger.info("Skipping optimization due to file error.")
+            return None
+        normalized_original_module_code = ast.unparse(normalize_node(original_module_ast))
+        validated_original_code: dict[Path, ValidCode] = {
+            original_module_path: ValidCode(
+                source_code=original_module_code, normalized_code=normalized_original_module_code
+            )
+        }
+
+        imported_module_analyses = analyze_imported_modules(
+            original_module_code, original_module_path, self.args.project_root
+        )
+
+        has_syntax_error = False
+        for analysis in imported_module_analyses:
+            callee_original_code = analysis.file_path.read_text(encoding="utf8")
+            try:
+                normalized_callee_original_code = normalize_code(callee_original_code)
+            except SyntaxError as e:
+                logger.warning(f"Syntax error parsing code in callee module {analysis.file_path}: {e}")
+                logger.info("Skipping optimization due to helper file error.")
+                has_syntax_error = True
+                break
+            validated_original_code[analysis.file_path] = ValidCode(
+                source_code=callee_original_code, normalized_code=normalized_callee_original_code
+            )
+
+        if has_syntax_error:
+            return None
+
+        return validated_original_code, original_module_ast
+
+    def run(self) -> None:
+        from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
         from codeflash.discovery.discover_unit_tests import discover_unit_tests
 
         ph("cli-optimize-run-start")
@@ -223,43 +267,11 @@ class Optimizer:
                 self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
 
             for original_module_path in file_to_funcs_to_optimize:
-                logger.info(f"Examining file {original_module_path!s}…")
-                console.rule()
-
-                original_module_code: str = original_module_path.read_text(encoding="utf8")
-                try:
-                    original_module_ast = ast.parse(original_module_code)
-                except SyntaxError as e:
-                    logger.warning(f"Syntax error parsing code in {original_module_path}: {e}")
-                    logger.info("Skipping optimization due to file error.")
+                module_prep_result = self.prepare_module_for_optimization(original_module_path)
+                if module_prep_result is None:
                     continue
-                normalized_original_module_code = ast.unparse(normalize_node(original_module_ast))
-                validated_original_code: dict[Path, ValidCode] = {
-                    original_module_path: ValidCode(
-                        source_code=original_module_code, normalized_code=normalized_original_module_code
-                    )
-                }
 
-                imported_module_analyses = analyze_imported_modules(
-                    original_module_code, original_module_path, self.args.project_root
-                )
-
-                has_syntax_error = False
-                for analysis in imported_module_analyses:
-                    callee_original_code = analysis.file_path.read_text(encoding="utf8")
-                    try:
-                        normalized_callee_original_code = normalize_code(callee_original_code)
-                    except SyntaxError as e:
-                        logger.warning(f"Syntax error parsing code in callee module {analysis.file_path}: {e}")
-                        logger.info("Skipping optimization due to helper file error.")
-                        has_syntax_error = True
-                        break
-                    validated_original_code[analysis.file_path] = ValidCode(
-                        source_code=callee_original_code, normalized_code=normalized_callee_original_code
-                    )
-
-                if has_syntax_error:
-                    continue
+                validated_original_code, original_module_ast = module_prep_result
 
                 for function_to_optimize in file_to_funcs_to_optimize[original_module_path]:
                     function_iterator_count += 1
