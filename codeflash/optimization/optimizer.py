@@ -107,6 +107,22 @@ class Optimizer:
 
         return function_benchmark_timings, total_benchmark_timings
 
+    def get_optimizable_functions(self) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
+        """Discover functions to optimize."""
+        from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
+
+        return get_functions_to_optimize(
+            optimize_all=self.args.all,
+            replay_test=self.args.replay_test,
+            file=self.args.file,
+            only_get_this_function=self.args.function,
+            test_cfg=self.test_cfg,
+            ignore_paths=self.args.ignore_paths,
+            project_root=self.args.project_root,
+            module_root=self.args.module_root,
+            previous_checkpoint_functions=self.args.previous_checkpoint_functions,
+        )
+
     def create_function_optimizer(
         self,
         function_to_optimize: FunctionToOptimize,
@@ -139,7 +155,6 @@ class Optimizer:
             get_first_top_level_function_or_method_ast,
         )
         from codeflash.discovery.discover_unit_tests import discover_unit_tests
-        from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
 
         ph("cli-optimize-run-start")
         logger.info("Running optimizer.")
@@ -154,20 +169,7 @@ class Optimizer:
             return
 
         function_optimizer = None
-        file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
-        num_optimizable_functions: int
-        # discover functions
-        (file_to_funcs_to_optimize, num_optimizable_functions) = get_functions_to_optimize(
-            optimize_all=self.args.all,
-            replay_test=self.args.replay_test,
-            file=self.args.file,
-            only_get_this_function=self.args.function,
-            test_cfg=self.test_cfg,
-            ignore_paths=self.args.ignore_paths,
-            project_root=self.args.project_root,
-            module_root=self.args.module_root,
-            previous_checkpoint_functions=self.args.previous_checkpoint_functions,
-        )
+        file_to_funcs_to_optimize, num_optimizable_functions = self.get_optimizable_functions()
         function_benchmark_timings, total_benchmark_timings = self.run_benchmarks(
             file_to_funcs_to_optimize, num_optimizable_functions
         )
