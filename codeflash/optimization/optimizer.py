@@ -219,9 +219,26 @@ class Optimizer:
 
         return validated_original_code, original_module_ast
 
+    def discover_tests(
+        self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
+    ) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
+        from codeflash.discovery.discover_unit_tests import discover_unit_tests
+
+        console.rule()
+        start_time = time.time()
+        function_to_tests, num_discovered_tests = discover_unit_tests(
+            self.test_cfg, file_to_funcs_to_optimize=file_to_funcs_to_optimize
+        )
+        console.rule()
+        logger.info(
+            f"Discovered {num_discovered_tests} existing unit tests in {(time.time() - start_time):.1f}s at {self.test_cfg.tests_root}"
+        )
+        console.rule()
+        ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
+        return function_to_tests, num_discovered_tests
+
     def run(self) -> None:
         from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
-        from codeflash.discovery.discover_unit_tests import discover_unit_tests
 
         ph("cli-optimize-run-start")
         logger.info("Running optimizer.")
@@ -252,17 +269,7 @@ class Optimizer:
                 logger.info("No functions found to optimize. Exiting…")
                 return
 
-            console.rule()
-            start_time = time.time()
-            function_to_tests, num_discovered_tests = discover_unit_tests(
-                self.test_cfg, file_to_funcs_to_optimize=file_to_funcs_to_optimize
-            )
-            console.rule()
-            logger.info(
-                f"Discovered {num_discovered_tests} existing unit tests in {(time.time() - start_time):.1f}s at {self.test_cfg.tests_root}"
-            )
-            console.rule()
-            ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
+            function_to_tests, _ = self.discover_tests(file_to_funcs_to_optimize)
             if self.args.all:
                 self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
 
