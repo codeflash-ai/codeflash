@@ -73,6 +73,7 @@ from codeflash.models.models import (
     TestResults,
     TestType,
 )
+from codeflash.optimization.line_profiler_formatter import format_line_profiler_results
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
 from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
 from codeflash.result.explanation import Explanation
@@ -310,6 +311,12 @@ class FunctionOptimizer:
                         best_optimization.candidate.explanation, title="Best Candidate Explanation", border_style="blue"
                     )
                 )
+                with progress_bar("Running line profiling for optimized code", transient=True):
+                    line_profile_results = self.run_line_profiling_for_best_optimization(
+                        best_optimization=best_optimization,
+                        code_context=code_context,
+                        original_helper_code=original_helper_code,
+                    )
                 processed_benchmark_info = None
                 if self.args.benchmark:
                     processed_benchmark_info = process_benchmark_data(
@@ -780,10 +787,12 @@ class FunctionOptimizer:
                     continue
                 # TODO: this naming logic should be moved to a function and made more standard
                 new_behavioral_test_path = Path(
-                    f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}"  # noqa: PTH122
+                    f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}"
+                    # noqa: PTH122
                 )
                 new_perf_test_path = Path(
-                    f"{os.path.splitext(test_file)[0]}__perfonlyinstrumented{os.path.splitext(test_file)[1]}"  # noqa: PTH122
+                    f"{os.path.splitext(test_file)[0]}__perfonlyinstrumented{os.path.splitext(test_file)[1]}"
+                    # noqa: PTH122
                 )
                 if injected_behavior_test is not None:
                     with new_behavioral_test_path.open("w", encoding="utf8") as _f:
@@ -818,6 +827,64 @@ class FunctionOptimizer:
                 f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
             )
         return unique_instrumented_test_files
+
+    #TODO: DRY the code
+
+    def run_line_profiling_for_best_optimization(
+        self,
+        best_optimization: BestOptimization,
+        code_context: CodeOptimizationContext,
+        original_helper_code: dict[Path, str],
+    ) -> dict:
+        """Run line profiling specifically for the best optimization candidate."""
+        if self.args.test_framework != "pytest":
+            logger.info("Line profiling is only supported for pytest")
+            return {"timings": {}, "unit": 0, "str_out": ""}
+
+        logger.info("Running line profiling for the best optimization...")
+
+        # Save current code state
+        current_fto_code = self.function_to_optimize.file_path.read_text("utf-8")
+        current_helper_code = {}
+        for module_abspath in original_helper_code:
+            current_helper_code[module_abspath] = Path(module_abspath).read_text("utf-8")
+
+        try:
+            # Replace with optimized code
+            self.replace_function_and_helpers_with_optimized_code(
+                code_context=code_context,
+                optimized_code=best_optimization.candidate.source_code,
+                original_helper_code=original_helper_code,
+            )
+
+            # Add line profiler decorators
+            line_profiler_output_file = add_decorator_imports(self.function_to_optimize, code_context)
+
+            test_env = os.environ.copy()
+            test_env["CODEFLASH_LOOP_INDEX"] = "0"
+            test_env["CODEFLASH_TEST_ITERATION"] = "best"
+            test_env["CODEFLASH_TRACER_DISABLE"] = "1"
+            if "PYTHONPATH" not in test_env:
+                test_env["PYTHONPATH"] = str(self.project_root)
+            else:
+                test_env["PYTHONPATH"] += os.pathsep + str(self.project_root)
+
+            line_profile_results, _ = self.run_and_parse_tests(
+                testing_type=TestingMode.LINE_PROFILE,
+                test_env=test_env,
+                test_files=self.test_files,
+                optimization_iteration=0,
+                testing_time=TOTAL_LOOPING_TIME,
+                enable_coverage=False,
+                code_context=code_context,
+                line_profiler_output_file=line_profiler_output_file,
+            )
+
+            return line_profile_results
+
+        finally:
+            # Restore original code
+            self.write_code_and_helpers(current_fto_code, current_helper_code, self.function_to_optimize.file_path)
 
     def generate_tests_and_optimizations(
         self,
@@ -981,6 +1048,7 @@ class FunctionOptimizer:
                         code_context=code_context,
                         line_profiler_output_file=line_profiler_output_file,
                     )
+
                 finally:
                     # Remove codeflash capture
                     self.write_code_and_helpers(
@@ -1325,10 +1393,10 @@ class FunctionOptimizer:
             [
                 test_file.instrumented_behavior_file_path
                 for test_type in [
-                    TestType.GENERATED_REGRESSION,
-                    TestType.EXISTING_UNIT_TEST,
-                    TestType.CONCOLIC_COVERAGE_TEST,
-                ]
+                TestType.GENERATED_REGRESSION,
+                TestType.EXISTING_UNIT_TEST,
+                TestType.CONCOLIC_COVERAGE_TEST,
+            ]
                 for test_file in self.test_files.get_by_type(test_type).test_files
             ]
             + [

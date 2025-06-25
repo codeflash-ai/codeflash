@@ -81,7 +81,7 @@ class BestOptimization(BaseModel):
     winning_behavioral_test_results: TestResults
     winning_benchmarking_test_results: TestResults
     winning_replay_benchmarking_test_results: Optional[TestResults] = None
-
+    line_profile_results: Optional[dict] = None
 
 @dataclass(frozen=True)
 class BenchmarkKey:
