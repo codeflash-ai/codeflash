@@ -1389,23 +1389,11 @@ class FunctionOptimizer:
         ]
 
     def cleanup_generated_files(self) -> None:
-        paths_to_cleanup = (
-            [
-                test_file.instrumented_behavior_file_path
-                for test_type in [
-                TestType.GENERATED_REGRESSION,
-                TestType.EXISTING_UNIT_TEST,
-                TestType.CONCOLIC_COVERAGE_TEST,
-            ]
-                for test_file in self.test_files.get_by_type(test_type).test_files
-            ]
-            + [
-                test_file.benchmarking_file_path
-                for test_type in [TestType.GENERATED_REGRESSION, TestType.EXISTING_UNIT_TEST]
-                for test_file in self.test_files.get_by_type(test_type).test_files
-            ]
-            + [self.test_cfg.concolic_test_root_dir]
-        )
+        paths_to_cleanup = [self.test_cfg.concolic_test_root_dir]
+        for test_file in self.test_files:
+            paths_to_cleanup.append(test_file.instrumented_behavior_file_path)
+            paths_to_cleanup.append(test_file.benchmarking_file_path)
+
         cleanup_paths(paths_to_cleanup)
         if hasattr(get_run_tmp_file, "tmpdir"):
             get_run_tmp_file.tmpdir.cleanup()
