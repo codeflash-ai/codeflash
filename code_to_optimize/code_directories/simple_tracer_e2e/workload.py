@@ -3,15 +3,11 @@ from concurrent.futures import ThreadPoolExecutor
 
 def funcA(number):
     number = min(1000, number)
-    # Use direct formula for sum of 0 to number*100-1
-    total_terms = number * 100
-    k = total_terms * (total_terms - 1) // 2
-
-    # Use direct formula for sum of 0 to number-1
-    j = number * (number - 1) // 2
-
-    # Use map(str, ...) which is faster than generator expression
-    return " ".join(map(str, range(number)))
+    # Preconstruct string representations just once for efficiency
+    if number == 0:
+        return ""
+    num_strs = [str(i) for i in range(number)]
+    return " ".join(num_strs)
 
 
 def test_threadpool() -> None:
