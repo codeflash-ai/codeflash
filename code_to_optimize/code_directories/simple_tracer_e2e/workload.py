@@ -23,17 +23,15 @@ class AlexNet:
         self.features_size = 256 * 6 * 6
 
     def forward(self, x):
-        features = self._extract_features(x)
-
-        output = self._classify(features)
-        return output
+        # Directly return empty list, since _extract_features and _classify are effectively no-ops.
+        return []
 
     def _extract_features(self, x):
         # The original implementation does nothing and returns an empty list.
-        # Optimized to directly return an empty list.
         return []
 
     def _classify(self, features):
+        # Retain original structure for compatibility; always returns empty list if features is empty.
         total = sum(features)
         return [total % self.num_classes for _ in features]
 
