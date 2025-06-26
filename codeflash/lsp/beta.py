@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -228,7 +227,7 @@ def perform_function_optimization(
         "status": "success",
         "message": "Optimization completed successfully",
         "extra": f"Speedup: {original_code_baseline.runtime / best_optimization.runtime:.2f}x faster",
-        "optimization": json.dumps(optimized_source, indent=None),
+        "optimization": optimized_source,
     }
 
 
