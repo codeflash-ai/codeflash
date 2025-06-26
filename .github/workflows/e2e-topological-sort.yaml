@@ -1,4 +1,4 @@
-name: end-to-end-test
+name: E2E - Topological Sort
 
 on:
   pull_request:
@@ -8,10 +8,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  benchmark-bubble-sort-optimization:
+  topological-sort-optimization:
     # Dynamically determine if environment is needed only when workflow files change and contributor is external
     environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
-
     runs-on: ubuntu-latest
     env:
       CODEFLASH_AIS_SERVER: prod
@@ -30,22 +29,47 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Debug Environment Decision
+        run: |
+          # Construct the condition result manually for debugging
+          EVENT_NAME="${{ github.event_name }}"
+          FILES_CHANGED="${{ toJSON(github.event.pull_request.files.*.filename) }}"
+          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
 
-      - name: Validate PR
+          echo "Event Name: $EVENT_NAME"
+          echo "Files Changed: $FILES_CHANGED"
+          echo "PR Author: $PR_AUTHOR"
+
+          # Check workflow file changes
+          if [[ "$FILES_CHANGED" == *".github/workflows/"* ]]; then
+            echo "Workflow files changed: YES"
+          else
+            echo "Workflow files changed: NO"
+          fi
+
+          # Check author conditions
+          if [[ "$PR_AUTHOR" != "misrasaurabh1" && "$PR_AUTHOR" != "KRRT7" ]]; then
+            echo "Author needs approval: YES"
+          else
+            echo "Author needs approval: NO"
+          fi
+
+          # Selected environment
+          echo "Selected Environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}"
+
+      - name: Validate PR for workflow changes
         run: |
           # Check for any workflow changes
           if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
             echo "⚠️ Workflow changes detected."
-
             # Get the PR author
             AUTHOR="${{ github.event.pull_request.user.login }}"
             echo "PR Author: $AUTHOR"
-
             # Allowlist check
             if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
               echo "✅ Authorized user ($AUTHOR). Proceeding."
             elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
-              echo "✅ PR triggered by 'pull_request_target' and is open. Assuming protection rules are in place. Proceeding."
+              echo "✅ PR is open. Assuming protection rules are in place. Proceeding."
             else
               echo "⛔ Unauthorized user ($AUTHOR) attempting to modify workflows. Exiting."
               exit 1
@@ -62,7 +86,8 @@ jobs:
       - name: Install dependencies (CLI)
         run: |
           uv sync
+
       - name: Run Codeflash to optimize code
-        id: optimize_code_with_benchmarks
+        id: optimize_code
         run: |
-          uv run python tests/scripts/end_to_end_test_benchmark_sort.py
+          uv run python tests/scripts/end_to_end_test_topological_sort.py
