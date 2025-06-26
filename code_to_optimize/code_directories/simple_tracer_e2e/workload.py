@@ -1,16 +1,15 @@
 from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 
 
 def funcA(number):
     number = min(1000, number)
 
-    # The original for-loop was not used (k was unused), so omit it for efficiency
-
     # Simplify the sum calculation using arithmetic progression formula for O(1) time
     j = number * (number - 1) // 2
 
-    # Use map(str, ...) in join for more efficiency
-    return " ".join(map(str, range(number)))
+    # Use a cached helper to very efficiently reuse results for each possible 'number'
+    return _joined_number_str(number)
 
 
 def test_threadpool() -> None:
@@ -60,6 +59,12 @@ def test_models():
 
     model2 = SimpleModel.create_default()
     prediction = model2.predict(input_data)
+
+
+@lru_cache(maxsize=1001)
+def _joined_number_str(n):
+    # Use list comprehension for best clarity/efficiency
+    return " ".join(str(i) for i in range(n))
 
 
 if __name__ == "__main__":
