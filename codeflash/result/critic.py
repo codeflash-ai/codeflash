@@ -56,8 +56,8 @@ def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool
 
     if pass_count >= MIN_TESTCASE_PASSED_THRESHOLD:
         return True
-    # If only one test passed, check if it's a REPLAY_TEST
-    return bool(pass_count == 1 and report[TestType.REPLAY_TEST]["passed"] == 1)
+    # If one or more tests passed, check if least one of them was a successful REPLAY_TEST
+    return bool(pass_count >= 1 and report[TestType.REPLAY_TEST]["passed"] >= 1)
 
 
 def coverage_critic(original_code_coverage: CoverageData | None, test_framework: str) -> bool:
