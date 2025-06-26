@@ -3,8 +3,9 @@ from functools import lru_cache
 
 
 def funcA(number):
+    if number <= 0:
+        return ""
     number = min(number, 1000)
-    # Use a cached helper to efficiently reuse results for each possible 'number'
     return _joined_number_str(number)
 
 
@@ -59,8 +60,14 @@ def test_models():
 
 @lru_cache(maxsize=1001)
 def _joined_number_str(n):
-    # Use map for faster str conversion and generator with join, more efficient than list comprehension
-    return " ".join(map(str, range(n)))
+    # Handle base cases fast
+    if n == 0:
+        return ""
+    if n == 1:
+        return "0"
+    # Use a list comprehension for string conversion, which is slightly faster than map in Py3
+    s_list = [str(i) for i in range(n)]
+    return " ".join(s_list)
 
 
 if __name__ == "__main__":
