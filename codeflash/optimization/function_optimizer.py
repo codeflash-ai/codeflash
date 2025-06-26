@@ -993,12 +993,6 @@ class FunctionOptimizer:
                     optimized_function=best_optimization.candidate.source_code,
                 )
 
-                existing_tests = existing_tests_source_for(
-                    self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
-                    function_to_all_tests,
-                    tests_root=self.test_cfg.tests_root,
-                )
-
                 original_code_combined = original_helper_code.copy()
                 original_code_combined[explanation.file_path] = self.function_to_optimize_source_code
                 new_code_combined = new_helper_code.copy()
@@ -1059,7 +1053,6 @@ class FunctionOptimizer:
                         trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
                     )
                 self.log_successful_optimization(explanation, generated_tests, exp_type)
-
         return best_optimization
 
     def establish_original_code_baseline(
