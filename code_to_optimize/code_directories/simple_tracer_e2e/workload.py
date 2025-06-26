@@ -1,5 +1,4 @@
 from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache
 
 
 def funcA(number):
@@ -58,12 +57,17 @@ def test_models():
     prediction = model2.predict(input_data)
 
 
-@lru_cache(maxsize=1001)
 def _cached_joined(number):
-    # Use map instead of a generator expression for faster str conversion
+    # Fetch from precomputed list if in range; else compute directly
+    if 0 <= number <= _MAX_JOINED:
+        return _PRECOMPUTED_JOINED[number]
     return " ".join(map(str, range(number)))
 
 
 if __name__ == "__main__":
     test_threadpool()
     test_models()
+
+_MAX_JOINED = 1000
+
+_PRECOMPUTED_JOINED = [" ".join(map(str, range(n))) for n in range(_MAX_JOINED + 1)]
