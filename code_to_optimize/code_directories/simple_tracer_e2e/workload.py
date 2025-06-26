@@ -57,10 +57,12 @@ def test_models():
 
 @lru_cache(maxsize=1001)
 def _cached_joined(number):
-    # Use list comprehension for slightly faster str conversion
-    return " ".join([str(i) for i in range(number)])
+    # Use generator expression and string cache for fast joining.
+    return " ".join(_STRINGS[i] for i in range(number))
 
 
 if __name__ == "__main__":
     test_threadpool()
     test_models()
+
+_STRINGS = tuple(str(i) for i in range(1001))
