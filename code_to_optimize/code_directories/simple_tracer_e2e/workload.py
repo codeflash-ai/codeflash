@@ -63,10 +63,10 @@ def test_models():
     prediction = model2.predict(input_data)
 
 
-@lru_cache(maxsize=1001)  # One possible input per [0, 1000]
+@lru_cache(maxsize=1001)
 def _cached_joined(number):
-    # Use map for slightly faster integer-to-string conversion and joining
-    return " ".join(map(str, range(number)))
+    # Use list comprehension for fast int-to-str conversion
+    return " ".join([str(i) for i in range(number)])
 
 
 if __name__ == "__main__":
