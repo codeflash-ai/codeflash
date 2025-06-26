@@ -1,4 +1,4 @@
-name: end-to-end-test
+name: E2E - Bubble Sort Pytest (No Git)
 
 on:
   pull_request:
