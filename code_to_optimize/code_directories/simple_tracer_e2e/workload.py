@@ -7,7 +7,6 @@ def funcA(number):
     # j is not used (retained for parity)
     j = number * (number - 1) // 2
 
-    # Use cached version for repeated calls
     return _cached_joined(number)
 
 
@@ -62,9 +61,10 @@ def test_models():
     prediction = model2.predict(input_data)
 
 
-@lru_cache(maxsize=1001)  # One possible input per [0, 1000]
+@lru_cache(maxsize=1001)
 def _cached_joined(number):
-    return " ".join(str(i) for i in range(number))
+    # Use map instead of a generator expression for faster str conversion
+    return " ".join(map(str, range(number)))
 
 
 if __name__ == "__main__":
