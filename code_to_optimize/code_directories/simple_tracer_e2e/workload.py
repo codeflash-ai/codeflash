@@ -31,11 +31,8 @@ class AlexNet:
         return output
 
     def _extract_features(self, x):
-        result = []
-        for i in range(len(x)):
-            pass
-
-        return result
+        # The loop and result are a no-op, just return empty list
+        return []
 
     def _classify(self, features):
         total_mod = sum(features) % self.num_classes
