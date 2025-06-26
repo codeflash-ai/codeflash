@@ -1,13 +1,14 @@
-name: end-to-end-test
+name: E2E - Bubble Sort Benchmark
 
 on:
   pull_request:
     paths:
       - '**'  # Trigger for all paths
+
   workflow_dispatch:
 
 jobs:
-  init-optimization:
+  benchmark-bubble-sort-optimization:
     # Dynamically determine if environment is needed only when workflow files change and contributor is external
     environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
 
@@ -19,7 +20,7 @@ jobs:
       COLUMNS: 110
       MAX_RETRIES: 3
       RETRY_DELAY: 5
-      EXPECTED_IMPROVEMENT_PCT: 30
+      EXPECTED_IMPROVEMENT_PCT: 5
       CODEFLASH_END_TO_END: 1
     steps:
       - name: 🛎️ Checkout
@@ -29,6 +30,7 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Validate PR
         run: |
           # Check for any workflow changes
@@ -60,8 +62,7 @@ jobs:
       - name: Install dependencies (CLI)
         run: |
           uv sync
-
       - name: Run Codeflash to optimize code
-        id: optimize_code
+        id: optimize_code_with_benchmarks
         run: |
-          uv run python tests/scripts/end_to_end_test_init_optimization.py
+          uv run python tests/scripts/end_to_end_test_benchmark_sort.py
