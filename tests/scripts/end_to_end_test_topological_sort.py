@@ -1,6 +1,5 @@
 import os
 import pathlib
-import tomlkit
 
 from codeflash.code_utils.code_utils import add_addopts_to_pyproject
 from end_to_end_test_utilities import CoverageExpectation, TestConfig, run_codeflash_command, run_with_retries
@@ -17,7 +16,7 @@ def run_test(expected_improvement_pct: int) -> bool:
                 CoverageExpectation(
                     function_name="Graph.topologicalSort",
                     expected_coverage=100.0,
-                    expected_lines=[24, 25, 26, 27, 28, 29],
+                    expected_lines=[25, 26, 27, 28, 29, 30, 31],
                 )
             ],
         )
