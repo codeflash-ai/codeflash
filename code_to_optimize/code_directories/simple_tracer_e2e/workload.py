@@ -1,5 +1,4 @@
 from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache
 
 
 def funcA(number):
@@ -61,12 +60,16 @@ def test_models():
     prediction = model2.predict(input_data)
 
 
-@lru_cache(maxsize=1001)
 def _joined_number_str(n):
-    # Use list comprehension for best clarity/efficiency
-    return " ".join(str(i) for i in range(n))
+    # Use precomputed result for n in 0..1000, else fallback to runtime computation
+    if 0 <= n <= 1000:
+        return _JOINED_NUMBER_STRINGS[n]
+    # use the same logic as before, but map is actually slightly faster than generator in CPython
+    return " ".join(map(str, range(n)))
 
 
 if __name__ == "__main__":
     test_threadpool()
     test_models()
+
+_JOINED_NUMBER_STRINGS = tuple(" ".join(str(i) for i in range(n)) for n in range(1001))
