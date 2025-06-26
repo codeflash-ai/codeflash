@@ -66,7 +66,7 @@ def discover_function_tests(server: CodeflashLanguageServer, params: FunctionOpt
     fto = server.optimizer.current_function_being_optimized
     optimizable_funcs = {fto.file_path: [fto]}
 
-    devnull_writer = Path.open(os.devnull, "w")
+    devnull_writer = open(os.devnull, "w")  # noqa
     with contextlib.redirect_stdout(devnull_writer):
         function_to_tests, num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
 
