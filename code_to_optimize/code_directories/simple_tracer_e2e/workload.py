@@ -3,14 +3,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 def funcA(number):
     number = min(1000, number)
-
-    # The original for-loop was not used (k was unused), so omit it for efficiency
-
-    # Simplify the sum calculation using arithmetic progression formula for O(1) time
     j = number * (number - 1) // 2
-
-    # Use map(str, ...) in join for more efficiency
-    return " ".join(map(str, range(number)))
+    return " ".join([str(i) for i in range(number)])
 
 
 def test_threadpool() -> None:
@@ -39,8 +33,10 @@ class AlexNet:
         return []
 
     def _classify(self, features):
-        total = sum(features)
-        return [total % self.num_classes for _ in features]
+        # Optimize by precomputing repeated expressions
+        total_mod = sum(features) % self.num_classes
+        features_len = len(features)
+        return [total_mod] * features_len
 
 
 class SimpleModel:
