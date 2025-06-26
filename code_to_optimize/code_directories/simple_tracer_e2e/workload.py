@@ -23,10 +23,9 @@ class AlexNet:
         self.features_size = 256 * 6 * 6
 
     def forward(self, x):
-        features = self._extract_features(x)
-
-        output = self._classify(features)
-        return output
+        # Optimization: Since _extract_features returns [] and _classify([]) returns [],
+        # we directly return []
+        return []
 
     def _extract_features(self, x):
         # As no operation is being performed, return an empty list directly
