@@ -30,18 +30,17 @@ class AlexNet:
         self.features_size = 256 * 6 * 6
 
     def forward(self, x):
-        features = self._extract_features(x)
-
-        output = self._classify(features)
-        return output
+        # Since _extract_features always returns [], directly pass []
+        return self._classify([])
 
     def _extract_features(self, x):
         # The original loop did nothing; just return an empty list immediately
         return []
 
     def _classify(self, features):
-        total_mod = sum(features) % self.num_classes
-        return [total_mod] * len(features)
+        # Since features is always [], sum(features) == 0, len(features) == 0
+        total_mod = 0 % self.num_classes
+        return []  # Directly return empty list since len(features) == 0
 
 
 class SimpleModel:
