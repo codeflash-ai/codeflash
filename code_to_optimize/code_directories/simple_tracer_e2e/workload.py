@@ -3,12 +3,8 @@ from functools import lru_cache
 
 
 def funcA(number):
-    number = min(1000, number)
-
-    # Simplify the sum calculation using arithmetic progression formula for O(1) time
-    j = number * (number - 1) // 2
-
-    # Use a cached helper to very efficiently reuse results for each possible 'number'
+    number = min(number, 1000)
+    # Use a cached helper to efficiently reuse results for each possible 'number'
     return _joined_number_str(number)
 
 
@@ -63,8 +59,8 @@ def test_models():
 
 @lru_cache(maxsize=1001)
 def _joined_number_str(n):
-    # Use list comprehension for best clarity/efficiency
-    return " ".join(str(i) for i in range(n))
+    # Use map for faster str conversion and generator with join, more efficient than list comprehension
+    return " ".join(map(str, range(n)))
 
 
 if __name__ == "__main__":
