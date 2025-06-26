@@ -1012,14 +1012,25 @@ class FunctionOptimizer:
                     generated_tests = remove_functions_from_generated_tests(
                         generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
                     )
+                    original_runtime_by_test = (
+                        original_code_baseline.benchmarking_test_results.usable_runtime_data_by_test_case()
+                    )
+                    optimized_runtime_by_test = (
+                        best_optimization.winning_benchmarking_test_results.usable_runtime_data_by_test_case()
+                    )
                     # Add runtime comments to generated tests before creating the PR
                     generated_tests = add_runtime_comments_to_generated_tests(
-                        generated_tests,
-                        original_code_baseline.benchmarking_test_results,
-                        best_optimization.winning_benchmarking_test_results,
+                        self.test_cfg, generated_tests, original_runtime_by_test, optimized_runtime_by_test
                     )
                     generated_tests_str = "\n\n".join(
                         [test.generated_original_test_source for test in generated_tests.generated_tests]
+                    )
+                    existing_tests = existing_tests_source_for(
+                        self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
+                        function_to_all_tests,
+                        test_cfg=self.test_cfg,
+                        original_runtimes_all=original_runtime_by_test,
+                        optimized_runtimes_all=optimized_runtime_by_test,
                     )
                     if concolic_test_str:
                         generated_tests_str += "\n\n" + concolic_test_str
