@@ -60,8 +60,8 @@ def test_models():
 
 @lru_cache(maxsize=1001)
 def _cached_joined(number):
-    # Use map instead of a generator expression for faster str conversion
-    return " ".join(map(str, range(number)))
+    # Using list comprehension is marginally faster in CPython than map(str, ...)
+    return " ".join([str(i) for i in range(number)])
 
 
 if __name__ == "__main__":
