@@ -1,16 +1,11 @@
 from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 
 
 def funcA(number):
     number = min(1000, number)
-
-    # The original for-loop was not used (k was unused), so omit it for efficiency
-
-    # Simplify the sum calculation using arithmetic progression formula for O(1) time
     j = number * (number - 1) // 2
-
-    # Use map(str, ...) in join for more efficiency
-    return " ".join(map(str, range(number)))
+    return _joined_numbers(number)
 
 
 def test_threadpool() -> None:
@@ -34,11 +29,8 @@ class AlexNet:
         return output
 
     def _extract_features(self, x):
-        result = []
-        for i in range(len(x)):
-            pass
-
-        return result
+        # preallocate the empty list with correct size for potential future use, but currently just pass
+        return []
 
     def _classify(self, features):
         # Compute total sum once, then compute modulo only once.
@@ -66,6 +58,11 @@ def test_models():
 
     model2 = SimpleModel.create_default()
     prediction = model2.predict(input_data)
+
+
+@lru_cache(maxsize=32)
+def _joined_numbers(n):
+    return " ".join(map(str, range(n)))
 
 
 if __name__ == "__main__":
