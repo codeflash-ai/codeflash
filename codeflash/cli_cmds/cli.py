@@ -22,6 +22,12 @@ def parse_args() -> Namespace:
 
     init_actions_parser = subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
     init_actions_parser.set_defaults(func=install_github_actions)
+
+    trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize a Python project.")
+    from codeflash.tracer import main as tracer_main
+
+    trace_optimize.set_defaults(func=tracer_main)
+
     parser.add_argument("--file", help="Try to optimize only this file")
     parser.add_argument("--function", help="Try to optimize only this function within the given file path")
     parser.add_argument(
@@ -64,7 +70,8 @@ def parse_args() -> Namespace:
     )
     parser.add_argument("--no-draft", default=False, action="store_true", help="Skip optimization for draft PRs")
 
-    args: Namespace = parser.parse_args()
+    args, unknown_args = parser.parse_known_args()
+    sys.argv[:] = [sys.argv[0], *unknown_args]
     return process_and_validate_cmd_args(args)
 
 
