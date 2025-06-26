@@ -27,19 +27,17 @@ class AlexNet:
 
     def forward(self, x):
         features = self._extract_features(x)
-
         output = self._classify(features)
         return output
 
     def _extract_features(self, x):
-        result = []
-        for i in range(len(x)):
-            pass
-
-        return result
+        # Directly return an empty list, as the original loop was a pass
+        return []
 
     def _classify(self, features):
         # Compute the sum and modulo just once, then construct the result list efficiently
+        if not features:
+            return []
         mod_val = sum(features) % self.num_classes
         return [mod_val] * len(features)
 
