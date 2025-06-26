@@ -27,16 +27,12 @@ class AlexNet:
 
     def forward(self, x):
         features = self._extract_features(x)
-
         output = self._classify(features)
         return output
 
     def _extract_features(self, x):
-        result = []
-        for i in range(len(x)):
-            pass
-
-        return result
+        # No need to loop, just return an empty list
+        return []
 
     def _classify(self, features):
         # Compute the sum and modulo just once, then construct the result list efficiently
@@ -65,7 +61,8 @@ def test_models():
 
 @lru_cache(maxsize=1001)  # One possible input per [0, 1000]
 def _cached_joined(number):
-    return " ".join(str(i) for i in range(number))
+    # Use map for slightly faster integer-to-string conversion and joining
+    return " ".join(map(str, range(number)))
 
 
 if __name__ == "__main__":
