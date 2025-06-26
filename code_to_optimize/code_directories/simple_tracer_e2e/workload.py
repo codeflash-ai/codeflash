@@ -5,11 +5,10 @@ def funcA(number):
     number = min(1000, number)
     # Use arithmetic formula for sum instead of looping
     k = (number * 100) * (number * 100 - 1) // 2
-    # Simplify the for loop by using sum with a range object (now by formula)
     j = number * (number - 1) // 2
 
-    # Use a map object for efficiency in join (str is faster than formatting and works well here)
-    return " ".join(map(str, range(number)))
+    # Use a list comprehension for fast join for small n
+    return " ".join([str(i) for i in range(number)])
 
 
 def test_threadpool() -> None:
