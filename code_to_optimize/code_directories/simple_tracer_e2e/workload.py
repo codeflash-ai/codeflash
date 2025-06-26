@@ -41,8 +41,12 @@ class AlexNet:
         return result
 
     def _classify(self, features):
-        total = sum(features)
-        return [total % self.num_classes for _ in features]
+        # Compute total sum once, then compute modulo only once.
+        # Use list multiplication for fast vector creation.
+        if not features:
+            return []
+        mod_val = sum(features) % self.num_classes
+        return [mod_val] * len(features)
 
 
 class SimpleModel:
