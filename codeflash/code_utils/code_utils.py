@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import TYPE_CHECKING
 
 import tomlkit
 
@@ -19,8 +20,12 @@ from codeflash.code_utils.config_parser import find_pyproject_toml
 ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
 
 
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+
 @contextmanager
-def custom_addopts() -> None:
+def custom_addopts() -> Generator[None, None, None]:
     pyproject_file = find_pyproject_toml()
     original_content = None
     non_blacklist_plugin_args = ""
@@ -58,7 +63,7 @@ def custom_addopts() -> None:
 
 
 @contextmanager
-def add_addopts_to_pyproject() -> None:
+def add_addopts_to_pyproject() -> Generator[None, None, None]:
     pyproject_file = find_pyproject_toml()
     original_content = None
     try:
@@ -220,3 +225,41 @@ def exit_with_message(message: str, *, error_on_exit: bool = False) -> None:
     paneled_text(message, panel_args={"style": "red"})
 
     sys.exit(1 if error_on_exit else 0)
+
+
+blacklist_installed_pkgs = {
+    "codeflash",
+    "pytest",
+    "coverage",
+    "__",  # this is for private packages  or ones that contain "__" in order to mangle names i.e 3204bda914b7f2c6f497__mypyc
+    "setuptools",
+    "pip",
+    "wheel",
+    "importlib_metadata",
+    "importlib_resources",
+    "isort",
+    "black",
+    "tomlkit",
+    "stubs",
+}
+
+
+def get_installed_packages() -> list[str]:
+    try:
+        try:
+            import importlib.metadata as importlib_metadata
+        except ImportError:
+            import importlib_metadata
+    except ImportError:
+        return []
+
+    try:
+        pkgs = importlib_metadata.packages_distributions().keys()
+    except AttributeError:
+        pkgs = [dist.metadata.get("Name", "") for dist in importlib_metadata.distributions()]
+
+    return [
+        pkg
+        for pkg in pkgs
+        if pkg and not pkg.startswith("_") and not any(blacklisted in pkg for blacklisted in blacklist_installed_pkgs)
+    ]
