@@ -65,7 +65,8 @@ def test_models():
 
 @lru_cache(maxsize=1001)  # One possible input per [0, 1000]
 def _cached_joined(number):
-    return " ".join(str(i) for i in range(number))
+    # Use map for slightly faster integer-to-string conversion and joining
+    return " ".join(map(str, range(number)))
 
 
 if __name__ == "__main__":
