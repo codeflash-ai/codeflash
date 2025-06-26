@@ -4,9 +4,7 @@ from functools import lru_cache
 
 def funcA(number):
     number = min(1000, number)
-    # j is not used (retained for parity)
-    j = number * (number - 1) // 2
-
+    j = number * (number - 1) // 2  # kept for parity, although unused
     return _cached_joined(number)
 
 
@@ -63,8 +61,8 @@ def test_models():
 
 @lru_cache(maxsize=1001)
 def _cached_joined(number):
-    # Use map instead of a generator expression for faster str conversion
-    return " ".join(map(str, range(number)))
+    # Use list comprehension for slightly faster str conversion
+    return " ".join([str(i) for i in range(number)])
 
 
 if __name__ == "__main__":
