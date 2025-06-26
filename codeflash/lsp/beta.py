@@ -58,7 +58,7 @@ def initialize_function_optimization(
         return {"functionName": params.functionName, "status": "not found", "args": None}
     fto = optimizable_funcs.popitem()[1][0]
     server.optimizer.current_function_being_optimized = fto
-    return {"functionName": params.functionName, "status": "success", "info": fto.server_info}
+    return {"functionName": params.functionName, "status": "success"}
 
 
 @server.feature("discoverFunctionTests")
