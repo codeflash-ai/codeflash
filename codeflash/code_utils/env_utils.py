@@ -7,7 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
@@ -110,3 +110,8 @@ def get_cached_gh_event_data() -> dict[str, Any] | None:
         return None
     with Path(event_path).open() as f:
         return json.load(f)  # type: ignore  # noqa
+
+
+@lru_cache(maxsize=1)
+def is_LSP_enabled() -> bool:
+    return console.quiet

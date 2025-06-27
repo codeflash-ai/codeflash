@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.concolic_utils import clean_concolic_tests
+from codeflash.code_utils.env_utils import is_LSP_enabled
 from codeflash.code_utils.static_analysis import has_typed_parameters
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.telemetry.posthog_cf import ph
@@ -28,6 +29,11 @@ def generate_concolic_tests(
     start_time = time.perf_counter()
     function_to_concolic_tests = {}
     concolic_test_suite_code = ""
+
+    if is_LSP_enabled():
+        logger.debug("Skipping concolic test generation in LSP mode")
+        return function_to_concolic_tests, concolic_test_suite_code
+
     if (
         test_cfg.concolic_test_root_dir
         and isinstance(function_to_optimize_ast, (ast.FunctionDef, ast.AsyncFunctionDef))
