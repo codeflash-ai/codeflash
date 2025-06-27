@@ -10,7 +10,7 @@ import requests
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.env_utils import get_codeflash_api_key
+from codeflash.code_utils.env_utils import get_codeflash_api_key, is_LSP_enabled
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.models.models import OptimizedCandidate
 from codeflash.telemetry.posthog_cf import ph
@@ -182,6 +182,7 @@ class AiServiceClient:
             "python_version": platform.python_version(),
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
+            "lsp_mode": is_LSP_enabled(),
         }
 
         logger.info("Generating optimized candidates…")
