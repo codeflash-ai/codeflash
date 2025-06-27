@@ -4,6 +4,7 @@ import json
 import os
 import platform
 import time
+from time import sleep
 from typing import TYPE_CHECKING, Any
 
 import requests
@@ -121,6 +122,7 @@ class AiServiceClient:
         console.rule()
         try:
             response = self.make_ai_service_request("/optimize", payload=payload, timeout=600)
+            sleep(1)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -298,6 +300,7 @@ class AiServiceClient:
         }
         try:
             response = self.make_ai_service_request("/testgen", payload=payload, timeout=600)
+            sleep(3)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating tests: {e}")
             ph("cli-testgen-error-caught", {"error": str(e)})
