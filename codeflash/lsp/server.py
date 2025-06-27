@@ -52,5 +52,6 @@ class CodeflashLanguageServer(LanguageServer):
 
         args = parse_args()
         args.config_file = config_file
+        args.no_pr = True  # LSP server should not create PRs
         args = process_pyproject_config(args)
         self.optimizer = Optimizer(args)

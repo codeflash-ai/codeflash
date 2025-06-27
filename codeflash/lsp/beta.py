@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -55,18 +57,21 @@ def initialize_function_optimization(
         return {"functionName": params.functionName, "status": "not found", "args": None}
     fto = optimizable_funcs.popitem()[1][0]
     server.optimizer.current_function_being_optimized = fto
-    return {"functionName": params.functionName, "status": "success", "info": fto.server_info}
+    return {"functionName": params.functionName, "status": "success"}
 
 
 @server.feature("discoverFunctionTests")
 def discover_function_tests(server: CodeflashLanguageServer, params: FunctionOptimizationParams) -> dict[str, str]:
-    current_function = server.optimizer.current_function_being_optimized
+    fto = server.optimizer.current_function_being_optimized
+    optimizable_funcs = {fto.file_path: [fto]}
 
-    optimizable_funcs = {current_function.file_path: [current_function]}
+    devnull_writer = open(os.devnull, "w")  # noqa
+    with contextlib.redirect_stdout(devnull_writer):
+        function_to_tests, num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
 
-    function_to_tests, num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
-    # mocking in order to get things going
-    return {"functionName": params.functionName, "status": "success", "generated_tests": str(num_discovered_tests)}
+    server.optimizer.discovered_tests = function_to_tests
+
+    return {"functionName": params.functionName, "status": "success", "discovered_tests": num_discovered_tests}
 
 
 @server.feature("prepareOptimization")
@@ -145,6 +150,7 @@ def perform_function_optimization(
         function_to_optimize_source_code=validated_original_code[current_function.file_path].source_code,
         original_module_ast=original_module_ast,
         original_module_path=current_function.file_path,
+        function_to_tests=server.optimizer.discovered_tests or {},
     )
 
     server.optimizer.current_function_optimizer = function_optimizer
@@ -214,13 +220,14 @@ def perform_function_optimization(
             "message": f"No best optimizations found for function {function_to_optimize_qualified_name}",
         }
 
-    optimized_source = best_optimization.candidate.source_code  # noqa: F841
+    optimized_source = best_optimization.candidate.source_code
 
     return {
         "functionName": params.functionName,
         "status": "success",
         "message": "Optimization completed successfully",
         "extra": f"Speedup: {original_code_baseline.runtime / best_optimization.runtime:.2f}x faster",
+        "optimization": optimized_source,
     }
 
 
