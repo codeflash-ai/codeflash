@@ -5,7 +5,7 @@ import os
 import random
 import warnings
 from _ast import AsyncFunctionDef, ClassDef, FunctionDef
-from collections import defaultdict
+from collections import defaultdict, deque
 from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
@@ -602,13 +602,27 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
 
 
 def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
-    # Custom DFS, return True as soon as a Return node is found
-    stack = [function_node]
+    # Custom DFS, return True as soon as a Return node is found (optimized)
+    stack = deque([function_node])
+    stack_pop = stack.pop
+    stack_extend = stack.extend
+
+    # Inline version of ast.iter_child_nodes, avoids generator/function call overhead
+    def fast_iter_child_nodes(node):
+        for name in node._fields:
+            value = getattr(node, name, None)
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, ast.AST):
+                        yield item
+            elif isinstance(value, ast.AST):
+                yield value
+
     while stack:
-        node = stack.pop()
+        node = stack_pop()
         if isinstance(node, ast.Return):
             return True
-        stack.extend(ast.iter_child_nodes(node))
+        stack_extend(fast_iter_child_nodes(node))
     return False
 
 
