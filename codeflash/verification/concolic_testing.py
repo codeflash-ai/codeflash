@@ -43,7 +43,7 @@ def generate_concolic_tests(
                     "crosshair",
                     "cover",
                     "--example_output_format=pytest",
-                    "--per_condition_timeout=64",
+                    "--per_condition_timeout=20",
                     ".".join(
                         [
                             function_to_optimize.file_path.relative_to(args.project_root)

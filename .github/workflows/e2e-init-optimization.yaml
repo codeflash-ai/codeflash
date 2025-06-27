@@ -1,4 +1,4 @@
-name: end-to-end-test
+name: E2E - Init Optimization
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  tracer-replay:
+  init-optimization:
     # Dynamically determine if environment is needed only when workflow files change and contributor is external
     environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
 
@@ -19,7 +19,7 @@ jobs:
       COLUMNS: 110
       MAX_RETRIES: 3
       RETRY_DELAY: 5
-      EXPECTED_IMPROVEMENT_PCT: 10
+      EXPECTED_IMPROVEMENT_PCT: 30
       CODEFLASH_END_TO_END: 1
     steps:
       - name: 🛎️ Checkout
@@ -52,7 +52,6 @@ jobs:
             echo "✅ No workflow file changes detected. Proceeding."
           fi
 
-
       - name: Set up Python 3.11 for CLI
         uses: astral-sh/setup-uv@v5
         with:
@@ -65,4 +64,4 @@ jobs:
       - name: Run Codeflash to optimize code
         id: optimize_code
         run: |
-          uv run python tests/scripts/end_to_end_test_tracer_replay.py
+          uv run python tests/scripts/end_to_end_test_init_optimization.py
