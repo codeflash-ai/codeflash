@@ -317,7 +317,6 @@ class Optimizer:
                     finally:
                         if function_optimizer is not None:
                             function_optimizer.cleanup_generated_files()
-                        self.cleanup_temporary_paths()
 
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
             if self.functions_checkpoint:
