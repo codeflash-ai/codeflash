@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
+from codeflash.code_utils.code_utils import cleanup_paths
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.either import is_successful
 from codeflash.models.models import ValidCode
@@ -251,6 +252,7 @@ class Optimizer:
         if self.args.no_draft and is_pr_draft():
             logger.warning("PR is in draft mode, skipping optimization")
             return
+        cleanup_paths(Optimizer.find_leftover_instrumented_test_files(self.test_cfg.tests_root))
 
         function_optimizer = None
         file_to_funcs_to_optimize, num_optimizable_functions = self.get_optimizable_functions()
@@ -344,12 +346,8 @@ class Optimizer:
         return [file for file in test_root.rglob("test_*.py") if pattern.match(file.name)]
 
     def cleanup_temporary_paths(self) -> None:
-        from codeflash.code_utils.code_utils import cleanup_paths
-
         if self.current_function_optimizer:
             self.current_function_optimizer.cleanup_generated_files()
-
-        cleanup_paths(Optimizer.find_leftover_instrumented_test_files(self.test_cfg.tests_root))
 
         cleanup_paths([self.test_cfg.concolic_test_root_dir, self.replay_tests_dir])
 
