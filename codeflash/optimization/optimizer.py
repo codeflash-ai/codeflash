@@ -248,7 +248,6 @@ class Optimizer:
             return
         if not env_utils.check_formatter_installed(self.args.formatter_cmds):
             return
-
         if self.args.no_draft and is_pr_draft():
             logger.warning("PR is in draft mode, skipping optimization")
             return
@@ -326,11 +325,31 @@ class Optimizer:
 
             self.cleanup_temporary_paths()
 
+    @staticmethod
+    def find_leftover_instrumented_test_files(test_root: Path) -> list[Path]:
+        """Search for all paths within the test_root that match the following patterns.
+
+        - 'test.*__perf_test_{0,1}.py'
+        - 'test_.*__unit_{0,1}.py'
+        - 'test_.*__perfinstrumented.py'
+        - 'test_.*__perfonlyinstrumented.py'
+        Returns a list of matching file paths.
+        """
+        import re
+
+        pattern = re.compile(
+            r"^(test.*__perf_test_?\.py|test_.*__unit_?\.py|test_.*__perfinstrumented\.py|test_.*__perfonlyinstrumented\.py)$"
+        )
+
+        return [file for file in test_root.rglob("test_*.py") if pattern.match(file.name)]
+
     def cleanup_temporary_paths(self) -> None:
         from codeflash.code_utils.code_utils import cleanup_paths
 
         if self.current_function_optimizer:
             self.current_function_optimizer.cleanup_generated_files()
+
+        cleanup_paths(Optimizer.find_leftover_instrumented_test_files(self.test_cfg.tests_root))
 
         cleanup_paths([self.test_cfg.concolic_test_root_dir, self.replay_tests_dir])
 
