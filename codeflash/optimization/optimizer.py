@@ -332,7 +332,7 @@ class Optimizer:
         """Search for all paths within the test_root that match the following patterns.
 
         - 'test.*__perf_test_{0,1}.py'
-        - 'test_.*__unit_{0,1}.py'
+        - 'test_.*__unit_test_{0,1}.py'
         - 'test_.*__perfinstrumented.py'
         - 'test_.*__perfonlyinstrumented.py'
         Returns a list of matching file paths.
@@ -340,10 +340,12 @@ class Optimizer:
         import re
 
         pattern = re.compile(
-            r"^(test.*__perf_test_?\.py|test_.*__unit_?\.py|test_.*__perfinstrumented\.py|test_.*__perfonlyinstrumented\.py)$"
+            r"(?:test.*__perf_test_\d?\.py|test_.*__unit_test_\d?\.py|test_.*__perfinstrumented\.py|test_.*__perfonlyinstrumented\.py)$"
         )
 
-        return [file for file in test_root.rglob("test_*.py") if pattern.match(file.name)]
+        return [
+            file_path for file_path in test_root.rglob("*") if file_path.is_file() and pattern.match(file_path.name)
+        ]
 
     def cleanup_temporary_paths(self) -> None:
         if self.current_function_optimizer:
