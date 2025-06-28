@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_utils import cleanup_paths
+from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.either import is_successful
 from codeflash.models.models import ValidCode
@@ -356,6 +356,9 @@ class Optimizer:
         if self.current_function_optimizer:
             self.current_function_optimizer.cleanup_generated_files()
 
+        if hasattr(get_run_tmp_file, "tmpdir"):
+            get_run_tmp_file.tmpdir.cleanup()
+            del get_run_tmp_file.tmpdir
         cleanup_paths([self.test_cfg.concolic_test_root_dir, self.replay_tests_dir])
 
 

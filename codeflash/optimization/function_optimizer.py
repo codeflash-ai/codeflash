@@ -1463,5 +1463,3 @@ class FunctionOptimizer:
             paths_to_cleanup.append(test_file.benchmarking_file_path)
 
         cleanup_paths(paths_to_cleanup)
-        if hasattr(get_run_tmp_file, "tmpdir"):
-            get_run_tmp_file.tmpdir.cleanup()
