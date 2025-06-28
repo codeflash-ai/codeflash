@@ -397,6 +397,13 @@ def replace_functions_and_add_imports(
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]],
     project_root_path: Path,
 ) -> str:
+    logger.debug("start from here,...")
+    logger.debug(f"source_code: {source_code}")
+    logger.debug(f"function_names: {function_names}")
+    logger.debug(f"optimized_code: {optimized_code}")
+    logger.debug(f"module_abspath: {module_abspath}")
+    logger.debug(f"preexisting_objects: {preexisting_objects}")
+    logger.debug(f"project_root_path: {project_root_path}")
     return add_needed_imports_from_module(
         optimized_code,
         replace_functions_in_file(source_code, function_names, optimized_code, preexisting_objects),

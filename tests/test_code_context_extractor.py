@@ -2434,3 +2434,53 @@ class SimpleClass:
         assert "class SimpleClass:" in code_content
         assert "def simple_method(self):" in code_content
         assert "return 42" in code_content
+
+
+from codeflash.code_utils.code_replacer import replace_functions_and_add_imports
+def test_replace_functions_and_add_imports():
+    path_to_root = Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "circular_deps"
+    optimized_code = '''from __future__ import annotations
+
+import urllib.parse
+from os import getenv
+
+from attrs import define
+from code_to_optimize.code_directories.circular_deps.constants import DEFAULT_API_URL, DEFAULT_APP_URL
+
+# Precompute constant netlocs for set membership test
+_DEFAULT_APP_NETLOC = urllib.parse.urlparse(DEFAULT_APP_URL).netloc
+_DEFAULT_API_NETLOC = urllib.parse.urlparse(DEFAULT_API_URL).netloc
+_NETLOC_SET = {_DEFAULT_APP_NETLOC, _DEFAULT_API_NETLOC}
+
+@define
+class GalileoApiClient():
+
+    @staticmethod
+    def get_console_url() -> str:
+        # Return DEFAULT_APP_URL if the env var is not set or set to DEFAULT_API_URL
+        console_url = getenv("GALILEO_CONSOLE_URL", DEFAULT_API_URL)
+        if console_url == DEFAULT_API_URL:
+            return DEFAULT_APP_URL
+        return console_url
+
+def _set_destination(console_url: str) -> str:
+    """
+    Parse the console_url and return the destination for the OpenTelemetry traces.
+    """
+    destination = (console_url or GalileoApiClient.get_console_url()).replace("console.", "api.")
+    parsed_url = urllib.parse.urlparse(destination)
+    if parsed_url.netloc in _NETLOC_SET:
+        return f"{DEFAULT_APP_URL}api/galileo/otel/traces"
+    return f"{parsed_url.scheme}://{parsed_url.netloc}/otel/traces"'''
+    file_abs_path = path_to_root / "api_client.py"
+    content = Path(file_abs_path).read_text(encoding="utf-8")
+    new_code = replace_functions_and_add_imports(
+        source_code= content,
+        function_names= ["GalileoApiClient.get_console_url"],
+        optimized_code= optimized_code,
+        module_abspath= file_abs_path,
+        preexisting_objects= {('GalileoApiClient', ()), ('_set_destination', ()), ('get_console_url', (FunctionParent(name='GalileoApiClient', type='ClassDef'),))},
+        project_root_path= Path(path_to_root),
+    )
+    print(new_code)
+    assert 1 == 1
