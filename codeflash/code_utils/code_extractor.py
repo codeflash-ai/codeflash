@@ -325,31 +325,36 @@ def add_needed_imports_from_module(
         )
     )
     cst.parse_module(src_module_code).visit(gatherer)
+    scheduled_unused_imports = []
     try:
         for mod in gatherer.module_imports:
             AddImportsVisitor.add_needed_import(dst_context, mod)
-            RemoveImportsVisitor.remove_unused_import(dst_context, mod)
+            scheduled_unused_imports.append((mod, "", ""))
         for mod, obj_seq in gatherer.object_mapping.items():
+            logger.debug(f"dst_context.full_module_name: {dst_context.full_module_name}")
+            logger.debug(f"mod: {mod}")
+            logger.debug(f"obj_seq: {obj_seq}")
+            logger.debug(f"helper_functions_fqn: {helper_functions_fqn}")
             for obj in obj_seq:
                 if (
                     f"{mod}.{obj}" in helper_functions_fqn
-                    or dst_context.full_module_name is mod  # avoid circular imports
+                    or dst_context.full_module_name == mod  # avoid circular imports
                 ):
                     continue  # Skip adding imports for helper functions already in the context
                 AddImportsVisitor.add_needed_import(dst_context, mod, obj)
-                RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
+                scheduled_unused_imports.append((mod, obj, ""))
     except Exception as e:
         logger.exception(f"Error adding imports to destination module code: {e}")
         return dst_module_code
     for mod, asname in gatherer.module_aliases.items():
         AddImportsVisitor.add_needed_import(dst_context, mod, asname=asname)
-        RemoveImportsVisitor.remove_unused_import(dst_context, mod, asname=asname)
+        scheduled_unused_imports.append((mod, "", asname))
     for mod, alias_pairs in gatherer.alias_mapping.items():
         for alias_pair in alias_pairs:
             if f"{mod}.{alias_pair[0]}" in helper_functions_fqn:
                 continue
             AddImportsVisitor.add_needed_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
-            RemoveImportsVisitor.remove_unused_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
+            scheduled_unused_imports.append((mod, alias_pair[0], alias_pair[1]))
 
     try:
         parsed_module = cst.parse_module(dst_module_code)
@@ -358,6 +363,9 @@ def add_needed_imports_from_module(
         return dst_module_code  # Return the original code if there's a syntax error
     try:
         transformed_module = AddImportsVisitor(dst_context).transform_module(parsed_module)
+        for _import in scheduled_unused_imports:
+            (_module, _obj, _alias) = _import
+            RemoveImportsVisitor.remove_unused_import(dst_context, module=_module, obj=_obj, asname=_alias)
         transformed_module = RemoveImportsVisitor(dst_context).transform_module(transformed_module)
         return transformed_module.code.lstrip("\n")
     except Exception as e:
