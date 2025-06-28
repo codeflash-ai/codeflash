@@ -288,31 +288,37 @@ class Optimizer:
                         f"{function_to_optimize.qualified_name}"
                     )
                     console.rule()
-
-                    function_optimizer = self.create_function_optimizer(
-                        function_to_optimize,
-                        function_to_tests=function_to_tests,
-                        function_to_optimize_source_code=validated_original_code[original_module_path].source_code,
-                        function_benchmark_timings=function_benchmark_timings,
-                        total_benchmark_timings=total_benchmark_timings,
-                        original_module_ast=original_module_ast,
-                        original_module_path=original_module_path,
-                    )
-
-                    self.current_function_optimizer = (
-                        function_optimizer  # needed to clean up from the outside of this function
-                    )
-                    best_optimization = function_optimizer.optimize_function()
-                    if self.functions_checkpoint:
-                        self.functions_checkpoint.add_function_to_checkpoint(
-                            function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
+                    function_optimizer = None
+                    try:
+                        function_optimizer = self.create_function_optimizer(
+                            function_to_optimize,
+                            function_to_tests=function_to_tests,
+                            function_to_optimize_source_code=validated_original_code[original_module_path].source_code,
+                            function_benchmark_timings=function_benchmark_timings,
+                            total_benchmark_timings=total_benchmark_timings,
+                            original_module_ast=original_module_ast,
+                            original_module_path=original_module_path,
                         )
-                    if is_successful(best_optimization):
-                        optimizations_found += 1
-                    else:
-                        logger.warning(best_optimization.failure())
-                        console.rule()
-                        continue
+
+                        self.current_function_optimizer = (
+                            function_optimizer  # needed to clean up from the outside of this function
+                        )
+                        best_optimization = function_optimizer.optimize_function()
+                        if self.functions_checkpoint:
+                            self.functions_checkpoint.add_function_to_checkpoint(
+                                function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
+                            )
+                        if is_successful(best_optimization):
+                            optimizations_found += 1
+                        else:
+                            logger.warning(best_optimization.failure())
+                            console.rule()
+                            continue
+                    finally:
+                        if function_optimizer is not None:
+                            function_optimizer.cleanup_generated_files()
+                        self.cleanup_temporary_paths()
+
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
             if self.functions_checkpoint:
                 self.functions_checkpoint.cleanup()
