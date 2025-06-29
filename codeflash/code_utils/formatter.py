@@ -109,6 +109,9 @@ def format_code(
     print_status: bool = True,  # noqa
     exit_on_failure: bool = True,  # noqa
 ) -> str:
+    if console.quiet:
+        # lsp mode
+        exit_on_failure = False
     with tempfile.TemporaryDirectory() as test_dir_str:
         if isinstance(path, str):
             path = Path(path)

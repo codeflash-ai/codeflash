@@ -1,3 +1,4 @@
+import uuid
 from collections import defaultdict
 
 
@@ -21,9 +22,10 @@ class Graph:
     def topologicalSort(self):
         visited = [False] * self.V
         stack = []
+        sorting_id = uuid.uuid4()
 
         for i in range(self.V):
             if visited[i] == False:
                 self.topologicalSortUtil(i, visited, stack)
 
-        return stack
+        return stack, str(sorting_id)

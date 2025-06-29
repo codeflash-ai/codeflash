@@ -29,7 +29,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, ClassVar
 
-import dill
 import isort
 from rich.align import Align
 from rich.panel import Panel
@@ -41,6 +40,7 @@ from codeflash.cli_cmds.console import console
 from codeflash.code_utils.code_utils import module_name_from_file_path
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.discovery.functions_to_optimize import filter_files_optimized
+from codeflash.picklepatch.pickle_patcher import PicklePatcher
 from codeflash.tracing.replay_test import create_trace_replay_test
 from codeflash.tracing.tracing_utils import FunctionModules
 from codeflash.verification.verification_utils import get_test_file_path
@@ -399,22 +399,12 @@ class Tracer:
                 arguments_copy = dict(arguments.items())  # Use the local 'arguments' from frame.f_locals
                 if class_name and code.co_name == "__init__" and "self" in arguments_copy:
                     del arguments_copy["self"]
-                local_vars = pickle.dumps(arguments_copy, protocol=pickle.HIGHEST_PROTOCOL)
+                local_vars = PicklePatcher.dumps(arguments_copy, protocol=pickle.HIGHEST_PROTOCOL)
                 sys.setrecursionlimit(original_recursion_limit)
             except Exception:
-                # we retry with dill if pickle fails. It's slower but more comprehensive
-                try:
-                    sys.setrecursionlimit(10000)  # Ensure limit is high for dill too
-                    # arguments_copy should be used here as well if defined above
-                    local_vars = dill.dumps(
-                        arguments_copy if "arguments_copy" in locals() else dict(arguments.items()),
-                        protocol=dill.HIGHEST_PROTOCOL,
-                    )
-                    sys.setrecursionlimit(original_recursion_limit)
-
-                except Exception:
-                    self.function_count[function_qualified_name] -= 1
-                    return
+                self.function_count[function_qualified_name] -= 1
+                sys.setrecursionlimit(original_recursion_limit)
+                return
 
             cur.execute(
                 "INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
