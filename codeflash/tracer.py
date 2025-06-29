@@ -123,8 +123,8 @@ class Tracer:
         self.function_count = defaultdict(int)
         self.current_file_path = Path(__file__).resolve()
         self.ignored_qualified_functions = {
-            f"{self.current_file_path}:Tracer:__exit__",
-            f"{self.current_file_path}:Tracer:__enter__",
+            f"{self.current_file_path}:Tracer.__exit__",
+            f"{self.current_file_path}:Tracer.__enter__",
         }
         self.max_function_count = max_function_count
         self.config, found_config_path = parse_config_file(config_file_path)
@@ -133,6 +133,7 @@ class Tracer:
         self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>", "<module>"}
 
         self.file_being_called_from: str = str(Path(sys._getframe().f_back.f_code.co_filename).name).replace(".", "_")  # noqa: SLF001
+        self.replay_test_file_path: Path | None = None
 
         assert timeout is None or timeout > 0, "Timeout should be greater than 0"
         self.timeout = timeout
@@ -283,6 +284,7 @@ class Tracer:
 
         with Path(test_file_path).open("w", encoding="utf8") as file:
             file.write(replay_test)
+        self.replay_test_file_path = test_file_path
 
         console.print(
             f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}",
@@ -347,8 +349,7 @@ class Tracer:
         try:
             function_qualified_name = f"{file_name}:{code.co_qualname}"
         except AttributeError:
-            function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
-
+            function_qualified_name = f"{file_name}:{(class_name + '.' if class_name else '')}{code.co_name}"
         if function_qualified_name in self.ignored_qualified_functions:
             return
         if function_qualified_name not in self.function_count:
@@ -701,7 +702,7 @@ class Tracer:
                 border_style="blue",
                 title="[bold]Function Profile[/bold] (ordered by internal time)",
                 title_style="cyan",
-                caption=f"Showing top 25 of {len(self.stats)} functions",
+                caption=f"Showing top {min(25, len(self.stats))} of {len(self.stats)} functions",
             )
 
             table.add_column("Calls", justify="right", style="green", width=10)
@@ -793,7 +794,7 @@ class Tracer:
 
 def main() -> ArgumentParser:
     parser = ArgumentParser(allow_abbrev=False)
-    parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", required=True)
+    parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", default="codeflash.trace")
     parser.add_argument("--only-functions", help="Trace only these functions", nargs="+", default=None)
     parser.add_argument(
         "--max-function-count",
@@ -815,6 +816,7 @@ def main() -> ArgumentParser:
         "with the codeflash config. Will be auto-discovered if not specified.",
         default=None,
     )
+    parser.add_argument("--trace-only", action="store_true", help="Trace and create replay tests only, don't optimize")
 
     if not sys.argv[1:]:
         parser.print_usage()
@@ -827,6 +829,7 @@ def main() -> ArgumentParser:
     # to the output file at startup.
     if args.outfile is not None:
         args.outfile = Path(args.outfile).resolve()
+    outfile = args.outfile
 
     if len(unknown_args) > 0:
         if args.module:
@@ -848,14 +851,48 @@ def main() -> ArgumentParser:
                 "__cached__": None,
             }
         try:
-            Tracer(
+            tracer = Tracer(
                 output=args.outfile,
                 functions=args.only_functions,
                 max_function_count=args.max_function_count,
                 timeout=args.tracer_timeout,
                 config_file_path=args.codeflash_config,
                 command=" ".join(sys.argv),
-            ).runctx(code, globs, None)
+            )
+            tracer.runctx(code, globs, None)
+            replay_test_path = tracer.replay_test_file_path
+            if not args.trace_only and replay_test_path is not None:
+                del tracer
+
+                from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
+                from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
+                from codeflash.cli_cmds.console import paneled_text
+                from codeflash.telemetry import posthog_cf
+                from codeflash.telemetry.sentry import init_sentry
+
+                sys.argv = ["codeflash", "--replay-test", str(replay_test_path)]
+
+                args = parse_args()
+                paneled_text(
+                    CODEFLASH_LOGO,
+                    panel_args={"title": "https://codeflash.ai", "expand": False},
+                    text_args={"style": "bold gold3"},
+                )
+
+                args = process_pyproject_config(args)
+                args.previous_checkpoint_functions = None
+                init_sentry(not args.disable_telemetry, exclude_errors=True)
+                posthog_cf.initialize_posthog(not args.disable_telemetry)
+
+                from codeflash.optimization import optimizer
+
+                optimizer.run_with_args(args)
+
+                # Delete the trace file and the replay test file if they exist
+                if outfile:
+                    outfile.unlink(missing_ok=True)
+                if replay_test_path:
+                    replay_test_path.unlink(missing_ok=True)
 
         except BrokenPipeError as exc:
             # Prevent "Exception ignored" during interpreter shutdown.
