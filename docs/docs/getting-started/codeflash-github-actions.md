@@ -57,7 +57,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
-      CODEFLASH_PR_NUMBER: ${{ github.event.number }}
     steps:
       - uses: actions/checkout@v4
         with:
