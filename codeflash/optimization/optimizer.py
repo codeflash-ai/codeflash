@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_utils import cleanup_paths
+from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.either import is_successful
 from codeflash.models.models import ValidCode
@@ -289,31 +289,36 @@ class Optimizer:
                         f"{function_to_optimize.qualified_name}"
                     )
                     console.rule()
-
-                    function_optimizer = self.create_function_optimizer(
-                        function_to_optimize,
-                        function_to_tests=function_to_tests,
-                        function_to_optimize_source_code=validated_original_code[original_module_path].source_code,
-                        function_benchmark_timings=function_benchmark_timings,
-                        total_benchmark_timings=total_benchmark_timings,
-                        original_module_ast=original_module_ast,
-                        original_module_path=original_module_path,
-                    )
-
-                    self.current_function_optimizer = (
-                        function_optimizer  # needed to clean up from the outside of this function
-                    )
-                    best_optimization = function_optimizer.optimize_function()
-                    if self.functions_checkpoint:
-                        self.functions_checkpoint.add_function_to_checkpoint(
-                            function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
+                    function_optimizer = None
+                    try:
+                        function_optimizer = self.create_function_optimizer(
+                            function_to_optimize,
+                            function_to_tests=function_to_tests,
+                            function_to_optimize_source_code=validated_original_code[original_module_path].source_code,
+                            function_benchmark_timings=function_benchmark_timings,
+                            total_benchmark_timings=total_benchmark_timings,
+                            original_module_ast=original_module_ast,
+                            original_module_path=original_module_path,
                         )
-                    if is_successful(best_optimization):
-                        optimizations_found += 1
-                    else:
-                        logger.warning(best_optimization.failure())
-                        console.rule()
-                        continue
+
+                        self.current_function_optimizer = (
+                            function_optimizer  # needed to clean up from the outside of this function
+                        )
+                        best_optimization = function_optimizer.optimize_function()
+                        if self.functions_checkpoint:
+                            self.functions_checkpoint.add_function_to_checkpoint(
+                                function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
+                            )
+                        if is_successful(best_optimization):
+                            optimizations_found += 1
+                        else:
+                            logger.warning(best_optimization.failure())
+                            console.rule()
+                            continue
+                    finally:
+                        if function_optimizer is not None:
+                            function_optimizer.cleanup_generated_files()
+
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
             if self.functions_checkpoint:
                 self.functions_checkpoint.cleanup()
@@ -351,6 +356,9 @@ class Optimizer:
         if self.current_function_optimizer:
             self.current_function_optimizer.cleanup_generated_files()
 
+        if hasattr(get_run_tmp_file, "tmpdir"):
+            get_run_tmp_file.tmpdir.cleanup()
+            del get_run_tmp_file.tmpdir
         cleanup_paths([self.test_cfg.concolic_test_root_dir, self.replay_tests_dir])
 
 
