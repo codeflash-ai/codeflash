@@ -1457,7 +1457,7 @@ class FunctionOptimizer:
         ]
 
     def cleanup_generated_files(self) -> None:
-        paths_to_cleanup = [self.test_cfg.concolic_test_root_dir]
+        paths_to_cleanup = []
         for test_file in self.test_files:
             paths_to_cleanup.append(test_file.instrumented_behavior_file_path)
             paths_to_cleanup.append(test_file.benchmarking_file_path)
