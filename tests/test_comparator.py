@@ -5,6 +5,7 @@ import datetime
 import decimal
 import re
 import sys
+import uuid
 from enum import Enum, Flag, IntFlag, auto
 from pathlib import Path
 import array # Add import for array
@@ -240,6 +241,12 @@ def test_standard_python_library_objects() -> None:
     assert comparator(empty_arr_i1, empty_arr_i2)
     assert not comparator(empty_arr_i1, empty_arr_f)
     assert not comparator(empty_arr_i1, arr1)
+
+    id1 = uuid.uuid4()
+    id3 = uuid.uuid4()
+    assert comparator(id1, id1)
+    assert not comparator(id1, id3)
+
 
 
 
