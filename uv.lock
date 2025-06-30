@@ -180,7 +180,6 @@ wheels = [
 
 [[package]]
 name = "codeflash"
-version = "0.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

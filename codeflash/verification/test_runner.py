@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shlex
 import subprocess
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -10,6 +11,7 @@ from codeflash.code_utils.code_utils import custom_addopts, get_run_tmp_file
 from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
+from codeflash.code_utils.time_utils import format_time
 from codeflash.models.models import TestFiles, TestType
 
 if TYPE_CHECKING:
@@ -98,13 +100,14 @@ def run_behavioral_tests(
                 coverage_cmd.extend(shlex.split(pytest_cmd, posix=IS_POSIX)[1:])
 
             blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS if plugin != "cov"]
-
+            start = time.perf_counter_ns()
             results = execute_test_subprocess(
                 coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files,
                 cwd=cwd,
                 env=pytest_test_env,
                 timeout=600,
             )
+            logger.info(f"Took {format_time(time.perf_counter_ns() - start)} seconds")
             logger.debug(
                 f"Result return code: {results.returncode}, "
                 f"{'Result stderr:' + str(results.stderr) if results.stderr else ''}"
@@ -194,12 +197,14 @@ def run_line_profile_tests(
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
         blocklist_args = [f"-p no:{plugin}" for plugin in BENCHMARKING_BLOCKLISTED_PLUGINS]
         pytest_test_env["LINE_PROFILE"] = "1"
+        start = time.perf_counter_ns()
         results = execute_test_subprocess(
             pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
             cwd=cwd,
             env=pytest_test_env,
             timeout=600,  # TODO: Make this dynamic
         )
+        logger.info(f"Took {format_time(time.perf_counter_ns() - start)} seconds")
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
@@ -254,12 +259,14 @@ def run_benchmarking_tests(
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
         blocklist_args = [f"-p no:{plugin}" for plugin in BENCHMARKING_BLOCKLISTED_PLUGINS]
+        start = time.perf_counter_ns()
         results = execute_test_subprocess(
             pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
             cwd=cwd,
             env=pytest_test_env,
             timeout=600,  # TODO: Make this dynamic
         )
+        logger.info(f"Took {format_time(time.perf_counter_ns() - start)} seconds")
     elif test_framework == "unittest":
         test_files = [file.benchmarking_file_path for file in test_paths.test_files]
         result_file_path, results = run_unittest_tests(
