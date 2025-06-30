@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
+from codeflash.code_utils.config_consts import DEFAULT_IMPORTANCE_THRESHOLD
 from codeflash.tracing.profile_stats import ProfileStats
 
 if TYPE_CHECKING:
@@ -12,54 +13,45 @@ if TYPE_CHECKING:
 
 
 class FunctionRanker:
-    """Ranks functions for optimization based on trace data using ttX scoring.
+    """Ranks and filters functions for optimization based on profiling trace data using the ttX scoring method.
 
-    ttX = own_time + (time_spent_in_callees x call_count)
+    The FunctionRanker analyzes function-level timing statistics from a trace file and assigns a ttX score to each function:
 
-    This prioritizes functions that:
-    1. Take significant time themselves (own_time)
-    2. Are called frequently and have expensive subcalls (time_spent_in_callees x call_count)
+        ttX = own_time + (time_spent_in_callees x call_count)
+
+    This scoring prioritizes functions that:
+      1. Consume significant time themselves (own_time)
+      2. Are called frequently and have expensive subcalls (time_spent_in_callees x call_count)
+
+    first, filters out functions whose own_time is less than a specified percentage (importance_threshold = minimum fraction of total runtime a function must account for to be considered important) of the total runtime, considering them unimportant for optimization.
+
+    The remaining functions are then ranked in descending order by their ttX score, prioritizing those most likely to yield performance improvements if optimized.
     """
 
     def __init__(self, trace_file_path: Path) -> None:
         self.trace_file_path = trace_file_path
-        self._function_stats = None
+        self._profile_stats = ProfileStats(trace_file_path.as_posix())
+        self._function_stats: dict[str, dict] = {}
+        self.load_function_stats()
 
-    def load_function_stats(self) -> dict[str, dict]:
-        """Load function timing statistics from trace database using ProfileStats."""
-        if self._function_stats is not None:
-            return self._function_stats
-
-        self._function_stats = {}
-
+    def load_function_stats(self) -> None:
         try:
-            profile_stats = ProfileStats(self.trace_file_path.as_posix())
-
-            # Access the stats dictionary directly from ProfileStats
-            for (filename, line_number, function_name), (
+            for (filename, line_number, func_name), (
                 call_count,
                 _num_callers,
                 total_time_ns,
                 cumulative_time_ns,
                 _callers,
-            ) in profile_stats.stats.items():
+            ) in self._profile_stats.stats.items():
                 if call_count <= 0:
                     continue
 
-                if "." in function_name and not function_name.startswith("<"):
-                    parts = function_name.split(".", 1)
+                # Parse function name to handle methods within classes
+                class_name, qualified_name, base_function_name = (None, func_name, func_name)
+                if "." in func_name and not func_name.startswith("<"):
+                    parts = func_name.split(".", 1)
                     if len(parts) == 2:
-                        class_name, method_name = parts
-                        qualified_name = function_name
-                        base_function_name = method_name
-                    else:
-                        class_name = None
-                        qualified_name = function_name
-                        base_function_name = function_name
-                else:
-                    class_name = None
-                    qualified_name = function_name
-                    base_function_name = function_name
+                        class_name, base_function_name = parts
 
                 # Calculate own time (total time - time spent in subcalls)
                 own_time_ns = total_time_ns
@@ -85,54 +77,63 @@ class FunctionRanker:
             logger.debug(f"Loaded timing stats for {len(self._function_stats)} functions from trace using ProfileStats")
 
         except Exception as e:
-            logger.warning(f"Failed to load function stats from trace file {self.trace_file_path}: {e}")
+            logger.warning(f"Failed to process function stats from trace file {self.trace_file_path}: {e}")
             self._function_stats = {}
 
-        return self._function_stats
+    def _get_function_stats(self, function_to_optimize: FunctionToOptimize) -> dict | None:
+        possible_keys = [
+            f"{function_to_optimize.file_path}:{function_to_optimize.qualified_name}",
+            f"{function_to_optimize.file_path}:{function_to_optimize.function_name}",
+        ]
+        for key in possible_keys:
+            if key in self._function_stats:
+                return self._function_stats[key]
+        return None
 
     def get_function_ttx_score(self, function_to_optimize: FunctionToOptimize) -> float:
-        stats = self.load_function_stats()
-
-        possible_keys = [
-            f"{function_to_optimize.file_path}:{function_to_optimize.qualified_name}",
-            f"{function_to_optimize.file_path}:{function_to_optimize.function_name}",
-        ]
-
-        for key in possible_keys:
-            if key in stats:
-                return stats[key]["ttx_score"]
-
-        return 0.0
+        stats = self._get_function_stats(function_to_optimize)
+        return stats["ttx_score"] if stats else 0.0
 
     def rank_functions(self, functions_to_optimize: list[FunctionToOptimize]) -> list[FunctionToOptimize]:
-        # Calculate ttX scores for all functions
-        function_scores = []
-        for func in functions_to_optimize:
-            ttx_score = self.get_function_ttx_score(func)
-            function_scores.append((func, ttx_score))
-
-        # Sort by ttX score descending (highest impact first)
-        function_scores.sort(key=lambda x: x[1], reverse=True)
-
-        # logger.info("Function ranking by ttX score:")
-        # for i, (func, score) in enumerate(function_scores[:10]):  # Top 10
-        #     logger.info(f"  {i + 1}. {func.qualified_name} (ttX: {score:.0f}ns)")
-
-        ranked_functions = [func for func, _ in function_scores]
-        logger.info(f"Ranked {len(ranked_functions)} functions by optimization priority")
-
-        return ranked_functions
+        return sorted(functions_to_optimize, key=self.get_function_ttx_score, reverse=True)
 
     def get_function_stats_summary(self, function_to_optimize: FunctionToOptimize) -> dict | None:
-        stats = self.load_function_stats()
+        return self._get_function_stats(function_to_optimize)
 
-        possible_keys = [
-            f"{function_to_optimize.file_path}:{function_to_optimize.qualified_name}",
-            f"{function_to_optimize.file_path}:{function_to_optimize.function_name}",
-        ]
+    def rerank_and_filter_functions(self, functions_to_optimize: list[FunctionToOptimize]) -> list[FunctionToOptimize]:
+        """Reranks and filters functions based on their impact on total runtime.
 
-        for key in possible_keys:
-            if key in stats:
-                return stats[key]
+        This method first calculates the total runtime of all profiled functions.
+        It then filters out functions whose own_time is less than a specified
+        percentage of the total runtime (importance_threshold).
 
-        return None
+        The remaining 'important' functions are then ranked by their ttX score.
+        """
+        stats_map = self._function_stats
+        if not stats_map:
+            return []
+
+        total_program_time = sum(s["own_time_ns"] for s in stats_map.values() if s.get("own_time_ns", 0) > 0)
+
+        if total_program_time == 0:
+            logger.warning("Total program time is zero, cannot determine function importance.")
+            return self.rank_functions(functions_to_optimize)
+
+        important_functions = []
+        for func in functions_to_optimize:
+            func_stats = self._get_function_stats(func)
+            if func_stats and func_stats.get("own_time_ns", 0) > 0:
+                importance = func_stats["own_time_ns"] / total_program_time
+                if importance >= DEFAULT_IMPORTANCE_THRESHOLD:
+                    important_functions.append(func)
+                else:
+                    logger.info(
+                        f"Filtering out function {func.qualified_name} with importance "
+                        f"{importance:.2%} (below threshold {DEFAULT_IMPORTANCE_THRESHOLD:.2%})"
+                    )
+
+        logger.info(
+            f"Filtered down to {len(important_functions)} important functions from {len(functions_to_optimize)} total functions"
+        )
+
+        return self.rank_functions(important_functions)

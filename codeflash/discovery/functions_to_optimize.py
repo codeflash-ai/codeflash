@@ -218,7 +218,8 @@ def get_functions_to_optimize(
                 all_functions.extend(file_functions)
 
             if all_functions:
-                ranked_functions = ranker.rank_functions(all_functions)
+                ranked_functions = ranker.rerank_and_filter_functions(all_functions)
+                functions_count = len(ranked_functions)
 
                 ranked_dict = {}
                 for func in ranked_functions:
@@ -227,7 +228,6 @@ def get_functions_to_optimize(
                     ranked_dict[func.file_path].append(func)
 
                 filtered_modified_functions = ranked_dict
-                logger.info(f"Ranked {len(all_functions)} functions by optimization priority using trace data")
 
         logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
         if optimize_all:
