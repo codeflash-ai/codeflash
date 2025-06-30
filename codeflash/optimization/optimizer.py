@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
+from codeflash.code_utils.code_utils import cleanup_paths
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.either import is_successful
 from codeflash.models.models import ValidCode
@@ -248,10 +249,10 @@ class Optimizer:
             return
         if not env_utils.check_formatter_installed(self.args.formatter_cmds):
             return
-
         if self.args.no_draft and is_pr_draft():
             logger.warning("PR is in draft mode, skipping optimization")
             return
+        cleanup_paths(Optimizer.find_leftover_instrumented_test_files(self.test_cfg.tests_root))
 
         function_optimizer = None
         file_to_funcs_to_optimize, num_optimizable_functions = self.get_optimizable_functions()
@@ -326,9 +327,27 @@ class Optimizer:
 
             self.cleanup_temporary_paths()
 
-    def cleanup_temporary_paths(self) -> None:
-        from codeflash.code_utils.code_utils import cleanup_paths
+    @staticmethod
+    def find_leftover_instrumented_test_files(test_root: Path) -> list[Path]:
+        """Search for all paths within the test_root that match the following patterns.
 
+        - 'test.*__perf_test_{0,1}.py'
+        - 'test_.*__unit_test_{0,1}.py'
+        - 'test_.*__perfinstrumented.py'
+        - 'test_.*__perfonlyinstrumented.py'
+        Returns a list of matching file paths.
+        """
+        import re
+
+        pattern = re.compile(
+            r"(?:test.*__perf_test_\d?\.py|test_.*__unit_test_\d?\.py|test_.*__perfinstrumented\.py|test_.*__perfonlyinstrumented\.py)$"
+        )
+
+        return [
+            file_path for file_path in test_root.rglob("*") if file_path.is_file() and pattern.match(file_path.name)
+        ]
+
+    def cleanup_temporary_paths(self) -> None:
         if self.current_function_optimizer:
             self.current_function_optimizer.cleanup_generated_files()
 

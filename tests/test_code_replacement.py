@@ -1693,8 +1693,8 @@ a=2
 print("Hello world")
     """
     expected_code = """import numpy as np
-print("Hello world")
 
+print("Hello world")
 a=2
 print("Hello world")
 def some_fn():
@@ -1712,8 +1712,7 @@ class NewClass:
     def __call__(self, value):
         return "I am still old"
     def new_function2(value):
-        return cst.ensure_type(value, str)
-"""
+        return cst.ensure_type(value, str)"""
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/global_var_original.py").resolve()
     code_path.write_text(original_code, encoding="utf-8")
     tests_root = Path("/Users/codeflash/Downloads/codeflash-dev/codeflash/code_to_optimize/tests/pytest/")
@@ -1769,8 +1768,8 @@ class NewClass:
 print("Hello world")
         """
     expected_code = """import numpy as np
-print("Hello world")
 
+print("Hello world")
 print("Hello world")
 def some_fn():
     a=np.zeros(10)
@@ -1846,8 +1845,8 @@ a=3
 print("Hello world")
     """
     expected_code = """import numpy as np
-print("Hello world")
 
+print("Hello world")
 a=3
 print("Hello world")
 def some_fn():
@@ -1922,8 +1921,8 @@ class NewClass:
 print("Hello world")
     """
     expected_code = """import numpy as np
-print("Hello world")
 
+print("Hello world")
 a=2
 print("Hello world")
 def some_fn():
@@ -1999,8 +1998,8 @@ a=3
 print("Hello world")
     """
     expected_code = """import numpy as np
-print("Hello world")
 
+print("Hello world")
 a=3
 print("Hello world")
 def some_fn():
@@ -2082,8 +2081,8 @@ class NewClass:
 print("Hello world")
 """
     expected_code = """import numpy as np
-print("Hello world")
 
+print("Hello world")
 if 2<3:
     a=4
 else:
