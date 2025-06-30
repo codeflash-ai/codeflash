@@ -2,15 +2,16 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 def funcA(number):
-    number = number if number < 1000 else 1000
-    k = 0
-    for i in range(number * 100):
-        k += i
-    # Simplify the for loop by using sum with a range object
-    j = sum(range(number))
+    number = min(1000, number)
 
-    # Use a generator expression directly in join for more efficiency
-    return " ".join(str(i) for i in range(number))
+    # Use arithmetic formula to sum efficiently
+    k = (number * 100 - 1) * (number * 100) // 2
+
+    # Use arithmetic formula for sum instead of sum(range())
+    j = (number - 1) * number // 2
+
+    # Pre-create string representations for faster join
+    return " ".join([str(i) for i in range(number)])
 
 
 def test_threadpool() -> None:
@@ -21,6 +22,7 @@ def test_threadpool() -> None:
     for r in result:
         print(r)
 
+
 class AlexNet:
     def __init__(self, num_classes=1000):
         self.num_classes = num_classes
@@ -28,7 +30,7 @@ class AlexNet:
 
     def forward(self, x):
         features = self._extract_features(x)
-        
+
         output = self._classify(features)
         return output
 
@@ -43,14 +45,16 @@ class AlexNet:
         total = sum(features)
         return [total % self.num_classes for _ in features]
 
+
 class SimpleModel:
     @staticmethod
     def predict(data):
         return [x * 2 for x in data]
-    
+
     @classmethod
     def create_default(cls):
         return cls()
+
 
 def test_models():
     model = AlexNet(num_classes=10)
@@ -59,6 +63,7 @@ def test_models():
 
     model2 = SimpleModel.create_default()
     prediction = model2.predict(input_data)
+
 
 if __name__ == "__main__":
     test_threadpool()
