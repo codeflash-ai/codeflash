@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.tracing.profile_stats import ProfileStats
 
 if TYPE_CHECKING:
@@ -105,18 +107,30 @@ class FunctionRanker:
         return 0.0
 
     def rank_functions(self, functions_to_optimize: list[FunctionToOptimize]) -> list[FunctionToOptimize]:
-        # Calculate ttX scores for all functions
+        # Load and cache function stats up front
+        stats = self.load_function_stats()
+
+        # Compute function ttX scores using direct dict lookup
         function_scores = []
+        append = function_scores.append  # Localize for loop speed
+
         for func in functions_to_optimize:
-            ttx_score = self.get_function_ttx_score(func)
-            function_scores.append((func, ttx_score))
+            # Precompute both possible keys for maximum efficiency
+            key1 = f"{func.file_path}:{func.qualified_name}"
+            tstat = stats.get(key1)
+            if tstat is not None:
+                ttx_score = tstat["ttx_score"]
+            else:
+                key2 = f"{func.file_path}:{func.function_name}"
+                tstat = stats.get(key2)
+                if tstat is not None:
+                    ttx_score = tstat["ttx_score"]
+                else:
+                    ttx_score = 0.0
+            append((func, ttx_score))
 
         # Sort by ttX score descending (highest impact first)
         function_scores.sort(key=lambda x: x[1], reverse=True)
-
-        # logger.info("Function ranking by ttX score:")
-        # for i, (func, score) in enumerate(function_scores[:10]):  # Top 10
-        #     logger.info(f"  {i + 1}. {func.qualified_name} (ttX: {score:.0f}ns)")
 
         ranked_functions = [func for func, _ in function_scores]
         logger.info(f"Ranked {len(ranked_functions)} functions by optimization priority")
