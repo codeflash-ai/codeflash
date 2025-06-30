@@ -331,7 +331,9 @@ def add_needed_imports_from_module(
             RemoveImportsVisitor.remove_unused_import(dst_context, mod)
         for mod, obj_seq in gatherer.object_mapping.items():
             for obj in obj_seq:
-                if f"{mod}.{obj}" in helper_functions_fqn:
+                if (
+                    f"{mod}.{obj}" in helper_functions_fqn or dst_context.full_module_name == mod  # avoid circular deps
+                ):
                     continue  # Skip adding imports for helper functions already in the context
                 AddImportsVisitor.add_needed_import(dst_context, mod, obj)
                 RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
