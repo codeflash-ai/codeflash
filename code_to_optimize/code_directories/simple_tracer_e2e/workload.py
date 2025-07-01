@@ -3,13 +3,11 @@ from concurrent.futures import ThreadPoolExecutor
 
 def funcA(number):
     number = min(1000, number)
-    # The original for loop accumulating in k is removed as its result is unused
-
-    # Simplify the for loop by using sum with a range object (comment kept for reference)
-    # j = sum(range(number))  # This line is obsolete and removed for efficiency
-
-    # Use map(str, range(number)) in join for maximum efficiency
-    return " ".join(map(str, range(number)))
+    if number == 0:
+        return ""
+    # Bind str locally for minor speedup, and use a list comprehension
+    s = str  # micro-optimization
+    return " ".join([s(i) for i in range(number)])
 
 
 def test_threadpool() -> None:
