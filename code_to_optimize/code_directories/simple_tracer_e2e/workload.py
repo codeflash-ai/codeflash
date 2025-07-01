@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from time import sleep
 
 
 def funcA(number):
@@ -46,11 +47,19 @@ class AlexNet:
 class SimpleModel:
     @staticmethod
     def predict(data):
-        return [x * 2 for x in data]
+        result = []
+        sleep(10)
+        for i in range(500):
+            for x in data:
+                computation = 0
+                computation += x * i ** 2
+                result.append(computation)
+        return result
     
     @classmethod
     def create_default(cls):
         return cls()
+
 
 def test_models():
     model = AlexNet(num_classes=10)
