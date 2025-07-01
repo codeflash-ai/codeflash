@@ -292,10 +292,3 @@ def perform_function_optimization(  # noqa: PLR0911
         "extra": f"Speedup: {speedup:.2f}x faster",
         "optimization": optimized_source,
     }
-
-
-if __name__ == "__main__":
-    from codeflash.cli_cmds.console import console
-
-    console.quiet = True
-    server.start_io()
