@@ -9,7 +9,7 @@ from codeflash.models.models import FunctionParent
 
 @pytest.fixture
 def trace_file():
-    return Path(__file__).parent.parent / "code_to_optimize/code_directories/simple_tracer_e2e/codeflash.trace.sqlite3"
+    return Path(__file__).parent.parent / "code_to_optimize/code_directories/simple_tracer_e2e/codeflash.trace"
 
 
 @pytest.fixture
@@ -58,8 +58,8 @@ def test_load_function_stats(function_ranker):
     # Verify funcA specific values
     assert func_a_stats["function_name"] == "funcA"
     assert func_a_stats["call_count"] == 1
-    assert func_a_stats["own_time_ns"] == 27000
-    assert func_a_stats["cumulative_time_ns"] == 1629000
+    assert func_a_stats["own_time_ns"] == 153000
+    assert func_a_stats["cumulative_time_ns"] == 5960000
 
 
 def test_get_function_ttx_score(function_ranker, workload_functions):
@@ -73,8 +73,8 @@ def test_get_function_ttx_score(function_ranker, workload_functions):
     ttx_score = function_ranker.get_function_ttx_score(func_a)
     
     # Expected ttX score: own_time + (time_in_callees * call_count)
-    # = 27000 + ((1629000 - 27000) * 1) = 1629000
-    assert ttx_score == 1629000
+    # = 153000 + ((5960000 - 153000) * 1) = 5960000
+    assert ttx_score == 5960000
 
 
 def test_rank_functions(function_ranker, workload_functions):
@@ -112,9 +112,9 @@ def test_get_function_stats_summary(function_ranker, workload_functions):
     
     assert stats is not None
     assert stats["function_name"] == "funcA"
-    assert stats["own_time_ns"] == 27000
-    assert stats["cumulative_time_ns"] == 1629000
-    assert stats["ttx_score"] == 1629000
+    assert stats["own_time_ns"] == 153000
+    assert stats["cumulative_time_ns"] == 5960000
+    assert stats["ttx_score"] == 5960000
 
 
 
@@ -134,5 +134,39 @@ def test_importance_calculation(function_ranker):
     assert func_a_stats is not None
     importance = func_a_stats["own_time_ns"] / total_program_time
     
-    # funcA importance should be approximately 0.33% (27000/8242000)
-    assert abs(importance - 0.00327) < 0.001
+    # funcA importance should be approximately 1.0% (153000/15281000)
+    assert abs(importance - 0.01001) < 0.001
+
+
+def test_simple_model_predict_stats(function_ranker, workload_functions):
+    # Find SimpleModel::predict function
+    predict_func = None
+    for func in workload_functions:
+        if func.function_name == "predict":
+            predict_func = func
+            break
+    
+    assert predict_func is not None
+    
+    stats = function_ranker.get_function_stats_summary(predict_func)
+    assert stats is not None
+    assert stats["function_name"] == "predict"
+    assert stats["call_count"] == 1
+    assert stats["own_time_ns"] == 2368000
+    assert stats["cumulative_time_ns"] == 4103000
+    assert stats["ttx_score"] == 4103000
+    
+    # Test ttX score calculation
+    ttx_score = function_ranker.get_function_ttx_score(predict_func)
+    # Expected ttX score: own_time + (time_in_callees * call_count)
+    # = 2368000 + ((4103000 - 2368000) * 1) = 4103000
+    assert ttx_score == 4103000
+    
+    # Test importance calculation for predict function
+    total_program_time = sum(
+        s["own_time_ns"] for s in function_ranker._function_stats.values() 
+        if s.get("own_time_ns", 0) > 0
+    )
+    importance = stats["own_time_ns"] / total_program_time
+    # predict importance should be approximately 15.5% (2368000/15281000)
+    assert abs(importance - 0.155) < 0.01

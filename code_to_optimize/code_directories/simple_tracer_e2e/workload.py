@@ -48,7 +48,7 @@ class SimpleModel:
     @staticmethod
     def predict(data):
         result = []
-        sleep(10)
+        sleep(0.1)
         for i in range(500):
             for x in data:
                 computation = 0
