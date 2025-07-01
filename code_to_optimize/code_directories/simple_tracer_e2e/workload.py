@@ -1,9 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor
-from time import sleep
 
 
 def funcA(number):
-    number = number if number < 1000 else 1000
+    number = min(1000, number)
     k = 0
     for i in range(number * 100):
         k += i
@@ -22,6 +21,7 @@ def test_threadpool() -> None:
     for r in result:
         print(r)
 
+
 class AlexNet:
     def __init__(self, num_classes=1000):
         self.num_classes = num_classes
@@ -29,7 +29,7 @@ class AlexNet:
 
     def forward(self, x):
         features = self._extract_features(x)
-        
+
         output = self._classify(features)
         return output
 
@@ -44,18 +44,16 @@ class AlexNet:
         total = sum(features)
         return [total % self.num_classes for _ in features]
 
+
 class SimpleModel:
     @staticmethod
     def predict(data):
-        result = []
-        sleep(10)
-        for i in range(500):
-            for x in data:
-                computation = 0
-                computation += x * i ** 2
-                result.append(computation)
+        # Precompute i_squares
+        i_squares = [i * i for i in range(500)]
+        # Compute result using list comprehension for better performance
+        result = [x * i_sq for i_sq in i_squares for x in data]
         return result
-    
+
     @classmethod
     def create_default(cls):
         return cls()
@@ -68,6 +66,7 @@ def test_models():
 
     model2 = SimpleModel.create_default()
     prediction = model2.predict(input_data)
+
 
 if __name__ == "__main__":
     test_threadpool()
