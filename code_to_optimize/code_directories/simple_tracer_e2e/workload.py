@@ -4,11 +4,9 @@ from time import sleep
 
 def funcA(number):
     number = min(1000, number)
-
-    # k and j are unused in return value, so no need to compute them
-
-    # Use map instead of generator expression for slightly faster performance in join
-    return " ".join(map(str, range(number)))
+    if number <= 0:
+        return ""
+    return " ".join(_str_lookup[:number])
 
 
 def test_threadpool() -> None:
@@ -72,3 +70,5 @@ def test_models():
 if __name__ == "__main__":
     test_threadpool()
     test_models()
+
+_str_lookup = [str(i) for i in range(1000)]
