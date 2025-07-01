@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_consts import DEFAULT_IMPORTANCE_THRESHOLD
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.tracing.profile_stats import ProfileStats
 
 if TYPE_CHECKING:
@@ -81,14 +83,13 @@ class FunctionRanker:
             self._function_stats = {}
 
     def _get_function_stats(self, function_to_optimize: FunctionToOptimize) -> dict | None:
-        possible_keys = [
-            f"{function_to_optimize.file_path}:{function_to_optimize.qualified_name}",
-            f"{function_to_optimize.file_path}:{function_to_optimize.function_name}",
-        ]
-        for key in possible_keys:
-            if key in self._function_stats:
-                return self._function_stats[key]
-        return None
+        # First try qualified_name, then function_name, avoid allocating a list
+        key1 = f"{function_to_optimize.file_path}:{function_to_optimize.qualified_name}"
+        stats = self._function_stats.get(key1)
+        if stats is not None:
+            return stats
+        key2 = f"{function_to_optimize.file_path}:{function_to_optimize.function_name}"
+        return self._function_stats.get(key2, None)
 
     def get_function_ttx_score(self, function_to_optimize: FunctionToOptimize) -> float:
         stats = self._get_function_stats(function_to_optimize)
