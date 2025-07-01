@@ -38,8 +38,9 @@ class AlexNet:
         return result
 
     def _classify(self, features):
-        total = sum(features)
-        return [total % self.num_classes for _ in features]
+        total_mod = sum(features) % self.num_classes
+        # Compute total_mod once and repeat it for the length of features
+        return [total_mod] * len(features)
 
 
 class SimpleModel:
