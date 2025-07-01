@@ -3,14 +3,14 @@ from concurrent.futures import ThreadPoolExecutor
 
 def funcA(number):
     number = min(1000, number)
-    k = 0
-    for i in range(number * 100):
-        k += i
-    # Simplify the for loop by using sum with a range object
-    j = sum(range(number))
+    # Replace the for loop with direct formula for arithmetic sum
+    k = (number * 100) * (number * 100 - 1) // 2
 
-    # Use a generator expression directly in join for more efficiency
-    return " ".join(str(i) for i in range(number))
+    # Simplify the for loop by using arithmetic series sum formula
+    j = number * (number - 1) // 2
+
+    # Use map(str, ...) instead of generator expr in join for improved efficiency
+    return " ".join(map(str, range(number)))
 
 
 def test_threadpool() -> None:
