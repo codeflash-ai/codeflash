@@ -346,6 +346,12 @@ class Tracer:
             # someone can override the getattr method and raise an exception. I'm looking at you wrapt
             return
 
+        # Extract class name from co_qualname for static methods that lack self/cls
+        if class_name is None and "." in getattr(code, "co_qualname", ""):
+            qualname_parts = code.co_qualname.split(".")
+            if len(qualname_parts) >= 2:
+                class_name = qualname_parts[-2]
+
         try:
             function_qualified_name = f"{file_name}:{code.co_qualname}"
         except AttributeError:
