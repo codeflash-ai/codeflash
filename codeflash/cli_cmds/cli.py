@@ -6,6 +6,7 @@ from pathlib import Path
 from codeflash.cli_cmds import logging_config
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions
+from codeflash.cli_cmds.cmd_doctor import run_doctor
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import exit_with_message
@@ -22,6 +23,9 @@ def parse_args() -> Namespace:
 
     init_actions_parser = subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
     init_actions_parser.set_defaults(func=install_github_actions)
+
+    doctor_parser = subparsers.add_parser("doctor", help="Verify Codeflash setup and diagnose issues")
+    doctor_parser.set_defaults(func=run_doctor)
     parser.add_argument("--file", help="Try to optimize only this file")
     parser.add_argument("--function", help="Try to optimize only this function within the given file path")
     parser.add_argument(
@@ -51,6 +55,11 @@ def parse_args() -> Namespace:
         "--verify-setup",
         action="store_true",
         help="Verify that codeflash is set up correctly by optimizing bubble sort as a test.",
+    )
+    parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help="Run setup diagnostics to verify Codeflash installation and configuration.",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose debug logs")
     parser.add_argument("--version", action="store_true", help="Print the version of codeflash")
