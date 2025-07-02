@@ -14,13 +14,14 @@ from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
-from codeflash.code_utils.git_utils import get_repo_owner_and_name, git_root_dir, get_current_branch
-from codeflash.result.explanation import Explanation
-from codeflash.version import __version__
+from codeflash.code_utils.git_utils import get_current_branch, get_repo_owner_and_name, git_root_dir
 from codeflash.github.PrComment import FileDiffContent, PrComment
+from codeflash.version import __version__
 
 if TYPE_CHECKING:
     from requests import Response
+
+    from codeflash.result.explanation import Explanation
 
 from packaging import version
 
@@ -175,8 +176,9 @@ def create_pr(
     }
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
+
 def create_staging(
-    original_code:str,
+    original_code: str,
     new_code: str,
     explanation: Explanation,
     existing_tests_source: str,
@@ -204,26 +206,27 @@ def create_staging(
         for p in original_code
     }
     payload = {
-        "baseBranch":  get_current_branch(),
+        "baseBranch": get_current_branch(),
         "diffContents": build_file_changes,
-        "prCommentFields":   PrComment(
-        optimization_explanation=explanation.explanation_message(),
-        best_runtime=explanation.best_runtime_ns,
-        original_runtime=explanation.original_runtime_ns,
-        function_name=explanation.function_name,
-        relative_file_path=relative_path,
-        speedup_x=explanation.speedup_x,
-        speedup_pct=explanation.speedup_pct,
-        winning_behavioral_test_results=explanation.winning_behavioral_test_results,
-        winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
-        benchmark_details=explanation.benchmark_details,
-    ).to_json(),
+        "prCommentFields": PrComment(
+            optimization_explanation=explanation.explanation_message(),
+            best_runtime=explanation.best_runtime_ns,
+            original_runtime=explanation.original_runtime_ns,
+            function_name=explanation.function_name,
+            relative_file_path=relative_path,
+            speedup_x=explanation.speedup_x,
+            speedup_pct=explanation.speedup_pct,
+            winning_behavioral_test_results=explanation.winning_behavioral_test_results,
+            winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
+            benchmark_details=explanation.benchmark_details,
+        ).to_json(),
         "existingTests": existing_tests_source,
         "generatedTests": generated_original_test_source,
         "traceId": function_trace_id,
         "coverage_message": coverage_message,
     }
     return make_cfapi_request(endpoint="/create-staging", method="POST", payload=payload)
+
 
 def is_github_app_installed_on_repo(owner: str, repo: str) -> bool:
     """Check if the Codeflash GitHub App is installed on the specified repository.

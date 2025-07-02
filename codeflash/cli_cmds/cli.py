@@ -47,11 +47,7 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--no-pr", action="store_true", help="Do not create a PR for the optimization, only update the code locally."
     )
-    parser.add_argument(
-        "--staging-review",
-        action="store_true",
-        help="Upload optimizations to staging for review"
-    )
+    parser.add_argument("--staging-review", action="store_true", help="Upload optimizations to staging for review")
     parser.add_argument(
         "--verify-setup",
         action="store_true",

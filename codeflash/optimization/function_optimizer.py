@@ -19,7 +19,7 @@ from rich.syntax import Syntax
 from rich.tree import Tree
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
-from codeflash.api.cfapi import add_code_context_hash, mark_optimization_success, create_staging
+from codeflash.api.cfapi import add_code_context_hash, create_staging, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
@@ -997,20 +997,40 @@ class FunctionOptimizer:
                 original_code_combined[explanation.file_path] = self.function_to_optimize_source_code
                 new_code_combined = new_helper_code.copy()
                 new_code_combined[explanation.file_path] = new_code
-                self.process_review(original_code_baseline, best_optimization, generated_tests,
-                              test_functions_to_remove, concolic_test_str, original_code_combined, new_code_combined,
-                              explanation, function_to_all_tests, exp_type, original_helper_code)
+                self.process_review(
+                    original_code_baseline,
+                    best_optimization,
+                    generated_tests,
+                    test_functions_to_remove,
+                    concolic_test_str,
+                    original_code_combined,
+                    new_code_combined,
+                    explanation,
+                    function_to_all_tests,
+                    exp_type,
+                    original_helper_code,
+                )
                 self.log_successful_optimization(explanation, generated_tests, exp_type)
         return best_optimization
 
     def process_review(
-        self, original_code_baseline, best_optimization, generated_tests,
-        test_functions_to_remove, concolic_test_str, original_code_combined,
-        new_code_combined, explanation, function_to_all_tests, exp_type, original_helper_code
-    ):
+        self,
+        original_code_baseline: OriginalCodeBaseline,
+        best_optimization: BestOptimization,
+        generated_tests: GeneratedTestsList,
+        test_functions_to_remove: list[str],
+        concolic_test_str: str | None,
+        original_code_combined: dict[Path, str],
+        new_code_combined: dict[Path, str],
+        explanation: Explanation,
+        function_to_all_tests: dict[str, set[FunctionCalledInTest]],
+        exp_type: str,
+        original_helper_code: dict[Path, str],
+    ) -> None:
         coverage_message = (
             original_code_baseline.coverage_results.build_message()
-            if original_code_baseline.coverage_results else "Coverage data not available"
+            if original_code_baseline.coverage_results
+            else "Coverage data not available"
         )
 
         generated_tests = remove_functions_from_generated_tests(
@@ -1018,7 +1038,9 @@ class FunctionOptimizer:
         )
 
         original_runtime_by_test = original_code_baseline.benchmarking_test_results.usable_runtime_data_by_test_case()
-        optimized_runtime_by_test = best_optimization.winning_benchmarking_test_results.usable_runtime_data_by_test_case()
+        optimized_runtime_by_test = (
+            best_optimization.winning_benchmarking_test_results.usable_runtime_data_by_test_case()
+        )
 
         generated_tests = add_runtime_comments_to_generated_tests(
             self.test_cfg, generated_tests, original_runtime_by_test, optimized_runtime_by_test
@@ -1038,15 +1060,17 @@ class FunctionOptimizer:
             optimized_runtimes_all=optimized_runtime_by_test,
         )
 
-        data = dict(
-            original_code=original_code_combined,
-            new_code=new_code_combined,
-            explanation=explanation,
-            existing_tests_source=existing_tests,
-            generated_original_test_source=generated_tests_str,
-            function_trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
-            coverage_message=coverage_message,
-        )
+        data = {
+            "original_code": original_code_combined,
+            "new_code": new_code_combined,
+            "explanation": explanation,
+            "existing_tests_source": existing_tests,
+            "generated_original_test_source": generated_tests_str,
+            "function_trace_id": self.function_trace_id[:-4] + exp_type
+            if self.experiment_id
+            else self.function_trace_id,
+            "coverage_message": coverage_message,
+        }
 
         if not self.args.no_pr and not self.args.staging_review:
             data["git_remote"] = self.args.git_remote
@@ -1059,13 +1083,12 @@ class FunctionOptimizer:
                 trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
             )
 
-        if (not self.args.no_pr) or not self.args.staging_review:
-            if self.args.all or env_utils.get_pr_number() or (self.args.file and not self.args.function):
-                self.write_code_and_helpers(
-                    self.function_to_optimize_source_code,
-                    original_helper_code,
-                    self.function_to_optimize.file_path,
-                )
+        if ((not self.args.no_pr) or not self.args.staging_review) and (
+            self.args.all or env_utils.get_pr_number() or (self.args.file and not self.args.function)
+        ):
+            self.write_code_and_helpers(
+                self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+            )
 
     def establish_original_code_baseline(
         self,
