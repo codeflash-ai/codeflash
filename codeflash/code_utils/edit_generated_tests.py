@@ -55,14 +55,14 @@ class CfoVisitor(ast.NodeVisitor):
         self.name = qualifed_name.split(".")[-1]
         self.results: list[int] = []  # map actual line number to line number in ast
 
-    def visit_Call(self, node):  # noqa: ANN201, ANN001
+    def visit_Call(self, node):  # type: ignore[no-untyped-def] # noqa: ANN201, ANN001
         """Detect fn calls."""
-        func_name = self._get_called_func_name(node.func)
+        func_name = self._get_called_func_name(node.func)  # type: ignore[no-untyped-call]
         if func_name == self.name:
             self.results.append(node.lineno - 1)
         self.generic_visit(node)
 
-    def _get_called_func_name(self, node):  # noqa: ANN001, ANN202
+    def _get_called_func_name(self, node):  # type: ignore[no-untyped-def] # noqa: ANN001, ANN202
         """Return name of called fn."""
         if isinstance(node, ast.Name):
             return node.id
@@ -130,10 +130,12 @@ def add_runtime_comments_to_generated_tests(
             return updated_node
 
         def leave_SimpleStatementLine(
-            self, original_node: cst.SimpleStatementLine, updated_node: cst.SimpleStatementLine
+            self,
+            original_node: cst.SimpleStatementLine,  # noqa: ARG002
+            updated_node: cst.SimpleStatementLine,
         ) -> cst.SimpleStatementLine:
             # Check if this statement line contains a call to self.name
-            if self._contains_myfunc_call(updated_node):
+            if self._contains_myfunc_call(updated_node):  # type: ignore[no-untyped-call]
                 # Find matching test cases by looking for this test function name in the test results
                 self.cfo_idx_loc_to_look_at += 1
                 matching_original_times = []
@@ -209,21 +211,21 @@ def add_runtime_comments_to_generated_tests(
                         )
             return updated_node
 
-        def _contains_myfunc_call(self, node):
+        def _contains_myfunc_call(self, node):  # type: ignore[no-untyped-def] # noqa : ANN202, ANN001
             """Recursively search for any Call node in the statement whose function is named self.name (including obj.myfunc)."""
 
             class Finder(cst.CSTVisitor):
-                def __init__(self, name: str):
+                def __init__(self, name: str) -> None:
                     super().__init__()
                     self.found = False
                     self.name = name
 
-                def visit_Call(self, call_node):
+                def visit_Call(self, call_node) -> None:  # type: ignore[no-untyped-def] # noqa : ANN001
                     func_expr = call_node.func
                     if isinstance(func_expr, cst.Name):
                         if func_expr.value == self.name:
                             self.found = True
-                    elif isinstance(func_expr, cst.Attribute):
+                    elif isinstance(func_expr, cst.Attribute):  # noqa : SIM102
                         if func_expr.attr.value == self.name:
                             self.found = True
 
