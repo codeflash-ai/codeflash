@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.config_consts import DEFAULT_IMPORTANCE_THRESHOLD
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.tracing.profile_stats import ProfileStats
@@ -128,7 +128,7 @@ class FunctionRanker:
                 if importance >= DEFAULT_IMPORTANCE_THRESHOLD:
                     important_functions.append(func)
                 else:
-                    logger.info(
+                    logger.debug(
                         f"Filtering out function {func.qualified_name} with importance "
                         f"{importance:.2%} (below threshold {DEFAULT_IMPORTANCE_THRESHOLD:.2%})"
                     )
@@ -136,5 +136,6 @@ class FunctionRanker:
         logger.info(
             f"Filtered down to {len(important_functions)} important functions from {len(functions_to_optimize)} total functions"
         )
+        console.rule()
 
         return self.rank_functions(important_functions)
