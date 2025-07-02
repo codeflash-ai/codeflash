@@ -133,21 +133,14 @@ def check_git_repository() -> Tuple[bool, str]:
 
 def check_project_configuration() -> Tuple[bool, str]:
     """Check for project configuration files."""
-    try:
-        config_files = ["pyproject.toml", "setup.py", "requirements.txt", "setup.cfg"]
-        found_configs = []
-        
-        for config_file in config_files:
-            if Path(config_file).exists():
-                found_configs.append(config_file)
-        
-        if found_configs:
-            return True, f"Project configuration found: {', '.join(found_configs)} ✓"
-        else:
-            return False, "No project configuration files found (pyproject.toml, setup.py, etc.)"
-            
-    except Exception as e:
-        return False, f"Project configuration check failed: {e}"
+    config_files = ["pyproject.toml", "setup.py", "requirements.txt", "setup.cfg"]
+    # Use list comprehension for efficiency and readability
+    found_configs = [fname for fname in config_files if Path(fname).exists()]
+    
+    if found_configs:
+        return True, f"Project configuration found: {', '.join(found_configs)} ✓"
+    else:
+        return False, "No project configuration files found (pyproject.toml, setup.py, etc.)"
 
 
 def print_results(results: List[Tuple[str, bool, str]], all_passed: bool) -> None:
