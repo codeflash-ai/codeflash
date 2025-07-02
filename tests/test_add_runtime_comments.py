@@ -53,6 +53,7 @@ class TestAddRuntimeComments:
     assert codeflash_output == [1, 2, 3]
 """
 
+        qualified_name = "bubble_sort"
         generated_test = GeneratedTests(
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
@@ -75,7 +76,7 @@ class TestAddRuntimeComments:
         original_runtimes = original_test_results.usable_runtime_data_by_test_case()
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
         # Test the functionality
-        result = add_runtime_comments_to_generated_tests(test_config, generated_tests, original_runtimes, optimized_runtimes)
+        result = add_runtime_comments_to_generated_tests(qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes)
 
         # Check that comments were added
         modified_source = result.generated_tests[0].generated_original_test_source
@@ -85,7 +86,7 @@ class TestAddRuntimeComments:
     def test_multiple_test_functions(self, test_config):
         """Test handling multiple test functions in the same file."""
         test_source = """def test_bubble_sort():
-    codeflash_output = bubble_sort([3, 1, 2])
+    codeflash_output = quick_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
 
 def test_quick_sort():
@@ -95,7 +96,7 @@ def test_quick_sort():
 def helper_function():
     return "not a test"
 """
-
+        qualified_name = "quick_sort"
         generated_test = GeneratedTests(
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
@@ -121,7 +122,7 @@ def helper_function():
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
 
         # Test the functionality
-        result = add_runtime_comments_to_generated_tests(test_config, generated_tests, original_runtimes, optimized_runtimes)
+        result = add_runtime_comments_to_generated_tests(qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes)
 
         modified_source = result.generated_tests[0].generated_original_test_source
 
@@ -151,7 +152,7 @@ def helper_function():
     codeflash_output = some_function()
     assert codeflash_output is not None
 """
-
+            qualified_name = "some_function"
             generated_test = GeneratedTests(
                 generated_original_test_source=test_source,
                 instrumented_behavior_test_source="",
@@ -173,7 +174,7 @@ def helper_function():
             optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
             # Test the functionality
             result = add_runtime_comments_to_generated_tests(
-                test_config, generated_tests, original_runtimes, optimized_runtimes
+                qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes
             )
 
             modified_source = result.generated_tests[0].generated_original_test_source
@@ -186,6 +187,7 @@ def helper_function():
     assert codeflash_output == [1, 2, 3]
 """
 
+        qualified_name = "bubble_sort"
         generated_test = GeneratedTests(
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
@@ -204,7 +206,7 @@ def helper_function():
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
 
         # Test the functionality
-        result = add_runtime_comments_to_generated_tests(test_config, generated_tests, original_runtimes, optimized_runtimes)
+        result = add_runtime_comments_to_generated_tests(qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes)
 
         # Check that no comments were added
         modified_source = result.generated_tests[0].generated_original_test_source
@@ -217,6 +219,7 @@ def helper_function():
     assert codeflash_output == [1, 2, 3]
 """
 
+        qualified_name = "bubble_sort"
         generated_test = GeneratedTests(
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
@@ -236,7 +239,7 @@ def helper_function():
         original_runtimes = original_test_results.usable_runtime_data_by_test_case()
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
         # Test the functionality
-        result = add_runtime_comments_to_generated_tests(test_config, generated_tests, original_runtimes, optimized_runtimes)
+        result = add_runtime_comments_to_generated_tests(qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes)
 
         # Check that no comments were added
         modified_source = result.generated_tests[0].generated_original_test_source
@@ -248,7 +251,7 @@ def helper_function():
     codeflash_output = bubble_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
 """
-
+        qualified_name = "bubble_sort"
         generated_test = GeneratedTests(
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
@@ -275,7 +278,7 @@ def helper_function():
         original_runtimes = original_test_results.usable_runtime_data_by_test_case()
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
         # Test the functionality
-        result = add_runtime_comments_to_generated_tests(test_config, generated_tests, original_runtimes, optimized_runtimes)
+        result = add_runtime_comments_to_generated_tests(qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes)
 
         # Check that minimum times were used (500μs -> 300μs)
         modified_source = result.generated_tests[0].generated_original_test_source
@@ -287,7 +290,7 @@ def helper_function():
     result = bubble_sort([3, 1, 2])
     assert result == [1, 2, 3]
 """
-
+        qualified_name = "bubble_sort"
         generated_test = GeneratedTests(
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
@@ -309,7 +312,7 @@ def helper_function():
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
 
         # Test the functionality
-        result = add_runtime_comments_to_generated_tests(test_config, generated_tests, original_runtimes, optimized_runtimes)
+        result = add_runtime_comments_to_generated_tests(qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes)
 
         # Check that no comments were added (no codeflash_output assignment)
         modified_source = result.generated_tests[0].generated_original_test_source
@@ -329,7 +332,7 @@ def helper_function():
             behavior_file_path=Path("/project/tests/test_module.py"),
             perf_file_path=Path("/project/tests/test_module_perf.py")
         )
-
+        qualified_name = "bubble_sort"
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
 
         # Create test results
@@ -343,7 +346,7 @@ def helper_function():
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
 
         # Test the functionality - should handle parse error gracefully
-        result = add_runtime_comments_to_generated_tests(test_config, generated_tests, original_runtimes, optimized_runtimes)
+        result = add_runtime_comments_to_generated_tests(qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes)
 
         # Check that original test is preserved when parsing fails
         modified_source = result.generated_tests[0].generated_original_test_source
@@ -352,7 +355,7 @@ def helper_function():
     def test_multiple_generated_tests(self, test_config):
         """Test handling multiple generated test objects."""
         test_source_1 = """def test_bubble_sort():
-    codeflash_output = bubble_sort([3, 1, 2])
+    codeflash_output = quick_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
 """
 
@@ -363,7 +366,7 @@ def helper_function():
     codeflash_output = quick_sort([5, 2, 8])
     assert codeflash_output == [2, 5, 8]
 """
-
+        qualified_name = "quick_sort"
         generated_test_1 = GeneratedTests(
             generated_original_test_source=test_source_1,
             instrumented_behavior_test_source="",
@@ -396,7 +399,7 @@ def helper_function():
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
 
         # Test the functionality
-        result = add_runtime_comments_to_generated_tests(test_config, generated_tests, original_runtimes, optimized_runtimes)
+        result = add_runtime_comments_to_generated_tests(qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes)
 
         # Check that comments were added to both test files
         modified_source_1 = result.generated_tests[0].generated_original_test_source
@@ -411,7 +414,7 @@ def helper_function():
     codeflash_output = bubble_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
 """
-
+        qualified_name = "bubble_sort"
         original_behavior_source = "behavior test source"
         original_perf_source = "perf test source"
         original_behavior_path = Path("/project/tests/test_module.py")
@@ -437,7 +440,7 @@ def helper_function():
         original_runtimes = original_test_results.usable_runtime_data_by_test_case()
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
         # Test the functionality
-        result = add_runtime_comments_to_generated_tests(test_config, generated_tests, original_runtimes, optimized_runtimes)
+        result = add_runtime_comments_to_generated_tests(qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes)
 
         # Check that other attributes are preserved
         modified_test = result.generated_tests[0]
@@ -458,7 +461,7 @@ def helper_function():
     assert result == [1, 2, 3]
     assert arr == [1, 2, 3]  # Input should be mutated
 """
-
+        qualified_name = "sorter"
         generated_test = GeneratedTests(
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
@@ -480,7 +483,7 @@ def helper_function():
         optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
 
         # Test the functionality
-        result = add_runtime_comments_to_generated_tests(test_config, generated_tests, original_runtimes, optimized_runtimes)
+        result = add_runtime_comments_to_generated_tests(qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes)
 
         # Check that comments were added to the correct line
         modified_source = result.generated_tests[0].generated_original_test_source
@@ -504,7 +507,7 @@ def helper_function():
     codeflash_output = some_function()
     assert codeflash_output == expected
 '''
-
+        qualified_name = "some_function"
         generated_test = GeneratedTests(
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
@@ -527,7 +530,7 @@ def helper_function():
         optimized_runtimes = {invocation_id: [500000000, 600000000]}   # 0.5s, 0.6s in nanoseconds
 
         result = add_runtime_comments_to_generated_tests(
-            test_config, generated_tests, original_runtimes, optimized_runtimes
+            qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes
         )
 
         expected_source = '''def test_function():
@@ -545,7 +548,7 @@ def helper_function():
         codeflash_output = some_function()
         assert codeflash_output == expected
 '''
-
+        qualified_name = "some_function"
         generated_test = GeneratedTests(
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
@@ -569,7 +572,7 @@ def helper_function():
         optimized_runtimes = {invocation_id: [1000000000]} # 1s in nanoseconds
 
         result = add_runtime_comments_to_generated_tests(
-            test_config, generated_tests, original_runtimes, optimized_runtimes
+            qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes
         )
 
         expected_source = '''class TestClass:
@@ -589,8 +592,10 @@ def helper_function():
     assert codeflash_output == expected
     codeflash_output = another_function()
     assert codeflash_output == expected2
+    codeflash_output = some_function()
+    assert codeflash_output == expected2
 '''
-
+        qualified_name = "some_function"
         generated_test = GeneratedTests(
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
@@ -612,22 +617,24 @@ def helper_function():
             test_module_path="tests.test_module",
             test_class_name=None,
             test_function_name="test_function",
-            function_getting_tested="another_function",
-            iteration_id="3",
+            function_getting_tested="some_function",
+            iteration_id="5",
         )
 
         original_runtimes = {invocation_id1: [1500000000], invocation_id2: [10]}  # 1.5s in nanoseconds
         optimized_runtimes = {invocation_id1: [750000000], invocation_id2: [5]}  # 0.75s in nanoseconds
 
         result = add_runtime_comments_to_generated_tests(
-            test_config, generated_tests, original_runtimes, optimized_runtimes
+            qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes
         )
 
         expected_source = '''def test_function():
     setup_data = prepare_test()
     codeflash_output = some_function() # 1.50s -> 750ms (100% faster)
     assert codeflash_output == expected
-    codeflash_output = another_function() # 10ns -> 5ns (100% faster)
+    codeflash_output = another_function()
+    assert codeflash_output == expected2
+    codeflash_output = some_function() # 10ns -> 5ns (100% faster)
     assert codeflash_output == expected2
 '''
 
@@ -640,7 +647,7 @@ def helper_function():
     codeflash_output = some_function()
     assert codeflash_output == expected
 '''
-
+        qualified_name = "some_function"
         generated_test = GeneratedTests(
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
@@ -664,7 +671,7 @@ def helper_function():
         optimized_runtimes = {invocation_id: [500000000]}
 
         result = add_runtime_comments_to_generated_tests(
-            test_config, generated_tests, original_runtimes, optimized_runtimes
+            qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes
         )
 
         # Source should remain unchanged
@@ -672,12 +679,16 @@ def helper_function():
         assert result.generated_tests[0].generated_original_test_source == test_source
 
     def test_add_runtime_comments_no_codeflash_output(self, test_config):
-        """Test that source remains unchanged when there's no codeflash_output assignment."""
+        """comments will still be added if codeflash output doesnt exist"""
         test_source = '''def test_function():
     result = some_function()
     assert result == expected
 '''
-
+        qualified_name = "some_function"
+        expected = '''def test_function():
+    result = some_function() # 1.00s -> 500ms (100% faster)
+    assert result == expected
+'''
         generated_test = GeneratedTests(
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
@@ -700,12 +711,12 @@ def helper_function():
         optimized_runtimes = {invocation_id: [500000000]}
 
         result = add_runtime_comments_to_generated_tests(
-            test_config, generated_tests, original_runtimes, optimized_runtimes
+            qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes
         )
 
         # Source should remain unchanged
         assert len(result.generated_tests) == 1
-        assert result.generated_tests[0].generated_original_test_source == test_source
+        assert result.generated_tests[0].generated_original_test_source == expected
 
     def test_add_runtime_comments_multiple_tests(self, test_config):
         """Test adding runtime comments to multiple generated tests."""
@@ -715,10 +726,10 @@ def helper_function():
 '''
 
         test_source2 = '''def test_function2():
-    codeflash_output = another_function()
+    codeflash_output = some_function()
     assert codeflash_output == expected
 '''
-
+        qualified_name = "some_function"
         generated_test1 = GeneratedTests(
             generated_original_test_source=test_source1,
             instrumented_behavior_test_source="",
@@ -749,7 +760,7 @@ def helper_function():
             test_module_path="tests.test_module2",
             test_class_name=None,
             test_function_name="test_function2",
-            function_getting_tested="another_function",
+            function_getting_tested="some_function", # not used in this test throughout the entire test file
             iteration_id = "0",
         )
 
@@ -763,7 +774,7 @@ def helper_function():
         }
 
         result = add_runtime_comments_to_generated_tests(
-            test_config, generated_tests, original_runtimes, optimized_runtimes
+            qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes
         )
 
         expected_source1 = '''def test_function1():
@@ -772,7 +783,7 @@ def helper_function():
 '''
 
         expected_source2 = '''def test_function2():
-    codeflash_output = another_function() # 2.00s -> 800ms (150% faster)
+    codeflash_output = some_function() # 2.00s -> 800ms (150% faster)
     assert codeflash_output == expected
 '''
 
@@ -788,7 +799,7 @@ def helper_function():
     codeflash_output = some_function()
     assert codeflash_output == expected
 '''
-
+        qualified_name = "some_function"
         generated_test = GeneratedTests(
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
@@ -819,7 +830,7 @@ def helper_function():
         optimized_runtimes = {invocation_id1: [1500000000], invocation_id2: [1]} # 1.5s (slower!)
 
         result = add_runtime_comments_to_generated_tests(
-            test_config, generated_tests, original_runtimes, optimized_runtimes
+            qualified_name, test_config, generated_tests, original_runtimes, optimized_runtimes
         )
 
         expected_source = '''def test_function():

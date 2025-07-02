@@ -5,7 +5,7 @@ import os
 import re
 from pathlib import Path
 from textwrap import dedent
-from typing import TYPE_CHECKING, Union, Optional
+from typing import TYPE_CHECKING
 
 import libcst as cst
 
@@ -52,30 +52,21 @@ class CfoVisitor(ast.NodeVisitor):
 
     def __init__(self, qualifed_name: str, source_code: str) -> None:
         self.source_lines = source_code.splitlines()
-        self.name = qualifed_name.split('.')[-1]
+        self.name = qualifed_name.split(".")[-1]
         self.results: list[int] = []  # map actual line number to line number in ast
 
-    def visit_Call(self, node):
-        """
-        Detect calls to:
-        - myfunc(...)
-        - obj.myfunc(...)
-        """
+    def visit_Call(self, node):  # noqa: ANN201, ANN001
+        """Detect fn calls."""
         func_name = self._get_called_func_name(node.func)
         if func_name == self.name:
-            self.results.append(node.lineno)
+            self.results.append(node.lineno - 1)
         self.generic_visit(node)
 
-    def _get_called_func_name(self, node):
-        """
-        Given a node like:
-        - Name(id='myfunc')
-        - Attribute(value=..., attr='myfunc')
-        Return the final function name if possible.
-        """
+    def _get_called_func_name(self, node):  # noqa: ANN001, ANN202
+        """Return name of called fn."""
         if isinstance(node, ast.Name):
             return node.id
-        elif isinstance(node, ast.Attribute):
+        if isinstance(node, ast.Attribute):
             return node.attr
         return None
 
@@ -101,7 +92,9 @@ def add_runtime_comments_to_generated_tests(
 
     # TODO: reduce for loops to one
     class RuntimeCommentTransformer(cst.CSTTransformer):
-        def __init__(self, module: cst.Module, test: GeneratedTests, tests_root: Path, rel_tests_root: Path) -> None:
+        def __init__(
+            self, qualified_name: str, module: cst.Module, test: GeneratedTests, tests_root: Path, rel_tests_root: Path
+        ) -> None:
             super().__init__()
             self.test = test
             self.context_stack: list[str] = []
@@ -110,6 +103,7 @@ def add_runtime_comments_to_generated_tests(
             self.module = module
             self.cfo_locs: list[int] = []
             self.cfo_idx_loc_to_look_at: int = -1
+            self.name = qualified_name.split(".")[-1]
 
         def visit_ClassDef(self, node: cst.ClassDef) -> None:
             # Track when we enter a class
@@ -135,14 +129,11 @@ def add_runtime_comments_to_generated_tests(
             self.context_stack.pop()
             return updated_node
 
-        def leave_Call(self, node: cst.Call, updated_node: cst.Call) -> cst.Call:
-            """
-            Detect calls to:
-            - myfunc()
-            - obj.myfunc()
-            """
-            func_name = self._get_called_func_name(node.func)
-            if func_name == self.name:
+        def leave_SimpleStatementLine(
+            self, original_node: cst.SimpleStatementLine, updated_node: cst.SimpleStatementLine
+        ) -> cst.SimpleStatementLine:
+            # Check if this statement line contains a call to self.name
+            if self._contains_myfunc_call(updated_node):
                 # Find matching test cases by looking for this test function name in the test results
                 self.cfo_idx_loc_to_look_at += 1
                 matching_original_times = []
@@ -209,23 +200,36 @@ def add_runtime_comments_to_generated_tests(
                         comment_text = (
                             f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
                         )
-
-                        whitespace = updated_node.trailing_whitespace
-                        new_trailing_whitespace = whitespace.with_changes(comment=cst.Comment(comment_text))
-                        return updated_node.with_changes(trailing_whitespace=new_trailing_whitespace)
+                        return updated_node.with_changes(
+                            trailing_whitespace=cst.TrailingWhitespace(
+                                whitespace=cst.SimpleWhitespace(" "),
+                                comment=cst.Comment(comment_text),
+                                newline=updated_node.trailing_whitespace.newline,
+                            )
+                        )
             return updated_node
 
-        def _get_called_func_name(self, node):
-            """
-            Extract the last part of the function name:
-            - cst.Name(value='myfunc')
-            - cst.Attribute(attr=cst.Name(value='myfunc'))
-            """
-            if isinstance(node, cst.Name):
-                return node.value
-            elif isinstance(node, cst.Attribute):
-                return node.attr.value
-            return None
+        def _contains_myfunc_call(self, node):
+            """Recursively search for any Call node in the statement whose function is named self.name (including obj.myfunc)."""
+
+            class Finder(cst.CSTVisitor):
+                def __init__(self, name: str):
+                    super().__init__()
+                    self.found = False
+                    self.name = name
+
+                def visit_Call(self, call_node):
+                    func_expr = call_node.func
+                    if isinstance(func_expr, cst.Name):
+                        if func_expr.value == self.name:
+                            self.found = True
+                    elif isinstance(func_expr, cst.Attribute):
+                        if func_expr.attr.value == self.name:
+                            self.found = True
+
+            finder = Finder(self.name)
+            node.visit(finder)
+            return finder.found
 
     # Process each generated test
     modified_tests = []
@@ -234,7 +238,8 @@ def add_runtime_comments_to_generated_tests(
             # Parse the test source code
             tree = cst.parse_module(test.generated_original_test_source)
             # Transform the tree to add runtime comments
-            transformer = RuntimeCommentTransformer(tree, test, tests_root, rel_tests_root)
+            # qualified_name: str, module: cst.Module, test: GeneratedTests, tests_root: Path, rel_tests_root: Path
+            transformer = RuntimeCommentTransformer(qualifed_name, tree, test, tests_root, rel_tests_root)
             modified_tree = tree.visit(transformer)
 
             # Convert back to source code
