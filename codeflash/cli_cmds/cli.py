@@ -109,6 +109,8 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
             if not Path(test_path).is_file():
                 exit_with_message(f"Replay test file {test_path} does not exist", error_on_exit=True)
         args.replay_test = [Path(replay_test).resolve() for replay_test in args.replay_test]
+        if env_utils.is_ci():
+            args.no_pr = True
 
     return args
 

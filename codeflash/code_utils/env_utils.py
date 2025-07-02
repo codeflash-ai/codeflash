@@ -113,5 +113,11 @@ def get_cached_gh_event_data() -> dict[str, Any] | None:
 
 
 @lru_cache(maxsize=1)
+def is_ci() -> bool:
+    """Check if running in a CI environment."""
+    return bool(os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"))
+
+
+@lru_cache(maxsize=1)
 def is_LSP_enabled() -> bool:
     return console.quiet
