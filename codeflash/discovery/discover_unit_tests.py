@@ -627,42 +627,45 @@ def process_test_files(
 
                 if not definition or definition[0].type != "function":
                     continue
+                try:
+                    definition_obj = definition[0]
+                    definition_path = str(definition_obj.module_path)
 
-                definition_obj = definition[0]
-                definition_path = str(definition_obj.module_path)
+                    project_root_str = str(project_root_path)
+                    if (
+                        definition_path.startswith(project_root_str + os.sep)
+                        and definition_obj.module_name != name.module_name
+                        and definition_obj.full_name is not None
+                    ):
+                        # Pre-compute common values outside the inner loop
+                        module_prefix = definition_obj.module_name + "."
+                        full_name_without_module_prefix = definition_obj.full_name.replace(module_prefix, "", 1)
+                        qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition_obj.module_path, project_root_path)}.{full_name_without_module_prefix}"
 
-                project_root_str = str(project_root_path)
-                if (
-                    definition_path.startswith(project_root_str + os.sep)
-                    and definition_obj.module_name != name.module_name
-                    and definition_obj.full_name is not None
-                ):
-                    # Pre-compute common values outside the inner loop
-                    module_prefix = definition_obj.module_name + "."
-                    full_name_without_module_prefix = definition_obj.full_name.replace(module_prefix, "", 1)
-                    qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition_obj.module_path, project_root_path)}.{full_name_without_module_prefix}"
+                        for test_func in test_functions_by_name[scope]:
+                            if test_func.parameters is not None:
+                                if test_framework == "pytest":
+                                    scope_test_function = f"{test_func.function_name}[{test_func.parameters}]"
+                                else:  # unittest
+                                    scope_test_function = f"{test_func.function_name}_{test_func.parameters}"
+                            else:
+                                scope_test_function = test_func.function_name
 
-                    for test_func in test_functions_by_name[scope]:
-                        if test_func.parameters is not None:
-                            if test_framework == "pytest":
-                                scope_test_function = f"{test_func.function_name}[{test_func.parameters}]"
-                            else:  # unittest
-                                scope_test_function = f"{test_func.function_name}_{test_func.parameters}"
-                        else:
-                            scope_test_function = test_func.function_name
-
-                        function_to_test_map[qualified_name_with_modules_from_root].add(
-                            FunctionCalledInTest(
-                                tests_in_file=TestsInFile(
-                                    test_file=test_file,
-                                    test_class=test_func.test_class,
-                                    test_function=scope_test_function,
-                                    test_type=test_func.test_type,
-                                ),
-                                position=CodePosition(line_no=name.line, col_no=name.column),
+                            function_to_test_map[qualified_name_with_modules_from_root].add(
+                                FunctionCalledInTest(
+                                    tests_in_file=TestsInFile(
+                                        test_file=test_file,
+                                        test_class=test_func.test_class,
+                                        test_function=scope_test_function,
+                                        test_type=test_func.test_type,
+                                    ),
+                                    position=CodePosition(line_no=name.line, col_no=name.column),
+                                )
                             )
-                        )
-                        num_discovered_tests += 1
+                            num_discovered_tests += 1
+                except Exception as e:
+                    logger.debug(str(e))
+                    continue
 
             progress.advance(task_id)
 
