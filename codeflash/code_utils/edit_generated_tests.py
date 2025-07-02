@@ -5,7 +5,7 @@ import os
 import re
 from pathlib import Path
 from textwrap import dedent
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Union, Optional
 
 import libcst as cst
 
@@ -50,89 +50,45 @@ class CfoVisitor(ast.NodeVisitor):
     and reports their location relative to the function they're in.
     """
 
-    def __init__(self, source_code: str) -> None:
+    def __init__(self, qualifed_name: str, source_code: str) -> None:
         self.source_lines = source_code.splitlines()
+        self.name = qualifed_name.split('.')[-1]
         self.results: list[int] = []  # map actual line number to line number in ast
 
-    def _is_codeflash_output_target(self, target: Union[ast.expr, list]) -> bool:  # type: ignore[type-arg]
-        """Check if the assignment target is the variable 'codeflash_output'."""
-        if isinstance(target, ast.Name):
-            return target.id == "codeflash_output"
-        if isinstance(target, (ast.Tuple, ast.List)):
-            # Handle tuple/list unpacking: a, codeflash_output, b = values
-            return any(self._is_codeflash_output_target(elt) for elt in target.elts)
-        if isinstance(target, (ast.Subscript, ast.Attribute)):
-            # Not a simple variable assignment
-            return False
-        return False
-
-    def _record_assignment(self, node: ast.AST) -> None:
-        """Record an assignment to codeflash_output."""
-        relative_line = node.lineno - 1  # type: ignore[attr-defined]
-        self.results.append(relative_line)
-
-    def visit_Assign(self, node: ast.Assign) -> None:
-        """Visit assignment statements: codeflash_output = value."""
-        for target in node.targets:
-            if self._is_codeflash_output_target(target):
-                self._record_assignment(node)
-                break
+    def visit_Call(self, node):
+        """
+        Detect calls to:
+        - myfunc(...)
+        - obj.myfunc(...)
+        """
+        func_name = self._get_called_func_name(node.func)
+        if func_name == self.name:
+            self.results.append(node.lineno)
         self.generic_visit(node)
 
-    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
-        """Visit annotated assignments: codeflash_output: int = value."""
-        if self._is_codeflash_output_target(node.target):
-            self._record_assignment(node)
-        self.generic_visit(node)
-
-    def visit_AugAssign(self, node: ast.AugAssign) -> None:
-        """Visit augmented assignments: codeflash_output += value."""
-        if self._is_codeflash_output_target(node.target):
-            self._record_assignment(node)
-        self.generic_visit(node)
-
-    def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
-        """Visit walrus operator: (codeflash_output := value)."""
-        if isinstance(node.target, ast.Name) and node.target.id == "codeflash_output":
-            self._record_assignment(node)
-        self.generic_visit(node)
-
-    def visit_For(self, node: ast.For) -> None:
-        """Visit for loops: for codeflash_output in iterable."""
-        if self._is_codeflash_output_target(node.target):
-            self._record_assignment(node)
-        self.generic_visit(node)
-
-    def visit_comprehension(self, node: ast.comprehension) -> None:
-        """Visit comprehensions: [x for codeflash_output in iterable]."""
-        if self._is_codeflash_output_target(node.target):
-            # Comprehensions don't have line numbers, so we skip recording
-            pass
-        self.generic_visit(node)
-
-    def visit_With(self, node: ast.With) -> None:
-        """Visit with statements: with expr as codeflash_output."""
-        for item in node.items:
-            if item.optional_vars and self._is_codeflash_output_target(item.optional_vars):
-                self._record_assignment(node)
-                break
-        self.generic_visit(node)
-
-    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
-        """Visit except handlers: except Exception as codeflash_output."""
-        if node.name == "codeflash_output":
-            self._record_assignment(node)
-        self.generic_visit(node)
+    def _get_called_func_name(self, node):
+        """
+        Given a node like:
+        - Name(id='myfunc')
+        - Attribute(value=..., attr='myfunc')
+        Return the final function name if possible.
+        """
+        if isinstance(node, ast.Name):
+            return node.id
+        elif isinstance(node, ast.Attribute):
+            return node.attr
+        return None
 
 
-def find_codeflash_output_assignments(source_code: str) -> list[int]:
+def find_codeflash_output_assignments(qualifed_name: str, source_code: str) -> list[int]:
     tree = ast.parse(source_code)
-    visitor = CfoVisitor(source_code)
+    visitor = CfoVisitor(qualifed_name, source_code)
     visitor.visit(tree)
     return visitor.results
 
 
 def add_runtime_comments_to_generated_tests(
+    qualifed_name: str,
     test_cfg: TestConfig,
     generated_tests: GeneratedTestsList,
     original_runtimes: dict[InvocationId, list[int]],
@@ -169,7 +125,7 @@ def add_runtime_comments_to_generated_tests(
             body_code = dedent(self.module.code_for_node(node.body))
             normalized_body_code = ast.unparse(ast.parse(body_code))
             self.cfo_locs = sorted(
-                find_codeflash_output_assignments(normalized_body_code)
+                find_codeflash_output_assignments(qualifed_name, normalized_body_code)
             )  # sorted in order we will encounter them
             self.cfo_idx_loc_to_look_at = -1
             self.context_stack.append(node.name.value)
@@ -179,24 +135,14 @@ def add_runtime_comments_to_generated_tests(
             self.context_stack.pop()
             return updated_node
 
-        def leave_SimpleStatementLine(
-            self,
-            original_node: cst.SimpleStatementLine,  # noqa: ARG002
-            updated_node: cst.SimpleStatementLine,
-        ) -> cst.SimpleStatementLine:
-            # Look for assignment statements that assign to codeflash_output
-            # Handle both single statements and multiple statements on one line
-            codeflash_assignment_found = False
-            for stmt in updated_node.body:
-                if isinstance(stmt, cst.Assign) and (
-                    len(stmt.targets) == 1
-                    and isinstance(stmt.targets[0].target, cst.Name)
-                    and stmt.targets[0].target.value == "codeflash_output"
-                ):
-                    codeflash_assignment_found = True
-                    break
-
-            if codeflash_assignment_found:
+        def leave_Call(self, node: cst.Call, updated_node: cst.Call) -> cst.Call:
+            """
+            Detect calls to:
+            - myfunc()
+            - obj.myfunc()
+            """
+            func_name = self._get_called_func_name(node.func)
+            if func_name == self.name:
                 # Find matching test cases by looking for this test function name in the test results
                 self.cfo_idx_loc_to_look_at += 1
                 matching_original_times = []
@@ -264,16 +210,22 @@ def add_runtime_comments_to_generated_tests(
                             f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
                         )
 
-                        # Add comment to the trailing whitespace
-                        new_trailing_whitespace = cst.TrailingWhitespace(
-                            whitespace=cst.SimpleWhitespace(" "),
-                            comment=cst.Comment(comment_text),
-                            newline=updated_node.trailing_whitespace.newline,
-                        )
-
+                        whitespace = updated_node.trailing_whitespace
+                        new_trailing_whitespace = whitespace.with_changes(comment=cst.Comment(comment_text))
                         return updated_node.with_changes(trailing_whitespace=new_trailing_whitespace)
-
             return updated_node
+
+        def _get_called_func_name(self, node):
+            """
+            Extract the last part of the function name:
+            - cst.Name(value='myfunc')
+            - cst.Attribute(attr=cst.Name(value='myfunc'))
+            """
+            if isinstance(node, cst.Name):
+                return node.value
+            elif isinstance(node, cst.Attribute):
+                return node.attr.value
+            return None
 
     # Process each generated test
     modified_tests = []

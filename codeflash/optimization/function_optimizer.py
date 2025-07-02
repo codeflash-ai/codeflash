@@ -1012,15 +1012,16 @@ class FunctionOptimizer:
                     optimized_runtime_by_test = (
                         best_optimization.winning_benchmarking_test_results.usable_runtime_data_by_test_case()
                     )
+                    qualifed_name = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
                     # Add runtime comments to generated tests before creating the PR
                     generated_tests = add_runtime_comments_to_generated_tests(
-                        self.test_cfg, generated_tests, original_runtime_by_test, optimized_runtime_by_test
+                        qualifed_name, self.test_cfg, generated_tests, original_runtime_by_test, optimized_runtime_by_test
                     )
                     generated_tests_str = "\n\n".join(
                         [test.generated_original_test_source for test in generated_tests.generated_tests]
                     )
                     existing_tests = existing_tests_source_for(
-                        self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
+                        qualifed_name,
                         function_to_all_tests,
                         test_cfg=self.test_cfg,
                         original_runtimes_all=original_runtime_by_test,
