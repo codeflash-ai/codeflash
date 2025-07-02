@@ -522,15 +522,8 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         workflows_path.mkdir(parents=True, exist_ok=True)
         from importlib.resources import files
 
-        benchmark_mode = False
         benchmarks_root = config.get("benchmarks_root", "").strip()
-        if benchmarks_root and benchmarks_root != "":
-            benchmark_mode = inquirer_wrapper(
-                inquirer.confirm,
-                message="⚡️It looks like you've configured a benchmarks_root in your config. Would you like to run the Github action in benchmark mode? "
-                " This will show the impact of Codeflash's suggested optimizations on your benchmarks",
-                default=True,
-            )
+        benchmark_mode = bool(benchmarks_root)
 
         optimize_yml_content = (
             files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding="utf-8")
@@ -686,7 +679,6 @@ def customize_codeflash_yaml_content(
 
     # Add codeflash command
     codeflash_cmd = get_codeflash_github_action_command(dep_manager)
-
     if benchmark_mode:
         codeflash_cmd += " --benchmark"
     return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
