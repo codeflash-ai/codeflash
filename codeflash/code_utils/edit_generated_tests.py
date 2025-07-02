@@ -50,9 +50,9 @@ class CfoVisitor(ast.NodeVisitor):
     and reports their location relative to the function they're in.
     """
 
-    def __init__(self, qualifed_name: str, source_code: str) -> None:
+    def __init__(self, qualified_name: str, source_code: str) -> None:
         self.source_lines = source_code.splitlines()
-        self.name = qualifed_name.split(".")[-1]
+        self.name = qualified_name.split(".")[-1]
         self.results: list[int] = []  # map actual line number to line number in ast
 
     def visit_Call(self, node):  # type: ignore[no-untyped-def] # noqa: ANN201, ANN001
@@ -71,15 +71,15 @@ class CfoVisitor(ast.NodeVisitor):
         return None
 
 
-def find_codeflash_output_assignments(qualifed_name: str, source_code: str) -> list[int]:
+def find_codeflash_output_assignments(qualified_name: str, source_code: str) -> list[int]:
     tree = ast.parse(source_code)
-    visitor = CfoVisitor(qualifed_name, source_code)
+    visitor = CfoVisitor(qualified_name, source_code)
     visitor.visit(tree)
     return visitor.results
 
 
 def add_runtime_comments_to_generated_tests(
-    qualifed_name: str,
+    qualified_name: str,
     test_cfg: TestConfig,
     generated_tests: GeneratedTestsList,
     original_runtimes: dict[InvocationId, list[int]],
@@ -119,7 +119,7 @@ def add_runtime_comments_to_generated_tests(
             body_code = dedent(self.module.code_for_node(node.body))
             normalized_body_code = ast.unparse(ast.parse(body_code))
             self.cfo_locs = sorted(
-                find_codeflash_output_assignments(qualifed_name, normalized_body_code)
+                find_codeflash_output_assignments(qualified_name, normalized_body_code)
             )  # sorted in order we will encounter them
             self.cfo_idx_loc_to_look_at = -1
             self.context_stack.append(node.name.value)
@@ -241,7 +241,7 @@ def add_runtime_comments_to_generated_tests(
             tree = cst.parse_module(test.generated_original_test_source)
             # Transform the tree to add runtime comments
             # qualified_name: str, module: cst.Module, test: GeneratedTests, tests_root: Path, rel_tests_root: Path
-            transformer = RuntimeCommentTransformer(qualifed_name, tree, test, tests_root, rel_tests_root)
+            transformer = RuntimeCommentTransformer(qualified_name, tree, test, tests_root, rel_tests_root)
             modified_tree = tree.visit(transformer)
 
             # Convert back to source code
