@@ -48,6 +48,11 @@ def parse_args() -> Namespace:
         "--no-pr", action="store_true", help="Do not create a PR for the optimization, only update the code locally."
     )
     parser.add_argument(
+        "--staging-review",
+        action="store_true",
+        help="Upload optimizations to staging for review"
+    )
+    parser.add_argument(
         "--verify-setup",
         action="store_true",
         help="Verify that codeflash is set up correctly by optimizing bubble sort as a test.",
