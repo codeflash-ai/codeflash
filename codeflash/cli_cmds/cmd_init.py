@@ -637,7 +637,7 @@ def customize_codeflash_yaml_content(
     except FileNotFoundError:
         click.echo(
             f"I couldn't find a pyproject.toml in the current directory.{LF}"
-            f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
+            f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `codeflash init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
         )
         apologize_and_exit()
 
@@ -669,7 +669,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     except FileNotFoundError:
         click.echo(
             f"I couldn't find a pyproject.toml in the current directory.{LF}"
-            f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
+            f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `codeflash init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
         )
         apologize_and_exit()
 
