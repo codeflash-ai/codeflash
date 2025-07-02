@@ -751,7 +751,7 @@ def install_github_app() -> None:
         return
     owner, repo = get_repo_owner_and_name(git_repo)
 
-    if is_github_app_installed_on_repo(owner, repo):
+    if is_github_app_installed_on_repo(owner, repo, suppress_errors=True):
         click.echo("🐙 Looks like you've already installed the Codeflash GitHub app on this repository! Continuing…")
 
     else:
@@ -774,7 +774,7 @@ def install_github_app() -> None:
         )
 
         count = 2
-        while not is_github_app_installed_on_repo(owner, repo):
+        while not is_github_app_installed_on_repo(owner, repo, suppress_errors=True):
             if count == 0:
                 click.echo(
                     f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
