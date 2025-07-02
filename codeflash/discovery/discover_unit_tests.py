@@ -624,10 +624,9 @@ def process_test_files(
                 except Exception as e:
                     logger.debug(str(e))
                     continue
-
-                if not definition or definition[0].type != "function":
-                    continue
                 try:
+                    if not definition or definition[0].type != "function":
+                        continue
                     definition_obj = definition[0]
                     definition_path = str(definition_obj.module_path)
 
