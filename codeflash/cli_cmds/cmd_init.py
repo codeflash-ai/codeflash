@@ -11,14 +11,13 @@ from typing import TYPE_CHECKING, Any, Union, cast
 
 import click
 import git
-import inquirer
-import inquirer.themes
 import tomlkit
 from git import InvalidGitRepositoryError, Repo
 from pydantic.dataclasses import dataclass
+from rich.prompt import Confirm, Prompt
 
 from codeflash.api.cfapi import is_github_app_installed_on_repo
-from codeflash.cli_cmds.cli_common import apologize_and_exit, inquirer_wrapper, inquirer_wrapper_path
+from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
@@ -185,23 +184,20 @@ def collect_setup_info() -> SetupInfo:
     custom_dir_option = "enter a custom directory…"
     module_subdir_options = [*valid_module_subdirs, curdir_option, custom_dir_option]
 
-    module_root_answer = inquirer_wrapper(
-        inquirer.list_input,
-        message="Which Python module do you want me to optimize going forward? (Usually the top-most directory with "
-        "all of your Python source code). Use arrow keys to select",
+    module_root_answer = Prompt.ask(
+        "Which Python module do you want me to optimize going forward? (Usually the top-most directory with "
+        "all of your Python source code)",
         choices=module_subdir_options,
         default=(project_name if project_name in module_subdir_options else module_subdir_options[0]),
     )
     if module_root_answer == curdir_option:
         module_root = "."
     elif module_root_answer == custom_dir_option:
-        custom_module_root_answer = inquirer_wrapper_path(
-            "path",
-            message=f"Enter the path to your module directory inside {Path(curdir).resolve()}{os.path.sep} ",
-            path_type=inquirer.Path.DIRECTORY,
+        custom_module_root_answer = Prompt.ask(
+            f"Enter the path to your module directory inside {Path(curdir).resolve()}{os.path.sep}"
         )
         if custom_module_root_answer:
-            module_root = Path(custom_module_root_answer["path"])
+            module_root = Path(custom_module_root_answer)
         else:
             apologize_and_exit()
     else:
@@ -216,9 +212,8 @@ def collect_setup_info() -> SetupInfo:
         test_subdir_options.append(create_for_me_option)
     custom_dir_option = "enter a custom directory…"
     test_subdir_options.append(custom_dir_option)
-    tests_root_answer = inquirer_wrapper(
-        inquirer.list_input,
-        message="Where are your tests located? "
+    tests_root_answer = Prompt.ask(
+        "Where are your tests located? "
         f"(If you don't have any tests yet, I can create an empty tests{os.pathsep} directory for you)",
         choices=test_subdir_options,
         default=(default_tests_subdir if default_tests_subdir in test_subdir_options else test_subdir_options[0]),
@@ -229,13 +224,11 @@ def collect_setup_info() -> SetupInfo:
         tests_root.mkdir()
         click.echo(f"✅ Created directory {tests_root}{os.path.sep}{LF}")
     elif tests_root_answer == custom_dir_option:
-        custom_tests_root_answer = inquirer_wrapper_path(
-            "path",
-            message=f"Enter the path to your tests directory inside {Path(curdir).resolve()}{os.path.sep} ",
-            path_type=inquirer.Path.DIRECTORY,
+        custom_tests_root_answer = Prompt.ask(
+            f"Enter the path to your tests directory inside {Path(curdir).resolve()}{os.path.sep}"
         )
         if custom_tests_root_answer:
-            tests_root = Path(curdir) / Path(custom_tests_root_answer["path"])
+            tests_root = Path(curdir) / Path(custom_tests_root_answer)
         else:
             apologize_and_exit()
     else:
@@ -257,12 +250,10 @@ def collect_setup_info() -> SetupInfo:
     autodetected_suffix = (
         f" (seems to me you're using {autodetected_test_framework})" if autodetected_test_framework else ""
     )
-    test_framework = inquirer_wrapper(
-        inquirer.list_input,
-        message="Which test framework do you use?" + autodetected_suffix,
+    test_framework = Prompt.ask(
+        "Which test framework do you use?" + autodetected_suffix,
         choices=["pytest", "unittest"],
         default=autodetected_test_framework or "pytest",
-        carousel=True,
     )
 
     ph("cli-test-framework-provided", {"test_framework": test_framework})
@@ -285,9 +276,8 @@ def collect_setup_info() -> SetupInfo:
     benchmarks_options.append(create_benchmarks_option)
     benchmarks_options.append(custom_dir_option)
 
-    benchmarks_answer = inquirer_wrapper(
-        inquirer.list_input,
-        message="Where are your performance benchmarks located? (benchmarks must be a sub directory of your tests root directory)",
+    benchmarks_answer = Prompt.ask(
+        "Where are your performance benchmarks located? (benchmarks must be a sub directory of your tests root directory)",
         choices=benchmarks_options,
         default=(
             default_benchmarks_subdir if default_benchmarks_subdir in benchmarks_options else benchmarks_options[0]
@@ -299,13 +289,11 @@ def collect_setup_info() -> SetupInfo:
         benchmarks_root.mkdir(exist_ok=True)
         click.echo(f"✅ Created directory {benchmarks_root}{os.path.sep}{LF}")
     elif benchmarks_answer == custom_dir_option:
-        custom_benchmarks_answer = inquirer_wrapper_path(
-            "path",
-            message=f"Enter the path to your benchmarks directory inside {tests_root}{os.path.sep} ",
-            path_type=inquirer.Path.DIRECTORY,
+        custom_benchmarks_answer = Prompt.ask(
+            f"Enter the path to your benchmarks directory inside {tests_root}{os.path.sep}"
         )
         if custom_benchmarks_answer:
-            benchmarks_root = tests_root / Path(custom_benchmarks_answer["path"])
+            benchmarks_root = tests_root / Path(custom_benchmarks_answer)
         else:
             apologize_and_exit()
     elif benchmarks_answer == no_benchmarks_option:
@@ -327,12 +315,8 @@ def collect_setup_info() -> SetupInfo:
     #         carousel=True,
     #     )
 
-    formatter = inquirer_wrapper(
-        inquirer.list_input,
-        message="Which code formatter do you use?",
-        choices=["black", "ruff", "other", "don't use a formatter"],
-        default="black",
-        carousel=True,
+    formatter = Prompt.ask(
+        "Which code formatter do you use?", choices=["black", "ruff", "other", "don't use a formatter"], default="black"
     )
 
     git_remote = ""
@@ -341,12 +325,10 @@ def collect_setup_info() -> SetupInfo:
         git_remotes = get_git_remotes(repo)
         if git_remotes:  # Only proceed if there are remotes
             if len(git_remotes) > 1:
-                git_remote = inquirer_wrapper(
-                    inquirer.list_input,
-                    message="What git remote do you want Codeflash to use for new Pull Requests? ",
+                git_remote = Prompt.ask(
+                    "What git remote do you want Codeflash to use for new Pull Requests?",
                     choices=git_remotes,
                     default="origin",
-                    carousel=True,
                 )
             else:
                 git_remote = git_remotes[0]
@@ -447,11 +429,8 @@ def check_for_toml_or_setup_file() -> str | None:
         ph("cli-no-pyproject-toml-or-setup-py")
 
         # Create a pyproject.toml file because it doesn't exist
-        create_toml = inquirer_wrapper(
-            inquirer.confirm,
-            message="Do you want me to create a pyproject.toml file in the current directory?",
-            default=True,
-            show_default=False,
+        create_toml = Confirm.ask(
+            "Do you want me to create a pyproject.toml file in the current directory?", default=True
         )
         if create_toml:
             ph("cli-create-pyproject-toml")
@@ -497,10 +476,8 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
 
         # Check if the workflow file already exists
         if optimize_yaml_path.exists():
-            confirm_overwrite = inquirer_wrapper(
-                inquirer.confirm,
-                message=f"⚡️ GitHub Actions workflow already exists at {optimize_yaml_path}. Overwrite?",
-                default=False,  # Don't overwrite by default
+            confirm_overwrite = Confirm.ask(
+                f"⚡️ GitHub Actions workflow already exists at {optimize_yaml_path}. Overwrite?", default=False
             )
             ph("cli-github-optimization-confirm-workflow-overwrite", {"confirm_overwrite": confirm_overwrite})
             if not confirm_overwrite:
@@ -508,9 +485,8 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                 ph("cli-github-workflow-skipped")
                 return
 
-        confirm_creation_yes = inquirer_wrapper(
-            inquirer.confirm,
-            message="⚡️Shall I set up a GitHub action that will continuously optimize all new code in GitHub PRs"
+        confirm_creation_yes = Confirm.ask(
+            "⚡️Shall I set up a GitHub action that will continuously optimize all new code in GitHub PRs"
             " for you? This is the main way of using Codeflash so we highly recommend it",
             default=True,
         )
