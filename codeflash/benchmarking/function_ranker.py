@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import console, logger
@@ -83,13 +82,17 @@ class FunctionRanker:
             self._function_stats = {}
 
     def _get_function_stats(self, function_to_optimize: FunctionToOptimize) -> dict | None:
-        # First try qualified_name, then function_name, avoid allocating a list
-        key1 = f"{function_to_optimize.file_path}:{function_to_optimize.qualified_name}"
-        stats = self._function_stats.get(key1)
-        if stats is not None:
-            return stats
-        key2 = f"{function_to_optimize.file_path}:{function_to_optimize.function_name}"
-        return self._function_stats.get(key2, None)
+        target_filename = function_to_optimize.file_path.name
+        for key, stats in self._function_stats.items():
+            if stats.get("function_name") == function_to_optimize.function_name and (
+                key.endswith(f"/{target_filename}") or target_filename in key
+            ):
+                return stats
+
+        logger.debug(
+            f"Could not find stats for function {function_to_optimize.function_name} in file {target_filename}"
+        )
+        return None
 
     def get_function_ttx_score(self, function_to_optimize: FunctionToOptimize) -> float:
         stats = self._get_function_stats(function_to_optimize)
