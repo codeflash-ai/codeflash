@@ -289,6 +289,12 @@ formatter-cmds = [
     "uvx ruff format $file",
 ]
 
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::pytest.PytestCollectionWarning",
+    "ignore::pytest.PytestUnknownMarkWarning"
+]
+
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
