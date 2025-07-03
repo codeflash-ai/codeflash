@@ -218,7 +218,7 @@ def get_functions_to_optimize(
                 all_functions.extend(file_functions)
 
             if all_functions:
-                ranked_functions = ranker.rerank_and_filter_functions(all_functions)
+                ranked_functions = ranker.rank_functions(all_functions)
                 functions_count = len(ranked_functions)
 
                 ranked_dict = {}

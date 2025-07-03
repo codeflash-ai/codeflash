@@ -14,19 +14,17 @@ if TYPE_CHECKING:
 
 
 class FunctionRanker:
-    """Ranks and filters functions for optimization based on profiling trace data using the ttX scoring method.
+    """Ranks and filters functions based on a ttX score derived from profiling data.
 
-    The FunctionRanker analyzes function-level timing statistics from a trace file and assigns a ttX score to each function:
+    The ttX score is calculated as:
+        ttX = own_time + (time_spent_in_callees / call_count)
 
-        ttX = own_time + (time_spent_in_callees x call_count)
+    This score prioritizes functions that are computationally heavy themselves (high `own_time`)
+    or that make expensive calls to other functions (high average `time_spent_in_callees`).
 
-    This scoring prioritizes functions that:
-      1. Consume significant time themselves (own_time)
-      2. Are called frequently and have expensive subcalls (time_spent_in_callees x call_count)
-
-    first, filters out functions whose own_time is less than a specified percentage (importance_threshold = minimum fraction of total runtime a function must account for to be considered important) of the total runtime, considering them unimportant for optimization.
-
-    The remaining functions are then ranked in descending order by their ttX score, prioritizing those most likely to yield performance improvements if optimized.
+    Functions are first filtered by an importance threshold based on their `own_time` as a
+    fraction of the total runtime. The remaining functions are then ranked by their ttX score
+    to identify the best candidates for optimization.
     """
 
     def __init__(self, trace_file_path: Path) -> None:
@@ -59,7 +57,7 @@ class FunctionRanker:
                 time_in_callees_ns = cumulative_time_ns - total_time_ns
 
                 # Calculate ttX score
-                ttx_score = own_time_ns + (time_in_callees_ns * call_count)
+                ttx_score = own_time_ns + (time_in_callees_ns / call_count)
 
                 function_key = f"{filename}:{qualified_name}"
                 self._function_stats[function_key] = {
@@ -99,10 +97,26 @@ class FunctionRanker:
         return stats["ttx_score"] if stats else 0.0
 
     def rank_functions(self, functions_to_optimize: list[FunctionToOptimize]) -> list[FunctionToOptimize]:
-        return sorted(functions_to_optimize, key=self.get_function_ttx_score, reverse=True)
+        ranked = sorted(functions_to_optimize, key=self.get_function_ttx_score, reverse=True)
+        logger.info(
+            f"Function ranking order: {[f'{func.function_name} (ttX={self.get_function_ttx_score(func):.2f})' for func in ranked]}"
+        )
+        return ranked
 
     def get_function_stats_summary(self, function_to_optimize: FunctionToOptimize) -> dict | None:
         return self._get_function_stats(function_to_optimize)
+
+    def rerank_functions(self, functions_to_optimize: list[FunctionToOptimize]) -> list[FunctionToOptimize]:
+        """Ranks functions based on their ttX score.
+
+        This method calculates the ttX score for each function and returns
+        the functions sorted in descending order of their ttX score.
+        """
+        if not self._function_stats:
+            logger.warning("No function stats available to rank functions.")
+            return []
+
+        return self.rank_functions(functions_to_optimize)
 
     def rerank_and_filter_functions(self, functions_to_optimize: list[FunctionToOptimize]) -> list[FunctionToOptimize]:
         """Reranks and filters functions based on their impact on total runtime.

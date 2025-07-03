@@ -58,8 +58,8 @@ def test_load_function_stats(function_ranker):
     # Verify funcA specific values
     assert func_a_stats["function_name"] == "funcA"
     assert func_a_stats["call_count"] == 1
-    assert func_a_stats["own_time_ns"] == 153000
-    assert func_a_stats["cumulative_time_ns"] == 5960000
+    assert func_a_stats["own_time_ns"] == 63000
+    assert func_a_stats["cumulative_time_ns"] == 5443000
 
 
 def test_get_function_ttx_score(function_ranker, workload_functions):
@@ -72,9 +72,9 @@ def test_get_function_ttx_score(function_ranker, workload_functions):
     assert func_a is not None
     ttx_score = function_ranker.get_function_ttx_score(func_a)
     
-    # Expected ttX score: own_time + (time_in_callees * call_count)
-    # = 153000 + ((5960000 - 153000) * 1) = 5960000
-    assert ttx_score == 5960000
+    # Expected ttX score: own_time + (time_in_callees / call_count)
+    # = 63000 + ((5443000 - 63000) / 1) = 5443000
+    assert ttx_score == 5443000
 
 
 def test_rank_functions(function_ranker, workload_functions):
@@ -112,9 +112,9 @@ def test_get_function_stats_summary(function_ranker, workload_functions):
     
     assert stats is not None
     assert stats["function_name"] == "funcA"
-    assert stats["own_time_ns"] == 153000
-    assert stats["cumulative_time_ns"] == 5960000
-    assert stats["ttx_score"] == 5960000
+    assert stats["own_time_ns"] == 63000
+    assert stats["cumulative_time_ns"] == 5443000
+    assert stats["ttx_score"] == 5443000
 
 
 
@@ -134,8 +134,8 @@ def test_importance_calculation(function_ranker):
     assert func_a_stats is not None
     importance = func_a_stats["own_time_ns"] / total_program_time
     
-    # funcA importance should be approximately 1.0% (153000/15281000)
-    assert abs(importance - 0.01001) < 0.001
+    # funcA importance should be approximately 0.57% (63000/10968000)
+    assert abs(importance - 0.0057) < 0.001
 
 
 def test_simple_model_predict_stats(function_ranker, workload_functions):
@@ -152,15 +152,15 @@ def test_simple_model_predict_stats(function_ranker, workload_functions):
     assert stats is not None
     assert stats["function_name"] == "predict"
     assert stats["call_count"] == 1
-    assert stats["own_time_ns"] == 2368000
-    assert stats["cumulative_time_ns"] == 4103000
-    assert stats["ttx_score"] == 4103000
+    assert stats["own_time_ns"] == 2289000
+    assert stats["cumulative_time_ns"] == 4017000
+    assert stats["ttx_score"] == 4017000
     
     # Test ttX score calculation
     ttx_score = function_ranker.get_function_ttx_score(predict_func)
-    # Expected ttX score: own_time + (time_in_callees * call_count)
-    # = 2368000 + ((4103000 - 2368000) * 1) = 4103000
-    assert ttx_score == 4103000
+    # Expected ttX score: own_time + (time_in_callees / call_count)
+    # = 2289000 + ((4017000 - 2289000) / 1) = 4017000
+    assert ttx_score == 4017000
     
     # Test importance calculation for predict function
     total_program_time = sum(
@@ -168,5 +168,5 @@ def test_simple_model_predict_stats(function_ranker, workload_functions):
         if s.get("own_time_ns", 0) > 0
     )
     importance = stats["own_time_ns"] / total_program_time
-    # predict importance should be approximately 15.5% (2368000/15281000)
-    assert abs(importance - 0.155) < 0.01
+    # predict importance should be approximately 20.9% (2289000/10968000)
+    assert abs(importance - 0.209) < 0.01
