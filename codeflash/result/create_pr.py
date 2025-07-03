@@ -52,9 +52,13 @@ def existing_tests_source_for(
     # TODO confirm that original and optimized have the same keys
     all_invocation_ids = original_runtimes_all.keys() | optimized_runtimes_all.keys()
     for invocation_id in all_invocation_ids:
-        rel_path = (
-            Path(invocation_id.test_module_path.replace(".", os.sep)).with_suffix(".py").relative_to(rel_tests_root)
-        )
+        try:
+            rel_path = (
+                Path(invocation_id.test_module_path.replace(".", os.sep)).with_suffix(".py").relative_to(rel_tests_root)
+            )
+        except Exception as e:
+            logger.debug(e)
+            continue
         if rel_path not in non_generated_tests:
             continue
         if rel_path not in original_tests_to_runtimes:
