@@ -228,6 +228,18 @@ def collect_setup_info() -> SetupInfo:
     custom_dir_option = "enter a custom directory…"
     module_subdir_options = [*valid_module_subdirs, curdir_option, custom_dir_option]
 
+    info_panel = Panel(
+        Text(
+            "📁 Let's identify your Python module directory.\n\n"
+            "This is usually the top-level directory containing all your Python source code.\n",
+            style="cyan",
+        ),
+        title="🔍 Module Discovery",
+        border_style="bright_blue",
+    )
+    console.print(info_panel)
+    console.print()
+
     questions = [
         inquirer.List(
             "module_root",
