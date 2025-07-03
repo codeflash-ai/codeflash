@@ -35,6 +35,9 @@ def main() -> None:
         init_sentry(not args.disable_telemetry, exclude_errors=True)
         posthog_cf.initialize_posthog(not args.disable_telemetry)
         ask_run_end_to_end_test(args)
+    elif args.doctor:
+        from codeflash.cli_cmds.cmd_doctor import run_doctor
+        run_doctor()
     else:
         args = process_pyproject_config(args)
         args.previous_checkpoint_functions = ask_should_use_checkpoint_get_functions(args)
