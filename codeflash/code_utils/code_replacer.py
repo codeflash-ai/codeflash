@@ -381,6 +381,13 @@ class ImportTracker(cst.CSTVisitor):
         # Set of fully-qualified imports like "utils.helpers.extract_path"
         self.imported_names: set[str] = set()
 
+    def get_full_name(self, expr: cst.BaseExpression) -> str:
+        if isinstance(expr, cst.Name):
+            return expr.value
+        if isinstance(expr, cst.Attribute):
+            return f"{self.get_full_name(expr.value)}.{expr.attr.value}"
+        return ""
+
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         # Get the full module path like "utils.helpers"
         module = ("." * node.relative if node.relative else "") + (
@@ -399,7 +406,7 @@ class ImportTracker(cst.CSTVisitor):
     def visit_Import(self, node: cst.Import) -> None:
         for name in node.names:
             if isinstance(name, cst.ImportAlias):
-                full_module_path = name.name.value  # e.g., "utils.helpers"
+                full_module_path = self.get_full_name(name.name)
                 self.imported_names.add(full_module_path)
 
 
