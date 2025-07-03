@@ -24,9 +24,33 @@ def parse_args() -> Namespace:
     init_actions_parser.set_defaults(func=install_github_actions)
 
     trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize a Python project.")
+
     from codeflash.tracer import main as tracer_main
 
     trace_optimize.set_defaults(func=tracer_main)
+
+    trace_optimize.add_argument(
+        "--max-function-count",
+        type=int,
+        default=100,
+        help="The maximum number of times to trace a single function. More calls to a function will not be traced. Default is 100.",
+    )
+    trace_optimize.add_argument(
+        "--timeout",
+        type=int,
+        help="The maximum time in seconds to trace the entire workflow. Default is indefinite. This is useful while tracing really long workflows, to not wait indefinitely.",
+    )
+    trace_optimize.add_argument(
+        "--output",
+        type=str,
+        default="codeflash.trace",
+        help="The file to save the trace to. Default is codeflash.trace.",
+    )
+    trace_optimize.add_argument(
+        "--config-file-path",
+        type=str,
+        help="The path to the pyproject.toml file which stores the Codeflash config. This is auto-discovered by default.",
+    )
 
     parser.add_argument("--file", help="Try to optimize only this file")
     parser.add_argument("--function", help="Try to optimize only this function within the given file path")

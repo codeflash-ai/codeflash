@@ -46,6 +46,7 @@ from codeflash.tracing.tracing_utils import FunctionModules
 from codeflash.verification.verification_utils import get_test_file_path
 
 if TYPE_CHECKING:
+    from argparse import Namespace
     from types import FrameType, TracebackType
 
 
@@ -798,7 +799,7 @@ class Tracer:
         return self
 
 
-def main() -> ArgumentParser:
+def main(args: Namespace | None = None) -> ArgumentParser:
     parser = ArgumentParser(allow_abbrev=False)
     parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", default="codeflash.trace")
     parser.add_argument("--only-functions", help="Trace only these functions", nargs="+", default=None)
@@ -824,18 +825,34 @@ def main() -> ArgumentParser:
     )
     parser.add_argument("--trace-only", action="store_true", help="Trace and create replay tests only, don't optimize")
 
-    if not sys.argv[1:]:
-        parser.print_usage()
-        sys.exit(2)
+    if args is not None:
+        parsed_args = args
+        parsed_args.outfile = getattr(args, "output", "codeflash.trace")
+        parsed_args.only_functions = getattr(args, "only_functions", None)
+        parsed_args.max_function_count = getattr(args, "max_function_count", 100)
+        parsed_args.tracer_timeout = getattr(args, "timeout", None)
+        parsed_args.codeflash_config = getattr(args, "config_file_path", None)
+        parsed_args.trace_only = getattr(args, "trace_only", False)
+        parsed_args.module = False
 
-    args, unknown_args = parser.parse_known_args()
-    sys.argv[:] = unknown_args
+        if getattr(args, "disable", False):
+            console.rule("Codeflash: Tracer disabled by --disable option", style="bold red")
+            return parser
+
+        unknown_args = []
+    else:
+        if not sys.argv[1:]:
+            parser.print_usage()
+            sys.exit(2)
+
+        parsed_args, unknown_args = parser.parse_known_args()
+        sys.argv[:] = unknown_args
 
     # The script that we're profiling may chdir, so capture the absolute path
     # to the output file at startup.
-    if args.outfile is not None:
-        args.outfile = Path(args.outfile).resolve()
-    outfile = args.outfile
+    if parsed_args.outfile is not None:
+        parsed_args.outfile = Path(parsed_args.outfile).resolve()
+    outfile = parsed_args.outfile
 
     if len(unknown_args) > 0:
         if args.module:
