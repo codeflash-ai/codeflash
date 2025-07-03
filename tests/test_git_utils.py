@@ -64,7 +64,7 @@ class TestGitUtils(unittest.TestCase):
 
     @patch("codeflash.code_utils.git_utils.git.Repo")
     @patch("codeflash.code_utils.git_utils.sys.__stdin__.isatty", return_value=True)
-    @patch("codeflash.code_utils.git_utils.inquirer.confirm", return_value=True)
+    @patch("codeflash.code_utils.git_utils.Confirm.ask", return_value=True)
     def test_check_and_push_branch(self, mock_confirm, mock_isatty, mock_repo):
         mock_repo_instance = mock_repo.return_value
         mock_repo_instance.active_branch.name = "test-branch"
