@@ -1,4 +1,4 @@
-"""Entry point for the Codeflash Language Server.
+"""Dedicated entry point for the Codeflash Language Server.
 
 Initializes the server and redirects its logs to stderr so that the
 VS Code client can display them in the output channel.
@@ -38,12 +38,6 @@ if __name__ == "__main__":
     # Set up logging
     log = setup_logging()
     log.info("Starting Codeflash Language Server...")
-
-    # Silence the console module to prevent stdout pollution
-    from codeflash.cli_cmds.console import console
-
-    console.quiet = True
-    # console.enable()
 
     # Start the language server
     server.start_io()
