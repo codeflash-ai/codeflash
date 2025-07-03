@@ -241,8 +241,11 @@ def add_runtime_comments_to_generated_tests(
     """Add runtime performance comments to function calls in generated tests."""
     tests_root = test_cfg.tests_root
     module_root = test_cfg.project_root_path
-    rel_tests_root = tests_root.relative_to(module_root)
-
+    try:
+        rel_tests_root = tests_root.relative_to(module_root)
+    except Exception as e:
+        logger.debug(e)
+        return generated_tests
     # Process each generated test
     modified_tests = []
     for test in generated_tests.generated_tests:
