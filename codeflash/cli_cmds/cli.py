@@ -10,7 +10,6 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.config_parser import parse_config_file
-from codeflash.tracer import main as tracer_main
 from codeflash.version import __version__ as version
 
 
@@ -25,6 +24,8 @@ def parse_args() -> Namespace:
     init_actions_parser.set_defaults(func=install_github_actions)
 
     trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize a Python project.")
+    from codeflash.tracer import main as tracer_main
+
     trace_optimize.set_defaults(func=tracer_main)
 
     parser.add_argument("--file", help="Try to optimize only this file")
