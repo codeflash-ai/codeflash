@@ -88,6 +88,7 @@ class NewClass:
     def __init__(self, name):
         self.name = name
     def new_function(self, value):
+        totally_new_function(123)
         return self.name
     def new_function2(value):
         return value
@@ -106,6 +107,7 @@ print("Hello world")
     def __init__(self, name):
         self.name = name
     def new_function(self, value):
+        totally_new_function(123)
         return self.name
     def new_function2(value):
         return value
@@ -143,6 +145,7 @@ class NewClass:
     def __init__(self, name):
         self.name = name
     def new_function(self, value):
+        totally_new_function(123)
         return other_function(self.name)
     def new_function2(value):
         return value
@@ -164,6 +167,7 @@ class NewClass:
     def __init__(self, name):
         self.name = name
     def new_function(self, value):
+        totally_new_function(123)
         return other_function(self.name)
     def new_function2(value):
         return value
@@ -198,6 +202,7 @@ def totally_new_function(value):
     return value
 
 def other_function(st):
+    totally_new_function(123)
     return(st * 2)
 
 class NewClass:
@@ -230,6 +235,7 @@ def yet_another_function(values):
     return len(values)
 
 def other_function(st):
+    totally_new_function(123)
     return(st * 2)
 
 def totally_new_function(value):
@@ -259,6 +265,7 @@ def totally_new_function(value):
     return value
 
 def yet_another_function(values: Optional[str]):
+    totally_new_function(123)
     return len(values) + 2
 
 def other_function(st):
@@ -291,6 +298,7 @@ print("Salut monde")
 print("Au revoir")
 
 def yet_another_function(values):
+    totally_new_function(123)
     return len(values) + 2
 
 def other_function(st):
@@ -730,6 +738,7 @@ class NewClass:
     def __call__(self, value):
         return self.name
     def new_function2(value):
+        totally_new_function()
         return cst.ensure_type(value, str)
     """
 
@@ -750,6 +759,7 @@ class NewClass:
     def __call__(self, value):
         return "I am still old"
     def new_function2(value):
+        totally_new_function()
         return cst.ensure_type(value, str)
 
 def totally_new_function(value: Optional[str]):
