@@ -125,14 +125,24 @@ def is_LSP_enabled() -> bool:
 
 def is_pr_draft() -> bool:
     """Check if the PR is draft. in the github action context."""
+    event_path = os.getenv("GITHUB_EVENT_PATH")
+    pr_number = get_pr_number()
+    if pr_number is not None and event_path:
+        event_data = get_event_data(event_path)
+        if event_data:
+            try:
+                return bool(event_data.get("pull_request", {}).get("draft", False))
+            except Exception as e:
+                logger.warning(f"Error checking if PR is draft: {e}")
+    return False
+
+
+@lru_cache(maxsize=1)
+def get_event_data(event_path: str) -> Optional[dict]:
     try:
-        event_path = os.getenv("GITHUB_EVENT_PATH")
-        pr_number = get_pr_number()
-        if pr_number is not None and event_path:
-            with Path(event_path).open() as f:
-                event_data = json.load(f)
-            return bool(event_data["pull_request"]["draft"])
-        return False  # noqa
-    except Exception as e:
-        logger.warning(f"Error checking if PR is draft: {e}")
-        return False
+        with open(event_path, "rb") as f:
+            # Read as bytes, decode and parse to reduce intermediate allocations
+            data = f.read()
+        return json.loads(data)
+    except Exception:
+        return None
