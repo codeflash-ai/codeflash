@@ -25,6 +25,7 @@ jobs:
       RETRY_DELAY: 5
       EXPECTED_IMPROVEMENT_PCT: 10
       CODEFLASH_END_TO_END: 1
+      PYTHONIOENCODING: "utf8"
     steps:
       - name: 🛎️ Checkout
         uses: actions/checkout@v4
