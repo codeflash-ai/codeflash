@@ -1,6 +1,6 @@
-"""The following script is the dedicated entry point for the Codeflash Language Server.
+"""Dedicated entry point for the Codeflash Language Server.
 
-It initializes the server and redirects its logs to stderr so that the
+Initializes the server and redirects its logs to stderr so that the
 VS Code client can display them in the output channel.
 
 This script is run by the VS Code extension and is not intended to be
@@ -14,7 +14,7 @@ from codeflash.lsp.beta import server
 
 
 # Configure logging to stderr for VS Code output channel
-def setup_logging():  # noqa : ANN201
+def setup_logging() -> logging.Logger:
     # Clear any existing handlers to prevent conflicts
     root_logger = logging.getLogger()
     root_logger.handlers.clear()
@@ -38,12 +38,6 @@ if __name__ == "__main__":
     # Set up logging
     log = setup_logging()
     log.info("Starting Codeflash Language Server...")
-
-    # Silence the console module to prevent stdout pollution
-    from codeflash.cli_cmds.console import console
-
-    console.quiet = True
-    # console.enable()
 
     # Start the language server
     server.start_io()
