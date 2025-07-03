@@ -9,14 +9,19 @@ from codeflash.models.models import GeneratedTests, GeneratedTestsList, Invocati
     VerificationType, TestResults
 from codeflash.verification.verification_utils import TestConfig
 
+
+TestType.__test__ = False
+TestConfig.__test__ = False
+TestResults.__test__ = False
+
 @pytest.fixture
 def test_config():
     """Create a mock TestConfig for testing."""
     config = Mock(spec=TestConfig)
-    config.project_root_path = Path("/project")
+    config.project_root_path = Path(__file__).resolve().parent.parent
     config.test_framework= "pytest"
-    config.tests_project_rootdir = Path("/project/tests")
-    config.tests_root = Path("/project/tests")
+    config.tests_project_rootdir = Path(__file__).resolve().parent
+    config.tests_root = Path(__file__).resolve().parent
     return config
 
 class TestAddRuntimeComments:
@@ -48,6 +53,7 @@ class TestAddRuntimeComments:
     def test_basic_runtime_comment_addition(self, test_config):
         """Test basic functionality of adding runtime comments."""
         # Create test source code
+        os.chdir(test_config.project_root_path)
         test_source = """def test_bubble_sort():
     codeflash_output = bubble_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -58,8 +64,8 @@ class TestAddRuntimeComments:
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module.py"),
-            perf_file_path=Path("/project/tests/test_module_perf.py"),
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py",
         )
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
 
@@ -85,6 +91,7 @@ class TestAddRuntimeComments:
 
     def test_multiple_test_functions(self, test_config):
         """Test handling multiple test functions in the same file."""
+        os.chdir(test_config.project_root_path)
         test_source = """def test_bubble_sort():
     codeflash_output = quick_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -101,8 +108,8 @@ def helper_function():
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module.py"),
-            perf_file_path=Path("/project/tests/test_module_perf.py")
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
         )
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
@@ -137,6 +144,7 @@ def helper_function():
 
     def test_different_time_formats(self, test_config):
         """Test that different time ranges are formatted correctly with new precision rules."""
+        os.chdir(test_config.project_root_path)
         test_cases = [
             (999, 500, "999ns -> 500ns"),  # nanoseconds
             (25_000, 18_000, "25.0μs -> 18.0μs"),  # microseconds with precision
@@ -157,8 +165,8 @@ def helper_function():
                 generated_original_test_source=test_source,
                 instrumented_behavior_test_source="",
                 instrumented_perf_test_source="",
-                behavior_file_path=Path("/project/tests/test_module.py"),
-                perf_file_path=Path("/project/tests/test_module_perf.py")
+                behavior_file_path=test_config.tests_root / "test_module.py",
+                perf_file_path=test_config.tests_root / "test_perf.py"
             )
 
             generated_tests = GeneratedTestsList(generated_tests=[generated_test])
@@ -182,6 +190,7 @@ def helper_function():
 
     def test_missing_test_results(self, test_config):
         """Test behavior when test results are missing for a test function."""
+        os.chdir(test_config.project_root_path)
         test_source = """def test_bubble_sort():
     codeflash_output = bubble_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -192,8 +201,8 @@ def helper_function():
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module.py"),
-            perf_file_path=Path("/project/tests/test_module_perf.py")
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
         )
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
@@ -214,6 +223,7 @@ def helper_function():
 
     def test_partial_test_results(self, test_config):
         """Test behavior when only one set of test results is available."""
+        os.chdir(test_config.project_root_path)
         test_source = """def test_bubble_sort():
     codeflash_output = bubble_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -224,8 +234,8 @@ def helper_function():
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module.py"),
-            perf_file_path=Path("/project/tests/test_module_perf.py")
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
         )
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
@@ -247,6 +257,7 @@ def helper_function():
 
     def test_multiple_runtimes_uses_minimum(self, test_config):
         """Test that when multiple runtimes exist, the minimum is used."""
+        os.chdir(test_config.project_root_path)
         test_source = """def test_bubble_sort():
     codeflash_output = bubble_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -256,8 +267,8 @@ def helper_function():
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module.py"),
-            perf_file_path=Path("/project/tests/test_module_perf.py")
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
         )
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
@@ -286,6 +297,7 @@ def helper_function():
 
     def test_no_codeflash_output_assignment(self, test_config):
         """Test behavior when test doesn't have codeflash_output assignment."""
+        os.chdir(test_config.project_root_path)
         test_source = """def test_bubble_sort():
     result = bubble_sort([3, 1, 2])
     assert result == [1, 2, 3]
@@ -295,8 +307,8 @@ def helper_function():
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module.py"),
-            perf_file_path=Path("/project/tests/test_module_perf.py")
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
         )
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
@@ -320,6 +332,7 @@ def helper_function():
 
     def test_invalid_python_code_handling(self, test_config):
         """Test behavior when test source code is invalid Python."""
+        os.chdir(test_config.project_root_path)
         test_source = """def test_bubble_sort(:
         codeflash_output = bubble_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -329,8 +342,8 @@ def helper_function():
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module.py"),
-            perf_file_path=Path("/project/tests/test_module_perf.py")
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
         )
         qualified_name = "bubble_sort"
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
@@ -354,6 +367,7 @@ def helper_function():
 
     def test_multiple_generated_tests(self, test_config):
         """Test handling multiple generated test objects."""
+        os.chdir(test_config.project_root_path)
         test_source_1 = """def test_bubble_sort():
     codeflash_output = quick_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -371,16 +385,16 @@ def helper_function():
             generated_original_test_source=test_source_1,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module.py"),
-            perf_file_path=Path("/project/tests/test_module_perf.py")
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
         )
 
         generated_test_2 = GeneratedTests(
             generated_original_test_source=test_source_2,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module.py"),
-            perf_file_path=Path("/project/tests/test_module_perf.py")
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
         )
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test_1, generated_test_2])
@@ -410,6 +424,7 @@ def helper_function():
 
     def test_preserved_test_attributes(self, test_config):
         """Test that other test attributes are preserved during modification."""
+        os.chdir(test_config.project_root_path)
         test_source = """def test_bubble_sort():
     codeflash_output = bubble_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -417,15 +432,15 @@ def helper_function():
         qualified_name = "bubble_sort"
         original_behavior_source = "behavior test source"
         original_perf_source = "perf test source"
-        original_behavior_path = Path("/project/tests/test_module.py")
-        original_perf_path = Path("/project/tests/test_module_perf.py")
+        original_behavior_path=test_config.tests_root / "test_module.py"
+        original_perf_path=test_config.tests_root / "test_perf.py"
 
         generated_test = GeneratedTests(
             generated_original_test_source=test_source,
             instrumented_behavior_test_source=original_behavior_source,
             instrumented_perf_test_source=original_perf_source,
-            behavior_file_path=original_behavior_path,
-            perf_file_path=original_perf_path
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
         )
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
@@ -454,6 +469,7 @@ def helper_function():
 
     def test_multistatement_line_handling(self, test_config):
         """Test that runtime comments work correctly with multiple statements on one line."""
+        os.chdir(test_config.project_root_path)
         test_source = """def test_mutation_of_input():
     # Test that the input list is mutated in-place and returned
     arr = [3, 1, 2]
@@ -466,8 +482,8 @@ def helper_function():
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module.py"),
-            perf_file_path=Path("/project/tests/test_module_perf.py")
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
         )
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
@@ -503,6 +519,7 @@ def helper_function():
 
     def test_add_runtime_comments_simple_function(self, test_config):
         """Test adding runtime comments to a simple test function."""
+        os.chdir(test_config.project_root_path)
         test_source = '''def test_function():
     codeflash_output = some_function()
     assert codeflash_output == expected
@@ -512,8 +529,8 @@ def helper_function():
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module.py"),
-            perf_file_path=Path("/project/tests/test_module_perf.py"),
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
         )
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
@@ -543,6 +560,7 @@ def helper_function():
 
     def test_add_runtime_comments_class_method(self, test_config):
         """Test adding runtime comments to a test method within a class."""
+        os.chdir(test_config.project_root_path)
         test_source = '''class TestClass:
     def test_function(self):
         codeflash_output = some_function()
@@ -553,8 +571,8 @@ def helper_function():
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module.py"),
-            perf_file_path=Path("/project/tests/test_module_perf.py"),
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
         )
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
@@ -586,6 +604,7 @@ def helper_function():
 
     def test_add_runtime_comments_multiple_assignments(self, test_config):
         """Test adding runtime comments when there are multiple codeflash_output assignments."""
+        os.chdir(test_config.project_root_path)
         test_source = '''def test_function():
     setup_data = prepare_test()
     codeflash_output = some_function()
@@ -600,8 +619,8 @@ def helper_function():
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module.py"),
-            perf_file_path=Path("/project/tests/test_module_perf.py"),
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
         )
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
@@ -643,6 +662,7 @@ def helper_function():
 
     def test_add_runtime_comments_no_matching_runtimes(self, test_config):
         """Test that source remains unchanged when no matching runtimes are found."""
+        os.chdir(test_config.project_root_path)
         test_source = '''def test_function():
     codeflash_output = some_function()
     assert codeflash_output == expected
@@ -652,8 +672,8 @@ def helper_function():
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module.py"),
-            perf_file_path=Path("/project/tests/test_module_perf.py"),
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
         )
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
@@ -680,6 +700,7 @@ def helper_function():
 
     def test_add_runtime_comments_no_codeflash_output(self, test_config):
         """comments will still be added if codeflash output doesnt exist"""
+        os.chdir(test_config.project_root_path)
         test_source = '''def test_function():
     result = some_function()
     assert result == expected
@@ -693,8 +714,8 @@ def helper_function():
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module.py"),
-            perf_file_path=Path("/project/tests/test_module_perf.py"),
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
         )
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])
@@ -720,6 +741,7 @@ def helper_function():
 
     def test_add_runtime_comments_multiple_tests(self, test_config):
         """Test adding runtime comments to multiple generated tests."""
+        os.chdir(test_config.project_root_path)
         test_source1 = '''def test_function1():
     codeflash_output = some_function()
     assert codeflash_output == expected
@@ -734,16 +756,16 @@ def helper_function():
             generated_original_test_source=test_source1,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module1.py"),
-            perf_file_path=Path("/project/tests/test_module1_perf.py"),
+            behavior_file_path=test_config.tests_root / "test_module1.py",
+            perf_file_path=test_config.tests_root / "test_perf1.py"
         )
 
         generated_test2 = GeneratedTests(
             generated_original_test_source=test_source2,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module2.py"),
-            perf_file_path=Path("/project/tests/test_module2_perf.py"),
+            behavior_file_path=test_config.tests_root / "test_module2.py",
+            perf_file_path=test_config.tests_root / "test_perf2.py"
         )
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test1, generated_test2])
@@ -793,6 +815,7 @@ def helper_function():
 
     def test_add_runtime_comments_performance_regression(self, test_config):
         """Test adding runtime comments when optimized version is slower (negative performance gain)."""
+        os.chdir(test_config.project_root_path)
         test_source = '''def test_function():
     codeflash_output = some_function()
     assert codeflash_output == expected
@@ -804,8 +827,8 @@ def helper_function():
             generated_original_test_source=test_source,
             instrumented_behavior_test_source="",
             instrumented_perf_test_source="",
-            behavior_file_path=Path("/project/tests/test_module.py"),
-            perf_file_path=Path("/project/tests/test_module_perf.py"),
+            behavior_file_path=test_config.tests_root / "test_module.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
         )
 
         generated_tests = GeneratedTestsList(generated_tests=[generated_test])

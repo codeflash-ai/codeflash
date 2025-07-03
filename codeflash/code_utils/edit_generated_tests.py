@@ -159,19 +159,10 @@ class RuntimeCommentTransformer(cst.CSTTransformer):
                     if invocation_id.test_class_name
                     else invocation_id.test_function_name
                 )
-                rel_path = (
-                    Path(invocation_id.test_module_path.replace(".", os.sep))
-                    .with_suffix(".py")
-                    .resolve()
-                    .relative_to(self.tests_root)
-                )
+                abs_path = Path(invocation_id.test_module_path.replace(".", os.sep)).with_suffix(".py").resolve()
                 if (
                     qualified_name == ".".join(self.context_stack)
-                    and rel_path
-                    in [
-                        self.test.behavior_file_path.relative_to(self.tests_root),
-                        self.test.perf_file_path.relative_to(self.tests_root),
-                    ]
+                    and abs_path in [self.test.behavior_file_path, self.test.perf_file_path]
                     and int(invocation_id.iteration_id.split("_")[0]) == self.cfo_locs[self.cfo_idx_loc_to_look_at]  # type:ignore[union-attr]
                 ):
                     matching_original_times.extend(runtimes)
@@ -183,19 +174,10 @@ class RuntimeCommentTransformer(cst.CSTTransformer):
                     if invocation_id.test_class_name
                     else invocation_id.test_function_name
                 )
-                rel_path = (
-                    Path(invocation_id.test_module_path.replace(".", os.sep))
-                    .with_suffix(".py")
-                    .resolve()
-                    .relative_to(self.tests_root)
-                )
+                abs_path = Path(invocation_id.test_module_path.replace(".", os.sep)).with_suffix(".py").resolve()
                 if (
                     qualified_name == ".".join(self.context_stack)
-                    and rel_path
-                    in [
-                        self.test.behavior_file_path.relative_to(self.tests_root),
-                        self.test.perf_file_path.relative_to(self.tests_root),
-                    ]
+                    and abs_path in [self.test.behavior_file_path, self.test.perf_file_path]
                     and int(invocation_id.iteration_id.split("_")[0]) == self.cfo_locs[self.cfo_idx_loc_to_look_at]  # type:ignore[union-attr]
                 ):
                     matching_optimized_times.extend(runtimes)
