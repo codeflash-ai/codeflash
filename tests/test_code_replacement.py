@@ -3098,14 +3098,25 @@ def test_new_global_created_helper_functions_scope():
     original_helper_code: dict[Path, str] = {}
     
     # helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
-    helper_function_paths = []
-    for index, hf in enumerate(code_context.helper_functions):
+    new_helper_functions: list[FakeFunctionSource] = []
+
+    for hf in code_context.helper_functions:
         file_name = hf.file_path.name
         temp_helper_file_path = str(hf.file_path).replace(file_name, f"temp_{file_name}")
         Path(temp_helper_file_path).write_text(hf.file_path.read_text(encoding="utf-8"), encoding="utf-8")
-        helper_function_paths.append(Path(temp_helper_file_path))
-        code_context.helper_functions[index].file_path = Path(temp_helper_file_path)
         going_to_unlink.append(Path(temp_helper_file_path))
+        new_helper_functions.append(FakeFunctionSource(
+            file_path= Path(temp_helper_file_path),
+            fully_qualified_name= hf.fully_qualified_name,
+            jedi_definition= hf.jedi_definition,
+            only_function_name= hf.only_function_name,
+            source_code= hf.source_code,
+            qualified_name= hf.qualified_name
+        ))
+        
+    code_context.helper_functions = new_helper_functions
+    helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+
     for helper_function_path in helper_function_paths:
         with helper_function_path.open(encoding="utf8") as f:
             helper_code = f.read()
