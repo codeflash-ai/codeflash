@@ -89,7 +89,8 @@ def run_codeflash_command(
 
     command = build_command(cwd, config, test_root, config.benchmarks_root if config.benchmarks_root else None)
     process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy(),
+        encoding='utf-8', errors='replace'
     )
 
     output = []
@@ -189,7 +190,8 @@ def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_p
     clear_directory(test_root)
     command = ["python", "-m", "codeflash.tracer", "-o", "codeflash.trace", "workload.py"]
     process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy(),
+        encoding='utf-8', errors='replace'
     )
 
     output = []
@@ -217,7 +219,8 @@ def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_p
     # Second command: Run optimization
     command = ["codeflash", "--replay-test", str(replay_test_path), "--no-pr"]
     process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy(),
+        encoding='utf-8', errors='replace'
     )
 
     output = []
