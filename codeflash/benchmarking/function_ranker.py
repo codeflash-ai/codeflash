@@ -98,7 +98,7 @@ class FunctionRanker:
 
     def rank_functions(self, functions_to_optimize: list[FunctionToOptimize]) -> list[FunctionToOptimize]:
         ranked = sorted(functions_to_optimize, key=self.get_function_ttx_score, reverse=True)
-        logger.info(
+        logger.debug(
             f"Function ranking order: {[f'{func.function_name} (ttX={self.get_function_ttx_score(func):.2f})' for func in ranked]}"
         )
         return ranked

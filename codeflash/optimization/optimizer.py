@@ -109,7 +109,7 @@ class Optimizer:
 
         return function_benchmark_timings, total_benchmark_timings
 
-    def get_optimizable_functions(self) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
+    def get_optimizable_functions(self) -> tuple[dict[Path, list[FunctionToOptimize]], int, Path | None]:
         """Discover functions to optimize."""
         from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
 
@@ -255,7 +255,7 @@ class Optimizer:
         cleanup_paths(Optimizer.find_leftover_instrumented_test_files(self.test_cfg.tests_root))
 
         function_optimizer = None
-        file_to_funcs_to_optimize, num_optimizable_functions = self.get_optimizable_functions()
+        file_to_funcs_to_optimize, num_optimizable_functions, trace_file_path = self.get_optimizable_functions()
         function_benchmark_timings, total_benchmark_timings = self.run_benchmarks(
             file_to_funcs_to_optimize, num_optimizable_functions
         )
@@ -282,7 +282,21 @@ class Optimizer:
 
                 validated_original_code, original_module_ast = module_prep_result
 
-                for function_to_optimize in file_to_funcs_to_optimize[original_module_path]:
+                functions_to_optimize = file_to_funcs_to_optimize[original_module_path]
+                if trace_file_path and trace_file_path.exists() and len(functions_to_optimize) > 1:
+                    try:
+                        from codeflash.benchmarking.function_ranker import FunctionRanker
+
+                        ranker = FunctionRanker(trace_file_path)
+                        functions_to_optimize = ranker.rank_functions(functions_to_optimize)
+                        logger.info(
+                            f"Ranked {len(functions_to_optimize)} functions by performance impact in {original_module_path}"
+                        )
+                        console.rule()
+                    except Exception as e:
+                        logger.debug(f"Could not rank functions in {original_module_path}: {e}")
+
+                for function_to_optimize in functions_to_optimize:
                     function_iterator_count += 1
                     logger.info(
                         f"Optimizing function {function_iterator_count} of {num_optimizable_functions}: "
@@ -322,6 +336,8 @@ class Optimizer:
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
             if self.functions_checkpoint:
                 self.functions_checkpoint.cleanup()
+            if hasattr(self.args, "command") and self.args.command == "optimize":
+                self.cleanup_replay_tests()
             if optimizations_found == 0:
                 logger.info("❌ No optimizations found.")
             elif self.args.all:
@@ -351,6 +367,11 @@ class Optimizer:
         return [
             file_path for file_path in test_root.rglob("*") if file_path.is_file() and pattern.match(file_path.name)
         ]
+
+    def cleanup_replay_tests(self) -> None:
+        if self.replay_tests_dir and self.replay_tests_dir.exists():
+            logger.debug(f"Cleaning up replay tests directory: {self.replay_tests_dir}")
+            cleanup_paths([self.replay_tests_dir])
 
     def cleanup_temporary_paths(self) -> None:
         if self.current_function_optimizer:

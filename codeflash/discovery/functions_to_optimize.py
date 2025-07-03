@@ -158,7 +158,7 @@ def get_functions_to_optimize(
     project_root: Path,
     module_root: Path,
     previous_checkpoint_functions: dict[str, dict[str, str]] | None = None,
-) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
+) -> tuple[dict[Path, list[FunctionToOptimize]], int, Path | None]:
     assert sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1, (
         "Only one of optimize_all, replay_test, or file should be provided"
     )
@@ -208,27 +208,6 @@ def get_functions_to_optimize(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )
 
-        if trace_file_path and trace_file_path.exists():
-            from codeflash.benchmarking.function_ranker import FunctionRanker
-
-            ranker = FunctionRanker(trace_file_path)
-
-            all_functions = []
-            for file_functions in filtered_modified_functions.values():
-                all_functions.extend(file_functions)
-
-            if all_functions:
-                ranked_functions = ranker.rank_functions(all_functions)
-                functions_count = len(ranked_functions)
-
-                ranked_dict = {}
-                for func in ranked_functions:
-                    if func.file_path not in ranked_dict:
-                        ranked_dict[func.file_path] = []
-                    ranked_dict[func.file_path].append(func)
-
-                filtered_modified_functions = ranked_dict
-
         logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
         if optimize_all:
             three_min_in_ns = int(1.8e11)
@@ -237,7 +216,7 @@ def get_functions_to_optimize(
                 f"It might take about {humanize_runtime(functions_count * three_min_in_ns)} to fully optimize this project. Codeflash "
                 f"will keep opening pull requests as it finds optimizations."
             )
-        return filtered_modified_functions, functions_count
+        return filtered_modified_functions, functions_count, trace_file_path
 
 
 def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
