@@ -120,9 +120,8 @@ def run_codeflash_command(
 def build_command(
     cwd: pathlib.Path, config: TestConfig, test_root: pathlib.Path, benchmarks_root: pathlib.Path | None = None
 ) -> list[str]:
-    python_path = "../../../codeflash/main.py" if "code_directories" in str(cwd) else "../codeflash/main.py"
-
-    base_command = ["python", python_path, "--file", config.file_path, "--no-pr"]
+    # Use the installed codeflash entry point instead of running the script directly
+    base_command = ["codeflash", "--file", config.file_path, "--no-pr"]
 
     if config.function_name:
         base_command.extend(["--function", config.function_name])
@@ -216,7 +215,7 @@ def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_p
         return False
 
     # Second command: Run optimization
-    command = ["python", "../../../codeflash/main.py", "--replay-test", str(replay_test_path), "--no-pr"]
+    command = ["codeflash", "--replay-test", str(replay_test_path), "--no-pr"]
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
     )
