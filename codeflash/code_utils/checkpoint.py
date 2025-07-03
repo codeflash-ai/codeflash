@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
-import click
+from rich.prompt import Confirm
 
 if TYPE_CHECKING:
     import argparse
@@ -139,7 +139,7 @@ def ask_should_use_checkpoint_get_functions(args: argparse.Namespace) -> Optiona
     previous_checkpoint_functions = None
     if args.all and (sys.platform == "linux" or sys.platform == "darwin") and Path("/tmp").is_dir():  # noqa: S108 #TODO: use the temp dir from codeutils-compat.py
         previous_checkpoint_functions = get_all_historical_functions(args.module_root, Path("/tmp"))  # noqa: S108
-        if previous_checkpoint_functions and click.confirm(
+        if previous_checkpoint_functions and Confirm.ask(
             "Previous Checkpoint detected from an incomplete optimization run, shall I continue the optimization from that point?",
             default=True,
         ):
