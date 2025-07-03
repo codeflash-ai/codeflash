@@ -67,9 +67,9 @@ def parse_config_file(
         raise ValueError(msg) from e
     assert isinstance(config, dict)
 
-    # default values:
-    path_keys = ["module-root", "tests-root", "benchmarks-root"]
-    path_list_keys = ["ignore-paths"]
+    # Prepare defaults once
+    path_keys = {"module-root", "tests-root", "benchmarks-root"}
+    path_list_keys = {"ignore-paths"}
     str_keys = {"pytest-cmd": "pytest", "git-remote": "origin"}
     bool_keys = {
         "override-fixtures": False,
@@ -79,43 +79,53 @@ def parse_config_file(
     }
     list_str_keys = {"formatter-cmds": ["black $file"]}
 
+    # Instead of multiple key lookups and conversions, normalize hyphen keys in a single pass (adds _ variant)
+    # While iterating over the keys, also copy all values in a new dict (to avoid mutation during iteration)
+    norm_config = {}
+    for k, v in config.items():
+        if "-" in k:
+            norm_k = k.replace("-", "_")
+            if norm_k not in config:
+                norm_config[norm_k] = v
+        norm_config[k] = v
+    config = norm_config
+
+    parent_dir = config_file_path.parent
+
+    # Set all default values efficiently, only if not present
     for key, default_value in str_keys.items():
-        if key in config:
-            config[key] = str(config[key])
-        else:
-            config[key] = default_value
+        config[key] = str(config.get(key, default_value))
+
     for key, default_value in bool_keys.items():
-        if key in config:
-            config[key] = bool(config[key])
-        else:
-            config[key] = default_value
+        config[key] = bool(config.get(key, default_value))
+
     for key in path_keys:
-        if key in config:
-            config[key] = str((Path(config_file_path).parent / Path(config[key])).resolve())
+        pathval = config.get(key)
+        if pathval is not None:
+            config[key] = str((parent_dir / Path(pathval)).resolve())
+
     for key, default_value in list_str_keys.items():
-        if key in config:
-            config[key] = [str(cmd) for cmd in config[key]]
+        val = config.get(key, default_value)
+        # Defensive: Make sure it's a list of str
+        if isinstance(val, list):
+            config[key] = [str(cmd) for cmd in val]
         else:
             config[key] = default_value
 
     for key in path_list_keys:
-        if key in config:
-            config[key] = [str((Path(config_file_path).parent / path).resolve()) for path in config[key]]
+        val = config.get(key)
+        if val is not None and isinstance(val, list):
+            config[key] = [str((parent_dir / Path(path)).resolve()) for path in val]
         else:
             config[key] = []
 
     assert config["test-framework"] in {"pytest", "unittest"}, (
         "In pyproject.toml, Codeflash only supports the 'test-framework' as pytest and unittest."
     )
-    # see if this is happening during GitHub actions setup
     if len(config["formatter-cmds"]) > 0 and not override_formatter_check:
         assert config["formatter-cmds"][0] != "your-formatter $file", (
             "The formatter command is not set correctly in pyproject.toml. Please set the "
             "formatter command in the 'formatter-cmds' key. More info - https://docs.codeflash.ai/configuration"
         )
-    for key in list(config.keys()):
-        if "-" in key:
-            config[key.replace("-", "_")] = config[key]
-            del config[key]
 
     return config, config_file_path
