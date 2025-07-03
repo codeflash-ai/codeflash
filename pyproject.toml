@@ -41,6 +41,7 @@ dependencies = [
     "coverage>=7.6.4",
     "line_profiler>=4.2.0",
     "platformdirs>=4.3.7",
+    "pygls>=1.3.1",
 ]
 
 [project.urls]
@@ -237,7 +238,8 @@ ignore = [
     "S301",
     "D104",
     "PERF203",
-    "LOG015"
+    "LOG015",
+    "PLC0415"
 ]
 
 [tool.ruff.lint.flake8-type-checking]
@@ -266,16 +268,16 @@ enable = true
 style = "pep440"
 vcs = "git"
 
-[tool.uv-dynamic-versioning.substitution]
-files = ["codeflash/version.py"]
-
-[tool.uv-dynamic-versioning.files."codeflash/version.py"]
-persistent-substitution = true
-initial-content = """
-  # These version placeholders will be replaced by uv-dynamic-versioning during build.
-  __version__ = "0.0.0"
-  __version_tuple__ = (0, 0, 0)
+[tool.hatch.build.hooks.version]
+path = "codeflash/version.py"
+template = """# These version placeholders will be replaced by uv-dynamic-versioning during build.
+__version__ = "{version}"
 """
+
+
+#[tool.hatch.build.hooks.custom]
+#path = "codeflash/update_license_version.py"
+
 
 [tool.codeflash]
 module-root = "codeflash"

@@ -10,13 +10,16 @@
         }
     ],
     "settings": {
-        "python.defaultInterpreterPath": "~/miniforge3/envs/codeflash312/bin/python",
         "python.terminal.activateEnvironment": true,
         "python.testing.pytestEnabled": true,
-        "python.testing.pytestArgs": ["tests/", "-vv"],
+        "python.testing.pytestArgs": [
+            "tests/",
+            "-vv",
+            "--ignore",
+            "tests/benchmarks/"
+        ],
     },
     "launch": {
-        "version": "0.2.0",
         "configurations": [
             {
                 "name": "bubble_sort",
@@ -62,19 +65,26 @@
                 },
             },
             {
-                "name": "bubble_sort --file bubble_sort.py (MBR)",
+                "name": "run codeflash in custom directory",
                 "type": "debugpy",
                 "request": "launch",
                 "program": "${workspaceFolder:codeflash}/codeflash/main.py",
                 "args": [
                     "--all",
                 ],
-                "cwd": "/Users/krrt7/Desktop/work/my-best-repo",
+                "cwd": "${input:chooseCwd}",
                 "console": "integratedTerminal",
                 "env": {
                     "PYTHONUNBUFFERED": "1"
-                },
+                }
+            }
+        ],
+        "inputs": [
+            {
+                "id": "chooseCwd",
+                "type": "promptString",
+                "description": "Enter the working directory for codeflash",
             }
         ]
-    }
+    },
 }

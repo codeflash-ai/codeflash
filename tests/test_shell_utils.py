@@ -60,6 +60,16 @@ class TestReadApiKeyFromShellConfig(unittest.TestCase):
             ) as mock_file:
                 self.assertEqual(read_api_key_from_shell_config(), self.api_key)
                 mock_file.assert_called_once_with(self.test_rc_path, encoding="utf8")
+            with patch(
+                "builtins.open", mock_open(read_data=f'export CODEFLASH_API_KEY=\'{self.api_key}\'\n')
+            ) as mock_file:
+                self.assertEqual(read_api_key_from_shell_config(), self.api_key)
+                mock_file.assert_called_once_with(self.test_rc_path, encoding="utf8")
+            with patch(
+                "builtins.open", mock_open(read_data=f'#export CODEFLASH_API_KEY=\'{self.api_key}\'\n')
+            ) as mock_file:
+                self.assertEqual(read_api_key_from_shell_config(), None)
+                mock_file.assert_called_once_with(self.test_rc_path, encoding="utf8")
 
     @patch("codeflash.code_utils.shell_utils.get_shell_rc_path")
     def test_no_api_key(self, mock_get_shell_rc_path):

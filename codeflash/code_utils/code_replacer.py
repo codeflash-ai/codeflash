@@ -415,12 +415,16 @@ def replace_function_definitions_in_module(
 ) -> bool:
     source_code: str = module_abspath.read_text(encoding="utf8")
     new_code: str = replace_functions_and_add_imports(
-        source_code, function_names, optimized_code, module_abspath, preexisting_objects, project_root_path
+        add_global_assignments(optimized_code, source_code),
+        function_names,
+        optimized_code,
+        module_abspath,
+        preexisting_objects,
+        project_root_path,
     )
     if is_zero_diff(source_code, new_code):
         return False
-    code_with_global_assignments = add_global_assignments(optimized_code, new_code)
-    module_abspath.write_text(code_with_global_assignments, encoding="utf8")
+    module_abspath.write_text(new_code, encoding="utf8")
     return True
 
 

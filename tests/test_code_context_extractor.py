@@ -11,6 +11,8 @@ from codeflash.context.code_context_extractor import get_code_optimization_conte
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
 from codeflash.optimization.optimizer import Optimizer
+from codeflash.code_utils.code_replacer import replace_functions_and_add_imports
+from codeflash.code_utils.code_extractor import add_global_assignments
 
 
 @pytest.fixture(scope="module")
@@ -2442,3 +2444,22 @@ class SimpleClass:
     assert "class SimpleClass:" in code_content
     assert "def simple_method(self):" in code_content
     assert "return 42" in code_content
+
+
+
+def test_replace_functions_and_add_imports():
+    path_to_root = Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "circular_deps"
+    file_abs_path = path_to_root / "api_client.py"
+    optimized_code = Path(path_to_root / "optimized.py").read_text(encoding="utf-8")
+    content = Path(file_abs_path).read_text(encoding="utf-8")
+    new_code = replace_functions_and_add_imports(
+        source_code= add_global_assignments(optimized_code, content),
+        function_names= ["ApiClient.get_console_url"],
+        optimized_code= optimized_code,
+        module_abspath= Path(file_abs_path),
+        preexisting_objects= {('ApiClient', ()), ('get_console_url', (FunctionParent(name='ApiClient', type='ClassDef'),))},
+        project_root_path= Path(path_to_root),
+    )
+    assert "import ApiClient" not in new_code, "Error: Circular dependency found"
+    
+    assert "import urllib.parse" in new_code, "Make sure imports for optimization global assignments exist" 
