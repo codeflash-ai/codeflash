@@ -161,7 +161,8 @@ class RuntimeCommentTransformer(cst.CSTTransformer):
                 )
                 rel_path = (
                     Path(invocation_id.test_module_path.replace(".", os.sep))
-                    .with_suffix(".py").resolve()
+                    .with_suffix(".py")
+                    .resolve()
                     .relative_to(self.tests_root)
                 )
                 if (
@@ -184,7 +185,8 @@ class RuntimeCommentTransformer(cst.CSTTransformer):
                 )
                 rel_path = (
                     Path(invocation_id.test_module_path.replace(".", os.sep))
-                    .with_suffix(".py").resolve()
+                    .with_suffix(".py")
+                    .resolve()
                     .relative_to(self.tests_root)
                 )
                 if (
@@ -238,7 +240,6 @@ def add_runtime_comments_to_generated_tests(
 ) -> GeneratedTestsList:
     """Add runtime performance comments to function calls in generated tests."""
     tests_root = test_cfg.tests_root
-    module_root = test_cfg.project_root_path
 
     # Process each generated test
     modified_tests = []
