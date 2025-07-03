@@ -292,7 +292,9 @@ formatter-cmds = [
 [tool.pytest.ini_options]
 filterwarnings = [
     "ignore::pytest.PytestCollectionWarning",
-    "ignore::pytest.PytestUnknownMarkWarning"
+]
+markers = [
+    "ci_skip: mark test to skip in CI environment",
 ]
 
 [build-system]
