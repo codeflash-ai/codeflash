@@ -14,8 +14,8 @@ class TestExistingTestsSourceFor:
         """Set up test fixtures."""
         # Mock test config
         self.test_cfg = Mock()
-        self.test_cfg.tests_root = Path("/project/tests")
-        self.test_cfg.project_root_path = Path("/project")
+        self.test_cfg.tests_root = Path(__file__).resolve().parent
+        self.test_cfg.project_root_path = Path(__file__).resolve().parent.parent
 
         # Mock invocation ID
         self.mock_invocation_id = Mock()
@@ -26,10 +26,14 @@ class TestExistingTestsSourceFor:
         # Mock function called in test
         self.mock_function_called_in_test = Mock()
         self.mock_function_called_in_test.tests_in_file = Mock()
-        self.mock_function_called_in_test.tests_in_file.test_file = "/project/tests/test_module.py"
+        self.mock_function_called_in_test.tests_in_file.test_file = Path(__file__).resolve().parent / "test_module.py"
+        #Path to pyproject.toml
+        os.chdir(self.test_cfg.project_root_path)
+        
 
     def test_no_test_files_returns_empty_string(self):
         """Test that function returns empty string when no test files exist."""
+        
         function_to_tests = {}
         original_runtimes = {}
         optimized_runtimes = {}
@@ -46,6 +50,7 @@ class TestExistingTestsSourceFor:
 
     def test_single_test_with_improvement(self):
         """Test single test showing performance improvement."""
+        
         function_to_tests = {
             "module.function": {self.mock_function_called_in_test}
         }
@@ -73,6 +78,7 @@ class TestExistingTestsSourceFor:
 
     def test_single_test_with_regression(self):
         """Test single test showing performance regression."""
+        
         function_to_tests = {
             "module.function": {self.mock_function_called_in_test}
         }
@@ -100,6 +106,7 @@ class TestExistingTestsSourceFor:
 
     def test_test_without_class_name(self):
         """Test function without class name (standalone test function)."""
+        
         mock_invocation_no_class = Mock()
         mock_invocation_no_class.test_module_path = "tests.test_module"
         mock_invocation_no_class.test_class_name = None
@@ -132,6 +139,7 @@ class TestExistingTestsSourceFor:
 
     def test_missing_original_runtime(self):
         """Test when original runtime is missing (shows NaN)."""
+        
         function_to_tests = {
             "module.function": {self.mock_function_called_in_test}
         }
@@ -156,6 +164,7 @@ class TestExistingTestsSourceFor:
 
     def test_missing_optimized_runtime(self):
         """Test when optimized runtime is missing (shows NaN)."""
+        
         function_to_tests = {
             "module.function": {self.mock_function_called_in_test}
         }
@@ -181,9 +190,10 @@ class TestExistingTestsSourceFor:
     def test_multiple_tests_sorted_output(self):
         """Test multiple tests with sorted output by filename and function name."""
         # Create second test file
+        
         mock_function_called_2 = Mock()
         mock_function_called_2.tests_in_file = Mock()
-        mock_function_called_2.tests_in_file.test_file = "/project/tests/test_another.py"
+        mock_function_called_2.tests_in_file.test_file = Path(__file__).resolve().parent / "test_another.py"
 
         mock_invocation_2 = Mock()
         mock_invocation_2.test_module_path = "tests.test_another"
@@ -220,6 +230,7 @@ class TestExistingTestsSourceFor:
 
     def test_multiple_runtimes_uses_minimum(self):
         """Test that function uses minimum runtime when multiple measurements exist."""
+        
         function_to_tests = {
             "module.function": {self.mock_function_called_in_test}
         }
@@ -247,6 +258,7 @@ class TestExistingTestsSourceFor:
 
     def test_complex_module_path_conversion(self):
         """Test conversion of complex module paths to file paths."""
+        
         mock_invocation_complex = Mock()
         mock_invocation_complex.test_module_path = "tests.integration.test_complex_module"
         mock_invocation_complex.test_class_name = "TestComplex"
@@ -254,7 +266,7 @@ class TestExistingTestsSourceFor:
 
         mock_function_complex = Mock()
         mock_function_complex.tests_in_file = Mock()
-        mock_function_complex.tests_in_file.test_file = f"/project/tests/integration/test_complex_module.py"
+        mock_function_complex.tests_in_file.test_file = Path(__file__).resolve().parent / "integration/test_complex_module.py"
 
         function_to_tests = {
             "module.function": {mock_function_complex}
@@ -283,6 +295,7 @@ class TestExistingTestsSourceFor:
 
     def test_zero_runtime_values(self):
         """Test handling of zero runtime values."""
+        
         function_to_tests = {
             "module.function": {self.mock_function_called_in_test}
         }
@@ -310,6 +323,7 @@ class TestExistingTestsSourceFor:
     def test_filters_out_generated_tests(self):
         """Test that generated tests are filtered out and only non-generated tests are included."""
         # Create a test that would be filtered out (not in non_generated_tests)
+        
         mock_generated_test = Mock()
         mock_generated_test.tests_in_file = Mock()
         mock_generated_test.tests_in_file.test_file = "/project/tests/generated_test.py"
