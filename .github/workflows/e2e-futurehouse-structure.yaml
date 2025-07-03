@@ -69,4 +69,4 @@ jobs:
       - name: Run Codeflash to optimize code
         id: optimize_code
         run: |
-          uv run python tests/scripts/end_to_end_test_futurehouse.py
+          uv run tests/scripts/end_to_end_test_futurehouse.py
