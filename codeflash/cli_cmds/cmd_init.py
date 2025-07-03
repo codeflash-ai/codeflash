@@ -231,8 +231,7 @@ def collect_setup_info() -> SetupInfo:
     info_panel = Panel(
         Text(
             "📁 Let's identify your Python module directory.\n\n"
-            "This is usually the top-level directory containing all your Python source code.\n"
-            "We've automatically detected some directories for you.",
+            "This is usually the top-level directory containing all your Python source code.\n",
             style="cyan",
         ),
         title="🔍 Module Discovery",
@@ -936,7 +935,6 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     codeflash_section["module-root"] = setup_info.module_root
     codeflash_section["tests-root"] = setup_info.tests_root
     codeflash_section["test-framework"] = setup_info.test_framework
-    codeflash_section["benchmarks-root"] = setup_info.benchmarks_root if setup_info.benchmarks_root else ""
     codeflash_section["ignore-paths"] = setup_info.ignore_paths
     codeflash_section["disable-telemetry"] = not enable_telemetry
     if setup_info.git_remote not in ["", "origin"]:
