@@ -43,7 +43,6 @@ def existing_tests_source_for(
     headers = ["Test File::Test Function", "Original ⏱️", "Optimized ⏱️", "Speedup"]
     tests_root = test_cfg.tests_root
     module_root = test_cfg.project_root_path
-    rel_tests_root = tests_root.relative_to(module_root)
     original_tests_to_runtimes: dict[Path, dict[str, int]] = {}
     optimized_tests_to_runtimes: dict[Path, dict[str, int]] = {}
     non_generated_tests = set()
@@ -53,7 +52,7 @@ def existing_tests_source_for(
     all_invocation_ids = original_runtimes_all.keys() | optimized_runtimes_all.keys()
     for invocation_id in all_invocation_ids:
         rel_path = (
-            Path(invocation_id.test_module_path.replace(".", os.sep)).with_suffix(".py").relative_to(rel_tests_root)
+            Path(invocation_id.test_module_path.replace(".", os.sep)).with_suffix(".py").resolve().relative_to(tests_root)
         )
         if rel_path not in non_generated_tests:
             continue

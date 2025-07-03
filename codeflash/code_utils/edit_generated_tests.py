@@ -102,7 +102,6 @@ class RuntimeCommentTransformer(cst.CSTTransformer):
         module: cst.Module,
         test: GeneratedTests,
         tests_root: Path,
-        rel_tests_root: Path,
         original_runtimes: dict[InvocationId, list[int]],
         optimized_runtimes: dict[InvocationId, list[int]],
     ) -> None:
@@ -110,7 +109,6 @@ class RuntimeCommentTransformer(cst.CSTTransformer):
         self.test = test
         self.context_stack: list[str] = []
         self.tests_root = tests_root
-        self.rel_tests_root = rel_tests_root
         self.module = module
         self.cfo_locs: list[int] = []
         self.cfo_idx_loc_to_look_at: int = -1
@@ -163,8 +161,8 @@ class RuntimeCommentTransformer(cst.CSTTransformer):
                 )
                 rel_path = (
                     Path(invocation_id.test_module_path.replace(".", os.sep))
-                    .with_suffix(".py")
-                    .relative_to(self.rel_tests_root)
+                    .with_suffix(".py").resolve()
+                    .relative_to(self.tests_root)
                 )
                 if (
                     qualified_name == ".".join(self.context_stack)
@@ -186,8 +184,8 @@ class RuntimeCommentTransformer(cst.CSTTransformer):
                 )
                 rel_path = (
                     Path(invocation_id.test_module_path.replace(".", os.sep))
-                    .with_suffix(".py")
-                    .relative_to(self.rel_tests_root)
+                    .with_suffix(".py").resolve()
+                    .relative_to(self.tests_root)
                 )
                 if (
                     qualified_name == ".".join(self.context_stack)
@@ -241,7 +239,6 @@ def add_runtime_comments_to_generated_tests(
     """Add runtime performance comments to function calls in generated tests."""
     tests_root = test_cfg.tests_root
     module_root = test_cfg.project_root_path
-    rel_tests_root = tests_root.relative_to(module_root)
 
     # Process each generated test
     modified_tests = []
@@ -250,9 +247,9 @@ def add_runtime_comments_to_generated_tests(
             # Parse the test source code
             tree = cst.parse_module(test.generated_original_test_source)
             # Transform the tree to add runtime comments
-            # qualified_name: str, module: cst.Module, test: GeneratedTests, tests_root: Path, rel_tests_root: Path
+            # qualified_name: str, module: cst.Module, test: GeneratedTests, tests_root: Path
             transformer = RuntimeCommentTransformer(
-                qualified_name, tree, test, tests_root, rel_tests_root, original_runtimes, optimized_runtimes
+                qualified_name, tree, test, tests_root, original_runtimes, optimized_runtimes
             )
             modified_tree = tree.visit(transformer)
 
