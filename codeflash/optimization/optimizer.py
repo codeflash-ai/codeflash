@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import json
 import os
 import tempfile
 import time
@@ -13,7 +12,7 @@ from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
-from codeflash.code_utils.env_utils import get_pr_number
+from codeflash.code_utils.env_utils import get_pr_number, is_pr_draft
 from codeflash.either import is_successful
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
@@ -64,7 +63,6 @@ class Optimizer:
         from codeflash.benchmarking.replay_test import generate_replay_test
         from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
         from codeflash.benchmarking.utils import print_benchmark_table, validate_and_format_benchmark_table
-        from codeflash.code_utils.env_utils import get_pr_number
 
         with progress_bar(
             f"Running benchmarks in {self.args.benchmarks_root}", transient=True, revert_to_print=bool(get_pr_number())
@@ -394,18 +392,3 @@ def run_with_args(args: Namespace) -> None:
             optimizer.cleanup_temporary_paths()
 
         raise SystemExit from None
-
-
-def is_pr_draft() -> bool:
-    """Check if the PR is draft. in the github action context."""
-    try:
-        event_path = os.getenv("GITHUB_EVENT_PATH")
-        pr_number = get_pr_number()
-        if pr_number is not None and event_path:
-            with Path(event_path).open() as f:
-                event_data = json.load(f)
-            return bool(event_data["pull_request"]["draft"])
-        return False  # noqa
-    except Exception as e:
-        logger.warning(f"Error checking if PR is draft: {e}")
-        return False

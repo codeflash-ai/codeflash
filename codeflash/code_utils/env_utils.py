@@ -121,3 +121,18 @@ def is_ci() -> bool:
 @lru_cache(maxsize=1)
 def is_LSP_enabled() -> bool:
     return console.quiet
+
+
+def is_pr_draft() -> bool:
+    """Check if the PR is draft. in the github action context."""
+    try:
+        event_path = os.getenv("GITHUB_EVENT_PATH")
+        pr_number = get_pr_number()
+        if pr_number is not None and event_path:
+            with Path(event_path).open() as f:
+                event_data = json.load(f)
+            return bool(event_data["pull_request"]["draft"])
+        return False  # noqa
+    except Exception as e:
+        logger.warning(f"Error checking if PR is draft: {e}")
+        return False
