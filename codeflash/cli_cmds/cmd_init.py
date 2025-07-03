@@ -82,7 +82,7 @@ def init_codeflash() -> None:
         if "setup_info" in locals():
             module_string = f" you selected ({setup_info.module_root})"
 
-        logger.info(
+        console.print(
             f"{LF}"
             f"⚡️ Codeflash is now set up! You can now run:{LF}"
             f"    codeflash --file <path-to-file> --function <function-name> to optimize a function within a file{LF}"
@@ -481,7 +481,6 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         )
         console.rule()
         input("Press Enter to continue...")
-        logger.info("")
         logger.info(
             f"Please edit, commit and push this GitHub actions file to your repo, and you're all set!{LF}"
             f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
@@ -659,7 +658,6 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
     logger.info(f"✅ Added Codeflash configuration to {toml_path}")
     console.rule()
-    logger.info("")
 
 
 def install_github_app() -> None:
