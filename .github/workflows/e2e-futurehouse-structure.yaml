@@ -66,6 +66,7 @@ jobs:
       - name: Install dependencies (CLI)
         run: |
           uv sync
+          uv add ruff
 
       - name: Run Codeflash to optimize code
         id: optimize_code
