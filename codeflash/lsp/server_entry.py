@@ -39,11 +39,5 @@ if __name__ == "__main__":
     log = setup_logging()
     log.info("Starting Codeflash Language Server...")
 
-    # Silence the console module to prevent stdout pollution
-    from codeflash.cli_cmds.console import console
-
-    console.quiet = True
-    # console.enable()
-
     # Start the language server
     server.start_io()
