@@ -1,10 +1,9 @@
-"""This script is the dedicated entry point for the Codeflash Language Server.
-It initializes the server and redirects its logs to stderr so that the
-VS Code client can display them in the output channel.
+# This script is the dedicated entry point for the Codeflash Language Server.
+# It initializes the server and redirects its logs to stderr so that the
+# VS Code client can display them in the output channel.
 
-This script is run by the VS Code extension and is not intended to be
-executed directly by users.
-"""
+# This script is run by the VS Code extension and is not intended to be
+# executed directly by users.
 
 import logging
 import sys
@@ -13,7 +12,7 @@ from codeflash.lsp.beta import server
 
 
 # Configure logging to stderr for VS Code output channel
-def setup_logging():
+def setup_logging() -> logging.Logger:
     # Clear any existing handlers to prevent conflicts
     root_logger = logging.getLogger()
     root_logger.handlers.clear()
