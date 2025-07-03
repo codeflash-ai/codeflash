@@ -110,3 +110,30 @@ def test_files_progress_bar(total: int, description: str) -> Generator[tuple[Pro
     ) as progress:
         task_id = progress.add_task(description, total=total)
         yield progress, task_id
+
+
+def prompt_with_rule(
+    question: str,
+    *,
+    choices: list[str] | None = None,
+    default: str = "",
+    show_default: bool = True,
+    password: bool = False,
+) -> str:
+    """Prompt user for input and add a console rule after."""
+    from rich.prompt import Prompt
+
+    result = Prompt.ask(
+        question, choices=choices, default=default, show_default=show_default, password=password, console=console
+    )
+    console.rule()
+    return result
+
+
+def confirm_with_rule(question: str, *, default: bool = True, show_default: bool = True) -> bool:
+    """Prompt user for confirmation and add a console rule after."""
+    from rich.prompt import Confirm
+
+    result = Confirm.ask(question, default=default, show_default=show_default, console=console)
+    console.rule()
+    return result

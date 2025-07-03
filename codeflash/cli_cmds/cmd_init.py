@@ -5,20 +5,19 @@ import os
 import re
 import subprocess
 import sys
+import webbrowser
 from enum import Enum, auto
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Union, cast
 
-import click
 import git
 import tomlkit
 from git import InvalidGitRepositoryError, Repo
 from pydantic.dataclasses import dataclass
-from rich.prompt import Confirm, Prompt
 
 from codeflash.api.cfapi import is_github_app_installed_on_repo
 from codeflash.cli_cmds.cli_common import apologize_and_exit
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import confirm_with_rule, console, logger, prompt_with_rule
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import check_formatter_installed, get_codeflash_api_key
@@ -65,7 +64,8 @@ class DependencyManager(Enum):
 
 def init_codeflash() -> None:
     try:
-        click.echo(f"⚡️ Welcome to Codeflash! Let's get you set up.{LF}")
+        logger.info(f"⚡️ Welcome to Codeflash! Let's get you set up.{LF}")
+        console.rule()
 
         did_add_new_key = prompt_api_key()
 
@@ -82,7 +82,7 @@ def init_codeflash() -> None:
         if "setup_info" in locals():
             module_string = f" you selected ({setup_info.module_root})"
 
-        click.echo(
+        logger.info(
             f"{LF}"
             f"⚡️ Codeflash is now set up! You can now run:{LF}"
             f"    codeflash --file <path-to-file> --function <function-name> to optimize a function within a file{LF}"
@@ -91,13 +91,15 @@ def init_codeflash() -> None:
             f"-or-{LF}"
             f"    codeflash --help to see all options{LF}"
         )
+        console.rule()
         if did_add_new_key:
-            click.echo("🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!")
-            click.echo("Or run the following command to reload:")
+            logger.info("🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!")
+            logger.info("Or run the following command to reload:")
             if os.name == "nt":
-                click.echo(f"  call {get_shell_rc_path()}")
+                logger.info(f"  call {get_shell_rc_path()}")
             else:
-                click.echo(f"  source {get_shell_rc_path()}")
+                logger.info(f"  source {get_shell_rc_path()}")
+            console.rule()
 
         ph("cli-installation-successful", {"did_add_new_key": did_add_new_key})
         sys.exit(0)
@@ -106,15 +108,9 @@ def init_codeflash() -> None:
 
 
 def ask_run_end_to_end_test(args: Namespace) -> None:
-    from rich.prompt import Confirm
-
-    run_tests = Confirm.ask(
+    run_tests = confirm_with_rule(
         "⚡️ Do you want to run a sample optimization to make sure everything's set up correctly? (takes about 3 minutes)",
-        choices=["y", "n"],
-        default="y",
-        show_choices=True,
-        show_default=False,
-        console=console,
+        default=True,
     )
 
     console.rule()
@@ -129,8 +125,6 @@ def should_modify_pyproject_toml() -> bool:
 
     If it does, ask the user if they want to re-configure it.
     """
-    from rich.prompt import Confirm
-
     pyproject_toml_path = Path.cwd() / "pyproject.toml"
     if not pyproject_toml_path.exists():
         return True
@@ -144,10 +138,8 @@ def should_modify_pyproject_toml() -> bool:
     if "tests_root" not in config or config["tests_root"] is None or not Path(config["tests_root"]).is_dir():
         return True
 
-    return Confirm.ask(
-        "✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?",
-        default=False,
-        show_default=True,
+    return confirm_with_rule(
+        "✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?", default=False
     )
 
 
@@ -155,8 +147,11 @@ def collect_setup_info() -> SetupInfo:
     curdir = Path.cwd()
     # Check if the cwd is writable
     if not os.access(curdir, os.W_OK):
-        click.echo(f"❌ The current directory isn't writable, please check your folder permissions and try again.{LF}")
-        click.echo("It's likely you don't have write permissions for this folder.")
+        logger.error(
+            f"❌ The current directory isn't writable, please check your folder permissions and try again.{LF}"
+        )
+        logger.error("It's likely you don't have write permissions for this folder.")
+        console.rule()
         sys.exit(1)
 
     # Check for the existence of pyproject.toml or setup.py
@@ -184,7 +179,7 @@ def collect_setup_info() -> SetupInfo:
     custom_dir_option = "enter a custom directory…"
     module_subdir_options = [*valid_module_subdirs, curdir_option, custom_dir_option]
 
-    module_root_answer = Prompt.ask(
+    module_root_answer = prompt_with_rule(
         "Which Python module do you want me to optimize going forward? (Usually the top-most directory with "
         "all of your Python source code)",
         choices=module_subdir_options,
@@ -193,7 +188,7 @@ def collect_setup_info() -> SetupInfo:
     if module_root_answer == curdir_option:
         module_root = "."
     elif module_root_answer == custom_dir_option:
-        custom_module_root_answer = Prompt.ask(
+        custom_module_root_answer = prompt_with_rule(
             f"Enter the path to your module directory inside {Path(curdir).resolve()}{os.path.sep}"
         )
         if custom_module_root_answer:
@@ -212,7 +207,7 @@ def collect_setup_info() -> SetupInfo:
         test_subdir_options.append(create_for_me_option)
     custom_dir_option = "enter a custom directory…"
     test_subdir_options.append(custom_dir_option)
-    tests_root_answer = Prompt.ask(
+    tests_root_answer = prompt_with_rule(
         "Where are your tests located? "
         f"(If you don't have any tests yet, I can create an empty tests{os.pathsep} directory for you)",
         choices=test_subdir_options,
@@ -222,9 +217,10 @@ def collect_setup_info() -> SetupInfo:
     if tests_root_answer == create_for_me_option:
         tests_root = Path(curdir) / default_tests_subdir
         tests_root.mkdir()
-        click.echo(f"✅ Created directory {tests_root}{os.path.sep}{LF}")
+        logger.info(f"✅ Created directory {tests_root}{os.path.sep}{LF}")
+        console.rule()
     elif tests_root_answer == custom_dir_option:
-        custom_tests_root_answer = Prompt.ask(
+        custom_tests_root_answer = prompt_with_rule(
             f"Enter the path to your tests directory inside {Path(curdir).resolve()}{os.path.sep}"
         )
         if custom_tests_root_answer:
@@ -250,7 +246,7 @@ def collect_setup_info() -> SetupInfo:
     autodetected_suffix = (
         f" (seems to me you're using {autodetected_test_framework})" if autodetected_test_framework else ""
     )
-    test_framework = Prompt.ask(
+    test_framework = prompt_with_rule(
         "Which test framework do you use?" + autodetected_suffix,
         choices=["pytest", "unittest"],
         default=autodetected_test_framework or "pytest",
@@ -258,64 +254,7 @@ def collect_setup_info() -> SetupInfo:
 
     ph("cli-test-framework-provided", {"test_framework": test_framework})
 
-    # Get benchmarks root directory
-    default_benchmarks_subdir = "benchmarks"
-    create_benchmarks_option = f"okay, create a {default_benchmarks_subdir}{os.path.sep} directory for me!"
-    no_benchmarks_option = "I don't need benchmarks"
-
-    # Check if benchmarks directory exists inside tests directory
-    tests_subdirs = []
-    if tests_root.exists():
-        tests_subdirs = [d.name for d in tests_root.iterdir() if d.is_dir() and not d.name.startswith(".")]
-
-    benchmarks_options = []
-    benchmarks_options.append(no_benchmarks_option)
-    if default_benchmarks_subdir in tests_subdirs:
-        benchmarks_options.append(default_benchmarks_subdir)
-    benchmarks_options.extend([d for d in tests_subdirs if d != default_benchmarks_subdir and d not in ignore_subdirs])
-    benchmarks_options.append(create_benchmarks_option)
-    benchmarks_options.append(custom_dir_option)
-
-    benchmarks_answer = Prompt.ask(
-        "Where are your performance benchmarks located? (benchmarks must be a sub directory of your tests root directory)",
-        choices=benchmarks_options,
-        default=(
-            default_benchmarks_subdir if default_benchmarks_subdir in benchmarks_options else benchmarks_options[0]
-        ),
-    )
-
-    if benchmarks_answer == create_benchmarks_option:
-        benchmarks_root = tests_root / default_benchmarks_subdir
-        benchmarks_root.mkdir(exist_ok=True)
-        click.echo(f"✅ Created directory {benchmarks_root}{os.path.sep}{LF}")
-    elif benchmarks_answer == custom_dir_option:
-        custom_benchmarks_answer = Prompt.ask(
-            f"Enter the path to your benchmarks directory inside {tests_root}{os.path.sep}"
-        )
-        if custom_benchmarks_answer:
-            benchmarks_root = tests_root / Path(custom_benchmarks_answer)
-        else:
-            apologize_and_exit()
-    elif benchmarks_answer == no_benchmarks_option:
-        benchmarks_root = None
-    else:
-        benchmarks_root = tests_root / Path(cast("str", benchmarks_answer))
-
-    # TODO: Implement other benchmark framework options
-    # if benchmarks_root:
-    #     benchmarks_root = benchmarks_root.relative_to(curdir)
-    #
-    #     # Ask about benchmark framework
-    #     benchmark_framework_options = ["pytest-benchmark", "asv (Airspeed Velocity)", "custom/other"]
-    #     benchmark_framework = inquirer_wrapper(
-    #         inquirer.list_input,
-    #         message="Which benchmark framework do you use?",
-    #         choices=benchmark_framework_options,
-    #         default=benchmark_framework_options[0],
-    #         carousel=True,
-    #     )
-
-    formatter = Prompt.ask(
+    formatter = prompt_with_rule(
         "Which code formatter do you use?", choices=["black", "ruff", "other", "don't use a formatter"], default="black"
     )
 
@@ -325,7 +264,7 @@ def collect_setup_info() -> SetupInfo:
         git_remotes = get_git_remotes(repo)
         if git_remotes:  # Only proceed if there are remotes
             if len(git_remotes) > 1:
-                git_remote = Prompt.ask(
+                git_remote = prompt_with_rule(
                     "What git remote do you want Codeflash to use for new Pull Requests?",
                     choices=git_remotes,
                     default="origin",
@@ -333,10 +272,11 @@ def collect_setup_info() -> SetupInfo:
             else:
                 git_remote = git_remotes[0]
         else:
-            click.echo(
+            logger.warning(
                 "No git remotes found. You can still use Codeflash locally, but you'll need to set up a remote "
                 "repository to use GitHub features."
             )
+            console.rule()
     except InvalidGitRepositoryError:
         git_remote = ""
 
@@ -344,7 +284,7 @@ def collect_setup_info() -> SetupInfo:
     return SetupInfo(
         module_root=str(module_root),
         tests_root=str(tests_root),
-        benchmarks_root=str(benchmarks_root) if benchmarks_root else None,
+        benchmarks_root=None,
         test_framework=cast("str", test_framework),
         ignore_paths=ignore_paths,
         formatter=cast("str", formatter),
@@ -395,8 +335,8 @@ def detect_test_framework(curdir: Path, tests_root: Path) -> str | None:
 
 
 def check_for_toml_or_setup_file() -> str | None:
-    click.echo()
-    click.echo("Checking for pyproject.toml or setup.py…\r", nl=False)
+    logger.info("Checking for pyproject.toml or setup.py…")
+    console.rule()
     curdir = Path.cwd()
     pyproject_toml_path = curdir / "pyproject.toml"
     setup_py_path = curdir / "setup.py"
@@ -405,10 +345,12 @@ def check_for_toml_or_setup_file() -> str | None:
         try:
             pyproject_toml_content = pyproject_toml_path.read_text(encoding="utf8")
             project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]
-            click.echo(f"✅ I found a pyproject.toml for your project {project_name}.")
+            logger.info(f"✅ I found a pyproject.toml for your project {project_name}.")
+            console.rule()
             ph("cli-pyproject-toml-found-name")
         except Exception:
-            click.echo("✅ I found a pyproject.toml for your project.")
+            logger.info("✅ I found a pyproject.toml for your project.")
+            console.rule()
             ph("cli-pyproject-toml-found")
     else:
         if setup_py_path.exists():
@@ -416,20 +358,23 @@ def check_for_toml_or_setup_file() -> str | None:
             project_name_match = re.search(r"setup\s*\([^)]*?name\s*=\s*['\"](.*?)['\"]", setup_py_content, re.DOTALL)
             if project_name_match:
                 project_name = project_name_match.group(1)
-                click.echo(f"✅ Found setup.py for your project {project_name}")
+                logger.info(f"✅ Found setup.py for your project {project_name}")
+                console.rule()
                 ph("cli-setup-py-found-name")
             else:
-                click.echo("✅ Found setup.py.")
+                logger.info("✅ Found setup.py.")
+                console.rule()
                 ph("cli-setup-py-found")
-        click.echo(
+        logger.warning(
             f"💡 I couldn't find a pyproject.toml in the current directory ({curdir}).{LF}"
             f"(make sure you're running `codeflash init` from your project's root directory!){LF}"
             f"I need this file to store my configuration settings."
         )
+        console.rule()
         ph("cli-no-pyproject-toml-or-setup-py")
 
         # Create a pyproject.toml file because it doesn't exist
-        create_toml = Confirm.ask(
+        create_toml = confirm_with_rule(
             "Do you want me to create a pyproject.toml file in the current directory?", default=True
         )
         if create_toml:
@@ -442,18 +387,20 @@ def check_for_toml_or_setup_file() -> str | None:
 
                 # Check if the pyproject.toml file was created
                 if pyproject_toml_path.exists():
-                    click.echo(f"✅ Created a pyproject.toml file at {pyproject_toml_path}")
-                    click.pause()
+                    logger.info(f"✅ Created a pyproject.toml file at {pyproject_toml_path}")
+                    console.rule()
+                    prompt_with_rule("press Enter to continue…")
                 ph("cli-created-pyproject-toml")
             except OSError:
-                click.echo(
+                logger.error(
                     "❌ Failed to create pyproject.toml. Please check your disk permissions and available space."
                 )
+                console.rule()
                 apologize_and_exit()
         else:
-            click.echo("⏩️ Skipping pyproject.toml creation.")
+            logger.info("⏩️ Skipping pyproject.toml creation.")
+            console.rule()
             apologize_and_exit()
-    click.echo()
     return cast("str", project_name)
 
 
@@ -465,9 +412,10 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         try:
             repo = Repo(config["module_root"], search_parent_directories=True)
         except git.InvalidGitRepositoryError:
-            click.echo(
+            logger.warning(
                 "Skipping GitHub action installation for continuous optimization because you're not in a git repository."
             )
+            console.rule()
             return
 
         git_root = Path(repo.git.rev_parse("--show-toplevel"))
@@ -476,23 +424,25 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
 
         # Check if the workflow file already exists
         if optimize_yaml_path.exists():
-            confirm_overwrite = Confirm.ask(
+            confirm_overwrite = confirm_with_rule(
                 f"⚡️ GitHub Actions workflow already exists at {optimize_yaml_path}. Overwrite?", default=False
             )
             ph("cli-github-optimization-confirm-workflow-overwrite", {"confirm_overwrite": confirm_overwrite})
             if not confirm_overwrite:
-                click.echo("⏩️ Skipping workflow creation.")
+                logger.info("⏩️ Skipping workflow creation.")
+                console.rule()
                 ph("cli-github-workflow-skipped")
                 return
 
-        confirm_creation_yes = Confirm.ask(
+        confirm_creation_yes = confirm_with_rule(
             "⚡️Shall I set up a GitHub action that will continuously optimize all new code in GitHub PRs"
             " for you? This is the main way of using Codeflash so we highly recommend it",
             default=True,
         )
         ph("cli-github-optimization-confirm-workflow-creation", {"confirm_creation": confirm_creation_yes})
         if not confirm_creation_yes:
-            click.echo("⏩️ Exiting workflow creation.")
+            logger.info("⏩️ Exiting workflow creation.")
+            console.rule()
             ph("cli-github-workflow-skipped")
             return
         workflows_path.mkdir(parents=True, exist_ok=True)
@@ -509,35 +459,34 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         )
         with optimize_yaml_path.open("w", encoding="utf8") as optimize_yml_file:
             optimize_yml_file.write(materialized_optimize_yml_content)
-        click.echo(f"{LF}✅ Created GitHub action workflow at {optimize_yaml_path}{LF}")
+        logger.info(f"{LF}✅ Created GitHub action workflow at {optimize_yaml_path}{LF}")
+        console.rule()
         try:
             existing_api_key = get_codeflash_api_key()
         except OSError:
             existing_api_key = None
-        click.prompt(
+        prompt_with_rule(
             f"Next, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.{LF}"
             f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} {LF}"
             f"Then, click 'New repository secret' to add your api key with the variable name CODEFLASH_API_KEY.{LF}"
             f"{'Here is your CODEFLASH_API_KEY: ' + existing_api_key + ' ' + LF}"
             if existing_api_key
-            else "",
-            default="",
-            type=click.STRING,
-            prompt_suffix="",
-            show_default=False,
+            else ""
         )
-        click.launch(get_github_secrets_page_url(repo))
-        click.echo(
+        webbrowser.open(get_github_secrets_page_url(repo))
+        logger.info(
             "🐙 I opened your Github secrets page! Note: if you see a 404, you probably don't have access to this "
             "repo's secrets; ask a repo admin to add it for you, or (not super recommended) you can temporarily "
             f"hard-code your api key into the workflow file.{LF}"
         )
-        click.pause()
-        click.echo()
-        click.echo(
+        console.rule()
+        input("Press Enter to continue...")
+        logger.info("")
+        logger.info(
             f"Please edit, commit and push this GitHub actions file to your repo, and you're all set!{LF}"
             f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
         )
+        console.rule()
         ph("cli-github-workflow-created")
     except KeyboardInterrupt:
         apologize_and_exit()
@@ -635,7 +584,7 @@ def customize_codeflash_yaml_content(
         with toml_path.open(encoding="utf8") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
-        click.echo(
+        logger.error(
             f"I couldn't find a pyproject.toml in the current directory.{LF}"
             f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `codeflash init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
         )
@@ -667,7 +616,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         with toml_path.open(encoding="utf8") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
-        click.echo(
+        logger.error(
             f"I couldn't find a pyproject.toml in the current directory.{LF}"
             f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `codeflash init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
         )
@@ -680,7 +629,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     codeflash_section["module-root"] = setup_info.module_root
     codeflash_section["tests-root"] = setup_info.tests_root
     codeflash_section["test-framework"] = setup_info.test_framework
-    codeflash_section["benchmarks-root"] = setup_info.benchmarks_root if setup_info.benchmarks_root else ""
+    codeflash_section["benchmarks-root"] = ""
     codeflash_section["ignore-paths"] = setup_info.ignore_paths
     codeflash_section["disable-telemetry"] = not enable_telemetry
     if setup_info.git_remote not in ["", "origin"]:
@@ -693,9 +642,10 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         formatter_cmds.extend(["ruff check --exit-zero --fix $file", "ruff format $file"])
     elif formatter == "other":
         formatter_cmds.append("your-formatter $file")
-        click.echo(
+        logger.info(
             "🔧 In pyproject.toml, please replace 'your-formatter' with the command you use to format your code."
         )
+        console.rule()
     elif formatter == "don't use a formatter":
         formatter_cmds.append("disabled")
     check_formatter_installed(formatter_cmds, exit_on_failure=False)
@@ -707,73 +657,58 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
 
     with toml_path.open("w", encoding="utf8") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
-    click.echo(f"✅ Added Codeflash configuration to {toml_path}")
-    click.echo()
+    logger.info(f"✅ Added Codeflash configuration to {toml_path}")
+    console.rule()
+    logger.info("")
 
 
 def install_github_app() -> None:
     try:
         git_repo = git.Repo(search_parent_directories=True)
     except git.InvalidGitRepositoryError:
-        click.echo("Skipping GitHub app installation because you're not in a git repository.")
+        logger.warning("Skipping GitHub app installation because you're not in a git repository.")
+        console.rule()
         return
     owner, repo = get_repo_owner_and_name(git_repo)
 
     if is_github_app_installed_on_repo(owner, repo, suppress_errors=True):
-        click.echo("🐙 Looks like you've already installed the Codeflash GitHub app on this repository! Continuing…")
+        logger.info("🐙 Looks like you've already installed the Codeflash GitHub app on this repository! Continuing…")
 
     else:
-        click.prompt(
+        prompt_with_rule(
             f"Finally, you'll need to install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
             f"I will attempt to open the github app page - https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-            f"Press Enter to open the page to let you install the app…{LF}",
-            default="",
-            type=click.STRING,
-            prompt_suffix="",
-            show_default=False,
+            f"Press Enter to open the page to let you install the app…{LF}"
         )
-        click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
-        click.prompt(
-            f"Press Enter once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target…{LF}",
-            default="",
-            type=click.STRING,
-            prompt_suffix="",
-            show_default=False,
+        webbrowser.open("https://github.com/apps/codeflash-ai/installations/select_target")
+        prompt_with_rule(
+            f"Press Enter once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target…{LF}"
         )
 
         count = 2
         while not is_github_app_installed_on_repo(owner, repo, suppress_errors=True):
             if count == 0:
-                click.echo(
+                logger.warning(
                     f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
                     f"You won't be able to create PRs with Codeflash until you install the app.{LF}"
                     f"In the meantime you can make local only optimizations by using the '--no-pr' flag with codeflash.{LF}"
                 )
                 break
-            click.prompt(
+            prompt_with_rule(
                 f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
                 f"Please install it from https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-                f"Press Enter to continue once you've finished installing the github app…{LF}",
-                default="",
-                type=click.STRING,
-                prompt_suffix="",
-                show_default=False,
+                f"Press Enter to continue once you've finished installing the github app…{LF}"
             )
             count -= 1
 
 
-class CFAPIKeyType(click.ParamType):
-    name = "cfapi-key"
-
-    def convert(self, value: str, param: click.Parameter | None, ctx: click.Context | None) -> str | None:
-        value = value.strip()
-        if not value.startswith("cf-") and value != "":
-            self.fail(
-                f"That key [{value}] seems to be invalid. It should start with a 'cf-' prefix. Please try again.",
-                param,
-                ctx,
-            )
-        return value
+def validate_api_key(value: str) -> str:
+    """Validate that API key starts with cf- prefix."""
+    value = value.strip()
+    if not value.startswith("cf-") and value != "":
+        error_msg = f"That key [{value}] seems to be invalid. It should start with a 'cf-' prefix. Please try again."
+        raise ValueError(error_msg)
+    return value
 
 
 # Returns True if the user entered a new API key, False if they used an existing one
@@ -784,8 +719,8 @@ def prompt_api_key() -> bool:
         existing_api_key = None
     if existing_api_key:
         display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
-        click.echo(f"🔑 I found a CODEFLASH_API_KEY in your environment [{display_key}]!")
-
+        logger.info(f"🔑 I found a CODEFLASH_API_KEY in your environment [{display_key}]!")
+        console.rule()
         return False
 
     enter_api_key_and_save_to_rc()
@@ -797,33 +732,36 @@ def enter_api_key_and_save_to_rc() -> None:
     browser_launched = False
     api_key = ""
     while api_key == "":
-        api_key = click.prompt(
+        api_key = prompt_with_rule(
             f"Enter your Codeflash API key{' [or press Enter to open your API key page]' if not browser_launched else ''}",
-            hide_input=False,
-            default="",
-            type=CFAPIKeyType(),
-            show_default=False,
+            password=False,
         ).strip()
+        if api_key:
+            try:
+                api_key = validate_api_key(api_key)
+            except ValueError as e:
+                logger.error(str(e))
+                api_key = ""  # Reset to retry
         if api_key:
             break
         if not browser_launched:
-            click.echo(
+            logger.info(
                 f"Opening your Codeflash API key page. Grab a key from there!{LF}"
                 "You can also open this link manually: https://app.codeflash.ai/app/apikeys"
             )
-            click.launch("https://app.codeflash.ai/app/apikeys")
+            webbrowser.open("https://app.codeflash.ai/app/apikeys")
             browser_launched = True  # This does not work on remote consoles
     shell_rc_path = get_shell_rc_path()
     if not shell_rc_path.exists() and os.name == "nt":
         # On Windows, create a batch file in the user's home directory (not auto-run, just used to store api key)
         shell_rc_path.touch()
-        click.echo(f"✅ Created {shell_rc_path}")
+        logger.info(f"✅ Created {shell_rc_path}")
     result = save_api_key_to_rc(api_key)
     if is_successful(result):
-        click.echo(result.unwrap())
+        logger.info(result.unwrap())
     else:
-        click.echo(result.failure())
-        click.pause()
+        logger.error(result.failure())
+        input("Press Enter to continue...")
 
     os.environ["CODEFLASH_API_KEY"] = api_key
 
@@ -876,9 +814,7 @@ def test_sort():
 
     bubble_sort_path = Path(args.module_root) / "bubble_sort.py"
     if bubble_sort_path.exists():
-        from rich.prompt import Confirm
-
-        overwrite = Confirm.ask(
+        overwrite = confirm_with_rule(
             f"🤔 {bubble_sort_path} already exists. Do you want to overwrite it?", default=True, show_default=False
         )
         if not overwrite:
@@ -945,10 +881,6 @@ def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test
 
 def ask_for_telemetry() -> bool:
     """Prompt the user to enable or disable telemetry."""
-    from rich.prompt import Confirm
-
-    return Confirm.ask(
-        "⚡️ Would you like to enable telemetry to help us improve the Codeflash experience?",
-        default=True,
-        show_default=True,
+    return confirm_with_rule(
+        "⚡️ Would you like to enable telemetry to help us improve the Codeflash experience?", default=True
     )
