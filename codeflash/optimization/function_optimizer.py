@@ -585,6 +585,8 @@ class FunctionOptimizer:
         with path.open("w", encoding="utf8") as f:
             f.write(original_code)
         for module_abspath, helper_code in original_helper_code.items():
+            if module_abspath == path:
+                continue  # no need to write it again
             with Path(module_abspath).open("w", encoding="utf8") as f:
                 f.write(helper_code)
 
@@ -632,7 +634,6 @@ class FunctionOptimizer:
                 project_root_path=self.project_root,
             )
         unused_helpers = detect_unused_helper_functions(self.function_to_optimize, code_context, optimized_code)
-
         # Revert unused helper functions to their original definitions
         if unused_helpers:
             revert_unused_helper_functions(self.project_root, unused_helpers, original_helper_code)

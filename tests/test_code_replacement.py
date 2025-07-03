@@ -3070,3 +3070,66 @@ def my_fixture(request):
         modified_module = module.visit(transformer)
 
         assert modified_module.code.strip() == expected.strip()
+
+
+def test_new_global_created_helper_functions_scope():
+    path_to_root = Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "unstructured_example"
+    optimized_code = (path_to_root / "optimized.py").read_text(encoding="utf-8")
+    
+    going_to_unlink=[]
+    code_path = (path_to_root / "base.py").resolve()
+    
+    temp_file = (path_to_root / "base_optimized.py")
+    temp_file.write_text(code_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+    going_to_unlink.append(temp_file)
+    tests_root = path_to_root / "tests"
+
+    func = FunctionToOptimize(function_name="elements_from_dicts", parents=[], file_path=temp_file.resolve())
+    test_config = TestConfig(
+        tests_root=tests_root,
+        tests_project_rootdir=tests_root,
+        project_root_path=path_to_root,
+        test_framework="pytest",
+        pytest_cmd="pytest",
+    )
+    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
+    original_helper_code: dict[Path, str] = {}
+    
+    # helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+    helper_function_paths = []
+    for index, hf in enumerate(code_context.helper_functions):
+        file_name = hf.file_path.name
+        temp_helper_file_path = str(hf.file_path).replace(file_name, f"temp_{file_name}")
+        Path(temp_helper_file_path).write_text(hf.file_path.read_text(encoding="utf-8"), encoding="utf-8")
+        helper_function_paths.append(Path(temp_helper_file_path))
+        code_context.helper_functions[index].file_path = Path(temp_helper_file_path)
+        going_to_unlink.append(Path(temp_helper_file_path))
+    for helper_function_path in helper_function_paths:
+        with helper_function_path.open(encoding="utf8") as f:
+            helper_code = f.read()
+            original_helper_code[helper_function_path] = helper_code
+
+    func_optimizer.replace_function_and_helpers_with_optimized_code(
+        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
+    )
+    final_output = temp_file.read_text(encoding="utf-8")
+    helper_elements_output = (path_to_root / "temp_elements.py").read_text(encoding="utf-8")
+    
+    # test rollingback changes
+    # func_optimizer.write_code_and_helpers(
+    #     func_optimizer.function_to_optimize_source_code,
+    #     original_helper_code,
+    #     func_optimizer.function_to_optimize.file_path,
+    # )
+    # assert code_path.read_text(encoding="utf-8") == temp_file.read_text(encoding="utf-8")
+    # TODO: assert no changes in the helpers also
+    
+    for temp_file in going_to_unlink:
+        temp_file.unlink(missing_ok=True)
+
+    assert "def _extract_file_directory_and_name" not in final_output
+    assert "def _extract_file_directory_and_name" in helper_elements_output
+
+        

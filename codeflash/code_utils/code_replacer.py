@@ -354,11 +354,61 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         return node
 
 
+class FunctionUsageCollector(cst.CSTVisitor):
+    def __init__(self) -> None:
+        self.used_functions: set[str] = set()
+
+    def visit_Call(self, node: cst.Call) -> bool:
+        if isinstance(node.func, cst.Name):
+            self.used_functions.add(node.func.value)
+        return True
+
+
+class UnusedFunctionRemover(cst.CSTTransformer):
+    def __init__(self, unused_function_names: set[str]) -> None:
+        self.unused_function_names = unused_function_names
+
+    def leave_FunctionDef(
+        self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef
+    ) -> cst.RemovalSentinel | cst.FunctionDef:
+        if original_node.name.value in self.unused_function_names:
+            return cst.RemoveFromParent()
+        return updated_node
+
+
+class ImportTracker(cst.CSTVisitor):
+    def __init__(self) -> None:
+        # Set of fully-qualified imports like "utils.helpers.extract_path"
+        self.imported_names: set[str] = set()
+
+    def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
+        # Get the full module path like "utils.helpers"
+        module = ("." * node.relative if node.relative else "") + (
+            node.module.attr.value
+            if isinstance(node.module, cst.Attribute)
+            else node.module.value
+            if node.module
+            else ""
+        )
+
+        for name in node.names:
+            if isinstance(name, cst.ImportAlias):
+                imported_name = name.name.value
+                self.imported_names.add(f"{module}.{imported_name}")
+
+    def visit_Import(self, node: cst.Import) -> None:
+        for name in node.names:
+            if isinstance(name, cst.ImportAlias):
+                full_module_path = name.name.value  # e.g., "utils.helpers"
+                self.imported_names.add(full_module_path)
+
+
 def replace_functions_in_file(
     source_code: str,
     original_function_names: list[str],
     optimized_code: str,
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]],
+    module_abspath: Optional[Path] = None,
 ) -> str:
     parsed_function_names = []
     for original_function_name in original_function_names:
@@ -386,7 +436,49 @@ def replace_functions_in_file(
     )
     original_module = cst.parse_module(source_code)
     modified_tree = original_module.visit(transformer)
-    return modified_tree.code
+
+    module_name = module_abspath.name.split(".")[0] if module_abspath is not None else None
+
+    if module_name is None:
+        return modified_tree.code
+
+    unused_new_function_names = []
+
+    file_uses = FunctionUsageCollector()
+    modified_tree.visit(file_uses)
+
+    new_functions = visitor.new_functions
+    used_functions = file_uses.used_functions
+
+    import_tracker = ImportTracker()
+    module.visit(import_tracker)
+
+    # get unused new functions (not in used_functions && not in the imported from module_abs.new_fucntion)
+    for fn in new_functions:
+        fn_name = fn.name.value
+        is_imported_from_this_module = f"{module_name}.{fn_name}" in import_tracker.imported_names
+        if is_imported_from_this_module:
+            # keep the new function in the module as it's imported else where
+            continue
+
+        # note: can_be_imported not just means it's imported in the optimized context but also it's imported from other module because of the condition above
+        can_be_imported = False
+        for _import in import_tracker.imported_names:
+            if _import.endswith("." + fn_name):
+                can_be_imported = True
+                break
+
+        used_and_can_be_imported = fn_name in used_functions and can_be_imported
+        not_used_and_no_import_for_it = fn_name not in used_functions and not can_be_imported
+
+        if used_and_can_be_imported or not_used_and_no_import_for_it:
+            # we then going to remove it
+            unused_new_function_names.append(fn_name)
+
+    remover = UnusedFunctionRemover(unused_new_function_names)
+    cleaned_tree = modified_tree.visit(remover)
+
+    return cleaned_tree.code
 
 
 def replace_functions_and_add_imports(
@@ -399,7 +491,7 @@ def replace_functions_and_add_imports(
 ) -> str:
     return add_needed_imports_from_module(
         optimized_code,
-        replace_functions_in_file(source_code, function_names, optimized_code, preexisting_objects),
+        replace_functions_in_file(source_code, function_names, optimized_code, preexisting_objects, module_abspath),
         module_abspath,
         module_abspath,
         project_root_path,
