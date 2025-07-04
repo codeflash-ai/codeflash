@@ -171,8 +171,9 @@ def get_run_tmp_file(file_path: Path) -> Path:
 
 
 def path_belongs_to_site_packages(file_path: Path) -> bool:
+    file_path_resolved = file_path.resolve()
     site_packages = [Path(p) for p in site.getsitepackages()]
-    return any(file_path.resolve().is_relative_to(site_package_path) for site_package_path in site_packages)
+    return any(file_path_resolved.is_relative_to(site_package_path) for site_package_path in site_packages)
 
 
 def is_class_defined_in_file(class_name: str, file_path: Path) -> bool:
