@@ -875,16 +875,16 @@ def main(args: Namespace | None = None) -> ArgumentParser:
             }
         try:
             tracer = Tracer(
-                output=args.outfile,
-                functions=args.only_functions,
-                max_function_count=args.max_function_count,
-                timeout=args.tracer_timeout,
-                config_file_path=args.codeflash_config,
+                output=parsed_args.outfile,
+                functions=parsed_args.only_functions,
+                max_function_count=parsed_args.max_function_count,
+                timeout=parsed_args.tracer_timeout,
+                config_file_path=parsed_args.codeflash_config,
                 command=" ".join(sys.argv),
             )
             tracer.runctx(code, globs, None)
             replay_test_path = tracer.replay_test_file_path
-            if not args.trace_only and replay_test_path is not None:
+            if not parsed_args.trace_only and replay_test_path is not None:
                 del tracer
 
                 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
