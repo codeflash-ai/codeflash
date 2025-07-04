@@ -145,7 +145,6 @@ codeflash --all # optimize the entire repo
 Make sure:
 - ✅ Your virtual environment is activated
 - ✅ All project dependencies are installed
-- ✅ You're running `codeflash` from your project root
 
 #### 🧪 "No optimizations found" or debugging issues
 Use the `--verbose` flag for detailed output:
@@ -165,18 +164,10 @@ Verify:
 - 🔍 Tests are discoverable by your test framework
 - 📝 Test files follow naming conventions (`test_*.py` for pytest)
 
-#### ⚙️ Configuration issues
-Check your `pyproject.toml`:
-```toml
-[tool.codeflash]
-module = "my_package"
-test-framework = "pytest"
-tests = "tests/"
-```
 
 ### Next Steps
 
 - Learn about [Codeflash Concepts](/codeflash-concepts/how-codeflash-works)
-- Explore [optimization workflows](/optimizing-with-codeflash/one-function)
+- Explore [Optimization workflows](/optimizing-with-codeflash/one-function)
 - Set up [GitHub Actions integration](/getting-started/codeflash-github-actions)
 - Read [configuration options](/configuration) for advanced setups
