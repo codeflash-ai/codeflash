@@ -32,13 +32,19 @@ else:
 
 
 def make_cfapi_request(
-    endpoint: str, method: str, payload: dict[str, Any] | None = None, extra_headers: dict[str, str] | None = None
+    endpoint: str,
+    method: str,
+    payload: dict[str, Any] | None = None,
+    extra_headers: dict[str, str] | None = None,
+    *,
+    suppress_errors: bool = False,
 ) -> Response:
     """Make an HTTP request using the specified method, URL, headers, and JSON payload.
 
     :param endpoint: The endpoint URL to send the request to.
     :param method: The HTTP method to use ('GET', 'POST', etc.).
     :param payload: Optional JSON payload to include in the POST request body.
+    :param suppress_errors: If True, suppress error logging for HTTP errors.
     :return: The response object from the API.
     """
     url = f"{CFAPI_BASE_URL}/cfapi{endpoint}"
@@ -66,9 +72,10 @@ def make_cfapi_request(
         except (ValueError, TypeError):
             error_message = response.text
 
-        logger.error(
-            f"CF_API_Error:: making request to Codeflash API (url: {url}, method: {method}, status {response.status_code}): {error_message}"
-        )
+        if not suppress_errors:
+            logger.error(
+                f"CF_API_Error:: making request to Codeflash API (url: {url}, method: {method}, status {response.status_code}): {error_message}"
+            )
         return response
 
 
@@ -175,14 +182,17 @@ def create_pr(
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
 
-def is_github_app_installed_on_repo(owner: str, repo: str) -> bool:
+def is_github_app_installed_on_repo(owner: str, repo: str, *, suppress_errors: bool = False) -> bool:
     """Check if the Codeflash GitHub App is installed on the specified repository.
 
     :param owner: The owner of the repository.
     :param repo: The name of the repository.
-    :return: The response object.
+    :param suppress_errors: If True, suppress error logging when the app is not installed.
+    :return: True if the app is installed, False otherwise.
     """
-    response = make_cfapi_request(endpoint=f"/is-github-app-installed?repo={repo}&owner={owner}", method="GET")
+    response = make_cfapi_request(
+        endpoint=f"/is-github-app-installed?repo={repo}&owner={owner}", method="GET", suppress_errors=suppress_errors
+    )
     return response.ok and response.text == "true"
 
 

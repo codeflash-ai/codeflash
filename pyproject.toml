@@ -268,16 +268,16 @@ enable = true
 style = "pep440"
 vcs = "git"
 
-[tool.uv-dynamic-versioning.substitution]
-files = ["codeflash/version.py"]
-
-[tool.uv-dynamic-versioning.files."codeflash/version.py"]
-persistent-substitution = true
-initial-content = """
-  # These version placeholders will be replaced by uv-dynamic-versioning during build.
-  __version__ = "0.0.0"
-  __version_tuple__ = (0, 0, 0)
+[tool.hatch.build.hooks.version]
+path = "codeflash/version.py"
+template = """# These version placeholders will be replaced by uv-dynamic-versioning during build.
+__version__ = "{version}"
 """
+
+
+#[tool.hatch.build.hooks.custom]
+#path = "codeflash/update_license_version.py"
+
 
 [tool.codeflash]
 module-root = "codeflash"
@@ -287,6 +287,14 @@ test-framework = "pytest"
 formatter-cmds = [
     "uvx ruff check --exit-zero --fix $file",
     "uvx ruff format $file",
+]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::pytest.PytestCollectionWarning",
+]
+markers = [
+    "ci_skip: mark test to skip in CI environment",
 ]
 
 [build-system]

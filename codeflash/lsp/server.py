@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from lsprotocol.types import INITIALIZE
+from lsprotocol.types import INITIALIZE, LogMessageParams, MessageType
 from pygls import uris
 from pygls.protocol import LanguageServerProtocol, lsp_method
 from pygls.server import LanguageServer
@@ -55,3 +55,25 @@ class CodeflashLanguageServer(LanguageServer):
         args.no_pr = True  # LSP server should not create PRs
         args = process_pyproject_config(args)
         self.optimizer = Optimizer(args)
+
+    def show_message_log(self, message: str, message_type: str) -> None:
+        """Send a log message to the client's output channel.
+
+        Args:
+            message: The message to log
+            message_type: String type - "Info", "Warning", "Error", or "Log"
+
+        """
+        # Convert string message type to LSP MessageType enum
+        type_mapping = {
+            "Info": MessageType.Info,
+            "Warning": MessageType.Warning,
+            "Error": MessageType.Error,
+            "Log": MessageType.Log,
+        }
+
+        lsp_message_type = type_mapping.get(message_type, MessageType.Info)
+
+        # Send log message to client (appears in output channel)
+        log_params = LogMessageParams(type=lsp_message_type, message=message)
+        self.lsp.notify("window/logMessage", log_params)

@@ -170,7 +170,7 @@ class FunctionOptimizer:
         # last time we could not find an optimization, maybe this time we do.
         # Random is before as a performance optimization, swapping the two 'and' statements has the same effect
         if random.random() > REPEAT_OPTIMIZATION_PROBABILITY and was_function_previously_optimized(  # noqa: S311
-            self.function_to_optimize, code_context
+            self.function_to_optimize, code_context, self.args
         ):
             return Failure("Function optimization previously attempted, skipping.")
 
@@ -1012,15 +1012,20 @@ class FunctionOptimizer:
                     optimized_runtime_by_test = (
                         best_optimization.winning_benchmarking_test_results.usable_runtime_data_by_test_case()
                     )
+                    qualified_name = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
                     # Add runtime comments to generated tests before creating the PR
                     generated_tests = add_runtime_comments_to_generated_tests(
-                        self.test_cfg, generated_tests, original_runtime_by_test, optimized_runtime_by_test
+                        qualified_name,
+                        self.test_cfg,
+                        generated_tests,
+                        original_runtime_by_test,
+                        optimized_runtime_by_test,
                     )
                     generated_tests_str = "\n\n".join(
                         [test.generated_original_test_source for test in generated_tests.generated_tests]
                     )
                     existing_tests = existing_tests_source_for(
-                        self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
+                        qualified_name,
                         function_to_all_tests,
                         test_cfg=self.test_cfg,
                         original_runtimes_all=original_runtime_by_test,
@@ -1457,11 +1462,9 @@ class FunctionOptimizer:
         ]
 
     def cleanup_generated_files(self) -> None:
-        paths_to_cleanup = [self.test_cfg.concolic_test_root_dir]
+        paths_to_cleanup = []
         for test_file in self.test_files:
             paths_to_cleanup.append(test_file.instrumented_behavior_file_path)
             paths_to_cleanup.append(test_file.benchmarking_file_path)
 
         cleanup_paths(paths_to_cleanup)
-        if hasattr(get_run_tmp_file, "tmpdir"):
-            get_run_tmp_file.tmpdir.cleanup()

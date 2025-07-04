@@ -16,9 +16,13 @@ import inquirer.themes
 import tomlkit
 from git import InvalidGitRepositoryError, Repo
 from pydantic.dataclasses import dataclass
+from rich.console import Group
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 from codeflash.api.cfapi import is_github_app_installed_on_repo
-from codeflash.cli_cmds.cli_common import apologize_and_exit, inquirer_wrapper, inquirer_wrapper_path
+from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
@@ -66,7 +70,18 @@ class DependencyManager(Enum):
 
 def init_codeflash() -> None:
     try:
-        click.echo(f"⚡️ Welcome to Codeflash! Let's get you set up.{LF}")
+        welcome_panel = Panel(
+            Text(
+                "⚡️ Welcome to Codeflash!\n\nThis setup will take just a few minutes.",
+                style="bold cyan",
+                justify="center",
+            ),
+            title="🚀 Codeflash Setup",
+            border_style="bright_cyan",
+            padding=(1, 2),
+        )
+        console.print(welcome_panel)
+        console.print()
 
         did_add_new_key = prompt_api_key()
 
@@ -83,22 +98,35 @@ def init_codeflash() -> None:
         if "setup_info" in locals():
             module_string = f" you selected ({setup_info.module_root})"
 
-        click.echo(
-            f"{LF}"
-            f"⚡️ Codeflash is now set up! You can now run:{LF}"
-            f"    codeflash --file <path-to-file> --function <function-name> to optimize a function within a file{LF}"
-            f"    codeflash --file <path-to-file> to optimize all functions in a file{LF}"
-            f"    codeflash --all to optimize all functions in all files in the module{module_string}{LF}"
-            f"-or-{LF}"
-            f"    codeflash --help to see all options{LF}"
+        usage_table = Table(show_header=False, show_lines=False, border_style="dim")
+        usage_table.add_column("Command", style="cyan")
+        usage_table.add_column("Description", style="white")
+
+        usage_table.add_row(
+            "codeflash --file <path-to-file> --function <function-name>", "Optimize a specific function within a file"
         )
+        usage_table.add_row("codeflash --file <path-to-file>", "Optimize all functions in a file")
+        usage_table.add_row(
+            f"codeflash --all{module_string if module_string else ''}", "Optimize all functions in all files"
+        )
+        usage_table.add_row("codeflash --help", "See all available options")
+
+        completion_message = "⚡️ Codeflash is now set up!\n\nYou can now run any of these commands:"
+
         if did_add_new_key:
-            click.echo("🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!")
-            click.echo("Or run the following command to reload:")
-            if os.name == "nt":
-                click.echo(f"  call {get_shell_rc_path()}")
-            else:
-                click.echo(f"  source {get_shell_rc_path()}")
+            completion_message += (
+                "\n\n🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
+            )
+            reload_cmd = f"call {get_shell_rc_path()}" if os.name == "nt" else f"source {get_shell_rc_path()}"
+            completion_message += f"\nOr run: {reload_cmd}"
+
+        completion_panel = Panel(
+            Group(Text(completion_message, style="bold green"), Text(""), usage_table),
+            title="🎉 Setup Complete!",
+            border_style="bright_green",
+            padding=(1, 2),
+        )
+        console.print(completion_panel)
 
         ph("cli-installation-successful", {"did_add_new_key": did_add_new_key})
         sys.exit(0)
@@ -152,6 +180,21 @@ def should_modify_pyproject_toml() -> bool:
     )
 
 
+# Custom theme for better UX
+class CodeflashTheme(inquirer.themes.Default):
+    def __init__(self) -> None:
+        super().__init__()
+        self.Question.mark_color = inquirer.themes.term.yellow
+        self.Question.brackets_color = inquirer.themes.term.bright_blue
+        self.Question.default_color = inquirer.themes.term.bright_cyan
+        self.List.selection_color = inquirer.themes.term.bright_blue
+        self.List.selection_cursor = "⚡"
+        self.Checkbox.selection_color = inquirer.themes.term.bright_blue
+        self.Checkbox.selection_cursor = "⚡"
+        self.Checkbox.selected_icon = "✅"
+        self.Checkbox.unselected_icon = "⬜"
+
+
 def collect_setup_info() -> SetupInfo:
     curdir = Path.cwd()
     # Check if the cwd is writable
@@ -185,23 +228,59 @@ def collect_setup_info() -> SetupInfo:
     custom_dir_option = "enter a custom directory…"
     module_subdir_options = [*valid_module_subdirs, curdir_option, custom_dir_option]
 
-    module_root_answer = inquirer_wrapper(
-        inquirer.list_input,
-        message="Which Python module do you want me to optimize going forward? (Usually the top-most directory with "
-        "all of your Python source code). Use arrow keys to select",
-        choices=module_subdir_options,
-        default=(project_name if project_name in module_subdir_options else module_subdir_options[0]),
+    info_panel = Panel(
+        Text(
+            "📁 Let's identify your Python module directory.\n\n"
+            "This is usually the top-level directory containing all your Python source code.\n",
+            style="cyan",
+        ),
+        title="🔍 Module Discovery",
+        border_style="bright_blue",
     )
+    console.print(info_panel)
+    console.print()
+
+    questions = [
+        inquirer.List(
+            "module_root",
+            message="Which Python module do you want me to optimize?",
+            choices=module_subdir_options,
+            default=(project_name if project_name in module_subdir_options else module_subdir_options[0]),
+            carousel=True,
+        )
+    ]
+
+    answers = inquirer.prompt(questions, theme=CodeflashTheme())
+    if not answers:
+        apologize_and_exit()
+    module_root_answer = answers["module_root"]
     if module_root_answer == curdir_option:
         module_root = "."
     elif module_root_answer == custom_dir_option:
-        custom_module_root_answer = inquirer_wrapper_path(
-            "path",
-            message=f"Enter the path to your module directory inside {Path(curdir).resolve()}{os.path.sep} ",
-            path_type=inquirer.Path.DIRECTORY,
+        custom_panel = Panel(
+            Text(
+                "📂 Enter a custom module directory path.\n\nPlease provide the path to your Python module directory.",
+                style="yellow",
+            ),
+            title="📂 Custom Directory",
+            border_style="bright_yellow",
         )
-        if custom_module_root_answer:
-            module_root = Path(custom_module_root_answer["path"])
+        console.print(custom_panel)
+        console.print()
+
+        custom_questions = [
+            inquirer.Path(
+                "custom_path",
+                message="Enter the path to your module directory",
+                path_type=inquirer.Path.DIRECTORY,
+                exists=True,
+                normalize_to_absolute_path=False,
+            )
+        ]
+
+        custom_answers = inquirer.prompt(custom_questions, theme=CodeflashTheme())
+        if custom_answers:
+            module_root = Path(custom_answers["custom_path"])
         else:
             apologize_and_exit()
     else:
@@ -210,32 +289,70 @@ def collect_setup_info() -> SetupInfo:
 
     # Discover test directory
     default_tests_subdir = "tests"
-    create_for_me_option = f"okay, create a tests{os.pathsep} directory for me!"
+    create_for_me_option = f"🆕 Create a new tests{os.pathsep} directory for me!"
     test_subdir_options = [sub_dir for sub_dir in valid_subdirs if sub_dir != module_root]
     if "tests" not in valid_subdirs:
         test_subdir_options.append(create_for_me_option)
-    custom_dir_option = "enter a custom directory…"
+    custom_dir_option = "📁 Enter a custom directory…"
     test_subdir_options.append(custom_dir_option)
-    tests_root_answer = inquirer_wrapper(
-        inquirer.list_input,
-        message="Where are your tests located? "
-        f"(If you don't have any tests yet, I can create an empty tests{os.pathsep} directory for you)",
-        choices=test_subdir_options,
-        default=(default_tests_subdir if default_tests_subdir in test_subdir_options else test_subdir_options[0]),
+
+    tests_panel = Panel(
+        Text(
+            "🧪 Now let's locate your test directory.\n\n"
+            "This is where all your test files are stored. If you don't have tests yet, "
+            "I can create a directory for you!",
+            style="green",
+        ),
+        title="🧪 Test Discovery",
+        border_style="bright_green",
     )
+    console.print(tests_panel)
+    console.print()
+
+    tests_questions = [
+        inquirer.List(
+            "tests_root",
+            message="Where are your tests located?",
+            choices=test_subdir_options,
+            default=(default_tests_subdir if default_tests_subdir in test_subdir_options else test_subdir_options[0]),
+            carousel=True,
+        )
+    ]
+
+    tests_answers = inquirer.prompt(tests_questions, theme=CodeflashTheme())
+    if not tests_answers:
+        apologize_and_exit()
+    tests_root_answer = tests_answers["tests_root"]
 
     if tests_root_answer == create_for_me_option:
         tests_root = Path(curdir) / default_tests_subdir
         tests_root.mkdir()
         click.echo(f"✅ Created directory {tests_root}{os.path.sep}{LF}")
     elif tests_root_answer == custom_dir_option:
-        custom_tests_root_answer = inquirer_wrapper_path(
-            "path",
-            message=f"Enter the path to your tests directory inside {Path(curdir).resolve()}{os.path.sep} ",
-            path_type=inquirer.Path.DIRECTORY,
+        custom_tests_panel = Panel(
+            Text(
+                "🧪 Enter a custom test directory path.\n\nPlease provide the path to your test directory.",
+                style="yellow",
+            ),
+            title="🧪 Custom Test Directory",
+            border_style="bright_yellow",
         )
-        if custom_tests_root_answer:
-            tests_root = Path(curdir) / Path(custom_tests_root_answer["path"])
+        console.print(custom_tests_panel)
+        console.print()
+
+        custom_tests_questions = [
+            inquirer.Path(
+                "custom_tests_path",
+                message="Enter the path to your tests directory",
+                path_type=inquirer.Path.DIRECTORY,
+                exists=False,  # Allow creating new directories
+                normalize_to_absolute_path=False,
+            )
+        ]
+
+        custom_tests_answers = inquirer.prompt(custom_tests_questions, theme=CodeflashTheme())
+        if custom_tests_answers:
+            tests_root = Path(curdir) / Path(custom_tests_answers["custom_tests_path"])
         else:
             apologize_and_exit()
     else:
@@ -252,66 +369,35 @@ def collect_setup_info() -> SetupInfo:
 
     ph("cli-tests-root-provided")
 
-    # Autodiscover test framework
     autodetected_test_framework = detect_test_framework(curdir, tests_root)
-    autodetected_suffix = (
-        f" (seems to me you're using {autodetected_test_framework})" if autodetected_test_framework else ""
-    )
-    test_framework = inquirer_wrapper(
-        inquirer.list_input,
-        message="Which test framework do you use?" + autodetected_suffix,
-        choices=["pytest", "unittest"],
-        default=autodetected_test_framework or "pytest",
-        carousel=True,
-    )
+
+    framework_message = "⚗️ Let's configure your test framework.\n\n"
+    if autodetected_test_framework:
+        framework_message += f"I detected that you're using {autodetected_test_framework}. "
+    framework_message += "Please confirm or select a different one."
+
+    framework_panel = Panel(Text(framework_message, style="blue"), title="⚗️ Test Framework", border_style="bright_blue")
+    console.print(framework_panel)
+    console.print()
+
+    framework_questions = [
+        inquirer.List(
+            "test_framework",
+            message="Which test framework do you use?",
+            choices=[("🧪 pytest", "pytest"), ("🐍 unittest", "unittest")],
+            default=autodetected_test_framework or "pytest",
+            carousel=True,
+        )
+    ]
+
+    framework_answers = inquirer.prompt(framework_questions, theme=CodeflashTheme())
+    if not framework_answers:
+        apologize_and_exit()
+    test_framework = framework_answers["test_framework"]
 
     ph("cli-test-framework-provided", {"test_framework": test_framework})
 
-    # Get benchmarks root directory
-    default_benchmarks_subdir = "benchmarks"
-    create_benchmarks_option = f"okay, create a {default_benchmarks_subdir}{os.path.sep} directory for me!"
-    no_benchmarks_option = "I don't need benchmarks"
-
-    # Check if benchmarks directory exists inside tests directory
-    tests_subdirs = []
-    if tests_root.exists():
-        tests_subdirs = [d.name for d in tests_root.iterdir() if d.is_dir() and not d.name.startswith(".")]
-
-    benchmarks_options = []
-    benchmarks_options.append(no_benchmarks_option)
-    if default_benchmarks_subdir in tests_subdirs:
-        benchmarks_options.append(default_benchmarks_subdir)
-    benchmarks_options.extend([d for d in tests_subdirs if d != default_benchmarks_subdir and d not in ignore_subdirs])
-    benchmarks_options.append(create_benchmarks_option)
-    benchmarks_options.append(custom_dir_option)
-
-    benchmarks_answer = inquirer_wrapper(
-        inquirer.list_input,
-        message="Where are your performance benchmarks located? (benchmarks must be a sub directory of your tests root directory)",
-        choices=benchmarks_options,
-        default=(
-            default_benchmarks_subdir if default_benchmarks_subdir in benchmarks_options else benchmarks_options[0]
-        ),
-    )
-
-    if benchmarks_answer == create_benchmarks_option:
-        benchmarks_root = tests_root / default_benchmarks_subdir
-        benchmarks_root.mkdir(exist_ok=True)
-        click.echo(f"✅ Created directory {benchmarks_root}{os.path.sep}{LF}")
-    elif benchmarks_answer == custom_dir_option:
-        custom_benchmarks_answer = inquirer_wrapper_path(
-            "path",
-            message=f"Enter the path to your benchmarks directory inside {tests_root}{os.path.sep} ",
-            path_type=inquirer.Path.DIRECTORY,
-        )
-        if custom_benchmarks_answer:
-            benchmarks_root = tests_root / Path(custom_benchmarks_answer["path"])
-        else:
-            apologize_and_exit()
-    elif benchmarks_answer == no_benchmarks_option:
-        benchmarks_root = None
-    else:
-        benchmarks_root = tests_root / Path(cast("str", benchmarks_answer))
+    benchmarks_root = None
 
     # TODO: Implement other benchmark framework options
     # if benchmarks_root:
@@ -327,13 +413,38 @@ def collect_setup_info() -> SetupInfo:
     #         carousel=True,
     #     )
 
-    formatter = inquirer_wrapper(
-        inquirer.list_input,
-        message="Which code formatter do you use?",
-        choices=["black", "ruff", "other", "don't use a formatter"],
-        default="black",
-        carousel=True,
+    formatter_panel = Panel(
+        Text(
+            "🎨 Let's configure your code formatter.\n\n"
+            "Code formatters help maintain consistent code style. "
+            "Codeflash will use this to format optimized code.",
+            style="magenta",
+        ),
+        title="🎨 Code Formatter",
+        border_style="bright_magenta",
     )
+    console.print(formatter_panel)
+    console.print()
+
+    formatter_questions = [
+        inquirer.List(
+            "formatter",
+            message="Which code formatter do you use?",
+            choices=[
+                ("⚫ black", "black"),
+                ("⚡ ruff", "ruff"),
+                ("🔧 other", "other"),
+                ("❌ don't use a formatter", "don't use a formatter"),
+            ],
+            default="black",
+            carousel=True,
+        )
+    ]
+
+    formatter_answers = inquirer.prompt(formatter_questions, theme=CodeflashTheme())
+    if not formatter_answers:
+        apologize_and_exit()
+    formatter = formatter_answers["formatter"]
 
     git_remote = ""
     try:
@@ -341,13 +452,30 @@ def collect_setup_info() -> SetupInfo:
         git_remotes = get_git_remotes(repo)
         if git_remotes:  # Only proceed if there are remotes
             if len(git_remotes) > 1:
-                git_remote = inquirer_wrapper(
-                    inquirer.list_input,
-                    message="What git remote do you want Codeflash to use for new Pull Requests? ",
-                    choices=git_remotes,
-                    default="origin",
-                    carousel=True,
+                git_panel = Panel(
+                    Text(
+                        "🔗 Configure Git Remote for Pull Requests.\n\n"
+                        "Codeflash will use this remote to create pull requests with optimized code.",
+                        style="blue",
+                    ),
+                    title="🔗 Git Remote Setup",
+                    border_style="bright_blue",
                 )
+                console.print(git_panel)
+                console.print()
+
+                git_questions = [
+                    inquirer.List(
+                        "git_remote",
+                        message="Which git remote should Codeflash use for Pull Requests?",
+                        choices=git_remotes,
+                        default="origin",
+                        carousel=True,
+                    )
+                ]
+
+                git_answers = inquirer.prompt(git_questions, theme=CodeflashTheme())
+                git_remote = git_answers["git_remote"] if git_answers else git_remotes[0]
             else:
                 git_remote = git_remotes[0]
         else:
@@ -439,20 +567,29 @@ def check_for_toml_or_setup_file() -> str | None:
             else:
                 click.echo("✅ Found setup.py.")
                 ph("cli-setup-py-found")
-        click.echo(
-            f"💡 I couldn't find a pyproject.toml in the current directory ({curdir}).{LF}"
-            f"(make sure you're running `codeflash init` from your project's root directory!){LF}"
-            f"I need this file to store my configuration settings."
+        toml_info_panel = Panel(
+            Text(
+                f"💡 No pyproject.toml found in {curdir}.\n\n"
+                "This file is essential for Codeflash to store its configuration.\n"
+                "Please ensure you are running `codeflash init` from your project's root directory.",
+                style="yellow",
+            ),
+            title="📋 pyproject.toml Required",
+            border_style="bright_yellow",
         )
+        console.print(toml_info_panel)
+        console.print()
         ph("cli-no-pyproject-toml-or-setup-py")
 
         # Create a pyproject.toml file because it doesn't exist
-        create_toml = inquirer_wrapper(
-            inquirer.confirm,
-            message="Do you want me to create a pyproject.toml file in the current directory?",
-            default=True,
-            show_default=False,
-        )
+        toml_questions = [
+            inquirer.Confirm("create_toml", message="Create pyproject.toml in the current directory?", default=True)
+        ]
+
+        toml_answers = inquirer.prompt(toml_questions, theme=CodeflashTheme())
+        if not toml_answers:
+            apologize_and_exit()
+        create_toml = toml_answers["create_toml"]
         if create_toml:
             ph("cli-create-pyproject-toml")
             # Define a minimal pyproject.toml content
@@ -463,8 +600,19 @@ def check_for_toml_or_setup_file() -> str | None:
 
                 # Check if the pyproject.toml file was created
                 if pyproject_toml_path.exists():
-                    click.echo(f"✅ Created a pyproject.toml file at {pyproject_toml_path}")
-                    click.pause()
+                    success_panel = Panel(
+                        Text(
+                            f"✅ Created a pyproject.toml file at {pyproject_toml_path}\n\n"
+                            "Your project is now ready for Codeflash configuration!",
+                            style="green",
+                            justify="center",
+                        ),
+                        title="🎉 Success!",
+                        border_style="bright_green",
+                    )
+                    console.print(success_panel)
+                    console.print("\n📍 Press any key to continue...")
+                    console.input()
                 ph("cli-created-pyproject-toml")
             except OSError:
                 click.echo(
@@ -495,42 +643,85 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         workflows_path = git_root / ".github" / "workflows"
         optimize_yaml_path = workflows_path / "codeflash.yaml"
 
+        actions_panel = Panel(
+            Text(
+                "🤖 GitHub Actions Setup\n\n"
+                "GitHub Actions will automatically optimize your code in every pull request. "
+                "This is the recommended way to use Codeflash for continuous optimization.",
+                style="blue",
+            ),
+            title="🤖 Continuous Optimization",
+            border_style="bright_blue",
+        )
+        console.print(actions_panel)
+        console.print()
+
         # Check if the workflow file already exists
         if optimize_yaml_path.exists():
-            confirm_overwrite = inquirer_wrapper(
-                inquirer.confirm,
-                message=f"⚡️ GitHub Actions workflow already exists at {optimize_yaml_path}. Overwrite?",
-                default=False,  # Don't overwrite by default
-            )
-            ph("cli-github-optimization-confirm-workflow-overwrite", {"confirm_overwrite": confirm_overwrite})
-            if not confirm_overwrite:
-                click.echo("⏩️ Skipping workflow creation.")
+            overwrite_questions = [
+                inquirer.Confirm(
+                    "confirm_overwrite",
+                    message=f"GitHub Actions workflow already exists at {optimize_yaml_path}. Overwrite?",
+                    default=False,
+                )
+            ]
+
+            overwrite_answers = inquirer.prompt(overwrite_questions, theme=CodeflashTheme())
+            if not overwrite_answers or not overwrite_answers["confirm_overwrite"]:
+                skip_panel = Panel(
+                    Text("⏩️ Skipping workflow creation.", style="yellow"), title="⏩️ Skipped", border_style="yellow"
+                )
+                console.print(skip_panel)
                 ph("cli-github-workflow-skipped")
                 return
+            ph(
+                "cli-github-optimization-confirm-workflow-overwrite",
+                {"confirm_overwrite": overwrite_answers["confirm_overwrite"]},
+            )
 
-        confirm_creation_yes = inquirer_wrapper(
-            inquirer.confirm,
-            message="⚡️Shall I set up a GitHub action that will continuously optimize all new code in GitHub PRs"
-            " for you? This is the main way of using Codeflash so we highly recommend it",
-            default=True,
-        )
-        ph("cli-github-optimization-confirm-workflow-creation", {"confirm_creation": confirm_creation_yes})
-        if not confirm_creation_yes:
-            click.echo("⏩️ Exiting workflow creation.")
+        creation_questions = [
+            inquirer.Confirm(
+                "confirm_creation", message="Set up GitHub Actions for continuous optimization?", default=True
+            )
+        ]
+
+        creation_answers = inquirer.prompt(creation_questions, theme=CodeflashTheme())
+        if not creation_answers or not creation_answers["confirm_creation"]:
+            skip_panel = Panel(
+                Text("⏩️ Skipping GitHub Actions setup.", style="yellow"), title="⏩️ Skipped", border_style="yellow"
+            )
+            console.print(skip_panel)
             ph("cli-github-workflow-skipped")
             return
+        ph(
+            "cli-github-optimization-confirm-workflow-creation",
+            {"confirm_creation": creation_answers["confirm_creation"]},
+        )
         workflows_path.mkdir(parents=True, exist_ok=True)
         from importlib.resources import files
 
         benchmark_mode = False
         benchmarks_root = config.get("benchmarks_root", "").strip()
         if benchmarks_root and benchmarks_root != "":
-            benchmark_mode = inquirer_wrapper(
-                inquirer.confirm,
-                message="⚡️It looks like you've configured a benchmarks_root in your config. Would you like to run the Github action in benchmark mode? "
-                " This will show the impact of Codeflash's suggested optimizations on your benchmarks",
-                default=True,
+            benchmark_panel = Panel(
+                Text(
+                    "📊 Benchmark Mode Available\n\n"
+                    "I noticed you've configured a benchmarks_root in your config. "
+                    "Benchmark mode will show the performance impact of Codeflash's optimizations on your benchmarks.",
+                    style="cyan",
+                ),
+                title="📊 Benchmark Mode",
+                border_style="bright_cyan",
             )
+            console.print(benchmark_panel)
+            console.print()
+
+            benchmark_questions = [
+                inquirer.Confirm("benchmark_mode", message="Run GitHub Actions in benchmark mode?", default=True)
+            ]
+
+            benchmark_answers = inquirer.prompt(benchmark_questions, theme=CodeflashTheme())
+            benchmark_mode = benchmark_answers["benchmark_mode"] if benchmark_answers else False
 
         optimize_yml_content = (
             files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding="utf-8")
@@ -540,29 +731,61 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         )
         with optimize_yaml_path.open("w", encoding="utf8") as optimize_yml_file:
             optimize_yml_file.write(materialized_optimize_yml_content)
-        click.echo(f"{LF}✅ Created GitHub action workflow at {optimize_yaml_path}{LF}")
+        # Success panel for workflow creation
+        workflow_success_panel = Panel(
+            Text(
+                f"✅ Created GitHub action workflow at {optimize_yaml_path}\n\n"
+                "Your repository is now configured for continuous optimization!",
+                style="green",
+                justify="center",
+            ),
+            title="🎉 Workflow Created!",
+            border_style="bright_green",
+        )
+        console.print(workflow_success_panel)
+        console.print()
+
         try:
             existing_api_key = get_codeflash_api_key()
         except OSError:
             existing_api_key = None
-        click.prompt(
-            f"Next, you'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repo.{LF}"
-            f"Press Enter to open your repo's secrets page at {get_github_secrets_page_url(repo)} {LF}"
-            f"Then, click 'New repository secret' to add your api key with the variable name CODEFLASH_API_KEY.{LF}"
-            f"{'Here is your CODEFLASH_API_KEY: ' + existing_api_key + ' ' + LF}"
-            if existing_api_key
-            else "",
-            default="",
-            type=click.STRING,
-            prompt_suffix="",
-            show_default=False,
+
+        # GitHub secrets setup panel
+        secrets_message = (
+            "🔐 Next Step: Add API Key as GitHub Secret\n\n"
+            "You'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repository.\n\n"
+            "📋 Steps:\n"
+            "1. Press Enter to open your repo's secrets page\n"
+            "2. Click 'New repository secret'\n"
+            "3. Add your API key with the variable name CODEFLASH_API_KEY"
         )
+
+        if existing_api_key:
+            secrets_message += f"\n\n🔑 Your API Key: {existing_api_key}"
+
+        secrets_panel = Panel(
+            Text(secrets_message, style="blue"), title="🔐 GitHub Secrets Setup", border_style="bright_blue"
+        )
+        console.print(secrets_panel)
+
+        console.print(f"\n📍 Press Enter to open: {get_github_secrets_page_url(repo)}")
+        console.input()
+
         click.launch(get_github_secrets_page_url(repo))
-        click.echo(
-            "🐙 I opened your Github secrets page! Note: if you see a 404, you probably don't have access to this "
-            "repo's secrets; ask a repo admin to add it for you, or (not super recommended) you can temporarily "
-            f"hard-code your api key into the workflow file.{LF}"
+
+        # Post-launch message panel
+        launch_panel = Panel(
+            Text(
+                "🐙 I opened your GitHub secrets page!\n\n"
+                "Note: If you see a 404, you probably don't have access to this repo's secrets. "
+                "Ask a repo admin to add it for you, or (not recommended) you can temporarily "
+                "hard-code your API key into the workflow file.",
+                style="cyan",
+            ),
+            title="🌐 Browser Opened",
+            border_style="bright_cyan",
         )
+        console.print(launch_panel)
         click.pause()
         click.echo()
         click.echo(
@@ -712,7 +935,6 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     codeflash_section["module-root"] = setup_info.module_root
     codeflash_section["tests-root"] = setup_info.tests_root
     codeflash_section["test-framework"] = setup_info.test_framework
-    codeflash_section["benchmarks-root"] = setup_info.benchmarks_root if setup_info.benchmarks_root else ""
     codeflash_section["ignore-paths"] = setup_info.ignore_paths
     codeflash_section["disable-telemetry"] = not enable_telemetry
     if setup_info.git_remote not in ["", "origin"]:
@@ -751,7 +973,7 @@ def install_github_app() -> None:
         return
     owner, repo = get_repo_owner_and_name(git_repo)
 
-    if is_github_app_installed_on_repo(owner, repo):
+    if is_github_app_installed_on_repo(owner, repo, suppress_errors=True):
         click.echo("🐙 Looks like you've already installed the Codeflash GitHub app on this repository! Continuing…")
 
     else:
@@ -774,7 +996,7 @@ def install_github_app() -> None:
         )
 
         count = 2
-        while not is_github_app_installed_on_repo(owner, repo):
+        while not is_github_app_installed_on_repo(owner, repo, suppress_errors=True):
             if count == 0:
                 click.echo(
                     f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
@@ -816,8 +1038,18 @@ def prompt_api_key() -> bool:
         existing_api_key = None
     if existing_api_key:
         display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
-        click.echo(f"🔑 I found a CODEFLASH_API_KEY in your environment [{display_key}]!")
-
+        api_key_panel = Panel(
+            Text(
+                f"🔑 I found a CODEFLASH_API_KEY in your environment [{display_key}]!\n\n"
+                "✅ You're all set with API authentication!",
+                style="green",
+                justify="center",
+            ),
+            title="🔑 API Key Found",
+            border_style="bright_green",
+        )
+        console.print(api_key_panel)
+        console.print()
         return False
 
     enter_api_key_and_save_to_rc()

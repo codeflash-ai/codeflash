@@ -46,6 +46,7 @@ from codeflash.tracing.tracing_utils import FunctionModules
 from codeflash.verification.verification_utils import get_test_file_path
 
 if TYPE_CHECKING:
+    from argparse import Namespace
     from types import FrameType, TracebackType
 
 
@@ -123,8 +124,8 @@ class Tracer:
         self.function_count = defaultdict(int)
         self.current_file_path = Path(__file__).resolve()
         self.ignored_qualified_functions = {
-            f"{self.current_file_path}:Tracer:__exit__",
-            f"{self.current_file_path}:Tracer:__enter__",
+            f"{self.current_file_path}:Tracer.__exit__",
+            f"{self.current_file_path}:Tracer.__enter__",
         }
         self.max_function_count = max_function_count
         self.config, found_config_path = parse_config_file(config_file_path)
@@ -133,6 +134,7 @@ class Tracer:
         self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>", "<module>"}
 
         self.file_being_called_from: str = str(Path(sys._getframe().f_back.f_code.co_filename).name).replace(".", "_")  # noqa: SLF001
+        self.replay_test_file_path: Path | None = None
 
         assert timeout is None or timeout > 0, "Timeout should be greater than 0"
         self.timeout = timeout
@@ -283,6 +285,7 @@ class Tracer:
 
         with Path(test_file_path).open("w", encoding="utf8") as file:
             file.write(replay_test)
+        self.replay_test_file_path = test_file_path
 
         console.print(
             f"Codeflash: Traced {self.trace_count} function calls successfully and replay test created at - {test_file_path}",
@@ -344,11 +347,16 @@ class Tracer:
             # someone can override the getattr method and raise an exception. I'm looking at you wrapt
             return
 
+        # Extract class name from co_qualname for static methods that lack self/cls
+        if class_name is None and "." in getattr(code, "co_qualname", ""):
+            qualname_parts = code.co_qualname.split(".")
+            if len(qualname_parts) >= 2:
+                class_name = qualname_parts[-2]
+
         try:
             function_qualified_name = f"{file_name}:{code.co_qualname}"
         except AttributeError:
-            function_qualified_name = f"{file_name}:{(class_name + ':' if class_name else '')}{code.co_name}"
-
+            function_qualified_name = f"{file_name}:{(class_name + '.' if class_name else '')}{code.co_name}"
         if function_qualified_name in self.ignored_qualified_functions:
             return
         if function_qualified_name not in self.function_count:
@@ -701,7 +709,7 @@ class Tracer:
                 border_style="blue",
                 title="[bold]Function Profile[/bold] (ordered by internal time)",
                 title_style="cyan",
-                caption=f"Showing top 25 of {len(self.stats)} functions",
+                caption=f"Showing top {min(25, len(self.stats))} of {len(self.stats)} functions",
             )
 
             table.add_column("Calls", justify="right", style="green", width=10)
@@ -791,9 +799,9 @@ class Tracer:
         return self
 
 
-def main() -> ArgumentParser:
+def main(args: Namespace | None = None) -> ArgumentParser:
     parser = ArgumentParser(allow_abbrev=False)
-    parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", required=True)
+    parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", default="codeflash.trace")
     parser.add_argument("--only-functions", help="Trace only these functions", nargs="+", default=None)
     parser.add_argument(
         "--max-function-count",
@@ -815,21 +823,39 @@ def main() -> ArgumentParser:
         "with the codeflash config. Will be auto-discovered if not specified.",
         default=None,
     )
+    parser.add_argument("--trace-only", action="store_true", help="Trace and create replay tests only, don't optimize")
 
-    if not sys.argv[1:]:
-        parser.print_usage()
-        sys.exit(2)
+    if args is not None:
+        parsed_args = args
+        parsed_args.outfile = getattr(args, "output", "codeflash.trace")
+        parsed_args.only_functions = getattr(args, "only_functions", None)
+        parsed_args.max_function_count = getattr(args, "max_function_count", 100)
+        parsed_args.tracer_timeout = getattr(args, "timeout", None)
+        parsed_args.codeflash_config = getattr(args, "config_file_path", None)
+        parsed_args.trace_only = getattr(args, "trace_only", False)
+        parsed_args.module = False
 
-    args, unknown_args = parser.parse_known_args()
-    sys.argv[:] = unknown_args
+        if getattr(args, "disable", False):
+            console.rule("Codeflash: Tracer disabled by --disable option", style="bold red")
+            return parser
+
+        unknown_args = []
+    else:
+        if not sys.argv[1:]:
+            parser.print_usage()
+            sys.exit(2)
+
+        parsed_args, unknown_args = parser.parse_known_args()
+        sys.argv[:] = unknown_args
 
     # The script that we're profiling may chdir, so capture the absolute path
     # to the output file at startup.
-    if args.outfile is not None:
-        args.outfile = Path(args.outfile).resolve()
+    if parsed_args.outfile is not None:
+        parsed_args.outfile = Path(parsed_args.outfile).resolve()
+    outfile = parsed_args.outfile
 
     if len(unknown_args) > 0:
-        if args.module:
+        if parsed_args.module:
             import runpy
 
             code = "run_module(modname, run_name='__main__')"
@@ -848,14 +874,48 @@ def main() -> ArgumentParser:
                 "__cached__": None,
             }
         try:
-            Tracer(
-                output=args.outfile,
-                functions=args.only_functions,
-                max_function_count=args.max_function_count,
-                timeout=args.tracer_timeout,
-                config_file_path=args.codeflash_config,
+            tracer = Tracer(
+                output=parsed_args.outfile,
+                functions=parsed_args.only_functions,
+                max_function_count=parsed_args.max_function_count,
+                timeout=parsed_args.tracer_timeout,
+                config_file_path=parsed_args.codeflash_config,
                 command=" ".join(sys.argv),
-            ).runctx(code, globs, None)
+            )
+            tracer.runctx(code, globs, None)
+            replay_test_path = tracer.replay_test_file_path
+            if not parsed_args.trace_only and replay_test_path is not None:
+                del tracer
+
+                from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
+                from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
+                from codeflash.cli_cmds.console import paneled_text
+                from codeflash.telemetry import posthog_cf
+                from codeflash.telemetry.sentry import init_sentry
+
+                sys.argv = ["codeflash", "--replay-test", str(replay_test_path)]
+
+                args = parse_args()
+                paneled_text(
+                    CODEFLASH_LOGO,
+                    panel_args={"title": "https://codeflash.ai", "expand": False},
+                    text_args={"style": "bold gold3"},
+                )
+
+                args = process_pyproject_config(args)
+                args.previous_checkpoint_functions = None
+                init_sentry(not args.disable_telemetry, exclude_errors=True)
+                posthog_cf.initialize_posthog(not args.disable_telemetry)
+
+                from codeflash.optimization import optimizer
+
+                optimizer.run_with_args(args)
+
+                # Delete the trace file and the replay test file if they exist
+                if outfile:
+                    outfile.unlink(missing_ok=True)
+                if replay_test_path:
+                    replay_test_path.unlink(missing_ok=True)
 
         except BrokenPipeError as exc:
             # Prevent "Exception ignored" during interpreter shutdown.

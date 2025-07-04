@@ -2,15 +2,15 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from version import __version_tuple__
+from codeflash.version import __version__
 
 
 def main() -> None:
     # Use the version tuple from version.py
-    version = __version_tuple__
+    version = __version__
 
     # Use the major and minor version components from the version tuple
-    major_minor_version = ".".join(map(str, version[:2]))
+    major_minor_version = ".".join(map(str, version.split(".")[:2]))
 
     # Define the pattern to search for and the replacement string for the version
     version_pattern = re.compile(r"(Licensed Work:\s+Codeflash Client version\s+)(0\.\d+)(\.x)")
