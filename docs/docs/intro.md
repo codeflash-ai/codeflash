@@ -27,12 +27,13 @@ This is a great way to ensure that your code, your team's code and your AI Agent
 
 <!--- TODO: Add links to the relevant sections of the documentation and style the table --->
 
-| Feature                                                                                 | Description                                                                                                                                                                                         |
-|-----------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [Optimize a single function](optimizing-with-codeflash/one-function)                    | Basic unit of optimization by asking Codeflash to optimize a particular function                                                                                                                    |
-| [Optimize all code in a repo](optimizing-with-codeflash/codeflash-all)                  | Codeflash discovers all functions in a repo and optimizes all of them!                                                                                                                              |
-| [Optimize every new pull request](optimizing-with-codeflash/optimize-prs)               | Codeflash runs as a GitHub action and GitHub app and reviews all new code for Optimizations                                                                                                         |
-| [Optimize a whole workflow by Tracing it](optimizing-with-codeflash/trace-and-optimize) | End to end optimization for all the functions called in a workflow, by tracing to collect real inputs seen during execution and ensuring correctness and performance optimization with those inputs |
+| Feature                                                                     | Description                                                                                                                                                                                   |
+|-----------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [Optimize a single function](optimizing-with-codeflash/one-function)        | `codeflash --file path.py --function myfunctionpy` Basic unit of optimization by asking Codeflash to optimize a particular function                                                           
+| [Optimize an entire workflow](optimizing-with-codeflash/trace-and-optimize) | `codeflash optimize myscript.py` End to end optimization for all the functions called in a workflow, by tracing to collect real inputs to ensure correctness and e2e performance optimization |
+| [Optimize all code in a repo](optimizing-with-codeflash/codeflash-all)      | `codeflash --all` Codeflash discovers all functions in a repo and optimizes all of them!                                                                                                      |
+| [Optimize every new pull request](optimizing-with-codeflash/optimize-prs)   | `codeflash init-actions` Codeflash runs as a GitHub action and GitHub app and reviews all new code for Optimizations                                                                          |
+
 
 ## How to use these docs
 
