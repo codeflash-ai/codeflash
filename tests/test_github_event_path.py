@@ -504,25 +504,22 @@ pr_event_file = '''{
 
 @pytest.fixture
 def set_event_file(tmp_path):
-    def _write_event(content: str):
-        path = tmp_path / "event.json"
-        path.write_text(content)
-        os.environ["GITHUB_EVENT_PATH"] = str(path)
-        return path
-    return _write_event
+    path = tmp_path / "event.json"
+    existing_or_new_path = Path(os.getenv("GITHUB_EVENT_PATH", str(path)))
+    existing_or_new_path.write_text(pr_event_file, encoding="utf-8")
+    os.environ["GITHUB_EVENT_PATH"] = str(existing_or_new_path)
+    print(existing_or_new_path)
+    return existing_or_new_path
 
 
 def test_is_repo_not_a_fork(set_event_file):
-    set_event_file(pr_event_file)
     assert env_utils.is_repo_a_fork() is False
 
 
 def test_is_pr_not_draft(set_event_file):
-    set_event_file(pr_event_file)
     assert env_utils.is_pr_draft() is False
 
 def test_get_pr_number(set_event_file):
-    set_event_file(pr_event_file)
     pr_number = env_utils.get_pr_number()
     assert type(pr_number) is int
     assert pr_number is 10
