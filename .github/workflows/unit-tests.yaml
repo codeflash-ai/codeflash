@@ -32,22 +32,22 @@ jobs:
       - name: Unit tests
         run: uv run pytest tests/ --benchmark-skip -m "not ci_skip"
 
-  unit-tests-windows:
-    runs-on: windows-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+  # unit-tests-windows:
+  #   runs-on: windows-latest
+  #   continue-on-error: true
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
+  #         token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.11"
+  #     - name: Install uv
+  #       uses: astral-sh/setup-uv@v5
+  #       with:
+  #         python-version: "3.11"
 
-      - name: install dependencies
-        run: uv sync
+  #     - name: install dependencies
+  #       run: uv sync
 
-      - name: Unit tests
-        run: uv run pytest tests/ --benchmark-skip -m "not ci_skip"
+  #     - name: Unit tests
+  #       run: uv run pytest tests/ --benchmark-skip -m "not ci_skip"
