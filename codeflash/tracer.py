@@ -855,7 +855,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
     outfile = parsed_args.outfile
 
     if len(unknown_args) > 0:
-        if args.module:
+        if parsed_args.module:
             import runpy
 
             code = "run_module(modname, run_name='__main__')"
