@@ -129,7 +129,7 @@ def functionA():
             tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
         )
         path_obj_name = Path(f.name)
-        functions, functions_count = get_functions_to_optimize(
+        functions, functions_count, _ = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
             file=path_obj_name,
@@ -145,7 +145,7 @@ def functionA():
             assert functions[file][0].function_name == "functionA"
             assert functions[file][0].top_level_parent_name == "A"
 
-        functions, functions_count = get_functions_to_optimize(
+        functions, functions_count, _ = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
             file=path_obj_name,
@@ -161,7 +161,7 @@ def functionA():
             assert functions[file][0].function_name == "functionA"
             assert functions[file][0].top_level_parent_name == "X"
 
-        functions, functions_count = get_functions_to_optimize(
+        functions, functions_count, _ = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
             file=path_obj_name,
@@ -229,7 +229,7 @@ def propagate_attributes(
             tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
         )
         path_obj_name = Path(f.name)
-        functions, functions_count = get_functions_to_optimize(
+        functions, functions_count, _ = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
             file=path_obj_name,
@@ -258,7 +258,7 @@ def outer_function():
             tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
         )
         path_obj_name = Path(f.name)
-        functions, functions_count = get_functions_to_optimize(
+        functions, functions_count, _ = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
             file=path_obj_name,
@@ -289,7 +289,7 @@ def outer_function():
             tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
         )
         path_obj_name = Path(f.name)
-        functions, functions_count = get_functions_to_optimize(
+        functions, functions_count, _ = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
             file=path_obj_name,
