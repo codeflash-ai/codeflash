@@ -41,7 +41,7 @@ def test_speedup_critic() -> None:
         total_candidate_timing=12,
     )
 
-    assert speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now)  # 20% improvement
+    assert speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now, True)  # 20% improvement
 
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
@@ -52,7 +52,7 @@ def test_speedup_critic() -> None:
         optimization_candidate_index=0,
     )
 
-    assert not speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now)  # 6% improvement
+    assert not speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now, True)  # 6% improvement
 
     original_code_runtime = 100000
     best_runtime_until_now = 100000
@@ -66,7 +66,7 @@ def test_speedup_critic() -> None:
         optimization_candidate_index=0,
     )
 
-    assert speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now)  # 6% improvement
+    assert speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now, True)  # 6% improvement
 
 
 def test_generated_test_critic() -> None:

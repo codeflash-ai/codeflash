@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
@@ -26,7 +26,10 @@ def performance_gain(*, original_runtime_ns: int, optimized_runtime_ns: int) -> 
 
 
 def speedup_critic(
-    candidate_result: OptimizedCandidateResult, original_code_runtime: int, best_runtime_until_now: int
+    candidate_result: OptimizedCandidateResult,
+    original_code_runtime: int,
+    best_runtime_until_now: int,
+    disable_gh_action_noise: Optional[bool] = None,
 ) -> bool:
     """Take in a correct optimized Test Result and decide if the optimization should actually be surfaced to the user.
 
@@ -35,10 +38,11 @@ def speedup_critic(
     when the original runtime is less than 10 microseconds, and becomes MIN_IMPROVEMENT_THRESHOLD for any higher runtime.
     The noise floor is doubled when benchmarking on a (noisy) GitHub Action virtual instance, also we want to be more confident there.
     """
-    in_github_actions_mode = bool(env_utils.get_pr_number())
     noise_floor = 3 * MIN_IMPROVEMENT_THRESHOLD if original_code_runtime < 10000 else MIN_IMPROVEMENT_THRESHOLD
-    if in_github_actions_mode:
-        noise_floor = noise_floor * 2  # Increase the noise floor in GitHub Actions mode
+    if not disable_gh_action_noise:
+        in_github_actions_mode = bool(env_utils.get_pr_number())
+        if in_github_actions_mode:
+            noise_floor = noise_floor * 2  # Increase the noise floor in GitHub Actions mode
 
     perf_gain = performance_gain(
         original_runtime_ns=original_code_runtime, optimized_runtime_ns=candidate_result.best_test_runtime

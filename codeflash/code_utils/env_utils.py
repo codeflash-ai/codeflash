@@ -74,17 +74,22 @@ def ensure_codeflash_api_key() -> bool:
 
 @lru_cache(maxsize=1)
 def get_pr_number() -> Optional[int]:
+    event_data = get_cached_gh_event_data()
+    pr_number = event_data.get("number")
+    if pr_number:
+        return int(pr_number)
+
     pr_number = os.environ.get("CODEFLASH_PR_NUMBER")
-    if not pr_number:
-        return None
-    return int(pr_number)
+    if pr_number:
+        return int(pr_number)
+    return None
 
 
 def ensure_pr_number() -> bool:
     if not get_pr_number():
         msg = (
-            "CODEFLASH_PR_NUMBER not found in environment variables; make sure the Github Action is setting this so "
-            "Codeflash can comment on the right PR"
+            "Codeflash couldn't detect your pull request number. Are you running Codeflash within a GitHub Action?"
+            "If not, please set the CODEFLASH_PR_NUMBER environment variable to ensure Codeflash can comment on the correct PR."
         )
         raise OSError(msg)
     return True
@@ -96,20 +101,17 @@ def is_end_to_end() -> bool:
 
 
 @lru_cache(maxsize=1)
-def is_repo_a_fork() -> bool:
-    event = get_cached_gh_event_data()
-    if event is None:
-        return False
-    return bool(event["repository"]["fork"])
-
-
-@lru_cache(maxsize=1)
-def get_cached_gh_event_data() -> dict[str, Any] | None:
+def get_cached_gh_event_data() -> dict[str, Any]:
     event_path = os.getenv("GITHUB_EVENT_PATH")
     if not event_path:
-        return None
+        return {}
     with Path(event_path).open() as f:
         return json.load(f)  # type: ignore  # noqa
+
+
+def is_repo_a_fork() -> bool:
+    event = get_cached_gh_event_data()
+    return bool(event.get("repository", {}).get("fork", False))
 
 
 @lru_cache(maxsize=1)
@@ -125,14 +127,5 @@ def is_LSP_enabled() -> bool:
 
 def is_pr_draft() -> bool:
     """Check if the PR is draft. in the github action context."""
-    try:
-        event_path = os.getenv("GITHUB_EVENT_PATH")
-        pr_number = get_pr_number()
-        if pr_number is not None and event_path:
-            with Path(event_path).open() as f:
-                event_data = json.load(f)
-            return bool(event_data["pull_request"]["draft"])
-        return False  # noqa
-    except Exception as e:
-        logger.warning(f"Error checking if PR is draft: {e}")
-        return False
+    event = get_cached_gh_event_data()
+    return bool(event.get("pull_request", {}).get("draft", False))
