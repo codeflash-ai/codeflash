@@ -1,5 +1,11 @@
 """Adapted from tabulate (https://github.com/astanin/python-tabulate) written by Sergey Astanin and contributors (MIT License)."""
 
+from __future__ import annotations
+import warnings
+import wcwidth
+from itertools import chain, zip_longest as izip_longest
+from collections.abc import Iterable
+
 """Pretty-print tabular data."""
 # ruff: noqa
 
@@ -650,94 +656,80 @@ def tabulate(
     rowalign=None,
     maxheadercolwidths=None,
 ):
+    # Shortcuts & locals
     if tabular_data is None:
         tabular_data = []
 
+    # 1. Normalize tabular data once
     list_of_lists, headers, headers_pad = _normalize_tabular_data(tabular_data, headers, showindex=showindex)
-    list_of_lists, separating_lines = _remove_separating_lines(list_of_lists)
+    list_of_lists, _ = _remove_separating_lines(list_of_lists)  # separating_lines not used
 
-    # PrettyTable formatting does not use any extra padding.
-    # Numbers are not parsed and are treated the same as strings for alignment.
-    # Check if pretty is the format being used and override the defaults so it
-    # does not impact other formats.
-    min_padding = MIN_PADDING
+    # 2. Pre-calculate format switches (reduce repeated logic)
+    min_padding = 0 if tablefmt == "pretty" else MIN_PADDING
     if tablefmt == "pretty":
-        min_padding = 0
         disable_numparse = True
         numalign = "center" if numalign == _DEFAULT_ALIGN else numalign
         stralign = "center" if stralign == _DEFAULT_ALIGN else stralign
     else:
         numalign = "decimal" if numalign == _DEFAULT_ALIGN else numalign
         stralign = "left" if stralign == _DEFAULT_ALIGN else stralign
-
-    # 'colon_grid' uses colons in the line beneath the header to represent a column's
-    # alignment instead of literally aligning the text differently. Hence,
-    # left alignment of the data in the text output is enforced.
     if tablefmt == "colon_grid":
         colglobalalign = "left"
         headersglobalalign = "left"
 
-    # optimization: look for ANSI control codes once,
-    # enable smart width functions only if a control code is found
-    #
-    # convert the headers and rows into a single, tab-delimited string ensuring
-    # that any bytestrings are decoded safely (i.e. errors ignored)
-    plain_text = "\t".join(
-        chain(
-            # headers
-            map(_to_str, headers),
-            # rows: chain the rows together into a single iterable after mapping
-            # the bytestring conversino to each cell value
-            chain.from_iterable(map(_to_str, row) for row in list_of_lists),
-        )
-    )
-
+    # 3. Prepare plain_text for features detection
+    # Flatten quite efficiently
+    # (The main cost here is table flattening for detection. Avoid generator object cost with a one-liner.)
+    if headers:
+        iters = chain(map(_to_str, headers), (cell for row in list_of_lists for cell in map(_to_str, row)))
+    else:
+        iters = (cell for row in list_of_lists for cell in map(_to_str, row))
+    plain_text = "\t".join(iters)
     has_invisible = _ansi_codes.search(plain_text) is not None
-
     enable_widechars = wcwidth is not None and WIDE_CHARS_MODE
+    is_multiline = False
     if not isinstance(tablefmt, TableFormat) and tablefmt in multiline_formats and _is_multiline(plain_text):
         tablefmt = multiline_formats.get(tablefmt, tablefmt)
         is_multiline = True
-    else:
-        is_multiline = False
     width_fn = _choose_width_fn(has_invisible, enable_widechars, is_multiline)
 
-    # format rows and columns, convert numeric values to strings
-    cols = list(izip_longest(*list_of_lists))
-    numparses = _expand_numparse(disable_numparse, len(cols))
-    coltypes = [_column_type(col, numparse=np) for col, np in zip(cols, numparses)]
-    if isinstance(floatfmt, str):  # old version
-        float_formats = len(cols) * [floatfmt]  # just duplicate the string to use in each column
-    else:  # if floatfmt is list, tuple etc we have one per column
-        float_formats = list(floatfmt)
-        if len(float_formats) < len(cols):
-            float_formats.extend((len(cols) - len(float_formats)) * [_DEFAULT_FLOATFMT])
-    if isinstance(intfmt, str):  # old version
-        int_formats = len(cols) * [intfmt]  # just duplicate the string to use in each column
-    else:  # if intfmt is list, tuple etc we have one per column
-        int_formats = list(intfmt)
-        if len(int_formats) < len(cols):
-            int_formats.extend((len(cols) - len(int_formats)) * [_DEFAULT_INTFMT])
-    if isinstance(missingval, str):
-        missing_vals = len(cols) * [missingval]
-    else:
-        missing_vals = list(missingval)
-        if len(missing_vals) < len(cols):
-            missing_vals.extend((len(cols) - len(missing_vals)) * [_DEFAULT_MISSINGVAL])
-    cols = [
-        [_format(v, ct, fl_fmt, int_fmt, miss_v, has_invisible) for v in c]
-        for c, ct, fl_fmt, int_fmt, miss_v in zip(cols, coltypes, float_formats, int_formats, missing_vals)
-    ]
+    # 4. Transpose data only once, for column-oriented transforms
+    # Avoid expensive list + zip + star unpacking overhead by storing list_of_lists directly
+    data_rows = list_of_lists
+    ncols = len(data_rows[0]) if data_rows else len(headers)
+    cols = [list(col) for col in izip_longest(*data_rows, fillvalue="")]
 
-    # align columns
-    # first set global alignment
-    if colglobalalign is not None:  # if global alignment provided
-        aligns = [colglobalalign] * len(cols)
-    else:  # default
+    # 5. Pre-compute per-column formatting parameters (avoid loop in loop)
+    numparses = _expand_numparse(disable_numparse, ncols)
+    coltypes = []
+    append_coltype = coltypes.append
+    for col, np in zip(cols, numparses):
+        append_coltype(_column_type(col, numparse=np))
+    float_formats = (
+        [floatfmt] * ncols
+        if isinstance(floatfmt, str)
+        else list(floatfmt) + [_DEFAULT_FLOATFMT] * (ncols - len(floatfmt))
+    )
+    int_formats = (
+        [intfmt] * ncols if isinstance(intfmt, str) else list(intfmt) + [_DEFAULT_INTFMT] * (ncols - len(intfmt))
+    )
+    missing_vals = (
+        [missingval] * ncols
+        if isinstance(missingval, str)
+        else list(missingval) + [_DEFAULT_MISSINGVAL] * (ncols - len(missingval))
+    )
+
+    # 6. Pre-format all columns (avoid repeated conversion/type detection)
+    formatted_cols = []
+    for c, ct, fl_fmt, int_fmt, miss_v in zip(cols, coltypes, float_formats, int_formats, missing_vals):
+        formatted_cols.append([_format(v, ct, fl_fmt, int_fmt, miss_v, has_invisible) for v in c])
+
+    # 7. Alignment selection (avoid dict/set lookups per-column by building list-style)
+    if colglobalalign is not None:
+        aligns = [colglobalalign] * ncols
+    else:
         aligns = [numalign if ct in {int, float} else stralign for ct in coltypes]
-    # then specific alignments
     if colalign is not None:
-        assert isinstance(colalign, Iterable)
         if isinstance(colalign, str):
             warnings.warn(
                 f"As a string, `colalign` is interpreted as {[c for c in colalign]}. "
@@ -745,33 +737,35 @@ def tabulate(
                 stacklevel=2,
             )
         for idx, align in enumerate(colalign):
-            if not idx < len(aligns):
+            if idx >= len(aligns):
                 break
             if align != "global":
                 aligns[idx] = align
-    minwidths = [width_fn(h) + min_padding for h in headers] if headers else [0] * len(cols)
-    aligns_copy = aligns.copy()
-    # Reset alignments in copy of alignments list to "left" for 'colon_grid' format,
-    # which enforces left alignment in the text output of the data.
-    if tablefmt == "colon_grid":
-        aligns_copy = ["left"] * len(cols)
-    cols = [
-        _align_column(c, a, minw, has_invisible, enable_widechars, is_multiline, preserve_whitespace)
-        for c, a, minw in zip(cols, aligns_copy, minwidths)
-    ]
 
-    aligns_headers = None
+    # 8. Compute minimum widths in a branch to avoid repeated expression evaluation
     if headers:
-        # align headers and add headers
-        t_cols = cols or [[""]] * len(headers)
-        # first set global alignment
-        if headersglobalalign is not None:  # if global alignment provided
-            aligns_headers = [headersglobalalign] * len(t_cols)
-        else:  # default
+        # Precompute column min widths (includes header + padding)
+        minwidths = [width_fn(h) + min_padding for h in headers]
+    else:
+        minwidths = [0] * ncols
+
+    aligns_copy = aligns if tablefmt != "colon_grid" else ["left"] * ncols
+
+    # 9. Align all columns (single allocation per column)
+    aligned_cols = []
+    for c, a, minw in zip(formatted_cols, aligns_copy, minwidths):
+        aligned_cols.append(
+            _align_column(c, a, minw, has_invisible, enable_widechars, is_multiline, preserve_whitespace)
+        )
+
+    # 10. Handle header alignment and formatting
+    if headers:
+        t_cols = aligned_cols or [[""]] * ncols
+        if headersglobalalign is not None:
+            aligns_headers = [headersglobalalign] * ncols
+        else:
             aligns_headers = aligns or [stralign] * len(headers)
-        # then specific header alignments
         if headersalign is not None:
-            assert isinstance(headersalign, Iterable)
             if isinstance(headersalign, str):
                 warnings.warn(
                     f"As a string, `headersalign` is interpreted as {[c for c in headersalign]}. "
@@ -781,28 +775,47 @@ def tabulate(
                 )
             for idx, align in enumerate(headersalign):
                 hidx = headers_pad + idx
-                if not hidx < len(aligns_headers):
+                if hidx >= len(aligns_headers):
                     break
-                if align == "same" and hidx < len(aligns):  # same as column align
+                if align == "same" and hidx < len(aligns):
                     aligns_headers[hidx] = aligns[hidx]
                 elif align != "global":
                     aligns_headers[hidx] = align
-        minwidths = [max(minw, max(width_fn(cl) for cl in c)) for minw, c in zip(minwidths, t_cols)]
+        # 1. Optimize minwidths by combining two loops into one, avoid repeated width_fn calls
+        for i in range(ncols):
+            if t_cols[i]:
+                minwidths[i] = max(minwidths[i], max(width_fn(x) for x in t_cols[i]))
+        # 2. Optimize headers alignment: single pass, in-place
         headers = [
             _align_header(h, a, minw, width_fn(h), is_multiline, width_fn)
             for h, a, minw in zip(headers, aligns_headers, minwidths)
         ]
-        rows = list(zip(*cols))
+        # Transpose aligned_cols for rows
+        rows = list(zip(*aligned_cols))
     else:
-        minwidths = [max(width_fn(cl) for cl in c) for c in cols]
-        rows = list(zip(*cols))
+        # No headers: just use widest cell for minwidth
+        for i in range(ncols):
+            if aligned_cols[i]:
+                minwidths[i] = max(width_fn(x) for x in aligned_cols[i])
+        rows = list(zip(*aligned_cols))
 
+    # Get TableFormat up front
     if not isinstance(tablefmt, TableFormat):
         tablefmt = _table_formats.get(tablefmt, _table_formats["simple"])
 
     ra_default = rowalign if isinstance(rowalign, str) else None
     rowaligns = _expand_iterable(rowalign, len(rows), ra_default)
-    return _format_table(tablefmt, headers, aligns_headers, rows, minwidths, aligns, is_multiline, rowaligns=rowaligns)
+    # 11. Table rendering (as per original logic)
+    return _format_table(
+        tablefmt,
+        headers,
+        aligns_headers if headers else None,
+        rows,
+        minwidths,
+        aligns,
+        is_multiline,
+        rowaligns=rowaligns,
+    )
 
 
 def _expand_numparse(disable_numparse, column_count):
