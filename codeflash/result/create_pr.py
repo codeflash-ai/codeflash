@@ -20,7 +20,9 @@ from codeflash.code_utils.github_utils import github_pr_url
 from codeflash.code_utils.tabulate import tabulate
 from codeflash.code_utils.time_utils import format_perf, format_time
 from codeflash.github.PrComment import FileDiffContent, PrComment
+from codeflash.models.models import FunctionCalledInTest, InvocationId
 from codeflash.result.critic import performance_gain
+from codeflash.verification.verification_utils import TestConfig
 
 if TYPE_CHECKING:
     from codeflash.models.models import FunctionCalledInTest, InvocationId
@@ -38,85 +40,82 @@ def existing_tests_source_for(
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
     if not test_files:
         return ""
-    output: str = ""
+    output = ""
     rows = []
     headers = ["Test File::Test Function", "Original ⏱️", "Optimized ⏱️", "Speedup"]
     tests_root = test_cfg.tests_root
-    original_tests_to_runtimes: dict[Path, dict[str, int]] = {}
-    optimized_tests_to_runtimes: dict[Path, dict[str, int]] = {}
-    non_generated_tests = set()
-    for test_file in test_files:
-        non_generated_tests.add(test_file.tests_in_file.test_file)
-    # TODO confirm that original and optimized have the same keys
-    all_invocation_ids = original_runtimes_all.keys() | optimized_runtimes_all.keys()
+
+    # Build non_generated_tests set (minimal extra work)
+    non_generated_tests = {t.tests_in_file.test_file for t in test_files}
+
+    # Use defaultdict paddings (saves many dict lookups and conditionals)
+    from collections import defaultdict
+
+    original_tests_to_runtimes = defaultdict(dict)
+    optimized_tests_to_runtimes = defaultdict(dict)
+
+    # Union all invocation ids from both dicts, filter early by test file
+    all_invocation_ids = set(original_runtimes_all) | set(optimized_runtimes_all)
+    path_cache = {}
     for invocation_id in all_invocation_ids:
-        abs_path = Path(invocation_id.test_module_path.replace(".", os.sep)).with_suffix(".py").resolve()
+        # Path construction optimized: use a cache
+        tid = invocation_id.test_module_path
+        if tid in path_cache:
+            abs_path = path_cache[tid]
+        else:
+            abs_path = Path(tid.replace(".", os.sep)).with_suffix(".py").resolve()  # expensive
+            path_cache[tid] = abs_path
         if abs_path not in non_generated_tests:
             continue
-        if abs_path not in original_tests_to_runtimes:
-            original_tests_to_runtimes[abs_path] = {}
-        if abs_path not in optimized_tests_to_runtimes:
-            optimized_tests_to_runtimes[abs_path] = {}
+        # Update per-path, per-name runtime dicts
         qualified_name = (
-            invocation_id.test_class_name + "." + invocation_id.test_function_name  # type: ignore[operator]
+            f"{invocation_id.test_class_name}.{invocation_id.test_function_name}"
             if invocation_id.test_class_name
             else invocation_id.test_function_name
         )
-        if qualified_name not in original_tests_to_runtimes[abs_path]:
-            original_tests_to_runtimes[abs_path][qualified_name] = 0  # type: ignore[index]
-        if qualified_name not in optimized_tests_to_runtimes[abs_path]:
-            optimized_tests_to_runtimes[abs_path][qualified_name] = 0  # type: ignore[index]
+        # Initialize to 0 only if not present; avoid redundant assignment
+        orig = original_tests_to_runtimes[abs_path]
+        opt = optimized_tests_to_runtimes[abs_path]
+        if qualified_name not in orig:
+            orig[qualified_name] = 0
+        if qualified_name not in opt:
+            opt[qualified_name] = 0
         if invocation_id in original_runtimes_all:
-            original_tests_to_runtimes[abs_path][qualified_name] += min(original_runtimes_all[invocation_id])  # type: ignore[index]
+            orig[qualified_name] += min(original_runtimes_all[invocation_id])
         if invocation_id in optimized_runtimes_all:
-            optimized_tests_to_runtimes[abs_path][qualified_name] += min(optimized_runtimes_all[invocation_id])  # type: ignore[index]
-    # parse into string
-    all_abs_paths = (
-        original_tests_to_runtimes.keys()
-    )  # both will have the same keys as some default values are assigned in the previous loop
+            opt[qualified_name] += min(optimized_runtimes_all[invocation_id])
+
+    # Collect output rows in one pass
+    all_abs_paths = list(original_tests_to_runtimes.keys())
     for filename in sorted(all_abs_paths):
-        all_qualified_names = original_tests_to_runtimes[
-            filename
-        ].keys()  # both will have the same keys as some default values are assigned in the previous loop
-        for qualified_name in sorted(all_qualified_names):
-            # if not present in optimized output nan
-            if (
-                original_tests_to_runtimes[filename][qualified_name] != 0
-                and optimized_tests_to_runtimes[filename][qualified_name] != 0
-            ):
-                print_optimized_runtime = format_time(optimized_tests_to_runtimes[filename][qualified_name])
-                print_original_runtime = format_time(original_tests_to_runtimes[filename][qualified_name])
+        orig_runtimes = original_tests_to_runtimes[filename]
+        opt_runtimes = optimized_tests_to_runtimes[filename]
+        qualified_names = sorted(orig_runtimes)
+        # Only process func names with nonzero original and optimized
+        for qn in qualified_names:
+            o_time = orig_runtimes[qn]
+            opt_time = opt_runtimes[qn]
+            if o_time != 0 and opt_time != 0:
+                print_optimized_runtime = format_time(opt_time)
+                print_original_runtime = format_time(o_time)
                 print_filename = filename.relative_to(tests_root)
-                greater = (
-                    optimized_tests_to_runtimes[filename][qualified_name]
-                    > original_tests_to_runtimes[filename][qualified_name]
-                )
-                perf_gain = format_perf(
-                    performance_gain(
-                        original_runtime_ns=original_tests_to_runtimes[filename][qualified_name],
-                        optimized_runtime_ns=optimized_tests_to_runtimes[filename][qualified_name],
-                    )
-                    * 100
-                )
-                if greater:
-                    rows.append(
-                        [
-                            f"`{print_filename.as_posix()}::{qualified_name}`",
-                            f"{print_original_runtime}",
-                            f"{print_optimized_runtime}",
-                            f"⚠️{perf_gain}%",
-                        ]
-                    )
+                # Branch for emoji
+                perf_gain_val = performance_gain(original_runtime_ns=o_time, optimized_runtime_ns=opt_time) * 100
+                perf_gain_str = format_perf(perf_gain_val)
+                if opt_time > o_time:
+                    emoji = "⚠️"
                 else:
-                    rows.append(
-                        [
-                            f"`{print_filename.as_posix()}::{qualified_name}`",
-                            f"{print_original_runtime}",
-                            f"{print_optimized_runtime}",
-                            f"✅{perf_gain}%",
-                        ]
-                    )
-    output += tabulate(  # type: ignore[no-untyped-call]
+                    emoji = "✅"
+                rows.append(
+                    [
+                        f"`{print_filename.as_posix()}::{qn}`",
+                        print_original_runtime,
+                        print_optimized_runtime,
+                        f"{emoji}{perf_gain_str}%",
+                    ]
+                )
+
+    output += tabulate(
         headers=headers, tabular_data=rows, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
     )
     output += "\n"

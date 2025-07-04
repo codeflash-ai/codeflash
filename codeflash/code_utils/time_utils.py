@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime as dt
 import re
 
@@ -53,47 +55,40 @@ def humanize_runtime(time_in_ns: int) -> str:
 
 def format_time(nanoseconds: int) -> str:
     """Format nanoseconds into a human-readable string with 3 significant digits when needed."""
-    # Define conversion factors and units
+    # Fast branch for correct input
     if not isinstance(nanoseconds, int):
         raise TypeError("Input must be an integer.")
     if nanoseconds < 0:
         raise ValueError("Input must be a positive integer.")
-    conversions = [(1_000_000_000, "s"), (1_000_000, "ms"), (1_000, "μs"), (1, "ns")]
-
-    # Handle nanoseconds case directly (no decimal formatting needed)
     if nanoseconds < 1_000:
         return f"{nanoseconds}ns"
-
-    # Find appropriate unit
-    for divisor, unit in conversions:
-        if nanoseconds >= divisor:
-            value = nanoseconds / divisor
-            int_value = nanoseconds // divisor
-
-            # Use integer formatting for values >= 100
-            if int_value >= 100:
-                formatted_value = f"{int_value:.0f}"
-            # Format with precision for 3 significant digits
-            elif value >= 100:
-                formatted_value = f"{value:.0f}"
-            elif value >= 10:
-                formatted_value = f"{value:.1f}"
+    # Avoid extra allocations by not rebuilding the conversion table every time
+    convs = ((1_000_000_000, "s"), (1_000_000, "ms"), (1_000, "μs"), (1, "ns"))
+    n = nanoseconds
+    for div, unit in convs:
+        if n >= div:
+            val = n / div
+            ival = n // div
+            if ival >= 100:
+                fval = f"{ival:.0f}"
+            elif val >= 100:
+                fval = f"{val:.0f}"
+            elif val >= 10:
+                fval = f"{val:.1f}"
             else:
-                formatted_value = f"{value:.2f}"
-
-            return f"{formatted_value}{unit}"
-
-    # This should never be reached, but included for completeness
+                fval = f"{val:.2f}"
+            return f"{fval}{unit}"
+    # Defensive fallback for completeness
     return f"{nanoseconds}ns"
 
 
 def format_perf(percentage: float) -> str:
     """Format percentage into a human-readable string with 3 significant digits when needed."""
-    percentage_abs = abs(percentage)
-    if percentage_abs >= 100:
+    abs_perc = abs(percentage)
+    if abs_perc >= 100:
         return f"{percentage:.0f}"
-    if percentage_abs >= 10:
+    if abs_perc >= 10:
         return f"{percentage:.1f}"
-    if percentage_abs >= 1:
+    if abs_perc >= 1:
         return f"{percentage:.2f}"
     return f"{percentage:.3f}"
