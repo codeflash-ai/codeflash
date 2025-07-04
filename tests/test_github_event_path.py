@@ -504,11 +504,11 @@ pr_event_file = '''{
 
 @pytest.fixture
 def set_event_file(tmp_path):
+    env_utils.get_cached_gh_event_data.cache_clear()
     path = tmp_path / "event.json"
     existing_or_new_path = Path(os.getenv("GITHUB_EVENT_PATH", str(path)))
     existing_or_new_path.write_text(pr_event_file, encoding="utf-8")
     os.environ["GITHUB_EVENT_PATH"] = str(existing_or_new_path)
-    print(existing_or_new_path)
     return existing_or_new_path
 
 
