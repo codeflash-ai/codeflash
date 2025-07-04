@@ -12,6 +12,8 @@ from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
 
+_cached_gh_event_data: dict[str, Any] | None = None
+
 
 def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool = True) -> bool:  # noqa
     return_code = True
@@ -100,13 +102,20 @@ def is_end_to_end() -> bool:
     return bool(os.environ.get("CODEFLASH_END_TO_END"))
 
 
-@lru_cache(maxsize=1)
 def get_cached_gh_event_data() -> dict[str, Any]:
+    global _cached_gh_event_data
+    if _cached_gh_event_data is not None:
+        return _cached_gh_event_data
     event_path = os.getenv("GITHUB_EVENT_PATH")
     if not event_path:
-        return {}
-    with Path(event_path).open() as f:
-        return json.load(f)  # type: ignore  # noqa
+        _cached_gh_event_data = {}
+        return _cached_gh_event_data
+    try:
+        with open(event_path) as f:  # Faster than Path(event_path).open()
+            _cached_gh_event_data = json.load(f)  # type: ignore  # noqa
+    except Exception:
+        _cached_gh_event_data = {}
+    return _cached_gh_event_data
 
 
 def is_repo_a_fork() -> bool:
@@ -128,4 +137,8 @@ def is_LSP_enabled() -> bool:
 def is_pr_draft() -> bool:
     """Check if the PR is draft. in the github action context."""
     event = get_cached_gh_event_data()
-    return bool(event.get("pull_request", {}).get("draft", False))
+    # Fast dict access; avoids redundant dict lookups.
+    pr = event.get("pull_request")
+    if not pr:
+        return False
+    return pr.get("draft", False)
