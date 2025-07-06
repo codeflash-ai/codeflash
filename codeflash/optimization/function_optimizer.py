@@ -898,8 +898,10 @@ class FunctionOptimizer:
             return Failure(baseline_result.failure())
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
-        if isinstance(original_code_baseline, OriginalCodeBaseline) and not coverage_critic(
-            original_code_baseline.coverage_results, self.args.test_framework
+        if (
+            isinstance(original_code_baseline, OriginalCodeBaseline)
+            and not coverage_critic(original_code_baseline.coverage_results, self.args.test_framework)
+            and not quantity_of_tests_critic(original_code_baseline)
         ):
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
