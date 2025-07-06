@@ -312,6 +312,8 @@ class Optimizer:
                             original_module_ast=original_module_ast,
                             original_module_path=original_module_path,
                         )
+                        if function_optimizer is None:
+                            continue
 
                         self.current_function_optimizer = (
                             function_optimizer  # needed to clean up from the outside of this function
