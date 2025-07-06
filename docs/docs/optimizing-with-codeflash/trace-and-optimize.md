@@ -1,7 +1,7 @@
 ---
 sidebar_position: 4
 ---
-# Optimize Workflows End-to-End.
+# Optimize Workflows End-to-End
 
 Codeflash supports optimizing an entire Python script end-to-end by tracing the script's execution and generating Replay Tests. Tracing follows the execution of a script, profiles it and captures inputs to all called functions, allowing them to be replayed during optimization. Codeflash uses these Replay Tests to optimize all functions called in the script, starting from the most important ones.
 
@@ -11,7 +11,7 @@ To optimize a script, `python myscript.py`, replace `python` with `codeflash opt
 codeflash optimize myscript.py
 ```
 
-To optimize code within pytest tests that you could normally run like `python -m pytest tests/`, use this command:
+To optimize code called by pytest tests that you could normally run like `python -m pytest tests/`, use this command:
 
 ```bash
 codeflash optimize -m pytest tests/
