@@ -12,7 +12,7 @@ from codeflash.code_utils.config_consts import (
 from codeflash.models.models import TestType
 
 if TYPE_CHECKING:
-    from codeflash.models.models import CoverageData, OptimizedCandidateResult
+    from codeflash.models.models import CoverageData, OptimizedCandidateResult, OriginalCodeBaseline
 
 
 def performance_gain(*, original_runtime_ns: int, optimized_runtime_ns: int) -> float:
@@ -50,7 +50,7 @@ def speedup_critic(
     return bool(perf_gain > noise_floor and candidate_result.best_test_runtime < best_runtime_until_now)
 
 
-def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool:
+def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult | OriginalCodeBaseline) -> bool:
     test_results = candidate_result.behavior_test_results
     report = test_results.get_test_pass_fail_report_by_type()
 

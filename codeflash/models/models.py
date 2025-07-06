@@ -78,7 +78,7 @@ class BestOptimization(BaseModel):
     helper_functions: list[FunctionSource]
     runtime: int
     replay_performance_gain: Optional[dict[BenchmarkKey, float]] = None
-    winning_behavioral_test_results: TestResults
+    winning_behavior_test_results: TestResults
     winning_benchmarking_test_results: TestResults
     winning_replay_benchmarking_test_results: Optional[TestResults] = None
 
@@ -278,7 +278,7 @@ class FunctionParent:
 
 
 class OriginalCodeBaseline(BaseModel):
-    behavioral_test_results: TestResults
+    behavior_test_results: TestResults
     benchmarking_test_results: TestResults
     replay_benchmarking_test_results: Optional[dict[BenchmarkKey, TestResults]] = None
     line_profile_results: dict
