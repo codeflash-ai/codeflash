@@ -9,7 +9,7 @@ from codeflash.code_utils.config_consts import (
     MIN_IMPROVEMENT_THRESHOLD,
     MIN_TESTCASE_PASSED_THRESHOLD,
 )
-from codeflash.models.models import TestType
+from codeflash.models.models import OptimizedCandidateResult, OriginalCodeBaseline, TestType
 
 if TYPE_CHECKING:
     from codeflash.models.models import CoverageData, OptimizedCandidateResult, OriginalCodeBaseline
@@ -52,16 +52,27 @@ def speedup_critic(
 
 def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult | OriginalCodeBaseline) -> bool:
     test_results = candidate_result.behavior_test_results
-    report = test_results.get_test_pass_fail_report_by_type()
-
+    # Fast path: compute report, pass_count and REPLAY_TEST in a single loop
+    report = {}
     pass_count = 0
-    for test_type in report:
-        pass_count += report[test_type]["passed"]
+    replay_pass = 0
+    for test_result in test_results.test_results:
+        if test_result.loop_index == 1:
+            ttype = test_result.test_type
+            if ttype not in report:
+                report[ttype] = {"passed": 0, "failed": 0}
+            if test_result.did_pass:
+                report[ttype]["passed"] += 1
+                pass_count += 1
+                if ttype == TestType.REPLAY_TEST:
+                    replay_pass += 1
+            else:
+                report[ttype]["failed"] += 1
 
     if pass_count >= MIN_TESTCASE_PASSED_THRESHOLD:
         return True
-    # If one or more tests passed, check if least one of them was a successful REPLAY_TEST
-    return bool(pass_count >= 1 and report[TestType.REPLAY_TEST]["passed"] >= 1)
+    # If at least one test passed, check if at least one was a successful REPLAY_TEST
+    return bool(pass_count >= 1 and replay_pass >= 1)
 
 
 def coverage_critic(original_code_coverage: CoverageData | None, test_framework: str) -> bool:
