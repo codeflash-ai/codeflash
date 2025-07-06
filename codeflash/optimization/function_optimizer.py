@@ -488,7 +488,7 @@ class FunctionOptimizer:
                                 candidate=candidate,
                                 helper_functions=code_context.helper_functions,
                                 runtime=best_test_runtime,
-                                winning_behavioral_test_results=candidate_result.behavior_test_results,
+                                winning_behavior_test_results=candidate_result.behavior_test_results,
                                 replay_performance_gain=replay_perf_gain if self.args.benchmark else None,
                                 winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
                                 winning_replay_benchmarking_test_results=candidate_result.benchmarking_test_results,
@@ -575,7 +575,7 @@ class FunctionOptimizer:
                 "original_runtime": explanation.original_runtime_ns,
                 "winning_test_results": {
                     tt.to_name(): v
-                    for tt, v in explanation.winning_behavioral_test_results.get_test_pass_fail_report_by_type().items()
+                    for tt, v in explanation.winning_behavior_test_results.get_test_pass_fail_report_by_type().items()
                 },
             },
         )
@@ -898,10 +898,9 @@ class FunctionOptimizer:
             return Failure(baseline_result.failure())
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
-        if (
-            isinstance(original_code_baseline, OriginalCodeBaseline)
-            and not coverage_critic(original_code_baseline.coverage_results, self.args.test_framework)
-            and not quantity_of_tests_critic(original_code_baseline)
+        if isinstance(original_code_baseline, OriginalCodeBaseline) and (
+            not coverage_critic(original_code_baseline.coverage_results, self.args.test_framework)
+            or not quantity_of_tests_critic(original_code_baseline)
         ):
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
@@ -973,7 +972,7 @@ class FunctionOptimizer:
                     )
                 explanation = Explanation(
                     raw_explanation_message=best_optimization.candidate.explanation,
-                    winning_behavioral_test_results=best_optimization.winning_behavioral_test_results,
+                    winning_behavior_test_results=best_optimization.winning_behavior_test_results,
                     winning_benchmarking_test_results=best_optimization.winning_benchmarking_test_results,
                     original_runtime_ns=original_code_baseline.runtime,
                     best_runtime_ns=best_optimization.runtime,
@@ -1205,7 +1204,7 @@ class FunctionOptimizer:
             return Success(
                 (
                     OriginalCodeBaseline(
-                        behavioral_test_results=behavioral_results,
+                        behavior_test_results=behavioral_results,
                         benchmarking_test_results=benchmarking_results,
                         replay_benchmarking_test_results=replay_benchmarking_test_results
                         if self.args.benchmark
@@ -1269,7 +1268,7 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
-            if compare_test_results(baseline_results.behavioral_test_results, candidate_behavior_results):
+            if compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results):
                 logger.info("Test results matched!")
                 console.rule()
             else:
