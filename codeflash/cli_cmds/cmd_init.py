@@ -346,7 +346,6 @@ def collect_setup_info() -> SetupInfo:
                 message="Enter the path to your tests directory",
                 path_type=inquirer.Path.DIRECTORY,
                 exists=False,  # Allow creating new directories
-                normalize_to_absolute_path=False,
             )
         ]
 
