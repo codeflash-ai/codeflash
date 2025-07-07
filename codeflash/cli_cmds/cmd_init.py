@@ -274,7 +274,6 @@ def collect_setup_info() -> SetupInfo:
                 message="Enter the path to your module directory",
                 path_type=inquirer.Path.DIRECTORY,
                 exists=True,
-                normalize_to_absolute_path=False,
             )
         ]
 
