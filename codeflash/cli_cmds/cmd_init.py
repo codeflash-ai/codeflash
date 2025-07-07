@@ -237,7 +237,6 @@ def collect_setup_info() -> SetupInfo:
     )
     console.print(info_panel)
     console.print()
-    print("'" + "''".join(module_subdir_options))
     questions = [
         inquirer.List(
             "module_root",
