@@ -105,10 +105,8 @@ def init_codeflash() -> None:
         usage_table.add_row(
             "codeflash --file <path-to-file> --function <function-name>", "Optimize a specific function within a file"
         )
-        usage_table.add_row("codeflash --file <path-to-file>", "Optimize all functions in a file")
-        usage_table.add_row(
-            f"codeflash --all{module_string if module_string else ''}", "Optimize all functions in all files"
-        )
+        usage_table.add_row("codeflash optimize myscript.py", "Trace and find the best optimizations for a script")
+        usage_table.add_row("codeflash --all", "Optimize all functions in all files")
         usage_table.add_row("codeflash --help", "See all available options")
 
         completion_message = "⚡️ Codeflash is now set up!\n\nYou can now run any of these commands:"
@@ -330,7 +328,7 @@ def collect_setup_info() -> SetupInfo:
     elif tests_root_answer == custom_dir_option:
         custom_tests_panel = Panel(
             Text(
-                "🧪 Enter a custom test directory path.\n\nPlease provide the path to your test directory.",
+                "🧪 Enter a custom test directory path.\n\nPlease provide the path to your test directory, relative to the current directory.",
                 style="yellow",
             ),
             title="🧪 Custom Test Directory",
