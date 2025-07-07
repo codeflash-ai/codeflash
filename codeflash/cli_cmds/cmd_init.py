@@ -105,7 +105,7 @@ def init_codeflash() -> None:
         usage_table.add_row(
             "codeflash --file <path-to-file> --function <function-name>", "Optimize a specific function within a file"
         )
-        usage_table.add_row("codeflash optimize myscript.py", "Trace and find the best optimizations for a script")
+        usage_table.add_row("codeflash optimize <myscript.py>", "Trace and find the best optimizations for a script")
         usage_table.add_row("codeflash --all", "Optimize all functions in all files")
         usage_table.add_row("codeflash --help", "See all available options")
 
