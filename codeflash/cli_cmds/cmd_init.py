@@ -339,10 +339,7 @@ def collect_setup_info() -> SetupInfo:
 
         custom_tests_questions = [
             inquirer.Path(
-                "custom_tests_path",
-                message="Enter the path to your tests directory",
-                path_type=inquirer.Path.DIRECTORY,
-                exists=False,  # Allow creating new directories
+                "custom_tests_path", message="Enter the path to your tests directory", path_type=inquirer.Path.DIRECTORY
             )
         ]
 
