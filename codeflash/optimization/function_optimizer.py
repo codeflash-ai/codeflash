@@ -842,7 +842,7 @@ class FunctionOptimizer:
             function_to_concolic_tests, concolic_test_str = future_concolic_tests.result()
             logger.info(f"Generated {len(tests)} tests for {self.function_to_optimize.function_name}")
             console.rule()
-            generated_tests = GeneratedTestsList(generated_tests=[])
+            generated_tests = GeneratedTestsList(generated_tests=tests)
         result = (
             generated_tests,
             function_to_concolic_tests,
