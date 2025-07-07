@@ -1047,7 +1047,12 @@ class FunctionOptimizer:
                         coverage_message=coverage_message,
                         git_remote=self.args.git_remote,
                     )
-                    if self.args.all or env_utils.get_pr_number() or (self.args.file and not self.args.function):
+                    if (
+                        self.args.all
+                        or env_utils.get_pr_number()
+                        or self.args.replay_test
+                        or (self.args.file and not self.args.function)
+                    ):
                         self.write_code_and_helpers(
                             self.function_to_optimize_source_code,
                             original_helper_code,
