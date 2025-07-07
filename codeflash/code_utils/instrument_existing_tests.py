@@ -526,6 +526,17 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
             body=[
                 ast.Assign(
                     targets=[
+                        ast.Name(id='wrapped_compile', ctx=ast.Store())],
+                    value=ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Name(id='torch', ctx=ast.Load()),
+                            attr='compile',
+                            ctx=ast.Load()),
+                        args=[
+                            ast.Name(id='wrapped', ctx=ast.Load())],
+                        keywords=[]), lineno=lineno+11),
+        ast.Assign(
+                    targets=[
                         ast.Name(id='start', ctx=ast.Store())],
                     value=ast.Call(
                         func=ast.Attribute(
@@ -539,7 +550,7 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                         keywords=[
                             ast.keyword(
                                 arg='enable_timing',
-                                value=ast.Constant(value=True))]), lineno=lineno + 11),
+                                value=ast.Constant(value=True))]), lineno=lineno + 12),
                 ast.Assign(
                     targets=[
                         ast.Name(id='end', ctx=ast.Store())],
@@ -555,7 +566,7 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                         keywords=[
                             ast.keyword(
                                 arg='enable_timing',
-                                value=ast.Constant(value=True))]), lineno=lineno + 12),
+                                value=ast.Constant(value=True))]), lineno=lineno + 13),
                 ast.Expr(
                     value=ast.Call(
                         func=ast.Attribute(
@@ -563,15 +574,15 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                             attr='record',
                             ctx=ast.Load()),
                         args=[],
-                        keywords=[]), lineno=lineno+13),
+                        keywords=[]), lineno=lineno+14),
                 ast.Assign(
                     targets=[ast.Name(id="return_value", ctx=ast.Store())],
                     value=ast.Call(
-                        func=ast.Name(id="wrapped", ctx=ast.Load()),
+                        func=ast.Name(id="wrapped_compile", ctx=ast.Load()),
                         args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
                         keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
                     ),
-                    lineno=lineno + 13,
+                    lineno=lineno + 15,
                 ),
                 ast.Expr(
                     value=ast.Call(
@@ -580,7 +591,7 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                             attr='record',
                             ctx=ast.Load()),
                         args=[],
-                        keywords=[]), lineno=lineno + 14),
+                        keywords=[]), lineno=lineno + 15),
                 ast.Expr(
                     value=ast.Call(
                         func=ast.Attribute(
@@ -591,7 +602,7 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                             attr='synchronize',
                             ctx=ast.Load()),
                         args=[],
-                        keywords=[]),lineno=lineno + 15),
+                        keywords=[]),lineno=lineno + 16),
                 ast.Assign(
                     targets=[
                         ast.Name(id='codeflash_duration', ctx=ast.Store())],
@@ -609,13 +620,32 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                                     keywords=[]),
                                 op=ast.Mult(),
                                 right=ast.Constant(value=1000000))],
-                        keywords=[]), lineno = lineno + 16),
+                        keywords=[]), lineno = lineno + 17),
             ],
             handlers=[
                 ast.ExceptHandler(
                     type=ast.Name(id="Exception", ctx=ast.Load()),
                     name="e",
                     body=[
+                        ast.Expr(
+                            value=ast.Call(
+                                func=ast.Attribute(
+                                    value=ast.Attribute(
+                                        value=ast.Name(id='torch', ctx=ast.Load()),
+                                        attr='cuda',
+                                        ctx=ast.Load()),
+                                    attr='synchronize',
+                                    ctx=ast.Load()),
+                                args=[],
+                                keywords=[]), lineno=lineno + 19),
+                        ast.Expr(
+                            value=ast.Call(
+                                func=ast.Attribute(
+                                    value=ast.Name(id='end', ctx=ast.Load()),
+                                    attr='record',
+                                    ctx=ast.Load()),
+                                args=[],
+                                keywords=[]), lineno=lineno + 20),
                         ast.Assign(
                             targets=[
                                 ast.Name(id='codeflash_duration', ctx=ast.Store())],
@@ -633,14 +663,14 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                                             keywords=[]),
                                         op=ast.Mult(),
                                         right=ast.Constant(value=1000000))],
-                                keywords=[]), lineno=lineno + 18),
+                                keywords=[]), lineno=lineno + 21),
                         ast.Assign(
                             targets=[ast.Name(id="exception", ctx=ast.Store())],
                             value=ast.Name(id="e", ctx=ast.Load()),
-                            lineno=lineno + 16,
+                            lineno=lineno + 17,
                         ),
                     ],
-                    lineno=lineno + 17,
+                    lineno=lineno + 18,
                 )
             ],
             orelse=[],

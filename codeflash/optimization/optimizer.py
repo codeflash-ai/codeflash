@@ -283,8 +283,6 @@ class Optimizer:
                 validated_original_code, original_module_ast = module_prep_result
 
                 for function_to_optimize in file_to_funcs_to_optimize[original_module_path]:
-                    if not(function_to_optimize.function_name=='forward' and function_to_optimize.parents[0].name=='MLP'):
-                        continue
                     function_iterator_count += 1
                     logger.info(
                         f"Optimizing function {function_iterator_count} of {num_optimizable_functions}: "

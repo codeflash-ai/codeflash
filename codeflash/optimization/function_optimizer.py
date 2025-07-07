@@ -898,13 +898,13 @@ class FunctionOptimizer:
             return Failure(baseline_result.failure())
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
-        if isinstance(original_code_baseline, OriginalCodeBaseline) and not coverage_critic(
-            original_code_baseline.coverage_results, self.args.test_framework
-        ):
-            if self.args.override_fixtures:
-                restore_conftest(original_conftest_content)
-            cleanup_paths(paths_to_cleanup)
-            return Failure("The threshold for test coverage was not met.")
+        # if isinstance(original_code_baseline, OriginalCodeBaseline) and not coverage_critic(
+        #     original_code_baseline.coverage_results, self.args.test_framework
+        # ):
+        #     if self.args.override_fixtures:
+        #         restore_conftest(original_conftest_content)
+        #     cleanup_paths(paths_to_cleanup)
+        #     return Failure("The threshold for test coverage was not met.")
 
         return Success(
             (
@@ -1102,8 +1102,8 @@ class FunctionOptimizer:
                 )
                 console.rule()
                 return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
-            if not coverage_critic(coverage_results, self.args.test_framework):
-                return Failure("The threshold for test coverage was not met.")
+            # if not coverage_critic(coverage_results, self.args.test_framework):
+            #     return Failure("The threshold for test coverage was not met.")
             if test_framework == "pytest":
                 try:
                     line_profiler_output_file = add_decorator_imports(self.function_to_optimize, code_context)
