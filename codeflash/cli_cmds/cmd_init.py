@@ -928,7 +928,8 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     codeflash_section["tests-root"] = setup_info.tests_root
     codeflash_section["test-framework"] = setup_info.test_framework
     codeflash_section["ignore-paths"] = setup_info.ignore_paths
-    codeflash_section["disable-telemetry"] = not enable_telemetry
+    if not enable_telemetry:
+        codeflash_section["disable-telemetry"] = not enable_telemetry
     if setup_info.git_remote not in ["", "origin"]:
         codeflash_section["git-remote"] = setup_info.git_remote
     formatter = setup_info.formatter
