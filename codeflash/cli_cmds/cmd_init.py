@@ -105,10 +105,8 @@ def init_codeflash() -> None:
         usage_table.add_row(
             "codeflash --file <path-to-file> --function <function-name>", "Optimize a specific function within a file"
         )
-        usage_table.add_row("codeflash --file <path-to-file>", "Optimize all functions in a file")
-        usage_table.add_row(
-            f"codeflash --all{module_string if module_string else ''}", "Optimize all functions in all files"
-        )
+        usage_table.add_row("codeflash optimize <myscript.py>", "Trace and find the best optimizations for a script")
+        usage_table.add_row("codeflash --all", "Optimize all functions in all files")
         usage_table.add_row("codeflash --help", "See all available options")
 
         completion_message = "⚡️ Codeflash is now set up!\n\nYou can now run any of these commands:"
@@ -239,7 +237,6 @@ def collect_setup_info() -> SetupInfo:
     )
     console.print(info_panel)
     console.print()
-
     questions = [
         inquirer.List(
             "module_root",
@@ -274,7 +271,6 @@ def collect_setup_info() -> SetupInfo:
                 message="Enter the path to your module directory",
                 path_type=inquirer.Path.DIRECTORY,
                 exists=True,
-                normalize_to_absolute_path=False,
             )
         ]
 
@@ -331,7 +327,7 @@ def collect_setup_info() -> SetupInfo:
     elif tests_root_answer == custom_dir_option:
         custom_tests_panel = Panel(
             Text(
-                "🧪 Enter a custom test directory path.\n\nPlease provide the path to your test directory.",
+                "🧪 Enter a custom test directory path.\n\nPlease provide the path to your test directory, relative to the current directory.",
                 style="yellow",
             ),
             title="🧪 Custom Test Directory",
@@ -342,11 +338,7 @@ def collect_setup_info() -> SetupInfo:
 
         custom_tests_questions = [
             inquirer.Path(
-                "custom_tests_path",
-                message="Enter the path to your tests directory",
-                path_type=inquirer.Path.DIRECTORY,
-                exists=False,  # Allow creating new directories
-                normalize_to_absolute_path=False,
+                "custom_tests_path", message="Enter the path to your tests directory", path_type=inquirer.Path.DIRECTORY
             )
         ]
 
@@ -936,7 +928,8 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     codeflash_section["tests-root"] = setup_info.tests_root
     codeflash_section["test-framework"] = setup_info.test_framework
     codeflash_section["ignore-paths"] = setup_info.ignore_paths
-    codeflash_section["disable-telemetry"] = not enable_telemetry
+    if not enable_telemetry:
+        codeflash_section["disable-telemetry"] = not enable_telemetry
     if setup_info.git_remote not in ["", "origin"]:
         codeflash_section["git-remote"] = setup_info.git_remote
     formatter = setup_info.formatter
