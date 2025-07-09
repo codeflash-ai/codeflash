@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 
 from pygls import uris
 
+from codeflash.api.cfapi import get_user_id
+from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
 
@@ -26,6 +28,11 @@ class OptimizableFunctionsParams:
 class FunctionOptimizationParams:
     textDocument: types.TextDocumentIdentifier  # noqa: N815
     functionName: str  # noqa: N815
+
+
+@dataclass
+class ProvideApiKeyParams:
+    api_key: str
 
 
 server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
@@ -116,6 +123,40 @@ def discover_function_tests(server: CodeflashLanguageServer, params: FunctionOpt
     server.optimizer.discovered_tests = function_to_tests
 
     return {"functionName": params.functionName, "status": "success", "discovered_tests": num_discovered_tests}
+
+
+@server.feature("apiKeyExistsAndValid")
+def check_api_key(_server: CodeflashLanguageServer, _params: any) -> dict[str, str]:
+    try:
+        user_id = get_user_id()
+        if user_id is None:
+            return {"status": "error", "message": "api key not found or invalid"}
+
+        from codeflash.optimization.optimizer import Optimizer
+
+        server.optimizer = Optimizer(server.args)
+        return {"status": "success", "user_id": user_id}  # noqa
+    except Exception:
+        return {"status": "error", "message": "something went wrong while validating the api key"}
+
+
+@server.feature("provideApiKey")
+def provide_api_key(server: CodeflashLanguageServer, params: ProvideApiKeyParams) -> dict[str, str]:
+    try:
+        api_key = params.api_key
+        result = save_api_key_to_rc(api_key)
+        if not is_successful(result):
+            return {"status": "error", "message": result.failure()}
+        user_id = get_user_id()
+        if user_id is None:
+            return {"status": "error", "message": "api key is not valid"}
+
+        from codeflash.optimization.optimizer import Optimizer
+
+        server.optimizer = Optimizer(server.args)
+        return {"status": "success", "message": "Api key saved successfully", "user_id": user_id}  # noqa: TRY300
+    except Exception:
+        return {"status": "error", "message": "something went wrong while saving the api key"}
 
 
 @server.feature("prepareOptimization")

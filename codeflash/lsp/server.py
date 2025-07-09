@@ -25,7 +25,7 @@ class CodeflashLanguageServerProtocol(LanguageServerProtocol):
             workspace_path = uris.to_fs_path(workspace_uri)
             pyproject_toml_path = self._find_pyproject_toml(workspace_path)
             if pyproject_toml_path:
-                server.initialize_optimizer(pyproject_toml_path)
+                server.prepare_optimizer_arguments(pyproject_toml_path)
                 server.show_message(f"Found pyproject.toml at: {pyproject_toml_path}")
             else:
                 server.show_message("No pyproject.toml found in workspace.")
@@ -45,16 +45,17 @@ class CodeflashLanguageServer(LanguageServer):
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
         super().__init__(*args, **kwargs)
         self.optimizer = None
+        self.args = None
 
-    def initialize_optimizer(self, config_file: Path) -> None:
+    def prepare_optimizer_arguments(self, config_file: Path) -> None:
         from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
-        from codeflash.optimization.optimizer import Optimizer
 
         args = parse_args()
         args.config_file = config_file
         args.no_pr = True  # LSP server should not create PRs
         args = process_pyproject_config(args)
-        self.optimizer = Optimizer(args)
+        self.args = args
+        # self.optimizer = Optimizer(args) # avoid creating the optimizer during initialization, bacause it may cause and erro if the api key is invalid
 
     def show_message_log(self, message: str, message_type: str) -> None:
         """Send a log message to the client's output channel.
