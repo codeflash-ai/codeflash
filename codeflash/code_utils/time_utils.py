@@ -55,22 +55,46 @@ def humanize_runtime(time_in_ns: int) -> str:
 
 def format_time(nanoseconds: int) -> str:
     """Format nanoseconds into a human-readable string with 3 significant digits when needed."""
-    # Define conversion factors and units
+    # Input checks (preserved)
     if not isinstance(nanoseconds, int):
         raise TypeError("Input must be an integer.")
     if nanoseconds < 0:
         raise ValueError("Input must be a positive integer.")
 
+    # Fast cases
     if nanoseconds < 1_000:
         return f"{nanoseconds}ns"
     if nanoseconds < 1_000_000:
-        value = nanoseconds / 1_000
-        return f"{value:.2f}μs" if value < 10 else (f"{value:.1f}μs" if value < 100 else f"{int(value)}μs")
+        micro = nanoseconds // 1_000  # integer microseconds
+        # Only use float formatting if < 100
+        if nanoseconds < 10_000:
+            # <10us, use 2 decimals
+            value = nanoseconds / 1_000
+            return f"{value:.2f}μs"
+        if nanoseconds < 100_000:
+            # <100us, use 1 decimal
+            value = nanoseconds / 1_000
+            return f"{value:.1f}μs"
+        # >=100us, integer
+        return f"{micro}μs"
     if nanoseconds < 1_000_000_000:
-        value = nanoseconds / 1_000_000
-        return f"{value:.2f}ms" if value < 10 else (f"{value:.1f}ms" if value < 100 else f"{int(value)}ms")
-    value = nanoseconds / 1_000_000_000
-    return f"{value:.2f}s" if value < 10 else (f"{value:.1f}s" if value < 100 else f"{int(value)}s")
+        milli = nanoseconds // 1_000_000  # integer ms
+        if nanoseconds < 10_000_000:
+            value = nanoseconds / 1_000_000
+            return f"{value:.2f}ms"
+        if nanoseconds < 100_000_000:
+            value = nanoseconds / 1_000_000
+            return f"{value:.1f}ms"
+        return f"{milli}ms"
+    # seconds branch
+    seconds = nanoseconds // 1_000_000_000
+    if nanoseconds < 10_000_000_000:
+        value = nanoseconds / 1_000_000_000
+        return f"{value:.2f}s"
+    if nanoseconds < 100_000_000_000:
+        value = nanoseconds / 1_000_000_000
+        return f"{value:.1f}s"
+    return f"{seconds}s"
 
 
 def format_perf(percentage: float) -> str:
