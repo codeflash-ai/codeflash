@@ -60,7 +60,6 @@ class Tracer:
         output: str = "codeflash.trace",
         functions: list[str] | None = None,
         disable: bool = False,  # noqa: FBT001, FBT002
-        config_file_path: Path | None = None,
         project_root: Path | None = None,
         max_function_count: int = 256,
         timeout: int | None = None,  # seconds
@@ -71,13 +70,11 @@ class Tracer:
         :param output: The path to the output trace file
         :param functions: List of functions to trace. If None, trace all functions
         :param disable: Disable the tracer if True
-        :param config_file_path: Path to the pyproject.toml file, if None then it will be auto-discovered
         :param max_function_count: Maximum number of times to trace one function
         :param timeout: Timeout in seconds for the tracer, if the traced code takes more than this time, then tracing
                     stops and normal execution continues. If this is None then no timeout applies
         :param command: The command that initiated the tracing (for metadata storage)
         """
-        print(locals())
         if functions is None:
             functions = []
         if os.environ.get("CODEFLASH_TRACER_DISABLE", "0") == "1":
@@ -110,7 +107,7 @@ class Tracer:
             f"{self.current_file_path}:Tracer.__enter__",
         }
         self.max_function_count = max_function_count
-        self.config, found_config_path = config, config_file_path
+        self.config = config
         self.project_root = project_root
         console.rule(f"Project Root: {self.project_root}", style="bold blue")
         self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>", "<module>"}
@@ -798,12 +795,8 @@ class Tracer:
 if __name__ == "__main__":
     args_dict = json.loads(sys.argv[-1])
     sys.argv = sys.argv[1:-1]
-    print("Args dict", args_dict)
-    print("sys.argv ", sys.argv)
     if args_dict["module"]:
         import runpy
-
-        print("running module")
 
         code = "run_module(modname, run_name='__main__')"
         globs = {"run_module": runpy.run_module, "modname": args_dict["progname"]}
@@ -819,8 +812,6 @@ if __name__ == "__main__":
             "__package__": None,
             "__cached__": None,
         }
-    print("raw Config", args_dict["config"])
-    print("raw config type", type(args_dict["config"]))
     args_dict["config"]["module_root"] = Path(args_dict["config"]["module_root"])
     args_dict["config"]["tests_root"] = Path(args_dict["config"]["tests_root"])
     tracer = Tracer(
@@ -829,7 +820,6 @@ if __name__ == "__main__":
         functions=args_dict["functions"],
         max_function_count=args_dict["max_function_count"],
         timeout=args_dict["timeout"],
-        config_file_path=Path(args_dict["config_file_path"]),
         command=args_dict["command"],
         disable=args_dict["disable"],
         result_pickle_file_path=Path(args_dict["result_pickle_file_path"]),

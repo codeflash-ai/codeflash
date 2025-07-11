@@ -85,7 +85,6 @@ def main(args: Namespace | None = None) -> ArgumentParser:
     outfile = parsed_args.outfile
     config, found_config_path = parse_config_file(parsed_args.codeflash_config)
     project_root = project_root_from_module_root(Path(config["module_root"]), found_config_path)
-    print("Config", config)
     if len(unknown_args) > 0:
         try:
             result_pickle_file_path = get_run_tmp_file("tracer_results_file.pkl")
@@ -94,7 +93,6 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                 "output": str(parsed_args.outfile),
                 "functions": parsed_args.only_functions,
                 "disable": False,
-                "config_file_path": str(parsed_args.codeflash_config),
                 "project_root": str(project_root),
                 "max_function_count": parsed_args.max_function_count,
                 "timeout": parsed_args.tracer_timeout,
@@ -113,9 +111,6 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                 ],
                 cwd=Path.cwd(),
                 check=False,
-                # check=False,
-                # capture_output=True,
-                # text=True,
             )
             try:
                 with result_pickle_file_path.open(mode="rb") as f:
