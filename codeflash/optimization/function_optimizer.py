@@ -905,7 +905,7 @@ class FunctionOptimizer:
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
-            return Failure("The threshold for test coverage was not met.")
+            return Failure("The threshold for test confidence was not met.")
 
         return Success(
             (
@@ -1016,11 +1016,7 @@ class FunctionOptimizer:
                     qualified_name = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
                     # Add runtime comments to generated tests before creating the PR
                     generated_tests = add_runtime_comments_to_generated_tests(
-                        qualified_name,
-                        self.test_cfg,
-                        generated_tests,
-                        original_runtime_by_test,
-                        optimized_runtime_by_test,
+                        generated_tests, original_runtime_by_test, optimized_runtime_by_test
                     )
                     generated_tests_str = "\n\n".join(
                         [test.generated_original_test_source for test in generated_tests.generated_tests]
