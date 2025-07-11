@@ -41,11 +41,12 @@ class CommentMapper(ast.NodeVisitor):
         # calculate speedup and output comment
         original_time = self.original_runtimes[match_key]
         optimized_time = self.optimized_runtimes[match_key]
-        perf_gain_value = (original_time - optimized_time) / optimized_time if optimized_time != 0 else 0.0
-        perf_gain_str = format_perf(abs(perf_gain_value * 100))
+        perf_gain = format_perf(
+            abs(performance_gain(original_runtime_ns=original_time, optimized_runtime_ns=optimized_time) * 100)
+        )
         status = "slower" if optimized_time > original_time else "faster"
         # Create the runtime comment
-        return f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain_str}% {status})"
+        return f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
         self.context_stack.append(node.name)
