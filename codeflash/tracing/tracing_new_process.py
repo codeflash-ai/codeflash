@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 import datetime
 import importlib
@@ -10,28 +12,8 @@ import sys
 import threading
 import time
 from collections import defaultdict
-
-# _original_import = builtins.__import__
-#
-# def custom_import(name, globals=None, locals=None, fromlist=(), level=0):
-#     module = _original_import(name, globals, locals, fromlist, level)
-#     if name in sys.modules:
-#         mod = sys.modules[name]
-#         file = getattr(mod, '__file__', '') or ''
-#
-#         if ("logfire" in name) or ("logfire" in file):
-#             if hasattr(mod, '__file__'):
-#                 print(f"Imported {name} from {mod.__file__}")
-#             else:
-#                 print(f"Imported {name} (built-in or dynamic)")
-#             for line in traceback.format_stack():
-#                 print(line.strip())
-#     return module
-#
-# builtins.__import__ = custom_import
 from pathlib import Path
-from types import FrameType, TracebackType
-from typing import Any, Callable, ClassVar
+from typing import TYPE_CHECKING, Any, Callable, ClassVar
 
 from rich.align import Align
 from rich.panel import Panel
@@ -42,7 +24,8 @@ from codeflash.cli_cmds.console import console
 from codeflash.picklepatch.pickle_patcher import PicklePatcher
 from codeflash.tracing.tracing_utils import FunctionModules, filter_files_optimized, module_name_from_file_path
 
-# Debug this file by simply adding print statements. This file is not meant to be debugged by the debugger.
+if TYPE_CHECKING:
+    from types import FrameType, TracebackType
 
 
 class FakeCode:
@@ -57,12 +40,13 @@ class FakeCode:
 
 
 class FakeFrame:
-    def __init__(self, code: FakeCode, prior: "FakeFrame | None") -> None:
+    def __init__(self, code: FakeCode, prior: FakeFrame | None) -> None:
         self.f_code = code
         self.f_back = prior
         self.f_locals: dict = {}
 
 
+# Debug this file by simply adding print statements. This file is not meant to be debugged by the debugger.
 class Tracer:
     """Use this class as a 'with' context manager to trace a function call.
 
@@ -71,7 +55,7 @@ class Tracer:
 
     def __init__(
         self,
-        config,
+        config: dict,
         result_pickle_file_path: Path,
         output: str = "codeflash.trace",
         functions: list[str] | None = None,
@@ -199,16 +183,12 @@ class Tracer:
         console.rule("Codeflash: Traced Program Output Begin", style="bold blue")
         frame = sys._getframe(0)  # Get this frame and simulate a call to it  # noqa: SLF001
         self.dispatch["call"](self, frame, 0)
-        print(dir(self))
-        for att in dir(self):
-            if att[:2] != "__":
-                print(att, getattr(self, att))
         self.start_time = time.time()
         sys.setprofile(self.trace_callback)
         threading.setprofile(self.trace_callback)
 
     def __exit__(
-        self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: "TracebackType | None"
+        self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: TracebackType | None
     ) -> None:
         if self.disable or self._db_lock is None:
             return
@@ -305,10 +285,10 @@ class Tracer:
         pickle_data = {"replay_test_file_path": self.replay_test_file_path}
         import pickle
 
-        with open(self.result_pickle_file_path, "wb") as file:
+        with self.result_pickle_file_path.open("wb") as file:
             pickle.dump(pickle_data, file)
 
-    def tracer_logic(self, frame: "FrameType", event: str) -> None:  # noqa: PLR0911
+    def tracer_logic(self, frame: FrameType, event: str) -> None:  # noqa: PLR0911
         if event != "call":
             return
         if None is not self.timeout and (time.time() - self.start_time) > self.timeout:
@@ -580,7 +560,7 @@ class Tracer:
 
         return 1
 
-    dispatch: ClassVar[dict[str, Callable[["Tracer", FrameType, int], int]]] = {
+    dispatch: ClassVar[dict[str, Callable[[Tracer, FrameType, int], int]]] = {
         "call": trace_dispatch_call,
         "exception": trace_dispatch_exception,
         "return": trace_dispatch_return,
@@ -806,10 +786,9 @@ class Tracer:
                 nc += callcnt
             self.stats[func] = cc, nc, tt, ct, callers
 
-    def runctx(self, cmd: str, global_vars: dict[str, Any], local_vars: dict[str, Any]) -> "Tracer | None":
+    def runctx(self, cmd: str, global_vars: dict[str, Any], local_vars: dict[str, Any]) -> Tracer | None:
         self.__enter__()
         try:
-            # pdb.set_trace()
             exec(cmd, global_vars, local_vars)  # noqa: S102
         finally:
             self.__exit__(None, None, None)
@@ -821,7 +800,6 @@ if __name__ == "__main__":
     sys.argv = sys.argv[1:-1]
     print("Args dict", args_dict)
     print("sys.argv ", sys.argv)
-    # pdb.set_trace()
     if args_dict["module"]:
         import runpy
 
@@ -830,7 +808,6 @@ if __name__ == "__main__":
         code = "run_module(modname, run_name='__main__')"
         globs = {"run_module": runpy.run_module, "modname": args_dict["progname"]}
     else:
-        # progname = unknown_args[0]
         sys.path.insert(0, str(Path(args_dict["progname"]).resolve().parent))
         with io.open_code(args_dict["progname"]) as fp:
             code = compile(fp.read(), args_dict["progname"], "exec")
@@ -846,8 +823,6 @@ if __name__ == "__main__":
     print("raw config type", type(args_dict["config"]))
     args_dict["config"]["module_root"] = Path(args_dict["config"]["module_root"])
     args_dict["config"]["tests_root"] = Path(args_dict["config"]["tests_root"])
-    # config = json.loads(args_dict["config"])
-    # print("parsed config", config)
     tracer = Tracer(
         config=args_dict["config"],
         output=Path(args_dict["output"]),

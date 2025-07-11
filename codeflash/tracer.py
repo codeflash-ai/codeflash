@@ -11,26 +11,7 @@
 #
 from __future__ import annotations
 
-# _original_import = builtins.__import__
-#
-# def custom_import(name, globals=None, locals=None, fromlist=(), level=0):
-#     module = _original_import(name, globals, locals, fromlist, level)
-#     if name in sys.modules:
-#         mod = sys.modules[name]
-#         file = getattr(mod, '__file__', '') or ''
-#
-#         if ("anyio" in name) or ("anyio" in file):
-#             if hasattr(mod, '__file__'):
-#                 print(f"Imported {name} from {mod.__file__}")
-#             else:
-#                 print(f"Imported {name} (built-in or dynamic)")
-#             for line in traceback.format_stack():
-#                 print(line.strip())
-#     return module
-#
-# builtins.__import__ = custom_import
 import json
-import os
 import pickle
 import subprocess
 import sys
@@ -123,14 +104,14 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                 "module": parsed_args.module,
             }
 
-            result = subprocess.run(
+            subprocess.run(
                 [
                     SAFE_SYS_EXECUTABLE,
                     Path(__file__).parent / "tracing" / "tracing_new_process.py",
                     *sys.argv,
                     json.dumps(args_dict),
                 ],
-                cwd=os.getcwd(),
+                cwd=Path.cwd(),
                 check=False,
                 # check=False,
                 # capture_output=True,
@@ -140,13 +121,11 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                 with result_pickle_file_path.open(mode="rb") as f:
                     data = pickle.load(f)
             except Exception:
-                print("Failed to trace")
-                exitcode = -1
+                console.print("Failed to trace")
             finally:
                 result_pickle_file_path.unlink(missing_ok=True)
 
             replay_test_path = data["replay_test_file_path"]
-            print("replay test detected", replay_test_path)
             if not parsed_args.trace_only and replay_test_path is not None:
                 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
                 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
