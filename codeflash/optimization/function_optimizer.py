@@ -905,7 +905,7 @@ class FunctionOptimizer:
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
-            return Failure("The threshold for test coverage was not met.")
+            return Failure("The threshold for test confidence was not met.")
 
         return Success(
             (
