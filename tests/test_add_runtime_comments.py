@@ -1619,7 +1619,7 @@ def helper_function():
     for i in range(3):
         b = 3
         b1 = 6
-        codeflash_output = bubble_sort([3, 1, 2]) # 500μs -> 300μs (66.7% faster)
+        codeflash_output = bubble_sort([3, 1, 2]) # 1.80ms -> 1.20ms (50.0% faster)
         assert codeflash_output == [1, 2, 3]
         c = 4
     d = 5
@@ -1640,7 +1640,6 @@ def helper_function():
         # Add test invocations with different runtimes
         original_invocation1 = self.create_test_invocation("test_bubble_sort", 500_000, iteration_id='1_2_0')  # 500μs
         optimized_invocation1 = self.create_test_invocation("test_bubble_sort", 300_000, iteration_id='1_2_0')  # 300μs
-        # longer runtime than minimum, will not contribute
         original_invocation2 = self.create_test_invocation("test_bubble_sort", 600_000, iteration_id='1_2_1')  # 500μs
         optimized_invocation2 = self.create_test_invocation("test_bubble_sort", 400_000, iteration_id='1_2_1')  # 300μs
         original_invocation3 = self.create_test_invocation("test_bubble_sort", 700_000, iteration_id='1_2_2')  # 500μs
@@ -1680,7 +1679,7 @@ def helper_function():
     while i<3:
         b = 3
         b1 = 6
-        codeflash_output = bubble_sort([3, 1, 2]) # 500μs -> 300μs (66.7% faster)
+        codeflash_output = bubble_sort([3, 1, 2]) # 1.80ms -> 1.20ms (50.0% faster)
         assert codeflash_output == [1, 2, 3]
         i += 1
     d = 5
@@ -1701,7 +1700,6 @@ def helper_function():
         # Add test invocations with different runtimes
         original_invocation1 = self.create_test_invocation("test_bubble_sort", 500_000, iteration_id='1_2_0')  # 500μs
         optimized_invocation1 = self.create_test_invocation("test_bubble_sort", 300_000, iteration_id='1_2_0')  # 300μs
-        # longer runtime than minimum, will not contribute
         original_invocation2 = self.create_test_invocation("test_bubble_sort", 600_000, iteration_id='1_2_1')  # 500μs
         optimized_invocation2 = self.create_test_invocation("test_bubble_sort", 400_000, iteration_id='1_2_1')  # 300μs
         original_invocation3 = self.create_test_invocation("test_bubble_sort", 700_000, iteration_id='1_2_2')  # 500μs
@@ -1741,7 +1739,7 @@ def helper_function():
     with open('a.txt','rb') as f:
         b = 3
         b1 = 6
-        codeflash_output = bubble_sort([3, 1, 2]) # 500μs -> 300μs (66.7% faster)
+        codeflash_output = bubble_sort([3, 1, 2]) # 1.80ms -> 1.20ms (50.0% faster)
         assert codeflash_output == [1, 2, 5]
         i += 1
     d = 5
@@ -1762,7 +1760,6 @@ def helper_function():
         # Add test invocations with different runtimes
         original_invocation1 = self.create_test_invocation("test_bubble_sort", 500_000, iteration_id='1_2_0')  # 500μs
         optimized_invocation1 = self.create_test_invocation("test_bubble_sort", 300_000, iteration_id='1_2_0')  # 300μs
-        # longer runtime than minimum, will not contribute
         original_invocation2 = self.create_test_invocation("test_bubble_sort", 600_000, iteration_id='1_2_1')  # 500μs
         optimized_invocation2 = self.create_test_invocation("test_bubble_sort", 400_000, iteration_id='1_2_1')  # 300μs
         original_invocation3 = self.create_test_invocation("test_bubble_sort", 700_000, iteration_id='1_2_2')  # 500μs
@@ -1796,7 +1793,7 @@ def helper_function():
 """
         expected = """def test_bubble_sort():
     i = 0
-    codeflash_output = [bubble_sort([3, 1, 2]) for _ in range(3)] # 500μs -> 300μs (66.7% faster)
+    codeflash_output = [bubble_sort([3, 1, 2]) for _ in range(3)] # 1.80ms -> 1.20ms (50.0% faster)
     assert codeflash_output == [[1,2,3],[1,2,3],[1,2,3]]
     i += 1
     d = 5
@@ -1817,7 +1814,6 @@ def helper_function():
         # Add test invocations with different runtimes
         original_invocation1 = self.create_test_invocation("test_bubble_sort", 500_000, iteration_id='1_0')  # 500μs
         optimized_invocation1 = self.create_test_invocation("test_bubble_sort", 300_000, iteration_id='1_0')  # 300μs
-        # longer runtime than minimum, will not contribute
         original_invocation2 = self.create_test_invocation("test_bubble_sort", 600_000, iteration_id='1_1')  # 500μs
         optimized_invocation2 = self.create_test_invocation("test_bubble_sort", 400_000, iteration_id='1_1')  # 300μs
         original_invocation3 = self.create_test_invocation("test_bubble_sort", 700_000, iteration_id='1_2')  # 500μs
@@ -1867,7 +1863,7 @@ def test_bubble_sort(input, expected_output):
 )
 def test_bubble_sort(input, expected_output):
     i = 0
-    codeflash_output = bubble_sort(input) # 500μs -> 300μs (66.7% faster)
+    codeflash_output = bubble_sort(input) # 1.80ms -> 1.20ms (50.0% faster)
     assert codeflash_output == expected_output
     i += 1
     d = 5
@@ -1888,7 +1884,6 @@ def test_bubble_sort(input, expected_output):
         # Add test invocations with different runtimes
         original_invocation1 = self.create_test_invocation("test_bubble_sort", 500_000, iteration_id='1_0')  # 500μs
         optimized_invocation1 = self.create_test_invocation("test_bubble_sort", 300_000, iteration_id='1_0')  # 300μs
-        # longer runtime than minimum, will not contribute
         original_invocation2 = self.create_test_invocation("test_bubble_sort", 600_000, iteration_id='1_1')  # 500μs
         optimized_invocation2 = self.create_test_invocation("test_bubble_sort", 400_000, iteration_id='1_1')  # 300μs
         original_invocation3 = self.create_test_invocation("test_bubble_sort", 700_000, iteration_id='1_2')  # 500μs

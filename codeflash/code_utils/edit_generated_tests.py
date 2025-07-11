@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 class CommentMapper(ast.NodeVisitor):
     def __init__(
-        self, test: GeneratedTests, original_runtimes: dict[str, list[int]], optimized_runtimes: dict[str, list[int]]
+        self, test: GeneratedTests, original_runtimes: dict[str, int], optimized_runtimes: dict[str, int]
     ) -> None:
         self.results: dict[int, str] = {}
         self.test: GeneratedTests = test
@@ -56,8 +56,8 @@ class CommentMapper(ast.NodeVisitor):
                             match_key = key + "#" + inv_id
                             if match_key in self.original_runtimes and match_key in self.optimized_runtimes:
                                 # calculate speedup and output comment
-                                original_time = min(self.original_runtimes[match_key])
-                                optimized_time = min(self.optimized_runtimes[match_key])
+                                original_time = self.original_runtimes[match_key]
+                                optimized_time = self.optimized_runtimes[match_key]
                                 perf_gain = format_perf(
                                     abs(
                                         performance_gain(
@@ -76,8 +76,8 @@ class CommentMapper(ast.NodeVisitor):
                 match_key = key + "#" + inv_id
                 if match_key in self.original_runtimes and match_key in self.optimized_runtimes:
                     # calculate speedup and output comment
-                    original_time = min(self.original_runtimes[match_key])
-                    optimized_time = min(self.optimized_runtimes[match_key])
+                    original_time = self.original_runtimes[match_key]
+                    optimized_time = self.optimized_runtimes[match_key]
                     perf_gain = format_perf(
                         abs(
                             performance_gain(original_runtime_ns=original_time, optimized_runtime_ns=optimized_time)
@@ -96,7 +96,7 @@ class CommentMapper(ast.NodeVisitor):
 
 
 def get_fn_call_linenos(
-    test: GeneratedTests, original_runtimes: dict[str, list[int]], optimized_runtimes: dict[str, list[int]]
+    test: GeneratedTests, original_runtimes: dict[str, int], optimized_runtimes: dict[str, int]
 ) -> dict[int, str]:
     line_comment_ast_mapper = CommentMapper(test, original_runtimes, optimized_runtimes)
     source_code = test.generated_original_test_source
@@ -156,8 +156,8 @@ class CommentAdder(cst.CSTTransformer):
         return updated_node
 
 
-def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]]) -> dict[str, list[int]]:
-    unique_inv_ids: dict[str, list[int]] = {}
+def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]]) -> dict[str, int]:
+    unique_inv_ids: dict[str, int] = {}
     for inv_id, runtimes in inv_id_runtimes.items():
         test_qualified_name = (
             inv_id.test_class_name + "." + inv_id.test_function_name  # type: ignore[operator]
@@ -172,8 +172,8 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]]) -> dict[str, l
         cur_invid = inv_id.iteration_id.split("_")[0] if parts < 3 else "_".join(inv_id.iteration_id.split("_")[:-1])  # type: ignore[union-attr]
         match_key = key + "#" + cur_invid
         if match_key not in unique_inv_ids:
-            unique_inv_ids[match_key] = []
-        unique_inv_ids[match_key].extend(runtimes)
+            unique_inv_ids[match_key] = 0
+        unique_inv_ids[match_key] += min(runtimes)
     return unique_inv_ids
 
 
