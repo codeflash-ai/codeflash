@@ -352,8 +352,10 @@ def discover_unit_tests(
     functions_to_optimize = None
     if file_to_funcs_to_optimize:
         functions_to_optimize = [func for funcs_list in file_to_funcs_to_optimize.values() for func in funcs_list]
-    function_to_tests, num_discovered_tests = strategy(cfg, discover_only_these_tests, functions_to_optimize)
-    return function_to_tests, num_discovered_tests
+    function_to_tests, num_discovered_tests, num_discovered_replay_tests = strategy(
+        cfg, discover_only_these_tests, functions_to_optimize
+    )
+    return function_to_tests, num_discovered_tests, num_discovered_replay_tests
 
 
 def discover_tests_pytest(
@@ -515,6 +517,7 @@ def process_test_files(
 
     function_to_test_map = defaultdict(set)
     num_discovered_tests = 0
+    num_discovered_replay_tests = 0
     jedi_project = jedi.Project(path=project_root_path)
 
     with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
@@ -661,6 +664,9 @@ def process_test_files(
                                     position=CodePosition(line_no=name.line, col_no=name.column),
                                 )
                             )
+                            if test_func.test_type == TestType.REPLAY_TEST:
+                                num_discovered_replay_tests += 1
+
                             num_discovered_tests += 1
                 except Exception as e:
                     logger.debug(str(e))
@@ -668,4 +674,4 @@ def process_test_files(
 
             progress.advance(task_id)
 
-    return dict(function_to_test_map), num_discovered_tests
+    return dict(function_to_test_map), num_discovered_tests, num_discovered_replay_tests
