@@ -116,7 +116,8 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                 with result_pickle_file_path.open(mode="rb") as f:
                     data = pickle.load(f)
             except Exception:
-                console.print("Failed to trace")
+                console.info("❌ Failed to trace. Exiting...")
+                sys.exit(1)
             finally:
                 result_pickle_file_path.unlink(missing_ok=True)
 
