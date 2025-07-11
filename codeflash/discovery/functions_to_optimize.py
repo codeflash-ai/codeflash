@@ -304,7 +304,7 @@ def get_all_replay_test_functions(
         logger.error("Could not find trace_file_path in replay test files.")
         exit_with_message("Could not find trace_file_path in replay test files.")
 
-    function_tests, _ = discover_unit_tests(test_cfg, discover_only_these_tests=replay_test)
+    function_tests, _, _ = discover_unit_tests(test_cfg, discover_only_these_tests=replay_test)
     # Get the absolute file paths for each function, excluding class name if present
     filtered_valid_functions = defaultdict(list)
     file_to_functions_map = defaultdict(list)
