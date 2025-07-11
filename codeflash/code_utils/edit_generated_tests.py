@@ -40,57 +40,53 @@ class CommentMapper(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
         self.context_stack.append(node.name)
-        i = len(node.body) - 1
-        test_qualified_name = ".".join(self.context_stack)
-        key = test_qualified_name + "#" + str(self.abs_path)
-        while i >= 0:
-            line_node = node.body[i]
+        node_body = node.body
+        context_stack = self.context_stack
+        abs_path_str = str(self.abs_path)
+        test_qualified_name = ".".join(context_stack)
+        key_base = f"{test_qualified_name}#{abs_path_str}#"
+        orig_times = self.original_runtimes
+        opt_times = self.optimized_runtimes
+        results = self.results
+
+        # Localize hot callables
+        _format_time = format_time
+        _performance_gain = performance_gain
+        _format_perf = format_perf
+
+        for i in range(len(node_body) - 1, -1, -1):
+            line_node = node_body[i]
+            # Compound nodes case (with/for/while/if)
             if isinstance(line_node, (ast.With, ast.For, ast.While, ast.If)):
-                j = len(line_node.body) - 1
-                while j >= 0:
-                    compound_line_node: ast.stmt = line_node.body[j]
-                    internal_node: ast.AST
-                    for internal_node in ast.walk(compound_line_node):
-                        if isinstance(internal_node, (ast.stmt, ast.Assign)):
-                            inv_id = str(i) + "_" + str(j)
-                            match_key = key + "#" + inv_id
-                            if match_key in self.original_runtimes and match_key in self.optimized_runtimes:
-                                # calculate speedup and output comment
-                                original_time = self.original_runtimes[match_key]
-                                optimized_time = self.optimized_runtimes[match_key]
-                                perf_gain = format_perf(
-                                    abs(
-                                        performance_gain(
-                                            original_runtime_ns=original_time, optimized_runtime_ns=optimized_time
-                                        )
-                                        * 100
-                                    )
-                                )
-                                status = "slower" if optimized_time > original_time else "faster"
-                                # Create the runtime comment
-                                comment_text = f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
-                                self.results[internal_node.lineno] = comment_text
-                    j -= 1
+                comp_body = line_node.body
+                for j in range(len(comp_body) - 1, -1, -1):
+                    compound_line_node = comp_body[j]
+                    # Only visit top-level nodes in that block, not ast.walk!
+                    internal_node = compound_line_node
+                    inv_id = f"{i}_{j}"
+                    match_key = key_base + inv_id
+                    orig_t = orig_times.get(match_key)
+                    opt_t = opt_times.get(match_key)
+                    if orig_t is not None and opt_t is not None:
+                        perf_gain = _format_perf(
+                            abs(_performance_gain(original_runtime_ns=orig_t, optimized_runtime_ns=opt_t) * 100)
+                        )
+                        status = "slower" if opt_t > orig_t else "faster"
+                        comment_text = f"# {_format_time(orig_t)} -> {_format_time(opt_t)} ({perf_gain}% {status})"
+                        # Only record once, for the main statement
+                        results[getattr(internal_node, "lineno", None)] = comment_text
             else:
                 inv_id = str(i)
-                match_key = key + "#" + inv_id
-                if match_key in self.original_runtimes and match_key in self.optimized_runtimes:
-                    # calculate speedup and output comment
-                    original_time = self.original_runtimes[match_key]
-                    optimized_time = self.optimized_runtimes[match_key]
-                    perf_gain = format_perf(
-                        abs(
-                            performance_gain(original_runtime_ns=original_time, optimized_runtime_ns=optimized_time)
-                            * 100
-                        )
+                match_key = key_base + inv_id
+                orig_t = orig_times.get(match_key)
+                opt_t = opt_times.get(match_key)
+                if orig_t is not None and opt_t is not None:
+                    perf_gain = _format_perf(
+                        abs(_performance_gain(original_runtime_ns=orig_t, optimized_runtime_ns=opt_t) * 100)
                     )
-                    status = "slower" if optimized_time > original_time else "faster"
-                    # Create the runtime comment
-                    comment_text = (
-                        f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
-                    )
-                    self.results[line_node.lineno] = comment_text
-            i -= 1
+                    status = "slower" if opt_t > orig_t else "faster"
+                    comment_text = f"# {_format_time(orig_t)} -> {_format_time(opt_t)} ({perf_gain}% {status})"
+                    results[getattr(line_node, "lineno", None)] = comment_text
         self.context_stack.pop()
         return node
 
