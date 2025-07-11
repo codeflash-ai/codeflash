@@ -1783,6 +1783,132 @@ def helper_function():
         modified_source = result.generated_tests[0].generated_original_test_source
         assert modified_source == expected
 
+    def test_runtime_comment_addition_lc(self, test_config):
+        """Test basic functionality of adding runtime comments for list comprehension."""
+        # Create test source code
+        os.chdir(test_config.project_root_path)
+        test_source = """def test_bubble_sort():
+    i = 0
+    codeflash_output = [bubble_sort([3, 1, 2]) for _ in range(3)]
+    assert codeflash_output == [[1,2,3],[1,2,3],[1,2,3]]
+    i += 1
+    d = 5
+"""
+        expected = """def test_bubble_sort():
+    i = 0
+    codeflash_output = [bubble_sort([3, 1, 2]) for _ in range(3)] # 500μs -> 300μs (66.7% faster)
+    assert codeflash_output == [[1,2,3],[1,2,3],[1,2,3]]
+    i += 1
+    d = 5
+"""
+        generated_test = GeneratedTests(
+            generated_original_test_source=test_source,
+            instrumented_behavior_test_source="",
+            instrumented_perf_test_source="",
+            behavior_file_path=test_config.tests_root / "test_module__unit_test_0.py",
+            perf_file_path=test_config.tests_root / "test_perf.py",
+        )
+        generated_tests = GeneratedTestsList(generated_tests=[generated_test])
+
+        # Create test results
+        original_test_results = TestResults()
+        optimized_test_results = TestResults()
+
+        # Add test invocations with different runtimes
+        original_invocation1 = self.create_test_invocation("test_bubble_sort", 500_000, iteration_id='1_0')  # 500μs
+        optimized_invocation1 = self.create_test_invocation("test_bubble_sort", 300_000, iteration_id='1_0')  # 300μs
+        # longer runtime than minimum, will not contribute
+        original_invocation2 = self.create_test_invocation("test_bubble_sort", 600_000, iteration_id='1_1')  # 500μs
+        optimized_invocation2 = self.create_test_invocation("test_bubble_sort", 400_000, iteration_id='1_1')  # 300μs
+        original_invocation3 = self.create_test_invocation("test_bubble_sort", 700_000, iteration_id='1_2')  # 500μs
+        optimized_invocation3 = self.create_test_invocation("test_bubble_sort", 500_000, iteration_id='1_2')  # 300μs
+
+        original_test_results.add(original_invocation1)
+        optimized_test_results.add(optimized_invocation1)
+        original_test_results.add(original_invocation2)
+        optimized_test_results.add(optimized_invocation2)
+        original_test_results.add(original_invocation3)
+        optimized_test_results.add(optimized_invocation3)
+        original_runtimes = original_test_results.usable_runtime_data_by_test_case()
+        optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
+        # Test the functionality
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_runtimes, optimized_runtimes)
+
+        # Check that comments were added
+        modified_source = result.generated_tests[0].generated_original_test_source
+        assert modified_source == expected
+
+    def test_runtime_comment_addition_parameterized(self, test_config):
+        """Test basic functionality of adding runtime comments for list comprehension."""
+        # Create test source code
+        os.chdir(test_config.project_root_path)
+        test_source = """@pytest.mark.parametrize(
+    "input, expected_output",
+    [
+        ([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]),
+        ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]),
+        (list(reversed(range(50))), list(range(50))),
+    ],
+)
+def test_bubble_sort(input, expected_output):
+    i = 0
+    codeflash_output = bubble_sort(input)
+    assert codeflash_output == expected_output
+    i += 1
+    d = 5
+"""
+        expected = """@pytest.mark.parametrize(
+    "input, expected_output",
+    [
+        ([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]),
+        ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]),
+        (list(reversed(range(50))), list(range(50))),
+    ],
+)
+def test_bubble_sort(input, expected_output):
+    i = 0
+    codeflash_output = bubble_sort(input) # 500μs -> 300μs (66.7% faster)
+    assert codeflash_output == expected_output
+    i += 1
+    d = 5
+"""
+        generated_test = GeneratedTests(
+            generated_original_test_source=test_source,
+            instrumented_behavior_test_source="",
+            instrumented_perf_test_source="",
+            behavior_file_path=test_config.tests_root / "test_module__unit_test_0.py",
+            perf_file_path=test_config.tests_root / "test_perf.py",
+        )
+        generated_tests = GeneratedTestsList(generated_tests=[generated_test])
+
+        # Create test results
+        original_test_results = TestResults()
+        optimized_test_results = TestResults()
+
+        # Add test invocations with different runtimes
+        original_invocation1 = self.create_test_invocation("test_bubble_sort", 500_000, iteration_id='1_0')  # 500μs
+        optimized_invocation1 = self.create_test_invocation("test_bubble_sort", 300_000, iteration_id='1_0')  # 300μs
+        # longer runtime than minimum, will not contribute
+        original_invocation2 = self.create_test_invocation("test_bubble_sort", 600_000, iteration_id='1_1')  # 500μs
+        optimized_invocation2 = self.create_test_invocation("test_bubble_sort", 400_000, iteration_id='1_1')  # 300μs
+        original_invocation3 = self.create_test_invocation("test_bubble_sort", 700_000, iteration_id='1_2')  # 500μs
+        optimized_invocation3 = self.create_test_invocation("test_bubble_sort", 500_000, iteration_id='1_2')  # 300μs
+
+        original_test_results.add(original_invocation1)
+        optimized_test_results.add(optimized_invocation1)
+        original_test_results.add(original_invocation2)
+        optimized_test_results.add(optimized_invocation2)
+        original_test_results.add(original_invocation3)
+        optimized_test_results.add(optimized_invocation3)
+        original_runtimes = original_test_results.usable_runtime_data_by_test_case()
+        optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
+        # Test the functionality
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_runtimes, optimized_runtimes)
+
+        # Check that comments were added
+        modified_source = result.generated_tests[0].generated_original_test_source
+        assert modified_source == expected
+
 """TODO Future tests"""
 #     def test_runtime_comment_addition_else(self, test_config):
 #         """Test basic functionality of adding runtime comments."""
