@@ -789,13 +789,21 @@ class Tracer:
         arg = arg.replace("\n", "_").replace("\r", "_")
 
         # Replace contiguous whitespace (including tabs and multiple spaces) with a single underscore
-        arg = re.sub(r"\s+", "_", arg)
+        # Limit to 5 whitespace splits
+        parts = re.split(r"\s+", arg)
+        if len(parts) > 5:
+            parts = parts[:5]
+
+        arg = "_".join(parts)
 
         # Remove all characters that are not alphanumeric, underscore, or dot
         arg = re.sub(r"[^\w._]", "", arg)
 
         # Avoid filenames starting or ending with a dot or underscore
         arg = arg.strip("._")
+
+        # Limit to 100 characters
+        arg = arg[:100]
 
         # Fallback if resulting name is empty
         return arg or "untitled"
