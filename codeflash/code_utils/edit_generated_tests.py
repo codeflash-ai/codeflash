@@ -167,9 +167,9 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]]) -> dict[str, l
         abs_path = str(Path(inv_id.test_module_path.replace(".", os.sep)).with_suffix(".py").resolve().with_suffix(""))
         if "__unit_test_" not in abs_path:
             continue
-        key = test_qualified_name + "#" + abs_path # type: ignore[operator]
-        parts = inv_id.iteration_id.split("_").__len__() # type: ignore[union-attr]
-        cur_invid = inv_id.iteration_id.split("_")[0] if parts < 3 else "_".join(inv_id.iteration_id.split("_")[:-1]) # type: ignore[union-attr]
+        key = test_qualified_name + "#" + abs_path  # type: ignore[operator]
+        parts = inv_id.iteration_id.split("_").__len__()  # type: ignore[union-attr]
+        cur_invid = inv_id.iteration_id.split("_")[0] if parts < 3 else "_".join(inv_id.iteration_id.split("_")[:-1])  # type: ignore[union-attr]
         match_key = key + "#" + cur_invid
         if match_key not in unique_inv_ids:
             unique_inv_ids[match_key] = []
