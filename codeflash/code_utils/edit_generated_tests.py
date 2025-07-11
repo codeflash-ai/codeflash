@@ -38,6 +38,17 @@ class CommentMapper(ast.NodeVisitor):
         self.context_stack.pop()
         return node
 
+    def get_comment(self, match_key: str) -> str:
+        # calculate speedup and output comment
+        original_time = self.original_runtimes[match_key]
+        optimized_time = self.optimized_runtimes[match_key]
+        perf_gain = format_perf(
+            abs(performance_gain(original_runtime_ns=original_time, optimized_runtime_ns=optimized_time) * 100)
+        )
+        status = "slower" if optimized_time > original_time else "faster"
+        # Create the runtime comment
+        return f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
+
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
         self.context_stack.append(node.name)
         i = len(node.body) - 1
@@ -55,41 +66,13 @@ class CommentMapper(ast.NodeVisitor):
                             inv_id = str(i) + "_" + str(j)
                             match_key = key + "#" + inv_id
                             if match_key in self.original_runtimes and match_key in self.optimized_runtimes:
-                                # calculate speedup and output comment
-                                original_time = self.original_runtimes[match_key]
-                                optimized_time = self.optimized_runtimes[match_key]
-                                perf_gain = format_perf(
-                                    abs(
-                                        performance_gain(
-                                            original_runtime_ns=original_time, optimized_runtime_ns=optimized_time
-                                        )
-                                        * 100
-                                    )
-                                )
-                                status = "slower" if optimized_time > original_time else "faster"
-                                # Create the runtime comment
-                                comment_text = f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
-                                self.results[internal_node.lineno] = comment_text
+                                self.results[internal_node.lineno] = self.get_comment(match_key)
                     j -= 1
             else:
                 inv_id = str(i)
                 match_key = key + "#" + inv_id
                 if match_key in self.original_runtimes and match_key in self.optimized_runtimes:
-                    # calculate speedup and output comment
-                    original_time = self.original_runtimes[match_key]
-                    optimized_time = self.optimized_runtimes[match_key]
-                    perf_gain = format_perf(
-                        abs(
-                            performance_gain(original_runtime_ns=original_time, optimized_runtime_ns=optimized_time)
-                            * 100
-                        )
-                    )
-                    status = "slower" if optimized_time > original_time else "faster"
-                    # Create the runtime comment
-                    comment_text = (
-                        f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
-                    )
-                    self.results[line_node.lineno] = comment_text
+                    self.results[line_node.lineno] = self.get_comment(match_key)
             i -= 1
         self.context_stack.pop()
         return node
@@ -106,7 +89,7 @@ def get_fn_call_linenos(
 
 
 class CommentAdder(cst.CSTTransformer):
-    """Transformer that adds comment 'a' to specified lines."""
+    """Transformer that adds comments to specified lines."""
 
     # Declare metadata dependencies
     METADATA_DEPENDENCIES = (PositionProvider,)
