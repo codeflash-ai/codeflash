@@ -7,6 +7,7 @@ import io
 import json
 import os
 import pickle
+import re
 import sqlite3
 import sys
 import threading
@@ -112,7 +113,7 @@ class Tracer:
         console.rule(f"Project Root: {self.project_root}", style="bold blue")
         self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>", "<module>"}
 
-        self.file_being_called_from: str = str(Path(sys._getframe().f_back.f_code.co_filename).name).replace(".", "_")  # noqa: SLF001
+        self.sanitized_filename = self.sanitize_to_filename(command)
         self.result_pickle_file_path = result_pickle_file_path
 
         assert timeout is None or timeout > 0, "Timeout should be greater than 0"
@@ -167,7 +168,7 @@ class Tracer:
 
         # Store command metadata
         cur.execute("INSERT INTO metadata VALUES (?, ?)", ("command", self.command))
-        cur.execute("INSERT INTO metadata VALUES (?, ?)", ("program_name", self.file_being_called_from))
+        cur.execute("INSERT INTO metadata VALUES (?, ?)", ("program_name", self.sanitized_filename))
         cur.execute(
             "INSERT INTO metadata VALUES (?, ?)",
             ("functions_filter", json.dumps(self.functions) if self.functions else None),
@@ -263,7 +264,7 @@ class Tracer:
             test_framework=self.config["test_framework"],
             max_run_count=self.max_function_count,
         )
-        function_path = "_".join(self.functions) if self.functions else self.file_being_called_from
+        function_path = "_".join(self.functions) if self.functions else self.sanitized_filename
         test_file_path = get_test_file_path(
             test_dir=Path(self.config["tests_root"]), function_name=function_path, test_type="replay"
         )
@@ -782,6 +783,22 @@ class Tracer:
             for callcnt in callers.values():
                 nc += callcnt
             self.stats[func] = cc, nc, tt, ct, callers
+
+    def sanitize_to_filename(self, arg: str) -> str:
+        # Replace newlines with underscores
+        arg = arg.replace("\n", "_").replace("\r", "_")
+
+        # Replace contiguous whitespace (including tabs and multiple spaces) with a single underscore
+        arg = re.sub(r"\s+", "_", arg)
+
+        # Remove all characters that are not alphanumeric, underscore, or dot
+        arg = re.sub(r"[^\w._]", "", arg)
+
+        # Avoid filenames starting or ending with a dot or underscore
+        arg = arg.strip("._")
+
+        # Fallback if resulting name is empty
+        return arg or "untitled"
 
     def runctx(self, cmd: str, global_vars: dict[str, Any], local_vars: dict[str, Any]) -> Tracer | None:
         self.__enter__()
