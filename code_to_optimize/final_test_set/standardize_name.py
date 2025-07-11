@@ -35,3 +35,22 @@ def standardize_name(street_name):
         return standardize_name(fixed_street_name)
 
     raise ValueError(f"Unknown street {street_name}")
+
+
+STANDARD_STREET_NAMES = [
+    "Brattle St",
+    "Mount Auburn St",
+    "Massachusetts Ave",
+    "Cardinal Medeiros Ave",
+    "Hampshire Street",
+    "Beacon St",
+    "Blake St",
+    "Beech St",
+    "Garden St",
+]
+
+LOWER_TO_STANDARD = {s.lower(): s for s in STANDARD_STREET_NAMES}
+
+STANDARD_STREET_NAME_SET = set(STANDARD_STREET_NAMES)
+
+SUFFIX_SYNONYMS = {"ave.": "Ave", "avenue": "Ave", "st.": "St", "street": "St"}

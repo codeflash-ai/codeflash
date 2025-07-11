@@ -4,32 +4,27 @@ def _encodePythonStringToC(value):
     This doesn't handle limits.
     """
     assert type(value) is bytes, type(value)
-
-    result = ""
+    # String builder as list for efficient concatenation
+    out = []
     octal = False
+    # Precompute tables for commonly checked membership
+    escape_bytes = {92, 9, 13, 10, 34, 63}  # '\\', '\t', '\r', '\n', '"', '?'
+    digit_bytes = {48, 49, 50, 51, 52, 53, 54, 55, 56, 57}  # b'0123456789'
 
     for c in value:
-        if str is bytes:
-            cv = ord(c)
-        else:
-            cv = c
-
-        if c in b'\\\t\r\n"?':
-            result += r"\%03o" % cv
-
+        cv = c
+        if cv in escape_bytes:
+            out.append(r"\%03o" % cv)
             octal = True
         elif 32 <= cv <= 127:
-            if octal and c in b"0123456789":
-                result += '" "'
-
-            result += chr(cv)
-
+            if octal and cv in digit_bytes:
+                out.append('" "')
+            out.append(chr(cv))
             octal = False
         else:
-            result += r"\%o" % cv
-
+            out.append(r"\%o" % cv)
             octal = True
 
-    result = result.replace('" "\\', "\\")
-
-    return '"%s"' % result
+    # We avoid .replace('" "\\', "\\") since the logic above guarantees that
+    # any needed spaces for unambiguous octal-escape will be inserted already (as '" "')
+    return '"' + "".join(out) + '"'

@@ -3,8 +3,10 @@ def f(x):
 
 
 def integrate_f(a, b, N):
-    s = 0
     dx = (b - a) / N
+    s = 0
+    adx = a
     for i in range(N):
-        s += f(a + i * dx)
+        s += adx * (adx - 1)
+        adx += dx
     return s * dx

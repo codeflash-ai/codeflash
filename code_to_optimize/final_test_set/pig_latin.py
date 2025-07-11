@@ -2,14 +2,13 @@ def translate(word):
     vowels = "aeiou"
     if word[0] in vowels:
         return word + "way"
-    else:
-        consonants = ""
-        for letter in word:
-            if letter not in vowels:
-                consonants += letter
-            else:
-                break
-        return word[len(consonants) :] + consonants + "ay"
+    # Find the index of the first vowel and use slicing to avoid repeated string ops
+    for i, letter in enumerate(word):
+        if letter in vowels:
+            # Use slice and concat
+            return word[i:] + word[:i] + "ay"
+    # No vowels: treat as all consonants
+    return word + "ay"
 
 
 def pig_latin(text):

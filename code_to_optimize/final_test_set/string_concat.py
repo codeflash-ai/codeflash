@@ -1,5 +1,7 @@
 def concatenate_strings(n):
-    result = ""
+    # Using list accumulation and join for faster string concatenation
+    parts = []
     for i in range(n):
-        result += str(i) + ", "
-    return result
+        parts.append(str(i))
+        parts.append(", ")
+    return "".join(parts)

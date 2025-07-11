@@ -13,18 +13,18 @@ class Graph:
         visited[v] = True
 
         for i in self.graph[v]:
-            if visited[i] == False:
+            if not visited[i]:
                 self.topologicalSortUtil(i, visited, stack)
 
-        stack.insert(0, v)
+        stack.append(v)  # append at end, reverse once at the end
 
     def topologicalSort(self):
         visited = [False] * self.V
         stack = []
 
         for i in range(self.V):
-            if visited[i] == False:
+            if not visited[i]:
                 self.topologicalSortUtil(i, visited, stack)
 
-        # Print contents of stack
+        stack.reverse()  # reverse once to get topological order
         return stack

@@ -1,5 +1,9 @@
 def exponentiation(base, exponent):
     result = 1
-    for _ in range(exponent):
-        result *= base
+    # Fast exponentiation by squaring (handles positive exponents as before)
+    while exponent > 0:
+        if exponent & 1:
+            result *= base
+        base *= base
+        exponent >>= 1
     return result
