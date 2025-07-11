@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from pygls import uris
 
-from codeflash.api.cfapi import get_user_id
+from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
@@ -125,17 +125,21 @@ def discover_function_tests(server: CodeflashLanguageServer, params: FunctionOpt
     return {"functionName": params.functionName, "status": "success", "discovered_tests": num_discovered_tests}
 
 
+def _initialize_optimizer_if_valid(server: CodeflashLanguageServer) -> dict[str, str]:
+    user_id = get_user_id()
+    if user_id is None:
+        return {"status": "error", "message": "api key not found or invalid"}
+
+    from codeflash.optimization.optimizer import Optimizer
+
+    server.optimizer = Optimizer(server.args)
+    return {"status": "success", "user_id": user_id}
+
+
 @server.feature("apiKeyExistsAndValid")
-def check_api_key(_server: CodeflashLanguageServer, _params: any) -> dict[str, str]:
+def check_api_key(server: CodeflashLanguageServer, _params: any) -> dict[str, str]:
     try:
-        user_id = get_user_id()
-        if user_id is None:
-            return {"status": "error", "message": "api key not found or invalid"}
-
-        from codeflash.optimization.optimizer import Optimizer
-
-        server.optimizer = Optimizer(server.args)
-        return {"status": "success", "user_id": user_id}  # noqa
+        return _initialize_optimizer_if_valid(server)
     except Exception:
         return {"status": "error", "message": "something went wrong while validating the api key"}
 
@@ -144,17 +148,22 @@ def check_api_key(_server: CodeflashLanguageServer, _params: any) -> dict[str, s
 def provide_api_key(server: CodeflashLanguageServer, params: ProvideApiKeyParams) -> dict[str, str]:
     try:
         api_key = params.api_key
+        if not api_key.startswith("cf-"):
+            return {"status": "error", "message": "Api key is not valid"}
+
         result = save_api_key_to_rc(api_key)
         if not is_successful(result):
             return {"status": "error", "message": result.failure()}
-        user_id = get_user_id()
-        if user_id is None:
-            return {"status": "error", "message": "api key is not valid"}
 
-        from codeflash.optimization.optimizer import Optimizer
+        # clear cache to ensure the new api key is used
+        get_codeflash_api_key.cache_clear()
+        get_user_id.cache_clear()
 
-        server.optimizer = Optimizer(server.args)
-        return {"status": "success", "message": "Api key saved successfully", "user_id": user_id}  # noqa: TRY300
+        init_result = _initialize_optimizer_if_valid(server)
+        if init_result["status"] == "error":
+            return {"status": "error", "message": "Api key is not valid"}
+
+        return {"status": "success", "message": "Api key saved successfully", "user_id": init_result["user_id"]}
     except Exception:
         return {"status": "error", "message": "something went wrong while saving the api key"}
 

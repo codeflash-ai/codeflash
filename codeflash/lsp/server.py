@@ -55,7 +55,7 @@ class CodeflashLanguageServer(LanguageServer):
         args.no_pr = True  # LSP server should not create PRs
         args = process_pyproject_config(args)
         self.args = args
-        # self.optimizer = Optimizer(args) # avoid creating the optimizer during initialization, bacause it may cause and erro if the api key is invalid
+        # avoid initializing the optimizer during initialization, because it can cause an error if the api key is invalid
 
     def show_message_log(self, message: str, message_type: str) -> None:
         """Send a log message to the client's output channel.
@@ -71,6 +71,7 @@ class CodeflashLanguageServer(LanguageServer):
             "Warning": MessageType.Warning,
             "Error": MessageType.Error,
             "Log": MessageType.Log,
+            "Debug": MessageType.Debug,
         }
 
         lsp_message_type = type_mapping.get(message_type, MessageType.Info)
