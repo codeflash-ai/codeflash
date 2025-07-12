@@ -117,7 +117,7 @@ def confirm_proceeding_with_no_git_repo() -> str | bool:
     return True
 
 
-def check_and_push_branch(repo: git.Repo, git_remote: str, wait_for_push: bool = False) -> bool:  # noqa: FBT001, FBT002
+def check_and_push_branch(repo: git.Repo, git_remote: str | None = "origin", wait_for_push: bool = False) -> bool:  # noqa: FBT001, FBT002
     current_branch = repo.active_branch.name
     remote = repo.remote(name=git_remote)
 
