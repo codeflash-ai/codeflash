@@ -155,7 +155,6 @@ def process_pyproject_config(args: Namespace) -> Namespace:
         "disable_telemetry",
         "disable_imports_sorting",
         "git_remote",
-        "exp_git_remote",
         "override_fixtures",
     ]
     for key in supported_keys:
