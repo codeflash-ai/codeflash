@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
+from codeflash.api.cfapi import send_completion_email
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
@@ -342,6 +343,11 @@ class Optimizer:
                 logger.info("❌ No optimizations found.")
             elif self.args.all:
                 logger.info("✨ All functions have been optimized! ✨")
+                response = send_completion_email()
+                if response.ok:
+                    logger.info("✅ Completion email sent successfully.")
+                else:
+                    logger.warning("⚠️ Failed to send completion email. Status")
         finally:
             if function_optimizer:
                 function_optimizer.cleanup_generated_files()
