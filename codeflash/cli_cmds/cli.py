@@ -155,6 +155,7 @@ def process_pyproject_config(args: Namespace) -> Namespace:
         "disable_telemetry",
         "disable_imports_sorting",
         "git_remote",
+        "exp_git_remote",
         "override_fixtures",
     ]
     for key in supported_keys:
@@ -234,7 +235,7 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
                 "I need a git repository to run --all and open PRs for optimizations. Exiting..."
             )
             apologize_and_exit()
-        if not args.no_pr and not check_and_push_branch(git_repo):
+        if not args.no_pr and not check_and_push_branch(git_repo, git_remote=args.git_remote):
             exit_with_message("Branch is not pushed...", error_on_exit=True)
         owner, repo = get_repo_owner_and_name(git_repo)
         if not args.no_pr:

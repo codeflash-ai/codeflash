@@ -73,13 +73,13 @@ class TestGitUtils(unittest.TestCase):
         mock_origin = mock_repo_instance.remote.return_value
         mock_origin.push.return_value = None
 
-        assert check_and_push_branch(mock_repo_instance)
+        assert check_and_push_branch(mock_repo_instance, git_remote="origin")
         mock_origin.push.assert_called_once_with("test-branch")
         mock_origin.push.reset_mock()
 
         # Test when branch is already pushed
         mock_repo_instance.refs = [f"origin/{mock_repo_instance.active_branch.name}"]
-        assert check_and_push_branch(mock_repo_instance)
+        assert check_and_push_branch(mock_repo_instance, git_remote="origin")
         mock_origin.push.assert_not_called()
         mock_origin.push.reset_mock()
 
@@ -93,7 +93,7 @@ class TestGitUtils(unittest.TestCase):
         mock_origin = mock_repo_instance.remote.return_value
         mock_origin.push.return_value = None
 
-        assert not check_and_push_branch(mock_repo_instance)
+        assert not check_and_push_branch(mock_repo_instance, git_remote="origin")
         mock_origin.push.assert_not_called()
         mock_origin.push.reset_mock()
 

@@ -1041,7 +1041,7 @@ class FunctionOptimizer:
                         if self.experiment_id
                         else self.function_trace_id,
                         coverage_message=coverage_message,
-                        git_remote=self.args.git_remote,
+                        git_remote=self.args.git_remote if exp_type == "EXP0" else self.args.exp_git_remote,
                     )
                     if (
                         self.args.all
