@@ -341,7 +341,7 @@ def discover_unit_tests(
     cfg: TestConfig,
     discover_only_these_tests: list[Path] | None = None,
     file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None = None,
-) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
+) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
     framework_strategies: dict[str, Callable] = {"pytest": discover_tests_pytest, "unittest": discover_tests_unittest}
     strategy = framework_strategies.get(cfg.test_framework, None)
     if not strategy:
