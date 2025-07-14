@@ -4,7 +4,7 @@ import site
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 import git
 
@@ -34,10 +34,11 @@ def is_git_repo(file_path: str) -> bool:
 
 
 @cache
-def ignored_submodule_paths(module_root: str) -> list[str]:
+def ignored_submodule_paths(module_root: str) -> list[Path]:
     if is_git_repo(module_root):
         git_repo = git.Repo(module_root, search_parent_directories=True)
-        return [Path(git_repo.working_tree_dir, submodule.path).resolve() for submodule in git_repo.submodules]
+        working_tree_dir = cast("Path", git_repo.working_tree_dir)
+        return [Path(working_tree_dir, submodule.path).resolve() for submodule in git_repo.submodules]
     return []
 
 
