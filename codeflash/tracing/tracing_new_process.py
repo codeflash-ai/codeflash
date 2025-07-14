@@ -64,7 +64,7 @@ class Tracer:
         project_root: Path | None = None,
         max_function_count: int = 256,
         timeout: int | None = None,  # seconds
-        command: str | None = None,
+        command: str = "",
     ) -> None:
         """Use this class to trace function calls.
 
