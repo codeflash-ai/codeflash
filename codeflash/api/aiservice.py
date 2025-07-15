@@ -7,6 +7,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 import requests
+from pydantic.dataclasses import dataclass
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
@@ -21,6 +22,18 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.ExperimentMetadata import ExperimentMetadata
+
+
+@dataclass(frozen=True)
+class AIServiceRefinerRequest:
+    original_source_code: str
+    original_read_only_dependency_code: str
+    optimized_source_code: str
+    optimized_explanation: str
+    trace_id: str
+    original_line_profiler_results: str
+    optimized_line_profiler_results: str
+    experiment_metadata: ExperimentMetadata | None = None
 
 
 class AiServiceClient:
@@ -195,6 +208,69 @@ class AiServiceClient:
             response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=600)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
+            return []
+
+        if response.status_code == 200:
+            optimizations_json = response.json()["optimizations"]
+            logger.info(f"Generated {len(optimizations_json)} candidate optimizations.")
+            console.rule()
+            return [
+                OptimizedCandidate(
+                    source_code=opt["source_code"],
+                    explanation=opt["explanation"],
+                    optimization_id=opt["optimization_id"],
+                )
+                for opt in optimizations_json
+            ]
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return []
+
+    def optimize_python_code_refinement(self, request: list[AIServiceRefinerRequest]) -> list[OptimizedCandidate]:
+        payload = [
+            {
+                "original_source_code": opt.original_source_code,
+                "original_read_only_dependency_code": opt.original_read_only_dependency_code,
+                "original_line_profiler_results": opt.original_line_profiler_results,
+                "optimized_source_code": opt.optimized_source_code,
+                "optimized_explanation": opt.optimized_explanation,
+                "optimized_line_profiler_results": opt.optimized_line_profiler_results,
+                "trace_id": opt.trace_id,
+                "python_version": platform.python_version(),
+                "experiment_metadata": opt.experiment_metadata,
+                "codeflash_version": codeflash_version,
+                "lsp_mode": is_LSP_enabled(),
+            }
+            for opt in request
+        ]
+        """Optimize the given python code for performance by making a request to the Django endpoint.
+
+        Parameters
+        ----------
+        - source_code (str): The python code to optimize.
+        - dependency_code (str): The dependency code used as read-only context for the optimization
+        - trace_id (str): Trace id of optimization run
+        - num_candidates (int): Number of optimization variants to generate. Default is 10.
+        - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
+
+        Returns
+        -------
+        - List[OptimizationCandidate]: A list of Optimization Candidates.
+
+        """
+
+        logger.info(f"Refining {len(request)} optimizations…")
+        console.rule()
+        try:
+            response = self.make_ai_service_request("/optimize-refinement", payload=payload, timeout=600)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
             return []
 

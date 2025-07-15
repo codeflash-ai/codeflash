@@ -75,12 +75,13 @@ class FunctionSource:
 
 class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
-    helper_functions: list[FunctionSource]
+    code_context: CodeOptimizationContext
     runtime: int
     replay_performance_gain: Optional[dict[BenchmarkKey, float]] = None
     winning_behavior_test_results: TestResults
     winning_benchmarking_test_results: TestResults
     winning_replay_benchmarking_test_results: Optional[TestResults] = None
+    line_profiler_test_results: dict
 
 
 @dataclass(frozen=True)

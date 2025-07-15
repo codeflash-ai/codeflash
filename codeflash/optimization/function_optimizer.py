@@ -18,7 +18,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.tree import Tree
 
-from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
+from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
 from codeflash.api.cfapi import add_code_context_hash, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
@@ -146,6 +146,7 @@ class FunctionOptimizer:
         self.generate_and_instrument_tests_results: (
             tuple[GeneratedTestsList, dict[str, set[FunctionCalledInTest]], OptimizationSet] | None
         ) = None
+        self.valid_optimizations: list[BestOptimization] = list()  # TODO: Figure out the dataclass type for this
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -390,8 +391,11 @@ class FunctionOptimizer:
                 candidate_index = 0
                 original_len = len(candidates)
                 while candidates:
-                    done = True if future_line_profile_results is None else future_line_profile_results.done()
-                    if done and (future_line_profile_results is not None):
+                    candidate_index += 1
+                    line_profiler_done = (
+                        True if future_line_profile_results is None else future_line_profile_results.done()
+                    )
+                    if line_profiler_done and (future_line_profile_results is not None):
                         line_profile_results = future_line_profile_results.result()
                         candidates.extend(line_profile_results)
                         original_len += len(line_profile_results)
@@ -400,7 +404,6 @@ class FunctionOptimizer:
                         )
                         future_line_profile_results = None
                     candidate = candidates.popleft()
-                    candidate_index += 1
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
                     logger.info(f"Optimization candidate {candidate_index}/{original_len}:")
@@ -451,9 +454,11 @@ class FunctionOptimizer:
                         tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
                         benchmark_tree = None
                         if speedup_critic(
-                            candidate_result, original_code_baseline.runtime, best_runtime_until_now
+                            candidate_result, original_code_baseline.runtime, best_runtime_until_now=None
                         ) and quantity_of_tests_critic(candidate_result):
-                            tree.add("This candidate is faster than the previous best candidate. 🚀")
+                            tree.add(
+                                "This candidate is faster than the previous best candidate. 🚀"
+                            )  # TODO: Change this description
                             tree.add(f"Original summed runtime: {humanize_runtime(original_code_baseline.runtime)}")
                             tree.add(
                                 f"Best summed runtime: {humanize_runtime(candidate_result.best_test_runtime)} "
@@ -462,6 +467,11 @@ class FunctionOptimizer:
                             )
                             tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
                             tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
+                            line_profile_test_results = self.line_profiler_step(
+                                code_context=code_context,
+                                original_helper_code=original_helper_code,
+                                candidate_index=candidate_index,
+                            )
                             replay_perf_gain = {}
                             if self.args.benchmark:
                                 test_results_by_benchmark = (
@@ -486,13 +496,15 @@ class FunctionOptimizer:
 
                             best_optimization = BestOptimization(
                                 candidate=candidate,
-                                helper_functions=code_context.helper_functions,
+                                code_context=code_context,
                                 runtime=best_test_runtime,
+                                line_profiler_test_results=line_profile_test_results,
                                 winning_behavior_test_results=candidate_result.behavior_test_results,
                                 replay_performance_gain=replay_perf_gain if self.args.benchmark else None,
                                 winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
                                 winning_replay_benchmarking_test_results=candidate_result.benchmarking_test_results,
                             )
+                            self.valid_optimizations.append(best_optimization)
                             best_runtime_until_now = best_test_runtime
                         else:
                             tree.add(
@@ -510,8 +522,9 @@ class FunctionOptimizer:
                     self.write_code_and_helpers(
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
+
                     if (not len(candidates)) and (
-                        not done
+                        not line_profiler_done
                     ):  # all original candidates processed but lp results haven't been processed
                         concurrent.futures.wait([future_line_profile_results])
                         line_profile_results = future_line_profile_results.result()
@@ -521,6 +534,25 @@ class FunctionOptimizer:
                             f"Added results from line profiler to candidates, total candidates now: {original_len}"
                         )
                         future_line_profile_results = None
+
+                    if len(candidates) == 0 and len(self.valid_optimizations) > 0:
+                        # TODO: Instead of doing it all at once at the end, do it one by one as the optimizations
+                        # are found. This way we can hide the time waiting for the LLM results.
+                        self.refine_optimizations(
+                            valid_optimizations=self.valid_optimizations,
+                            original_code_baseline=original_code_baseline,
+                            code_context=code_context,
+                            trace_id=self.function_trace_id[:-4] + exp_type,
+                            experiment_metadata=ExperimentMetadata(
+                                id=self.experiment_id, group="control" if exp_type == "EXP0" else "experiment"
+                            )
+                            if self.experiment_id
+                            else self.function_trace_id,
+                            ai_service_client=ai_service_client,
+                            executor=executor,
+                        )
+
+                        print("hi")
             except KeyboardInterrupt as e:
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
@@ -536,6 +568,36 @@ class FunctionOptimizer:
             is_correct=is_correct,
         )
         return best_optimization
+
+    def refine_optimizations(
+        self,
+        valid_optimizations: list[BestOptimization],
+        original_code_baseline: OriginalCodeBaseline,
+        code_context: CodeOptimizationContext,
+        trace_id: str,
+        experiment_metadata: ExperimentMetadata,
+        ai_service_client: AiServiceClient,
+        executor: concurrent.futures.ThreadPoolExecutor,
+    ):
+        request = [
+            AIServiceRefinerRequest(
+                original_source_code=code_context.read_writable_code,
+                original_read_only_dependency_code=code_context.read_only_context_code,
+                optimized_source_code=opt.candidate.source_code,
+                optimized_explanation=opt.candidate.explanation,
+                trace_id=trace_id,
+                original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
+                optimized_line_profiler_results=opt.line_profiler_test_results["str_out"],
+                experiment_metadata=experiment_metadata,
+            )
+            for opt in valid_optimizations
+        ]
+        future_line_profile_results = executor.submit(
+            ai_service_client.optimize_python_code_refinement, request=request
+        )
+        concurrent.futures.wait([future_line_profile_results])
+        line_profile_results = future_line_profile_results.result()
+        print("hi")
 
     def log_successful_optimization(
         self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str
@@ -1074,16 +1136,8 @@ class FunctionOptimizer:
             assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
             success = True
 
-            test_env = os.environ.copy()
-            test_env["CODEFLASH_TEST_ITERATION"] = "0"
-            test_env["CODEFLASH_TRACER_DISABLE"] = "1"
-            test_env["CODEFLASH_LOOP_INDEX"] = "0"
-            if "PYTHONPATH" not in test_env:
-                test_env["PYTHONPATH"] = str(self.args.project_root)
-            else:
-                test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
+            test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
 
-            coverage_results = None
             # Instrument codeflash capture
             try:
                 instrument_codeflash_capture(
@@ -1112,28 +1166,10 @@ class FunctionOptimizer:
             if not coverage_critic(coverage_results, self.args.test_framework):
                 return Failure("The threshold for test coverage was not met.")
             if test_framework == "pytest":
-                try:
-                    line_profiler_output_file = add_decorator_imports(self.function_to_optimize, code_context)
-                    line_profile_results, _ = self.run_and_parse_tests(
-                        testing_type=TestingMode.LINE_PROFILE,
-                        test_env=test_env,
-                        test_files=self.test_files,
-                        optimization_iteration=0,
-                        testing_time=TOTAL_LOOPING_TIME,
-                        enable_coverage=False,
-                        code_context=code_context,
-                        line_profiler_output_file=line_profiler_output_file,
-                    )
-                finally:
-                    # Remove codeflash capture
-                    self.write_code_and_helpers(
-                        self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-                    )
-                if line_profile_results["str_out"] == "":
-                    logger.warning(
-                        f"Couldn't run line profiler for original function {self.function_to_optimize.function_name}"
-                    )
-                    console.rule()
+                line_profile_results = self.line_profiler_step(
+                    code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
+                )
+                console.rule()
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
                     test_env=test_env,
@@ -1229,14 +1265,11 @@ class FunctionOptimizer:
         assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
 
         with progress_bar("Testing optimization candidate"):
-            test_env = os.environ.copy()
-            test_env["CODEFLASH_LOOP_INDEX"] = "0"
-            test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_candidate_index)
-            test_env["CODEFLASH_TRACER_DISABLE"] = "1"
-            if "PYTHONPATH" not in test_env:
-                test_env["PYTHONPATH"] = str(self.project_root)
-            else:
-                test_env["PYTHONPATH"] += os.pathsep + str(self.project_root)
+            test_env = self.get_test_env(
+                codeflash_loop_index=0,
+                codeflash_test_iteration=optimization_candidate_index,
+                codeflash_tracer_disable=1,
+            )
 
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
             # Instrument codeflash capture
@@ -1470,3 +1503,45 @@ class FunctionOptimizer:
             paths_to_cleanup.append(test_file.benchmarking_file_path)
 
         cleanup_paths(paths_to_cleanup)
+
+    def get_test_env(
+        self, codeflash_loop_index: int, codeflash_test_iteration: int, codeflash_tracer_disable: int = 1
+    ) -> dict:
+        test_env = os.environ.copy()
+        test_env["CODEFLASH_TEST_ITERATION"] = str(codeflash_test_iteration)
+        test_env["CODEFLASH_TRACER_DISABLE"] = str(codeflash_tracer_disable)
+        test_env["CODEFLASH_LOOP_INDEX"] = str(codeflash_loop_index)
+        if "PYTHONPATH" not in test_env:
+            test_env["PYTHONPATH"] = str(self.args.project_root)
+        else:
+            test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
+        return test_env
+
+    def line_profiler_step(
+        self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
+    ) -> dict:
+        try:
+            test_env = self.get_test_env(
+                codeflash_loop_index=0, codeflash_test_iteration=candidate_index, codeflash_tracer_disable=1
+            )
+            line_profiler_output_file = add_decorator_imports(self.function_to_optimize, code_context)
+            line_profile_results, _ = self.run_and_parse_tests(
+                testing_type=TestingMode.LINE_PROFILE,
+                test_env=test_env,
+                test_files=self.test_files,
+                optimization_iteration=0,
+                testing_time=TOTAL_LOOPING_TIME,
+                enable_coverage=False,
+                code_context=code_context,
+                line_profiler_output_file=line_profiler_output_file,
+            )
+        finally:
+            # Remove codeflash capture
+            self.write_code_and_helpers(
+                self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+            )
+        if line_profile_results["str_out"] == "":
+            logger.warning(
+                f"Couldn't run line profiler for original function {self.function_to_optimize.function_name}"
+            )
+        return line_profile_results
