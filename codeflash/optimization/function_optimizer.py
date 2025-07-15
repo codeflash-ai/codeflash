@@ -547,7 +547,7 @@ class FunctionOptimizer:
                                 id=self.experiment_id, group="control" if exp_type == "EXP0" else "experiment"
                             )
                             if self.experiment_id
-                            else self.function_trace_id,
+                            else None,
                             ai_service_client=ai_service_client,
                             executor=executor,
                         )
@@ -575,7 +575,7 @@ class FunctionOptimizer:
         original_code_baseline: OriginalCodeBaseline,
         code_context: CodeOptimizationContext,
         trace_id: str,
-        experiment_metadata: ExperimentMetadata,
+        experiment_metadata: ExperimentMetadata | None,
         ai_service_client: AiServiceClient,
         executor: concurrent.futures.ThreadPoolExecutor,
     ):

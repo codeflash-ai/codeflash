@@ -13,6 +13,7 @@ from pydantic.json import pydantic_encoder
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key, is_LSP_enabled
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
+from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import OptimizedCandidate
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
@@ -21,7 +22,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.models.ExperimentMetadata import ExperimentMetadata
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,7 @@ class AIServiceRefinerRequest:
     trace_id: str
     original_line_profiler_results: str
     optimized_line_profiler_results: str
-    experiment_metadata: ExperimentMetadata | None = None
+    experiment_metadata: ExperimentMetadata | None
 
 
 class AiServiceClient:
