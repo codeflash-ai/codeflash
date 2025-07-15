@@ -268,7 +268,7 @@ class AiServiceClient:
         logger.info(f"Refining {len(request)} optimizations…")
         console.rule()
         try:
-            response = self.make_ai_service_request("/optimize-refinement", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/refinement", payload=payload, timeout=600)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
