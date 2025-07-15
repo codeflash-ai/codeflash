@@ -269,6 +269,8 @@ def send_completion_email() -> Response:
         owner, repo = get_repo_owner_and_name()
     except Exception as e:
         sentry_sdk.capture_exception(e)
-        return {}
+        response = requests.Response()
+        response.status_code = 500
+        return response
     payload = {"owner": owner, "repo": repo}
     return make_cfapi_request(endpoint="/send-completion-email", method="POST", payload=payload)
