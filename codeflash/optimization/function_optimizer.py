@@ -538,7 +538,7 @@ class FunctionOptimizer:
                     if len(candidates) == 0 and len(self.valid_optimizations) > 0:
                         # TODO: Instead of doing it all at once at the end, do it one by one as the optimizations
                         # are found. This way we can hide the time waiting for the LLM results.
-                        self.refine_optimizations(
+                        refinement_diffs = self.refine_optimizations(
                             valid_optimizations=self.valid_optimizations,
                             original_code_baseline=original_code_baseline,
                             code_context=code_context,
@@ -578,7 +578,7 @@ class FunctionOptimizer:
         experiment_metadata: ExperimentMetadata | None,
         ai_service_client: AiServiceClient,
         executor: concurrent.futures.ThreadPoolExecutor,
-    ):
+    ) -> list[str]:
         request = [
             AIServiceRefinerRequest(
                 original_source_code=code_context.read_writable_code,
@@ -592,12 +592,10 @@ class FunctionOptimizer:
             )
             for opt in valid_optimizations
         ]
-        future_line_profile_results = executor.submit(
-            ai_service_client.optimize_python_code_refinement, request=request
-        )
-        concurrent.futures.wait([future_line_profile_results])
-        line_profile_results = future_line_profile_results.result()
-        print("hi")
+        future_refinement_results = executor.submit(ai_service_client.optimize_python_code_refinement, request=request)
+        concurrent.futures.wait([future_refinement_results])
+        refinement_results = future_refinement_results.result()
+        return refinement_results
 
     def log_successful_optimization(
         self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str

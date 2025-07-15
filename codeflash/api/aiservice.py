@@ -232,7 +232,7 @@ class AiServiceClient:
         console.rule()
         return []
 
-    def optimize_python_code_refinement(self, request: list[AIServiceRefinerRequest]) -> list[OptimizedCandidate]:
+    def optimize_python_code_refinement(self, request: list[AIServiceRefinerRequest]) -> list[str]:
         payload = [
             {
                 "original_source_code": opt.original_source_code,
@@ -275,17 +275,10 @@ class AiServiceClient:
             return []
 
         if response.status_code == 200:
-            optimizations_json = response.json()["optimizations"]
-            logger.info(f"Generated {len(optimizations_json)} candidate optimizations.")
+            refined_optimizations = response.json()["result"]
+            logger.info(f"Generated {len(refined_optimizations)} candidate refinements.")
             console.rule()
-            return [
-                OptimizedCandidate(
-                    source_code=opt["source_code"],
-                    explanation=opt["explanation"],
-                    optimization_id=opt["optimization_id"],
-                )
-                for opt in optimizations_json
-            ]
+            return refined_optimizations
         try:
             error = response.json()["error"]
         except Exception:
