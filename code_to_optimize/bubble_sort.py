@@ -1,10 +1,6 @@
 def sorter(arr):
     print("codeflash stdout: Sorting list")
-    for i in range(len(arr)):
-        for j in range(len(arr) - 1):
-            if arr[j] > arr[j + 1]:
-                temp = arr[j]
-                arr[j] = arr[j + 1]
-                arr[j + 1] = temp
+    arr.sort()  # use in-place Timsort, much faster
     print(f"result: {arr}")
-    return arr
+    summed_value = sum(arr[:3])  # use direct list slice, generator is unnecessary
+    return arr, summed_value
