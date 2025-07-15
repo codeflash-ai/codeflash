@@ -343,7 +343,7 @@ class Optimizer:
                 logger.info("❌ No optimizations found.")
             elif self.args.all:
                 logger.info("✨ All functions have been optimized! ✨")
-                response = send_completion_email()
+                response = send_completion_email()  # TODO: Include more details in the email
                 if response.ok:
                     logger.info("✅ Completion email sent successfully.")
                 else:
