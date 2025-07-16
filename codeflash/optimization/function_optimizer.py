@@ -357,6 +357,8 @@ class FunctionOptimizer:
         file_path_to_helper_classes: dict[Path, set[str]],
         exp_type: str,
     ) -> BestOptimization | None:
+        #TODO remove
+        from codeflash.models.models import OptimizedCandidate
         best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime
 
