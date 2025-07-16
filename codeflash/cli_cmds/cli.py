@@ -71,7 +71,7 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--tests-root", type=str, help="Path to the test directory of the project, where all the tests are located."
     )
-    parser.add_argument("--test-framework", choices=["pytest", "unittest"], default="pytest")
+    parser.add_argument("--test-framework", choices=["pytest", "unittest", "django"], default="pytest")
     parser.add_argument("--config-file", type=str, help="Path to the pyproject.toml with codeflash configs.")
     parser.add_argument("--replay-test", type=str, nargs="+", help="Paths to replay test to optimize functions from")
     parser.add_argument(

@@ -50,6 +50,278 @@ UNITTEST_STRIP_NUMBERED_SUFFIX_REGEX = re.compile(r"_\d+(?:_\w+)*$")
 FUNCTION_NAME_REGEX = re.compile(r"([^.]+)\.([a-zA-Z0-9_]+)$")
 
 
+def is_django_project(project_root: Path) -> bool:
+    """
+    Detect if the project uses Django by checking for Django-specific files and patterns.
+    
+    Args:
+        project_root: The root directory of the project
+        
+    Returns:
+        bool: True if Django project is detected, False otherwise
+    """
+    # Check for manage.py in project root
+    if (project_root / "manage.py").exists():
+        return True
+    
+    # Check for Django settings files
+    settings_patterns = [
+        "settings.py",
+        "settings/__init__.py", 
+        "config/settings.py",
+        "*/settings.py"
+    ]
+    
+    for pattern in settings_patterns:
+        if pattern.endswith("*.py"):
+            # Handle wildcard patterns
+            if list(project_root.rglob(pattern)):
+                return True
+        else:
+            # Handle specific paths
+            if (project_root / pattern).exists():
+                return True
+    
+    # Check for Django apps structure (apps.py files)
+    if list(project_root.rglob("apps.py")):
+        return True
+    
+    # Check for Django-specific files in subdirectories
+    django_files = ["models.py", "views.py", "urls.py", "admin.py"]
+    django_file_count = 0
+    
+    for django_file in django_files:
+        if list(project_root.rglob(django_file)):
+            django_file_count += 1
+    
+    # If we find 2 or more Django-specific files, likely a Django project
+    if django_file_count >= 2:
+        return True
+    
+    return False
+
+
+def configure_django_environment(project_root: Path) -> tuple[bool, str]:
+    """
+    Configure Django environment for test discovery.
+    
+    Args:
+        project_root: The root directory of the Django project
+        
+    Returns:
+        tuple[bool, str]: (success, error_message)
+    """
+    try:
+        import django
+        from django.conf import settings
+        from django.core.management import execute_from_command_line
+        
+        # If Django is already configured, skip
+        if settings.configured:
+            return True, ""
+        
+        # Find Django settings module
+        settings_module = None
+        
+        # Check for manage.py to extract settings module
+        manage_py = project_root / "manage.py"
+        if manage_py.exists():
+            try:
+                with manage_py.open("r", encoding="utf-8") as f:
+                    content = f.read()
+                    # Look for DJANGO_SETTINGS_MODULE
+                    import re
+                    pattern = r"DJANGO_SETTINGS_MODULE['\"]?\s*,\s*['\"]([^'\"]+)['\"]"
+                    match = re.search(pattern, content)
+                    if match:
+                        settings_module = match.group(1)
+            except Exception:
+                pass
+        
+        # Common Django settings module patterns
+        if not settings_module:
+            settings_candidates = [
+                "settings",
+                "config.settings",
+                "core.settings",
+                "myproject.settings",
+                f"{project_root.name}.settings"
+            ]
+            
+            # Look for settings files to determine module path
+            for candidate in settings_candidates:
+                module_path = candidate.replace(".", "/") + ".py"
+                if (project_root / module_path).exists():
+                    settings_module = candidate
+                    break
+        
+        if not settings_module:
+            return False, "Could not find Django settings module"
+        
+        # Set environment variable
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", settings_module)
+        
+        # Add project root to Python path
+        import sys
+        if str(project_root) not in sys.path:
+            sys.path.insert(0, str(project_root))
+        
+        # Configure Django
+        django.setup()
+        
+        return True, ""
+        
+    except ImportError:
+        return False, "Django is not installed"
+    except Exception as e:
+        return False, f"Failed to configure Django environment: {str(e)}"
+
+
+def discover_tests_django(
+    cfg: TestConfig,
+    discover_only_these_tests: list[Path] | None = None,
+    functions_to_optimize: list[FunctionToOptimize] | None = None,
+) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
+    """
+    Discover tests using Django's test discovery system.
+    
+    Args:
+        cfg: Test configuration
+        discover_only_these_tests: Optional list of specific test files to discover
+        functions_to_optimize: Optional list of functions to optimize for import filtering
+        
+    Returns:
+        tuple: (function_to_tests_map, num_discovered_tests, num_discovered_replay_tests)
+    """
+    project_root = cfg.project_root_path
+    tests_root = cfg.tests_root
+    
+    # Configure Django environment
+    success, error_msg = configure_django_environment(project_root)
+    if not success:
+        logger.error(f"Failed to configure Django environment: {error_msg}")
+        # Fallback to pytest discovery
+        logger.info("Falling back to pytest discovery")
+        return discover_tests_pytest(cfg, discover_only_these_tests, functions_to_optimize)
+    
+    try:
+        from django.test.utils import get_runner
+        from django.conf import settings
+        from django.test.runner import DiscoverRunner
+        
+        # Get Django test runner
+        runner_class = get_runner(settings)
+        if not runner_class:
+            runner_class = DiscoverRunner
+        
+        # Create test runner instance
+        runner = runner_class(verbosity=0, interactive=False, keepdb=True)
+        
+        # Discover tests using Django's discovery system
+        test_labels = []
+        if discover_only_these_tests:
+            # Convert file paths to Django test labels
+            for test_file in discover_only_these_tests:
+                try:
+                    # Convert file path to module path
+                    rel_path = test_file.relative_to(project_root)
+                    module_path = str(rel_path.with_suffix("")).replace("/", ".")
+                    test_labels.append(module_path)
+                except ValueError:
+                    # File is not under project root
+                    continue
+        
+        # Use Django's test discovery
+        if test_labels:
+            test_suite = runner.build_suite(test_labels)
+        else:
+            # Discover all tests
+            test_suite = runner.build_suite()
+        
+        # Process Django test suite
+        return process_django_test_suite(test_suite, cfg, functions_to_optimize)
+        
+    except Exception as e:
+        logger.error(f"Django test discovery failed: {str(e)}")
+        logger.info("Falling back to pytest discovery")
+        # Fallback to pytest discovery
+        return discover_tests_pytest(cfg, discover_only_these_tests, functions_to_optimize)
+
+
+def process_django_test_suite(
+    test_suite: unittest.TestSuite,
+    cfg: TestConfig,
+    functions_to_optimize: list[FunctionToOptimize] | None = None,
+) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
+    """
+    Process Django test suite and convert to CodeFlash format.
+    
+    Args:
+        test_suite: Django test suite
+        cfg: Test configuration
+        functions_to_optimize: Optional list of functions to optimize for import filtering
+        
+    Returns:
+        tuple: (function_to_tests_map, num_discovered_tests, num_discovered_replay_tests)
+    """
+    file_to_test_map: dict[Path, list[TestsInFile]] = defaultdict(list)
+    
+    def extract_tests_from_suite(suite: unittest.TestSuite) -> None:
+        """Recursively extract tests from Django test suite."""
+        for test in suite:
+            if isinstance(test, unittest.TestSuite):
+                # Nested test suite - recurse
+                extract_tests_from_suite(test)
+            elif hasattr(test, '_testMethodName'):
+                # Individual test case
+                test_function = test._testMethodName
+                test_class = test.__class__.__qualname__
+                test_module = test.__class__.__module__
+                
+                # Convert module path to file path
+                try:
+                    module_parts = test_module.split('.')
+                    file_path = cfg.project_root_path
+                    for part in module_parts:
+                        file_path = file_path / part
+                    file_path = file_path.with_suffix('.py')
+                    
+                    # Check if file exists
+                    if not file_path.exists():
+                        # Try alternative path resolution
+                        file_path = cfg.tests_root / f"{test_module.replace('.', '/')}.py"
+                        if not file_path.exists():
+                            continue
+                    
+                    # Determine test type
+                    if "__replay_test" in str(file_path):
+                        test_type = TestType.REPLAY_TEST
+                    elif "test_concolic_coverage" in str(file_path):
+                        test_type = TestType.CONCOLIC_COVERAGE_TEST
+                    else:
+                        test_type = TestType.EXISTING_UNIT_TEST
+                    
+                    # Create test entry
+                    test_obj = TestsInFile(
+                        test_file=file_path,
+                        test_class=test_class if test_class != test_function else None,
+                        test_function=test_function,
+                        test_type=test_type,
+                    )
+                    
+                    file_to_test_map[file_path].append(test_obj)
+                    
+                except Exception as e:
+                    logger.debug(f"Failed to process test {test_module}.{test_class}.{test_function}: {e}")
+                    continue
+    
+    # Extract all tests from the Django test suite
+    extract_tests_from_suite(test_suite)
+    
+    # Process using existing CodeFlash test processing logic
+    return process_test_files(file_to_test_map, cfg, functions_to_optimize)
+
+
 class TestsCache:
     def __init__(self) -> None:
         self.connection = sqlite3.connect(codeflash_cache_db)
@@ -342,7 +614,17 @@ def discover_unit_tests(
     discover_only_these_tests: list[Path] | None = None,
     file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None = None,
 ) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
-    framework_strategies: dict[str, Callable] = {"pytest": discover_tests_pytest, "unittest": discover_tests_unittest}
+    # Auto-detect Django projects and override framework if needed
+    original_framework = cfg.test_framework
+    if cfg.test_framework != "django" and is_django_project(cfg.project_root_path):
+        logger.info("Django project detected - using Django test discovery")
+        cfg.test_framework = "django"
+    
+    framework_strategies: dict[str, Callable] = {
+        "pytest": discover_tests_pytest, 
+        "unittest": discover_tests_unittest,
+        "django": discover_tests_django
+    }
     strategy = framework_strategies.get(cfg.test_framework, None)
     if not strategy:
         error_message = f"Unsupported test framework: {cfg.test_framework}"
@@ -352,9 +634,23 @@ def discover_unit_tests(
     functions_to_optimize = None
     if file_to_funcs_to_optimize:
         functions_to_optimize = [func for funcs_list in file_to_funcs_to_optimize.values() for func in funcs_list]
-    function_to_tests, num_discovered_tests, num_discovered_replay_tests = strategy(
-        cfg, discover_only_these_tests, functions_to_optimize
-    )
+    
+    try:
+        function_to_tests, num_discovered_tests, num_discovered_replay_tests = strategy(
+            cfg, discover_only_these_tests, functions_to_optimize
+        )
+    except Exception as e:
+        # If Django discovery fails, restore original framework and retry
+        if cfg.test_framework == "django" and original_framework != "django":
+            logger.warning(f"Django test discovery failed ({e}), falling back to {original_framework}")
+            cfg.test_framework = original_framework
+            strategy = framework_strategies.get(cfg.test_framework, discover_tests_pytest)
+            function_to_tests, num_discovered_tests, num_discovered_replay_tests = strategy(
+                cfg, discover_only_these_tests, functions_to_optimize
+            )
+        else:
+            raise
+    
     return function_to_tests, num_discovered_tests, num_discovered_replay_tests
 
 

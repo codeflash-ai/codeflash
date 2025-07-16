@@ -376,7 +376,7 @@ def collect_setup_info() -> SetupInfo:
         inquirer.List(
             "test_framework",
             message="Which test framework do you use?",
-            choices=[("🧪 pytest", "pytest"), ("🐍 unittest", "unittest")],
+            choices=[("🧪 pytest", "pytest"), ("🐍 unittest", "unittest"), ("🌐 django", "django")],
             default=autodetected_test_framework or "pytest",
             carousel=True,
         )
@@ -491,6 +491,11 @@ def collect_setup_info() -> SetupInfo:
 
 
 def detect_test_framework(curdir: Path, tests_root: Path) -> str | None:
+    # First check for Django project - highest priority
+    from codeflash.discovery.discover_unit_tests import is_django_project
+    if is_django_project(curdir):
+        return "django"
+    
     test_framework = None
     pytest_files = ["pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg"]
     pytest_config_patterns = {
