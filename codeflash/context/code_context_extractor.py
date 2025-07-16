@@ -61,13 +61,14 @@ def get_code_optimization_context(
     )
 
     # Extract code context for optimization
-    final_read_writable_code = extract_code_string_context_from_files(
+    final_read_writable_code = extract_code_markdown_context_from_files(
         helpers_of_fto_dict,
-        {},
+        helpers_of_helpers_dict,
         project_root_path,
         remove_docstrings=False,
         code_context_type=CodeContextType.READ_WRITABLE,
-    ).code
+    )
+
     read_only_code_markdown = extract_code_markdown_context_from_files(
         helpers_of_fto_dict,
         helpers_of_helpers_dict,
@@ -84,14 +85,14 @@ def get_code_optimization_context(
     )
 
     # Handle token limits
-    final_read_writable_tokens = encoded_tokens_len(final_read_writable_code)
+    final_read_writable_tokens = encoded_tokens_len(final_read_writable_code.__str__)
     if final_read_writable_tokens > optim_token_limit:
         raise ValueError("Read-writable code has exceeded token limit, cannot proceed")
 
     # Setup preexisting objects for code replacer
     preexisting_objects = set(
         chain(
-            find_preexisting_objects(final_read_writable_code),
+            find_preexisting_objects(final_read_writable_code.__str__),
             *(find_preexisting_objects(codestring.code) for codestring in read_only_code_markdown.code_strings),
         )
     )

@@ -19,7 +19,7 @@ from re import Pattern
 from typing import Annotated, Optional, cast
 
 from jedi.api.classes import Name
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
@@ -139,8 +139,22 @@ class CodeString(BaseModel):
     file_path: Optional[Path] = None
 
 
+def get_code_block_splitter(file_path: Path) -> str:
+    return f"# codeflash-splitter__{file_path}"
+
+
 class CodeStringsMarkdown(BaseModel):
     code_strings: list[CodeString] = []
+    cached_code: str | None = None
+
+    @property
+    def __str__(self) -> str:
+        if self.cached_code is not None:
+            return self.cached_code
+        self.cached_code = "\n\n".join(
+            get_code_block_splitter(block.file_path) + "\n" + block.code for block in self.code_strings
+        )
+        return self.cached_code
 
     @property
     def markdown(self) -> str:
@@ -155,7 +169,7 @@ class CodeStringsMarkdown(BaseModel):
 
 class CodeOptimizationContext(BaseModel):
     testgen_context_code: str = ""
-    read_writable_code: str = Field(min_length=1)
+    read_writable_code: CodeStringsMarkdown
     read_only_context_code: str = ""
     hashing_code_context: str = ""
     hashing_code_context_hash: str = ""
