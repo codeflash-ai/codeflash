@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from codeflash.context.code_context_extractor import get_code_optimization_context
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionParent
+from codeflash.models.models import FunctionParent, get_code_block_splitter
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.code_utils.code_replacer import replace_functions_and_add_imports
 from codeflash.code_utils.code_extractor import add_global_assignments
@@ -88,7 +88,8 @@ def test_code_replacement10() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
 
-    expected_read_write_context = """
+    expected_read_write_context = f"""
+{get_code_block_splitter(file_path.relative_to(file_path.parent))}
 from __future__ import annotations
 
 class HelperClass:
@@ -125,7 +126,7 @@ class MainClass:
 ```
 """
 
-    assert read_write_context.strip() == expected_read_write_context.strip()
+    assert read_write_context.__str__.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
