@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import concurrent.futures
+import difflib
 import os
 import random
 import subprocess
@@ -567,7 +568,57 @@ class FunctionOptimizer:
                 logger.exception(f"Optimization interrupted: {e}")
                 raise
 
-        #need to figure out best candidate here before we return best_optimization
+        def diff_length(a: str, b: str) -> int:
+            """
+            Compute the length (in characters) of the unified diff between two strings.
+
+            Parameters:
+                a (str): Original string.
+                b (str): Modified string.
+
+            Returns:
+                int: Total number of characters in the diff.
+            """
+            # Split input strings into lines for line-by-line diff
+            a_lines = a.splitlines(keepends=True)
+            b_lines = b.splitlines(keepends=True)
+
+            # Compute unified diff
+            diff_lines = list(difflib.unified_diff(a_lines, b_lines, lineterm=""))
+
+            # Join all lines with newline to calculate total diff length
+            diff_text = "\n".join(diff_lines)
+
+            return len(diff_text)
+
+        def create_rank_dictionary_compact(int_array: list[int]) -> dict[int, int]:
+            """
+            Creates a dictionary from a list of ints, mapping the original index to its rank.
+            This version uses a more compact, "Pythonic" implementation.
+
+            Args:
+                int_array: A list of integers.
+
+            Returns:
+                A dictionary where keys are original indices and values are the
+                rank of the element in ascending order.
+            """
+            # Sort the indices of the array based on their corresponding values
+            sorted_indices = sorted(range(len(int_array)), key=lambda i: int_array[i])
+
+            # Create a dictionary mapping the original index to its rank (its position in the sorted list)
+            return {original_index: rank for rank, original_index in enumerate(sorted_indices)}
+
+        #need to figure out the best candidate here before we return best_optimization
+        diff_lens_list = []
+        runtimes_list = []
+        for valid_opt in self.valid_optimizations:
+            diff_lens_list.append(diff_length(valid_opt.candidate.source_code, code_context.read_writable_code))
+            runtimes_list.append(valid_opt.runtime)
+        diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
+        runtimes_ranking = create_rank_dictionary_compact(runtimes_list)
+        overall_ranking = {key:diff_lens_ranking[key] + runtimes_ranking[key] for key in diff_lens_ranking.keys()}
+        min_key = min(overall_ranking, key=overall_ranking.get)
         ai_service_client.log_results(
             function_trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
             speedup_ratio=speedup_ratios,
@@ -575,7 +626,7 @@ class FunctionOptimizer:
             optimized_runtime=optimized_runtimes,
             is_correct=is_correct,
         )
-        return best_optimization
+        return self.valid_optimizations[min_key]
 
     def refine_optimizations(
         self,
