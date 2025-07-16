@@ -240,6 +240,9 @@ def add_code_context_hash(code_context_hash: str) -> None:
         return
     try:
         owner, repo = get_repo_owner_and_name()
+        # don't add the context hash for codeflash repo
+        if f"{owner}/{repo}" != "codeflash-ai/codeflash":
+            return
         pr_number = get_pr_number()
     except git.exc.InvalidGitRepositoryError:
         return

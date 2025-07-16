@@ -335,9 +335,7 @@ class FunctionOptimizer:
             test_functions_to_remove=test_functions_to_remove,
             concolic_test_str=concolic_test_str,
         )
-
-        # Add function to code context hash if in gh actions
-
+        # don't add the context hash for codeflash repo
         add_code_context_hash(code_context.hashing_code_context_hash)
 
         if self.args.override_fixtures:
