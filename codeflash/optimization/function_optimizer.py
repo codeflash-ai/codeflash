@@ -370,6 +370,7 @@ class FunctionOptimizer:
         )
         console.rule()
         candidates = deque(candidates)
+        refinement_done = False
         # Start a new thread for AI service request, start loop in main thread
         # check if aiservice request is complete, when it is complete, append result to the candidates list
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
@@ -535,7 +536,7 @@ class FunctionOptimizer:
                         )
                         future_line_profile_results = None
 
-                    if len(candidates) == 0 and len(self.valid_optimizations) > 0:
+                    if len(candidates) == 0 and len(self.valid_optimizations) > 0 and not refinement_done:
                         # TODO: Instead of doing it all at once at the end, do it one by one as the optimizations
                         # are found. This way we can hide the time waiting for the LLM results.
                         refinement_diffs = self.refine_optimizations(
@@ -551,8 +552,12 @@ class FunctionOptimizer:
                             ai_service_client=ai_service_client,
                             executor=executor,
                         )
-
-                        print("hi")
+                        more_opt_candidates = [OptimizedCandidate(source_code=refinement_diffs[i], explanation=self.valid_optimizations[i].candidate.explanation, optimization_id=self.valid_optimizations[i].candidate.optimization_id) for i in range(len(refinement_diffs))]
+                        # we no longer need to apply diffs since we are generating the entire code again
+                        candidates.extend(more_opt_candidates)
+                        print("added candidates from refinement")
+                        original_len += len(more_opt_candidates)
+                        refinement_done = True
             except KeyboardInterrupt as e:
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
@@ -560,6 +565,7 @@ class FunctionOptimizer:
                 logger.exception(f"Optimization interrupted: {e}")
                 raise
 
+        #need to figure out best candidate here before we return best_optimization
         ai_service_client.log_results(
             function_trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
             speedup_ratio=speedup_ratios,
