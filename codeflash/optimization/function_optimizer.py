@@ -619,6 +619,8 @@ class FunctionOptimizer:
             # Create a dictionary mapping the original index to its rank (its position in the sorted list)
             return {original_index: rank for rank, original_index in enumerate(sorted_indices)}
 
+        if not len(self.valid_optimizations):
+            return None
         # need to figure out the best candidate here before we return best_optimization
         diff_lens_list = []
         runtimes_list = []
