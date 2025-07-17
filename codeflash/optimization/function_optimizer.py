@@ -651,7 +651,7 @@ class FunctionOptimizer:
         request = [
             AIServiceRefinerRequest(
                 original_source_code=code_context.read_writable_code,
-                original_read_only_dependency_code=code_context.read_only_context_code,
+                read_only_dependency_code=code_context.read_only_context_code,
                 original_code_runtime=humanize_runtime(original_code_baseline.runtime),
                 optimized_source_code=opt.candidate.source_code,
                 optimized_explanation=opt.candidate.explanation,

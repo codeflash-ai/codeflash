@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class AIServiceRefinerRequest:
     original_source_code: str
-    original_read_only_dependency_code: str
+    read_only_dependency_code: str
     original_code_runtime: str
     optimized_source_code: str
     optimized_explanation: str
