@@ -239,7 +239,7 @@ class AiServiceClient:
         payload = [
             {
                 "original_source_code": opt.original_source_code,
-                "original_read_only_dependency_code": opt.original_read_only_dependency_code,
+                "read_only_dependency_code": opt.read_only_dependency_code,
                 "original_line_profiler_results": opt.original_line_profiler_results,
                 "original_code_runtime": opt.original_code_runtime,
                 "optimized_source_code": opt.optimized_source_code,
