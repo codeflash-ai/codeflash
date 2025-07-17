@@ -556,6 +556,7 @@ class FunctionOptimizer:
                             ai_service_client=ai_service_client,
                             executor=executor,
                         )
+                        # filter out empty strings of code
                         more_opt_candidates = [
                             OptimizedCandidate(
                                 source_code=refinement_diffs[i],
@@ -563,6 +564,7 @@ class FunctionOptimizer:
                                 optimization_id=self.valid_optimizations[i].candidate.optimization_id,
                             )
                             for i in range(len(refinement_diffs))
+                            if refinement_diffs[i] != ""
                         ]
                         # we no longer need to apply diffs since we are generating the entire code again
                         candidates.extend(more_opt_candidates)
