@@ -357,8 +357,9 @@ class FunctionOptimizer:
         file_path_to_helper_classes: dict[Path, set[str]],
         exp_type: str,
     ) -> BestOptimization | None:
-        #TODO remove
+        # TODO remove
         from codeflash.models.models import OptimizedCandidate
+
         best_optimization: BestOptimization | None = None
         best_runtime_until_now = original_code_baseline.runtime
 
@@ -554,7 +555,14 @@ class FunctionOptimizer:
                             ai_service_client=ai_service_client,
                             executor=executor,
                         )
-                        more_opt_candidates = [OptimizedCandidate(source_code=refinement_diffs[i], explanation=self.valid_optimizations[i].candidate.explanation, optimization_id=self.valid_optimizations[i].candidate.optimization_id) for i in range(len(refinement_diffs))]
+                        more_opt_candidates = [
+                            OptimizedCandidate(
+                                source_code=refinement_diffs[i],
+                                explanation=self.valid_optimizations[i].candidate.explanation,
+                                optimization_id=self.valid_optimizations[i].candidate.optimization_id,
+                            )
+                            for i in range(len(refinement_diffs))
+                        ]
                         # we no longer need to apply diffs since we are generating the entire code again
                         candidates.extend(more_opt_candidates)
                         print("added candidates from refinement")
@@ -567,7 +575,7 @@ class FunctionOptimizer:
                 logger.exception(f"Optimization interrupted: {e}")
                 raise
 
-        #need to figure out best candidate here before we return best_optimization
+        # need to figure out best candidate here before we return best_optimization
         ai_service_client.log_results(
             function_trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
             speedup_ratio=speedup_ratios,
@@ -591,8 +599,11 @@ class FunctionOptimizer:
             AIServiceRefinerRequest(
                 original_source_code=code_context.read_writable_code,
                 original_read_only_dependency_code=code_context.read_only_context_code,
+                original_code_runtime=humanize_runtime(original_code_baseline.runtime),
                 optimized_source_code=opt.candidate.source_code,
                 optimized_explanation=opt.candidate.explanation,
+                optimized_code_runtime=humanize_runtime(opt.runtime),
+                speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=opt.runtime) * 100)}%",
                 trace_id=trace_id,
                 original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
                 optimized_line_profiler_results=opt.line_profiler_test_results["str_out"],

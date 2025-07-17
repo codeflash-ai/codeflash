@@ -28,8 +28,11 @@ if TYPE_CHECKING:
 class AIServiceRefinerRequest:
     original_source_code: str
     original_read_only_dependency_code: str
+    original_code_runtime: str
     optimized_source_code: str
     optimized_explanation: str
+    optimized_code_runtime: str
+    speedup: str
     trace_id: str
     original_line_profiler_results: str
     optimized_line_profiler_results: str
@@ -238,9 +241,12 @@ class AiServiceClient:
                 "original_source_code": opt.original_source_code,
                 "original_read_only_dependency_code": opt.original_read_only_dependency_code,
                 "original_line_profiler_results": opt.original_line_profiler_results,
+                "original_code_runtime": opt.original_code_runtime,
                 "optimized_source_code": opt.optimized_source_code,
                 "optimized_explanation": opt.optimized_explanation,
                 "optimized_line_profiler_results": opt.optimized_line_profiler_results,
+                "optimized_code_runtime": opt.optimized_code_runtime,
+                "speedup": opt.speedup,
                 "trace_id": opt.trace_id,
                 "python_version": platform.python_version(),
                 "experiment_metadata": opt.experiment_metadata,
