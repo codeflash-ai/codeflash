@@ -4,13 +4,24 @@ import os
 import sqlite3
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
 from codeflash.code_utils.code_utils import module_name_from_file_path
-from codeflash.models.models import BenchmarkKey
+
+# from codeflash.models.models import BenchmarkKey
+
+
+@dataclass
+class BenchmarkKey:
+    module_path: str
+    function_name: str
+
+    def __str__(self) -> str:
+        return f"{self.module_path}::{self.function_name}"
 
 
 class CodeFlashBenchmarkPlugin:
