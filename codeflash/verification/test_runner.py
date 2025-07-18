@@ -25,7 +25,31 @@ def execute_test_subprocess(
     """Execute a subprocess with the given command list, working directory, environment variables, and timeout."""
     with custom_addopts():
         logger.debug(f"executing test run with command: {' '.join(cmd_list)}")
-        return subprocess.run(cmd_list, capture_output=True, cwd=cwd, env=env, text=True, timeout=timeout, check=False)
+        # Use explicit pipe management to prevent FD leaks
+        proc = subprocess.Popen(
+            cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE, cwd=cwd, env=env, text=True
+        )
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+            returncode = proc.returncode
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            try:
+                stdout, stderr = proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.terminate()
+                stdout, stderr = "", "Process terminated due to timeout"
+            returncode = -1
+        finally:
+            # Ensure all pipes are closed
+            if proc.stdin:
+                proc.stdin.close()
+            if proc.stdout:
+                proc.stdout.close()
+            if proc.stderr:
+                proc.stderr.close()
+
+        return subprocess.CompletedProcess(cmd_list, returncode, stdout, stderr)
 
 
 def run_behavioral_tests(
