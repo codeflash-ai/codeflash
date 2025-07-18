@@ -7,11 +7,13 @@ import time
 from typing import TYPE_CHECKING, Any
 
 import requests
+from pydantic.dataclasses import dataclass
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key, is_LSP_enabled
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
+from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import OptimizedCandidate
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
@@ -20,7 +22,22 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.models.ExperimentMetadata import ExperimentMetadata
+
+
+@dataclass(frozen=True)
+class AIServiceRefinerRequest:
+    original_source_code: str
+    read_only_dependency_code: str
+    original_code_runtime: str
+    optimized_source_code: str
+    optimized_explanation: str
+    optimized_code_runtime: str
+    speedup: str
+    trace_id: str
+    fto_name: str
+    original_line_profiler_results: str
+    optimized_line_profiler_results: str
+    experiment_metadata: ExperimentMetadata | None
 
 
 class AiServiceClient:
@@ -98,11 +115,7 @@ class AiServiceClient:
 
         """
         start_time = time.perf_counter()
-        try:
-            git_repo_owner, git_repo_name = get_repo_owner_and_name()
-        except Exception as e:
-            logger.warning(f"Could not determine repo owner and name: {e}")
-            git_repo_owner, git_repo_name = None, None
+        git_repo_owner, git_repo_name = safe_get_repo_owner_and_name()
 
         payload = {
             "source_code": source_code,
@@ -210,6 +223,70 @@ class AiServiceClient:
                 )
                 for opt in optimizations_json
             ]
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return []
+
+    def optimize_python_code_refinement(self, request: list[AIServiceRefinerRequest]) -> list[str]:
+        git_repo_owner, git_repo_name = safe_get_repo_owner_and_name()
+        payload = [
+            {
+                "original_source_code": opt.original_source_code,
+                "read_only_dependency_code": opt.read_only_dependency_code,
+                "original_line_profiler_results": opt.original_line_profiler_results,
+                "original_code_runtime": opt.original_code_runtime,
+                "optimized_source_code": opt.optimized_source_code,
+                "optimized_explanation": opt.optimized_explanation,
+                "optimized_line_profiler_results": opt.optimized_line_profiler_results,
+                "optimized_code_runtime": opt.optimized_code_runtime,
+                "speedup": opt.speedup,
+                "python_version": platform.python_version(),
+                "experiment_metadata": opt.experiment_metadata,
+                "codeflash_version": codeflash_version,
+                "lsp_mode": is_LSP_enabled(),
+                # needed for tracking the refinement behavior
+                "trace_id": opt.trace_id,
+                "function_to_optimize": opt.fto_name,
+                "repo_owner": git_repo_owner,
+                "repo_name": git_repo_name,
+            }
+            for opt in request
+        ]
+        """Optimize the given python code for performance by making a request to the Django endpoint.
+
+        Parameters
+        ----------
+        - source_code (str): The python code to optimize.
+        - dependency_code (str): The dependency code used as read-only context for the optimization
+        - trace_id (str): Trace id of optimization run
+        - num_candidates (int): Number of optimization variants to generate. Default is 10.
+        - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
+
+        Returns
+        -------
+        - List[OptimizationCandidate]: A list of Optimization Candidates.
+
+        """
+
+        logger.info(f"Refining {len(request)} optimizations…")
+        console.rule()
+        try:
+            response = self.make_ai_service_request("/refinement", payload=payload, timeout=600)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating optimization refinements: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
+            return []
+
+        if response.status_code == 200:
+            refined_optimizations = response.json()["result"]
+            logger.info(f"Generated {len(refined_optimizations)} candidate refinements.")
+            console.rule()
+            return refined_optimizations
         try:
             error = response.json()["error"]
         except Exception:
@@ -331,3 +408,12 @@ class LocalAiServiceClient(AiServiceClient):
     def get_aiservice_base_url(self) -> str:
         """Get the base URL for the local AI service."""
         return "http://localhost:8000"
+
+
+def safe_get_repo_owner_and_name() -> tuple[str | None, str | None]:
+    try:
+        git_repo_owner, git_repo_name = get_repo_owner_and_name()
+    except Exception as e:
+        logger.warning(f"Could not determine repo owner and name: {e}")
+        git_repo_owner, git_repo_name = None, None
+    return git_repo_owner, git_repo_name
