@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime as dt
 import re
 
@@ -58,42 +60,27 @@ def format_time(nanoseconds: int) -> str:
         raise TypeError("Input must be an integer.")
     if nanoseconds < 0:
         raise ValueError("Input must be a positive integer.")
-    conversions = [(1_000_000_000, "s"), (1_000_000, "ms"), (1_000, "μs"), (1, "ns")]
 
-    # Handle nanoseconds case directly (no decimal formatting needed)
     if nanoseconds < 1_000:
         return f"{nanoseconds}ns"
-
-    # Find appropriate unit
-    for divisor, unit in conversions:
-        if nanoseconds >= divisor:
-            value = nanoseconds / divisor
-            int_value = nanoseconds // divisor
-
-            # Use integer formatting for values >= 100
-            if int_value >= 100:
-                formatted_value = f"{int_value:.0f}"
-            # Format with precision for 3 significant digits
-            elif value >= 100:
-                formatted_value = f"{value:.0f}"
-            elif value >= 10:
-                formatted_value = f"{value:.1f}"
-            else:
-                formatted_value = f"{value:.2f}"
-
-            return f"{formatted_value}{unit}"
-
-    # This should never be reached, but included for completeness
-    return f"{nanoseconds}ns"
+    if nanoseconds < 1_000_000:
+        value = nanoseconds / 1_000
+        return f"{value:.2f}μs" if value < 10 else (f"{value:.1f}μs" if value < 100 else f"{int(value)}μs")
+    if nanoseconds < 1_000_000_000:
+        value = nanoseconds / 1_000_000
+        return f"{value:.2f}ms" if value < 10 else (f"{value:.1f}ms" if value < 100 else f"{int(value)}ms")
+    value = nanoseconds / 1_000_000_000
+    return f"{value:.2f}s" if value < 10 else (f"{value:.1f}s" if value < 100 else f"{int(value)}s")
 
 
 def format_perf(percentage: float) -> str:
     """Format percentage into a human-readable string with 3 significant digits when needed."""
-    percentage_abs = abs(percentage)
-    if percentage_abs >= 100:
+    # Branch order optimized
+    abs_perc = abs(percentage)
+    if abs_perc >= 100:
         return f"{percentage:.0f}"
-    if percentage_abs >= 10:
+    if abs_perc >= 10:
         return f"{percentage:.1f}"
-    if percentage_abs >= 1:
+    if abs_perc >= 1:
         return f"{percentage:.2f}"
     return f"{percentage:.3f}"

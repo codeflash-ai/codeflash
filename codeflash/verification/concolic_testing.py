@@ -84,7 +84,7 @@ def generate_concolic_tests(
                 test_framework=args.test_framework,
                 pytest_cmd=args.pytest_cmd,
             )
-            function_to_concolic_tests, num_discovered_concolic_tests = discover_unit_tests(concolic_test_cfg)
+            function_to_concolic_tests, num_discovered_concolic_tests, _ = discover_unit_tests(concolic_test_cfg)
             logger.info(
                 f"Created {num_discovered_concolic_tests} "
                 f"concolic unit test case{'s' if num_discovered_concolic_tests != 1 else ''} "

@@ -89,8 +89,7 @@ def run_codeflash_command(
 
     command = build_command(cwd, config, test_root, config.benchmarks_root if config.benchmarks_root else None)
     process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy(),
-        encoding='utf-8', errors='replace'
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
     )
 
     output = []
@@ -121,8 +120,9 @@ def run_codeflash_command(
 def build_command(
     cwd: pathlib.Path, config: TestConfig, test_root: pathlib.Path, benchmarks_root: pathlib.Path | None = None
 ) -> list[str]:
-    # Use the installed codeflash entry point instead of running the script directly
-    base_command = ["codeflash", "--file", config.file_path, "--no-pr"]
+    python_path = "../../../codeflash/main.py" if "code_directories" in str(cwd) else "../codeflash/main.py"
+
+    base_command = ["python", python_path, "--file", config.file_path, "--no-pr"]
 
     if config.function_name:
         base_command.extend(["--function", config.function_name])
@@ -185,13 +185,11 @@ def validate_stdout_in_candidate(stdout: str, expected_in_stdout: list[str]) -> 
 
 
 def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_pct: int) -> bool:
-    # First command: Run the tracer
     test_root = cwd / "tests" / (config.test_framework or "")
     clear_directory(test_root)
-    command = ["python", "-m", "codeflash.tracer", "-o", "codeflash.trace", "workload.py"]
+    command = ["python", "-m", "codeflash.main", "optimize", "workload.py"]
     process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy(),
-        encoding='utf-8', errors='replace'
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
     )
 
     output = []
@@ -203,34 +201,20 @@ def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_p
     stdout = "".join(output)
 
     if return_code != 0:
-        logging.error(f"Tracer command returned exit code {return_code}")
+        logging.error(f"Tracer with optimization command returned exit code {return_code}")
         return False
 
-    functions_traced = re.search(r"Traced (\d+) function calls successfully and replay test created at - (.*)$", stdout)
-    if not functions_traced or int(functions_traced.group(1)) != 13:
+    functions_traced = re.search(r"Traced (\d+) function calls successfully", stdout)
+    logging.info(functions_traced.groups() if functions_traced else "No functions traced")
+    if not functions_traced:
+        logging.error("Failed to find traced functions in output")
+        return False
+    if int(functions_traced.group(1)) != 13:
+        logging.error(functions_traced.groups())
         logging.error("Expected 13 traced functions")
         return False
 
-    replay_test_path = pathlib.Path(functions_traced.group(2))
-    if not replay_test_path.exists():
-        logging.error(f"Replay test file missing at {replay_test_path}")
-        return False
-
-    # Second command: Run optimization
-    command = ["codeflash", "--replay-test", str(replay_test_path), "--no-pr"]
-    process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy(),
-        encoding='utf-8', errors='replace'
-    )
-
-    output = []
-    for line in process.stdout:
-        logging.info(line.strip())
-        output.append(line)
-
-    return_code = process.wait()
-    stdout = "".join(output)
-
+    # Validate optimization results (from optimization phase)
     return validate_output(stdout, return_code, expected_improvement_pct, config)
 
 

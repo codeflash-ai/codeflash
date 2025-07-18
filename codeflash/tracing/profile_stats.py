@@ -27,6 +27,7 @@ class ProfileStats(pstats.Stats):
             filename,
             line_number,
             function,
+            class_name,
             call_count_nonrecursive,
             num_callers,
             total_time_ns,
@@ -34,8 +35,19 @@ class ProfileStats(pstats.Stats):
             callers,
         ) in pdata:
             loaded_callers = json.loads(callers)
-            unmapped_callers = {caller["key"]: caller["value"] for caller in loaded_callers}
-            self.stats[(filename, line_number, function)] = (
+            unmapped_callers = {}
+            for caller in loaded_callers:
+                caller_key = caller["key"]
+                if isinstance(caller_key, list):
+                    caller_key = tuple(caller_key)
+                elif not isinstance(caller_key, tuple):
+                    caller_key = (caller_key,) if not isinstance(caller_key, (list, tuple)) else tuple(caller_key)
+                unmapped_callers[caller_key] = caller["value"]
+
+            # Create function key with class name if present (matching tracer.py format)
+            function_name = f"{class_name}.{function}" if class_name else function
+
+            self.stats[(filename, line_number, function_name)] = (
                 call_count_nonrecursive,
                 num_callers,
                 total_time_ns / time_conversion_factor if time_conversion_factor != 1 else total_time_ns,

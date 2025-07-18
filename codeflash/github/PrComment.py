@@ -18,14 +18,14 @@ class PrComment:
     relative_file_path: str
     speedup_x: str
     speedup_pct: str
-    winning_behavioral_test_results: TestResults
+    winning_behavior_test_results: TestResults
     winning_benchmarking_test_results: TestResults
     benchmark_details: Optional[list[BenchmarkDetail]] = None
 
     def to_json(self) -> dict[str, Union[dict[str, dict[str, int]], int, str, Optional[list[BenchmarkDetail]]]]:
         report_table = {
             test_type.to_name(): result
-            for test_type, result in self.winning_behavioral_test_results.get_test_pass_fail_report_by_type().items()
+            for test_type, result in self.winning_behavior_test_results.get_test_pass_fail_report_by_type().items()
             if test_type.to_name()
         }
 

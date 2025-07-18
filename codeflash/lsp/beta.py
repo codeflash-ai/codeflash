@@ -52,7 +52,7 @@ def get_optimizable_functions(
         server.optimizer.args.previous_checkpoint_functions = False
 
         server.show_message_log("Calling get_optimizable_functions...", "Info")
-        optimizable_funcs, _ = server.optimizer.get_optimizable_functions()
+        optimizable_funcs, _, _ = server.optimizer.get_optimizable_functions()
 
         path_to_qualified_names = {}
         for path, functions in optimizable_funcs.items():
@@ -93,7 +93,7 @@ def initialize_function_optimization(
         f"Args set - function: {server.optimizer.args.function}, file: {server.optimizer.args.file}", "Info"
     )
 
-    optimizable_funcs, _ = server.optimizer.get_optimizable_functions()
+    optimizable_funcs, _, _ = server.optimizer.get_optimizable_functions()
     if not optimizable_funcs:
         server.show_message_log(f"No optimizable functions found for {params.functionName}", "Warning")
         return {"functionName": params.functionName, "status": "not found", "args": None}

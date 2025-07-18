@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from .version import __version__
+from codeflash.version import __version__
 
 
 def main() -> None:

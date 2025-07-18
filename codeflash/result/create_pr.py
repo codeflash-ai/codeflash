@@ -163,7 +163,7 @@ def check_create_pr(
                 relative_file_path=relative_path,
                 speedup_x=explanation.speedup_x,
                 speedup_pct=explanation.speedup_pct,
-                winning_behavioral_test_results=explanation.winning_behavioral_test_results,
+                winning_behavior_test_results=explanation.winning_behavior_test_results,
                 winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
                 benchmark_details=explanation.benchmark_details,
             ),
@@ -185,7 +185,7 @@ def check_create_pr(
         owner, repo = get_repo_owner_and_name(git_repo, git_remote)
         logger.info(f"Pushing to {git_remote} - Owner: {owner}, Repo: {repo}")
         console.rule()
-        if not check_and_push_branch(git_repo, wait_for_push=True):
+        if not check_and_push_branch(git_repo, git_remote, wait_for_push=True):
             logger.warning("⏭️ Branch is not pushed, skipping PR creation...")
             return
         relative_path = explanation.file_path.relative_to(git_root_dir()).as_posix()
@@ -210,7 +210,7 @@ def check_create_pr(
                 relative_file_path=relative_path,
                 speedup_x=explanation.speedup_x,
                 speedup_pct=explanation.speedup_pct,
-                winning_behavioral_test_results=explanation.winning_behavioral_test_results,
+                winning_behavior_test_results=explanation.winning_behavior_test_results,
                 winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
                 benchmark_details=explanation.benchmark_details,
             ),

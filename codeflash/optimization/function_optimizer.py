@@ -488,7 +488,7 @@ class FunctionOptimizer:
                                 candidate=candidate,
                                 helper_functions=code_context.helper_functions,
                                 runtime=best_test_runtime,
-                                winning_behavioral_test_results=candidate_result.behavior_test_results,
+                                winning_behavior_test_results=candidate_result.behavior_test_results,
                                 replay_performance_gain=replay_perf_gain if self.args.benchmark else None,
                                 winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
                                 winning_replay_benchmarking_test_results=candidate_result.benchmarking_test_results,
@@ -575,7 +575,7 @@ class FunctionOptimizer:
                 "original_runtime": explanation.original_runtime_ns,
                 "winning_test_results": {
                     tt.to_name(): v
-                    for tt, v in explanation.winning_behavioral_test_results.get_test_pass_fail_report_by_type().items()
+                    for tt, v in explanation.winning_behavior_test_results.get_test_pass_fail_report_by_type().items()
                 },
             },
         )
@@ -898,13 +898,14 @@ class FunctionOptimizer:
             return Failure(baseline_result.failure())
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
-        if isinstance(original_code_baseline, OriginalCodeBaseline) and not coverage_critic(
-            original_code_baseline.coverage_results, self.args.test_framework
+        if isinstance(original_code_baseline, OriginalCodeBaseline) and (
+            not coverage_critic(original_code_baseline.coverage_results, self.args.test_framework)
+            or not quantity_of_tests_critic(original_code_baseline)
         ):
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
-            return Failure("The threshold for test coverage was not met.")
+            return Failure("The threshold for test confidence was not met.")
 
         return Success(
             (
@@ -971,7 +972,7 @@ class FunctionOptimizer:
                     )
                 explanation = Explanation(
                     raw_explanation_message=best_optimization.candidate.explanation,
-                    winning_behavioral_test_results=best_optimization.winning_behavioral_test_results,
+                    winning_behavior_test_results=best_optimization.winning_behavior_test_results,
                     winning_benchmarking_test_results=best_optimization.winning_benchmarking_test_results,
                     original_runtime_ns=original_code_baseline.runtime,
                     best_runtime_ns=best_optimization.runtime,
@@ -1015,11 +1016,7 @@ class FunctionOptimizer:
                     qualified_name = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
                     # Add runtime comments to generated tests before creating the PR
                     generated_tests = add_runtime_comments_to_generated_tests(
-                        qualified_name,
-                        self.test_cfg,
-                        generated_tests,
-                        original_runtime_by_test,
-                        optimized_runtime_by_test,
+                        generated_tests, original_runtime_by_test, optimized_runtime_by_test
                     )
                     generated_tests_str = "\n\n".join(
                         [test.generated_original_test_source for test in generated_tests.generated_tests]
@@ -1046,7 +1043,12 @@ class FunctionOptimizer:
                         coverage_message=coverage_message,
                         git_remote=self.args.git_remote,
                     )
-                    if self.args.all or env_utils.get_pr_number() or (self.args.file and not self.args.function):
+                    if (
+                        self.args.all
+                        or env_utils.get_pr_number()
+                        or self.args.replay_test
+                        or (self.args.file and not self.args.function)
+                    ):
                         self.write_code_and_helpers(
                             self.function_to_optimize_source_code,
                             original_helper_code,
@@ -1203,7 +1205,7 @@ class FunctionOptimizer:
             return Success(
                 (
                     OriginalCodeBaseline(
-                        behavioral_test_results=behavioral_results,
+                        behavior_test_results=behavioral_results,
                         benchmarking_test_results=benchmarking_results,
                         replay_benchmarking_test_results=replay_benchmarking_test_results
                         if self.args.benchmark
@@ -1267,7 +1269,7 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
-            if compare_test_results(baseline_results.behavioral_test_results, candidate_behavior_results):
+            if compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results):
                 logger.info("Test results matched!")
                 console.rule()
             else:

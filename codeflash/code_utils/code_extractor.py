@@ -324,7 +324,11 @@ def add_needed_imports_from_module(
             full_package_name=src_module_and_package.package,
         )
     )
-    cst.parse_module(src_module_code).visit(gatherer)
+    try:
+        cst.parse_module(src_module_code).visit(gatherer)
+    except Exception as e:
+        logger.error(f"Error parsing source module code: {e}")
+        return dst_module_code
     try:
         for mod in gatherer.module_imports:
             AddImportsVisitor.add_needed_import(dst_context, mod)

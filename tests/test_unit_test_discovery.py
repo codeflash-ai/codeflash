@@ -7,9 +7,9 @@ from codeflash.discovery.discover_unit_tests import (
     discover_unit_tests,
     filter_test_files_by_imports,
 )
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import TestsInFile, TestType
 from codeflash.verification.verification_utils import TestConfig
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 
 def test_unit_test_discovery_pytest():
@@ -21,7 +21,7 @@ def test_unit_test_discovery_pytest():
         test_framework="pytest",
         tests_project_rootdir=tests_path.parent,
     )
-    tests, _ = discover_unit_tests(test_config)
+    tests, _, _ = discover_unit_tests(test_config)
     assert len(tests) > 0
 
 
@@ -34,8 +34,8 @@ def test_benchmark_test_discovery_pytest():
         test_framework="pytest",
         tests_project_rootdir=tests_path.parent,
     )
-    tests, _ = discover_unit_tests(test_config)
-    assert len(tests) == 1 # Should not discover benchmark tests
+    tests, _, _ = discover_unit_tests(test_config)
+    assert len(tests) == 1  # Should not discover benchmark tests
 
 
 def test_unit_test_discovery_unittest():
@@ -48,9 +48,10 @@ def test_unit_test_discovery_unittest():
         tests_project_rootdir=project_path.parent,
     )
     os.chdir(project_path)
-    tests, _ = discover_unit_tests(test_config)
+    tests, _, _ = discover_unit_tests(test_config)
     # assert len(tests) > 0
     # Unittest discovery within a pytest environment does not work
+
 
 def test_benchmark_unit_test_discovery_pytest():
     with tempfile.TemporaryDirectory() as tmpdirname:
@@ -86,14 +87,15 @@ def sorter(arr):
         )
 
         # Discover tests
-        tests, _ = discover_unit_tests(test_config)
+        tests, _, _ = discover_unit_tests(test_config)
         assert len(tests) == 1
-        assert 'bubble_sort.sorter' in tests
-        assert len(tests['bubble_sort.sorter']) == 2
-        functions = [test.tests_in_file.test_function for test in tests['bubble_sort.sorter']]
-        assert 'test_normal_test' in functions
-        assert 'test_normal_test2' in functions
-        assert 'test_benchmark_sort' not in functions
+        assert "bubble_sort.sorter" in tests
+        assert len(tests["bubble_sort.sorter"]) == 2
+        functions = [test.tests_in_file.test_function for test in tests["bubble_sort.sorter"]]
+        assert "test_normal_test" in functions
+        assert "test_normal_test2" in functions
+        assert "test_benchmark_sort" not in functions
+
 
 def test_discover_tests_pytest_with_temp_dir_root():
     with tempfile.TemporaryDirectory() as tmpdirname:
@@ -125,14 +127,17 @@ def test_discover_tests_pytest_with_temp_dir_root():
         )
 
         # Discover tests
-        discovered_tests, _ = discover_unit_tests(test_config)
+        discovered_tests, _, _ = discover_unit_tests(test_config)
 
         # Check if the dummy test file is discovered
         assert len(discovered_tests) == 1
         assert len(discovered_tests["dummy_code.dummy_function"]) == 2
         dummy_tests = discovered_tests["dummy_code.dummy_function"]
         assert all(test.tests_in_file.test_file == test_file_path for test in dummy_tests)
-        assert {test.tests_in_file.test_function for test in dummy_tests} == {"test_dummy_parametrized_function[True]", "test_dummy_function"}
+        assert {test.tests_in_file.test_function for test in dummy_tests} == {
+            "test_dummy_parametrized_function[True]",
+            "test_dummy_function",
+        }
 
 
 def test_discover_tests_pytest_with_multi_level_dirs():
@@ -195,13 +200,14 @@ def test_discover_tests_pytest_with_multi_level_dirs():
         )
 
         # Discover tests
-        discovered_tests, _ = discover_unit_tests(test_config)
+        discovered_tests, _, _ = discover_unit_tests(test_config)
 
         # Check if the test files at all levels are discovered
         assert len(discovered_tests) == 3
         assert next(iter(discovered_tests["root_code.root_function"])).tests_in_file.test_file == root_test_file_path
         assert (
-            next(iter(discovered_tests["level1.level1_code.level1_function"])).tests_in_file.test_file == level1_test_file_path
+            next(iter(discovered_tests["level1.level1_code.level1_function"])).tests_in_file.test_file
+            == level1_test_file_path
         )
 
         assert (
@@ -285,13 +291,14 @@ def test_discover_tests_pytest_dirs():
         )
 
         # Discover tests
-        discovered_tests, _ = discover_unit_tests(test_config)
+        discovered_tests, _, _ = discover_unit_tests(test_config)
 
         # Check if the test files at all levels are discovered
         assert len(discovered_tests) == 4
         assert next(iter(discovered_tests["root_code.root_function"])).tests_in_file.test_file == root_test_file_path
         assert (
-            next(iter(discovered_tests["level1.level1_code.level1_function"])).tests_in_file.test_file == level1_test_file_path
+            next(iter(discovered_tests["level1.level1_code.level1_function"])).tests_in_file.test_file
+            == level1_test_file_path
         )
         assert (
             next(iter(discovered_tests["level1.level2.level2_code.level2_function"])).tests_in_file.test_file
@@ -331,11 +338,14 @@ def test_discover_tests_pytest_with_class():
         )
 
         # Discover tests
-        discovered_tests, _ = discover_unit_tests(test_config)
+        discovered_tests, _, _ = discover_unit_tests(test_config)
 
         # Check if the test class and method are discovered
         assert len(discovered_tests) == 1
-        assert next(iter(discovered_tests["some_class_code.SomeClass.some_method"])).tests_in_file.test_file == test_file_path
+        assert (
+            next(iter(discovered_tests["some_class_code.SomeClass.some_method"])).tests_in_file.test_file
+            == test_file_path
+        )
 
 
 def test_discover_tests_pytest_with_double_nested_directories():
@@ -369,12 +379,14 @@ def test_discover_tests_pytest_with_double_nested_directories():
         )
 
         # Discover tests
-        discovered_tests, _ = discover_unit_tests(test_config)
+        discovered_tests, _, _ = discover_unit_tests(test_config)
 
         # Check if the test class and method are discovered
         assert len(discovered_tests) == 1
         assert (
-            next(iter(discovered_tests["nested.more_nested.nested_class_code.NestedClass.nested_method"])).tests_in_file.test_file
+            next(
+                iter(discovered_tests["nested.more_nested.nested_class_code.NestedClass.nested_method"])
+            ).tests_in_file.test_file
             == test_file_path
         )
 
@@ -417,7 +429,7 @@ def test_discover_tests_with_code_in_dir_and_test_in_subdir():
         )
 
         # Discover tests
-        discovered_tests, _ = discover_unit_tests(test_config)
+        discovered_tests, _, _ = discover_unit_tests(test_config)
 
         # Check if the test file is discovered and associated with the code file
         assert len(discovered_tests) == 1
@@ -430,10 +442,7 @@ def test_discover_tests_pytest_with_nested_class():
         # Create a code file with a nested class
         code_file_path = path_obj_tmpdirname / "nested_class_code.py"
         code_file_content = (
-            "class OuterClass:\n"
-            "    class InnerClass:\n"
-            "        def inner_method(self):\n"
-            "            return True\n"
+            "class OuterClass:\n    class InnerClass:\n        def inner_method(self):\n            return True\n"
         )
         code_file_path.write_text(code_file_content)
 
@@ -456,7 +465,7 @@ def test_discover_tests_pytest_with_nested_class():
         )
 
         # Discover tests
-        discovered_tests, _ = discover_unit_tests(test_config)
+        discovered_tests, _, _ = discover_unit_tests(test_config)
 
         # Check if the test for the nested class method is discovered
         assert len(discovered_tests) == 1
@@ -496,7 +505,7 @@ def test_discover_tests_pytest_separate_moduledir():
         )
 
         # Discover tests
-        discovered_tests, _ = discover_unit_tests(test_config)
+        discovered_tests, _, _ = discover_unit_tests(test_config)
 
         # Check if the test for the nested class method is discovered
         assert len(discovered_tests) == 1
@@ -538,7 +547,7 @@ class TestCalculator(unittest.TestCase):
         )
 
         # Discover tests
-        discovered_tests, _ = discover_unit_tests(test_config)
+        discovered_tests, _, _ = discover_unit_tests(test_config)
 
         # Verify the unittest was discovered
         assert len(discovered_tests) == 1
@@ -606,7 +615,7 @@ class TestCalculator(ExtendedTestCase):
         )
 
         # Discover tests
-        discovered_tests, _ = discover_unit_tests(test_config)
+        discovered_tests, _, _ = discover_unit_tests(test_config)
 
         # Verify the unittest was discovered
         assert len(discovered_tests) == 2
@@ -652,7 +661,7 @@ class TestCalculator(unittest.TestCase):
         )
 
         # Discover tests
-        discovered_tests, _ = discover_unit_tests(test_config)
+        discovered_tests, _, _ = discover_unit_tests(test_config)
 
         # Verify no tests were discovered
         assert len(discovered_tests) == 0
@@ -704,7 +713,7 @@ class TestCalculator(unittest.TestCase):
         )
 
         # Discover tests
-        discovered_tests, _ = discover_unit_tests(test_config)
+        discovered_tests, _, _ = discover_unit_tests(test_config)
 
         # Verify the unittest was discovered
         assert len(discovered_tests) == 1
@@ -712,9 +721,7 @@ class TestCalculator(unittest.TestCase):
         assert len(discovered_tests["calculator.Calculator.add"]) == 1
         calculator_test = next(iter(discovered_tests["calculator.Calculator.add"]))
         assert calculator_test.tests_in_file.test_file == test_file_path
-        assert (
-            calculator_test.tests_in_file.test_function == "test_add_with_parameters"
-        )
+        assert calculator_test.tests_in_file.test_function == "test_add_with_parameters"
 
 
 def test_unittest_discovery_with_pytest_parameterized():
@@ -787,7 +794,7 @@ class TestCalculator(unittest.TestCase):
         )
 
         # Discover tests
-        discovered_tests, _ = discover_unit_tests(test_config)
+        discovered_tests, _, _ = discover_unit_tests(test_config)
 
         # Verify the basic structure
         assert len(discovered_tests) == 2  # Should have tests for both add and multiply
@@ -809,10 +816,10 @@ def test_target():
     assert target_function() is True
 """
         test_file.write_text(test_content)
-        
+
         target_functions = {"target_function", "missing_function"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
-        
+
         assert should_process is True
 
 
@@ -827,12 +834,11 @@ def test_something():
     assert something() is True
 """
         test_file.write_text(test_content)
-        
+
         target_functions = {"target_function"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
-        
-        assert should_process is False
 
+        assert should_process is False
 
     with tempfile.TemporaryDirectory() as tmpdirname:
         test_file = Path(tmpdirname) / "test_example.py"
@@ -844,13 +850,11 @@ def test_target():
 """
         test_file.group
         test_file.write_text(test_content)
-        
+
         target_functions = {"mymodule.target_function"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
-        
+
         assert should_process is True
-
-
 
     with tempfile.TemporaryDirectory() as tmpdirname:
         test_file = Path(tmpdirname) / "test_example.py"
@@ -861,13 +865,12 @@ def test_target():
     assert target_function_extended() is True
 """
         test_file.write_text(test_content)
-        
-        # Should not match - target_function != target_function_extended  
+
+        # Should not match - target_function != target_function_extended
         target_functions = {"mymodule.target_function"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
-        
-        assert should_process is False
 
+        assert should_process is False
 
     with tempfile.TemporaryDirectory() as tmpdirname:
         test_file = Path(tmpdirname) / "test_example.py"
@@ -879,12 +882,11 @@ def test_something():
     assert x == 42
 """
         test_file.write_text(test_content)
-        
+
         target_functions = {"mymodule.target_function"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
-        
-        assert should_process is False
 
+        assert should_process is False
 
     with tempfile.TemporaryDirectory() as tmpdirname:
         test_file = Path(tmpdirname) / "test_example.py"
@@ -896,13 +898,12 @@ def test_something():
     assert "target_function" in message
 """
         test_file.write_text(test_content)
-        
+
         target_functions = {"mymodule.target_function"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
-        
+
         # String literals are ast.Constant nodes, not ast.Name nodes, so they don't match
         assert should_process is False
-
 
     with tempfile.TemporaryDirectory() as tmpdirname:
         test_file = Path(tmpdirname) / "test_example.py"
@@ -915,13 +916,11 @@ def test_target():
     assert other_func() is True
 """
         test_file.write_text(test_content)
-        
+
         target_functions = {"mymodule.target_function", "othermodule.other_func"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
-        
+
         assert should_process is True
-
-
 
 
 def test_analyze_imports_module_import():
@@ -935,10 +934,10 @@ def test_target():
     assert mymodule.target_function() is True
 """
         test_file.write_text(test_content)
-        
+
         target_functions = {"target_function"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
-        
+
         assert should_process is True
 
 
@@ -954,10 +953,10 @@ def test_dynamic():
     assert module.target_function() is True
 """
         test_file.write_text(test_content)
-        
+
         target_functions = {"target_function"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
-        
+
         assert should_process is True
 
 
@@ -971,10 +970,10 @@ def test_builtin_import():
     assert module.target_function() is True
 """
         test_file.write_text(test_content)
-        
+
         target_functions = {"target_function"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
-        
+
         assert should_process is True
 
 
@@ -989,7 +988,7 @@ def test_unrelated():
     assert unrelated_function() is True
 """
         test_file.write_text(test_content)
-        
+
         target_functions = {"target_function", "another_function"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
         assert should_process is False
@@ -1005,11 +1004,10 @@ def test_target():
     assert some_function() is True
 """
         test_file.write_text(test_content)
-        
+
         target_functions = {"target_module.some_function"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
         assert should_process is True
-
 
 
 def test_analyze_imports_syntax_error():
@@ -1023,10 +1021,10 @@ def test_target(
     assert target_function() is True
 """
         test_file.write_text(test_content)
-        
+
         target_functions = {"target_function"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
-        
+
         # Should be conservative with unparseable files
         assert should_process is True
 
@@ -1034,7 +1032,7 @@ def test_target(
 def test_filter_test_files_by_imports():
     with tempfile.TemporaryDirectory() as tmpdirname:
         tmpdir = Path(tmpdirname)
-        
+
         # Create test file that imports target function
         relevant_test = tmpdir / "test_relevant.py"
         relevant_test.write_text("""
@@ -1043,7 +1041,7 @@ from mymodule import target_function
 def test_target():
     assert target_function() is True
 """)
-        
+
         # Create test file that doesn't import target function
         irrelevant_test = tmpdir / "test_irrelevant.py"
         irrelevant_test.write_text("""
@@ -1052,7 +1050,7 @@ from othermodule import other_function
 def test_other():
     assert other_function() is True
 """)
-        
+
         # Create test file with star import (should not be processed)
         star_test = tmpdir / "test_star.py"
         star_test.write_text("""
@@ -1061,38 +1059,65 @@ from mymodule import *
 def test_star():
     assert something() is True
 """)
-        
+
         file_to_test_map = {
-            relevant_test: [TestsInFile(test_file=relevant_test, test_function="test_target", test_class=None, test_type=TestType.EXISTING_UNIT_TEST)],
-            irrelevant_test: [TestsInFile(test_file=irrelevant_test, test_function="test_other", test_class=None, test_type=TestType.EXISTING_UNIT_TEST)],
-            star_test: [TestsInFile(test_file=star_test, test_function="test_star", test_class=None, test_type=TestType.EXISTING_UNIT_TEST)],
+            relevant_test: [
+                TestsInFile(
+                    test_file=relevant_test,
+                    test_function="test_target",
+                    test_class=None,
+                    test_type=TestType.EXISTING_UNIT_TEST,
+                )
+            ],
+            irrelevant_test: [
+                TestsInFile(
+                    test_file=irrelevant_test,
+                    test_function="test_other",
+                    test_class=None,
+                    test_type=TestType.EXISTING_UNIT_TEST,
+                )
+            ],
+            star_test: [
+                TestsInFile(
+                    test_file=star_test,
+                    test_function="test_star",
+                    test_class=None,
+                    test_type=TestType.EXISTING_UNIT_TEST,
+                )
+            ],
         }
-        
+
         target_functions = {"target_function"}
         filtered_map = filter_test_files_by_imports(file_to_test_map, target_functions)
-        
+
         # Should filter out irrelevant_test
         assert len(filtered_map) == 1
         assert relevant_test in filtered_map
         assert irrelevant_test not in filtered_map
-        
 
 
 def test_filter_test_files_no_target_functions():
     """Test that filtering is skipped when no target functions are provided."""
     with tempfile.TemporaryDirectory() as tmpdirname:
         tmpdir = Path(tmpdirname)
-        
+
         test_file = tmpdir / "test_example.py"
         test_file.write_text("def test_something(): pass")
-        
+
         file_to_test_map = {
-            test_file: [TestsInFile(test_file=test_file, test_function="test_something", test_class=None, test_type=TestType.EXISTING_UNIT_TEST)]
+            test_file: [
+                TestsInFile(
+                    test_file=test_file,
+                    test_function="test_something",
+                    test_class=None,
+                    test_type=TestType.EXISTING_UNIT_TEST,
+                )
+            ]
         }
-        
+
         # No target functions provided
-        filtered_map =  filter_test_files_by_imports(file_to_test_map, set())
-        
+        filtered_map = filter_test_files_by_imports(file_to_test_map, set())
+
         # Should return original map unchanged
         assert filtered_map == file_to_test_map
 
@@ -1101,7 +1126,7 @@ def test_discover_unit_tests_with_import_filtering():
     """Test the full discovery process with import filtering."""
     with tempfile.TemporaryDirectory() as tmpdirname:
         tmpdir = Path(tmpdirname)
-        
+
         # Create a code file
         code_file = tmpdir / "mycode.py"
         code_file.write_text("""
@@ -1111,7 +1136,7 @@ def target_function():
 def other_function():
     return False
 """)
-        
+
         # Create relevant test file
         relevant_test = tmpdir / "test_relevant.py"
         relevant_test.write_text("""
@@ -1120,7 +1145,7 @@ from mycode import target_function
 def test_target():
     assert target_function() is True
 """)
-        
+
         # Create irrelevant test file
         irrelevant_test = tmpdir / "test_irrelevant.py"
         irrelevant_test.write_text("""
@@ -1129,26 +1154,18 @@ from mycode import other_function
 def test_other():
     assert other_function() is False
 """)
-        
+
         # Configure test discovery
         test_config = TestConfig(
-            tests_root=tmpdir,
-            project_root_path=tmpdir,
-            test_framework="pytest",
-            tests_project_rootdir=tmpdir.parent,
-        )
-        
-        all_tests, _ = discover_unit_tests(test_config)
-        assert len(all_tests) == 2 
-        
-
-        fto = FunctionToOptimize(
-            function_name="target_function",
-            file_path=code_file,
-            parents=[],
+            tests_root=tmpdir, project_root_path=tmpdir, test_framework="pytest", tests_project_rootdir=tmpdir.parent
         )
 
-        filtered_tests, _ = discover_unit_tests(test_config, file_to_funcs_to_optimize={code_file: [fto]})
+        all_tests, _, _ = discover_unit_tests(test_config)
+        assert len(all_tests) == 2
+
+        fto = FunctionToOptimize(function_name="target_function", file_path=code_file, parents=[])
+
+        filtered_tests, _, _ = discover_unit_tests(test_config, file_to_funcs_to_optimize={code_file: [fto]})
         assert len(filtered_tests) >= 1
         assert "mycode.target_function" in filtered_tests
 
@@ -1164,10 +1181,10 @@ def test_conditional():
         assert target_function() is True
 """
         test_file.write_text(test_content)
-        
+
         target_functions = {"target_function"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
-        
+
         assert should_process is True
 
 
@@ -1186,10 +1203,10 @@ def test_indirect():
     assert result is True
 """
         test_file.write_text(test_content)
-        
+
         target_functions = {"target_function"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
-        
+
         assert should_process is True
 
 
@@ -1205,10 +1222,10 @@ def test_aliased():
     assert of() is False
 """
         test_file.write_text(test_content)
-        
+
         target_functions = {"target_function", "missing_function"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
-        
+
         assert should_process is True
 
 
@@ -1222,31 +1239,32 @@ def test_bubble():
     assert sort_function([3,1,2]) == [1,2,3]
 """
         test_file.write_text(test_content)
-        
+
         target_functions = {"bubble_sort"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
-        
+
         assert should_process is False
+
 
 def test_discover_unit_tests_filtering_different_modules():
     """Test import filtering with test files from completely different modules."""
     with tempfile.TemporaryDirectory() as tmpdirname:
         tmpdir = Path(tmpdirname)
-        
+
         # Create target code file
         target_file = tmpdir / "target_module.py"
         target_file.write_text("""
 def target_function():
     return True
 """)
-        
+
         # Create unrelated code file
         unrelated_file = tmpdir / "unrelated_module.py"
         unrelated_file.write_text("""
 def unrelated_function():
     return False
 """)
-        
+
         # Create test file that imports target function
         relevant_test = tmpdir / "test_target.py"
         relevant_test.write_text("""
@@ -1255,7 +1273,7 @@ from target_module import target_function
 def test_target():
     assert target_function() is True
 """)
-        
+
         # Create test file that imports unrelated function
         irrelevant_test = tmpdir / "test_unrelated.py"
         irrelevant_test.write_text("""
@@ -1264,26 +1282,19 @@ from unrelated_module import unrelated_function
 def test_unrelated():
     assert unrelated_function() is False
 """)
-        
+
         # Configure test discovery
         test_config = TestConfig(
-            tests_root=tmpdir,
-            project_root_path=tmpdir,
-            test_framework="pytest",
-            tests_project_rootdir=tmpdir.parent,
-        )
-        
-        # Test without filtering
-        all_tests, _ = discover_unit_tests(test_config)
-        assert len(all_tests) == 2  # Should find both functions
-        
-        fto = FunctionToOptimize(
-            function_name="target_function",
-            file_path=target_file,
-            parents=[],
+            tests_root=tmpdir, project_root_path=tmpdir, test_framework="pytest", tests_project_rootdir=tmpdir.parent
         )
 
-        filtered_tests, _ = discover_unit_tests(test_config, file_to_funcs_to_optimize={target_file: [fto]})
+        # Test without filtering
+        all_tests, _, _ = discover_unit_tests(test_config)
+        assert len(all_tests) == 2  # Should find both functions
+
+        fto = FunctionToOptimize(function_name="target_function", file_path=target_file, parents=[])
+
+        filtered_tests, _, _ = discover_unit_tests(test_config, file_to_funcs_to_optimize={target_file: [fto]})
         assert len(filtered_tests) == 1
         assert "target_module.target_function" in filtered_tests
         assert "unrelated_module.unrelated_function" not in filtered_tests
