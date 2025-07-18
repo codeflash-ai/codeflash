@@ -116,52 +116,55 @@ def codeflash_capture(function_name: str, tmp_dir_path: str, tests_root: str, is
             print(f"!$######{test_stdout_tag}######$!")
             # Connect to sqlite
             codeflash_con = sqlite3.connect(f"{tmp_dir_path}_{codeflash_iteration}.sqlite")
-            codeflash_cur = codeflash_con.cursor()
-
-            # Record timing information
-            exception = None
-            gc.disable()
             try:
-                counter = time.perf_counter_ns()
-                wrapped(*args, **kwargs)
-                codeflash_duration = time.perf_counter_ns() - counter
-            except Exception as e:
-                codeflash_duration = time.perf_counter_ns() - counter
-                exception = e
+                codeflash_cur = codeflash_con.cursor()
+
+                # Record timing information
+                exception = None
+                gc.disable()
+                try:
+                    counter = time.perf_counter_ns()
+                    wrapped(*args, **kwargs)
+                    codeflash_duration = time.perf_counter_ns() - counter
+                except Exception as e:
+                    codeflash_duration = time.perf_counter_ns() - counter
+                    exception = e
+                finally:
+                    gc.enable()
+                print(f"!######{test_stdout_tag}######!")
+
+                # Capture instance state after initialization
+                if hasattr(args[0], "__dict__"):
+                    instance_state = args[
+                        0
+                    ].__dict__  # self is always the first argument, this is ensured during instrumentation
+                else:
+                    raise ValueError("Instance state could not be captured.")
+                codeflash_cur.execute(
+                    "CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)"
+                )
+
+                # Write to sqlite
+                pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(instance_state)
+                codeflash_cur.execute(
+                    "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        test_module_name,
+                        test_class_name,
+                        test_name,
+                        function_name,
+                        loop_index,
+                        invocation_id,
+                        codeflash_duration,
+                        pickled_return_value,
+                        VerificationType.INIT_STATE_FTO if is_fto else VerificationType.INIT_STATE_HELPER,
+                    ),
+                )
+                codeflash_con.commit()
+                if exception:
+                    raise exception
             finally:
-                gc.enable()
-            print(f"!######{test_stdout_tag}######!")
-
-            # Capture instance state after initialization
-            if hasattr(args[0], "__dict__"):
-                instance_state = args[
-                    0
-                ].__dict__  # self is always the first argument, this is ensured during instrumentation
-            else:
-                raise ValueError("Instance state could not be captured.")
-            codeflash_cur.execute(
-                "CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)"
-            )
-
-            # Write to sqlite
-            pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(instance_state)
-            codeflash_cur.execute(
-                "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    test_module_name,
-                    test_class_name,
-                    test_name,
-                    function_name,
-                    loop_index,
-                    invocation_id,
-                    codeflash_duration,
-                    pickled_return_value,
-                    VerificationType.INIT_STATE_FTO if is_fto else VerificationType.INIT_STATE_HELPER,
-                ),
-            )
-            codeflash_con.commit()
-            if exception:
-                raise exception
+                codeflash_con.close()
 
         return wrapper
 
