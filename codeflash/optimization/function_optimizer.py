@@ -147,7 +147,9 @@ class FunctionOptimizer:
         self.generate_and_instrument_tests_results: (
             tuple[GeneratedTestsList, dict[str, set[FunctionCalledInTest]], OptimizationSet] | None
         ) = None
-        self.valid_optimizations: list[BestOptimization] = list()  # TODO: Figure out the dataclass type for this
+        self.valid_optimizations: list[BestOptimization] = (
+            list()  # TODO: Figure out the dataclass type for this  # noqa: C408
+        )
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -362,7 +364,7 @@ class FunctionOptimizer:
         from codeflash.models.models import OptimizedCandidate
 
         best_optimization: BestOptimization | None = None
-        best_runtime_until_now = original_code_baseline.runtime
+        _best_runtime_until_now = original_code_baseline.runtime
 
         speedup_ratios: dict[str, float | None] = {}
         optimized_runtimes: dict[str, float | None] = {}
@@ -510,7 +512,6 @@ class FunctionOptimizer:
                                 winning_replay_benchmarking_test_results=candidate_result.benchmarking_test_results,
                             )
                             self.valid_optimizations.append(best_optimization)
-                            best_runtime_until_now = best_test_runtime
                         else:
                             tree.add(
                                 f"Summed runtime: {humanize_runtime(best_test_runtime)} "
@@ -543,11 +544,14 @@ class FunctionOptimizer:
                     if len(candidates) == 0 and len(self.valid_optimizations) > 0 and not refinement_done:
                         # TODO: Instead of doing it all at once at the end, do it one by one as the optimizations
                         # are found. This way we can hide the time waiting for the LLM results.
+                        trace_id = self.function_trace_id
+                        if trace_id.endswith(("EXP0", "EXP1")):
+                            trace_id = trace_id[:-4] + exp_type
                         refinement_diffs = self.refine_optimizations(
                             valid_optimizations=self.valid_optimizations,
                             original_code_baseline=original_code_baseline,
                             code_context=code_context,
-                            trace_id=self.function_trace_id[:-4] + exp_type,
+                            trace_id=trace_id,
                             experiment_metadata=ExperimentMetadata(
                                 id=self.experiment_id, group="control" if exp_type == "EXP0" else "experiment"
                             )
@@ -555,6 +559,7 @@ class FunctionOptimizer:
                             else None,
                             ai_service_client=ai_service_client,
                             executor=executor,
+                            fto_name=self.function_to_optimize.qualified_name,
                         )
                         # filter out empty strings of code
                         more_opt_candidates = [
@@ -581,13 +586,11 @@ class FunctionOptimizer:
         def diff_length(a: str, b: str) -> int:
             """Compute the length (in characters) of the unified diff between two strings.
 
-            Parameters
-            ----------
+            Args:
                 a (str): Original string.
                 b (str): Modified string.
 
-            Returns
-            -------
+            Returns:
                 int: Total number of characters in the diff.
 
             """
@@ -604,7 +607,8 @@ class FunctionOptimizer:
             return len(diff_text)
 
         def create_rank_dictionary_compact(int_array: list[int]) -> dict[int, int]:
-            """Creates a dictionary from a list of ints, mapping the original index to its rank.
+            """Create a dictionary from a list of ints, mapping the original index to its rank.
+
             This version uses a more compact, "Pythonic" implementation.
 
             Args:
@@ -631,7 +635,7 @@ class FunctionOptimizer:
             runtimes_list.append(valid_opt.runtime)
         diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
         runtimes_ranking = create_rank_dictionary_compact(runtimes_list)
-        overall_ranking = {key: diff_lens_ranking[key] + runtimes_ranking[key] for key in diff_lens_ranking.keys()}
+        overall_ranking = {key: diff_lens_ranking[key] + runtimes_ranking[key] for key in diff_lens_ranking.keys()}  # noqa: SIM118
         min_key = min(overall_ranking, key=overall_ranking.get)
         ai_service_client.log_results(
             function_trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
@@ -651,6 +655,7 @@ class FunctionOptimizer:
         experiment_metadata: ExperimentMetadata | None,
         ai_service_client: AiServiceClient,
         executor: concurrent.futures.ThreadPoolExecutor,
+        fto_name: str,
     ) -> list[str]:
         request = [
             AIServiceRefinerRequest(
@@ -665,13 +670,13 @@ class FunctionOptimizer:
                 original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
                 optimized_line_profiler_results=opt.line_profiler_test_results["str_out"],
                 experiment_metadata=experiment_metadata,
+                fto_name=fto_name,
             )
             for opt in valid_optimizations
         ]
         future_refinement_results = executor.submit(ai_service_client.optimize_python_code_refinement, request=request)
         concurrent.futures.wait([future_refinement_results])
-        refinement_results = future_refinement_results.result()
-        return refinement_results
+        return future_refinement_results.result()
 
     def log_successful_optimization(
         self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str

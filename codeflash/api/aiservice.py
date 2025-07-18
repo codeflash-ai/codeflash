@@ -34,6 +34,7 @@ class AIServiceRefinerRequest:
     optimized_code_runtime: str
     speedup: str
     trace_id: str
+    fto_name: str
     original_line_profiler_results: str
     optimized_line_profiler_results: str
     experiment_metadata: ExperimentMetadata | None
@@ -114,11 +115,7 @@ class AiServiceClient:
 
         """
         start_time = time.perf_counter()
-        try:
-            git_repo_owner, git_repo_name = get_repo_owner_and_name()
-        except Exception as e:
-            logger.warning(f"Could not determine repo owner and name: {e}")
-            git_repo_owner, git_repo_name = None, None
+        git_repo_owner, git_repo_name = safe_get_repo_owner_and_name()
 
         payload = {
             "source_code": source_code,
@@ -236,6 +233,7 @@ class AiServiceClient:
         return []
 
     def optimize_python_code_refinement(self, request: list[AIServiceRefinerRequest]) -> list[str]:
+        git_repo_owner, git_repo_name = safe_get_repo_owner_and_name()
         payload = [
             {
                 "original_source_code": opt.original_source_code,
@@ -247,11 +245,15 @@ class AiServiceClient:
                 "optimized_line_profiler_results": opt.optimized_line_profiler_results,
                 "optimized_code_runtime": opt.optimized_code_runtime,
                 "speedup": opt.speedup,
-                "trace_id": opt.trace_id,
                 "python_version": platform.python_version(),
                 "experiment_metadata": opt.experiment_metadata,
                 "codeflash_version": codeflash_version,
                 "lsp_mode": is_LSP_enabled(),
+                # needed for tracking the refinement behavior
+                "trace_id": opt.trace_id,
+                "function_to_optimize": opt.fto_name,
+                "repo_owner": git_repo_owner,
+                "repo_name": git_repo_name,
             }
             for opt in request
         ]
@@ -406,3 +408,12 @@ class LocalAiServiceClient(AiServiceClient):
     def get_aiservice_base_url(self) -> str:
         """Get the base URL for the local AI service."""
         return "http://localhost:8000"
+
+
+def safe_get_repo_owner_and_name() -> tuple[str | None, str | None]:
+    try:
+        git_repo_owner, git_repo_name = get_repo_owner_and_name()
+    except Exception as e:
+        logger.warning(f"Could not determine repo owner and name: {e}")
+        git_repo_owner, git_repo_name = None, None
+    return git_repo_owner, git_repo_name
