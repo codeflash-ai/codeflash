@@ -287,6 +287,7 @@ def test_run_and_parse_picklepatch() -> None:
         total_benchmark_timings = codeflash_benchmark_plugin.get_benchmark_timings(output_file)
         function_to_results = validate_and_format_benchmark_table(function_benchmark_timings, total_benchmark_timings)
         assert "code_to_optimize.bubble_sort_picklepatch_test_unused_socket.bubble_sort_with_unused_socket" in function_to_results
+        conn.close()
 
         test_name, total_time, function_time, percent = function_to_results["code_to_optimize.bubble_sort_picklepatch_test_unused_socket.bubble_sort_with_unused_socket"][0]
         assert total_time > 0.0
