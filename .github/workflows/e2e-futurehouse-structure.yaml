@@ -61,7 +61,7 @@ jobs:
       - name: Set up Python 3.11 for CLI
         uses: astral-sh/setup-uv@v5
         with:
-          python-version: 3.11.6
+          python-version: 3.11
 
       - name: Install dependencies (CLI)
         run: |
@@ -70,5 +70,7 @@ jobs:
 
       - name: Run Codeflash to optimize code
         id: optimize_code
+        env:
+          PYTHONUTF8: 1
         run: |
           uv run tests/scripts/end_to_end_test_futurehouse.py
