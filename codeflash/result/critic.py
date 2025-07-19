@@ -3,13 +3,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils import env_utils
 from codeflash.code_utils.config_consts import (
     COVERAGE_THRESHOLD,
     MIN_IMPROVEMENT_THRESHOLD,
     MIN_TESTCASE_PASSED_THRESHOLD,
 )
-from codeflash.models.models import TestType
+from codeflash.code_utils.env_utils import get_pr_number as _gh_get_pr_number
+from codeflash.models.models import OptimizedCandidateResult, TestType
 
 if TYPE_CHECKING:
     from codeflash.models.models import CoverageData, OptimizedCandidateResult, OriginalCodeBaseline
@@ -38,19 +38,23 @@ def speedup_critic(
     when the original runtime is less than 10 microseconds, and becomes MIN_IMPROVEMENT_THRESHOLD for any higher runtime.
     The noise floor is doubled when benchmarking on a (noisy) GitHub Action virtual instance, also we want to be more confident there.
     """
+    # Set initial noise floor based on the runtime
     noise_floor = 3 * MIN_IMPROVEMENT_THRESHOLD if original_code_runtime < 10000 else MIN_IMPROVEMENT_THRESHOLD
-    if not disable_gh_action_noise:
-        in_github_actions_mode = bool(env_utils.get_pr_number())
-        if in_github_actions_mode:
-            noise_floor = noise_floor * 2  # Increase the noise floor in GitHub Actions mode
+
+    # Increase noise floor if running in GitHub Actions unless disabled
+    if not disable_gh_action_noise and _gh_get_pr_number() is not None:
+        noise_floor = noise_floor * 2
 
     perf_gain = performance_gain(
         original_runtime_ns=original_code_runtime, optimized_runtime_ns=candidate_result.best_test_runtime
     )
+
+    # No previous best runtime, just check if above noise floor
     if best_runtime_until_now is None:
-        # collect all optimizations with thi
-        return bool(perf_gain > noise_floor)
-    return bool(perf_gain > noise_floor and candidate_result.best_test_runtime < best_runtime_until_now)
+        return perf_gain > noise_floor
+
+    # Must both be above noise floor *and* faster than previous best
+    return perf_gain > noise_floor and candidate_result.best_test_runtime < best_runtime_until_now
 
 
 def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult | OriginalCodeBaseline) -> bool:
