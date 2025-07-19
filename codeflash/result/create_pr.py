@@ -101,7 +101,7 @@ def existing_tests_source_for(
                 if greater:
                     rows.append(
                         [
-                            f"`{print_filename}::{qualified_name}`",
+                            f"`{print_filename.as_posix()}::{qualified_name}`",
                             f"{print_original_runtime}",
                             f"{print_optimized_runtime}",
                             f"⚠️{perf_gain}%",
@@ -110,7 +110,7 @@ def existing_tests_source_for(
                 else:
                     rows.append(
                         [
-                            f"`{print_filename}::{qualified_name}`",
+                            f"`{print_filename.as_posix()}::{qualified_name}`",
                             f"{print_original_runtime}",
                             f"{print_optimized_runtime}",
                             f"✅{perf_gain}%",

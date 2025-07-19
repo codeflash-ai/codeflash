@@ -33,7 +33,7 @@ def instrument_codeflash_capture(
     modified_code = add_codeflash_capture_to_init(
         target_classes={class_parent.name},
         fto_name=function_to_optimize.function_name,
-        tmp_dir_path=str(get_run_tmp_file(Path("test_return_values"))),
+        tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         code=original_code,
         tests_root=tests_root,
         is_fto=True,
@@ -46,7 +46,7 @@ def instrument_codeflash_capture(
         modified_code = add_codeflash_capture_to_init(
             target_classes=helper_classes,
             fto_name=function_to_optimize.function_name,
-            tmp_dir_path=str(get_run_tmp_file(Path("test_return_values"))),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
             code=original_code,
             tests_root=tests_root,
             is_fto=False,
@@ -124,7 +124,7 @@ class InitDecorator(ast.NodeTransformer):
             keywords=[
                 ast.keyword(arg="function_name", value=ast.Constant(value=f"{node.name}.__init__")),
                 ast.keyword(arg="tmp_dir_path", value=ast.Constant(value=self.tmp_dir_path)),
-                ast.keyword(arg="tests_root", value=ast.Constant(value=str(self.tests_root))),
+                ast.keyword(arg="tests_root", value=ast.Constant(value=self.tests_root.as_posix())),
                 ast.keyword(arg="is_fto", value=ast.Constant(value=self.is_fto)),
             ],
         )

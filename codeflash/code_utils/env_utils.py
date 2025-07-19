@@ -18,10 +18,9 @@ def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool =
     if formatter_cmds[0] == "disabled":
         return return_code
     tmp_code = """print("hello world")"""
-    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".py") as f:
-        f.write(tmp_code)
-        f.flush()
-        tmp_file = Path(f.name)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_file = Path(tmpdir) / "test_codeflash_formatter.py"
+        tmp_file.write_text(tmp_code, encoding="utf-8")
         try:
             format_code(formatter_cmds, tmp_file, print_status=False, exit_on_failure=exit_on_failure)
         except Exception:
@@ -29,7 +28,7 @@ def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool =
                 "⚠️ Codeflash requires a code formatter to be installed in your environment, but none was found. Please install a supported formatter, verify the formatter-cmds in your codeflash pyproject.toml config and try again.",
                 error_on_exit=True,
             )
-    return return_code
+        return return_code
 
 
 @lru_cache(maxsize=1)

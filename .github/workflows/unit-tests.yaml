@@ -12,8 +12,9 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
+        os: [ubuntu-latest]
     continue-on-error: true
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,10 +25,29 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
-          version: "0.5.30"
 
       - name: install dependencies
         run: uv sync
 
       - name: Unit tests
         run: uv run pytest tests/ --benchmark-skip -m "not ci_skip"
+
+  # unit-tests-windows:
+  #   runs-on: windows-latest
+  #   continue-on-error: true
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
+  #         token: ${{ secrets.GITHUB_TOKEN }}
+
+  #     - name: Install uv
+  #       uses: astral-sh/setup-uv@v5
+  #       with:
+  #         python-version: "3.11"
+
+  #     - name: install dependencies
+  #       run: uv sync
+
+  #     - name: Unit tests
+  #       run: uv run pytest tests/ --benchmark-skip -m "not ci_skip"
