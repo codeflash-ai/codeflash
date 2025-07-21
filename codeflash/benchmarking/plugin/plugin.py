@@ -55,6 +55,7 @@ class CodeFlashBenchmarkPlugin:
             raise
 
     def write_benchmark_timings(self) -> None:
+        print("XXX ATTEMPTING TO WRITE THE BENCHMARK TIMINGS")
         if not self.benchmark_timings:
             return  # No data to write
 
@@ -97,6 +98,7 @@ class CodeFlashBenchmarkPlugin:
 
         """
         # Initialize the result dictionary
+        print("XXX ATTEMPTING get_function_benchmark_timings")
         result = {}
 
         # Connect to the SQLite database
@@ -156,6 +158,7 @@ class CodeFlashBenchmarkPlugin:
 
         """
         # Initialize the result dictionary
+        print("XXX ATTEMPTING get_benchmark_timings")
         result = {}
         overhead_by_benchmark = {}
 
@@ -244,6 +247,7 @@ class CodeFlashBenchmarkPlugin:
                 marker = item.get_closest_marker("benchmark")
                 if marker is not None:
                     has_marker = True
+                    print("XXX FOUND THE BENCHMARK MARKER")
 
             # Skip if neither fixture nor marker is present
             if not (has_fixture or has_marker):
@@ -253,9 +257,11 @@ class CodeFlashBenchmarkPlugin:
     class Benchmark:  # noqa: D106
         def __init__(self, request: pytest.FixtureRequest) -> None:
             self.request = request
+            print("XXX INITIALIZING THE BENCHMARK")
 
         def __call__(self, func, *args, **kwargs):  # type: ignore  # noqa: ANN001, ANN002, ANN003, ANN204, PGH003
             """Handle both direct function calls and decorator usage."""
+            print("XXX CALLED THE BENCHMARK")
             if args or kwargs:
                 # Used as benchmark(func, *args, **kwargs)
                 return self._run_benchmark(func, *args, **kwargs)
@@ -269,6 +275,7 @@ class CodeFlashBenchmarkPlugin:
 
         def _run_benchmark(self, func, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
             """Actual benchmark implementation."""
+            print("XXX RUNNING THE BENCHMARK!!")
             benchmark_module_path = module_name_from_file_path(
                 Path(str(self.request.node.fspath)), Path(codeflash_benchmark_plugin.project_root)
             )
@@ -301,7 +308,9 @@ class CodeFlashBenchmarkPlugin:
     @pytest.fixture
     def benchmark(request: pytest.FixtureRequest) -> object:
         if not request.config.getoption("--codeflash-trace"):
+            print("XXX NOOOO PLS")
             return None
+        print("XXX BENCHMARK PLUGIN INITIATED")
 
         return CodeFlashBenchmarkPlugin.Benchmark(request)
 

@@ -108,6 +108,7 @@ class CodeflashTrace:
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:  # noqa: ANN002, ANN003, ANN401
+            print("XXX CALLED THE CODEFLASH_TRACE MARKER")
             # Initialize thread-local active functions set if it doesn't exist
             if not hasattr(self._thread_local, "active_functions"):
                 self._thread_local.active_functions = set()
@@ -132,6 +133,9 @@ class CodeflashTrace:
             benchmark_function_name = os.environ.get("CODEFLASH_BENCHMARK_FUNCTION_NAME", "")
             benchmark_module_path = os.environ.get("CODEFLASH_BENCHMARK_MODULE_PATH", "")
             benchmark_line_number = os.environ.get("CODEFLASH_BENCHMARK_LINE_NUMBER", "")
+            print("XXX benchmark_function_name", benchmark_function_name)
+            print("XXX benchmark_module_path", benchmark_module_path)
+            print("XXX benchmark_line_number", benchmark_line_number)
             # Get class name
             class_name = ""
             qualname = func.__qualname__
