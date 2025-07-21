@@ -1021,7 +1021,7 @@ class FunctionOptimizer:
                     generated_tests_str = "\n\n".join(
                         [test.generated_original_test_source for test in generated_tests.generated_tests]
                     )
-                    existing_tests = existing_tests_source_for(
+                    existing_tests, replay_tests, concolic_tests = existing_tests_source_for(
                         qualified_name,
                         function_to_all_tests,
                         test_cfg=self.test_cfg,
@@ -1042,6 +1042,8 @@ class FunctionOptimizer:
                         else self.function_trace_id,
                         coverage_message=coverage_message,
                         git_remote=self.args.git_remote,
+                        replay_tests_source=replay_tests,
+                        concolic_tests_source=concolic_tests,
                     )
                     if (
                         self.args.all
