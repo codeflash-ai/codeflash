@@ -565,7 +565,7 @@ class FunctionOptimizer:
                         more_opt_candidates = [
                             OptimizedCandidate(
                                 source_code=refinement_diffs[i],
-                                explanation=self.valid_optimizations[i].candidate.explanation,
+                                explanation="REFINEMENT "+self.valid_optimizations[i].candidate.explanation,
                                 optimization_id=self.valid_optimizations[i].candidate.optimization_id,
                             )
                             for i in range(len(refinement_diffs))
