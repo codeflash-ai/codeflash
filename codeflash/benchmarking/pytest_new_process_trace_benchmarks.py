@@ -28,12 +28,12 @@ if __name__ == "__main__":
                 "-p",
                 "no:profiling",
                 "-s",
+                "-vv",
                 "-o",
                 "addopts=",
             ],
             plugins=[codeflash_benchmark_plugin],
         )  # Errors will be printed to stdout, not stderr
-
     except Exception as e:
         print(f"Failed to collect tests: {e!s}", file=sys.stderr)
         exitcode = -1

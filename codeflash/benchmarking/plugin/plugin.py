@@ -12,10 +12,8 @@ import pytest
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
 from codeflash.code_utils.code_utils import module_name_from_file_path
 
-# from codeflash.models.models import BenchmarkKey
 
-
-@dataclass
+@dataclass(frozen=True)
 class BenchmarkKey:
     module_path: str
     function_name: str
@@ -192,6 +190,7 @@ class CodeFlashBenchmarkPlugin:
 
                 # Create the benchmark key (file::function::line)
                 benchmark_key = BenchmarkKey(module_path=benchmark_file, function_name=benchmark_func)
+                print(f"XXX Processing benchmark: {benchmark_key}")
                 # Subtract overhead from total time
                 overhead = overhead_by_benchmark.get(benchmark_key, 0)
                 result[benchmark_key] = time_ns - overhead
@@ -232,26 +231,16 @@ class CodeFlashBenchmarkPlugin:
 
     @staticmethod
     def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-        # Skip tests that don't have the benchmark fixture
+        # Skip tests that don't have the benchmark marker
         if not config.getoption("--codeflash-trace"):
             return
 
-        skip_no_benchmark = pytest.mark.skip(reason="Test requires benchmark fixture")
         for item in items:
-            # Check for direct benchmark fixture usage
-            has_fixture = hasattr(item, "fixturenames") and "benchmark" in item.fixturenames
-
             # Check for @pytest.mark.benchmark marker
-            has_marker = False
             if hasattr(item, "get_closest_marker"):
                 marker = item.get_closest_marker("benchmark")
-                if marker is not None:
-                    has_marker = True
-                    print("XXX FOUND THE BENCHMARK MARKER")
-
-            # Skip if neither fixture nor marker is present
-            if not (has_fixture or has_marker):
-                item.add_marker(skip_no_benchmark)
+                if marker is None:
+                    item.add_marker(pytest.mark.skip(reason="Test requires benchmark marker"))
 
     # Benchmark fixture
     class Benchmark:  # noqa: D106
@@ -307,11 +296,10 @@ class CodeFlashBenchmarkPlugin:
     @staticmethod
     @pytest.fixture
     def benchmark(request: pytest.FixtureRequest) -> object:
+        """Fixture to provide the benchmark functionality."""
         if not request.config.getoption("--codeflash-trace"):
-            print("XXX NOOOO PLS")
             return None
         print("XXX BENCHMARK PLUGIN INITIATED")
-
         return CodeFlashBenchmarkPlugin.Benchmark(request)
 
 
