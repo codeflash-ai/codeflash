@@ -2,7 +2,8 @@ import numpy as np
 
 
 def sigmoid_stable(x):
-    return np.where(x >= 0, 1 / (1 + np.exp(-x)), np.exp(x) / (1 + np.exp(x)))
+    exp_x = np.exp(-np.abs(x))
+    return np.where(x >= 0, 1 / (1 + exp_x), exp_x / (1 + exp_x))
 
 
 def postprocess(logits: np.array, max_detections: int = 8):
