@@ -1234,7 +1234,7 @@ class FunctionOptimizer:
             return Success(
                 (
                     OriginalCodeBaseline(
-                        behavioral_test_results=behavioral_results,
+                        behavior_test_results=behavioral_results,
                         benchmarking_test_results=benchmarking_results,
                         replay_benchmarking_test_results=replay_benchmarking_test_results
                         if self.args.benchmark
@@ -1298,7 +1298,7 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
-            if compare_test_results(baseline_results.behavioral_test_results, candidate_behavior_results):
+            if compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results):
                 logger.info("Test results matched!")
                 console.rule()
             else:
