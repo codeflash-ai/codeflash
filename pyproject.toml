@@ -289,6 +289,14 @@ formatter-cmds = [
     "uvx ruff format $file",
 ]
 
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::pytest.PytestCollectionWarning",
+]
+markers = [
+    "ci_skip: mark test to skip in CI environment",
+]
+
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"

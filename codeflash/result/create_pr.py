@@ -42,43 +42,39 @@ def existing_tests_source_for(
     rows = []
     headers = ["Test File::Test Function", "Original ⏱️", "Optimized ⏱️", "Speedup"]
     tests_root = test_cfg.tests_root
-    module_root = test_cfg.project_root_path
-    rel_tests_root = tests_root.relative_to(module_root)
     original_tests_to_runtimes: dict[Path, dict[str, int]] = {}
     optimized_tests_to_runtimes: dict[Path, dict[str, int]] = {}
     non_generated_tests = set()
     for test_file in test_files:
-        non_generated_tests.add(Path(test_file.tests_in_file.test_file).relative_to(tests_root))
+        non_generated_tests.add(test_file.tests_in_file.test_file)
     # TODO confirm that original and optimized have the same keys
     all_invocation_ids = original_runtimes_all.keys() | optimized_runtimes_all.keys()
     for invocation_id in all_invocation_ids:
-        rel_path = (
-            Path(invocation_id.test_module_path.replace(".", os.sep)).with_suffix(".py").relative_to(rel_tests_root)
-        )
-        if rel_path not in non_generated_tests:
+        abs_path = Path(invocation_id.test_module_path.replace(".", os.sep)).with_suffix(".py").resolve()
+        if abs_path not in non_generated_tests:
             continue
-        if rel_path not in original_tests_to_runtimes:
-            original_tests_to_runtimes[rel_path] = {}
-        if rel_path not in optimized_tests_to_runtimes:
-            optimized_tests_to_runtimes[rel_path] = {}
+        if abs_path not in original_tests_to_runtimes:
+            original_tests_to_runtimes[abs_path] = {}
+        if abs_path not in optimized_tests_to_runtimes:
+            optimized_tests_to_runtimes[abs_path] = {}
         qualified_name = (
             invocation_id.test_class_name + "." + invocation_id.test_function_name  # type: ignore[operator]
             if invocation_id.test_class_name
             else invocation_id.test_function_name
         )
-        if qualified_name not in original_tests_to_runtimes[rel_path]:
-            original_tests_to_runtimes[rel_path][qualified_name] = 0  # type: ignore[index]
-        if qualified_name not in optimized_tests_to_runtimes[rel_path]:
-            optimized_tests_to_runtimes[rel_path][qualified_name] = 0  # type: ignore[index]
+        if qualified_name not in original_tests_to_runtimes[abs_path]:
+            original_tests_to_runtimes[abs_path][qualified_name] = 0  # type: ignore[index]
+        if qualified_name not in optimized_tests_to_runtimes[abs_path]:
+            optimized_tests_to_runtimes[abs_path][qualified_name] = 0  # type: ignore[index]
         if invocation_id in original_runtimes_all:
-            original_tests_to_runtimes[rel_path][qualified_name] += min(original_runtimes_all[invocation_id])  # type: ignore[index]
+            original_tests_to_runtimes[abs_path][qualified_name] += min(original_runtimes_all[invocation_id])  # type: ignore[index]
         if invocation_id in optimized_runtimes_all:
-            optimized_tests_to_runtimes[rel_path][qualified_name] += min(optimized_runtimes_all[invocation_id])  # type: ignore[index]
+            optimized_tests_to_runtimes[abs_path][qualified_name] += min(optimized_runtimes_all[invocation_id])  # type: ignore[index]
     # parse into string
-    all_rel_paths = (
+    all_abs_paths = (
         original_tests_to_runtimes.keys()
     )  # both will have the same keys as some default values are assigned in the previous loop
-    for filename in sorted(all_rel_paths):
+    for filename in sorted(all_abs_paths):
         all_qualified_names = original_tests_to_runtimes[
             filename
         ].keys()  # both will have the same keys as some default values are assigned in the previous loop
@@ -90,6 +86,7 @@ def existing_tests_source_for(
             ):
                 print_optimized_runtime = format_time(optimized_tests_to_runtimes[filename][qualified_name])
                 print_original_runtime = format_time(original_tests_to_runtimes[filename][qualified_name])
+                print_filename = filename.relative_to(tests_root)
                 greater = (
                     optimized_tests_to_runtimes[filename][qualified_name]
                     > original_tests_to_runtimes[filename][qualified_name]
@@ -104,7 +101,7 @@ def existing_tests_source_for(
                 if greater:
                     rows.append(
                         [
-                            f"`{filename}::{qualified_name}`",
+                            f"`{print_filename}::{qualified_name}`",
                             f"{print_original_runtime}",
                             f"{print_optimized_runtime}",
                             f"⚠️{perf_gain}%",
@@ -113,7 +110,7 @@ def existing_tests_source_for(
                 else:
                     rows.append(
                         [
-                            f"`{filename}::{qualified_name}`",
+                            f"`{print_filename}::{qualified_name}`",
                             f"{print_original_runtime}",
                             f"{print_optimized_runtime}",
                             f"✅{perf_gain}%",
@@ -166,7 +163,7 @@ def check_create_pr(
                 relative_file_path=relative_path,
                 speedup_x=explanation.speedup_x,
                 speedup_pct=explanation.speedup_pct,
-                winning_behavioral_test_results=explanation.winning_behavioral_test_results,
+                winning_behavior_test_results=explanation.winning_behavior_test_results,
                 winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
                 benchmark_details=explanation.benchmark_details,
             ),
@@ -188,7 +185,7 @@ def check_create_pr(
         owner, repo = get_repo_owner_and_name(git_repo, git_remote)
         logger.info(f"Pushing to {git_remote} - Owner: {owner}, Repo: {repo}")
         console.rule()
-        if not check_and_push_branch(git_repo, wait_for_push=True):
+        if not check_and_push_branch(git_repo, git_remote, wait_for_push=True):
             logger.warning("⏭️ Branch is not pushed, skipping PR creation...")
             return
         relative_path = explanation.file_path.relative_to(git_root_dir()).as_posix()
@@ -213,7 +210,7 @@ def check_create_pr(
                 relative_file_path=relative_path,
                 speedup_x=explanation.speedup_x,
                 speedup_pct=explanation.speedup_pct,
-                winning_behavioral_test_results=explanation.winning_behavioral_test_results,
+                winning_behavior_test_results=explanation.winning_behavior_test_results,
                 winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
                 benchmark_details=explanation.benchmark_details,
             ),

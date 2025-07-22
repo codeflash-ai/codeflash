@@ -79,8 +79,6 @@ class PicklePatcher:
         except:  # noqa: E722
             obj_str = f"<unprintable object of type {obj_type.__name__}>"
 
-        print(f"Creating placeholder for {obj_type.__name__} at path {'->'.join(path) or 'root'}: {error_msg}")
-
         placeholder = PicklePlaceholder(obj_type.__name__, obj_str, error_msg, path)
 
         # Add this type to our known unpicklable types cache

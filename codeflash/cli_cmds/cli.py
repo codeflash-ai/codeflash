@@ -22,6 +22,36 @@ def parse_args() -> Namespace:
 
     init_actions_parser = subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
     init_actions_parser.set_defaults(func=install_github_actions)
+
+    trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize a Python project.")
+
+    from codeflash.tracer import main as tracer_main
+
+    trace_optimize.set_defaults(func=tracer_main)
+
+    trace_optimize.add_argument(
+        "--max-function-count",
+        type=int,
+        default=100,
+        help="The maximum number of times to trace a single function. More calls to a function will not be traced. Default is 100.",
+    )
+    trace_optimize.add_argument(
+        "--timeout",
+        type=int,
+        help="The maximum time in seconds to trace the entire workflow. Default is indefinite. This is useful while tracing really long workflows, to not wait indefinitely.",
+    )
+    trace_optimize.add_argument(
+        "--output",
+        type=str,
+        default="codeflash.trace",
+        help="The file to save the trace to. Default is codeflash.trace.",
+    )
+    trace_optimize.add_argument(
+        "--config-file-path",
+        type=str,
+        help="The path to the pyproject.toml file which stores the Codeflash config. This is auto-discovered by default.",
+    )
+
     parser.add_argument("--file", help="Try to optimize only this file")
     parser.add_argument("--function", help="Try to optimize only this function within the given file path")
     parser.add_argument(
@@ -65,7 +95,8 @@ def parse_args() -> Namespace:
     )
     parser.add_argument("--no-draft", default=False, action="store_true", help="Skip optimization for draft PRs")
 
-    args: Namespace = parser.parse_args()
+    args, unknown_args = parser.parse_known_args()
+    sys.argv[:] = [sys.argv[0], *unknown_args]
     return process_and_validate_cmd_args(args)
 
 
@@ -103,6 +134,8 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
             if not Path(test_path).is_file():
                 exit_with_message(f"Replay test file {test_path} does not exist", error_on_exit=True)
         args.replay_test = [Path(replay_test).resolve() for replay_test in args.replay_test]
+        if env_utils.is_ci():
+            args.no_pr = True
 
     return args
 
@@ -202,7 +235,7 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
                 "I need a git repository to run --all and open PRs for optimizations. Exiting..."
             )
             apologize_and_exit()
-        if not args.no_pr and not check_and_push_branch(git_repo):
+        if not args.no_pr and not check_and_push_branch(git_repo, git_remote=args.git_remote):
             exit_with_message("Branch is not pushed...", error_on_exit=True)
         owner, repo = get_repo_owner_and_name(git_repo)
         if not args.no_pr:

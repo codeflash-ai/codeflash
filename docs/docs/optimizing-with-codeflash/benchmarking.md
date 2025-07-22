@@ -1,7 +1,7 @@
 ---
 sidebar_position: 5
 ---
-# Using Benchmarks
+# Using Benchmarks in CI
 
 Codeflash is able to determine the impact of an optimization on predefined benchmarks, when used in benchmark mode.
 

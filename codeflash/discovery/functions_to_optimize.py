@@ -30,6 +30,8 @@ from codeflash.models.models import FunctionParent
 from codeflash.telemetry.posthog_cf import ph
 
 if TYPE_CHECKING:
+    from argparse import Namespace
+
     from libcst import CSTNode
     from libcst.metadata import CodeRange
 
@@ -158,11 +160,12 @@ def get_functions_to_optimize(
     project_root: Path,
     module_root: Path,
     previous_checkpoint_functions: dict[str, dict[str, str]] | None = None,
-) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
+) -> tuple[dict[Path, list[FunctionToOptimize]], int, Path | None]:
     assert sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1, (
         "Only one of optimize_all, replay_test, or file should be provided"
     )
     functions: dict[str, list[FunctionToOptimize]]
+    trace_file_path: Path | None = None
     with warnings.catch_warnings():
         warnings.simplefilter(action="ignore", category=SyntaxWarning)
         if optimize_all:
@@ -170,7 +173,7 @@ def get_functions_to_optimize(
             console.rule()
             functions = get_all_files_and_functions(Path(optimize_all))
         elif replay_test:
-            functions = get_all_replay_test_functions(
+            functions, trace_file_path = get_all_replay_test_functions(
                 replay_test=replay_test, test_cfg=test_cfg, project_root_path=project_root
             )
         elif file is not None:
@@ -206,6 +209,7 @@ def get_functions_to_optimize(
         filtered_modified_functions, functions_count = filter_functions(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )
+
         logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
         if optimize_all:
             three_min_in_ns = int(1.8e11)
@@ -214,7 +218,7 @@ def get_functions_to_optimize(
                 f"It might take about {humanize_runtime(functions_count * three_min_in_ns)} to fully optimize this project. Codeflash "
                 f"will keep opening pull requests as it finds optimizations."
             )
-        return filtered_modified_functions, functions_count
+        return filtered_modified_functions, functions_count, trace_file_path
 
 
 def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
@@ -272,8 +276,35 @@ def find_all_functions_in_file(file_path: Path) -> dict[Path, list[FunctionToOpt
 
 def get_all_replay_test_functions(
     replay_test: list[Path], test_cfg: TestConfig, project_root_path: Path
-) -> dict[Path, list[FunctionToOptimize]]:
-    function_tests, _ = discover_unit_tests(test_cfg, discover_only_these_tests=replay_test)
+) -> tuple[dict[Path, list[FunctionToOptimize]], Path]:
+    trace_file_path: Path | None = None
+    for replay_test_file in replay_test:
+        try:
+            with replay_test_file.open("r", encoding="utf8") as f:
+                tree = ast.parse(f.read())
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Assign):
+                        for target in node.targets:
+                            if (
+                                isinstance(target, ast.Name)
+                                and target.id == "trace_file_path"
+                                and isinstance(node.value, ast.Constant)
+                                and isinstance(node.value.value, str)
+                            ):
+                                trace_file_path = Path(node.value.value)
+                                break
+                        if trace_file_path:
+                            break
+            if trace_file_path:
+                break
+        except Exception as e:
+            logger.warning(f"Error parsing replay test file {replay_test_file}: {e}")
+
+    if not trace_file_path:
+        logger.error("Could not find trace_file_path in replay test files.")
+        exit_with_message("Could not find trace_file_path in replay test files.")
+
+    function_tests, _, _ = discover_unit_tests(test_cfg, discover_only_these_tests=replay_test)
     # Get the absolute file paths for each function, excluding class name if present
     filtered_valid_functions = defaultdict(list)
     file_to_functions_map = defaultdict(list)
@@ -317,7 +348,7 @@ def get_all_replay_test_functions(
         if filtered_list:
             filtered_valid_functions[file_path] = filtered_list
 
-    return filtered_valid_functions
+    return filtered_valid_functions, trace_file_path
 
 
 def is_git_repo(file_path: str) -> bool:
@@ -423,7 +454,7 @@ def inspect_top_level_functions_or_methods(
 
 
 def was_function_previously_optimized(
-    function_to_optimize: FunctionToOptimize, code_context: CodeOptimizationContext
+    function_to_optimize: FunctionToOptimize, code_context: CodeOptimizationContext, args: Namespace
 ) -> bool:
     """Check which functions have already been optimized and filter them out.
 
@@ -445,7 +476,7 @@ def was_function_previously_optimized(
         owner, repo = None, None
     pr_number = get_pr_number()
 
-    if not owner or not repo or pr_number is None:
+    if not owner or not repo or pr_number is None or getattr(args, "no_pr", False):
         return False
 
     code_contexts = []

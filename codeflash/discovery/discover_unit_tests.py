@@ -341,7 +341,7 @@ def discover_unit_tests(
     cfg: TestConfig,
     discover_only_these_tests: list[Path] | None = None,
     file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None = None,
-) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
+) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
     framework_strategies: dict[str, Callable] = {"pytest": discover_tests_pytest, "unittest": discover_tests_unittest}
     strategy = framework_strategies.get(cfg.test_framework, None)
     if not strategy:
@@ -352,8 +352,10 @@ def discover_unit_tests(
     functions_to_optimize = None
     if file_to_funcs_to_optimize:
         functions_to_optimize = [func for funcs_list in file_to_funcs_to_optimize.values() for func in funcs_list]
-    function_to_tests, num_discovered_tests = strategy(cfg, discover_only_these_tests, functions_to_optimize)
-    return function_to_tests, num_discovered_tests
+    function_to_tests, num_discovered_tests, num_discovered_replay_tests = strategy(
+        cfg, discover_only_these_tests, functions_to_optimize
+    )
+    return function_to_tests, num_discovered_tests, num_discovered_replay_tests
 
 
 def discover_tests_pytest(
@@ -515,6 +517,7 @@ def process_test_files(
 
     function_to_test_map = defaultdict(set)
     num_discovered_tests = 0
+    num_discovered_replay_tests = 0
     jedi_project = jedi.Project(path=project_root_path)
 
     with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
@@ -624,46 +627,51 @@ def process_test_files(
                 except Exception as e:
                     logger.debug(str(e))
                     continue
+                try:
+                    if not definition or definition[0].type != "function":
+                        continue
+                    definition_obj = definition[0]
+                    definition_path = str(definition_obj.module_path)
 
-                if not definition or definition[0].type != "function":
-                    continue
+                    project_root_str = str(project_root_path)
+                    if (
+                        definition_path.startswith(project_root_str + os.sep)
+                        and definition_obj.module_name != name.module_name
+                        and definition_obj.full_name is not None
+                    ):
+                        # Pre-compute common values outside the inner loop
+                        module_prefix = definition_obj.module_name + "."
+                        full_name_without_module_prefix = definition_obj.full_name.replace(module_prefix, "", 1)
+                        qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition_obj.module_path, project_root_path)}.{full_name_without_module_prefix}"
 
-                definition_obj = definition[0]
-                definition_path = str(definition_obj.module_path)
+                        for test_func in test_functions_by_name[scope]:
+                            if test_func.parameters is not None:
+                                if test_framework == "pytest":
+                                    scope_test_function = f"{test_func.function_name}[{test_func.parameters}]"
+                                else:  # unittest
+                                    scope_test_function = f"{test_func.function_name}_{test_func.parameters}"
+                            else:
+                                scope_test_function = test_func.function_name
 
-                project_root_str = str(project_root_path)
-                if (
-                    definition_path.startswith(project_root_str + os.sep)
-                    and definition_obj.module_name != name.module_name
-                    and definition_obj.full_name is not None
-                ):
-                    # Pre-compute common values outside the inner loop
-                    module_prefix = definition_obj.module_name + "."
-                    full_name_without_module_prefix = definition_obj.full_name.replace(module_prefix, "", 1)
-                    qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition_obj.module_path, project_root_path)}.{full_name_without_module_prefix}"
-
-                    for test_func in test_functions_by_name[scope]:
-                        if test_func.parameters is not None:
-                            if test_framework == "pytest":
-                                scope_test_function = f"{test_func.function_name}[{test_func.parameters}]"
-                            else:  # unittest
-                                scope_test_function = f"{test_func.function_name}_{test_func.parameters}"
-                        else:
-                            scope_test_function = test_func.function_name
-
-                        function_to_test_map[qualified_name_with_modules_from_root].add(
-                            FunctionCalledInTest(
-                                tests_in_file=TestsInFile(
-                                    test_file=test_file,
-                                    test_class=test_func.test_class,
-                                    test_function=scope_test_function,
-                                    test_type=test_func.test_type,
-                                ),
-                                position=CodePosition(line_no=name.line, col_no=name.column),
+                            function_to_test_map[qualified_name_with_modules_from_root].add(
+                                FunctionCalledInTest(
+                                    tests_in_file=TestsInFile(
+                                        test_file=test_file,
+                                        test_class=test_func.test_class,
+                                        test_function=scope_test_function,
+                                        test_type=test_func.test_type,
+                                    ),
+                                    position=CodePosition(line_no=name.line, col_no=name.column),
+                                )
                             )
-                        )
-                        num_discovered_tests += 1
+                            if test_func.test_type == TestType.REPLAY_TEST:
+                                num_discovered_replay_tests += 1
+
+                            num_discovered_tests += 1
+                except Exception as e:
+                    logger.debug(str(e))
+                    continue
 
             progress.advance(task_id)
 
-    return dict(function_to_test_map), num_discovered_tests
+    return dict(function_to_test_map), num_discovered_tests, num_discovered_replay_tests
