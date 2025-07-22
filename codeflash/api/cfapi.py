@@ -183,9 +183,10 @@ def create_pr(
     }
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
+
 def create_staging(
-    original_code: str,
-    new_code: str,
+    original_code: dict[Path, str],
+    new_code: dict[Path, str],
     explanation: Explanation,
     existing_tests_source: str,
     generated_original_test_source: str,
@@ -194,15 +195,15 @@ def create_staging(
 ) -> Response:
     """Create a staging pull request, targeting the specified branch. (usually 'staging').
 
-    :param owner: The owner of the repository.
-    :param repo: The name of the repository.
-    :param base_branch: The base branch to target.
-    :param file_changes: A dictionary of file changes.
-    :param pr_comment: The pull request comment object, containing the optimization explanation, best runtime, etc.
-    :param generated_tests: The generated tests.
-    :return: The response object.
+    :param original_code: A mapping of file paths to original source code.
+    :param new_code: A mapping of file paths to optimized source code.
+    :param explanation: An Explanation object with optimization details.
+    :param existing_tests_source: Existing test code.
+    :param generated_original_test_source: Generated tests for the original function.
+    :param function_trace_id: Unique identifier for this optimization trace.
+    :param coverage_message: Coverage report or summary.
+    :return: The response object from the backend.
     """
-    # convert Path objects to strings
     relative_path = explanation.file_path.relative_to(git_root_dir()).as_posix()
 
     build_file_changes = {
@@ -211,6 +212,7 @@ def create_staging(
         )
         for p in original_code
     }
+
     payload = {
         "baseBranch": get_current_branch(),
         "diffContents": build_file_changes,
@@ -222,7 +224,7 @@ def create_staging(
             relative_file_path=relative_path,
             speedup_x=explanation.speedup_x,
             speedup_pct=explanation.speedup_pct,
-            winning_behavioral_test_results=explanation.winning_behavioral_test_results,
+            winning_behavior_test_results=explanation.winning_behavior_test_results,
             winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
             benchmark_details=explanation.benchmark_details,
         ).to_json(),
@@ -231,6 +233,7 @@ def create_staging(
         "traceId": function_trace_id,
         "coverage_message": coverage_message,
     }
+
     return make_cfapi_request(endpoint="/create-staging", method="POST", payload=payload)
 
 
