@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class AIServiceRefinerRequest:
+    optimization_id: str
     original_source_code: str
     read_only_dependency_code: str
     original_code_runtime: str
@@ -232,10 +233,11 @@ class AiServiceClient:
         console.rule()
         return []
 
-    def optimize_python_code_refinement(self, request: list[AIServiceRefinerRequest]) -> list[str]:
+    def optimize_python_code_refinement(self, request: list[AIServiceRefinerRequest]) -> dict[str, str]:
         git_repo_owner, git_repo_name = safe_get_repo_owner_and_name()
         payload = [
             {
+                "optimization_id": opt.optimization_id,
                 "original_source_code": opt.original_source_code,
                 "read_only_dependency_code": opt.read_only_dependency_code,
                 "original_line_profiler_results": opt.original_line_profiler_results,
@@ -280,7 +282,7 @@ class AiServiceClient:
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
-            return []
+            return {}
 
         if response.status_code == 200:
             refined_optimizations = response.json()["result"]
@@ -294,7 +296,7 @@ class AiServiceClient:
         logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
-        return []
+        return {}
 
     def log_results(  # noqa: D417
         self,
@@ -303,6 +305,7 @@ class AiServiceClient:
         original_runtime: float | None,
         optimized_runtime: dict[str, float | None] | None,
         is_correct: dict[str, bool] | None,
+        metadata: dict[str, any] | None,
     ) -> None:
         """Log features to the database.
 
@@ -313,6 +316,7 @@ class AiServiceClient:
         - original_runtime (Optional[Dict[str, float]]): The original runtime.
         - optimized_runtime (Optional[Dict[str, float]]): The optimized runtime.
         - is_correct (Optional[Dict[str, bool]]): Whether the optimized code is correct.
+        - metadata (Optional[dict[str, any]]): metadata.
 
         """
         payload = {
@@ -322,6 +326,7 @@ class AiServiceClient:
             "optimized_runtime": optimized_runtime,
             "is_correct": is_correct,
             "codeflash_version": codeflash_version,
+            "metadata": metadata,
         }
         try:
             self.make_ai_service_request("/log_features", payload=payload, timeout=5)

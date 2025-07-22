@@ -547,7 +547,8 @@ class FunctionOptimizer:
                         trace_id = self.function_trace_id
                         if trace_id.endswith(("EXP0", "EXP1")):
                             trace_id = trace_id[:-4] + exp_type
-                        refinement_diffs = self.refine_optimizations(
+                        # refinement_dict is a dictionary with optimization_id as a key and the refined code as a value
+                        refinement_dict = self.refine_optimizations(
                             valid_optimizations=self.valid_optimizations,
                             original_code_baseline=original_code_baseline,
                             code_context=code_context,
@@ -561,15 +562,18 @@ class FunctionOptimizer:
                             executor=executor,
                             fto_name=self.function_to_optimize.qualified_name,
                         )
-                        # filter out empty strings of code
+
                         more_opt_candidates = [
                             OptimizedCandidate(
-                                source_code=refinement_diffs[i],
-                                explanation=self.valid_optimizations[i].candidate.explanation,
-                                optimization_id=self.valid_optimizations[i].candidate.optimization_id,
+                                source_code=code,
+                                explanation=self.valid_optimizations[
+                                    i
+                                ].candidate.explanation,  # TODO: handle the new explanation after the refinement
+                                optimization_id=opt_id,
                             )
-                            for i in range(len(refinement_diffs))
-                            if refinement_diffs[i] != ""
+                            for i, (opt_id, code) in enumerate(refinement_dict.items())
+                            # filter out empty strings of code
+                            if code != ""
                         ]
                         # we no longer need to apply diffs since we are generating the entire code again
                         candidates.extend(more_opt_candidates)
@@ -637,14 +641,16 @@ class FunctionOptimizer:
         runtimes_ranking = create_rank_dictionary_compact(runtimes_list)
         overall_ranking = {key: diff_lens_ranking[key] + runtimes_ranking[key] for key in diff_lens_ranking.keys()}  # noqa: SIM118
         min_key = min(overall_ranking, key=overall_ranking.get)
+        best_optimization = self.valid_optimizations[min_key]
         ai_service_client.log_results(
             function_trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
             speedup_ratio=speedup_ratios,
             original_runtime=original_code_baseline.runtime,
             optimized_runtime=optimized_runtimes,
             is_correct=is_correct,
+            metadata={"best_optimization_id": best_optimization.candidate.optimization_id},
         )
-        return self.valid_optimizations[min_key]
+        return best_optimization
 
     def refine_optimizations(
         self,
@@ -656,9 +662,10 @@ class FunctionOptimizer:
         ai_service_client: AiServiceClient,
         executor: concurrent.futures.ThreadPoolExecutor,
         fto_name: str,
-    ) -> list[str]:
+    ) -> dict[str, str]:
         request = [
             AIServiceRefinerRequest(
+                optimization_id=opt.candidate.optimization_id,
                 original_source_code=code_context.read_writable_code,
                 read_only_dependency_code=code_context.read_only_context_code,
                 original_code_runtime=humanize_runtime(original_code_baseline.runtime),
