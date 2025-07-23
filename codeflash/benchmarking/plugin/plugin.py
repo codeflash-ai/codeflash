@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import os
 import sqlite3
 import sys
@@ -11,6 +12,8 @@ import pytest
 
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
 from codeflash.code_utils.code_utils import module_name_from_file_path
+
+IS_PYTEST_BENCHMARK_INSTALLED = importlib.util.find_spec("pytest_benchmark") is not None
 
 
 @dataclass(frozen=True)
@@ -213,17 +216,16 @@ class CodeFlashBenchmarkPlugin:
         parser.addoption("--codeflash-trace", action="store_true", default=False, help="Enable CodeFlash tracing")
 
     @staticmethod
-    def pytest_plugin_registered(plugin, manager) -> None:  # noqa: ANN001
-        # Not necessary since run with -p no:benchmark, but just in case
-        if hasattr(plugin, "name") and plugin.name == "pytest-benchmark":
-            manager.unregister(plugin)
-
-    @staticmethod
     def pytest_configure(config: pytest.Config) -> None:
-        """Register the benchmark marker."""
+        """Register the benchmark marker and disable conflicting plugins."""
         config.addinivalue_line(
             "markers", "benchmark: mark test as a benchmark that should be run with codeflash tracing"
         )
+
+        if config.getoption("--codeflash-trace") and IS_PYTEST_BENCHMARK_INSTALLED:
+            object.__setattr__(config.option, "benchmark_disable", True)
+            config.pluginmanager.set_blocked("pytest_benchmark")
+            config.pluginmanager.set_blocked("pytest-benchmark")
 
     @staticmethod
     def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
@@ -297,3 +299,20 @@ class CodeFlashBenchmarkPlugin:
 
 
 codeflash_benchmark_plugin = CodeFlashBenchmarkPlugin()
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line("markers", "benchmark: mark test as a benchmark that should be run with codeflash tracing")
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--codeflash-trace", action="store_true", default=False, help="Enable CodeFlash tracing for benchmarks"
+    )
+
+
+@pytest.fixture
+def benchmark(request: pytest.FixtureRequest) -> object:
+    if not request.config.getoption("--codeflash-trace"):
+        return lambda func, *args, **kwargs: func(*args, **kwargs)
+    return codeflash_benchmark_plugin.Benchmark(request)

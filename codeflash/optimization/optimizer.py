@@ -90,13 +90,13 @@ class Optimizer:
                     logger.info(
                         f"No valid benchmarks found in {self.args.benchmarks_root} for functions to optimize, continuing optimization"
                     )
-                    raise SystemExit  # noqa: TRY301
-                function_benchmark_timings = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(trace_file)
-                total_benchmark_timings = CodeFlashBenchmarkPlugin.get_benchmark_timings(trace_file)
-                function_to_results = validate_and_format_benchmark_table(
-                    function_benchmark_timings, total_benchmark_timings
-                )
-                print_benchmark_table(function_to_results)
+                else:
+                    function_benchmark_timings = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(trace_file)
+                    total_benchmark_timings = CodeFlashBenchmarkPlugin.get_benchmark_timings(trace_file)
+                    function_to_results = validate_and_format_benchmark_table(
+                        function_benchmark_timings, total_benchmark_timings
+                    )
+                    print_benchmark_table(function_to_results)
             except Exception as e:
                 logger.info(f"Error while tracing existing benchmarks: {e}")
                 logger.info("Information on existing benchmarks will not be available for this run.")
