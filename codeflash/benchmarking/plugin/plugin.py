@@ -233,12 +233,16 @@ class CodeFlashBenchmarkPlugin:
         if not config.getoption("--codeflash-trace"):
             return
 
+        skip_marker = pytest.mark.skip(reason="Test requires benchmark marker")
         for item in items:
             # Check for @pytest.mark.benchmark marker
-            if hasattr(item, "get_closest_marker"):
-                marker = item.get_closest_marker("benchmark")
-                if marker is None:
-                    item.add_marker(pytest.mark.skip(reason="Test requires benchmark marker"))
+            get_marker = getattr(item, "get_closest_marker", None)
+            if get_marker is not None:
+                if get_marker("benchmark") is None:
+                    item.add_marker(skip_marker)
+            else:
+                # If item does not have get_closest_marker (rare), skip it for correctness
+                continue
 
     # Benchmark fixture
     class Benchmark:  # noqa: D106
