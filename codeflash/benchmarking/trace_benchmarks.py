@@ -32,7 +32,6 @@ def trace_benchmarks_pytest(
         env=benchmark_env,
         timeout=timeout,
     )
-    print(result.stdout)
     if result.returncode != 0:
         if "ERROR collecting" in result.stdout:
             # Pattern matches "===== ERRORS =====" (any number of =) and captures everything after

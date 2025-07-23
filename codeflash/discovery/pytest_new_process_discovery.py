@@ -23,6 +23,9 @@ class PytestCollectionPlugin:
             if "benchmark" in item.fixturenames:
                 item.add_marker(skip_benchmark)
 
+    def pytest_configure(self, config) -> None:
+        config.addinivalue_line("markers", "benchmark: placeholder")
+
 
 def parse_pytest_collection_results(pytest_tests: list[Any]) -> list[dict[str, str]]:
     test_results = []
