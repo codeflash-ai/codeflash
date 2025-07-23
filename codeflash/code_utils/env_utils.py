@@ -111,7 +111,7 @@ def get_cached_gh_event_data() -> dict[str, Any]:
 
 def is_repo_a_fork() -> bool:
     event = get_cached_gh_event_data()
-    return bool(event.get("repository", {}).get("fork", False))
+    return bool(event.get("pull_request", {}).get("head", {}).get("repo", {}).get("fork", False))
 
 
 @lru_cache(maxsize=1)
