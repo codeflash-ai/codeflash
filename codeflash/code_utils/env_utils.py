@@ -102,16 +102,21 @@ def is_end_to_end() -> bool:
 
 @lru_cache(maxsize=1)
 def get_cached_gh_event_data() -> dict[str, Any]:
-    event_path = os.getenv("GITHUB_EVENT_PATH")
+    event_path = os.environ.get("GITHUB_EVENT_PATH")
     if not event_path:
         return {}
-    with Path(event_path).open() as f:
+    # Use built-in open for less overhead
+    with open(event_path) as f:
         return json.load(f)  # type: ignore  # noqa
 
 
 def is_repo_a_fork() -> bool:
     event = get_cached_gh_event_data()
-    return bool(event.get("pull_request", {}).get("head", {}).get("repo", {}).get("fork", False))
+    try:
+        # Access nested keys directly for speed; fallback to False
+        return bool(event["pull_request"]["head"]["repo"]["fork"])
+    except (KeyError, TypeError):
+        return False
 
 
 @lru_cache(maxsize=1)
