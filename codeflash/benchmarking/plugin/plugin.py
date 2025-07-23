@@ -53,7 +53,6 @@ class CodeFlashBenchmarkPlugin:
             raise
 
     def write_benchmark_timings(self) -> None:
-        print("XXX ATTEMPTING TO WRITE THE BENCHMARK TIMINGS")
         if not self.benchmark_timings:
             return  # No data to write
 
@@ -96,7 +95,6 @@ class CodeFlashBenchmarkPlugin:
 
         """
         # Initialize the result dictionary
-        print("XXX ATTEMPTING get_function_benchmark_timings")
         result = {}
 
         # Connect to the SQLite database
@@ -156,7 +154,6 @@ class CodeFlashBenchmarkPlugin:
 
         """
         # Initialize the result dictionary
-        print("XXX ATTEMPTING get_benchmark_timings")
         result = {}
         overhead_by_benchmark = {}
 
@@ -190,7 +187,6 @@ class CodeFlashBenchmarkPlugin:
 
                 # Create the benchmark key (file::function::line)
                 benchmark_key = BenchmarkKey(module_path=benchmark_file, function_name=benchmark_func)
-                print(f"XXX Processing benchmark: {benchmark_key}")
                 # Subtract overhead from total time
                 overhead = overhead_by_benchmark.get(benchmark_key, 0)
                 result[benchmark_key] = time_ns - overhead
@@ -246,11 +242,9 @@ class CodeFlashBenchmarkPlugin:
     class Benchmark:  # noqa: D106
         def __init__(self, request: pytest.FixtureRequest) -> None:
             self.request = request
-            print("XXX INITIALIZING THE BENCHMARK")
 
         def __call__(self, func, *args, **kwargs):  # type: ignore  # noqa: ANN001, ANN002, ANN003, ANN204, PGH003
             """Handle both direct function calls and decorator usage."""
-            print("XXX CALLED THE BENCHMARK")
             if args or kwargs:
                 # Used as benchmark(func, *args, **kwargs)
                 return self._run_benchmark(func, *args, **kwargs)
@@ -264,10 +258,10 @@ class CodeFlashBenchmarkPlugin:
 
         def _run_benchmark(self, func, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
             """Actual benchmark implementation."""
-            print("XXX RUNNING THE BENCHMARK!!")
             benchmark_module_path = module_name_from_file_path(
-                Path(str(self.request.node.fspath)), Path(codeflash_benchmark_plugin.project_root)
+                Path(str(self.request.node.fspath)), Path(codeflash_benchmark_plugin.project_root), traverse_up=True
             )
+
             benchmark_function_name = self.request.node.name
             line_number = int(str(sys._getframe(2).f_lineno))  # 2 frames up in the call stack  # noqa: SLF001
             # Set env vars
@@ -299,7 +293,6 @@ class CodeFlashBenchmarkPlugin:
         """Fixture to provide the benchmark functionality."""
         if not request.config.getoption("--codeflash-trace"):
             return None
-        print("XXX BENCHMARK PLUGIN INITIATED")
         return CodeFlashBenchmarkPlugin.Benchmark(request)
 
 
