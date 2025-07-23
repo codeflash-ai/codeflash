@@ -648,7 +648,7 @@ class FunctionOptimizer:
             original_runtime=original_code_baseline.runtime,
             optimized_runtime=optimized_runtimes,
             is_correct=is_correct,
-            metadata={"best_optimization_id": best_optimization.candidate.optimization_id},
+            best_optimization_id=best_optimization.candidate.optimization_id,
         )
         return best_optimization
 
