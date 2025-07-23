@@ -28,7 +28,6 @@ if __name__ == "__main__":
                 "-p",
                 "no:profiling",
                 "-s",
-                "-vv",
                 "-o",
                 "addopts=",
             ],
