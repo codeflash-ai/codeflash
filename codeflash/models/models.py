@@ -139,8 +139,11 @@ class CodeString(BaseModel):
     file_path: Optional[Path] = None
 
 
+SPLITTER_MARKER = "# codeflash-splitter__"
+
+
 def get_code_block_splitter(file_path: Path) -> str:
-    return f"# codeflash-splitter__{file_path}"
+    return f"{SPLITTER_MARKER}{file_path}"
 
 
 class CodeStringsMarkdown(BaseModel):
@@ -165,6 +168,20 @@ class CodeStringsMarkdown(BaseModel):
                 for code_string in self.code_strings
             ]
         )
+
+    @staticmethod
+    def from_str_with_markers(code_with_markers: str) -> list[CodeString]:
+        pattern = rf"{SPLITTER_MARKER}([^\n]+)\n"
+        matches = list(re.finditer(pattern, code_with_markers))
+
+        results = []
+        for i, match in enumerate(matches):
+            start = match.end()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(code_with_markers)
+            file_path = match.group(1).strip()
+            code = code_with_markers[start:end].lstrip("\n")
+            results.append(CodeString(file_path=file_path, code=code))
+        return results
 
 
 class CodeOptimizationContext(BaseModel):
