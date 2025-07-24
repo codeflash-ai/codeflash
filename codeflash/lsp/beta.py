@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from pygls import uris
 
+from codeflash.code_utils.git_utils import create_git_worktrees, create_worktree_root_dir, remove_git_worktrees
 from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
 
@@ -292,3 +293,116 @@ def perform_function_optimization(  # noqa: PLR0911
         "extra": f"Speedup: {speedup:.2f}x faster",
         "optimization": optimized_source,
     }
+
+
+@dataclass
+class WorktreeParams:
+    functionName: str  # noqa: N815
+    candidateId: str  # noqa: N815
+    gitRoot: str  # noqa: N815
+
+
+@server.feature("codeflash/createWorktree")
+def create_worktree(server: CodeflashLanguageServer, params: WorktreeParams) -> dict[str, str]:
+    """Create git worktrees for optimization suggestions using CLI's existing infrastructure."""
+    server.show_message_log(
+        f"Creating worktree for function: {params.functionName}, candidate: {params.candidateId}", "Info"
+    )
+
+    try:
+        module_root = Path(params.gitRoot)
+
+        # Create worktree root directory
+        git_root, worktree_root_dir = create_worktree_root_dir(module_root)
+
+        if not git_root or not worktree_root_dir:
+            server.show_message_log("Not in a git repository, worktree creation skipped", "Warning")
+            return {
+                "functionName": params.functionName,
+                "candidateId": params.candidateId,
+                "status": "error",
+                "message": "Not in a git repository",
+            }
+
+        # Create git worktrees (creates N_CANDIDATES + 1 worktrees)
+        worktree_root, worktrees = create_git_worktrees(git_root, worktree_root_dir, module_root)
+
+        if not worktrees:
+            server.show_message_log("Failed to create git worktrees", "Error")
+            return {
+                "functionName": params.functionName,
+                "candidateId": params.candidateId,
+                "status": "error",
+                "message": "Failed to create git worktrees",
+            }
+
+        # Store worktree info for later cleanup (use public attribute instead of private)
+        if not hasattr(server, "worktree_registry"):
+            server.worktree_registry = {}
+
+        server.worktree_registry[params.candidateId] = {
+            "worktree_root": worktree_root,
+            "worktrees": worktrees,
+            "function_name": params.functionName,
+        }
+
+        # For now, return the first worktree (original) - in a full implementation,
+        # you'd assign specific worktrees to specific optimization candidates
+        primary_worktree_path = str(worktrees[0]) if worktrees else str(worktree_root)
+
+        server.show_message_log(
+            f"Successfully created worktrees for {params.functionName}, primary at: {primary_worktree_path}", "Info"
+        )
+
+        return {
+            "functionName": params.functionName,
+            "candidateId": params.candidateId,
+            "status": "success",
+            "worktreePath": primary_worktree_path,
+            "message": f"Created {len(worktrees)} worktrees",
+        }
+
+    except Exception as e:
+        server.show_message_log(f"Error creating worktree: {e!s}", "Error")
+        return {
+            "functionName": params.functionName,
+            "candidateId": params.candidateId,
+            "status": "error",
+            "message": f"Error creating worktree: {e!s}",
+        }
+
+
+@server.feature("codeflash/removeWorktree")
+def remove_worktree(server: CodeflashLanguageServer, params: WorktreeParams) -> dict[str, str]:
+    """Remove git worktrees for a specific optimization candidate."""
+    server.show_message_log(f"Removing worktree for candidate: {params.candidateId}", "Info")
+
+    if not hasattr(server, "worktree_registry") or params.candidateId not in server.worktree_registry:
+        server.show_message_log(f"No worktree found for candidate: {params.candidateId}", "Warning")
+        return {"candidateId": params.candidateId, "status": "warning", "message": "No worktree found for candidate"}
+
+    try:
+        worktree_info = server.worktree_registry[params.candidateId]
+        worktree_root = worktree_info["worktree_root"]
+        worktrees = worktree_info["worktrees"]
+        function_name = worktree_info["function_name"]
+
+        # Use CLI's existing cleanup function
+        remove_git_worktrees(worktree_root, worktrees)
+
+        # Remove from registry
+        del server.worktree_registry[params.candidateId]
+
+        server.show_message_log(
+            f"Successfully removed worktrees for {function_name} (candidate: {params.candidateId})", "Info"
+        )
+
+    except Exception as e:
+        server.show_message_log(f"Error removing worktree: {e!s}", "Error")
+        return {"candidateId": params.candidateId, "status": "error", "message": f"Error removing worktree: {e!s}"}
+    else:
+        return {
+            "candidateId": params.candidateId,
+            "status": "success",
+            "message": f"Successfully removed worktrees for {function_name}",
+        }
