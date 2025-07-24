@@ -67,7 +67,6 @@ dev = [
     "types-openpyxl>=3.1.5.20241020",
     "types-regex>=2024.9.11.20240912",
     "types-python-dateutil>=2.9.0.20241003",
-    "pytest-benchmark>=5.1.0",
     "types-gevent>=24.11.0.20241230,<25",
     "types-greenlet>=3.1.0.20241221,<4",
     "types-pexpect>=4.9.0.20241208,<5",
@@ -300,3 +299,6 @@ markers = [
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
+
+[project.entry-points.pytest11]
+codeflash = "codeflash.benchmarking.plugin.plugin"
