@@ -109,7 +109,7 @@ def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
     return full_qualified_name[len(module_name) + 1 :]
 
 
-def module_name_from_file_path(file_path: Path, project_root_path: Path, *, traverse_up: bool = True) -> str:
+def module_name_from_file_path(file_path: Path, project_root_path: Path, *, traverse_up: bool = False) -> str:
     try:
         relative_path = file_path.relative_to(project_root_path)
         return relative_path.with_suffix("").as_posix().replace("/", ".")
