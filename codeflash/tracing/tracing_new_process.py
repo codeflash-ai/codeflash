@@ -23,6 +23,7 @@ from rich.text import Text
 
 from codeflash.cli_cmds.console import console
 from codeflash.picklepatch.pickle_patcher import PicklePatcher
+from codeflash.tracing.trace_filters import TraceFilter
 from codeflash.tracing.tracing_utils import FunctionModules, filter_files_optimized, module_name_from_file_path
 
 if TYPE_CHECKING:
@@ -135,6 +136,9 @@ class Tracer:
 
         # Store command information for metadata table
         self.command = command
+        
+        # Initialize intelligent trace filtering
+        self.trace_filter = TraceFilter(config, project_root)
 
     def __enter__(self) -> None:
         if self.disable:
@@ -303,6 +307,10 @@ class Tracer:
         if code.co_name in self.ignored_functions:
             return
 
+        # Early built-in filtering to reduce noise - minimal change
+        if code.co_name in self.trace_filter.builtin_noise_functions:
+            return
+
         # Now resolve file path only if we need it
         co_filename = code.co_filename
         if co_filename in self.path_cache:
@@ -317,6 +325,10 @@ class Tracer:
         if not file_name.exists():
             return
         if self.functions and code.co_name not in self.functions:
+            return
+            
+        # Apply intelligent filtering early to reduce noise
+        if not self.trace_filter.should_trace_function(str(file_name), code.co_name):
             return
         class_name = None
         arguments = frame.f_locals
@@ -589,10 +601,6 @@ class Tracer:
             self.total_tt = 0
             return
 
-        if not isinstance(sort, tuple):
-            sort = (sort,)
-
-        # First, convert stats to make them pstats-compatible
         try:
             # Initialize empty collections for pstats
             self.files = []
@@ -600,10 +608,12 @@ class Tracer:
 
             # Create entirely new dictionaries instead of modifying existing ones
             new_stats = {}
-            new_timings = {}
+            filtered_stats = {}
 
-            # Convert stats dictionary
+            # Convert stats dictionary and apply intelligent filtering
             stats_items = list(self.stats.items())
+            total_filtered_out = 0
+            
             for func, stats_data in stats_items:
                 try:
                     # Make sure we have 5 elements in stats_data
@@ -619,6 +629,8 @@ class Tracer:
                         new_func = (file_name, line_num, new_func_name)
                     else:
                         new_func = func  # Keep as is if already in correct format
+                        # Extract file_name and func_name for filtering
+                        file_name, line_num, func_name = func if len(func) >= 3 else (func[0] if func else "", 0, "unknown")
 
                     new_callers = {}
                     callers_items = list(callers.items())
@@ -631,119 +643,123 @@ class Tracer:
                             else:
                                 new_caller_func = caller_func
                         else:
-                            console.print(f"Unexpected caller format: {caller_func}")
                             new_caller_func = str(caller_func)
 
                         new_callers[new_caller_func] = count
 
                     # Store with new format
                     new_stats[new_func] = (cc, nc, tt, ct, new_callers)
+                    
+                    # Apply intelligent filtering for display
+                    if (self.trace_filter.should_display_in_stats((cc, nc, tt, ct, new_callers)) and
+                        self.trace_filter.should_display_function(file_name, func_name)):
+                        filtered_stats[new_func] = (cc, nc, tt, ct, new_callers)
+                    else:
+                        total_filtered_out += 1
+                        
                 except Exception as e:
                     console.print(f"Error converting stats for {func}: {e}")
                     continue
 
-            timings_items = list(self.timings.items())
-            for func, timing_data in timings_items:
-                try:
-                    if len(timing_data) != 5:
-                        console.print(f"Skipping malformed timing data for {func}: {timing_data}")
-                        continue
-
-                    cc, ns, tt, ct, callers = timing_data
-
-                    if len(func) == 4:
-                        file_name, line_num, func_name, class_name = func
-                        new_func_name = f"{class_name}.{func_name}" if class_name else func_name
-                        new_func = (file_name, line_num, new_func_name)
-                    else:
-                        new_func = func
-
-                    new_callers = {}
-                    callers_items = list(callers.items())
-                    for caller_func, count in callers_items:
-                        if isinstance(caller_func, tuple):
-                            if len(caller_func) == 4:
-                                caller_file, caller_line, caller_name, caller_class = caller_func
-                                caller_new_name = f"{caller_class}.{caller_name}" if caller_class else caller_name
-                                new_caller_func = (caller_file, caller_line, caller_new_name)
-                            else:
-                                new_caller_func = caller_func
-                        else:
-                            console.print(f"Unexpected caller format: {caller_func}")
-                            new_caller_func = str(caller_func)
-
-                        new_callers[new_caller_func] = count
-
-                    new_timings[new_func] = (cc, ns, tt, ct, new_callers)
-                except Exception as e:
-                    console.print(f"Error converting timings for {func}: {e}")
-                    continue
-
             self.stats = new_stats
-            self.timings = new_timings
-
             self.total_tt = sum(tt for _, _, tt, _, _ in self.stats.values())
 
-            total_calls = sum(cc for cc, _, _, _, _ in self.stats.values())
-            total_primitive = sum(nc for _, nc, _, _, _ in self.stats.values())
+            # Use filtered stats for display
+            if not filtered_stats:
+                console.print("No functions meet the minimum performance thresholds for display")
+                return
 
-            summary = Text.assemble(
-                f"{total_calls:,} function calls ",
+            total_calls = sum(cc for cc, _, _, _, _ in filtered_stats.values())
+            total_primitive = sum(nc for _, nc, _, _, _ in filtered_stats.values())
+            filtered_time = sum(tt for _, _, tt, _, _ in filtered_stats.values())
+
+            # Enhanced summary with filtering info
+            summary_lines = [
+                f"{total_calls:,} significant function calls ",
                 ("(" + f"{total_primitive:,} primitive calls" + ")", "dim"),
-                f" in {self.total_tt / 1e6:.3f}milliseconds",
-            )
+                f" in {filtered_time / 1e6:.3f}ms",
+            ]
+            
+            if total_filtered_out > 0:
+                summary_lines.extend([
+                    "\n",
+                    ("(", "dim"),
+                    (f"{total_filtered_out} low-impact functions filtered out", "dim italic"),
+                    (")", "dim"),
+                ])
 
-            console.print(Align.center(Panel(summary, border_style="blue", width=80, padding=(0, 2), expand=False)))
+            summary = Text.assemble(*summary_lines)
+            console.print(Align.center(Panel(summary, border_style="blue", width=90, padding=(0, 2), expand=False)))
 
+            # Enhanced table with impact indicators
             table = Table(
                 show_header=True,
                 header_style="bold magenta",
                 border_style="blue",
-                title="[bold]Function Profile[/bold] (ordered by internal time)",
+                title="[bold]Performance Hotspots[/bold] (optimization targets)",
                 title_style="cyan",
-                caption=f"Showing top {min(25, len(self.stats))} of {len(self.stats)} functions",
+                caption=f"Showing top {min(self.trace_filter.max_functions_display, len(filtered_stats))} functions",
             )
 
+            table.add_column("Impact", width=12)
             table.add_column("Calls", justify="right", style="green", width=10)
             table.add_column("Time (ms)", justify="right", style="cyan", width=10)
             table.add_column("Per Call", justify="right", style="cyan", width=10)
-            table.add_column("Cum (ms)", justify="right", style="yellow", width=10)
-            table.add_column("Cum/Call", justify="right", style="yellow", width=10)
             table.add_column("Function", style="blue")
+            table.add_column("Optimization Tip", style="yellow", width=30)
 
+            # Sort by total time and limit results
             sorted_stats = sorted(
-                ((func, stats) for func, stats in self.stats.items() if isinstance(func, tuple) and len(func) == 3),
+                ((func, stats) for func, stats in filtered_stats.items() if isinstance(func, tuple) and len(func) == 3),
                 key=lambda x: x[1][2],  # Sort by tt (internal time)
                 reverse=True,
-            )[:25]  # Limit to top 25
+            )[:self.trace_filter.max_functions_display]
 
             # Format and add each row to the table
             for func, (cc, nc, tt, ct, _) in sorted_stats:
                 filename, lineno, funcname = func
+
+                # Get impact category and suggestions
+                impact = self.trace_filter.categorize_function_impact((cc, nc, tt, ct, {}))
+                suggestion = self.trace_filter.get_optimization_suggestion(filename, funcname, (cc, nc, tt, ct, {}))
 
                 # Format calls - show recursive format if different
                 calls_str = f"{cc}/{nc}" if cc != nc else f"{cc:,}"
 
                 # Convert to milliseconds
                 tt_ms = tt / 1e6
-                ct_ms = ct / 1e6
 
                 # Calculate per-call times
                 per_call = tt_ms / cc if cc > 0 else 0
-                cum_per_call = ct_ms / nc if nc > 0 else 0
                 base_filename = Path(filename).name
                 file_link = f"[link=file://{filename}]{base_filename}[/link]"
 
                 table.add_row(
+                    impact,
                     calls_str,
                     f"{tt_ms:.3f}",
                     f"{per_call:.3f}",
-                    f"{ct_ms:.3f}",
-                    f"{cum_per_call:.3f}",
                     f"{funcname} [dim]({file_link}:{lineno})[/dim]",
+                    suggestion[:30] + "..." if len(suggestion) > 30 else suggestion,
                 )
 
             console.print(Align.center(table))
+
+            # Add helpful explanation
+            explanation = Panel(
+                Text.assemble(
+                    "🎯 ", ("Optimization Guide:", "bold"),
+                    "\n• ", ("High Impact:", "red bold"), " Priority optimization targets",
+                    "\n• ", ("Medium Impact:", "yellow bold"), " Good candidates for improvement", 
+                    "\n• ", ("Low Impact:", "green bold"), " Fine-tuning opportunities",
+                    "\n\n💡 Focus on functions with high call counts or long execution times for maximum performance gains."
+                ),
+                title="Understanding Your Profile",
+                border_style="green",
+                width=90,
+                padding=(0, 2),
+            )
+            console.print(Align.center(explanation))
 
         except Exception as e:
             console.print(f"[bold red]Error in stats processing:[/bold red] {e}")
