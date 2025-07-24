@@ -17,53 +17,163 @@ class TraceFilter:
         # Built-in functions that are rarely optimization targets - expanded set
         self.builtin_noise_functions = {
             # Core Python built-ins
-            "isinstance", "getattr", "hasattr", "len", "iter", "next", "list", "dict", "set", "tuple",
-            "str", "repr", "hash", "id", "type", "bool", "int", "float", "abs", "min", "max",
-            "sum", "all", "any", "enumerate", "zip", "range", "sorted", "reversed", "filter", "map",
-            
+            "isinstance",
+            "getattr",
+            "hasattr",
+            "len",
+            "iter",
+            "next",
+            "list",
+            "dict",
+            "set",
+            "tuple",
+            "str",
+            "repr",
+            "hash",
+            "id",
+            "type",
+            "bool",
+            "int",
+            "float",
+            "abs",
+            "min",
+            "max",
+            "sum",
+            "all",
+            "any",
+            "enumerate",
+            "zip",
+            "range",
+            "sorted",
+            "reversed",
+            "filter",
+            "map",
             # Container methods (very common, low optimization value)
-            "append", "extend", "update", "pop", "remove", "clear", "copy", "keys", "values", "items",
-            "get", "setdefault", "popitem", "insert", "count", "reverse", "sort", "index",
-            
+            "append",
+            "extend",
+            "update",
+            "pop",
+            "remove",
+            "clear",
+            "copy",
+            "keys",
+            "values",
+            "items",
+            "get",
+            "setdefault",
+            "popitem",
+            "insert",
+            "count",
+            "reverse",
+            "sort",
+            "index",
             # String methods (very frequent, rarely worth optimizing)
-            "join", "split", "strip", "replace", "format", "startswith", "endswith", "find", "index",
-            "rstrip", "lstrip", "removeprefix", "removesuffix", "upper", "lower", "capitalize",
-            "title", "swapcase", "isdigit", "isalpha", "isalnum", "isspace", "islower", "isupper",
-            
+            "join",
+            "split",
+            "strip",
+            "replace",
+            "format",
+            "startswith",
+            "endswith",
+            "find",
+            "rstrip",
+            "lstrip",
+            "removeprefix",
+            "removesuffix",
+            "upper",
+            "lower",
+            "capitalize",
+            "title",
+            "swapcase",
+            "isdigit",
+            "isalpha",
+            "isalnum",
+            "isspace",
+            "islower",
+            "isupper",
             # File and path operations
-            "intern", "fspath", "stat", "open", "close", "read", "write", "seek", "tell", "flush",
-            
+            "intern",
+            "fspath",
+            "stat",
+            "open",
+            "close",
+            "read",
+            "write",
+            "seek",
+            "tell",
+            "flush",
             # Regular expressions and parsing
-            "compile", "loads", "dumps", "sub", "repl", "match", "search", "findall", "finditer",
-            
+            "compile",
+            "loads",
+            "dumps",
+            "sub",
+            "repl",
+            "match",
+            "search",
+            "findall",
+            "finditer",
             # AST and inspection
-            "walk", "collect", "iter_child_nodes", "iter_fields", "dump", "parse",
-            
+            "walk",
+            "collect",
+            "iter_child_nodes",
+            "iter_fields",
+            "dump",
+            "parse",
             # Threading and synchronization
-            "acquire", "release", "locked", "wait", "notify", "notify_all",
-            
+            "acquire",
+            "release",
+            "locked",
+            "wait",
+            "notify",
+            "notify_all",
             # Import and module system
-            "find_spec", "create_dynamic", "import_module", "reload", "invalidate_caches",
-            
+            "find_spec",
+            "create_dynamic",
+            "import_module",
+            "reload",
+            "invalidate_caches",
             # Memory and garbage collection
-            "collect", "get_count", "get_threshold", "set_threshold", "get_stats",
-            
+            "get_count",
+            "get_threshold",
+            "set_threshold",
+            "get_stats",
             # Internal Python functions (very noisy)
-            "_type_repr", "_type_check", "_is_dunder", "_parse_path", "_path_join", "_get_sep",
-            "_str_normcase", "_joinrealpath", "_parse", "_compile", "get_statement_startend2",
-            "_getframe", "_current_frames", "_getdefaultencoding", "_getfilesystemencoding",
-            
+            "_type_repr",
+            "_type_check",
+            "_is_dunder",
+            "_parse_path",
+            "_path_join",
+            "_get_sep",
+            "_str_normcase",
+            "_joinrealpath",
+            "_parse",
+            "_compile",
+            "get_statement_startend2",
+            "_getframe",
+            "_current_frames",
+            "_getdefaultencoding",
+            "_getfilesystemencoding",
             # Common property and descriptor methods
-            "__get__", "__set__", "__delete__", "__set_name__",
-            
+            "__get__",
+            "__set__",
+            "__delete__",
+            "__set_name__",
             # Common iterator protocol methods
-            "__iter__", "__next__", "__reversed__",
-            
-            # Common container protocol methods  
-            "__len__", "__getitem__", "__setitem__", "__delitem__", "__contains__",
-            
+            "__iter__",
+            "__next__",
+            "__reversed__",
+            # Common container protocol methods
+            "__len__",
+            "__getitem__",
+            "__setitem__",
+            "__delitem__",
+            "__contains__",
             # Attribute access methods (very frequent)
-            "__getattribute__", "__getattr__", "__setattr__", "__delattr__", "__dir__",
+            "__getattribute__",
+            "__getattr__",
+            "__setattr__",
+            "__delattr__",
+            "__dir__",
         }
 
         # Standard library modules that are usually not optimization targets - expanded
@@ -84,7 +194,6 @@ class TraceFilter:
             r"^.*[\\/]runpy\.py:",
             r"^.*[\\/]io\.py:",
             r"^.*[\\/]tempfile\.py:",
-            
             # Additional stdlib modules that create noise
             r"^.*[\\/]os\.py:",
             r"^.*[\\/]sys\.py:",
@@ -135,14 +244,46 @@ class TraceFilter:
 
         # Functions that are implementation details, not optimization targets
         self.implementation_detail_functions = {
-            "__init__", "__new__", "__del__", "__enter__", "__exit__",
-            "__getattr__", "__setattr__", "__delattr__", "__getattribute__",
-            "__getitem__", "__setitem__", "__delitem__", "__contains__",
-            "__str__", "__repr__", "__format__", "__bytes__",
-            "__hash__", "__bool__", "__len__", "__iter__", "__next__",
-            "__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__",
-            "__add__", "__sub__", "__mul__", "__truediv__", "__floordiv__",
-            "__mod__", "__pow__", "__and__", "__or__", "__xor__", "__lshift__", "__rshift__",
+            "__init__",
+            "__new__",
+            "__del__",
+            "__enter__",
+            "__exit__",
+            "__getattr__",
+            "__setattr__",
+            "__delattr__",
+            "__getattribute__",
+            "__getitem__",
+            "__setitem__",
+            "__delitem__",
+            "__contains__",
+            "__str__",
+            "__repr__",
+            "__format__",
+            "__bytes__",
+            "__hash__",
+            "__bool__",
+            "__len__",
+            "__iter__",
+            "__next__",
+            "__eq__",
+            "__ne__",
+            "__lt__",
+            "__le__",
+            "__gt__",
+            "__ge__",
+            "__add__",
+            "__sub__",
+            "__mul__",
+            "__truediv__",
+            "__floordiv__",
+            "__mod__",
+            "__pow__",
+            "__and__",
+            "__or__",
+            "__xor__",
+            "__lshift__",
+            "__rshift__",
         }
 
         # Compile regex patterns for performance
@@ -156,7 +297,6 @@ class TraceFilter:
 
     def should_trace_function(self, filename: str, function_name: str, class_name: str | None = None) -> bool:
         """Determine if a function should be traced based on its characteristics."""
-
         # Skip built-in noise functions
         if function_name in self.builtin_noise_functions:
             return False
@@ -226,7 +366,6 @@ class TraceFilter:
 
     def should_display_function(self, filename: str, function_name: str) -> bool:
         """Additional display-level filtering for functions that made it through tracing."""
-
         # Skip built-in noise functions at display time too
         if function_name in self.builtin_noise_functions:
             return False
@@ -238,7 +377,7 @@ class TraceFilter:
         # For user functions that made it through tracing, be more lenient
         # Only filter out obvious noise functions, not based on project path
         # since the tracer already handles project scope filtering
-        
+
         return True
 
     def categorize_function_impact(self, func_stats: tuple[int, int, int, int, dict]) -> str:
@@ -252,13 +391,14 @@ class TraceFilter:
         if total_time_ms > 100 or call_count > 1000:
             return "🔥 High Impact"
         # Medium impact: moderate time and calls
-        elif total_time_ms > 10 or call_count > 100:
+        if total_time_ms > 10 or call_count > 100:
             return "⚡ Medium Impact"
         # Low impact: but still worth showing
-        else:
-            return "💡 Low Impact"
+        return "💡 Low Impact"
 
-    def get_optimization_suggestion(self, filename: str, function_name: str, func_stats: tuple[int, int, int, int, dict]) -> str:
+    def get_optimization_suggestion(
+        self, filename: str, function_name: str, func_stats: tuple[int, int, int, int, dict]
+    ) -> str:
         """Provide specific optimization suggestions based on function characteristics."""
         call_count, _, total_time_ns, _, _ = func_stats
         total_time_ms = total_time_ns / 1e6

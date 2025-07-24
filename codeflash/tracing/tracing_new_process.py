@@ -136,7 +136,7 @@ class Tracer:
 
         # Store command information for metadata table
         self.command = command
-        
+
         # Initialize intelligent trace filtering
         self.trace_filter = TraceFilter(config, project_root)
 
@@ -326,7 +326,7 @@ class Tracer:
             return
         if self.functions and code.co_name not in self.functions:
             return
-            
+
         # Apply intelligent filtering early to reduce noise
         if not self.trace_filter.should_trace_function(str(file_name), code.co_name):
             return
@@ -613,7 +613,7 @@ class Tracer:
             # Convert stats dictionary and apply intelligent filtering
             stats_items = list(self.stats.items())
             total_filtered_out = 0
-            
+
             for func, stats_data in stats_items:
                 try:
                     # Make sure we have 5 elements in stats_data
@@ -630,7 +630,9 @@ class Tracer:
                     else:
                         new_func = func  # Keep as is if already in correct format
                         # Extract file_name and func_name for filtering
-                        file_name, line_num, func_name = func if len(func) >= 3 else (func[0] if func else "", 0, "unknown")
+                        file_name, line_num, func_name = (
+                            func if len(func) >= 3 else (func[0] if func else "", 0, "unknown")
+                        )
 
                     new_callers = {}
                     callers_items = list(callers.items())
@@ -649,14 +651,15 @@ class Tracer:
 
                     # Store with new format
                     new_stats[new_func] = (cc, nc, tt, ct, new_callers)
-                    
+
                     # Apply intelligent filtering for display
-                    if (self.trace_filter.should_display_in_stats((cc, nc, tt, ct, new_callers)) and
-                        self.trace_filter.should_display_function(file_name, func_name)):
+                    if self.trace_filter.should_display_in_stats(
+                        (cc, nc, tt, ct, new_callers)
+                    ) and self.trace_filter.should_display_function(file_name, func_name):
                         filtered_stats[new_func] = (cc, nc, tt, ct, new_callers)
                     else:
                         total_filtered_out += 1
-                        
+
                 except Exception as e:
                     console.print(f"Error converting stats for {func}: {e}")
                     continue
@@ -679,14 +682,16 @@ class Tracer:
                 ("(" + f"{total_primitive:,} primitive calls" + ")", "dim"),
                 f" in {filtered_time / 1e6:.3f}ms",
             ]
-            
+
             if total_filtered_out > 0:
-                summary_lines.extend([
-                    "\n",
-                    ("(", "dim"),
-                    (f"{total_filtered_out} low-impact functions filtered out", "dim italic"),
-                    (")", "dim"),
-                ])
+                summary_lines.extend(
+                    [
+                        "\n",
+                        ("(", "dim"),
+                        (f"{total_filtered_out} low-impact functions filtered out", "dim italic"),
+                        (")", "dim"),
+                    ]
+                )
 
             summary = Text.assemble(*summary_lines)
             console.print(Align.center(Panel(summary, border_style="blue", width=90, padding=(0, 2), expand=False)))
@@ -713,7 +718,7 @@ class Tracer:
                 ((func, stats) for func, stats in filtered_stats.items() if isinstance(func, tuple) and len(func) == 3),
                 key=lambda x: x[1][2],  # Sort by tt (internal time)
                 reverse=True,
-            )[:self.trace_filter.max_functions_display]
+            )[: self.trace_filter.max_functions_display]
 
             # Format and add each row to the table
             for func, (cc, nc, tt, ct, _) in sorted_stats:
@@ -748,11 +753,18 @@ class Tracer:
             # Add helpful explanation
             explanation = Panel(
                 Text.assemble(
-                    "🎯 ", ("Optimization Guide:", "bold"),
-                    "\n• ", ("High Impact:", "red bold"), " Priority optimization targets",
-                    "\n• ", ("Medium Impact:", "yellow bold"), " Good candidates for improvement", 
-                    "\n• ", ("Low Impact:", "green bold"), " Fine-tuning opportunities",
-                    "\n\n💡 Focus on functions with high call counts or long execution times for maximum performance gains."
+                    "🎯 ",
+                    ("Optimization Guide:", "bold"),
+                    "\n• ",
+                    ("High Impact:", "red bold"),
+                    " Priority optimization targets",
+                    "\n• ",
+                    ("Medium Impact:", "yellow bold"),
+                    " Good candidates for improvement",
+                    "\n• ",
+                    ("Low Impact:", "green bold"),
+                    " Fine-tuning opportunities",
+                    "\n\n💡 Focus on functions with high call counts or long execution times for maximum performance gains.",
                 ),
                 title="Understanding Your Profile",
                 border_style="green",
