@@ -136,6 +136,7 @@ class ProcessedBenchmarkInfo:
 
 class CodeString(BaseModel):
     code: Annotated[str, AfterValidator(validate_python_code)]
+    lines_map: dict[int, int] = {}
     file_path: Optional[Path] = None
 
 
@@ -165,6 +166,9 @@ class CodeStringsMarkdown(BaseModel):
                 for code_string in self.code_strings
             ]
         )
+
+    def file_path_to_line_map(self) -> dict[str, dict[int, int]]:
+        return {str(code_string.file_path): code_string.lines_map for code_string in self.code_strings}
 
 
 class CodeOptimizationContext(BaseModel):

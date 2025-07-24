@@ -77,6 +77,7 @@ class AiServiceClient:
     def optimize_python_code(  # noqa: D417
         self,
         source_code: str,
+        line_maps: dict[str, dict[int, int]],
         dependency_code: str,
         trace_id: str,
         num_candidates: int = 10,
@@ -87,6 +88,7 @@ class AiServiceClient:
         Parameters
         ----------
         - source_code (str): The python code to optimize.
+        - line_maps (dict[str, dict[int, int]]): The line maps for the code to optimize. The key is the file path and the value is a mapping of context line numbers to original line numbers.
         - dependency_code (str): The dependency code used as read-only context for the optimization
         - trace_id (str): Trace id of optimization run
         - num_candidates (int): Number of optimization variants to generate. Default is 10.
@@ -106,6 +108,7 @@ class AiServiceClient:
 
         payload = {
             "source_code": source_code,
+            "line_maps": line_maps,
             "dependency_code": dependency_code,
             "num_variants": num_candidates,
             "trace_id": trace_id,
@@ -116,6 +119,13 @@ class AiServiceClient:
             "repo_owner": git_repo_owner,
             "repo_name": git_repo_name,
         }
+
+        print("\nfinallllllllllly!!!!\n")
+        try:
+            json_string = json.dumps(payload, indent=2, ensure_ascii=False, default=pydantic_encoder)
+            print(json_string)
+        except TypeError as e:
+            print("JSON serialization error:", e)
 
         logger.info("Generating optimized candidates…")
         console.rule()

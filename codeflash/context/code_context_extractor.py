@@ -66,6 +66,7 @@ def get_code_optimization_context(
         helpers_of_helpers_dict,
         project_root_path,
         remove_docstrings=False,
+        generate_line_map=True,
         code_context_type=CodeContextType.READ_WRITABLE,
     )
 
@@ -262,6 +263,7 @@ def extract_code_markdown_context_from_files(
     helpers_of_helpers: dict[Path, set[FunctionSource]],
     project_root_path: Path,
     remove_docstrings: bool = False,  # noqa: FBT001, FBT002
+    generate_line_map: bool = False,  # noqa: FBT001, FBT002
     code_context_type: CodeContextType = CodeContextType.READ_ONLY,
 ) -> CodeStringsMarkdown:
     """Extract code context from files containing target functions and their helpers, formatting them as markdown.
@@ -279,6 +281,7 @@ def extract_code_markdown_context_from_files(
         helpers_of_helpers: Dictionary mapping file paths to sets of Function Sources of helpers of helper functions
         project_root_path: Root path of the project
         remove_docstrings: Whether to remove docstrings from the extracted code
+        generate_line_map: Whether to generate line maps for each code string in the markdown
         code_context_type: Type of code context to extract (READ_ONLY, READ_WRITABLE, or TESTGEN)
 
     Returns:
@@ -367,7 +370,120 @@ def extract_code_markdown_context_from_files(
                 )
             code_string_context = CodeString(code=code_context, file_path=file_path.relative_to(project_root_path))
             code_context_markdown.code_strings.append(code_string_context)
+    if generate_line_map:
+        for code_string in code_context_markdown.code_strings:
+            original_code = code_string.file_path.read_text("utf8")
+            code_string.lines_map = calculate_lines_map_for_code_string(code_string, original_code)
+
     return code_context_markdown
+
+
+def calculate_lines_map_for_code_string(code_string: CodeString, original_code: str) -> dict[int, int]:
+    lines_map = {}
+
+    # Split into lines and preserve original line numbers
+    code_lines = code_string.code.split("\n")
+    original_lines = original_code.split("\n")
+
+    # Track which lines we've processed
+    used_code_lines = set()
+    used_original_lines = set()
+
+    def normalize_line(line: str) -> str:
+        return line.strip()
+
+    def find_best_match_block(start_code_idx: int) -> tuple[int, int] | None:
+        if start_code_idx in used_code_lines:
+            return None
+
+        code_line = normalize_line(code_lines[start_code_idx])
+        if code_line == "":  # Skip empty lines
+            return None
+
+        best_match = None
+        best_block_size = 0
+
+        # Search for this line in original code
+        for orig_idx, orig_line in enumerate(original_lines):
+            if orig_idx in used_original_lines:
+                continue
+
+            if normalize_line(orig_line) == code_line:
+                # Found a potential match, check how long the block is
+                block_size = get_block_size(start_code_idx, orig_idx)
+
+                if block_size > best_block_size:
+                    # we found a better match
+                    best_block_size = block_size
+                    best_match = (orig_idx, block_size)
+                    # break: if we break here we will take the first match, TODO: see if this is a problem
+
+        return best_match
+
+    def get_block_size(code_start_idx: int, orig_start_idx: int) -> int:
+        size = 0
+        c_idx = code_start_idx
+        o_idx = orig_start_idx
+
+        while (
+            c_idx < len(code_lines)
+            and o_idx < len(original_lines)
+            and c_idx not in used_code_lines
+            and o_idx not in used_original_lines
+        ):
+            block_line = normalize_line(code_lines[c_idx])
+            original_line = normalize_line(original_lines[o_idx])
+
+            # Handle empty lines
+            if not block_line and not original_line:
+                c_idx += 1
+                o_idx += 1
+                size += 1
+                continue
+            if not block_line:
+                c_idx += 1
+                size += 1
+                continue
+            if not original_line:
+                o_idx += 1
+                continue
+
+            # Check if lines match
+            if block_line == original_line:
+                size += 1
+                c_idx += 1
+                o_idx += 1
+            else:
+                break
+
+        return size
+
+    # Process code lines sequentially, finding the best match for each block
+    code_idx = 0
+    while code_idx < len(code_lines):
+        if code_idx in used_code_lines:
+            code_idx += 1
+            continue
+
+        match = find_best_match_block(code_idx)
+
+        if match:
+            orig_start_idx, block_size = match
+
+            # Map the entire block
+            for i in range(block_size):
+                if code_idx + i < len(code_lines):
+                    code_line_num = code_idx + i + 1  # 1-based
+                    orig_line_num = orig_start_idx + i + 1  # 1-based
+                    lines_map[code_line_num] = orig_line_num
+                    used_code_lines.add(code_idx + i)
+                    used_original_lines.add(orig_start_idx + i)
+
+            code_idx += block_size
+        else:
+            code_idx += 1
+
+    return lines_map
 
 
 def get_function_to_optimize_as_function_source(

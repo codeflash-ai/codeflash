@@ -87,6 +87,9 @@ def test_code_replacement10() -> None:
     assert qualified_names == {"HelperClass.helper_method"}  # Nested method should not be in here
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
+    # print('-----\n')
+    # print(code_ctx.read_writable_code.__str__)
+    # print('-----\n')
 
     expected_read_write_context = f"""
 {get_code_block_splitter(file_path.relative_to(file_path.parent))}
