@@ -13,6 +13,7 @@ import enum
 import re
 import sys
 from collections.abc import Collection
+from dataclasses import dataclass as dcdataclass
 from enum import Enum, IntEnum
 from pathlib import Path
 from re import Pattern
@@ -83,7 +84,7 @@ class BestOptimization(BaseModel):
     winning_replay_benchmarking_test_results: Optional[TestResults] = None
 
 
-@dataclass(frozen=True)
+@dcdataclass(frozen=True)
 class BenchmarkKey:
     module_path: str
     function_name: str

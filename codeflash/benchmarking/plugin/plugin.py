@@ -5,24 +5,18 @@ import os
 import sqlite3
 import sys
 import time
-from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
 from codeflash.code_utils.code_utils import module_name_from_file_path
 
+if TYPE_CHECKING:
+    from codeflash.models.models import BenchmarkKey
+
 IS_PYTEST_BENCHMARK_INSTALLED = importlib.util.find_spec("pytest_benchmark") is not None
-
-
-@dataclass(frozen=True)
-class BenchmarkKey:
-    module_path: str
-    function_name: str
-
-    def __str__(self) -> str:
-        return f"{self.module_path}::{self.function_name}"
 
 
 class CodeFlashBenchmarkPlugin:
@@ -83,6 +77,8 @@ class CodeFlashBenchmarkPlugin:
 
     @staticmethod
     def get_function_benchmark_timings(trace_path: Path) -> dict[str, dict[BenchmarkKey, int]]:
+        from codeflash.models.models import BenchmarkKey
+
         """Process the trace file and extract timing data for all functions.
 
         Args:
@@ -143,6 +139,8 @@ class CodeFlashBenchmarkPlugin:
 
     @staticmethod
     def get_benchmark_timings(trace_path: Path) -> dict[BenchmarkKey, int]:
+        from codeflash.models.models import BenchmarkKey
+
         """Extract total benchmark timings from trace files.
 
         Args:
