@@ -139,11 +139,11 @@ class CodeString(BaseModel):
     file_path: Optional[Path] = None
 
 
-SPLITTER_MARKER = "# codeflash-splitter__"
+LINE_SPLITTER_MARKER_PREFIX = "# codeflash-splitter__"
 
 
 def get_code_block_splitter(file_path: Path) -> str:
-    return f"{SPLITTER_MARKER}{file_path}"
+    return f"{LINE_SPLITTER_MARKER_PREFIX}{file_path}"
 
 
 class CodeStringsMarkdown(BaseModel):
@@ -151,7 +151,7 @@ class CodeStringsMarkdown(BaseModel):
     cached_code: Optional[str] = None
 
     @property
-    def __str__(self) -> str:
+    def flat(self) -> str:
         if self.cached_code is not None:
             return self.cached_code
         self.cached_code = "\n".join(
@@ -174,7 +174,7 @@ class CodeStringsMarkdown(BaseModel):
 
     @staticmethod
     def from_str_with_markers(code_with_markers: str) -> CodeStringsMarkdown:
-        pattern = rf"{SPLITTER_MARKER}([^\n]+)\n"
+        pattern = rf"{LINE_SPLITTER_MARKER_PREFIX}([^\n]+)\n"
         matches = list(re.finditer(pattern, code_with_markers))
 
         results = []

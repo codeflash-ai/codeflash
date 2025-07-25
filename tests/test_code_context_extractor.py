@@ -126,7 +126,7 @@ class MainClass:
 ```
 """
 
-    assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+    assert read_write_context.flat.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -200,7 +200,7 @@ class Graph:
 ```
 """
 
-    assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+    assert read_write_context.flat.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -260,7 +260,7 @@ def sort_from_another_file(arr):
     return sorted_arr
 ```
 """
-    assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+    assert read_write_context.flat.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -647,7 +647,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         return self.__backend__.get_cache_or_call(func=self.__wrapped__, args=args, kwargs=kwargs, lifespan=self.__duration__)
 ```
 """
-        assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+        assert read_write_context.flat.strip() == expected_read_write_context.strip()
         assert read_only_context.strip() == expected_read_only_context.strip()
         assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -740,7 +740,7 @@ class HelperClass:
 ```
 """
 
-        assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+        assert read_write_context.flat.strip() == expected_read_write_context.strip()
         assert read_only_context.strip() == expected_read_only_context.strip()
         assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -836,7 +836,7 @@ class HelperClass:
         return self.x
 ```
 """
-        assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+        assert read_write_context.flat.strip() == expected_read_write_context.strip()
         assert read_only_context.strip() == expected_read_only_context.strip()
         assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -923,7 +923,7 @@ class HelperClass:
         return self.x
 ```
 """
-        assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+        assert read_write_context.flat.strip() == expected_read_write_context.strip()
         assert read_only_context.strip() == expected_read_only_context.strip()
         assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1118,7 +1118,7 @@ def fetch_and_process_data():
     return processed
 ```
 """
-    assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+    assert read_write_context.flat.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1217,7 +1217,7 @@ def fetch_and_transform_data():
     return transformed
 ```
 """
-    assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+    assert read_write_context.flat.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1297,7 +1297,7 @@ class DataProcessor:
 ```
 """
 
-    assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+    assert read_write_context.flat.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1372,7 +1372,7 @@ class DataProcessor:
 ```
 """
 
-    assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+    assert read_write_context.flat.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1434,7 +1434,7 @@ def update_data(data):
 ```
 """
 
-    assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+    assert read_write_context.flat.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1510,7 +1510,7 @@ class DataTransformer:
 ```
 """
 
-    assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+    assert read_write_context.flat.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1576,7 +1576,7 @@ class MyClass:
         return self.x + self.y
 ```
 """
-        assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+        assert read_write_context.flat.strip() == expected_read_write_context.strip()
         assert read_only_context.strip() == expected_read_only_context.strip()
         assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1658,7 +1658,7 @@ import code_to_optimize.code_directories.retriever.main
 def function_to_optimize():
     return code_to_optimize.code_directories.retriever.main.fetch_and_transform_data()
 """
-    assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+    assert read_write_context.flat.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1902,7 +1902,7 @@ class Calculator:
 ```
 """
         # Verify the contexts match the expected values
-        assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+        assert read_write_context.flat.strip() == expected_read_write_context.strip()
         assert read_only_context.strip() == expected_read_only_context.strip()
         assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -2113,7 +2113,7 @@ except ImportError:
     CALCULATION_BACKEND = "python"
 ```
 """
-        assert read_write_context.__str__.strip() == expected_read_write_context.strip()
+        assert read_write_context.flat.strip() == expected_read_write_context.strip()
         assert read_only_context.strip() == expected_read_only_context.strip()
 
 
