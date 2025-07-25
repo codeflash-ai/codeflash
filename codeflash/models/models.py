@@ -169,8 +169,11 @@ class CodeStringsMarkdown(BaseModel):
             ]
         )
 
+    def path_to_code_string(self) -> dict[str, str]:
+        return {code_string.file_path: code_string.code for code_string in self.code_strings}
+
     @staticmethod
-    def from_str_with_markers(code_with_markers: str) -> list[CodeString]:
+    def from_str_with_markers(code_with_markers: str) -> CodeStringsMarkdown:
         pattern = rf"{SPLITTER_MARKER}([^\n]+)\n"
         matches = list(re.finditer(pattern, code_with_markers))
 
@@ -181,7 +184,7 @@ class CodeStringsMarkdown(BaseModel):
             file_path = match.group(1).strip()
             code = code_with_markers[start:end].lstrip("\n")
             results.append(CodeString(file_path=file_path, code=code))
-        return results
+        return CodeStringsMarkdown(code_strings=results)
 
 
 class CodeOptimizationContext(BaseModel):
