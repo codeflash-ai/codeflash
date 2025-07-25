@@ -52,6 +52,13 @@ try:
     HAS_TORCH = True
 except ImportError:
     HAS_TORCH = False
+try:
+    import jax  # type: ignore
+    import jax.numpy as jnp  # type: ignore
+
+    HAS_JAX = True
+except ImportError:
+    HAS_JAX = False
 
 
 def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001, ANN401, FBT002, PLR0911
@@ -105,6 +112,14 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
             orig_dict = {k: v for k, v in orig.__dict__.items() if not k.startswith("_")}
             new_dict = {k: v for k, v in new.__dict__.items() if not k.startswith("_")}
             return comparator(orig_dict, new_dict, superset_obj)
+
+        # Handle JAX arrays first to avoid boolean context errors in other conditions
+        if HAS_JAX and isinstance(orig, jax.Array):
+            if orig.dtype != new.dtype:
+                return False
+            if orig.shape != new.shape:
+                return False
+            return bool(jnp.allclose(orig, new, equal_nan=True))
 
         if HAS_SQLALCHEMY:
             try:
