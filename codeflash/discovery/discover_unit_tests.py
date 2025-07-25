@@ -336,7 +336,6 @@ def filter_test_files_by_imports(
     )
     return filtered_map
 
-
 def discover_unit_tests(
     cfg: TestConfig,
     discover_only_these_tests: list[Path] | None = None,
@@ -506,6 +505,8 @@ def process_test_files(
     cfg: TestConfig,
     functions_to_optimize: list[FunctionToOptimize] | None = None,
 ) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
+    from time import sleep
+
     import jedi
 
     project_root_path = cfg.project_root_path
@@ -519,7 +520,7 @@ def process_test_files(
     num_discovered_tests = 0
     num_discovered_replay_tests = 0
     jedi_project = jedi.Project(path=project_root_path)
-
+    sleep(0.0001)
     with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
         progress,
         task_id,
