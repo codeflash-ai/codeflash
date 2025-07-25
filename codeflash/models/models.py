@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel
 from rich.tree import Tree
 
 from codeflash.cli_cmds.console import DEBUG_MODE
@@ -19,7 +20,7 @@ from re import Pattern
 from typing import Annotated, Optional, cast
 
 from jedi.api.classes import Name
-from pydantic import AfterValidator, BaseModel, ConfigDict
+from pydantic import AfterValidator, ConfigDict
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
@@ -170,7 +171,13 @@ class CodeStringsMarkdown(BaseModel):
         )
 
     def path_to_code_string(self) -> dict[str, str]:
-        return {str(code_string.file_path): code_string.code for code_string in self.code_strings}
+        # Direct local variable for quick lookup
+        code_strings = self.code_strings
+        # Pre-size dict for efficiency (Python 3.6+ dicts grow efficiently, but this can help in tight loops)
+        result = {}
+        for cs in code_strings:
+            result[str(cs.file_path)] = cs.code
+        return result
 
     @staticmethod
     def from_str_with_markers(code_with_markers: str) -> CodeStringsMarkdown:
