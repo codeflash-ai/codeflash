@@ -148,7 +148,7 @@ def get_code_block_splitter(file_path: Path) -> str:
 
 class CodeStringsMarkdown(BaseModel):
     code_strings: list[CodeString] = []
-    cached_code: str | None = None
+    cached_code: Optional[str] = None
 
     @property
     def __str__(self) -> str:
