@@ -376,7 +376,7 @@ class FunctionOptimizer:
             ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
             future_line_profile_results = executor.submit(
                 ai_service_client.optimize_python_code_line_profiler,
-                source_code=code_context.read_writable_code,
+                source_code=code_context.read_writable_code.__str__,
                 dependency_code=code_context.read_only_context_code,
                 trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
                 line_profiler_results=original_code_baseline.line_profile_results["str_out"],

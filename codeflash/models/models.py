@@ -154,7 +154,7 @@ class CodeStringsMarkdown(BaseModel):
     def __str__(self) -> str:
         if self.cached_code is not None:
             return self.cached_code
-        self.cached_code = "\n\n".join(
+        self.cached_code = "\n".join(
             get_code_block_splitter(block.file_path) + "\n" + block.code for block in self.code_strings
         )
         return self.cached_code
