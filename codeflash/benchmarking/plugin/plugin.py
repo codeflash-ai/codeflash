@@ -16,12 +16,7 @@ from codeflash.code_utils.code_utils import module_name_from_file_path
 if TYPE_CHECKING:
     from codeflash.models.models import BenchmarkKey
 
-try:
-    import pytest_benchmark
-
-    PYTEST_BENCHMARK_INSTALLED = True
-except ImportError:
-    PYTEST_BENCHMARK_INSTALLED = False
+PYTEST_BENCHMARK_INSTALLED = importlib.util.find_spec("pytest_benchmark") is not None
 
 
 class CodeFlashBenchmarkPlugin:
@@ -337,5 +332,5 @@ def benchmark(request: pytest.FixtureRequest) -> object:
                 **dict(bs.options, **options),
             )
         return lambda func, *args, **kwargs: func(*args, **kwargs)
-    
+
     return lambda func, *args, **kwargs: func(*args, **kwargs)
