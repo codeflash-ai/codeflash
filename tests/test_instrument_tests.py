@@ -129,11 +129,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
     """
-    if sys.version_info < (3, 12):
-        expected += """test_stdout_tag = f"{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}"
-    """
-    else:
-        expected += """test_stdout_tag = f'{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}'
+    expected += """test_stdout_tag = f'{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}'
     """
     expected += """print(f'!$######{{test_stdout_tag}}######$!')
     exception = None
@@ -189,9 +185,9 @@ class TestPigLatin(unittest.TestCase):
         )
         os.chdir(original_cwd)
     assert success
-    assert new_test == expected.format(
+    assert new_test.replace('"', "'") == expected.format(
         module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
-    )
+    ).replace('"', "'")
 
 
 def test_perfinjector_only_replay_test() -> None:
@@ -233,11 +229,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
     """
-    if sys.version_info < (3, 12):
-        expected += """test_stdout_tag = f"{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}"
-    """
-    else:
-        expected += """test_stdout_tag = f'{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}'
+    expected += """test_stdout_tag = f'{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}'
     """
     expected += """print(f'!$######{{test_stdout_tag}}######$!')
     exception = None
@@ -289,9 +281,9 @@ def test_prepare_image_for_yolo():
         )
         os.chdir(original_cwd)
     assert success
-    assert new_test == expected.format(
+    assert new_test.replace('"', "'") == expected.format(
         module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
-    )
+    ).replace('"', "'")
 
 
 def test_perfinjector_bubble_sort_results() -> None:
