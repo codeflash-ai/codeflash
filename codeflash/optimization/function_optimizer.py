@@ -37,6 +37,8 @@ from codeflash.code_utils.code_utils import (
     has_any_async_functions,
     module_name_from_file_path,
     restore_conftest,
+    diff_length,
+    create_rank_dictionary_compact,
 )
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
@@ -369,6 +371,7 @@ class FunctionOptimizer:
         speedup_ratios: dict[str, float | None] = {}
         optimized_runtimes: dict[str, float | None] = {}
         is_correct = {}
+        optimized_line_profiler_results: dict[str, str] = {}
 
         logger.info(
             f"Determining best optimization candidate (out of {len(candidates)}) for "
@@ -464,7 +467,7 @@ class FunctionOptimizer:
                             candidate_result, original_code_baseline.runtime, best_runtime_until_now=None
                         ) and quantity_of_tests_critic(candidate_result):
                             tree.add(
-                                "This candidate is faster than the previous best candidate. 🚀"
+                                "This candidate is faster than the original code. 🚀"
                             )  # TODO: Change this description
                             tree.add(f"Original summed runtime: {humanize_runtime(original_code_baseline.runtime)}")
                             tree.add(
@@ -479,6 +482,7 @@ class FunctionOptimizer:
                                 original_helper_code=original_helper_code,
                                 candidate_index=candidate_index,
                             )
+                            optimized_line_profiler_results[candidate.optimization_id]=line_profile_test_results['str_out']
                             replay_perf_gain = {}
                             if self.args.benchmark:
                                 test_results_by_benchmark = (
@@ -547,8 +551,8 @@ class FunctionOptimizer:
                         trace_id = self.function_trace_id
                         if trace_id.endswith(("EXP0", "EXP1")):
                             trace_id = trace_id[:-4] + exp_type
-                        # refinement_dict is a dictionary with optimization_id as a key and the refined code as a value
-                        refinement_dict = self.refine_optimizations(
+                        # refinement_response is a dataclass with optimization_id, code and explanation
+                        refinement_response = self.refine_optimizations(
                             valid_optimizations=self.valid_optimizations,
                             original_code_baseline=original_code_baseline,
                             code_context=code_context,
@@ -562,23 +566,9 @@ class FunctionOptimizer:
                             executor=executor,
                             fto_name=self.function_to_optimize.qualified_name,
                         )
-
-                        more_opt_candidates = [
-                            OptimizedCandidate(
-                                source_code=code,
-                                explanation=self.valid_optimizations[
-                                    i
-                                ].candidate.explanation,  # TODO: handle the new explanation after the refinement
-                                optimization_id=opt_id,
-                            )
-                            for i, (opt_id, code) in enumerate(refinement_dict.items())
-                            # filter out empty strings of code
-                            if code != ""
-                        ]
-                        # we no longer need to apply diffs since we are generating the entire code again
-                        candidates.extend(more_opt_candidates)
-                        print("added candidates from refinement")
-                        original_len += len(more_opt_candidates)
+                        candidates.extend(refinement_response)
+                        print("Added candidates from refinement")
+                        original_len += len(refinement_response)
                         refinement_done = True
             except KeyboardInterrupt as e:
                 self.write_code_and_helpers(
@@ -587,58 +577,17 @@ class FunctionOptimizer:
                 logger.exception(f"Optimization interrupted: {e}")
                 raise
 
-        def diff_length(a: str, b: str) -> int:
-            """Compute the length (in characters) of the unified diff between two strings.
-
-            Args:
-                a (str): Original string.
-                b (str): Modified string.
-
-            Returns:
-                int: Total number of characters in the diff.
-
-            """
-            # Split input strings into lines for line-by-line diff
-            a_lines = a.splitlines(keepends=True)
-            b_lines = b.splitlines(keepends=True)
-
-            # Compute unified diff
-            diff_lines = list(difflib.unified_diff(a_lines, b_lines, lineterm=""))
-
-            # Join all lines with newline to calculate total diff length
-            diff_text = "\n".join(diff_lines)
-
-            return len(diff_text)
-
-        def create_rank_dictionary_compact(int_array: list[int]) -> dict[int, int]:
-            """Create a dictionary from a list of ints, mapping the original index to its rank.
-
-            This version uses a more compact, "Pythonic" implementation.
-
-            Args:
-                int_array: A list of integers.
-
-            Returns:
-                A dictionary where keys are original indices and values are the
-                rank of the element in ascending order.
-
-            """
-            # Sort the indices of the array based on their corresponding values
-            sorted_indices = sorted(range(len(int_array)), key=lambda i: int_array[i])
-
-            # Create a dictionary mapping the original index to its rank (its position in the sorted list)
-            return {original_index: rank for rank, original_index in enumerate(sorted_indices)}
-
         if not len(self.valid_optimizations):
             return None
         # need to figure out the best candidate here before we return best_optimization
-        diff_lens_list = []
+        diff_lens_list = [] # character level diff
         runtimes_list = []
         for valid_opt in self.valid_optimizations:
-            diff_lens_list.append(diff_length(valid_opt.candidate.source_code, code_context.read_writable_code))
+            diff_lens_list.append(diff_length(valid_opt.candidate.source_code, code_context.read_writable_code)) #char level diff
             runtimes_list.append(valid_opt.runtime)
         diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
         runtimes_ranking = create_rank_dictionary_compact(runtimes_list)
+        # TODO: better way to resolve conflicts with same min ranking
         overall_ranking = {key: diff_lens_ranking[key] + runtimes_ranking[key] for key in diff_lens_ranking.keys()}  # noqa: SIM118
         min_key = min(overall_ranking, key=overall_ranking.get)
         best_optimization = self.valid_optimizations[min_key]
@@ -649,6 +598,7 @@ class FunctionOptimizer:
             optimized_runtime=optimized_runtimes,
             is_correct=is_correct,
             best_optimization_id=best_optimization.candidate.optimization_id,
+            optimized_line_profiler_results= optimized_line_profiler_results
         )
         return best_optimization
 
@@ -662,7 +612,7 @@ class FunctionOptimizer:
         ai_service_client: AiServiceClient,
         executor: concurrent.futures.ThreadPoolExecutor,
         fto_name: str,
-    ) -> dict[str, str]:
+    ) -> list[OptimizedCandidate]:
         request = [
             AIServiceRefinerRequest(
                 optimization_id=opt.candidate.optimization_id,
@@ -680,7 +630,7 @@ class FunctionOptimizer:
                 fto_name=fto_name,
             )
             for opt in valid_optimizations
-        ]
+        ] # TODO: multiple workers for this?
         future_refinement_results = executor.submit(ai_service_client.optimize_python_code_refinement, request=request)
         concurrent.futures.wait([future_refinement_results])
         return future_refinement_results.result()

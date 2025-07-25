@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import difflib
 import os
 import re
 import shutil
@@ -18,6 +19,48 @@ from codeflash.code_utils.config_parser import find_pyproject_toml
 
 ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
 
+def diff_length(a: str, b: str) -> int:
+    """Compute the length (in characters) of the unified diff between two strings.
+
+    Args:
+        a (str): Original string.
+        b (str): Modified string.
+
+    Returns:
+        int: Total number of characters in the diff.
+
+    """
+    # Split input strings into lines for line-by-line diff
+    a_lines = a.splitlines(keepends=True)
+    b_lines = b.splitlines(keepends=True)
+
+    # Compute unified diff
+    diff_lines = list(difflib.unified_diff(a_lines, b_lines, lineterm=""))
+
+    # Join all lines with newline to calculate total diff length
+    diff_text = "\n".join(diff_lines)
+
+    return len(diff_text)
+
+
+def create_rank_dictionary_compact(int_array: list[int]) -> dict[int, int]:
+    """Create a dictionary from a list of ints, mapping the original index to its rank.
+
+    This version uses a more compact, "Pythonic" implementation.
+
+    Args:
+        int_array: A list of integers.
+
+    Returns:
+        A dictionary where keys are original indices and values are the
+        rank of the element in ascending order.
+
+    """
+    # Sort the indices of the array based on their corresponding values
+    sorted_indices = sorted(range(len(int_array)), key=lambda i: int_array[i])
+
+    # Create a dictionary mapping the original index to its rank (its position in the sorted list)
+    return {original_index: rank for rank, original_index in enumerate(sorted_indices)}
 
 @contextmanager
 def custom_addopts() -> None:

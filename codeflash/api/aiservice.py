@@ -233,7 +233,7 @@ class AiServiceClient:
         console.rule()
         return []
 
-    def optimize_python_code_refinement(self, request: list[AIServiceRefinerRequest]) -> dict[str, str]:
+    def optimize_python_code_refinement(self, request: list[AIServiceRefinerRequest]) -> list[OptimizedCandidate]:
         git_repo_owner, git_repo_name = safe_get_repo_owner_and_name()
         payload = [
             {
@@ -282,13 +282,20 @@ class AiServiceClient:
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
-            return {}
+            return []
 
         if response.status_code == 200:
-            refined_optimizations = response.json()["result"]
+            refined_optimizations = response.json()["refinements"]
             logger.info(f"Generated {len(refined_optimizations)} candidate refinements.")
             console.rule()
-            return refined_optimizations
+            return [
+                OptimizedCandidate(
+                    source_code=opt["source_code"],
+                    explanation=opt["explanation"],
+                    optimization_id=opt["optimization_id"][:-4]+"refi",
+                )
+                for opt in refined_optimizations
+            ]
         try:
             error = response.json()["error"]
         except Exception:
@@ -296,7 +303,7 @@ class AiServiceClient:
         logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
-        return {}
+        return []
 
     def log_results(  # noqa: D417
         self,
@@ -306,6 +313,7 @@ class AiServiceClient:
         optimized_runtime: dict[str, float | None] | None,
         is_correct: dict[str, bool] | None,
         best_optimization_id: str | None,
+        optimized_line_profiler_results: dict[str, str] | None,
     ) -> None:
         """Log features to the database.
 
@@ -317,6 +325,7 @@ class AiServiceClient:
         - optimized_runtime (Optional[Dict[str, float]]): The optimized runtime.
         - is_correct (Optional[Dict[str, bool]]): Whether the optimized code is correct.
         - best_optimization_id (Optional[str]): The best optimization id.
+        -optimized_line_profiler_results: line_profiler results for every candidate mapped to their optimization_id
 
         """
         payload = {
@@ -327,6 +336,7 @@ class AiServiceClient:
             "is_correct": is_correct,
             "codeflash_version": codeflash_version,
             "best_optimization_id": best_optimization_id,
+            "optimized_line_profiler_results": optimized_line_profiler_results
         }
         try:
             self.make_ai_service_request("/log_features", payload=payload, timeout=5)

@@ -48,7 +48,7 @@ def speedup_critic(
         original_runtime_ns=original_code_runtime, optimized_runtime_ns=candidate_result.best_test_runtime
     )
     if best_runtime_until_now is None:
-        # collect all optimizations with thi
+        # collect all optimizations with this
         return bool(perf_gain > noise_floor)
     return bool(perf_gain > noise_floor and candidate_result.best_test_runtime < best_runtime_until_now)
 
