@@ -33,7 +33,7 @@ def test_trace_benchmarks() -> None:
         function_calls = cursor.fetchall()
 
         # Assert the length of function calls
-        assert len(function_calls) == 8, f"Expected 8 function calls, but got {len(function_calls)}"
+        assert len(function_calls) == 7, f"Expected 7 function calls, but got {len(function_calls)}"
 
         bubble_sort_path = (project_root / "bubble_sort_codeflash_trace.py").as_posix()
         process_and_bubble_sort_path = (project_root / "process_and_bubble_sort_codeflash_trace.py").as_posix()

@@ -30,4 +30,4 @@ jobs:
         run: uv sync
 
       - name: Unit tests
-        run: uv run pytest tests/ --benchmark-skip -m "not ci_skip"
+        run: uv run pytest tests/

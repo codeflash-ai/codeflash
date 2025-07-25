@@ -154,9 +154,21 @@ def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
     return full_qualified_name[len(module_name) + 1 :]
 
 
-def module_name_from_file_path(file_path: Path, project_root_path: Path) -> str:
-    relative_path = file_path.relative_to(project_root_path)
-    return relative_path.with_suffix("").as_posix().replace("/", ".")
+def module_name_from_file_path(file_path: Path, project_root_path: Path, *, traverse_up: bool = False) -> str:
+    try:
+        relative_path = file_path.relative_to(project_root_path)
+        return relative_path.with_suffix("").as_posix().replace("/", ".")
+    except ValueError:
+        if traverse_up:
+            parent = file_path.parent
+            while parent not in (project_root_path, parent.parent):
+                try:
+                    relative_path = file_path.relative_to(parent)
+                    return relative_path.with_suffix("").as_posix().replace("/", ".")
+                except ValueError:
+                    parent = parent.parent
+        msg = f"File {file_path} is not within the project root {project_root_path}."
+        raise ValueError(msg)  # noqa: B904
 
 
 def file_path_from_module_name(module_name: str, project_root_path: Path) -> Path:
