@@ -117,12 +117,12 @@ def confirm_proceeding_with_no_git_repo() -> str | bool:
     return True
 
 
-def check_and_push_branch(repo: git.Repo, wait_for_push: bool = False) -> bool:  # noqa: FBT001, FBT002
+def check_and_push_branch(repo: git.Repo, git_remote: str | None = "origin", wait_for_push: bool = False) -> bool:  # noqa: FBT001, FBT002
     current_branch = repo.active_branch.name
-    origin = repo.remote(name="origin")
+    remote = repo.remote(name=git_remote)
 
     # Check if the branch is pushed
-    if f"origin/{current_branch}" not in repo.refs:
+    if f"{git_remote}/{current_branch}" not in repo.refs:
         logger.warning(f"⚠️ The branch '{current_branch}' is not pushed to the remote repository.")
         if not sys.__stdin__.isatty():
             logger.warning("Non-interactive shell detected. Branch will not be pushed.")
@@ -132,13 +132,13 @@ def check_and_push_branch(repo: git.Repo, wait_for_push: bool = False) -> bool: 
             f"the branch '{current_branch}' to the remote repository?",
             default=False,
         ):
-            origin.push(current_branch)
-            logger.info(f"⬆️ Branch '{current_branch}' has been pushed to origin.")
+            remote.push(current_branch)
+            logger.info(f"⬆️ Branch '{current_branch}' has been pushed to {git_remote}.")
             if wait_for_push:
                 time.sleep(3)  # adding this to give time for the push to register with GitHub,
                 # so that our modifications to it are not rejected
             return True
-        logger.info(f"🔘 Branch '{current_branch}' has not been pushed to origin.")
+        logger.info(f"🔘 Branch '{current_branch}' has not been pushed to {git_remote}.")
         return False
     logger.debug(f"The branch '{current_branch}' is present in the remote repository.")
     return True
