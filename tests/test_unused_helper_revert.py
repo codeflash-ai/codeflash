@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.models import get_code_block_splitter
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
@@ -55,7 +56,8 @@ def test_detect_unused_helper_functions(temp_project):
     temp_dir, main_file, test_cfg = temp_project
 
     # Optimized version that only calls one helper
-    optimized_code = """
+    optimized_code = f"""
+{get_code_block_splitter("main.py")}
 def entrypoint_function(n):
     \"\"\"Optimized function that only calls one helper.\"\"\"
     result1 = helper_function_1(n)
@@ -99,7 +101,8 @@ def helper_function_2(x):
 
     # Also test the complete replace_function_and_helpers_with_optimized_code workflow
     # First modify the optimized code to include a MODIFIED unused helper
-    optimized_code_with_modified_helper = """
+    optimized_code_with_modified_helper = f"""
+{get_code_block_splitter("main.py")}
 def entrypoint_function(n):
     \"\"\"Optimized function that only calls one helper.\"\"\"
     result1 = helper_function_1(n)
@@ -159,7 +162,8 @@ def test_revert_unused_helper_functions(temp_project):
     temp_dir, main_file, test_cfg = temp_project
 
     # Optimized version that only calls one helper and modifies the unused one
-    optimized_code = """
+    optimized_code = f"""
+{get_code_block_splitter("main.py") }
 def entrypoint_function(n):
     \"\"\"Optimized function that only calls one helper.\"\"\"
     result1 = helper_function_1(n)
@@ -221,7 +225,8 @@ def test_no_unused_helpers_no_revert(temp_project):
     temp_dir, main_file, test_cfg = temp_project
 
     # Optimized version that still calls both helpers
-    optimized_code = """
+    optimized_code = f"""
+{get_code_block_splitter("main.py")}
 def entrypoint_function(n):
     \"\"\"Optimized function that still calls both helpers.\"\"\"
     result1 = helper_function_1(n)
@@ -303,13 +308,16 @@ def helper_function_2(x):
 """)
 
         # Optimized version that only calls one helper
-        optimized_code = """
+        optimized_code = f"""
+{get_code_block_splitter("main.py")}
 from helpers import helper_function_1
 
 def entrypoint_function(n):
     \"\"\"Optimized function that only calls one helper.\"\"\"
     result1 = helper_function_1(n)
     return result1 + n * 3  # Inlined helper_function_2
+
+{get_code_block_splitter("helpers.py")}
 """
 
         # Create test config
@@ -384,7 +392,6 @@ def helper_function_2(x):
 
         # Apply optimization and test reversion
         optimizer.replace_function_and_helpers_with_optimized_code(code_context, optimized_code, original_helper_code)
-
         # Check main file content
         main_content = main_file.read_text()
         assert "result1 + n * 3" in main_content, "Entrypoint function should be optimized"
@@ -478,7 +485,8 @@ class Calculator:
 """)
 
         # Optimized version that only calls one helper method
-        optimized_code = """
+        optimized_code = f"""
+{get_code_block_splitter("main.py") }
 class Calculator:
     def entrypoint_method(self, n):
         \"\"\"Optimized method that only calls one helper.\"\"\"
@@ -537,7 +545,8 @@ class Calculator:
 
         # Also test the complete replace_function_and_helpers_with_optimized_code workflow
         # Update optimized code to include a MODIFIED unused helper
-        optimized_code_with_modified_helper = """
+        optimized_code_with_modified_helper = f"""
+{get_code_block_splitter("main.py")}
 class Calculator:
     def entrypoint_method(self, n):
         \"\"\"Optimized method that only calls one helper.\"\"\"
@@ -619,7 +628,8 @@ class Processor:
 """)
 
         # Optimized version that only calls one external helper
-        optimized_code = """
+        optimized_code = f"""
+{get_code_block_splitter("main.py") }
 def external_helper_1(x):
     \"\"\"External helper function.\"\"\"
     return x * 2
@@ -678,7 +688,8 @@ class Processor:
 
         # Also test the complete replace_function_and_helpers_with_optimized_code workflow
         # Update optimized code to include a MODIFIED unused helper
-        optimized_code_with_modified_helper = """
+        optimized_code_with_modified_helper = f"""
+{get_code_block_splitter("main.py")}
 def external_helper_1(x):
     \"\"\"External helper function.\"\"\"
     return x * 2
@@ -716,7 +727,8 @@ class Processor:
 
         # Also test the complete replace_function_and_helpers_with_optimized_code workflow
         # Update optimized code to include a MODIFIED unused helper
-        optimized_code_with_modified_helper = """
+        optimized_code_with_modified_helper = f"""
+{get_code_block_splitter("main.py")}
 def external_helper_1(x):
     \"\"\"External helper function.\"\"\"
     return x * 2
@@ -786,7 +798,8 @@ class OuterClass:
 """)
 
         # Optimized version that inlines one helper
-        optimized_code = """
+        optimized_code = f"""
+{get_code_block_splitter("main.py") }
 def global_helper_1(x):
     return x * 2
 
@@ -954,7 +967,8 @@ def clean_data(x):
 """)
 
         # Optimized version that only uses some functions
-        optimized_code = """
+        optimized_code = f"""
+{get_code_block_splitter("main.py") }
 import utils
 from math_helpers import add
 
@@ -1115,7 +1129,8 @@ def divide_numbers(x, y):
 """)
 
         # Optimized version that only uses add_numbers
-        optimized_code = """
+        optimized_code = f"""
+{get_code_block_splitter("main.py") }
 import calculator
 
 def entrypoint_function(n):
@@ -1317,7 +1332,8 @@ class MathUtils:
 """)
 
         # Optimized static method that inlines one utility
-        optimized_static_code = """
+        optimized_static_code = f"""
+{get_code_block_splitter("main.py")}
 def utility_function_1(x):
     return x * 2
 
@@ -1384,7 +1400,8 @@ class MathUtils:
 
         # Also test the complete replace_function_and_helpers_with_optimized_code workflow
         # Update optimized code to include a MODIFIED unused helper
-        optimized_static_code_with_modified_helper = """
+        optimized_static_code_with_modified_helper = f"""
+{get_code_block_splitter("main.py")}
 def utility_function_1(x):
     return x * 2
 

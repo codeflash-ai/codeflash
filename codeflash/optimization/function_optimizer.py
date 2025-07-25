@@ -627,16 +627,19 @@ class FunctionOptimizer:
             if helper_function.jedi_definition.type != "class":
                 read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
         for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
-            relative_module_path = module_abspath.relative_to(self.project_root)
+            relative_module_path = str(module_abspath.relative_to(self.project_root))
             logger.debug(f"applying optimized code to: {relative_module_path}")
 
-            optimized_code = file_to_code_context.get(relative_module_path)
-            if not optimized_code:
-                msg = f"Optimized code not found for {relative_module_path}, existing files in the context are: {list(file_to_code_context.keys())}, re-check your 'split markers'"
-                raise ValueError(msg)
+            scoped_optimized_code = file_to_code_context.get(relative_module_path, None)
+            if scoped_optimized_code is None:
+                logger.warning(
+                    f"Optimized code not found for {relative_module_path}, existing files in the context are: {list(file_to_code_context.keys())}, re-check your 'split markers'"
+                )
+                scoped_optimized_code = ""
+
             did_update |= replace_function_definitions_in_module(
                 function_names=list(qualified_names),
-                optimized_code=optimized_code,
+                optimized_code=scoped_optimized_code,
                 module_abspath=module_abspath,
                 preexisting_objects=code_context.preexisting_objects,
                 project_root_path=self.project_root,

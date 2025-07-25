@@ -170,7 +170,7 @@ class CodeStringsMarkdown(BaseModel):
         )
 
     def path_to_code_string(self) -> dict[str, str]:
-        return {code_string.file_path: code_string.code for code_string in self.code_strings}
+        return {str(code_string.file_path): code_string.code for code_string in self.code_strings}
 
     @staticmethod
     def from_str_with_markers(code_with_markers: str) -> CodeStringsMarkdown:
