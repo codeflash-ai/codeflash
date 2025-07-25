@@ -54,7 +54,11 @@ class AiServiceClient:
         return "https://app.codeflash.ai"
 
     def make_ai_service_request(
-        self, endpoint: str, method: str = "POST", payload: dict[str, Any] | None = None, timeout: float | None = None
+        self,
+        endpoint: str,
+        method: str = "POST",
+        payload: dict[str, Any] | list[dict[str, Any]] | None = None,
+        timeout: float | None = None,
     ) -> requests.Response:
         """Make an API request to the given endpoint on the AI service.
 
@@ -292,7 +296,7 @@ class AiServiceClient:
                 OptimizedCandidate(
                     source_code=opt["source_code"],
                     explanation=opt["explanation"],
-                    optimization_id=opt["optimization_id"][:-4]+"refi",
+                    optimization_id=opt["optimization_id"][:-4] + "refi",
                 )
                 for opt in refined_optimizations
             ]
@@ -336,7 +340,7 @@ class AiServiceClient:
             "is_correct": is_correct,
             "codeflash_version": codeflash_version,
             "best_optimization_id": best_optimization_id,
-            "optimized_line_profiler_results": optimized_line_profiler_results
+            "optimized_line_profiler_results": optimized_line_profiler_results,
         }
         try:
             self.make_ai_service_request("/log_features", payload=payload, timeout=5)

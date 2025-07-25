@@ -19,6 +19,7 @@ from codeflash.code_utils.config_parser import find_pyproject_toml
 
 ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
 
+
 def diff_length(a: str, b: str) -> int:
     """Compute the length (in characters) of the unified diff between two strings.
 
@@ -61,6 +62,7 @@ def create_rank_dictionary_compact(int_array: list[int]) -> dict[int, int]:
 
     # Create a dictionary mapping the original index to its rank (its position in the sorted list)
     return {original_index: rank for rank, original_index in enumerate(sorted_indices)}
+
 
 @contextmanager
 def custom_addopts() -> None:

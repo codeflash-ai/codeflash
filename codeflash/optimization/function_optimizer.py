@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import concurrent.futures
-import difflib
 import os
 import random
 import subprocess
@@ -32,13 +31,13 @@ from codeflash.code_utils.code_replacer import (
 from codeflash.code_utils.code_utils import (
     ImportErrorPattern,
     cleanup_paths,
+    create_rank_dictionary_compact,
+    diff_length,
     file_name_from_test_module_name,
     get_run_tmp_file,
     has_any_async_functions,
     module_name_from_file_path,
     restore_conftest,
-    diff_length,
-    create_rank_dictionary_compact,
 )
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
@@ -363,7 +362,6 @@ class FunctionOptimizer:
         exp_type: str,
     ) -> BestOptimization | None:
         # TODO remove
-        from codeflash.models.models import OptimizedCandidate
 
         best_optimization: BestOptimization | None = None
         _best_runtime_until_now = original_code_baseline.runtime
@@ -482,7 +480,9 @@ class FunctionOptimizer:
                                 original_helper_code=original_helper_code,
                                 candidate_index=candidate_index,
                             )
-                            optimized_line_profiler_results[candidate.optimization_id]=line_profile_test_results['str_out']
+                            optimized_line_profiler_results[candidate.optimization_id] = line_profile_test_results[
+                                "str_out"
+                            ]
                             replay_perf_gain = {}
                             if self.args.benchmark:
                                 test_results_by_benchmark = (
@@ -580,10 +580,12 @@ class FunctionOptimizer:
         if not len(self.valid_optimizations):
             return None
         # need to figure out the best candidate here before we return best_optimization
-        diff_lens_list = [] # character level diff
+        diff_lens_list = []  # character level diff
         runtimes_list = []
         for valid_opt in self.valid_optimizations:
-            diff_lens_list.append(diff_length(valid_opt.candidate.source_code, code_context.read_writable_code)) #char level diff
+            diff_lens_list.append(
+                diff_length(valid_opt.candidate.source_code, code_context.read_writable_code)
+            )  # char level diff
             runtimes_list.append(valid_opt.runtime)
         diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
         runtimes_ranking = create_rank_dictionary_compact(runtimes_list)
@@ -598,7 +600,7 @@ class FunctionOptimizer:
             optimized_runtime=optimized_runtimes,
             is_correct=is_correct,
             best_optimization_id=best_optimization.candidate.optimization_id,
-            optimized_line_profiler_results= optimized_line_profiler_results
+            optimized_line_profiler_results=optimized_line_profiler_results,
         )
         return best_optimization
 
@@ -630,7 +632,7 @@ class FunctionOptimizer:
                 fto_name=fto_name,
             )
             for opt in valid_optimizations
-        ] # TODO: multiple workers for this?
+        ]  # TODO: multiple workers for this?
         future_refinement_results = executor.submit(ai_service_client.optimize_python_code_refinement, request=request)
         concurrent.futures.wait([future_refinement_results])
         return future_refinement_results.result()
