@@ -598,7 +598,6 @@ class FunctionOptimizer:
             original_runtime=original_code_baseline.runtime,
             optimized_runtime=optimized_runtimes,
             is_correct=is_correct,
-            best_optimization_id=best_optimization.candidate.optimization_id,
             optimized_line_profiler_results=optimized_line_profiler_results,
         )
         return best_optimization
