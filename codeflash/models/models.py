@@ -27,6 +27,22 @@ from codeflash.code_utils.code_utils import module_name_from_file_path, validate
 from codeflash.code_utils.env_utils import is_end_to_end
 from codeflash.verification.comparator import comparator
 
+
+@dataclass(frozen=True)
+class AIServiceRefinerRequest:
+    optimization_id: str
+    original_source_code: str
+    read_only_dependency_code: str
+    original_code_runtime: str
+    optimized_source_code: str
+    optimized_explanation: str
+    optimized_code_runtime: str
+    speedup: str
+    trace_id: str
+    original_line_profiler_results: str
+    optimized_line_profiler_results: str
+
+
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
 # qualified name of the method is foo.eggs.Ham.spam, its qualified name is Ham.spam, and its name is spam. The full name
 # of the module is foo.eggs.
