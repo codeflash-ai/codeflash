@@ -28,7 +28,7 @@ def performance_gain(*, original_runtime_ns: int, optimized_runtime_ns: int) -> 
 def speedup_critic(
     candidate_result: OptimizedCandidateResult,
     original_code_runtime: int,
-    best_runtime_until_now: int,
+    best_runtime_until_now: int | None,
     disable_gh_action_noise: Optional[bool] = None,
 ) -> bool:
     """Take in a correct optimized Test Result and decide if the optimization should actually be surfaced to the user.
@@ -47,6 +47,9 @@ def speedup_critic(
     perf_gain = performance_gain(
         original_runtime_ns=original_code_runtime, optimized_runtime_ns=candidate_result.best_test_runtime
     )
+    if best_runtime_until_now is None:
+        # collect all optimizations with this
+        return bool(perf_gain > noise_floor)
     return bool(perf_gain > noise_floor and candidate_result.best_test_runtime < best_runtime_until_now)
 
 
