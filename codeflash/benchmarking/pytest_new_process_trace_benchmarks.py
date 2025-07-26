@@ -30,8 +30,6 @@ if __name__ == "__main__":
                 "-s",
                 "-o",
                 "addopts=",
-                "-W",
-                "ignore::pytest.PytestAssertRewriteWarning",
             ],
             plugins=[codeflash_benchmark_plugin],
         )  # Errors will be printed to stdout, not stderr

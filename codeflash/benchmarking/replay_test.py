@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 import textwrap
 from pathlib import Path
@@ -13,6 +14,8 @@ from codeflash.verification.verification_utils import get_test_file_path
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+
+benchmark_context_cleaner = re.compile(r"[^a-zA-Z0-9_]+")
 
 
 def get_next_arg_and_return(
@@ -44,6 +47,16 @@ def get_next_arg_and_return(
 
 def get_function_alias(module: str, function_name: str) -> str:
     return "_".join(module.split(".")) + "_" + function_name
+
+
+def get_unique_test_name(module: str, function_name: str, benchmark_name: str, class_name: str | None = None) -> str:
+    clean_benchmark = benchmark_context_cleaner.sub("_", benchmark_name).strip("_")
+
+    base_alias = get_function_alias(module, function_name)
+    if class_name:
+        class_alias = get_function_alias(module, class_name)
+        return f"{class_alias}_{function_name}_{clean_benchmark}"
+    return f"{base_alias}_{clean_benchmark}"
 
 
 def create_trace_replay_test_code(
@@ -209,7 +222,8 @@ trace_file_path = r"{trace_file}"
         formatted_test_body = textwrap.indent(test_body, "        " if test_framework == "unittest" else "    ")
 
         test_template += "    " if test_framework == "unittest" else ""
-        test_template += f"def test_{alias}({self}):\n{formatted_test_body}\n"
+        unique_test_name = get_unique_test_name(module_name, function_name, benchmark_function_name, class_name)
+        test_template += f"def test_{unique_test_name}({self}):\n{formatted_test_body}\n"
 
     return imports + "\n" + metadata + "\n" + test_template
 
@@ -294,3 +308,4 @@ def generate_replay_test(
         logger.info(f"Error generating replay tests: {e}")
 
     return count
+
