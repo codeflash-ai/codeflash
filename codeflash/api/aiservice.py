@@ -316,7 +316,6 @@ class AiServiceClient:
         original_runtime: float | None,
         optimized_runtime: dict[str, float | None] | None,
         is_correct: dict[str, bool] | None,
-        best_optimization_id: str | None,
         optimized_line_profiler_results: dict[str, str] | None,
     ) -> None:
         """Log features to the database.
@@ -328,7 +327,6 @@ class AiServiceClient:
         - original_runtime (Optional[Dict[str, float]]): The original runtime.
         - optimized_runtime (Optional[Dict[str, float]]): The optimized runtime.
         - is_correct (Optional[Dict[str, bool]]): Whether the optimized code is correct.
-        - best_optimization_id (Optional[str]): The best optimization id.
         -optimized_line_profiler_results: line_profiler results for every candidate mapped to their optimization_id
 
         """
@@ -339,7 +337,6 @@ class AiServiceClient:
             "optimized_runtime": optimized_runtime,
             "is_correct": is_correct,
             "codeflash_version": codeflash_version,
-            "best_optimization_id": best_optimization_id,
             "optimized_line_profiler_results": optimized_line_profiler_results,
         }
         try:

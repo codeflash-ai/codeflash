@@ -361,8 +361,6 @@ class FunctionOptimizer:
         file_path_to_helper_classes: dict[Path, set[str]],
         exp_type: str,
     ) -> BestOptimization | None:
-        # TODO remove
-
         best_optimization: BestOptimization | None = None
         _best_runtime_until_now = original_code_baseline.runtime
 
@@ -507,6 +505,7 @@ class FunctionOptimizer:
 
                             best_optimization = BestOptimization(
                                 candidate=candidate,
+                                helper_functions=code_context.helper_functions,
                                 code_context=code_context,
                                 runtime=best_test_runtime,
                                 line_profiler_test_results=line_profile_test_results,

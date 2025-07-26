@@ -75,6 +75,7 @@ class FunctionSource:
 
 class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
+    helper_functions: list[FunctionSource]
     code_context: CodeOptimizationContext
     runtime: int
     replay_performance_gain: Optional[dict[BenchmarkKey, float]] = None
