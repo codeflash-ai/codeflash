@@ -19,7 +19,7 @@ from re import Pattern
 from typing import Annotated, Optional, cast
 
 from jedi.api.classes import Name
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
@@ -139,8 +139,25 @@ class CodeString(BaseModel):
     file_path: Optional[Path] = None
 
 
+LINE_SPLITTER_MARKER_PREFIX = "# codeflash-splitter__"
+
+
+def get_code_block_splitter(file_path: Path) -> str:
+    return f"{LINE_SPLITTER_MARKER_PREFIX}{file_path}"
+
+
 class CodeStringsMarkdown(BaseModel):
     code_strings: list[CodeString] = []
+    cached_code: Optional[str] = None
+
+    @property
+    def flat(self) -> str:
+        if self.cached_code is not None:
+            return self.cached_code
+        self.cached_code = "\n".join(
+            get_code_block_splitter(block.file_path) + "\n" + block.code for block in self.code_strings
+        )
+        return self.cached_code
 
     @property
     def markdown(self) -> str:
@@ -152,10 +169,24 @@ class CodeStringsMarkdown(BaseModel):
             ]
         )
 
+    @staticmethod
+    def parse_splitter_markers(code_with_markers: str) -> dict[str, str]:
+        pattern = rf"{LINE_SPLITTER_MARKER_PREFIX}([^\n]+)\n"
+        matches = list(re.finditer(pattern, code_with_markers))
+
+        results = {}
+        for i, match in enumerate(matches):
+            start = match.end()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(code_with_markers)
+            file_path = match.group(1).strip()
+            code = code_with_markers[start:end].lstrip("\n")
+            results[file_path] = code
+        return results
+
 
 class CodeOptimizationContext(BaseModel):
     testgen_context_code: str = ""
-    read_writable_code: str = Field(min_length=1)
+    read_writable_code: CodeStringsMarkdown
     read_only_context_code: str = ""
     hashing_code_context: str = ""
     hashing_code_context_hash: str = ""

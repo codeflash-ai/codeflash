@@ -62,6 +62,7 @@ from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
     CodeOptimizationContext,
+    CodeStringsMarkdown,
     GeneratedTests,
     GeneratedTestsList,
     OptimizationSet,
@@ -164,7 +165,7 @@ class FunctionOptimizer:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
 
-        if has_any_async_functions(code_context.read_writable_code):
+        if has_any_async_functions(code_context.read_writable_code.flat):
             return Failure("Codeflash does not support async functions in the code to optimize.")
         # Random here means that we still attempt optimization with a fractional chance to see if
         # last time we could not find an optimization, maybe this time we do.
@@ -283,7 +284,7 @@ class FunctionOptimizer:
 
         should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
 
-        code_print(code_context.read_writable_code)
+        code_print(code_context.read_writable_code.flat)
 
         test_setup_result = self.generate_and_instrument_tests(  # also generates optimizations
             code_context, should_run_experiment=should_run_experiment
@@ -375,7 +376,7 @@ class FunctionOptimizer:
             ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
             future_line_profile_results = executor.submit(
                 ai_service_client.optimize_python_code_line_profiler,
-                source_code=code_context.read_writable_code,
+                source_code=code_context.read_writable_code.flat,
                 dependency_code=code_context.read_only_context_code,
                 trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
                 line_profiler_results=original_code_baseline.line_profile_results["str_out"],
@@ -620,13 +621,28 @@ class FunctionOptimizer:
         read_writable_functions_by_file_path[self.function_to_optimize.file_path].add(
             self.function_to_optimize.qualified_name
         )
+
+        file_to_code_context = CodeStringsMarkdown.parse_splitter_markers(optimized_code)
+
         for helper_function in code_context.helper_functions:
             if helper_function.jedi_definition.type != "class":
                 read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
+
         for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
+            relative_module_path = str(module_abspath.relative_to(self.project_root))
+            logger.debug(f"applying optimized code to: {relative_module_path}")
+
+            scoped_optimized_code = file_to_code_context.get(relative_module_path, None)
+            if scoped_optimized_code is None:
+                logger.warning(
+                    f"Optimized code not found for {relative_module_path} In the context\n-------\n{optimized_code}\n-------\n"
+                    "Existing files in the context are: {list(file_to_code_context.keys())}, re-check your 'split markers'"
+                )
+                scoped_optimized_code = ""
+
             did_update |= replace_function_definitions_in_module(
                 function_names=list(qualified_names),
-                optimized_code=optimized_code,
+                optimized_code=scoped_optimized_code,
                 module_abspath=module_abspath,
                 preexisting_objects=code_context.preexisting_objects,
                 project_root_path=self.project_root,
@@ -756,7 +772,7 @@ class FunctionOptimizer:
     def generate_tests_and_optimizations(
         self,
         testgen_context_code: str,
-        read_writable_code: str,
+        read_writable_code: CodeStringsMarkdown,
         read_only_context_code: str,
         helper_functions: list[FunctionSource],
         generated_test_paths: list[Path],
@@ -777,7 +793,7 @@ class FunctionOptimizer:
             )
             future_optimization_candidates = executor.submit(
                 self.aiservice_client.optimize_python_code,
-                read_writable_code,
+                read_writable_code.flat,
                 read_only_context_code,
                 self.function_trace_id[:-4] + "EXP0" if run_experiment else self.function_trace_id,
                 N_CANDIDATES,
@@ -796,7 +812,7 @@ class FunctionOptimizer:
             if run_experiment:
                 future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
-                    read_writable_code,
+                    read_writable_code.flat,
                     read_only_context_code,
                     self.function_trace_id[:-4] + "EXP1",
                     N_CANDIDATES,
