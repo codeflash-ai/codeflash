@@ -56,12 +56,7 @@ from collections.abc import Sequence
 
 from pydantic_ai_slim.pydantic_ai.messages import BinaryContent, UserContent
 
-# Compile regex once, as in original
 _TOKEN_SPLIT_RE = re.compile(r'[\\s",.:]+')
-
-# Precompute translation table for fast token splitting for string input
-# This covers the chars: whitespace (\\x09-\\x0d, space), " (0x22), , (0x2c),
-# Map those codepoints to ' '
 _translate_table = {{ord(c): ord(' ') for c in ' \\t\\n\\r\\x0b\\x0c",.:'}}
 
 def _estimate_string_tokens(content: str | Sequence[UserContent]) -> int:

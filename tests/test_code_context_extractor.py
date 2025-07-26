@@ -2449,8 +2449,8 @@ class SimpleClass:
         assert "return 42" in code_content
 
 
-
-def test_replace_functions_and_add_imports():
+# This shouldn't happen as we are now using a scoped optimization context, but keep it just in case
+def test_circular_deps():
     path_to_root = Path(__file__).resolve().parent.parent / "code_to_optimize" / "code_directories" / "circular_deps"
     file_abs_path = path_to_root / "api_client.py"
     optimized_code = Path(path_to_root / "optimized.py").read_text(encoding="utf-8")

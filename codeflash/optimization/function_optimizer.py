@@ -621,11 +621,13 @@ class FunctionOptimizer:
         read_writable_functions_by_file_path[self.function_to_optimize.file_path].add(
             self.function_to_optimize.qualified_name
         )
-        file_to_code_context = CodeStringsMarkdown.from_str_with_markers(optimized_code).path_to_code_string()
-        logger.debug(f"Optimized code: {file_to_code_context}")
+
+        file_to_code_context = CodeStringsMarkdown.parse_splitter_markers(optimized_code)
+
         for helper_function in code_context.helper_functions:
             if helper_function.jedi_definition.type != "class":
                 read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
+
         for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
             relative_module_path = str(module_abspath.relative_to(self.project_root))
             logger.debug(f"applying optimized code to: {relative_module_path}")
@@ -633,7 +635,8 @@ class FunctionOptimizer:
             scoped_optimized_code = file_to_code_context.get(relative_module_path, None)
             if scoped_optimized_code is None:
                 logger.warning(
-                    f"Optimized code not found for {relative_module_path}, existing files in the context are: {list(file_to_code_context.keys())}, re-check your 'split markers'"
+                    f"Optimized code not found for {relative_module_path} In the context\n-------\n{optimized_code}\n-------\n"
+                    "Existing files in the context are: {list(file_to_code_context.keys())}, re-check your 'split markers'"
                 )
                 scoped_optimized_code = ""
 

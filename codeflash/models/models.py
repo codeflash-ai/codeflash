@@ -169,22 +169,19 @@ class CodeStringsMarkdown(BaseModel):
             ]
         )
 
-    def path_to_code_string(self) -> dict[str, str]:
-        return {str(code_string.file_path): code_string.code for code_string in self.code_strings}
-
     @staticmethod
-    def from_str_with_markers(code_with_markers: str) -> CodeStringsMarkdown:
+    def parse_splitter_markers(code_with_markers: str) -> dict[str, str]:
         pattern = rf"{LINE_SPLITTER_MARKER_PREFIX}([^\n]+)\n"
         matches = list(re.finditer(pattern, code_with_markers))
 
-        results = []
+        results = {}
         for i, match in enumerate(matches):
             start = match.end()
             end = matches[i + 1].start() if i + 1 < len(matches) else len(code_with_markers)
             file_path = match.group(1).strip()
             code = code_with_markers[start:end].lstrip("\n")
-            results.append(CodeString(file_path=file_path, code=code))
-        return CodeStringsMarkdown(code_strings=results)
+            results[file_path] = code
+        return results
 
 
 class CodeOptimizationContext(BaseModel):
