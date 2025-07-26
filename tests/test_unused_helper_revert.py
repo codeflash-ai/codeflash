@@ -316,8 +316,6 @@ def entrypoint_function(n):
     \"\"\"Optimized function that only calls one helper.\"\"\"
     result1 = helper_function_1(n)
     return result1 + n * 3  # Inlined helper_function_2
-
-{get_code_block_splitter("helpers.py")}
 """
 
         # Create test config
