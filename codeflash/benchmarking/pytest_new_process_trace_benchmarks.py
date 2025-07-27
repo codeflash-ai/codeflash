@@ -13,6 +13,10 @@ if __name__ == "__main__":
     import pytest
 
     try:
+        # Increase recursion limit to handle recursive benchmarks with tracing overhead
+        original_limit = sys.getrecursionlimit()
+        sys.setrecursionlimit(max(2000, original_limit * 2))
+
         codeflash_benchmark_plugin.setup(trace_file, project_root)
         codeflash_trace.setup(trace_file)
         exitcode = pytest.main(
@@ -33,6 +37,8 @@ if __name__ == "__main__":
             ],
             plugins=[codeflash_benchmark_plugin],
         )  # Errors will be printed to stdout, not stderr
+
+        sys.setrecursionlimit(original_limit)
 
     except Exception as e:
         print(f"Failed to collect tests: {e!s}", file=sys.stderr)
