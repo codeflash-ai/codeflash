@@ -308,4 +308,3 @@ def generate_replay_test(
         logger.info(f"Error generating replay tests: {e}")
 
     return count
-
