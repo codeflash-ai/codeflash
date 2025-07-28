@@ -70,7 +70,7 @@ def parse_config_file(
     # default values:
     path_keys = ["module-root", "tests-root", "benchmarks-root"]
     path_list_keys = ["ignore-paths"]
-    str_keys = {"pytest-cmd": "pytest", "git-remote": "origin"}
+    str_keys = {"pytest-cmd": "pytest", "git-remote": "origin", "exp-git-remote": "exp-origin"}
     bool_keys = {
         "override-fixtures": False,
         "disable-telemetry": False,
