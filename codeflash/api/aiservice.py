@@ -306,6 +306,10 @@ class AiServiceClient:
             "optimized_runtime": optimized_runtime,
             "is_correct": is_correct,
             "codeflash_version": codeflash_version,
+<<<<<<< Updated upstream
+=======
+            "best_optimization_id": best_optimization_id,
+>>>>>>> Stashed changes
             "optimized_line_profiler_results": optimized_line_profiler_results,
         }
         try:

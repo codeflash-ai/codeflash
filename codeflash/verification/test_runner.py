@@ -152,7 +152,7 @@ def run_line_profile_tests(
     test_framework: str,
     *,
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME,
-    verbose: bool = False,  # noqa: ARG001
+    verbose: bool = False,
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,  # noqa: ARG001
     pytest_max_loops: int = 100_000,  # noqa: ARG001
@@ -199,6 +199,30 @@ def run_line_profile_tests(
             cwd=cwd,
             env=pytest_test_env,
             timeout=600,  # TODO: Make this dynamic
+        )
+    elif test_framework == "unittest":
+        test_env["CODEFLASH_LOOP_INDEX"] = "1"
+        test_env["LINE_PROFILE"] = "1"
+        test_files: list[str] = []
+        for file in test_paths.test_files:
+            if file.test_type in {TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST} and file.tests_in_file:
+                test_files.extend(
+                    [
+                        str(file.benchmarking_file_path)
+                        + "::"
+                        + (test.test_class + "::" if test.test_class else "")
+                        + (test.test_function.split("[", 1)[0] if "[" in test.test_function else test.test_function)
+                        for test in file.tests_in_file
+                    ]
+                )
+            else:
+                test_files.append(str(file.benchmarking_file_path))
+        test_files = list(set(test_files))  # remove multiple calls in the same test function
+        line_profiler_output_file, results = run_unittest_tests(
+            verbose=verbose, test_file_paths=[Path(file) for file in test_files], test_env=test_env, cwd=cwd
+        )
+        logger.debug(
+            f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
         )
     else:
         msg = f"Unsupported test framework: {test_framework}"

@@ -361,6 +361,11 @@ class FunctionOptimizer:
         file_path_to_helper_classes: dict[Path, set[str]],
         exp_type: str,
     ) -> BestOptimization | None:
+<<<<<<< Updated upstream
+=======
+        # TODO remove
+
+>>>>>>> Stashed changes
         best_optimization: BestOptimization | None = None
         _best_runtime_until_now = original_code_baseline.runtime
 
@@ -598,6 +603,10 @@ class FunctionOptimizer:
             original_runtime=original_code_baseline.runtime,
             optimized_runtime=optimized_runtimes,
             is_correct=is_correct,
+<<<<<<< Updated upstream
+=======
+            best_optimization_id=best_optimization.candidate.optimization_id,
+>>>>>>> Stashed changes
             optimized_line_profiler_results=optimized_line_profiler_results,
         )
         return best_optimization
