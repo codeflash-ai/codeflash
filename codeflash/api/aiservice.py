@@ -296,7 +296,7 @@ class AiServiceClient:
         - original_runtime (Optional[Dict[str, float]]): The original runtime.
         - optimized_runtime (Optional[Dict[str, float]]): The optimized runtime.
         - is_correct (Optional[Dict[str, bool]]): Whether the optimized code is correct.
-        -optimized_line_profiler_results: line_profiler results for every candidate mapped to their optimization_id
+        - optimized_line_profiler_results: line_profiler results for every candidate mapped to their optimization_id
 
         """
         payload = {
