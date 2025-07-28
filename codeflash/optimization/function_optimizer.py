@@ -946,17 +946,14 @@ class FunctionOptimizer:
                 file_path_to_helper_classes=file_path_to_helper_classes,
                 exp_type=exp_type,
             )
-            ph(
-                "cli-optimize-function-finished",
-                {
-                    "function_trace_id": self.function_trace_id[:-4] + exp_type
-                    if self.experiment_id
-                    else self.function_trace_id
-                },
-            )
+            trace_id = self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id
+            ph("cli-optimize-function-finished", {"function_trace_id": trace_id})
 
             if best_optimization:
                 logger.info("Best candidate:")
+                logger.debug(
+                    f"ATTENTION!!!: best optimization found for {function_to_optimize_qualified_name} --> {exp_type} , trace_id ::: optimization_id is {trace_id} ::: {best_optimization.candidate.optimization_id}."
+                )
                 code_print(best_optimization.candidate.source_code)
                 console.print(
                     Panel(
