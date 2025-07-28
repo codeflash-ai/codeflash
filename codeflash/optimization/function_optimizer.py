@@ -556,14 +556,8 @@ class FunctionOptimizer:
                             original_code_baseline=original_code_baseline,
                             code_context=code_context,
                             trace_id=trace_id,
-                            experiment_metadata=ExperimentMetadata(
-                                id=self.experiment_id, group="control" if exp_type == "EXP0" else "experiment"
-                            )
-                            if self.experiment_id
-                            else None,
                             ai_service_client=ai_service_client,
                             executor=executor,
-                            fto_name=self.function_to_optimize.qualified_name,
                         )
                         candidates.extend(refinement_response)
                         print("Added candidates from refinement")
@@ -599,6 +593,7 @@ class FunctionOptimizer:
             optimized_runtime=optimized_runtimes,
             is_correct=is_correct,
             optimized_line_profiler_results=optimized_line_profiler_results,
+            metadata={"best_optimization_id": best_optimization.candidate.optimization_id}
         )
         return best_optimization
 
@@ -608,10 +603,8 @@ class FunctionOptimizer:
         original_code_baseline: OriginalCodeBaseline,
         code_context: CodeOptimizationContext,
         trace_id: str,
-        experiment_metadata: ExperimentMetadata | None,
         ai_service_client: AiServiceClient,
         executor: concurrent.futures.ThreadPoolExecutor,
-        fto_name: str,
     ) -> list[OptimizedCandidate]:
         request = [
             AIServiceRefinerRequest(
@@ -626,8 +619,6 @@ class FunctionOptimizer:
                 trace_id=trace_id,
                 original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
                 optimized_line_profiler_results=opt.line_profiler_test_results["str_out"],
-                experiment_metadata=experiment_metadata,
-                fto_name=fto_name,
             )
             for opt in valid_optimizations
         ]  # TODO: multiple workers for this?
