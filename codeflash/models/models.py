@@ -515,6 +515,7 @@ class TestResults(BaseModel):
                 benchmark_replay_test_dir.resolve()
                 / f"test_{benchmark_key.module_path.replace('.', '_')}__replay_test_",
                 project_root,
+                traverse_up=True,
             )
         for test_result in self.test_results:
             if test_result.test_type == TestType.REPLAY_TEST:

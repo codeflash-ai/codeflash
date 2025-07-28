@@ -8,6 +8,12 @@ resolution-markers = [
     "python_full_version < '3.10'",
 ]
 
+[manifest]
+members = [
+    "codeflash",
+    "codeflash-benchmark",
+]
+
 [[package]]
 name = "annotated-types"
 version = "0.7.0"
@@ -210,6 +216,7 @@ source = { editable = "." }
 dependencies = [
     { name = "click", version = "8.1.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "click", version = "8.2.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+    { name = "codeflash-benchmark" },
     { name = "coverage" },
     { name = "crosshair-tool" },
     { name = "dill" },
@@ -239,6 +246,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "codeflash-benchmark" },
     { name = "ipython", version = "8.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "ipython", version = "8.37.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
     { name = "ipython", version = "9.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -268,6 +276,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.1.0" },
+    { name = "codeflash-benchmark", editable = "codeflash-benchmark" },
     { name = "coverage", specifier = ">=7.6.4" },
     { name = "crosshair-tool", specifier = ">=0.0.78" },
     { name = "dill", specifier = ">=0.3.8" },
@@ -297,6 +306,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "codeflash-benchmark", editable = "codeflash-benchmark" },
     { name = "ipython", specifier = ">=8.12.0" },
     { name = "lxml-stubs", specifier = ">=0.5.1" },
     { name = "mypy", specifier = ">=1.13" },
@@ -319,6 +329,17 @@ dev = [
     { name = "types-unidiff", specifier = ">=0.7.0.20240505,<0.8" },
     { name = "uv", specifier = ">=0.6.2" },
 ]
+
+[[package]]
+name = "codeflash-benchmark"
+version = "0.1.0"
+source = { editable = "codeflash-benchmark" }
+dependencies = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pytest", specifier = ">=7.0.0,!=8.3.4" }]
 
 [[package]]
 name = "colorama"

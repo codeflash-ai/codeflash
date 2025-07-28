@@ -12,6 +12,7 @@ from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 def trace_benchmarks_pytest(
     benchmarks_root: Path, tests_root: Path, project_root: Path, trace_file: Path, timeout: int = 300
 ) -> None:
+    logger.info("Tracing benchmarks with codeflash-benchmark")
     benchmark_env = os.environ.copy()
     if "PYTHONPATH" not in benchmark_env:
         benchmark_env["PYTHONPATH"] = str(project_root)
@@ -32,6 +33,8 @@ def trace_benchmarks_pytest(
         env=benchmark_env,
         timeout=timeout,
     )
+    logger.info(f"ran with args: {result.args}")
+    logger.info(f"Pytest output: {result.stderr}")
     if result.returncode != 0:
         if "ERROR collecting" in result.stdout:
             # Pattern matches "===== ERRORS =====" (any number of =) and captures everything after
