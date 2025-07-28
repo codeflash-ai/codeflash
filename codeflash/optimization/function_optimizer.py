@@ -593,7 +593,7 @@ class FunctionOptimizer:
             optimized_runtime=optimized_runtimes,
             is_correct=is_correct,
             optimized_line_profiler_results=optimized_line_profiler_results,
-            metadata={"best_optimization_id": best_optimization.candidate.optimization_id}
+            metadata={"best_optimization_id": best_optimization.candidate.optimization_id},
         )
         return best_optimization
 

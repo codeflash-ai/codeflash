@@ -286,7 +286,7 @@ class AiServiceClient:
         optimized_runtime: dict[str, float | None] | None,
         is_correct: dict[str, bool] | None,
         optimized_line_profiler_results: dict[str, str] | None,
-        metadata: dict[str, any] | None,
+        metadata: dict[str, Any] | None,
     ) -> None:
         """Log features to the database.
 
@@ -299,6 +299,7 @@ class AiServiceClient:
         - is_correct (Optional[Dict[str, bool]]): Whether the optimized code is correct.
         - optimized_line_profiler_results: line_profiler results for every candidate mapped to their optimization_id
         - metadata: contains the best optimization id
+
         """
         payload = {
             "trace_id": function_trace_id,
