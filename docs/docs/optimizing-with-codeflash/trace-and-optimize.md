@@ -19,8 +19,6 @@ codeflash optimize -m pytest tests/
 
 This powerful command creates high-quality optimizations, making it ideal when you need to optimize a workflow or script. The initial tracing process can be slow, so try to limit your script's runtime to under 1 minute for best results. If your workflow is longer, consider tracing it into smaller sections by using the Codeflash tracer as a context manager (point 3 below).
 
-The generated replay tests and the trace file are for the immediate optimization use, don't add them to git.
-
 ## What is the codeflash optimize command?
 
 `codeflash optimize` tries to do everything that an expert engineer would do while optimizing a workflow. It profiles your code, traces the execution of your workflow and generates a set of test cases that are derived from how your code is actually run.
