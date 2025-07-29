@@ -171,11 +171,181 @@ def should_modify_pyproject_toml() -> bool:
     if "tests_root" not in config or config["tests_root"] is None or not Path(config["tests_root"]).is_dir():
         return True
 
-    return Confirm.ask(
+    should_reconfigure = Confirm.ask(
         "✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?",
         default=False,
         show_default=True,
     )
+    
+    if not should_reconfigure:
+        display_current_config(config, config_file_path)
+    
+    return should_reconfigure
+
+
+def browse_and_select_directory(start_dir: Path, message: str, title: str) -> Path | None:
+    """Interactive directory browser with tab-completion-like functionality."""
+    current_dir = start_dir
+    
+    while True:
+        # Get all subdirectories in current directory
+        try:
+            subdirs = []
+            for item in current_dir.iterdir():
+                if item.is_dir() and not item.name.startswith('.'):
+                    subdirs.append(item.name)
+            subdirs.sort()
+        except PermissionError:
+            console.print(f"❌ Permission denied accessing {current_dir}")
+            return None
+        
+        # Build choices list
+        choices = []
+        
+        # Add parent directory option if not at start_dir
+        if current_dir != start_dir and current_dir.parent != current_dir:
+            choices.append(("📁 .. (parent directory)", ".."))
+        
+        # Add current directory selection option
+        choices.append(("✅ Select this directory", "SELECT"))
+        
+        # Add subdirectories
+        for subdir in subdirs:
+            choices.append((f"📂 {subdir}/", subdir))
+        
+        # Add option to type custom path
+        choices.append(("⌨️  Type custom path", "CUSTOM"))
+        choices.append(("❌ Cancel", "CANCEL"))
+        
+        # Show current directory in panel
+        browse_panel = Panel(
+            Text(f"📍 Current directory: {current_dir}\n\n{message}", style="cyan"),
+            title=title,
+            border_style="bright_blue",
+        )
+        console.print(browse_panel)
+        console.print()
+        
+        # Prompt for selection
+        questions = [
+            inquirer.List(
+                "selection",
+                message="Navigate or select directory:",
+                choices=choices,
+                carousel=True,
+            )
+        ]
+        
+        answers = inquirer.prompt(questions, theme=CodeflashTheme())
+        if not answers:
+            return None
+            
+        selection = answers["selection"]
+        
+        if selection == "SELECT":
+            return current_dir
+        elif selection == "CANCEL":
+            return None
+        elif selection == "..":
+            current_dir = current_dir.parent
+        elif selection == "CUSTOM":
+            # Allow custom path input
+            custom_panel = Panel(
+                Text("Enter a directory path (relative to current directory or absolute):", style="yellow"),
+                title="🔧 Custom Path",
+                border_style="bright_yellow",
+            )
+            console.print(custom_panel)
+            console.print()
+            
+            custom_path = click.prompt("Directory path", type=str).strip()
+            if custom_path:
+                try:
+                    if Path(custom_path).is_absolute():
+                        new_dir = Path(custom_path)
+                    else:
+                        new_dir = current_dir / custom_path
+                    
+                    new_dir = new_dir.resolve()
+                    if new_dir.exists() and new_dir.is_dir():
+                        current_dir = new_dir
+                    else:
+                        console.print(f"❌ Directory does not exist: {new_dir}")
+                        click.pause()
+                except Exception as e:
+                    console.print(f"❌ Invalid path: {e}")
+                    click.pause()
+        else:
+            # Navigate to subdirectory
+            try:
+                new_dir = current_dir / selection
+                if new_dir.exists() and new_dir.is_dir():
+                    current_dir = new_dir
+                else:
+                    console.print(f"❌ Directory not accessible: {new_dir}")
+                    click.pause()
+            except Exception as e:
+                console.print(f"❌ Error accessing directory: {e}")
+                click.pause()
+
+
+def display_current_config(config: dict[str, Any], config_file_path: Path) -> None:
+    """Display the current codeflash configuration in a nice format."""
+    # Create a table for the configuration
+    config_table = Table(show_header=True, header_style="bold cyan")
+    config_table.add_column("Setting", style="blue", width=20)
+    config_table.add_column("Value", style="green")
+
+    # Add configuration rows
+    config_table.add_row("Module Root", str(config.get("module_root", "Not set")))
+
+    # Handle tests_root - it could be a string or list
+    tests_root = config.get("tests_root", "Not set")
+    if isinstance(tests_root, list):
+        tests_root_display = ", ".join(tests_root) if tests_root else "Not set"
+    else:
+        tests_root_display = str(tests_root)
+    config_table.add_row("Tests Root", tests_root_display)
+
+    config_table.add_row("Test Framework", str(config.get("test_framework", "Not set")))
+    config_table.add_row("Benchmarks Root", str(config.get("benchmarks_root", "Not set")))
+    config_table.add_row("Git Remote", str(config.get("git_remote", "origin")))
+
+    # Handle formatter commands
+    formatter_cmds = config.get("formatter_cmds", [])
+    if isinstance(formatter_cmds, list):
+        formatter_display = ", ".join(formatter_cmds) if formatter_cmds else "Not set"
+    else:
+        formatter_display = str(formatter_cmds)
+    config_table.add_row("Formatter Commands", formatter_display)
+
+    # Handle ignore paths
+    ignore_paths = config.get("ignore_paths", [])
+    if isinstance(ignore_paths, list):
+        ignore_display = ", ".join(ignore_paths) if ignore_paths else "None"
+    else:
+        ignore_display = str(ignore_paths)
+    config_table.add_row("Ignore Paths", ignore_display)
+
+    # Display telemetry setting
+    telemetry_disabled = config.get("disable_telemetry", False)
+    telemetry_status = "Disabled" if telemetry_disabled else "Enabled"
+    config_table.add_row("Telemetry", telemetry_status)
+
+    # Create the panel
+    config_panel = Panel(
+        Group(
+            Text("📋 Current Codeflash Configuration\n", style="bold cyan", justify="center"),
+            Text(f"Configuration file: {config_file_path}\n", style="dim"),
+            config_table
+        ),
+        title="📋 Current Configuration",
+        border_style="bright_blue",
+        padding=(1, 2),
+    )
+
+    console.print(config_panel)
+    console.print()
 
 
 # Custom theme for better UX
@@ -336,16 +506,13 @@ def collect_setup_info() -> SetupInfo:
         console.print(custom_tests_panel)
         console.print()
 
-        custom_tests_questions = [
-            inquirer.Path(
-                "custom_tests_path", message="Enter the path to your tests directory", path_type=inquirer.Path.DIRECTORY
-            )
-        ]
-
-        custom_tests_answers = inquirer.prompt(custom_tests_questions, theme=CodeflashTheme())
-        if custom_tests_answers:
-            tests_root = Path(curdir) / Path(custom_tests_answers["custom_tests_path"])
-        else:
+        # Use interactive directory browser instead of simple path input
+        tests_root = browse_and_select_directory(
+            curdir, 
+            "Select your tests directory:", 
+            "🧪 Browse for Tests Directory"
+        )
+        if not tests_root:
             apologize_and_exit()
     else:
         tests_root = Path(curdir) / Path(cast("str", tests_root_answer))
