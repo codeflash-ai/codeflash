@@ -1,16 +1,25 @@
 from __future__ import annotations
 
+# This file should not have any dependencies on codeflash
 import functools
 import gc
 import inspect
 import os
 import sqlite3
 import time
+from enum import Enum
 from pathlib import Path
+from typing import Callable
 
 import dill as pickle
 
-from codeflash.models.models import VerificationType
+
+class VerificationType(str, Enum):
+    FUNCTION_CALL = (
+        "function_call"  # Correctness verification for a test function, checks input values and output values)
+    )
+    INIT_STATE_FTO = "init_state_fto"  # Correctness verification for fto class instance attributes after init
+    INIT_STATE_HELPER = "init_state_helper"  # Correctness verification for helper class instance attributes after init
 
 
 def get_test_info_from_stack(tests_root: str) -> tuple[str, str | None, str, str]:
@@ -73,12 +82,12 @@ def get_test_info_from_stack(tests_root: str) -> tuple[str, str | None, str, str
     return test_module_name, test_class_name, test_name, line_id
 
 
-def codeflash_capture(function_name: str, tmp_dir_path: str, tests_root: str, is_fto: bool = False):
-    """Defines decorator to be instrumented onto the init function in the code. Collects info of the test that called this, and captures the state of the instance."""
+def codeflash_capture(function_name: str, tmp_dir_path: str, tests_root: str, is_fto: bool = False) -> Callable:  # noqa: FBT001, FBT002
+    """Define a decorator to instrument the init function, collect test info, and capture the instance state."""
 
-    def decorator(wrapped):
+    def decorator(wrapped: Callable) -> Callable:
         @functools.wraps(wrapped)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs) -> None:  # noqa: ANN002, ANN003
             # Dynamic information retrieved from stack
             test_module_name, test_class_name, test_name, line_id = get_test_info_from_stack(tests_root)
 
@@ -103,9 +112,8 @@ def codeflash_capture(function_name: str, tmp_dir_path: str, tests_root: str, is
 
             # Generate invocation id
             invocation_id = f"{line_id}_{codeflash_test_index}"
-            print(
-                f"!######{test_module_name}:{(test_class_name + '.' if test_class_name else '')}{test_name}:{function_name}:{loop_index}:{invocation_id}######!"
-            )
+            test_stdout_tag = f"{test_module_name}:{(test_class_name + '.' if test_class_name else '')}{test_name}:{function_name}:{loop_index}:{invocation_id}"
+            print(f"!$######{test_stdout_tag}######$!")
             # Connect to sqlite
             codeflash_con = sqlite3.connect(f"{tmp_dir_path}_{codeflash_iteration}.sqlite")
             codeflash_cur = codeflash_con.cursor()
@@ -122,6 +130,7 @@ def codeflash_capture(function_name: str, tmp_dir_path: str, tests_root: str, is
                 exception = e
             finally:
                 gc.enable()
+            print(f"!######{test_stdout_tag}######!")
 
             # Capture instance state after initialization
             if hasattr(args[0], "__dict__"):

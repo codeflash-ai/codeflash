@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.9.18, 3.10.13, 3.11.6, 3.12.1, 3.13.0]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     continue-on-error: true
     runs-on: ubuntu-latest
     steps:
@@ -25,17 +25,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           version: "0.5.30"
-      - name: install poetry as a tool
-        run: uv tool install poetry
 
       - name: install dependencies
-        run: uvx poetry install --with dev
+        run: uv sync
 
       - name: Unit tests
-        run: uvx poetry run pytest tests/ --cov --cov-report=xml
-
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
-        if: matrix.python-version == '3.12.1'
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+        run: uv run pytest tests/

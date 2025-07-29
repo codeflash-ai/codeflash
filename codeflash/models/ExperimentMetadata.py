@@ -1,3 +1,5 @@
+from __future__ import annotations  # noqa: N999
+
 from typing import Optional
 
 from pydantic import BaseModel

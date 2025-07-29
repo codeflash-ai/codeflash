@@ -7,6 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
+import git
 import requests
 import sentry_sdk
 from pydantic.json import pydantic_encoder
@@ -31,26 +32,51 @@ else:
 
 
 def make_cfapi_request(
-    endpoint: str, method: str, payload: dict[str, Any] | None = None, extra_headers: dict[str, str] | None = None
+    endpoint: str,
+    method: str,
+    payload: dict[str, Any] | None = None,
+    extra_headers: dict[str, str] | None = None,
+    *,
+    suppress_errors: bool = False,
 ) -> Response:
     """Make an HTTP request using the specified method, URL, headers, and JSON payload.
 
     :param endpoint: The endpoint URL to send the request to.
     :param method: The HTTP method to use ('GET', 'POST', etc.).
     :param payload: Optional JSON payload to include in the POST request body.
+    :param suppress_errors: If True, suppress error logging for HTTP errors.
     :return: The response object from the API.
     """
     url = f"{CFAPI_BASE_URL}/cfapi{endpoint}"
     cfapi_headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
     if extra_headers:
         cfapi_headers.update(extra_headers)
-    if method.upper() == "POST":
-        json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
-        cfapi_headers["Content-Type"] = "application/json"
-        response = requests.post(url, data=json_payload, headers=cfapi_headers, timeout=60)
-    else:
-        response = requests.get(url, headers=cfapi_headers, timeout=60)
-    return response
+    try:
+        if method.upper() == "POST":
+            json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
+            cfapi_headers["Content-Type"] = "application/json"
+            response = requests.post(url, data=json_payload, headers=cfapi_headers, timeout=60)
+        else:
+            response = requests.get(url, headers=cfapi_headers, timeout=60)
+        response.raise_for_status()
+        return response  # noqa: TRY300
+    except requests.exceptions.HTTPError:
+        # response may be either a string or JSON, so we handle both cases
+        error_message = ""
+        try:
+            json_response = response.json()
+            if "error" in json_response:
+                error_message = json_response["error"]
+            elif "message" in json_response:
+                error_message = json_response["message"]
+        except (ValueError, TypeError):
+            error_message = response.text
+
+        if not suppress_errors:
+            logger.error(
+                f"CF_API_Error:: making request to Codeflash API (url: {url}, method: {method}, status {response.status_code}): {error_message}"
+            )
+        return response
 
 
 @lru_cache(maxsize=1)
@@ -115,7 +141,7 @@ def suggest_changes(
         "existingTests": existing_tests,
         "generatedTests": generated_tests,
         "traceId": trace_id,
-        "coverage": coverage_message,
+        "coverage_message": coverage_message,
     }
     return make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
 
@@ -151,23 +177,23 @@ def create_pr(
         "existingTests": existing_tests,
         "generatedTests": generated_tests,
         "traceId": trace_id,
-        "coverage": coverage_message,
+        "coverage_message": coverage_message,
     }
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
 
-def is_github_app_installed_on_repo(owner: str, repo: str) -> bool:
+def is_github_app_installed_on_repo(owner: str, repo: str, *, suppress_errors: bool = False) -> bool:
     """Check if the Codeflash GitHub App is installed on the specified repository.
 
     :param owner: The owner of the repository.
     :param repo: The name of the repository.
-    :return: The response object.
+    :param suppress_errors: If True, suppress error logging when the app is not installed.
+    :return: True if the app is installed, False otherwise.
     """
-    response = make_cfapi_request(endpoint=f"/is-github-app-installed?repo={repo}&owner={owner}", method="GET")
-    if not response.ok or response.text != "true":
-        logger.error(f"Error: {response.text}")
-        return False
-    return True
+    response = make_cfapi_request(
+        endpoint=f"/is-github-app-installed?repo={repo}&owner={owner}", method="GET", suppress_errors=suppress_errors
+    )
+    return response.ok and response.text == "true"
 
 
 def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
@@ -179,19 +205,11 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
     if pr_number is None:
         return {}
 
-    not_found = 404
-    internal_server_error = 500
-
-    owner, repo = get_repo_owner_and_name()
-    information = {"pr_number": pr_number, "repo_owner": owner, "repo_name": repo}
     try:
+        owner, repo = get_repo_owner_and_name()
+        information = {"pr_number": pr_number, "repo_owner": owner, "repo_name": repo}
+
         req = make_cfapi_request(endpoint="/verify-existing-optimizations", method="POST", payload=information)
-        if req.status_code == not_found:
-            logger.debug(req.json()["message"])
-            return {}
-        if req.status_code == internal_server_error:
-            logger.error(req.json()["message"])
-            return {}
         req.raise_for_status()
         content: dict[str, list[str]] = req.json()
     except Exception as e:
@@ -200,3 +218,59 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
         return {}
 
     return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
+
+
+def is_function_being_optimized_again(
+    owner: str, repo: str, pr_number: int, code_contexts: list[dict[str, str]]
+) -> Any:  # noqa: ANN401
+    """Check if the function being optimized is being optimized again."""
+    response = make_cfapi_request(
+        "/is-already-optimized",
+        "POST",
+        {"owner": owner, "repo": repo, "pr_number": pr_number, "code_contexts": code_contexts},
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def add_code_context_hash(code_context_hash: str) -> None:
+    """Add code context to the DB cache."""
+    pr_number = get_pr_number()
+    if pr_number is None:
+        return
+    try:
+        owner, repo = get_repo_owner_and_name()
+        pr_number = get_pr_number()
+    except git.exc.InvalidGitRepositoryError:
+        return
+
+    if owner and repo and pr_number is not None:
+        make_cfapi_request(
+            "/add-code-hash",
+            "POST",
+            {"owner": owner, "repo": repo, "pr_number": pr_number, "code_hash": code_context_hash},
+        )
+
+
+def mark_optimization_success(trace_id: str, *, is_optimization_found: bool) -> Response:
+    """Mark an optimization event as success or not.
+
+    :param trace_id: The unique identifier for the optimization event.
+    :param is_optimization_found: Boolean indicating whether the optimization was found.
+    :return: The response object from the API.
+    """
+    payload = {"trace_id": trace_id, "is_optimization_found": is_optimization_found}
+    return make_cfapi_request(endpoint="/mark-as-success", method="POST", payload=payload)
+
+
+def send_completion_email() -> Response:
+    """Send an email notification when codeflash --all completes."""
+    try:
+        owner, repo = get_repo_owner_and_name()
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
+        response = requests.Response()
+        response.status_code = 500
+        return response
+    payload = {"owner": owner, "repo": repo}
+    return make_cfapi_request(endpoint="/send-completion-email", method="POST", payload=payload)

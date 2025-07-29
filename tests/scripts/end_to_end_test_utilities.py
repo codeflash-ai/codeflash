@@ -26,6 +26,7 @@ class TestConfig:
     min_improvement_x: float = 0.1
     trace_mode: bool = False
     coverage_expectations: list[CoverageExpectation] = field(default_factory=list)
+    benchmarks_root: Optional[pathlib.Path] = None
 
 
 def clear_directory(directory_path: str | pathlib.Path) -> None:
@@ -85,8 +86,8 @@ def run_codeflash_command(
     path_to_file = cwd / config.file_path
     file_contents = path_to_file.read_text("utf-8")
     test_root = cwd / "tests" / (config.test_framework or "")
-    command = build_command(cwd, config, test_root)
 
+    command = build_command(cwd, config, test_root, config.benchmarks_root if config.benchmarks_root else None)
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
     )
@@ -116,7 +117,9 @@ def run_codeflash_command(
     return validated
 
 
-def build_command(cwd: pathlib.Path, config: TestConfig, test_root: pathlib.Path) -> list[str]:
+def build_command(
+    cwd: pathlib.Path, config: TestConfig, test_root: pathlib.Path, benchmarks_root: pathlib.Path | None = None
+) -> list[str]:
     python_path = "../../../codeflash/main.py" if "code_directories" in str(cwd) else "../codeflash/main.py"
 
     base_command = ["python", python_path, "--file", config.file_path, "--no-pr"]
@@ -127,7 +130,8 @@ def build_command(cwd: pathlib.Path, config: TestConfig, test_root: pathlib.Path
         base_command.extend(
             ["--test-framework", config.test_framework, "--tests-root", str(test_root), "--module-root", str(cwd)]
         )
-
+    if benchmarks_root:
+        base_command.extend(["--benchmark", "--benchmarks-root", str(benchmarks_root)])
     return base_command
 
 
@@ -181,10 +185,9 @@ def validate_stdout_in_candidate(stdout: str, expected_in_stdout: list[str]) -> 
 
 
 def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_pct: int) -> bool:
-    # First command: Run the tracer
     test_root = cwd / "tests" / (config.test_framework or "")
     clear_directory(test_root)
-    command = ["python", "-m", "codeflash.tracer", "-o", "codeflash.trace", "workload.py"]
+    command = ["python", "-m", "codeflash.main", "optimize", "workload.py"]
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
     )
@@ -198,33 +201,20 @@ def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_p
     stdout = "".join(output)
 
     if return_code != 0:
-        logging.error(f"Tracer command returned exit code {return_code}")
+        logging.error(f"Tracer with optimization command returned exit code {return_code}")
         return False
 
-    functions_traced = re.search(r"Traced (\d+) function calls successfully and replay test created at - (.*)$", stdout)
-    if not functions_traced or int(functions_traced.group(1)) != 4:
-        logging.error("Expected 4 traced functions")
+    functions_traced = re.search(r"Traced (\d+) function calls successfully", stdout)
+    logging.info(functions_traced.groups() if functions_traced else "No functions traced")
+    if not functions_traced:
+        logging.error("Failed to find traced functions in output")
+        return False
+    if int(functions_traced.group(1)) != 13:
+        logging.error(functions_traced.groups())
+        logging.error("Expected 13 traced functions")
         return False
 
-    replay_test_path = pathlib.Path(functions_traced.group(2))
-    if not replay_test_path.exists():
-        logging.error(f"Replay test file missing at {replay_test_path}")
-        return False
-
-    # Second command: Run optimization
-    command = ["python", "../../../codeflash/main.py", "--replay-test", str(replay_test_path), "--no-pr"]
-    process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
-    )
-
-    output = []
-    for line in process.stdout:
-        logging.info(line.strip())
-        output.append(line)
-
-    return_code = process.wait()
-    stdout = "".join(output)
-
+    # Validate optimization results (from optimization phase)
     return validate_output(stdout, return_code, expected_improvement_pct, config)
 
 

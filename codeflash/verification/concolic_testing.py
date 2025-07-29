@@ -3,25 +3,37 @@ from __future__ import annotations
 import ast
 import subprocess
 import tempfile
-from argparse import Namespace
+import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.concolic_utils import clean_concolic_tests
+from codeflash.code_utils.env_utils import is_LSP_enabled
 from codeflash.code_utils.static_analysis import has_typed_parameters
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionCalledInTest
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
+
+if TYPE_CHECKING:
+    from argparse import Namespace
+
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.models.models import FunctionCalledInTest
 
 
 def generate_concolic_tests(
     test_cfg: TestConfig, args: Namespace, function_to_optimize: FunctionToOptimize, function_to_optimize_ast: ast.AST
-) -> tuple[dict[str, list[FunctionCalledInTest]], str]:
+) -> tuple[dict[str, set[FunctionCalledInTest]], str]:
+    start_time = time.perf_counter()
     function_to_concolic_tests = {}
     concolic_test_suite_code = ""
+
+    if is_LSP_enabled():
+        logger.debug("Skipping concolic test generation in LSP mode")
+        return function_to_concolic_tests, concolic_test_suite_code
+
     if (
         test_cfg.concolic_test_root_dir
         and isinstance(function_to_optimize_ast, (ast.FunctionDef, ast.AsyncFunctionDef))
@@ -37,7 +49,7 @@ def generate_concolic_tests(
                     "crosshair",
                     "cover",
                     "--example_output_format=pytest",
-                    "--per_condition_timeout=64",
+                    "--per_condition_timeout=20",
                     ".".join(
                         [
                             function_to_optimize.file_path.relative_to(args.project_root)
@@ -72,8 +84,7 @@ def generate_concolic_tests(
                 test_framework=args.test_framework,
                 pytest_cmd=args.pytest_cmd,
             )
-            function_to_concolic_tests = discover_unit_tests(concolic_test_cfg)
-            num_discovered_concolic_tests: int = sum([len(value) for value in function_to_concolic_tests.values()])
+            function_to_concolic_tests, num_discovered_concolic_tests, _ = discover_unit_tests(concolic_test_cfg)
             logger.info(
                 f"Created {num_discovered_concolic_tests} "
                 f"concolic unit test case{'s' if num_discovered_concolic_tests != 1 else ''} "
@@ -84,4 +95,6 @@ def generate_concolic_tests(
         else:
             logger.debug(f"Error running CrossHair Cover {': ' + cover_result.stderr if cover_result.stderr else '.'}")
             console.rule()
+    end_time = time.perf_counter()
+    logger.debug(f"Generated concolic tests in {end_time - start_time:.2f} seconds")
     return function_to_concolic_tests, concolic_test_suite_code

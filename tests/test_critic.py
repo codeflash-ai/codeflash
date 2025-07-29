@@ -41,7 +41,7 @@ def test_speedup_critic() -> None:
         total_candidate_timing=12,
     )
 
-    assert speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now)  # 20% improvement
+    assert speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now, True)  # 20% improvement
 
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
@@ -52,7 +52,7 @@ def test_speedup_critic() -> None:
         optimization_candidate_index=0,
     )
 
-    assert not speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now)  # 6% improvement
+    assert not speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now, True)  # 6% improvement
 
     original_code_runtime = 100000
     best_runtime_until_now = 100000
@@ -66,7 +66,7 @@ def test_speedup_critic() -> None:
         optimization_candidate_index=0,
     )
 
-    assert speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now)  # 6% improvement
+    assert speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now, True)  # 6% improvement
 
 
 def test_generated_test_critic() -> None:
@@ -195,21 +195,7 @@ def test_generated_test_critic() -> None:
         timed_out=False,
         loop_index=1,
     )
-
-    test_results = [test_1, test_2, test_3, test_7]
-
-    candidate_result = OptimizedCandidateResult(
-        max_loop_count=5,
-        best_test_runtime=100,
-        behavior_test_results=TestResults(test_results=test_results),
-        benchmarking_test_results=TestResults(),
-        total_candidate_timing=12,
-        optimization_candidate_index=0,
-    )
-
-    assert quantity_of_tests_critic(candidate_result)
-
-    test_results = [test_1, test_2, test_3, test_6, test_7]
+    test_results = [test_1, test_2, test_3, test_4, test_5, test_6, test_7, test_1]
 
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
@@ -222,7 +208,20 @@ def test_generated_test_critic() -> None:
 
     assert quantity_of_tests_critic(candidate_result)
 
-    test_results = [test_1, test_3, test_4, test_2, test_7]
+    test_results = [test_1, test_2, test_3, test_6, test_7, test_1, test_4, test_1]
+
+    candidate_result = OptimizedCandidateResult(
+        max_loop_count=5,
+        best_test_runtime=100,
+        behavior_test_results=TestResults(test_results=test_results),
+        benchmarking_test_results=TestResults(),
+        total_candidate_timing=12,
+        optimization_candidate_index=0,
+    )
+
+    assert quantity_of_tests_critic(candidate_result)
+
+    test_results = [test_1, test_3, test_4, test_2, test_7, test_1, test_6, test_1]
 
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
@@ -248,7 +247,7 @@ def test_generated_test_critic() -> None:
 
     assert not quantity_of_tests_critic(candidate_result)
 
-    test_results = [test_1, test_2, test_3, test_4, test_5]
+    test_results = [test_1, test_2, test_3, test_4, test_5, test_1, test_1, test_1]
 
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
@@ -287,7 +286,7 @@ def test_generated_test_critic() -> None:
 
     assert quantity_of_tests_critic(candidate_result)
 
-    test_results = [test_1, test_2, test_3, test_4, test_5]
+    test_results = [test_1, test_2, test_3, test_4, test_5, test_1, test_1, test_1]
 
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
@@ -328,7 +327,7 @@ def test_generated_test_critic() -> None:
 
     assert not quantity_of_tests_critic(candidate_result)
 
-    test_results = [test_1, test_2, test_3, test_5]
+    test_results = [test_1, test_2, test_3, test_5, test_1, test_1, test_1, test_1]
 
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,

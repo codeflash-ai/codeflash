@@ -6,10 +6,12 @@ import inspect
 # System Imports
 import logging
 import os
+import platform
 import re
 import sys
-import time
+import time as _time_module
 import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from unittest import TestCase
 
@@ -34,6 +36,161 @@ class InvalidTimeParameterError(Exception):
 
 class UnexpectedError(Exception):
     pass
+
+
+if platform.system() == "Linux":
+    import resource
+
+    # We set the memory limit to 85% of total system memory + swap when swap exists
+    swap_file_path = Path("/proc/swaps")
+    swap_exists = swap_file_path.is_file()
+    swap_size = 0
+
+    if swap_exists:
+        with swap_file_path.open("r") as f:
+            swap_lines = f.readlines()
+            swap_exists = len(swap_lines) > 1  # First line is header
+
+            if swap_exists:
+                # Parse swap size from lines after header
+                for line in swap_lines[1:]:
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        # Swap size is in KB in the 3rd column
+                        with contextlib.suppress(ValueError, IndexError):
+                            swap_size += int(parts[2]) * 1024  # Convert KB to bytes
+
+    # Get total system memory
+    total_memory = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+
+    # Add swap to total available memory if swap exists
+    if swap_exists:
+        total_memory += swap_size
+
+    # Set the memory limit to 85% of total memory (RAM plus swap)
+    memory_limit = int(total_memory * 0.85)
+
+    # Set both soft and hard limits
+    resource.setrlimit(resource.RLIMIT_AS, (memory_limit, memory_limit))
+
+
+# Store references to original functions before any patching
+_ORIGINAL_TIME_TIME = _time_module.time
+_ORIGINAL_PERF_COUNTER = _time_module.perf_counter
+_ORIGINAL_TIME_SLEEP = _time_module.sleep
+
+
+# Apply deterministic patches for reproducible test execution
+def _apply_deterministic_patches() -> None:
+    """Apply patches to make all sources of randomness deterministic."""
+    import datetime
+    import random
+    import time
+    import uuid
+
+    # Store original functions (these are already saved globally above)
+    _original_time = time.time
+    _original_perf_counter = time.perf_counter
+    _original_datetime_now = datetime.datetime.now
+    _original_datetime_utcnow = datetime.datetime.utcnow
+    _original_uuid4 = uuid.uuid4
+    _original_uuid1 = uuid.uuid1
+    _original_random = random.random
+
+    # Fixed deterministic values
+    fixed_timestamp = 1609459200.0  # 2021-01-01 00:00:00 UTC
+    fixed_datetime = datetime.datetime(2021, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+    fixed_uuid = uuid.UUID("12345678-1234-5678-9abc-123456789012")
+
+    # Counter for perf_counter to maintain relative timing
+    _perf_counter_start = fixed_timestamp
+    _perf_counter_calls = 0
+
+    def mock_time_time() -> float:
+        """Return fixed timestamp while preserving performance characteristics."""
+        _original_time()  # Maintain performance characteristics
+        return fixed_timestamp
+
+    def mock_perf_counter() -> float:
+        """Return incrementing counter for relative timing."""
+        nonlocal _perf_counter_calls
+        _original_perf_counter()  # Maintain performance characteristics
+        _perf_counter_calls += 1
+        return _perf_counter_start + (_perf_counter_calls * 0.001)  # Increment by 1ms each call
+
+    def mock_datetime_now(tz: datetime.timezone | None = None) -> datetime.datetime:
+        """Return fixed datetime while preserving performance characteristics."""
+        _original_datetime_now(tz)  # Maintain performance characteristics
+        if tz is None:
+            return fixed_datetime
+        return fixed_datetime.replace(tzinfo=tz)
+
+    def mock_datetime_utcnow() -> datetime.datetime:
+        """Return fixed UTC datetime while preserving performance characteristics."""
+        _original_datetime_utcnow()  # Maintain performance characteristics
+        return fixed_datetime
+
+    def mock_uuid4() -> uuid.UUID:
+        """Return fixed UUID4 while preserving performance characteristics."""
+        _original_uuid4()  # Maintain performance characteristics
+        return fixed_uuid
+
+    def mock_uuid1(node: int | None = None, clock_seq: int | None = None) -> uuid.UUID:
+        """Return fixed UUID1 while preserving performance characteristics."""
+        _original_uuid1(node, clock_seq)  # Maintain performance characteristics
+        return fixed_uuid
+
+    def mock_random() -> float:
+        """Return deterministic random value while preserving performance characteristics."""
+        _original_random()  # Maintain performance characteristics
+        return 0.123456789  # Fixed random value
+
+    # Apply patches
+    time.time = mock_time_time
+    time.perf_counter = mock_perf_counter
+    uuid.uuid4 = mock_uuid4
+    uuid.uuid1 = mock_uuid1
+
+    # Seed random module for other random functions
+    random.seed(42)
+    random.random = mock_random
+
+    # For datetime, we need to use a different approach since we can't patch class methods
+    # Store original methods for potential later use
+    import builtins
+
+    builtins._original_datetime_now = _original_datetime_now  # noqa: SLF001
+    builtins._original_datetime_utcnow = _original_datetime_utcnow  # noqa: SLF001
+    builtins._mock_datetime_now = mock_datetime_now  # noqa: SLF001
+    builtins._mock_datetime_utcnow = mock_datetime_utcnow  # noqa: SLF001
+
+    # Patch numpy.random if available
+    try:
+        import numpy as np
+
+        # Use modern numpy random generator approach
+        np.random.default_rng(42)
+        np.random.seed(42)  # Keep legacy seed for compatibility  # noqa: NPY002
+    except ImportError:
+        pass
+
+    # Patch os.urandom if needed
+    try:
+        import os
+
+        _original_urandom = os.urandom
+
+        def mock_urandom(n: int) -> bytes:
+            _original_urandom(n)  # Maintain performance characteristics
+            return b"\x42" * n  # Fixed bytes
+
+        os.urandom = mock_urandom
+    except (ImportError, AttributeError):
+        pass
+
+
+# Note: Deterministic patches are applied conditionally, not globally
+# They should only be applied when running CodeFlash optimization tests
 
 
 def pytest_addoption(parser: Parser) -> None:
@@ -99,6 +256,9 @@ def pytest_configure(config: Config) -> None:
     config.addinivalue_line("markers", "loops(n): run the given test function `n` times.")
     config.pluginmanager.register(PytestLoops(config), PytestLoops.name)
 
+    # Apply deterministic patches when the plugin is configured
+    _apply_deterministic_patches()
+
 
 class PytestLoops:
     name: str = "pytest-loops"
@@ -119,7 +279,7 @@ class PytestLoops:
         if session.config.option.collectonly:
             return True
 
-        start_time: float = time.time()
+        start_time: float = _ORIGINAL_TIME_TIME()
         total_time: float = self._get_total_time(session)
 
         count: int = 0
@@ -146,7 +306,7 @@ class PytestLoops:
                     raise session.Interrupted(session.shouldstop)
             if self._timed_out(session, start_time, count):
                 break  # exit loop
-            time.sleep(self._get_delay_time(session))
+            _ORIGINAL_TIME_SLEEP(self._get_delay_time(session))
         return True
 
     def _clear_lru_caches(self, item: pytest.Item) -> None:
@@ -176,7 +336,7 @@ class PytestLoops:
                 try:
                     obj_module = inspect.getmodule(obj)
                     module_name = obj_module.__name__.split(".")[0] if obj_module is not None else None
-                except Exception:  # noqa: BLE001
+                except Exception:
                     module_name = None
 
             if module_name in protected_modules:
@@ -197,9 +357,9 @@ class PytestLoops:
                         for _, obj in inspect.getmembers(module):
                             if callable(obj):
                                 _clear_cache_for_object(obj)
-                except Exception:  # noqa: BLE001, S110
+                except Exception:  # noqa: S110
                     pass
-        except Exception:  # noqa: BLE001, S110
+        except Exception:  # noqa: S110
             pass
 
     def _set_nodeid(self, nodeid: str, count: int) -> str:
@@ -245,7 +405,7 @@ class PytestLoops:
         """
         return count >= session.config.option.codeflash_max_loops or (
             count >= session.config.option.codeflash_min_loops
-            and time.time() - start_time > self._get_total_time(session)
+            and _ORIGINAL_TIME_TIME() - start_time > self._get_total_time(session)
         )
 
     @pytest.fixture

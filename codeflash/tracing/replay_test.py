@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import sqlite3
 import textwrap
-from collections.abc import Generator
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-from codeflash.discovery.functions_to_optimize import FunctionProperties, inspect_top_level_functions_or_methods
-from codeflash.tracing.tracing_utils import FunctionModules
+from codeflash.discovery.functions_to_optimize import inspect_top_level_functions_or_methods
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+    from codeflash.discovery.functions_to_optimize import FunctionProperties
+    from codeflash.tracing.tracing_utils import FunctionModules
 
 
 def get_next_arg_and_return(
@@ -40,9 +44,12 @@ def get_function_alias(module: str, function_name: str) -> str:
 
 
 def create_trace_replay_test(
-    trace_file: str, functions: list[FunctionModules], test_framework: str = "pytest", max_run_count=100
+    trace_file: str,
+    functions: list[FunctionModules],
+    test_framework: str = "pytest",
+    max_run_count=100,  # noqa: ANN001
 ) -> str:
-    assert test_framework in ["pytest", "unittest"]
+    assert test_framework in {"pytest", "unittest"}
 
     imports = f"""import dill as pickle
 {"import unittest" if test_framework == "unittest" else ""}
@@ -50,7 +57,7 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
 """
 
     # TODO: Module can have "-" character if the module-root is ".". Need to handle that case
-    function_properties: list[FunctionProperties] = [
+    function_properties: list[FunctionProperties | None] = [
         inspect_top_level_functions_or_methods(
             file_name=function.file_name,
             function_or_method_name=function.function_name,
@@ -61,6 +68,8 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
     ]
     function_imports = []
     for function, function_property in zip(functions, function_properties):
+        if function_property is None:
+            continue
         if not function_property.is_top_level:
             # can't be imported and run in the replay test
             continue
@@ -110,6 +119,8 @@ trace_file_path = r"{trace_file}"
         test_template = ""
         self = ""
     for func, func_property in zip(functions, function_properties):
+        if func_property is None:
+            continue
         if not func_property.is_top_level:
             # can't be imported and run in the replay test
             continue

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.config_consts import COVERAGE_THRESHOLD, MIN_IMPROVEMENT_THRESHOLD
+from codeflash.code_utils.config_consts import (
+    COVERAGE_THRESHOLD,
+    MIN_IMPROVEMENT_THRESHOLD,
+    MIN_TESTCASE_PASSED_THRESHOLD,
+)
 from codeflash.models.models import TestType
 
 if TYPE_CHECKING:
-    from codeflash.models.models import CoverageData, OptimizedCandidateResult
+    from codeflash.models.models import CoverageData, OptimizedCandidateResult, OriginalCodeBaseline
 
 
 def performance_gain(*, original_runtime_ns: int, optimized_runtime_ns: int) -> float:
@@ -22,7 +26,10 @@ def performance_gain(*, original_runtime_ns: int, optimized_runtime_ns: int) -> 
 
 
 def speedup_critic(
-    candidate_result: OptimizedCandidateResult, original_code_runtime: int, best_runtime_until_now: int
+    candidate_result: OptimizedCandidateResult,
+    original_code_runtime: int,
+    best_runtime_until_now: int | None,
+    disable_gh_action_noise: Optional[bool] = None,
 ) -> bool:
     """Take in a correct optimized Test Result and decide if the optimization should actually be surfaced to the user.
 
@@ -31,18 +38,22 @@ def speedup_critic(
     when the original runtime is less than 10 microseconds, and becomes MIN_IMPROVEMENT_THRESHOLD for any higher runtime.
     The noise floor is doubled when benchmarking on a (noisy) GitHub Action virtual instance, also we want to be more confident there.
     """
-    in_github_actions_mode = bool(env_utils.get_pr_number())
-    noise_floor = 2 * MIN_IMPROVEMENT_THRESHOLD if original_code_runtime < 10000 else MIN_IMPROVEMENT_THRESHOLD
-    if in_github_actions_mode:
-        noise_floor = noise_floor * 2  # Increase the noise floor in GitHub Actions mode
+    noise_floor = 3 * MIN_IMPROVEMENT_THRESHOLD if original_code_runtime < 10000 else MIN_IMPROVEMENT_THRESHOLD
+    if not disable_gh_action_noise:
+        in_github_actions_mode = bool(env_utils.get_pr_number())
+        if in_github_actions_mode:
+            noise_floor = noise_floor * 2  # Increase the noise floor in GitHub Actions mode
 
     perf_gain = performance_gain(
         original_runtime_ns=original_code_runtime, optimized_runtime_ns=candidate_result.best_test_runtime
     )
+    if best_runtime_until_now is None:
+        # collect all optimizations with this
+        return bool(perf_gain > noise_floor)
     return bool(perf_gain > noise_floor and candidate_result.best_test_runtime < best_runtime_until_now)
 
 
-def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool:
+def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult | OriginalCodeBaseline) -> bool:
     test_results = candidate_result.behavior_test_results
     report = test_results.get_test_pass_fail_report_by_type()
 
@@ -50,10 +61,10 @@ def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult) -> bool
     for test_type in report:
         pass_count += report[test_type]["passed"]
 
-    if pass_count >= 4:
+    if pass_count >= MIN_TESTCASE_PASSED_THRESHOLD:
         return True
-    # If only one test passed, check if it's a REPLAY_TEST
-    return bool(pass_count == 1 and report[TestType.REPLAY_TEST]["passed"] == 1)
+    # If one or more tests passed, check if least one of them was a successful REPLAY_TEST
+    return bool(pass_count >= 1 and report[TestType.REPLAY_TEST]["passed"] >= 1)
 
 
 def coverage_critic(original_code_coverage: CoverageData | None, test_framework: str) -> bool:

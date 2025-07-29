@@ -1,13 +1,144 @@
 from __future__ import annotations
 
 import ast
+import difflib
 import os
+import re
+import shutil
 import site
+import sys
+from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from codeflash.cli_cmds.console import logger
+import tomlkit
+
+from codeflash.cli_cmds.console import logger, paneled_text
+from codeflash.code_utils.config_parser import find_pyproject_toml
+
+ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
+
+
+def diff_length(a: str, b: str) -> int:
+    """Compute the length (in characters) of the unified diff between two strings.
+
+    Args:
+        a (str): Original string.
+        b (str): Modified string.
+
+    Returns:
+        int: Total number of characters in the diff.
+
+    """
+    # Split input strings into lines for line-by-line diff
+    a_lines = a.splitlines(keepends=True)
+    b_lines = b.splitlines(keepends=True)
+
+    # Compute unified diff
+    diff_lines = list(difflib.unified_diff(a_lines, b_lines, lineterm=""))
+
+    # Join all lines with newline to calculate total diff length
+    diff_text = "\n".join(diff_lines)
+
+    return len(diff_text)
+
+
+def create_rank_dictionary_compact(int_array: list[int]) -> dict[int, int]:
+    """Create a dictionary from a list of ints, mapping the original index to its rank.
+
+    This version uses a more compact, "Pythonic" implementation.
+
+    Args:
+        int_array: A list of integers.
+
+    Returns:
+        A dictionary where keys are original indices and values are the
+        rank of the element in ascending order.
+
+    """
+    # Sort the indices of the array based on their corresponding values
+    sorted_indices = sorted(range(len(int_array)), key=lambda i: int_array[i])
+
+    # Create a dictionary mapping the original index to its rank (its position in the sorted list)
+    return {original_index: rank for rank, original_index in enumerate(sorted_indices)}
+
+
+@contextmanager
+def custom_addopts() -> None:
+    pyproject_file = find_pyproject_toml()
+    original_content = None
+    non_blacklist_plugin_args = ""
+
+    try:
+        # Read original file
+        if pyproject_file.exists():
+            with Path.open(pyproject_file, encoding="utf-8") as f:
+                original_content = f.read()
+                data = tomlkit.parse(original_content)
+            # Backup original addopts
+            original_addopts = data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("addopts", "")
+            # nothing to do if no addopts present
+            if original_addopts != "" and isinstance(original_addopts, list):
+                original_addopts = [x.strip() for x in original_addopts]
+                non_blacklist_plugin_args = re.sub(r"-n(?: +|=)\S+", "", " ".join(original_addopts)).split(" ")
+                non_blacklist_plugin_args = [x for x in non_blacklist_plugin_args if x != ""]
+                if non_blacklist_plugin_args != original_addopts:
+                    data["tool"]["pytest"]["ini_options"]["addopts"] = non_blacklist_plugin_args
+                    # Write modified file
+                    with Path.open(pyproject_file, "w", encoding="utf-8") as f:
+                        f.write(tomlkit.dumps(data))
+
+        yield
+
+    finally:
+        # Restore original file
+        if (
+            original_content
+            and pyproject_file.exists()
+            and tuple(original_addopts) not in {(), tuple(non_blacklist_plugin_args)}
+        ):
+            with Path.open(pyproject_file, "w", encoding="utf-8") as f:
+                f.write(original_content)
+
+
+@contextmanager
+def add_addopts_to_pyproject() -> None:
+    pyproject_file = find_pyproject_toml()
+    original_content = None
+    try:
+        # Read original file
+        if pyproject_file.exists():
+            with Path.open(pyproject_file, encoding="utf-8") as f:
+                original_content = f.read()
+                data = tomlkit.parse(original_content)
+            data["tool"]["pytest"] = {}
+            data["tool"]["pytest"]["ini_options"] = {}
+            data["tool"]["pytest"]["ini_options"]["addopts"] = [
+                "-n=auto",
+                "-n",
+                "1",
+                "-n 1",
+                "-n      1",
+                "-n      auto",
+            ]
+            with Path.open(pyproject_file, "w", encoding="utf-8") as f:
+                f.write(tomlkit.dumps(data))
+
+        yield
+
+    finally:
+        # Restore original file
+        with Path.open(pyproject_file, "w", encoding="utf-8") as f:
+            f.write(original_content)
+
+
+def encoded_tokens_len(s: str) -> int:
+    """Return the approximate length of the encoded tokens.
+
+    It's an approximation of BPE encoding (https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf).
+    """
+    return int(len(s) * 0.25)
 
 
 def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
@@ -23,9 +154,21 @@ def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
     return full_qualified_name[len(module_name) + 1 :]
 
 
-def module_name_from_file_path(file_path: Path, project_root_path: Path) -> str:
-    relative_path = file_path.relative_to(project_root_path)
-    return relative_path.with_suffix("").as_posix().replace("/", ".")
+def module_name_from_file_path(file_path: Path, project_root_path: Path, *, traverse_up: bool = False) -> str:
+    try:
+        relative_path = file_path.relative_to(project_root_path)
+        return relative_path.with_suffix("").as_posix().replace("/", ".")
+    except ValueError:
+        if traverse_up:
+            parent = file_path.parent
+            while parent not in (project_root_path, parent.parent):
+                try:
+                    relative_path = file_path.relative_to(parent)
+                    return relative_path.with_suffix("").as_posix().replace("/", ".")
+                except ValueError:
+                    parent = parent.parent
+        msg = f"File {file_path} is not within the project root {project_root_path}."
+        raise ValueError(msg)  # noqa: B904
 
 
 def file_path_from_module_name(module_name: str, project_root_path: Path) -> Path:
@@ -118,4 +261,19 @@ def has_any_async_functions(code: str) -> bool:
 
 def cleanup_paths(paths: list[Path]) -> None:
     for path in paths:
-        path.unlink(missing_ok=True)
+        if path and path.exists():
+            if path.is_dir():
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                path.unlink(missing_ok=True)
+
+
+def restore_conftest(path_to_content_map: dict[Path, str]) -> None:
+    for path, file_content in path_to_content_map.items():
+        path.write_text(file_content, encoding="utf8")
+
+
+def exit_with_message(message: str, *, error_on_exit: bool = False) -> None:
+    paneled_text(message, panel_args={"style": "red"})
+
+    sys.exit(1 if error_on_exit else 0)

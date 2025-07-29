@@ -10,7 +10,7 @@ from codeflash.cli_cmds.console import logger
 class ProfileStats(pstats.Stats):
     def __init__(self, trace_file_path: str, time_unit: str = "ns") -> None:
         assert Path(trace_file_path).is_file(), f"Trace file {trace_file_path} does not exist"
-        assert time_unit in ["ns", "us", "ms", "s"], f"Invalid time unit {time_unit}"
+        assert time_unit in {"ns", "us", "ms", "s"}, f"Invalid time unit {time_unit}"
         self.trace_file_path = trace_file_path
         self.time_unit = time_unit
         logger.debug(hasattr(self, "create_stats"))
@@ -27,6 +27,7 @@ class ProfileStats(pstats.Stats):
             filename,
             line_number,
             function,
+            class_name,
             call_count_nonrecursive,
             num_callers,
             total_time_ns,
@@ -34,8 +35,19 @@ class ProfileStats(pstats.Stats):
             callers,
         ) in pdata:
             loaded_callers = json.loads(callers)
-            unmapped_callers = {caller["key"]: caller["value"] for caller in loaded_callers}
-            self.stats[(filename, line_number, function)] = (
+            unmapped_callers = {}
+            for caller in loaded_callers:
+                caller_key = caller["key"]
+                if isinstance(caller_key, list):
+                    caller_key = tuple(caller_key)
+                elif not isinstance(caller_key, tuple):
+                    caller_key = (caller_key,) if not isinstance(caller_key, (list, tuple)) else tuple(caller_key)
+                unmapped_callers[caller_key] = caller["value"]
+
+            # Create function key with class name if present (matching tracer.py format)
+            function_name = f"{class_name}.{function}" if class_name else function
+
+            self.stats[(filename, line_number, function_name)] = (
                 call_count_nonrecursive,
                 num_callers,
                 total_time_ns / time_conversion_factor if time_conversion_factor != 1 else total_time_ns,
@@ -43,7 +55,7 @@ class ProfileStats(pstats.Stats):
                 unmapped_callers,
             )
 
-    def print_stats(self, *amount):
+    def print_stats(self, *amount) -> pstats.Stats:  # noqa: ANN002
         # Copied from pstats.Stats.print_stats and modified to print the correct time unit
         for filename in self.files:
             print(filename, file=self.stream)
@@ -55,14 +67,14 @@ class ProfileStats(pstats.Stats):
 
         print(indent, self.total_calls, "function calls", end=" ", file=self.stream)
         if self.total_calls != self.prim_calls:
-            print("(%d primitive calls)" % self.prim_calls, end=" ", file=self.stream)
+            print(f"({self.prim_calls:d} primitive calls)", end=" ", file=self.stream)
         time_unit = {"ns": "nanoseconds", "us": "microseconds", "ms": "milliseconds", "s": "seconds"}[self.time_unit]
         print(f"in {self.total_tt:.3f} {time_unit}", file=self.stream)
         print(file=self.stream)
-        width, list = self.get_print_list(amount)
-        if list:
+        width, list_ = self.get_print_list(amount)
+        if list_:
             self.print_title()
-            for func in list:
+            for func in list_:
                 self.print_line(func)
             print(file=self.stream)
             print(file=self.stream)

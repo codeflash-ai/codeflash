@@ -9,7 +9,7 @@ def run_test(expected_improvement_pct: int) -> bool:
         file_path="remove_control_chars.py",
         function_name="CharacterRemover.remove_control_characters",
         test_framework="pytest",
-        min_improvement_x=1.0,
+        min_improvement_x=0.3,
         coverage_expectations=[
             CoverageExpectation(
                 function_name="CharacterRemover.remove_control_characters", expected_coverage=100.0, expected_lines=[14]

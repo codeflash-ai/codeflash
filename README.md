@@ -11,17 +11,17 @@
   </a>
 </p>
 
-[Codeflash](https://www.codeflash.ai) is a general purpose optimizer for Python that automatically improves the performance of your Python code while maintaining its correctness.
+[Codeflash](https://www.codeflash.ai) is a general purpose optimizer for Python that helps you improve the performance of your Python code while maintaining its correctness.
 It uses advanced LLMs to generate multiple optimization ideas for your code, tests them to be correct and benchmarks them for performance. It then creates merge-ready pull requests containing the best optimization found, which you can review and merge.
 
 How to use Codeflash -
 - Optimize an entire existing codebase by running `codeflash --all`
 - Automate optimizing all __future__ code you will write by installing Codeflash as a GitHub action.
-- Optimize a Python workflow end-to-end by tracing the workflow.
+- Optimize a Python workflow `python myscript.py` end-to-end by running `codeflash optimize myscript.py`
 
-Codeflash is used by top engineering teams at [Pydantic](https://github.com/pydantic/pydantic/pulls?q=is%3Apr+author%3Amisrasaurabh1+is%3Amerged), [Langflow](https://github.com/langflow-ai/langflow/issues?q=state%3Aclosed%20is%3Apr%20author%3Amisrasaurabh1), [Albumentations](https://github.com/albumentations-team/albumentations/issues?q=state%3Amerged%20is%3Apr%20author%3Akrrt7%20OR%20state%3Amerged%20is%3Apr%20author%3Aaseembits93%20) and many others to ship performant, expert level code.
+Codeflash is used by top engineering teams at [Pydantic](https://github.com/pydantic/pydantic/pulls?q=is%3Apr+author%3Amisrasaurabh1+is%3Amerged), [Langflow](https://github.com/langflow-ai/langflow/issues?q=state%3Aclosed%20is%3Apr%20author%3Amisrasaurabh1), [Roboflow](https://github.com/roboflow/inference/pulls?q=is%3Apr+is%3Amerged+codeflash+sort%3Acreated-asc), [Albumentations](https://github.com/albumentations-team/albumentations/issues?q=state%3Amerged%20is%3Apr%20author%3Akrrt7%20OR%20state%3Amerged%20is%3Apr%20author%3Aaseembits93%20) and many others to ship performant, expert level code.
 
-Codeflash is great at optimizing AI Agents, Computer Vision algorithms, numerical code, backend code or anything else you might write with Python.
+Codeflash is great at optimizing AI Agents, Computer Vision algorithms, PyTorch code, numerical code, backend code or anything else you might write with Python.
 
 
 ## Installation
@@ -50,6 +50,10 @@ Add codeflash as a development time dependency if you are using package managers
    codeflash --all
    ```
    This can take a while to run for a large codebase, but it will keep opening PRs as it finds optimizations.
+3. Optimize a script:
+   ```
+   codeflash optimize myscript.py
+   ```
 
 ## Documentation
 For detailed installation and usage instructions, visit our documentation at [docs.codeflash.ai](https://docs.codeflash.ai)
@@ -65,10 +69,10 @@ https://github.com/user-attachments/assets/38f44f4e-be1c-4f84-8db9-63d5ee3e61e5
 
 Join our community for support and discussions. If you have any questions, feel free to reach out to us using one of the following methods:
 
+- [Free live Installation Support](https://calendly.com/codeflash-saurabh/codeflash-setup)
 - [Join our Discord](https://www.codeflash.ai/discord)
 - [Follow us on Twitter](https://x.com/codeflashAI)
 - [Follow us on Linkedin](https://www.linkedin.com/in/saurabh-misra/)
-- [Email founders](mailto:saurabh@codeflash.ai)
 
 ## License
 

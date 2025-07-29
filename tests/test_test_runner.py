@@ -2,6 +2,7 @@ import os
 import tempfile
 from pathlib import Path
 
+from codeflash.code_utils.code_utils import ImportErrorPattern
 from codeflash.models.models import TestFile, TestFiles, TestType
 from codeflash.verification.parse_test_output import parse_test_xml
 from codeflash.verification.test_runner import run_behavioral_tests
@@ -95,4 +96,52 @@ def test_sort():
             test_xml_file_path=result_file, test_files=test_files, test_config=config, run_result=process
         )
     assert results[0].did_pass, "Test did not pass as expected"
+    result_file.unlink(missing_ok=True)
+
+    code = """import torch_does_not_exist
+def sorter(arr):
+    print(torch.ones(1))
+    arr.sort()
+    return arr
+
+def test_sort():
+    arr = [5, 4, 3, 2, 1, 0]
+    output = sorter(arr)
+    assert output == [0, 1, 2, 3, 4, 5]
+    """
+    cur_dir_path = Path(__file__).resolve().parent
+    config = TestConfig(
+        tests_root=cur_dir_path,
+        project_root_path=cur_dir_path,
+        test_framework="pytest",
+        tests_project_rootdir=cur_dir_path.parent,
+    )
+
+    test_env = os.environ.copy()
+    test_env["CODEFLASH_TEST_ITERATION"] = "0"
+    test_env["CODEFLASH_TRACER_DISABLE"] = "1"
+    if "PYTHONPATH" not in test_env:
+        test_env["PYTHONPATH"] = str(config.project_root_path)
+    else:
+        test_env["PYTHONPATH"] += os.pathsep + str(config.project_root_path)
+
+    with tempfile.NamedTemporaryFile(prefix="test_xx", suffix=".py", dir=cur_dir_path) as fp:
+        test_files = TestFiles(
+            test_files=[TestFile(instrumented_behavior_file_path=Path(fp.name), test_type=TestType.EXISTING_UNIT_TEST)]
+        )
+        fp.write(code.encode("utf-8"))
+        fp.flush()
+        result_file, process, _, _ = run_behavioral_tests(
+            test_files,
+            test_framework=config.test_framework,
+            cwd=Path(config.project_root_path),
+            test_env=test_env,
+            pytest_timeout=1,
+            pytest_target_runtime_seconds=1,
+        )
+        results = parse_test_xml(
+            test_xml_file_path=result_file, test_files=test_files, test_config=config, run_result=process
+        )
+    match = ImportErrorPattern.search(process.stdout).group()
+    assert match == "ModuleNotFoundError: No module named 'torch_does_not_exist'"
     result_file.unlink(missing_ok=True)

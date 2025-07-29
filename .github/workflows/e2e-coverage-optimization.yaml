@@ -1,0 +1,67 @@
+name: Coverage E2E
+
+on:
+  pull_request:
+    paths:
+      - '**'  # Trigger for all paths
+
+  workflow_dispatch:
+
+jobs:
+  end-to-end-test-coverage:
+    # Dynamically determine if environment is needed only when workflow files change and contributor is external
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - name: 🛎️ Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Validate PR
+        run: |
+          # Check for any workflow changes
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
+            echo "⚠️ Workflow changes detected."
+
+            # Get the PR author
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            echo "PR Author: $AUTHOR"
+
+            # Allowlist check
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+              echo "✅ Authorized user ($AUTHOR). Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "✅ PR triggered by 'pull_request_target' and is open. Assuming protection rules are in place. Proceeding."
+            else
+              echo "⛔ Unauthorized user ($AUTHOR) attempting to modify workflows. Exiting."
+              exit 1
+            fi
+          else
+            echo "✅ No workflow file changes detected. Proceeding."
+          fi
+
+      - name: Set up Python 3.11 for CLI
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies (CLI)
+        run: |
+          uv sync
+          uv add black  # my-best-repo in end_to_end_test_coverage.py is configured to use black
+
+      - name: Run Codeflash to optimize code
+        id: optimize_code
+        run: |
+          uv run python tests/scripts/end_to_end_test_coverage.py

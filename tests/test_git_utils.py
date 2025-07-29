@@ -11,27 +11,38 @@ class TestGitUtils(unittest.TestCase):
     def test_test_get_repo_owner_and_name(self, mock_get_remote_url):
         # Test with a standard GitHub HTTPS URL
         mock_get_remote_url.return_value = "https://github.com/owner/repo.git"
+        get_repo_owner_and_name.cache_clear()
         owner, repo_name = get_repo_owner_and_name()
         assert owner == "owner"
         assert repo_name == "repo"
 
         # Test with a GitHub SSH URL
         mock_get_remote_url.return_value = "git@github.com:owner/repo.git"
+        get_repo_owner_and_name.cache_clear()
         owner, repo_name = get_repo_owner_and_name()
         assert owner == "owner"
         assert repo_name == "repo"
 
         # Test with another GitHub SSH URL
         mock_get_remote_url.return_value = "git@github.com:codeflash-ai/posthog.git"
+        get_repo_owner_and_name.cache_clear()
         owner, repo_name = get_repo_owner_and_name()
         assert owner == "codeflash-ai"
         assert repo_name == "posthog"
 
         # Test with a URL without the .git suffix
         mock_get_remote_url.return_value = "https://github.com/owner/repo"
+        get_repo_owner_and_name.cache_clear()
         owner, repo_name = get_repo_owner_and_name()
         assert owner == "owner"
         assert repo_name == "repo"
+
+        # Test with another GitHub SSH URL
+        mock_get_remote_url.return_value = "git@github.com:codeflash-ai/posthog/"
+        get_repo_owner_and_name.cache_clear()
+        owner, repo_name = get_repo_owner_and_name()
+        assert owner == "codeflash-ai"
+        assert repo_name == "posthog"
 
     @patch("codeflash.code_utils.git_utils.git.Repo")
     def test_check_running_in_git_repo_in_git_repo(self, mock_repo):
@@ -53,7 +64,7 @@ class TestGitUtils(unittest.TestCase):
 
     @patch("codeflash.code_utils.git_utils.git.Repo")
     @patch("codeflash.code_utils.git_utils.sys.__stdin__.isatty", return_value=True)
-    @patch("codeflash.code_utils.git_utils.inquirer.confirm", return_value=True)
+    @patch("codeflash.code_utils.git_utils.Confirm.ask", return_value=True)
     def test_check_and_push_branch(self, mock_confirm, mock_isatty, mock_repo):
         mock_repo_instance = mock_repo.return_value
         mock_repo_instance.active_branch.name = "test-branch"

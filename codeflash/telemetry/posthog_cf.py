@@ -7,12 +7,12 @@ from posthog import Posthog
 
 from codeflash.api.cfapi import get_user_id
 from codeflash.cli_cmds.console import logger
-from codeflash.version import __version__, __version_tuple__
+from codeflash.version import __version__
 
 _posthog = None
 
 
-def initialize_posthog(enabled: bool = True) -> None:
+def initialize_posthog(enabled: bool = True) -> None:  # noqa: FBT001, FBT002
     """Enable or disable PostHog.
 
     :param enabled: Whether to enable PostHog.
@@ -20,8 +20,8 @@ def initialize_posthog(enabled: bool = True) -> None:
     if not enabled:
         return
 
-    global _posthog
-    _posthog = Posthog(project_api_key="phc_aUO790jHd7z1SXwsYCz8dRApxueplZlZWeDSpKc5hol", host="https://us.posthog.com")  # type: ignore
+    global _posthog  # noqa: PLW0603
+    _posthog = Posthog(project_api_key="phc_aUO790jHd7z1SXwsYCz8dRApxueplZlZWeDSpKc5hol", host="https://us.posthog.com")
     _posthog.log.setLevel(logging.CRITICAL)  # Suppress PostHog logging
     ph("cli-telemetry-enabled")
 
@@ -36,11 +36,11 @@ def ph(event: str, properties: dict[str, Any] | None = None) -> None:
         return
 
     properties = properties or {}
-    properties.update({"cli_version": __version__, "cli_version_tuple": __version_tuple__})
+    properties.update({"cli_version": __version__})
 
     user_id = get_user_id()
 
     if user_id:
-        _posthog.capture(distinct_id=user_id, event=event, properties=properties)  # type: ignore
+        _posthog.capture(distinct_id=user_id, event=event, properties=properties)
     else:
         logger.debug("Failed to log event to PostHog: User ID could not be retrieved.")

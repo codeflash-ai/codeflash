@@ -5,8 +5,10 @@ import datetime
 import decimal
 import re
 import sys
+import uuid
 from enum import Enum, Flag, IntFlag, auto
 from pathlib import Path
+import array # Add import for array
 
 import pydantic
 import pytest
@@ -124,6 +126,26 @@ def test_basic_python_objects() -> None:
     assert comparator(a, b)
     assert not comparator(a, c)
 
+@pytest.mark.parametrize("r1, r2, expected", [
+    (range(1, 10), range(1, 10), True),                # equal
+    (range(0, 10), range(1, 10), False),               # different start
+    (range(2, 10), range(1, 10), False),
+    (range(1, 5), range(1, 10), False),                # different stop
+    (range(1, 20), range(1, 10), False),
+    (range(1, 10, 1), range(1, 10, 2), False),          # different step
+    (range(1, 10, 3), range(1, 10, 2), False),
+    (range(-5, 0), range(-5, 0), True),                # negative ranges
+    (range(-10, 0), range(-5, 0), False),
+    (range(5, 1), range(10, 5), True),                # empty ranges
+    (range(5, 1), range(5, 1), True),
+    (range(7), range(0, 7), True),
+    (range(0, 7), range(0, 7, 1), True),
+    (range(7), range(0, 7, 1), True),
+])
+
+def test_ranges(r1, r2, expected):
+    assert comparator(r1, r2) == expected
+
 
 def test_standard_python_library_objects() -> None:
     a = datetime.datetime(2020, 2, 2, 2, 2, 2) # type: ignore
@@ -202,6 +224,30 @@ def test_standard_python_library_objects() -> None:
     assert comparator(a, b)
     assert not comparator(a, c)
     assert not comparator(a, d)
+
+    arr1 = array.array('i', [1, 2, 3])
+    arr2 = array.array('i', [1, 2, 3])
+    arr3 = array.array('i', [4, 5, 6])
+    arr4 = array.array('f', [1.0, 2.0, 3.0])
+
+    assert comparator(arr1, arr2)
+    assert not comparator(arr1, arr3)
+    assert not comparator(arr1, arr4)
+    assert not comparator(arr1, [1, 2, 3])
+
+    empty_arr_i1 = array.array('i')
+    empty_arr_i2 = array.array('i')
+    empty_arr_f = array.array('f')
+    assert comparator(empty_arr_i1, empty_arr_i2)
+    assert not comparator(empty_arr_i1, empty_arr_f)
+    assert not comparator(empty_arr_i1, arr1)
+
+    id1 = uuid.uuid4()
+    id3 = uuid.uuid4()
+    assert comparator(id1, id1)
+    assert not comparator(id1, id3)
+
+
 
 
 def test_numpy():
@@ -297,6 +343,20 @@ def test_numpy():
     assert comparator(ai, aj)
     assert comparator(ak, al)
     assert not comparator(ai, ak)
+
+    dt = np.dtype([('name', 'S10'), ('age', np.int32)])
+    a_struct = np.array([('Alice', 25)], dtype=dt)
+    b_struct = np.array([('Alice', 25)], dtype=dt)
+    c_struct = np.array([('Bob', 30)], dtype=dt)
+
+    a_void = a_struct[0]
+    b_void = b_struct[0]
+    c_void = c_struct[0]
+
+    assert isinstance(a_void, np.void)
+    assert comparator(a_void, b_void)
+    assert not comparator(a_void, c_void)
+
 
 
 def test_scipy():
@@ -648,6 +708,81 @@ def test_torch():
     ii = torch.tensor([True, True, True])
     assert comparator(gg, hh)
     assert not comparator(gg, ii)
+
+
+def test_jax():
+    try:
+        import jax.numpy as jnp
+    except ImportError:
+        pytest.skip()
+
+    # Test basic arrays
+    a = jnp.array([1, 2, 3])
+    b = jnp.array([1, 2, 3])
+    c = jnp.array([1, 2, 4])
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    # Test 2D arrays
+    d = jnp.array([[1, 2, 3], [4, 5, 6]])
+    e = jnp.array([[1, 2, 3], [4, 5, 6]])
+    f = jnp.array([[1, 2, 3], [4, 5, 7]])
+    assert comparator(d, e)
+    assert not comparator(d, f)
+
+    # Test arrays with different data types
+    g = jnp.array([1, 2, 3], dtype=jnp.float32)
+    h = jnp.array([1, 2, 3], dtype=jnp.float32)
+    i = jnp.array([1, 2, 3], dtype=jnp.int32)
+    assert comparator(g, h)
+    assert not comparator(g, i)
+
+    # Test 3D arrays
+    j = jnp.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
+    k = jnp.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
+    l = jnp.array([[[1, 2], [3, 4]], [[5, 6], [7, 9]]])
+    assert comparator(j, k)
+    assert not comparator(j, l)
+
+    # Test arrays with different shapes
+    m = jnp.array([1, 2, 3])
+    n = jnp.array([[1, 2, 3]])
+    assert not comparator(m, n)
+
+    # Test empty arrays
+    o = jnp.array([])
+    p = jnp.array([])
+    q = jnp.array([1])
+    assert comparator(o, p)
+    assert not comparator(o, q)
+
+    # Test arrays with NaN values
+    r = jnp.array([1.0, jnp.nan, 3.0])
+    s = jnp.array([1.0, jnp.nan, 3.0])
+    t = jnp.array([1.0, 2.0, 3.0])
+    assert comparator(r, s)  # NaN == NaN
+    assert not comparator(r, t)
+
+    # Test arrays with infinity values
+    u = jnp.array([1.0, jnp.inf, 3.0])
+    v = jnp.array([1.0, jnp.inf, 3.0])
+    w = jnp.array([1.0, -jnp.inf, 3.0])
+    assert comparator(u, v)
+    assert not comparator(u, w)
+
+    # Test complex arrays
+    x = jnp.array([1+2j, 3+4j])
+    y = jnp.array([1+2j, 3+4j])
+    z = jnp.array([1+2j, 3+5j])
+    assert comparator(x, y)
+    assert not comparator(x, z)
+
+    # Test boolean arrays
+    aa = jnp.array([True, False, True])
+    bb = jnp.array([True, False, True])
+    cc = jnp.array([True, True, True])
+    assert comparator(aa, bb)
+    assert not comparator(aa, cc)
 
 
 def test_returns():
@@ -1008,6 +1143,94 @@ def test_compare_results_fn():
     )
 
     assert not compare_test_results(original_results, new_results_4)
+
+    new_results_5_baseline = TestResults()
+    new_results_5_baseline.add(
+        FunctionTestInvocation(
+            id=InvocationId(
+                test_module_path="test_module_path",
+                test_class_name="test_class_name",
+                test_function_name="test_function_name",
+                function_getting_tested="function_getting_tested",
+                iteration_id="0",
+            ),
+            file_name=Path("file_name"),
+            did_pass=True,
+            runtime=5,
+            test_framework="unittest",
+            test_type=TestType.GENERATED_REGRESSION,
+            return_value=5,
+            timed_out=False,
+            loop_index=1,
+        )
+    )
+
+    new_results_5_opt = TestResults()
+    new_results_5_opt.add(
+        FunctionTestInvocation(
+            id=InvocationId(
+                test_module_path="test_module_path",
+                test_class_name="test_class_name",
+                test_function_name="test_function_name",
+                function_getting_tested="function_getting_tested",
+                iteration_id="0",
+            ),
+            file_name=Path("file_name"),
+            did_pass=False,
+            runtime=5,
+            test_framework="unittest",
+            test_type=TestType.GENERATED_REGRESSION,
+            return_value=5,
+            timed_out=False,
+            loop_index=1,
+        )
+    )
+
+    assert  not compare_test_results(new_results_5_baseline, new_results_5_opt)
+
+    new_results_6_baseline = TestResults()
+    new_results_6_baseline.add(
+        FunctionTestInvocation(
+            id=InvocationId(
+                test_module_path="test_module_path",
+                test_class_name="test_class_name",
+                test_function_name="test_function_name",
+                function_getting_tested="function_getting_tested",
+                iteration_id="0",
+            ),
+            file_name=Path("file_name"),
+            did_pass=True,
+            runtime=5,
+            test_framework="unittest",
+            test_type=TestType.REPLAY_TEST,
+            return_value=5,
+            timed_out=False,
+            loop_index=1,
+        )
+    )
+
+    new_results_6_opt = TestResults()
+    new_results_6_opt.add(
+        FunctionTestInvocation(
+            id=InvocationId(
+                test_module_path="test_module_path",
+                test_class_name="test_class_name",
+                test_function_name="test_function_name",
+                function_getting_tested="function_getting_tested",
+                iteration_id="0",
+            ),
+            file_name=Path("file_name"),
+            did_pass=False,
+            runtime=5,
+            test_framework="unittest",
+            test_type=TestType.REPLAY_TEST,
+            return_value=5,
+            timed_out=False,
+            loop_index=1,
+        )
+    )
+
+    assert  not compare_test_results(new_results_6_baseline, new_results_6_opt)
 
     assert not compare_test_results(TestResults(), TestResults())
 

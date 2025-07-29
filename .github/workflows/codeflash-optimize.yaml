@@ -3,7 +3,8 @@ name: CodeFlash
 on:
   pull_request:
     paths:
-      - "**"
+      - '**'  # Trigger for all paths
+
   workflow_dispatch:
 
 concurrency:
@@ -19,7 +20,6 @@ jobs:
       CODEFLASH_AIS_SERVER: prod
       POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
       CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
-      CODEFLASH_PR_NUMBER: ${{ github.event.number }}
       COLUMNS: 110
     steps:
       - name: 🛎️ Checkout
@@ -34,13 +34,9 @@ jobs:
 
       - name: 📦 Install dependencies (CLI)
         run: |
-          uv tool install poetry
-          uv venv
-          source .venv/bin/activate
-          poetry install --with dev
+          uv sync
 
       - name: ⚡️Codeflash Optimization
         id: optimize_code
         run: |
-          source .venv/bin/activate
-          poetry run codeflash
+          uv run codeflash --benchmark
