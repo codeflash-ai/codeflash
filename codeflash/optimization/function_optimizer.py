@@ -840,6 +840,7 @@ class FunctionOptimizer:
                 f"{concolic_coverage_test_files_count} concolic coverage test file"
                 f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
             )
+            console.rule()
         return unique_instrumented_test_files
 
     def generate_tests_and_optimizations(

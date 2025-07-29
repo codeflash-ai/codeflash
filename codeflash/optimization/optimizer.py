@@ -106,7 +106,7 @@ class Optimizer:
                 for file in file_path_to_source_code:
                     with file.open("w", encoding="utf8") as f:
                         f.write(file_path_to_source_code[file])
-
+        console.rule()
         return function_benchmark_timings, total_benchmark_timings
 
     def get_optimizable_functions(self) -> tuple[dict[Path, list[FunctionToOptimize]], int, Path | None]:
