@@ -578,7 +578,7 @@ class FunctionOptimizer:
         runtimes_list = []
         for valid_opt in self.valid_optimizations:
             diff_lens_list.append(
-                diff_length(valid_opt.candidate.source_code, code_context.read_writable_code)
+                diff_length(valid_opt.candidate.source_code, code_context.read_writable_code.flat)
             )  # char level diff
             runtimes_list.append(valid_opt.runtime)
         diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
@@ -610,7 +610,7 @@ class FunctionOptimizer:
         request = [
             AIServiceRefinerRequest(
                 optimization_id=opt.candidate.optimization_id,
-                original_source_code=code_context.read_writable_code,
+                original_source_code=code_context.read_writable_code.flat,
                 read_only_dependency_code=code_context.read_only_context_code,
                 original_code_runtime=humanize_runtime(original_code_baseline.runtime),
                 optimized_source_code=opt.candidate.source_code,
