@@ -574,19 +574,6 @@ class FunctionOptimizer:
         if not len(self.valid_optimizations):
             return None
         # need to figure out the best candidate here before we return best_optimization
-        # new_explanation = self.aiservice_client.get_new_explanation(
-        #     source_code=code_context.read_writable_code,
-        #     dependency_code=code_context.read_only_context_code,
-        #     trace_id=self.function_trace_id,
-        #     num_candidates=1,
-        #     experiment_metadata=None,
-        #     existing_explanation=best_optimization.candidate.explanation,
-        # )
-        #
-        # best_optimization.candidate = replace(
-        #     best_optimization.candidate,
-        #     explanation=new_explanation if new_explanation != "" else best_optimization.candidate.explanation,
-        # )
         diff_lens_list = []  # character level diff
         runtimes_list = []
         for valid_opt in self.valid_optimizations:
@@ -1134,11 +1121,30 @@ class FunctionOptimizer:
                     )
                     if concolic_test_str:
                         generated_tests_str += "\n\n" + concolic_test_str
-
+                    new_explanation_raw_str = self.aiservice_client.get_new_explanation(
+                        source_code=code_context.read_writable_code,
+                        dependency_code=code_context.read_only_context_code,
+                        trace_id=self.function_trace_id[:-4] + exp_type,
+                        optimized_code=best_optimization.candidate.source_code,
+                        original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
+                        optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
+                        original_code_runtime=humanize_runtime(original_code_baseline.runtime),
+                        optimized_code_runtime=humanize_runtime(best_optimization.runtime),
+                        speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_optimization.runtime) * 100)}%",
+                        annotated_tests=generated_tests_str,
+                        optimization_id=best_optimization.candidate.optimization_id,
+                    )
+                    new_explanation = Explanation(raw_explanation_message=new_explanation_raw_str, winning_behavior_test_results=explanation.winning_behavior_test_results,
+                                                    winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
+                                                    original_runtime_ns=explanation.original_runtime_ns,
+                                                    best_runtime_ns=explanation.best_runtime_ns,
+                                                    function_name=explanation.function_name,
+                                                    file_path=explanation.file_path,
+                                                    benchmark_details=explanation.benchmark_details)
                     check_create_pr(
                         original_code=original_code_combined,
                         new_code=new_code_combined,
-                        explanation=explanation,
+                        explanation=new_explanation,
                         existing_tests_source=existing_tests,
                         generated_original_test_source=generated_tests_str,
                         function_trace_id=self.function_trace_id[:-4] + exp_type

@@ -284,7 +284,13 @@ class AiServiceClient:
         optimized_code: str,
         dependency_code: str,
         trace_id: str,
-        existing_explanation: str,
+        original_line_profiler_results: str,
+        optimized_line_profiler_results: str,
+        original_code_runtime: str,
+        optimized_code_runtime: str,
+        speedup: str,
+        annotated_tests: str,
+        optimization_id: str,
     ) -> str:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -305,16 +311,22 @@ class AiServiceClient:
         payload = {
             "trace_id": trace_id,
             "source_code": source_code,
-            "optimized_code":optimized_code,
-            "existing_explanation": existing_explanation,
+            "optimized_code": optimized_code,
+            "original_line_profiler_results": original_line_profiler_results,
+            "optimized_line_profiler_results": optimized_line_profiler_results,
+            "original_code_runtime": original_code_runtime,
+            "optimized_code_runtime": optimized_code_runtime,
+            "speedup": speedup,
+            "annotated_tests": annotated_tests,
+            "optimization_id": optimization_id,
             "dependency_code": dependency_code,
         }
-        logger.info("Generating optimized candidates…")
+        logger.info("Generating explanation")
         console.rule()
         try:
             response = self.make_ai_service_request("/explain", payload=payload, timeout=600)
         except requests.exceptions.RequestException as e:
-            logger.exception(f"Error generating optimized candidates: {e}")
+            logger.exception(f"Error generating explanations: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
             return ""
 
