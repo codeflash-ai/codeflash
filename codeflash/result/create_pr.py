@@ -132,6 +132,7 @@ def check_create_pr(
     function_trace_id: str,
     coverage_message: str,
     git_remote: Optional[str] = None,
+    exp_type: Optional[str] = None,
 ) -> None:
     pr_number: Optional[int] = env_utils.get_pr_number()
     git_repo = git.Repo(search_parent_directories=True)
@@ -203,7 +204,7 @@ def check_create_pr(
             base_branch=base_branch,
             file_changes=build_file_changes,
             pr_comment=PrComment(
-                optimization_explanation=explanation.explanation_message(),
+                optimization_explanation="## Experiment Type: " + exp_type + "\n\n" + explanation.explanation_message(),
                 best_runtime=explanation.best_runtime_ns,
                 original_runtime=explanation.original_runtime_ns,
                 function_name=explanation.function_name,
