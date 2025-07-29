@@ -25,7 +25,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
-
 @pytest.fixture
 def benchmark(request: pytest.FixtureRequest) -> object:
     """Benchmark fixture that works with or without pytest-benchmark installed."""

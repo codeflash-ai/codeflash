@@ -204,6 +204,7 @@ def get_functions_to_optimize(
                 functions[file] = [found_function]
         else:
             logger.info("Finding all functions modified in the current git diff ...")
+            console.rule()
             ph("cli-optimizing-git-diff")
             functions = get_functions_within_git_diff()
         filtered_modified_functions, functions_count = filter_functions(
