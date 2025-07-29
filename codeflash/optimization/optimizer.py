@@ -74,7 +74,6 @@ class Optimizer:
             for file in file_to_funcs_to_optimize:
                 with file.open("r", encoding="utf8") as f:
                     file_path_to_source_code[file] = f.read()
-            console.print(f"Instrumented {len(file_to_funcs_to_optimize)} files for benchmarking…")
             try:
                 instrument_codeflash_trace_decorator(file_to_funcs_to_optimize)
                 trace_file = Path(self.args.benchmarks_root) / "benchmarks.trace"
@@ -84,7 +83,6 @@ class Optimizer:
                 self.replay_tests_dir = Path(
                     tempfile.mkdtemp(prefix="codeflash_replay_tests_", dir=self.args.benchmarks_root)
                 )
-                logger.info(f"Tracing benchmarks to {trace_file} in {self.replay_tests_dir}")
                 trace_benchmarks_pytest(
                     self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file
                 )  # Run all tests that use pytest-benchmark

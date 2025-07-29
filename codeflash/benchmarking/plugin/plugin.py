@@ -286,19 +286,3 @@ class CodeFlashBenchmarkPlugin:
 
 
 codeflash_benchmark_plugin = CodeFlashBenchmarkPlugin()
-
-
-# def pytest_configure(config: pytest.Config) -> None:
-#     """Register the benchmark marker and disable conflicting plugins."""
-#     config.addinivalue_line("markers", "benchmark: mark test as a benchmark that should be run with codeflash tracing")
-
-#     if config.getoption("--codeflash-trace") and PYTEST_BENCHMARK_INSTALLED:
-#         config.option.benchmark_disable = True
-#         config.pluginmanager.set_blocked("pytest_benchmark")
-#         config.pluginmanager.set_blocked("pytest-benchmark")
-
-
-# def pytest_addoption(parser: pytest.Parser) -> None:
-#     parser.addoption(
-#         "--codeflash-trace", action="store_true", default=False, help="Enable CodeFlash tracing for benchmarks"
-#     )
