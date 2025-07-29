@@ -574,6 +574,19 @@ class FunctionOptimizer:
         if not len(self.valid_optimizations):
             return None
         # need to figure out the best candidate here before we return best_optimization
+        # new_explanation = self.aiservice_client.get_new_explanation(
+        #     source_code=code_context.read_writable_code,
+        #     dependency_code=code_context.read_only_context_code,
+        #     trace_id=self.function_trace_id,
+        #     num_candidates=1,
+        #     experiment_metadata=None,
+        #     existing_explanation=best_optimization.candidate.explanation,
+        # )
+        #
+        # best_optimization.candidate = replace(
+        #     best_optimization.candidate,
+        #     explanation=new_explanation if new_explanation != "" else best_optimization.candidate.explanation,
+        # )
         diff_lens_list = []  # character level diff
         runtimes_list = []
         for valid_opt in self.valid_optimizations:

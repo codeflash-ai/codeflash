@@ -278,7 +278,6 @@ class AiServiceClient:
         console.rule()
         return []
 
-    def log_results(  # noqa: D417
     def get_new_explanation(
         self,
         source_code: str,
