@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Optional
 import git
 import libcst as cst
 from pydantic.dataclasses import dataclass
+from rich.tree import Tree
 
 from codeflash.api.cfapi import get_blocklisted_functions, is_function_being_optimized_again
 from codeflash.cli_cmds.console import DEBUG_MODE, console, logger
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
 
     from codeflash.models.models import CodeOptimizationContext
     from codeflash.verification.verification_utils import TestConfig
+from rich.text import Text
 
 
 @dataclass(frozen=True)
@@ -594,20 +596,22 @@ def filter_functions(
 
     if not disable_logs:
         log_info = {
-            f"{test_functions_removed_count} test function{'s' if test_functions_removed_count != 1 else ''}": test_functions_removed_count,
-            f"{site_packages_removed_count} site-package function{'s' if site_packages_removed_count != 1 else ''}": site_packages_removed_count,
-            f"{malformed_paths_count} non-importable file path{'s' if malformed_paths_count != 1 else ''}": malformed_paths_count,
-            f"{non_modules_removed_count} function{'s' if non_modules_removed_count != 1 else ''} outside module-root": non_modules_removed_count,
-            f"{ignore_paths_removed_count} file{'s' if ignore_paths_removed_count != 1 else ''} from ignored paths": ignore_paths_removed_count,
-            f"{submodule_ignored_paths_count} file{'s' if submodule_ignored_paths_count != 1 else ''} from ignored submodules": submodule_ignored_paths_count,
-            f"{blocklist_funcs_removed_count} function{'s' if blocklist_funcs_removed_count != 1 else ''} as previously optimized": blocklist_funcs_removed_count,
-            f"{previous_checkpoint_functions_removed_count} function{'s' if previous_checkpoint_functions_removed_count != 1 else ''} skipped from checkpoint": previous_checkpoint_functions_removed_count,
+            "Test functions removed": (test_functions_removed_count, "yellow"),
+            "Site-package functions removed": (site_packages_removed_count, "magenta"),
+            "Non-importable file paths": (malformed_paths_count, "red"),
+            "Functions outside module-root": (non_modules_removed_count, "cyan"),
+            "Files from ignored paths": (ignore_paths_removed_count, "blue"),
+            "Files from ignored submodules": (submodule_ignored_paths_count, "bright_black"),
+            "Blocklisted functions removed": (blocklist_funcs_removed_count, "bright_red"),
+            "Functions skipped from checkpoint": (previous_checkpoint_functions_removed_count, "green"),
         }
-        log_string = "\n".join([k for k, v in log_info.items() if v > 0])
-        if log_string:
-            logger.info(f"Ignoring: {log_string}")
+        tree = Tree(Text("Ignored functions and files", style="bold"))
+        for label, (count, color) in log_info.items():
+            if count > 0:
+                tree.add(Text(f"{label}: {count}", style=color))
+        if len(tree.children) > 0:
+            console.print(tree)
             console.rule()
-
     return {Path(k): v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 
