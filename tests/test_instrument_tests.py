@@ -6,7 +6,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-
+import pytest
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.instrument_existing_tests import (
     FunctionImportedAsVisitor,
@@ -85,9 +85,13 @@ codeflash_wrap_perfonly_string = """def codeflash_wrap(wrapped, test_module_name
         raise exception
     return return_value
 """
+# create a temporary directory for the test results
+@pytest.fixture
+def tmp_dir():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        yield Path(tmpdirname)
 
-
-def test_perfinjector_bubble_sort() -> None:
+def test_perfinjector_bubble_sort(tmp_dir) -> None:
     code = """import unittest
 
 from code_to_optimize.bubble_sort import sorter
@@ -169,7 +173,8 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, codeflash_cur, codeflash_con, input), list(range(5000)))
         codeflash_con.close()
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
+
+    with (tmp_dir / "test_sort.py").open("w") as f:
         f.write(code)
         f.flush()
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path(f.name))
@@ -186,7 +191,7 @@ class TestPigLatin(unittest.TestCase):
         os.chdir(original_cwd)
     assert success
     assert new_test.replace('"', "'") == expected.format(
-        module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
+        module_path=Path(f.name).stem, tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
     ).replace('"', "'")
 
 
