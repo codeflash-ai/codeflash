@@ -316,3 +316,16 @@ def mark_optimization_success(trace_id: str, *, is_optimization_found: bool) -> 
     """
     payload = {"trace_id": trace_id, "is_optimization_found": is_optimization_found}
     return make_cfapi_request(endpoint="/mark-as-success", method="POST", payload=payload)
+
+
+def send_completion_email() -> Response:
+    """Send an email notification when codeflash --all completes."""
+    try:
+        owner, repo = get_repo_owner_and_name()
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
+        response = requests.Response()
+        response.status_code = 500
+        return response
+    payload = {"owner": owner, "repo": repo}
+    return make_cfapi_request(endpoint="/send-completion-email", method="POST", payload=payload)
