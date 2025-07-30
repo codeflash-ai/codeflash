@@ -17,6 +17,7 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.tree import Tree
+
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
 from codeflash.api.cfapi import add_code_context_hash, create_staging, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
@@ -1132,7 +1133,9 @@ class FunctionOptimizer:
             best_optimization.winning_benchmarking_test_results.usable_runtime_data_by_test_case()
         )
 
-        add_runtime_comments_to_generated_tests(generated_tests, original_runtime_by_test, optimized_runtime_by_test)
+        generated_tests = add_runtime_comments_to_generated_tests(
+            generated_tests, original_runtime_by_test, optimized_runtime_by_test
+        )
 
         generated_tests_str = "\n\n".join(
             [test.generated_original_test_source for test in generated_tests.generated_tests]
