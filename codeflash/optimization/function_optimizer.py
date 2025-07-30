@@ -1136,6 +1136,7 @@ class FunctionOptimizer:
                         speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_optimization.runtime) * 100)}%",
                         annotated_tests=generated_tests_str,
                         optimization_id=best_optimization.candidate.optimization_id,
+                        original_explanation=best_optimization.candidate.explanation,
                     )
                     new_explanation = Explanation(
                         raw_explanation_message=new_explanation_raw_str or explanation.raw_explanation_message,

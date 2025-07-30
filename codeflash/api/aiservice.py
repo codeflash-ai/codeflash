@@ -291,6 +291,7 @@ class AiServiceClient:
         speedup: str,
         annotated_tests: str,
         optimization_id: str,
+        original_explanation: str,
     ) -> str:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -306,6 +307,7 @@ class AiServiceClient:
         - speedup: str - speedup of the optimized code
         - annotated_tests: str - test functions annotated with runtime
         - optimization_id: str - unique id of opt candidate
+        - original_explanation: str - original_explanation generated for the opt candidate
 
         Returns
         -------
@@ -323,6 +325,7 @@ class AiServiceClient:
             "speedup": speedup,
             "annotated_tests": annotated_tests,
             "optimization_id": optimization_id,
+            "original_explanation": original_explanation,
             "dependency_code": dependency_code,
         }
         logger.info("Generating explanation")
