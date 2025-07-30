@@ -8,7 +8,6 @@ import subprocess
 import time
 import uuid
 from collections import defaultdict, deque
-from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -1124,7 +1123,9 @@ class FunctionOptimizer:
                     new_explanation_raw_str = self.aiservice_client.get_new_explanation(
                         source_code=code_context.read_writable_code,
                         dependency_code=code_context.read_only_context_code,
-                        trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
+                        trace_id=self.function_trace_id[:-4] + exp_type
+                        if self.experiment_id
+                        else self.function_trace_id,
                         optimized_code=best_optimization.candidate.source_code,
                         original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
                         optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
@@ -1134,13 +1135,16 @@ class FunctionOptimizer:
                         annotated_tests=generated_tests_str,
                         optimization_id=best_optimization.candidate.optimization_id,
                     )
-                    new_explanation = Explanation(raw_explanation_message=new_explanation_raw_str or explanation.raw_explanation_message, winning_behavior_test_results=explanation.winning_behavior_test_results,
-                                                    winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
-                                                    original_runtime_ns=explanation.original_runtime_ns,
-                                                    best_runtime_ns=explanation.best_runtime_ns,
-                                                    function_name=explanation.function_name,
-                                                    file_path=explanation.file_path,
-                                                    benchmark_details=explanation.benchmark_details)
+                    new_explanation = Explanation(
+                        raw_explanation_message=new_explanation_raw_str or explanation.raw_explanation_message,
+                        winning_behavior_test_results=explanation.winning_behavior_test_results,
+                        winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
+                        original_runtime_ns=explanation.original_runtime_ns,
+                        best_runtime_ns=explanation.best_runtime_ns,
+                        function_name=explanation.function_name,
+                        file_path=explanation.file_path,
+                        benchmark_details=explanation.benchmark_details,
+                    )
                     check_create_pr(
                         original_code=original_code_combined,
                         new_code=new_code_combined,
