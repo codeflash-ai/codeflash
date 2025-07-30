@@ -1134,7 +1134,7 @@ class FunctionOptimizer:
                         annotated_tests=generated_tests_str,
                         optimization_id=best_optimization.candidate.optimization_id,
                     )
-                    new_explanation = Explanation(raw_explanation_message=new_explanation_raw_str, winning_behavior_test_results=explanation.winning_behavior_test_results,
+                    new_explanation = Explanation(raw_explanation_message=new_explanation_raw_str or explanation.raw_explanation_message, winning_behavior_test_results=explanation.winning_behavior_test_results,
                                                     winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
                                                     original_runtime_ns=explanation.original_runtime_ns,
                                                     best_runtime_ns=explanation.best_runtime_ns,
