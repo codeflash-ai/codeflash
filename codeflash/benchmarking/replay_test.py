@@ -166,7 +166,7 @@ trace_file_path = r"{trace_file}"
         module_name = func.get("module_name")
         function_name = func.get("function_name")
         class_name = func.get("class_name")
-        file_path = func.get("file_path")
+        file_path = Path(func.get("file_path")).as_posix()
         benchmark_function_name = func.get("benchmark_function_name")
         function_properties = func.get("function_properties")
         if not class_name:
