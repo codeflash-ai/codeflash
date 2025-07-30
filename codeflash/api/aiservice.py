@@ -328,7 +328,7 @@ class AiServiceClient:
         logger.info("Generating explanation")
         console.rule()
         try:
-            response = self.make_ai_service_request("/explain", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/explain", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating explanations: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -336,7 +336,7 @@ class AiServiceClient:
 
         if response.status_code == 200:
             explanation: str = response.json()["explanation"]
-            logger.info(f"New Explanation: {explanation}")
+            logger.debug(f"New Explanation: {explanation}")
             console.rule()
             return explanation
         try:
