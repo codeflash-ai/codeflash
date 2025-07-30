@@ -195,7 +195,7 @@ class TestPigLatin(unittest.TestCase):
     ).replace('"', "'")
 
 
-def test_perfinjector_only_replay_test() -> None:
+def test_perfinjector_only_replay_test(tmp_dir) -> None:
     code = """import dill as pickle
 import pytest
 from codeflash.tracing.replay_test import get_next_arg_and_return
@@ -274,7 +274,7 @@ def test_prepare_image_for_yolo():
         assert compare_results(return_val_1, ret)
     codeflash_con.close()
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
+    with (tmp_dir / "test_return_values.py").open("w") as f:
         f.write(code)
         f.flush()
         func = FunctionToOptimize(function_name="prepare_image_for_yolo", parents=[], file_path=Path("module.py"))
@@ -287,7 +287,7 @@ def test_prepare_image_for_yolo():
         os.chdir(original_cwd)
     assert success
     assert new_test.replace('"', "'") == expected.format(
-        module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
+        module_path=Path(f.name).stem, tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
     ).replace('"', "'")
 
 
@@ -394,7 +394,7 @@ def test_sort():
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
 
         success, new_perf_test = inject_profiling_into_existing_test(
