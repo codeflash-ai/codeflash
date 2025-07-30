@@ -72,8 +72,8 @@ class TestTracer:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False, dir=temp_dir) as f:
             f.write(f"""
 [tool.codeflash]
-module-root = "{current_dir}"
-tests-root = "{tests_dir}"
+module-root = "{current_dir.as_posix()}"
+tests-root = "{tests_dir.as_posix()}"
 test-framework = "pytest"
 ignore-paths = []
 """)

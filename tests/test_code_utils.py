@@ -254,7 +254,7 @@ def test_get_run_tmp_file_reuses_temp_directory() -> None:
 
 
 def test_path_belongs_to_site_packages_with_site_package_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    site_packages = [Path("/usr/local/lib/python3.9/site-packages")]
+    site_packages = [Path("/usr/local/lib/python3.9/site-packages").resolve()]
     monkeypatch.setattr(site, "getsitepackages", lambda: site_packages)
 
     file_path = Path("/usr/local/lib/python3.9/site-packages/some_package")
