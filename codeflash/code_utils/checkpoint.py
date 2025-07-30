@@ -149,4 +149,6 @@ def ask_should_use_checkpoint_get_functions(args: argparse.Namespace) -> Optiona
             console.rule()
         else:
             previous_checkpoint_functions = None
+
+    console.rule()
     return previous_checkpoint_functions

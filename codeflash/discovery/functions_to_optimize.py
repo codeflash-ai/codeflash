@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any, Optional
 import git
 import libcst as cst
 from pydantic.dataclasses import dataclass
-from rich.console import Console
 from rich.tree import Tree
 
 from codeflash.api.cfapi import get_blocklisted_functions, is_function_being_optimized_again
@@ -39,8 +38,6 @@ if TYPE_CHECKING:
 
     from codeflash.models.models import CodeOptimizationContext
     from codeflash.verification.verification_utils import TestConfig
-from rich import box
-from rich.panel import Panel
 from rich.text import Text
 
 
