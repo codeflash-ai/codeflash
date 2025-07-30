@@ -1119,7 +1119,9 @@ class FunctionOptimizer:
                         optimized_runtimes_all=optimized_runtime_by_test,
                     )
                     if concolic_test_str:
-                        generated_tests_str += "\n#------------------------------------------------\n" + concolic_test_str
+                        generated_tests_str += (
+                            "\n#------------------------------------------------\n" + concolic_test_str
+                        )
                     new_explanation_raw_str = self.aiservice_client.get_new_explanation(
                         source_code=code_context.read_writable_code,
                         dependency_code=code_context.read_only_context_code,
