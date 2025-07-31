@@ -1,29 +1,44 @@
-# Website
+# Mintlify Starter Kit
 
-This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
+Use the starter kit to get your docs deployed and ready to customize.
 
-### Installation
+Click the green **Use this template** button at the top of this repo to copy the Mintlify starter kit. The starter kit contains examples with
 
-```
-$ npm install
-```
+- Guide pages
+- Navigation
+- Customizations
+- API reference pages
+- Use of popular components
 
-### Local Development
+**[Follow the full quickstart guide](https://starter.mintlify.com/quickstart)**
 
-```
-$ npm run start
-```
+## Development
 
-This command starts a local development server and opens up a browser window. Most changes are reflected live without having to restart the server.
-
-### Build
+Install the [Mintlify CLI](https://www.npmjs.com/package/mint) to preview your documentation changes locally. To install, use the following command:
 
 ```
-$ npm run build
+npm i -g mint
 ```
 
-This command generates static content into the `build` directory and can be served using any static contents hosting service.
+Run the following command at the root of your documentation, where your `docs.json` is located:
 
-### Deployment
+```
+mint dev
+```
 
-Deployment is done automatically via GitHub Actions when the Pull Request changes are merged to the `main` branch.
+View your local preview at `http://localhost:3000`.
+
+## Publishing changes
+
+Install our GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app) to propagate changes from your repo to your deployment. Changes are deployed to production automatically after pushing to the default branch.
+
+## Need help?
+
+### Troubleshooting
+
+- If your dev environment isn't running: Run `mint update` to ensure you have the most recent version of the CLI.
+- If a page loads as a 404: Make sure you are running in a folder with a valid `docs.json`.
+
+### Resources
+- [Mintlify documentation](https://mintlify.com/docs)
+- [Mintlify community](https://mintlify.com/community)

@@ -1,0 +1,115 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "aspen",
+  "name": "Codeflash Documentation",
+  "colors": {
+    "primary": "#2563EB",
+    "light": "#3B82F6",
+    "dark": "#1D4ED8"
+  },
+  "favicon": "/favicon.ico",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "🏠 Overview",
+            "pages": [
+              "index"
+            ]
+          },
+          {
+            "group": "🚀 Getting Started",
+            "pages": [
+              "getting-started/local-installation",
+              "getting-started/codeflash-github-actions"
+            ]
+          },
+          {
+            "group": "⚡ Optimization Workflows",
+            "pages": [
+              "optimizing-with-codeflash/one-function",
+              "optimizing-with-codeflash/trace-and-optimize",
+              "optimizing-with-codeflash/codeflash-all",
+              {
+                "group": "CI/CD Integration",
+                "pages": [
+                  "optimizing-with-codeflash/optimize-prs",
+                  "optimizing-with-codeflash/benchmarking"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "🧠 Core Concepts",
+            "pages": [
+              "codeflash-concepts/how-codeflash-works",
+              "codeflash-concepts/benchmarking"
+            ]
+          },
+          {
+            "group": "⚙️ Configuration & Best Practices",
+            "pages": [
+              "configuration",
+              "getting-the-best-out-of-codeflash"
+            ]
+          }
+        ]
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "GitHub",
+          "href": "https://github.com/codeflash-ai",
+          "icon": "github"
+        },
+        {
+          "anchor": "Discord",
+          "href": "https://www.codeflash.ai/discord",
+          "icon": "discord"
+        }
+      ]
+    }
+  },
+  "logo": {
+    "light": "/images/codeflash_light.svg",
+    "dark": "/images/codeflash_darkmode.svg"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Contact",
+        "href": "mailto:contact@codeflash.ai"
+      },
+      {
+        "label": "Blog",
+        "href": "https://www.codeflash.ai/blog"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Try Codeflash",
+      "href": "https://www.codeflash.ai"
+    }
+  },
+  "contextual": {
+    "options": [
+      "copy"
+    ]
+  },
+  "redirects": [
+    {
+      "source": "/docs/:path*",
+      "destination": "/:path*"
+    }
+  ],
+  "footer": {
+    "socials": {
+      "discord": "https://www.codeflash.ai/discord",
+      "github": "https://github.com/codeflash-ai",
+      "linkedin": "https://www.linkedin.com/company/codeflash-ai"
+    }
+  }
+}

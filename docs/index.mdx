@@ -1,8 +1,10 @@
 ---
-sidebar_position: 1
-slug: /
+title: "What is Codeflash?"
+description: "AI-powered Python performance optimizer that automatically speeds up your code while verifying correctness"
+icon: "rocket"
+sidebarTitle: "Overview"
+keywords: ["python", "performance", "optimization", "AI", "code analysis", "benchmarking"]
 ---
-# What is Codeflash?
 
 Welcome! Codeflash is an AI performance optimizer for Python code.
 Codeflash speeds up Python code by figuring out the best way to rewrite your code while verifying that the behavior of the code is unchanged.
@@ -25,14 +27,35 @@ This is a great way to ensure that your code, your team's code and your AI Agent
 
 ### Features
 
-<!--- TODO: Add links to the relevant sections of the documentation and style the table --->
+<CardGroup cols={1}>
+  <Card title="Optimize a Single Function" icon="bullseye" href="/optimizing-with-codeflash/one-function">
+    Target and optimize individual Python functions for maximum performance gains.
+    ```bash
+    codeflash --file path.py --function my_function
+    ```
+  </Card>
 
-| Feature                                                                      | Usage                                             | Description                                                                                                                                                  |
-|------------------------------------------------------------------------------|---------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [Optimize a single function](optimizing-with-codeflash/one-function)         | `codeflash --file path.py --function my_function` | Basic unit of optimization by asking Codeflash to optimize a particular function                                                                             |
-| [Optimize an entire workflow](optimizing-with-codeflash/trace-and-optimize)  | `codeflash optimize myscript.py`                  | End to end optimization for all the functions called in a workflow, by tracing to collect real inputs to ensure correctness and e2e performance optimization |
-| [Optimize all code in a repo](optimizing-with-codeflash/codeflash-all)       | `codeflash --all`                                 | Codeflash discovers all functions in a repo and optimizes all of them!                                                                                       |
-| [Optimize every new pull request](optimizing-with-codeflash/optimize-prs)    | `codeflash init-actions`                          | Codeflash runs as a GitHub action and GitHub app and suggests optimizations for all new code in a Pull Request.                                              |
+  <Card title="Trace & Optimize Workflows" icon="route" href="/optimizing-with-codeflash/trace-and-optimize">
+    End-to-end optimization of entire Python workflows with execution tracing.
+    ```bash
+    codeflash optimize myscript.py
+    ```
+  </Card>
+
+  <Card title="Optimize Your Entire Codebase" icon="database" href="/optimizing-with-codeflash/codeflash-all">
+    Automatically optimize all functions in your project with comprehensive analysis.
+    ```bash
+    codeflash --all
+    ```
+  </Card>
+
+  <Card title="Optimize Pull Requests" icon="git-pull-request" href="/optimizing-with-codeflash/optimize-prs">
+    Automatically optimize code changes in pull requests with GitHub Actions integration.
+    ```bash
+    codeflash init-actions
+    ```
+  </Card>
+</CardGroup>
 
 
 ## How to use these docs
