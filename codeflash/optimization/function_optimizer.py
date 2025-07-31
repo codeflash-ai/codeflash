@@ -19,7 +19,7 @@ from rich.syntax import Syntax
 from rich.tree import Tree
 
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
-from codeflash.api.cfapi import add_code_context_hash, mark_optimization_success
+from codeflash.api.cfapi import add_code_context_hash, create_staging, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
@@ -1088,69 +1088,98 @@ class FunctionOptimizer:
                 original_code_combined[explanation.file_path] = self.function_to_optimize_source_code
                 new_code_combined = new_helper_code.copy()
                 new_code_combined[explanation.file_path] = new_code
-                if not self.args.no_pr:
-                    coverage_message = (
-                        original_code_baseline.coverage_results.build_message()
-                        if original_code_baseline.coverage_results
-                        else "Coverage data not available"
-                    )
-                    generated_tests = remove_functions_from_generated_tests(
-                        generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
-                    )
-                    original_runtime_by_test = (
-                        original_code_baseline.benchmarking_test_results.usable_runtime_data_by_test_case()
-                    )
-                    optimized_runtime_by_test = (
-                        best_optimization.winning_benchmarking_test_results.usable_runtime_data_by_test_case()
-                    )
-                    qualified_name = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
-                    # Add runtime comments to generated tests before creating the PR
-                    generated_tests = add_runtime_comments_to_generated_tests(
-                        generated_tests, original_runtime_by_test, optimized_runtime_by_test
-                    )
-                    generated_tests_str = "\n\n".join(
-                        [test.generated_original_test_source for test in generated_tests.generated_tests]
-                    )
-                    existing_tests = existing_tests_source_for(
-                        qualified_name,
-                        function_to_all_tests,
-                        test_cfg=self.test_cfg,
-                        original_runtimes_all=original_runtime_by_test,
-                        optimized_runtimes_all=optimized_runtime_by_test,
-                    )
-                    if concolic_test_str:
-                        generated_tests_str += "\n\n" + concolic_test_str
-
-                    check_create_pr(
-                        original_code=original_code_combined,
-                        new_code=new_code_combined,
-                        explanation=explanation,
-                        existing_tests_source=existing_tests,
-                        generated_original_test_source=generated_tests_str,
-                        function_trace_id=self.function_trace_id[:-4] + exp_type
-                        if self.experiment_id
-                        else self.function_trace_id,
-                        coverage_message=coverage_message,
-                        git_remote=self.args.git_remote,
-                    )
-                    if (
-                        self.args.all
-                        or env_utils.get_pr_number()
-                        or self.args.replay_test
-                        or (self.args.file and not self.args.function)
-                    ):
-                        self.write_code_and_helpers(
-                            self.function_to_optimize_source_code,
-                            original_helper_code,
-                            self.function_to_optimize.file_path,
-                        )
-                else:
-                    # Mark optimization success since no PR will be created
-                    mark_optimization_success(
-                        trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
-                    )
+                self.process_review(
+                    original_code_baseline,
+                    best_optimization,
+                    generated_tests,
+                    test_functions_to_remove,
+                    concolic_test_str,
+                    original_code_combined,
+                    new_code_combined,
+                    explanation,
+                    function_to_all_tests,
+                    exp_type,
+                    original_helper_code,
+                )
                 self.log_successful_optimization(explanation, generated_tests, exp_type)
         return best_optimization
+
+    def process_review(
+        self,
+        original_code_baseline: OriginalCodeBaseline,
+        best_optimization: BestOptimization,
+        generated_tests: GeneratedTestsList,
+        test_functions_to_remove: list[str],
+        concolic_test_str: str | None,
+        original_code_combined: dict[Path, str],
+        new_code_combined: dict[Path, str],
+        explanation: Explanation,
+        function_to_all_tests: dict[str, set[FunctionCalledInTest]],
+        exp_type: str,
+        original_helper_code: dict[Path, str],
+    ) -> None:
+        coverage_message = (
+            original_code_baseline.coverage_results.build_message()
+            if original_code_baseline.coverage_results
+            else "Coverage data not available"
+        )
+
+        generated_tests = remove_functions_from_generated_tests(
+            generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
+        )
+
+        original_runtime_by_test = original_code_baseline.benchmarking_test_results.usable_runtime_data_by_test_case()
+        optimized_runtime_by_test = (
+            best_optimization.winning_benchmarking_test_results.usable_runtime_data_by_test_case()
+        )
+
+        generated_tests = add_runtime_comments_to_generated_tests(
+            generated_tests, original_runtime_by_test, optimized_runtime_by_test
+        )
+
+        generated_tests_str = "\n\n".join(
+            [test.generated_original_test_source for test in generated_tests.generated_tests]
+        )
+        if concolic_test_str:
+            generated_tests_str += "\n\n" + concolic_test_str
+
+        existing_tests = existing_tests_source_for(
+            self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
+            function_to_all_tests,
+            test_cfg=self.test_cfg,
+            original_runtimes_all=original_runtime_by_test,
+            optimized_runtimes_all=optimized_runtime_by_test,
+        )
+
+        data = {
+            "original_code": original_code_combined,
+            "new_code": new_code_combined,
+            "explanation": explanation,
+            "existing_tests_source": existing_tests,
+            "generated_original_test_source": generated_tests_str,
+            "function_trace_id": self.function_trace_id[:-4] + exp_type
+            if self.experiment_id
+            else self.function_trace_id,
+            "coverage_message": coverage_message,
+        }
+
+        if not self.args.no_pr and not self.args.staging_review:
+            data["git_remote"] = self.args.git_remote
+            check_create_pr(**data)
+        elif self.args.staging_review:
+            create_staging(**data)
+        else:
+            # Mark optimization success since no PR will be created
+            mark_optimization_success(
+                trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
+            )
+
+        if ((not self.args.no_pr) or not self.args.staging_review) and (
+            self.args.all or env_utils.get_pr_number() or (self.args.file and not self.args.function)
+        ):
+            self.write_code_and_helpers(
+                self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+            )
 
     def establish_original_code_baseline(
         self,
