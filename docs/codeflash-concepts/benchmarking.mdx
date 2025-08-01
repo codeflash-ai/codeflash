@@ -1,5 +1,9 @@
 ---
-sidebar_position: 2
+title: "How Codeflash Measures Code Runtime"
+description: "Learn how Codeflash accurately measures code performance using multiple runs and minimum timing"
+icon: "stopwatch"
+sidebarTitle: "Runtime Measurement"
+keywords: ["benchmarking", "performance", "timing", "measurement", "runtime", "noise reduction"]
 ---
 
 # How Codeflash measures code runtime
@@ -70,7 +74,7 @@ You ask the driver to repeat the race multiple times. In this scenario, since th
 
 This gives us timing data (in hours) that looks like the following.
 
-![img_2.png](img_2.png)
+![img_2.png](./img_2.png)
 
 With 100 data points (50 per train), determining the faster train becomes more complex.
 
@@ -120,7 +124,7 @@ We can only measure times between adjacent stations.
 
 Here is how the timing data looks like (in hours):
 
-![img_1.png](img_1.png)
+![img_1.png](./img_1.png)
 
 With 300 data points (50 runs × 3 segments × 2 trains) and varying conditions on each segment, 
 determining the faster train becomes even more challenging.
