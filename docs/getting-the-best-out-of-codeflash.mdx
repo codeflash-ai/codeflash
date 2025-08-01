@@ -8,21 +8,26 @@ keywords: ["best practices", "tips", "github actions", "tracer", "optimization",
 
 # Getting the best out of Codeflash
 
-Codeflash is a powerful tool; here are our recommendations, tips and tricks on getting the best out of it. We do these ourselves, so we hope you will too!
+Codeflash is a powerful tool; here are our recommendations based on how the Codeflash team uses Codeflash.
 
 ### Install the Github App and actions workflow
 
 After you install Codeflash on an actively developed project, [installing the GitHub App](getting-started/codeflash-github-actions) and setting up the
 GitHub Actions workflow will automatically optimize your code whenever new pull requests are opened. This ensures you get the best version of any changes you make to your code without any extra effort. We find that PRs are also the best time to review these changes, because the code is fresh in your mind.
 
+### Find and optimize entire scripts with the Codeflash Tracer
+
+Find the best results by running [Codeflash Optimize](optimizing-with-codeflash/trace-and-optimize) on your script to optimize it.
+This internally runs a profiler, captures inputs to all the functions your script calls, and uses those inputs to create Replay tests and benchmarks.
+The optimizations you get with this method, show you how much faster your workflow will get plus guarantee that your workflow won't break if you merge in the optimizations.
+
+###
+
 ### Find optimizations on your whole codebase with `codeflash --all`
 
 If you have a lot of existing code, run [`codeflash --all`](optimizing-with-codeflash/codeflash-all) to discover and fix any
 slow code in your project. Codeflash will open new pull requests for any optimizations it finds, and you can review and merge them at your own pace.
 
-### Find and optimize bottlenecks with the Codeflash Tracer
-
-Find the best results by running [Codeflash Tracer](optimizing-with-codeflash/trace-and-optimize) on the entry point of your script before optimizing it. The Codeflash Tracer will generate a trace file and a Replay Test file that will help Codeflash understand the behavior & inputs of your functions and generate the highest quality optimizations.
 
 ### Review the PRs Codeflash opens
 
