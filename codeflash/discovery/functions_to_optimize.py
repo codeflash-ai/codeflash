@@ -221,6 +221,7 @@ def get_functions_to_optimize(
                 f"It might take about {humanize_runtime(functions_count * three_min_in_ns)} to fully optimize this project. Codeflash "
                 f"will keep opening pull requests as it finds optimizations."
             )
+        console.rule()
         return filtered_modified_functions, functions_count, trace_file_path
 
 

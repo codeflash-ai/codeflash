@@ -269,6 +269,7 @@ class Optimizer:
             ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
             if num_optimizable_functions == 0:
                 logger.info("No functions found to optimize. Exiting…")
+                console.rule()
                 return
 
             function_to_tests, _ = self.discover_tests(file_to_funcs_to_optimize)
