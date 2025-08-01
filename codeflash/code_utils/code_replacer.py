@@ -4,7 +4,6 @@ import ast
 from collections import defaultdict
 from functools import lru_cache
 from typing import TYPE_CHECKING, Optional, TypeVar
-from warnings import deprecated
 
 import isort
 import libcst as cst
@@ -433,7 +432,6 @@ def is_zero_diff(original_code: str, new_code: str) -> bool:
     return normalize_code(original_code) == normalize_code(new_code)
 
 
-@deprecated("")
 def replace_optimized_code(
     callee_module_paths: set[Path],
     candidates: list[OptimizedCandidate],
