@@ -102,6 +102,13 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
                 FunctionToOptimize(function_name=node.name, file_path=self.file_path, parents=self.ast_path[:])
             )
 
+    def visit_AsyncFunctionDef(self, node: AsyncFunctionDef) -> None:
+        # Check if the async function has a return statement and add it to the list
+        if function_has_return_statement(node) and not function_is_a_property(node):
+            self.functions.append(
+                FunctionToOptimize(function_name=node.name, file_path=self.file_path, parents=self.ast_path[:])
+            )
+
     def generic_visit(self, node: ast.AST) -> None:
         if isinstance(node, (FunctionDef, AsyncFunctionDef, ClassDef)):
             self.ast_path.append(FunctionParent(node.name, node.__class__.__name__))
