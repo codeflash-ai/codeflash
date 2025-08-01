@@ -169,8 +169,6 @@ class FunctionOptimizer:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
 
-        if has_any_async_functions(code_context.read_writable_code):
-            return Failure("Codeflash does not support async functions in the code to optimize.")
         # Random here means that we still attempt optimization with a fractional chance to see if
         # last time we could not find an optimization, maybe this time we do.
         # Random is before as a performance optimization, swapping the two 'and' statements has the same effect
