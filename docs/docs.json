@@ -22,8 +22,15 @@
           {
             "group": "🚀 Getting Started",
             "pages": [
-              "getting-started/local-installation",
-              "getting-started/codeflash-github-actions"
+              "getting-started/local-installation"
+            ]
+          },
+          {
+            "group": "🔧 CI/CD Integration",
+            "pages": [
+              "getting-started/codeflash-github-actions",
+              "optimizing-with-codeflash/optimize-prs",
+              "optimizing-with-codeflash/benchmarking"
             ]
           },
           {
@@ -31,14 +38,7 @@
             "pages": [
               "optimizing-with-codeflash/one-function",
               "optimizing-with-codeflash/trace-and-optimize",
-              "optimizing-with-codeflash/codeflash-all",
-              {
-                "group": "CI/CD Integration",
-                "pages": [
-                  "optimizing-with-codeflash/optimize-prs",
-                  "optimizing-with-codeflash/benchmarking"
-                ]
-              }
+              "optimizing-with-codeflash/codeflash-all"
             ]
           },
           {
