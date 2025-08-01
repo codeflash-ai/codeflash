@@ -110,7 +110,7 @@ class FunctionOptimizer:
         test_cfg: TestConfig,
         function_to_optimize_source_code: str = "",
         function_to_tests: dict[str, set[FunctionCalledInTest]] | None = None,
-        function_to_optimize_ast: ast.FunctionDef | None = None,
+        function_to_optimize_ast: ast.FunctionDef | ast.AsyncFunctionDef | None = None,
         aiservice_client: AiServiceClient | None = None,
         function_benchmark_timings: dict[BenchmarkKey, int] | None = None,
         total_benchmark_timings: dict[BenchmarkKey, int] | None = None,

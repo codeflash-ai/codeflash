@@ -128,13 +128,19 @@ def get_first_top_level_object_def_ast(
 
 def get_first_top_level_function_or_method_ast(
     function_name: str, parents: list[FunctionParent], node: ast.AST
-) -> ast.FunctionDef | None:
+) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
     if not parents:
-        return get_first_top_level_object_def_ast(function_name, ast.FunctionDef, node)
+        result = get_first_top_level_object_def_ast(function_name, ast.FunctionDef, node)
+        if result is None:
+            result = get_first_top_level_object_def_ast(function_name, ast.AsyncFunctionDef, node)
+        return result
     if parents[0].type == "ClassDef" and (
         class_node := get_first_top_level_object_def_ast(parents[0].name, ast.ClassDef, node)
     ):
-        return get_first_top_level_object_def_ast(function_name, ast.FunctionDef, class_node)
+        result = get_first_top_level_object_def_ast(function_name, ast.FunctionDef, class_node)
+        if result is None:
+            result = get_first_top_level_object_def_ast(function_name, ast.AsyncFunctionDef, class_node)
+        return result
     return None
 
 
