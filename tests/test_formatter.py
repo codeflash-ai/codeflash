@@ -263,7 +263,7 @@ def _run_formatting_test(source_code: str, should_content_change: bool, expected
             helper_functions=[],
             path=target_path,
             original_code=optimizer.function_to_optimize_source_code,
-            optimized_function=optimized_function,
+            optimized_code=optimized_function,
         )
 
         content = target_path.read_text(encoding="utf8")

@@ -157,6 +157,7 @@ class CodeString(BaseModel):
     file_path: Optional[Path] = None
 
 
+# Used to split files by adding a marker at the start of each file followed by the file path.
 LINE_SPLITTER_MARKER_PREFIX = "# codeflash-splitter__"
 
 
@@ -188,17 +189,17 @@ class CodeStringsMarkdown(BaseModel):
         )
 
     @staticmethod
-    def parse_splitter_markers(code_with_markers: str) -> dict[str, str]:
+    def parse_splitter_markers(code_with_markers: str) -> CodeStringsMarkdown:
         pattern = rf"{LINE_SPLITTER_MARKER_PREFIX}([^\n]+)\n"
         matches = list(re.finditer(pattern, code_with_markers))
 
-        results = {}
+        results = CodeStringsMarkdown()
         for i, match in enumerate(matches):
             start = match.end()
             end = matches[i + 1].start() if i + 1 < len(matches) else len(code_with_markers)
             file_path = match.group(1).strip()
             code = code_with_markers[start:end].lstrip("\n")
-            results[file_path] = code
+            results.code_strings.append(CodeString(code=code, file_path=Path(file_path)))
         return results
 
 
@@ -303,7 +304,7 @@ class TestsInFile:
 
 @dataclass(frozen=True)
 class OptimizedCandidate:
-    source_code: str
+    source_code: CodeStringsMarkdown
     explanation: str
     optimization_id: str
 
