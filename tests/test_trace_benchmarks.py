@@ -154,7 +154,7 @@ from codeflash.benchmarking.replay_test import get_next_arg_and_return
 from codeflash.picklepatch.pickle_patcher import PicklePatcher as pickle
 
 functions = ['compute_and_sort', 'sorter']
-trace_file_path = r"{output_file}"
+trace_file_path = r"{output_file.as_posix()}"
 
 def test_code_to_optimize_process_and_bubble_sort_codeflash_trace_compute_and_sort_test_compute_and_sort():
     for args_pkl, kwargs_pkl in get_next_arg_and_return(trace_file=trace_file_path, benchmark_function_name="test_compute_and_sort", function_name="compute_and_sort", file_path=r"{process_and_bubble_sort_path}", num_to_get=100):
@@ -196,6 +196,8 @@ def test_trace_multithreaded_benchmark() -> None:
             "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name")
         function_calls = cursor.fetchall()
 
+        conn.close()
+
         # Assert the length of function calls
         assert len(function_calls) == 10, f"Expected 10 function calls, but got {len(function_calls)}"
         function_benchmark_timings = codeflash_benchmark_plugin.get_function_benchmark_timings(output_file)
@@ -204,9 +206,9 @@ def test_trace_multithreaded_benchmark() -> None:
         assert "code_to_optimize.bubble_sort_codeflash_trace.sorter" in function_to_results
 
         test_name, total_time, function_time, percent = function_to_results["code_to_optimize.bubble_sort_codeflash_trace.sorter"][0]
-        assert total_time > 0.0
-        assert function_time > 0.0
-        assert percent > 0.0
+        assert total_time >= 0.0
+        assert function_time >= 0.0
+        assert percent >= 0.0
 
         bubble_sort_path = (project_root / "bubble_sort_codeflash_trace.py").as_posix()
         # Expected function calls

@@ -165,7 +165,7 @@ class CodeStringsMarkdown(BaseModel):
         """Returns the markdown representation of the code, including the file path where possible."""
         return "\n".join(
             [
-                f"```python{':' + str(code_string.file_path) if code_string.file_path else ''}\n{code_string.code.strip()}\n```"
+                f"```python{':' + code_string.file_path.as_posix() if code_string.file_path else ''}\n{code_string.code.strip()}\n```"
                 for code_string in self.code_strings
             ]
         )
