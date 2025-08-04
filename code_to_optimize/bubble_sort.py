@@ -8,4 +8,3 @@ def sorter(arr):
                 arr[j + 1] = temp
     print(f"result: {arr}")
     return arr
-    
