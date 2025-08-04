@@ -8,6 +8,11 @@
     "dark": "#1D4ED8"
   },
   "favicon": "/favicon.ico",
+  "integrations": {
+    "intercom": {
+          "appId": "ljxo1nzr"
+    }
+  },
   "navigation": {
     "tabs": [
       {
@@ -26,7 +31,7 @@
             ]
           },
           {
-            "group": "🔧 CI/CD Integration",
+            "group": "🔧 Continuous Optimization",
             "pages": [
               "getting-started/codeflash-github-actions",
               "optimizing-with-codeflash/optimize-prs",
