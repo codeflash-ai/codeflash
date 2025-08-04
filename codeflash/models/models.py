@@ -198,7 +198,7 @@ class CodeStringsMarkdown(BaseModel):
 
     @staticmethod
     def parse_flattened_code(flat_code: str) -> CodeStringsMarkdown:
-        pattern = rf"{LINE_SPLITTER_MARKER_PREFIX}([^\n]+)\n"
+        pattern = rf"^{LINE_SPLITTER_MARKER_PREFIX}([^\n]+)\n"
         matches = list(re.finditer(pattern, flat_code))
 
         results = CodeStringsMarkdown()
