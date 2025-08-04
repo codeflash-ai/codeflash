@@ -1,7 +1,10 @@
 ---
-sidebar_position: 4
+title: "Trace & Optimize Workflows"
+description: "End-to-end optimization of entire Python workflows with execution tracing"
+icon: "route"
+sidebarTitle: "Trace & Optimize"
+keywords: ["tracing", "workflow optimization", "replay tests", "end-to-end", "script optimization", "context manager"]
 ---
-# Optimize Workflows End-to-End
 
 Codeflash supports optimizing an entire Python script end-to-end by tracing the script's execution and generating Replay Tests. Tracing follows the execution of a script, profiles it and captures inputs to all called functions, allowing them to be replayed during optimization. Codeflash uses these Replay Tests to optimize all functions called in the script, starting from the most important ones.
 
@@ -20,6 +23,11 @@ codeflash optimize -m pytest tests/
 This powerful command creates high-quality optimizations, making it ideal when you need to optimize a workflow or script. The initial tracing process can be slow, so try to limit your script's runtime to under 1 minute for best results. If your workflow is longer, consider tracing it into smaller sections by using the Codeflash tracer as a context manager (point 3 below).
 
 The generated replay tests and the trace file are for the immediate optimization use, don't add them to git.
+
+## Codeflash optimize 1 min demo
+
+<iframe width="640" height="400" src="https://www.youtube.com/embed/_nwliGzRIug" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+
 
 ## What is the codeflash optimize command?
 
