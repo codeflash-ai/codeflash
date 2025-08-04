@@ -1187,6 +1187,7 @@ class FunctionOptimizer:
 
         if not self.args.no_pr and not self.args.staging_review:
             data["git_remote"] = self.args.git_remote
+            data["exp_type"] = exp_type
             check_create_pr(**data)
         elif self.args.staging_review:
             create_staging(**data)
