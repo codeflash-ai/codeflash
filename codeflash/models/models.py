@@ -165,6 +165,9 @@ def get_code_block_splitter(file_path: Path) -> str:
     return f"{LINE_SPLITTER_MARKER_PREFIX}{file_path}"
 
 
+splitter_pattern = re.compile(f"^{LINE_SPLITTER_MARKER_PREFIX}([^\n]+)\n", re.MULTILINE | re.DOTALL)
+
+
 class CodeStringsMarkdown(BaseModel):
     code_strings: list[CodeString] = []
     _cache: dict = PrivateAttr(default_factory=dict)
@@ -198,9 +201,7 @@ class CodeStringsMarkdown(BaseModel):
 
     @staticmethod
     def parse_flattened_code(flat_code: str) -> CodeStringsMarkdown:
-        pattern = rf"^{LINE_SPLITTER_MARKER_PREFIX}([^\n]+)\n"
-        matches = list(re.finditer(pattern, flat_code))
-
+        matches = list(splitter_pattern.finditer(flat_code))
         results = CodeStringsMarkdown()
         for i, match in enumerate(matches):
             start = match.end()

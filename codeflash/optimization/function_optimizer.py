@@ -735,7 +735,7 @@ class FunctionOptimizer:
             if scoped_optimized_code is None:
                 logger.warning(
                     f"Optimized code not found for {relative_module_path} In the context\n-------\n{optimized_code}\n-------\n"
-                    "Existing files in the context are: {list(file_to_code_context.keys())}, re-check your 'split markers'"
+                    "re-check your 'split markers'"
                     f"existing files are {file_to_code_context.keys()}"
                 )
                 scoped_optimized_code = ""
