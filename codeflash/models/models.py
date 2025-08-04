@@ -158,7 +158,7 @@ class CodeString(BaseModel):
 
 
 # Used to split files by adding a marker at the start of each file followed by the file path.
-LINE_SPLITTER_MARKER_PREFIX = "# codeflash-splitter__"
+LINE_SPLITTER_MARKER_PREFIX = "# --codeflash:file--"
 
 
 def get_code_block_splitter(file_path: Path) -> str:
