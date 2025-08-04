@@ -375,6 +375,7 @@ class FunctionOptimizer:
         )
         console.rule()
         candidates = deque(candidates)
+        refinement_done = False
         future_all_refinements: list[concurrent.futures.Future] = []
         # Start a new thread for AI service request, start loop in main thread
         # check if aiservice request is complete, when it is complete, append result to the candidates list
@@ -516,18 +517,19 @@ class FunctionOptimizer:
                             )
                             self.valid_optimizations.append(best_optimization)
                             # queue corresponding refined optimization for best optimization
-                            future_all_refinements.append(
-                                self.refine_optimizations(
-                                    valid_optimizations=[best_optimization],
-                                    original_code_baseline=original_code_baseline,
-                                    code_context=code_context,
-                                    trace_id=self.function_trace_id[:-4] + exp_type
-                                    if self.experiment_id
-                                    else self.function_trace_id,
-                                    ai_service_client=ai_service_client,
-                                    executor=executor,
+                            if not candidate.optimization_id.endswith("refi"):
+                                future_all_refinements.append(
+                                    self.refine_optimizations(
+                                        valid_optimizations=[best_optimization],
+                                        original_code_baseline=original_code_baseline,
+                                        code_context=code_context,
+                                        trace_id=self.function_trace_id[:-4] + exp_type
+                                        if self.experiment_id
+                                        else self.function_trace_id,
+                                        ai_service_client=ai_service_client,
+                                        executor=executor,
+                                    )
                                 )
-                            )
                         else:
                             tree.add(
                                 f"Summed runtime: {humanize_runtime(best_test_runtime)} "
@@ -545,9 +547,9 @@ class FunctionOptimizer:
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
 
-                    if (not len(candidates)) and (
-                        not line_profiler_done
-                    ):  # all original candidates processed but lp results haven't been processed
+                    if (
+                        (not len(candidates)) and (not line_profiler_done)
+                    ):  # all original candidates processed but lp results haven't been processed, doesn't matter at the moment if we're done refining or not
                         concurrent.futures.wait([future_line_profile_results])
                         line_profile_results = future_line_profile_results.result()
                         candidates.extend(line_profile_results)
@@ -556,16 +558,19 @@ class FunctionOptimizer:
                             f"Added results from line profiler to candidates, total candidates now: {original_len}"
                         )
                         future_line_profile_results = None
-                    # all original candidates and lp andidates processed
-                    if (not len(candidates)) and line_profiler_done:
-                        # waiting just in case not all calls are finished
+                    # all original candidates and lp candidates processed, collect refinement candidates and append to candidate list
+                    if (not len(candidates)) and line_profiler_done and not refinement_done:
+                        # waiting just in case not all calls are finished, nothing else to do
                         concurrent.futures.wait(future_all_refinements)
-                        refinement_response = [
-                            future_refinement.result() for future_refinement in future_all_refinements
-                        ]
+                        refinement_response = []
+                        for future_refinement in future_all_refinements:
+                            possible_refinement = future_refinement.result()
+                            if len(possible_refinement) > 0:  # if the api returns a valid response
+                                refinement_response.append(possible_refinement[0])
                         candidates.extend(refinement_response)
-                        print("Added candidates from refinement")
+                        logger.info(f"Added {len(refinement_response)} candidates from refinement")
                         original_len += len(refinement_response)
+                        refinement_done = True
             except KeyboardInterrupt as e:
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
