@@ -65,7 +65,6 @@ from codeflash.models.models import (
     LINE_SPLITTER_MARKER_PREFIX,
     BestOptimization,
     CodeOptimizationContext,
-    CodeStringsMarkdown,
     GeneratedTests,
     GeneratedTestsList,
     OptimizationSet,
@@ -97,6 +96,7 @@ if TYPE_CHECKING:
     from codeflash.either import Result
     from codeflash.models.models import (
         BenchmarkKey,
+        CodeStringsMarkdown,
         CoverageData,
         FunctionCalledInTest,
         FunctionSource,
@@ -419,7 +419,7 @@ class FunctionOptimizer:
                     try:
                         did_update = self.replace_function_and_helpers_with_optimized_code(
                             code_context=code_context,
-                            optimized_code=candidate.source_code.flat,
+                            optimized_code=candidate.source_code,
                             original_helper_code=original_helper_code,
                         )
                         if not did_update:
@@ -680,11 +680,20 @@ class FunctionOptimizer:
                 f.write(helper_code)
 
     def reformat_code_and_helpers(
-        self, helper_functions: list[FunctionSource], path: Path, original_code: str, optimized_code: str
+        self,
+        helper_functions: list[FunctionSource],
+        path: Path,
+        original_code: str,
+        optimized_context: CodeStringsMarkdown,
     ) -> tuple[str, dict[Path, str]]:
         should_sort_imports = not self.args.disable_imports_sorting
         if should_sort_imports and isort.code(original_code) != original_code:
             should_sort_imports = False
+
+        optimized_code = ""
+        if optimized_context is not None:
+            file_to_code_context = optimized_context.file_to_path()
+            optimized_code = file_to_code_context.get(str(path.relative_to(self.project_root)), "")
 
         new_code = format_code(self.args.formatter_cmds, path, optimized_code=optimized_code, check_diff=True)
         if should_sort_imports:
@@ -704,7 +713,7 @@ class FunctionOptimizer:
         return new_code, new_helper_code
 
     def replace_function_and_helpers_with_optimized_code(
-        self, code_context: CodeOptimizationContext, optimized_code: str, original_helper_code: str
+        self, code_context: CodeOptimizationContext, optimized_code: CodeStringsMarkdown, original_helper_code: str
     ) -> bool:
         did_update = False
         read_writable_functions_by_file_path = defaultdict(set)
@@ -712,8 +721,7 @@ class FunctionOptimizer:
             self.function_to_optimize.qualified_name
         )
 
-        code_strings = CodeStringsMarkdown.parse_splitter_markers(optimized_code).code_strings
-        file_to_code_context = {str(code_string.file_path): code_string.code for code_string in code_strings}
+        file_to_code_context = optimized_code.file_to_path()
 
         for helper_function in code_context.helper_functions:
             if helper_function.jedi_definition.type != "class":
@@ -739,7 +747,7 @@ class FunctionOptimizer:
                 preexisting_objects=code_context.preexisting_objects,
                 project_root_path=self.project_root,
             )
-        unused_helpers = detect_unused_helper_functions(self.function_to_optimize, code_context, optimized_code)
+        unused_helpers = detect_unused_helper_functions(self.function_to_optimize, code_context, optimized_code.flat)
 
         # Revert unused helper functions to their original definitions
         if unused_helpers:
@@ -1092,7 +1100,7 @@ class FunctionOptimizer:
 
                 self.replace_function_and_helpers_with_optimized_code(
                     code_context=code_context,
-                    optimized_code=best_optimization.candidate.source_code.flat,
+                    optimized_code=best_optimization.candidate.source_code,
                     original_helper_code=original_helper_code,
                 )
 
@@ -1100,7 +1108,7 @@ class FunctionOptimizer:
                     code_context.helper_functions,
                     explanation.file_path,
                     self.function_to_optimize_source_code,
-                    optimized_code=best_optimization.candidate.source_code.flat,
+                    optimized_context=best_optimization.candidate.source_code,
                 )
 
                 original_code_combined = original_helper_code.copy()
@@ -1173,8 +1181,9 @@ class FunctionOptimizer:
         )
         new_explanation_raw_str = self.aiservice_client.get_new_explanation(
             source_code=code_context.read_writable_code.flat.replace(
-                LINE_SPLITTER_MARKER_PREFIX, "# file: "
-            ),  # for better readability to the LLM
+                LINE_SPLITTER_MARKER_PREFIX,
+                "# file: ",  # for better readability
+            ),
             dependency_code=code_context.read_only_context_code,
             trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
             optimized_code=best_optimization.candidate.source_code.flat.replace(

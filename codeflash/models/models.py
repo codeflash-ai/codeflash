@@ -19,7 +19,7 @@ from re import Pattern
 from typing import Annotated, Optional, cast
 
 from jedi.api.classes import Name
-from pydantic import AfterValidator, BaseModel, ConfigDict
+from pydantic import AfterValidator, BaseModel, ConfigDict, PrivateAttr
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
@@ -167,16 +167,16 @@ def get_code_block_splitter(file_path: Path) -> str:
 
 class CodeStringsMarkdown(BaseModel):
     code_strings: list[CodeString] = []
-    cached_code: Optional[str] = None
+    _cache: dict = PrivateAttr(default_factory=dict)
 
     @property
     def flat(self) -> str:
-        if self.cached_code is not None:
-            return self.cached_code
-        self.cached_code = "\n".join(
+        if self._cache.get("flat") is not None:
+            return self._cache["flat"]
+        self._cache["flat"] = "\n".join(
             get_code_block_splitter(block.file_path) + "\n" + block.code for block in self.code_strings
         )
-        return self.cached_code
+        return self._cache["flat"]
 
     @property
     def markdown(self) -> str:
@@ -188,17 +188,25 @@ class CodeStringsMarkdown(BaseModel):
             ]
         )
 
+    def file_to_path(self) -> dict[str, str]:
+        if self._cache.get("file_to_path") is not None:
+            return self._cache["file_to_path"]
+        self._cache["file_to_path"] = {
+            str(code_string.file_path): code_string.code for code_string in self.code_strings
+        }
+        return self._cache["file_to_path"]
+
     @staticmethod
-    def parse_splitter_markers(code_with_markers: str) -> CodeStringsMarkdown:
+    def parse_flattened_code(flat_code: str) -> CodeStringsMarkdown:
         pattern = rf"{LINE_SPLITTER_MARKER_PREFIX}([^\n]+)\n"
-        matches = list(re.finditer(pattern, code_with_markers))
+        matches = list(re.finditer(pattern, flat_code))
 
         results = CodeStringsMarkdown()
         for i, match in enumerate(matches):
             start = match.end()
-            end = matches[i + 1].start() if i + 1 < len(matches) else len(code_with_markers)
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(flat_code)
             file_path = match.group(1).strip()
-            code = code_with_markers[start:end].lstrip("\n")
+            code = flat_code[start:end].lstrip("\n")
             results.code_strings.append(CodeString(code=code, file_path=Path(file_path)))
         return results
 

@@ -121,7 +121,6 @@ def format_code(
 
         if check_diff and original_code_lines > 50:
             # we dont' count the formatting diff for the optimized function as it should be well-formatted
-            # TODO: This is not correct, optimized_code is not continuous, Think of a better way for doing this.
             original_code_without_opfunc = original_code.replace(optimized_code, "")
 
             original_temp = Path(test_dir_str) / "original_temp.py"

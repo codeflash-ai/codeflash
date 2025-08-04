@@ -13,7 +13,7 @@ from codeflash.code_utils.code_replacer import (
     replace_functions_in_file,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeOptimizationContext, FunctionParent, get_code_block_splitter
+from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionParent, get_code_block_splitter
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
@@ -73,7 +73,7 @@ def sorter(arr):
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
+        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code=original_helper_code
     )
     final_output = code_path.read_text(encoding="utf-8")
     assert "inconsequential_var = '123'" in final_output
@@ -1742,7 +1742,7 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
+        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -1819,7 +1819,7 @@ a=2
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
+        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -1897,7 +1897,7 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
+        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -1974,7 +1974,7 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
+        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -2052,7 +2052,7 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
+        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -2141,7 +2141,7 @@ a = 6
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
+        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)

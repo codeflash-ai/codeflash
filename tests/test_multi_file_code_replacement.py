@@ -1,6 +1,6 @@
 from pathlib import Path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeOptimizationContext, get_code_block_splitter
+from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, get_code_block_splitter
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
@@ -117,7 +117,7 @@ def _get_string_usage(text: str) -> Usage:
 
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
+        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code=original_helper_code
     )
     new_code = main_file.read_text(encoding="utf-8")
     new_helper_code = helper_file.read_text(encoding="utf-8")
