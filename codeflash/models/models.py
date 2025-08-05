@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel
 from rich.tree import Tree
 
 from codeflash.cli_cmds.console import DEBUG_MODE
@@ -19,7 +20,7 @@ from re import Pattern
 from typing import Annotated, Optional, cast
 
 from jedi.api.classes import Name
-from pydantic import AfterValidator, BaseModel, ConfigDict, PrivateAttr
+from pydantic import AfterValidator, ConfigDict, PrivateAttr
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
@@ -192,12 +193,11 @@ class CodeStringsMarkdown(BaseModel):
         )
 
     def file_to_path(self) -> dict[str, str]:
-        if self._cache.get("file_to_path") is not None:
-            return self._cache["file_to_path"]
-        self._cache["file_to_path"] = {
-            str(code_string.file_path): code_string.code for code_string in self.code_strings
-        }
-        return self._cache["file_to_path"]
+        cache = self._cache
+        if cache.get("file_to_path") is not None:
+            return cache["file_to_path"]
+        cache["file_to_path"] = {str(code_string.file_path): code_string.code for code_string in self.code_strings}
+        return cache["file_to_path"]
 
     @staticmethod
     def parse_flattened_code(flat_code: str) -> CodeStringsMarkdown:
