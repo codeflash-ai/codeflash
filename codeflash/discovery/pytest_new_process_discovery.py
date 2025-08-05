@@ -41,7 +41,7 @@ if __name__ == "__main__":
 
     try:
         exitcode = pytest.main(
-            [tests_root, "-p no:logging", "--collect-only", "-m", "not skip"], plugins=[PytestCollectionPlugin()]
+            [tests_root, "-p no:logging", "--collect-only", "-m", "not skip", "-p", "no:codeflash-benchmark"], plugins=[PytestCollectionPlugin()]
         )
     except Exception as e:
         print(f"Failed to collect tests: {e!s}")
