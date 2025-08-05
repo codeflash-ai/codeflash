@@ -8,13 +8,35 @@ from codeflash.benchmarking.plugin.plugin import codeflash_benchmark_plugin
 
 PYTEST_BENCHMARK_INSTALLED = importlib.util.find_spec("pytest_benchmark") is not None
 
+benchmark_options = [
+    ("--benchmark-columns", "store", None, "Benchmark columns"),
+    ("--benchmark-group-by", "store", None, "Benchmark group by"),
+    ("--benchmark-name", "store", None, "Benchmark name pattern"),
+    ("--benchmark-sort", "store", None, "Benchmark sort column"),
+    ("--benchmark-json", "store", None, "Benchmark JSON output file"),
+    ("--benchmark-save", "store", None, "Benchmark save name"),
+    ("--benchmark-warmup", "store", None, "Benchmark warmup"),
+    ("--benchmark-warmup-iterations", "store", None, "Benchmark warmup iterations"),
+    ("--benchmark-min-time", "store", None, "Benchmark minimum time"),
+    ("--benchmark-max-time", "store", None, "Benchmark maximum time"),
+    ("--benchmark-min-rounds", "store", None, "Benchmark minimum rounds"),
+    ("--benchmark-timer", "store", None, "Benchmark timer"),
+    ("--benchmark-calibration-precision", "store", None, "Benchmark calibration precision"),
+    ("--benchmark-disable", "store_true", False, "Disable benchmarks"),
+    ("--benchmark-skip", "store_true", False, "Skip benchmarks"),
+    ("--benchmark-only", "store_true", False, "Only run benchmarks"),
+    ("--benchmark-verbose", "store_true", False, "Verbose benchmark output"),
+    ("--benchmark-histogram", "store", None, "Benchmark histogram"),
+    ("--benchmark-compare", "store", None, "Benchmark compare"),
+    ("--benchmark-compare-fail", "store", None, "Benchmark compare fail threshold"),
+]
+
 
 def pytest_configure(config: pytest.Config) -> None:
     """Register the benchmark marker and disable conflicting plugins."""
     config.addinivalue_line("markers", "benchmark: mark test as a benchmark that should be run with codeflash tracing")
 
     if config.getoption("--codeflash-trace") and PYTEST_BENCHMARK_INSTALLED:
-        config.option.benchmark_disable = True
         config.pluginmanager.set_blocked("pytest_benchmark")
         config.pluginmanager.set_blocked("pytest-benchmark")
 
@@ -23,6 +45,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
         "--codeflash-trace", action="store_true", default=False, help="Enable CodeFlash tracing for benchmarks"
     )
+    # These options are ignored when --codeflash-trace is used
+    for option, action, default, help_text in benchmark_options:
+        help_suffix = (
+            " (ignored when --codeflash-trace is used)" if "disable" not in option and "skip" not in option else ""
+        )
+        parser.addoption(option, action=action, default=default, help=help_text + help_suffix)
 
 
 @pytest.fixture
