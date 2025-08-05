@@ -333,6 +333,7 @@ class Optimizer:
                             continue
                     finally:
                         if function_optimizer is not None:
+                            function_optimizer.executor.shutdown(wait=True)
                             function_optimizer.cleanup_generated_files()
 
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
