@@ -36,9 +36,16 @@ def pytest_configure(config: pytest.Config) -> None:
     """Register the benchmark marker and disable conflicting plugins."""
     config.addinivalue_line("markers", "benchmark: mark test as a benchmark that should be run with codeflash tracing")
 
-    if config.getoption("--codeflash-trace") and PYTEST_BENCHMARK_INSTALLED:
-        config.pluginmanager.set_blocked("pytest_benchmark")
-        config.pluginmanager.set_blocked("pytest-benchmark")
+    if config.getoption("--codeflash-trace"):
+        # When --codeflash-trace is used, ignore all benchmark options by resetting them to defaults
+        for option, _, default, _ in benchmark_options:
+            option_name = option.replace("--", "").replace("-", "_")
+            if hasattr(config.option, option_name):
+                setattr(config.option, option_name, default)
+
+        if PYTEST_BENCHMARK_INSTALLED:
+            config.pluginmanager.set_blocked("pytest_benchmark")
+            config.pluginmanager.set_blocked("pytest-benchmark")
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -47,9 +54,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
     # These options are ignored when --codeflash-trace is used
     for option, action, default, help_text in benchmark_options:
-        help_suffix = (
-            " (ignored when --codeflash-trace is used)" if "disable" not in option and "skip" not in option else ""
-        )
+        help_suffix = " (ignored when --codeflash-trace is used)"
         parser.addoption(option, action=action, default=default, help=help_text + help_suffix)
 
 
@@ -65,7 +70,7 @@ def benchmark(request: pytest.FixtureRequest) -> object:
     # If pytest-benchmark is installed and --codeflash-trace is not enabled,
     # return the normal pytest-benchmark fixture
     if PYTEST_BENCHMARK_INSTALLED:
-        from pytest_benchmark.fixture import BenchmarkFixture as BSF  # noqa: N814
+        from pytest_benchmark.fixture import BenchmarkFixture as BSF  # pyright: ignore[reportMissingImports]  # noqa: I001, N814
 
         bs = getattr(config, "_benchmarksession", None)
         if bs and bs.skip:
