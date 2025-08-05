@@ -121,7 +121,7 @@ def helper_function_2(x):
 
     # Apply optimization and test reversion
     optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context, CodeStringsMarkdown.parse_flattened_code(optimized_code_with_modified_helper), original_helper_code
+        code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code_with_modified_helper), original_helper_code
     )
     # Check final file content
     final_content = main_file.read_text()
@@ -140,7 +140,7 @@ def helper_function_2(x):
     original_helper_code = {main_file: main_file.read_text()}
 
     # Apply optimization and test reversion
-    optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code)
+    optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
 
     # Check final file content
     final_content = main_file.read_text()
@@ -203,7 +203,7 @@ def helper_function_2(x):
     # 1. Apply the optimization
     # 2. Detect unused helpers
     # 3. Revert unused helpers to original definitions
-    optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code)
+    optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
 
     # Check final file content
     final_content = main_file.read_text()
@@ -267,7 +267,7 @@ def helper_function_2(x):
     assert len(unused_helpers) == 0, "No helpers should be detected as unused"
 
     # Apply optimization
-    optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code)
+    optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
 
     # Check final file content - should contain the optimized versions
     final_content = main_file.read_text()
@@ -388,7 +388,7 @@ def helper_function_2(x):
         }
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
         # Check main file content
         main_content = main_file.read_text()
         assert "result1 + n * 3" in main_content, "Entrypoint function should be optimized"
@@ -436,7 +436,7 @@ def helper_function_2(x):
         }
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
 
         # Check main file content
         main_content = main_file.read_text()
@@ -563,7 +563,7 @@ class Calculator:
 
         # Apply optimization and test reversion
         optimizer.replace_function_and_helpers_with_optimized_code(
-            code_context, CodeStringsMarkdown.parse_flattened_code(optimized_code_with_modified_helper), original_helper_code
+            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code_with_modified_helper), original_helper_code
         )
 
         # Check final file content
@@ -582,7 +582,7 @@ class Calculator:
         # Test reversion
         original_helper_code = {main_file: main_file.read_text()}
 
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
 
         # Check final file content
         final_content = main_file.read_text()
@@ -706,7 +706,7 @@ class Processor:
 
         # Apply optimization and test reversion
         optimizer.replace_function_and_helpers_with_optimized_code(
-            code_context, CodeStringsMarkdown.parse_flattened_code(optimized_code_with_modified_helper), original_helper_code
+            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code_with_modified_helper), original_helper_code
         )
 
         # Check final file content
@@ -745,7 +745,7 @@ class Processor:
 
         # Apply optimization and test reversion
         optimizer.replace_function_and_helpers_with_optimized_code(
-            code_context, CodeStringsMarkdown.parse_flattened_code(optimized_code_with_modified_helper), original_helper_code
+            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code_with_modified_helper), original_helper_code
         )
 
         # Check final file content
@@ -1066,7 +1066,7 @@ def subtract(x, y):
         }
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
 
         # Check main file content
         main_content = main_file.read_text()
@@ -1216,7 +1216,7 @@ def divide_numbers(x, y):
         }
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
 
         # Check main file content
         main_content = main_file.read_text()
@@ -1275,7 +1275,7 @@ def divide_numbers(x, y):
         }
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_flattened_code(optimized_code), original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
 
         # Check main file content
         main_content = main_file.read_text()
@@ -1424,7 +1424,7 @@ class MathUtils:
 
         # Apply optimization and test reversion
         optimizer.replace_function_and_helpers_with_optimized_code(
-            code_context, CodeStringsMarkdown.parse_flattened_code(optimized_static_code_with_modified_helper), original_helper_code
+            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_static_code_with_modified_helper), original_helper_code
         )
 
         # Check final file content

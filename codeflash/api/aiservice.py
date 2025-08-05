@@ -73,6 +73,9 @@ class AiServiceClient:
         url = f"{self.base_url}/ai{endpoint}"
         if method.upper() == "POST":
             json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
+            print(f"========JSON PAYLOAD FOR {url}==============")
+            print(f"Payload: {json_payload}")
+            print("======================")
             headers = {**self.headers, "Content-Type": "application/json"}
             response = requests.post(url, data=json_payload, headers=headers, timeout=timeout)
         else:
@@ -136,7 +139,7 @@ class AiServiceClient:
             logger.debug(f"Generating optimizations took {end_time - start_time:.2f} seconds.")
             return [
                 OptimizedCandidate(
-                    source_code=CodeStringsMarkdown.parse_flattened_code(opt["source_code"]),
+                    source_code=CodeStringsMarkdown.parse_markdown_code(opt["source_code"]),
                     explanation=opt["explanation"],
                     optimization_id=opt["optimization_id"],
                 )
@@ -206,7 +209,7 @@ class AiServiceClient:
             console.rule()
             return [
                 OptimizedCandidate(
-                    source_code=CodeStringsMarkdown.parse_flattened_code(opt["source_code"]),
+                    source_code=CodeStringsMarkdown.parse_markdown_code(opt["source_code"]),
                     explanation=opt["explanation"],
                     optimization_id=opt["optimization_id"],
                 )
@@ -263,7 +266,7 @@ class AiServiceClient:
             console.rule()
             return [
                 OptimizedCandidate(
-                    source_code=CodeStringsMarkdown.parse_flattened_code(opt["source_code"]),
+                    source_code=CodeStringsMarkdown.parse_markdown_code(opt["source_code"]),
                     explanation=opt["explanation"],
                     optimization_id=opt["optimization_id"][:-4] + "refi",
                 )

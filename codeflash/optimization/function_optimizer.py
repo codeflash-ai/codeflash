@@ -384,7 +384,7 @@ class FunctionOptimizer:
             ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
             future_line_profile_results = executor.submit(
                 ai_service_client.optimize_python_code_line_profiler,
-                source_code=code_context.read_writable_code.flat,
+                source_code=code_context.read_writable_code.markdown,
                 dependency_code=code_context.read_only_context_code,
                 trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
                 line_profiler_results=original_code_baseline.line_profile_results["str_out"],
@@ -611,10 +611,10 @@ class FunctionOptimizer:
         request = [
             AIServiceRefinerRequest(
                 optimization_id=opt.candidate.optimization_id,
-                original_source_code=code_context.read_writable_code.flat,
+                original_source_code=code_context.read_writable_code.markdown,
                 read_only_dependency_code=code_context.read_only_context_code,
                 original_code_runtime=humanize_runtime(original_code_baseline.runtime),
-                optimized_source_code=opt.candidate.source_code.flat,
+                optimized_source_code=opt.candidate.source_code.markdown,
                 optimized_explanation=opt.candidate.explanation,
                 optimized_code_runtime=humanize_runtime(opt.runtime),
                 speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=opt.runtime) * 100)}%",
@@ -894,7 +894,7 @@ class FunctionOptimizer:
             )
             future_optimization_candidates = executor.submit(
                 self.aiservice_client.optimize_python_code,
-                read_writable_code.flat,
+                read_writable_code.markdown,
                 read_only_context_code,
                 self.function_trace_id[:-4] + "EXP0" if run_experiment else self.function_trace_id,
                 N_CANDIDATES,
@@ -913,7 +913,7 @@ class FunctionOptimizer:
             if run_experiment:
                 future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
-                    read_writable_code.flat,
+                    read_writable_code.markdown,
                     read_only_context_code,
                     self.function_trace_id[:-4] + "EXP1",
                     N_CANDIDATES,

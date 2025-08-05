@@ -165,7 +165,7 @@ def get_code_block_splitter(file_path: Path) -> str:
     return f"{LINE_SPLITTER_MARKER_PREFIX}{file_path}"
 
 
-splitter_pattern = re.compile(f"^{LINE_SPLITTER_MARKER_PREFIX}([^\n]+)\n", re.MULTILINE | re.DOTALL)
+markdown_pattern = re.compile(r"```python:([^\n]+)\n(.*?)\n```", re.DOTALL)
 
 
 class CodeStringsMarkdown(BaseModel):
@@ -200,15 +200,12 @@ class CodeStringsMarkdown(BaseModel):
         return self._cache["file_to_path"]
 
     @staticmethod
-    def parse_flattened_code(flat_code: str) -> CodeStringsMarkdown:
-        matches = list(splitter_pattern.finditer(flat_code))
+    def parse_markdown_code(markdown_code: str) -> CodeStringsMarkdown:
+        matches = markdown_pattern.findall(markdown_code)
         results = CodeStringsMarkdown()
-        for i, match in enumerate(matches):
-            start = match.end()
-            end = matches[i + 1].start() if i + 1 < len(matches) else len(flat_code)
-            file_path = match.group(1).strip()
-            code = flat_code[start:end].lstrip("\n")
-            results.code_strings.append(CodeString(code=code, file_path=Path(file_path)))
+        for file_path, code in matches:
+            path = file_path.strip()
+            results.code_strings.append(CodeString(code=code, file_path=Path(path)))
         return results
 
 
