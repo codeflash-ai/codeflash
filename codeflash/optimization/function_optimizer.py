@@ -1034,6 +1034,7 @@ class FunctionOptimizer:
             if candidates is None:
                 continue
 
+            self.valid_optimizations = []  # reset for each experiment
             best_optimization = self.determine_best_candidate(
                 candidates=candidates,
                 code_context=code_context,
