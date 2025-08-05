@@ -35,7 +35,6 @@ from codeflash.code_utils.code_utils import (
     diff_length,
     file_name_from_test_module_name,
     get_run_tmp_file,
-    has_any_async_functions,
     module_name_from_file_path,
     restore_conftest,
 )

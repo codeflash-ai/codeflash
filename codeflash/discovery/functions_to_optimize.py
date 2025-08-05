@@ -421,7 +421,10 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
         # iterate over the class methods
         if node.name == self.class_name:
             for body_node in node.body:
-                if isinstance(body_node, (ast.FunctionDef, ast.AsyncFunctionDef)) and body_node.name == self.function_name:
+                if (
+                    isinstance(body_node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and body_node.name == self.function_name
+                ):
                     self.is_top_level = True
                     if any(
                         isinstance(decorator, ast.Name) and decorator.id == "classmethod"
