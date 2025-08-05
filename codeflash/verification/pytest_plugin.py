@@ -9,17 +9,23 @@ import os
 import platform
 import re
 import sys
+import threading
+import time
 import time as _time_module
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from unittest import TestCase
+from urllib.parse import urlparse
 
 # PyTest Imports
 import pytest
 from pluggy import HookspecMarker
 
 if TYPE_CHECKING:
+    import sqlite3
+
+    import psycopg2
     from _pytest.config import Config, Parser
     from _pytest.main import Session
     from _pytest.python import Metafunc
@@ -250,6 +256,14 @@ def pytest_addoption(parser: Parser) -> None:
         help="Scope for looping tests",
     )
 
+    pytest_loops.addoption(
+        "--codeflash_db_uri", action="store", default="", type=str, help="The database URI to use for profiling."
+    )
+
+    pytest_loops.addoption(
+        "--codeflash_db_type", action="store", default="", type=str, help="The database type to use for profiling."
+    )
+
 
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config: Config) -> None:
@@ -258,6 +272,7 @@ def pytest_configure(config: Config) -> None:
 
     # Apply deterministic patches when the plugin is configured
     _apply_deterministic_patches()
+    _patch_sql_drivers("postgresql://postgres:postgres@127.0.0.1:55432/codeflash", "psycopg2")
 
 
 class PytestLoops:
@@ -450,3 +465,77 @@ class PytestLoops:
             metafunc.parametrize(
                 "__pytest_loop_step_number", range(count), indirect=True, ids=make_progress_id, scope=scope
             )
+
+
+_SQL_PROFILER_LOCAL = threading.local()
+_SQL_PROFILER_LOCAL.queries = []
+
+
+class ProfilingCursor:
+    def __init__(self, real_cursor: Any) -> None:  # noqa: ANN401
+        self._cursor = real_cursor
+
+    def execute(self, sql: str, params: Any = None) -> Any:  # noqa: ANN401
+        start = time.perf_counter()
+        result = self._cursor.execute(sql, params or ())
+        duration = time.perf_counter() - start
+        _SQL_PROFILER_LOCAL.queries.append((sql, params, duration))
+        return result
+
+    def executemany(self, sql: str, seq_of_params: Any) -> Any:  # noqa: ANN401
+        start = time.perf_counter()
+        result = self._cursor.executemany(sql, seq_of_params)
+        duration = time.perf_counter() - start
+        _SQL_PROFILER_LOCAL.queries.append((sql, seq_of_params, duration))
+        return result
+
+
+class ProfilingConnection:
+    def __init__(self, db_uri: str) -> None:
+        parsed = urlparse(db_uri)
+        self._conn = self._connect_from_uri(parsed)
+
+    def _connect_from_uri(self, parsed_uri: urlparse) -> sqlite3.Connection | psycopg2.extensions.connection:
+        if parsed_uri.scheme == "postgresql":
+            import psycopg2
+
+            return psycopg2.connect(
+                dbname=parsed_uri.path[1:],  # remove leading '/'
+                user=parsed_uri.username,
+                password=parsed_uri.password,
+                host=parsed_uri.hostname,
+                port=parsed_uri.port or 5432,
+            )
+        if parsed_uri.scheme == "sqlite":
+            import sqlite3
+
+            return sqlite3.connect(parsed_uri.path)
+        msg = f"Unsupported DB scheme: {parsed_uri.scheme}"
+        raise NotImplementedError(msg)
+
+    def cursor(self, *args, **kwargs) -> ProfilingCursor:  # noqa
+        return ProfilingCursor(self._conn.cursor(*args, **kwargs))
+
+
+def _patch_sql_drivers(database_uri: str, connection_type: str) -> None:
+    if connection_type == "psycopg2" or database_uri.startswith("postgresql"):
+        try:
+            import psycopg2
+
+            def patched_connect(*a, **kw) -> ProfilingConnection:  # noqa
+                return ProfilingConnection(database_uri)
+
+            psycopg2.connect = patched_connect
+        except ImportError:
+            pass
+
+    elif connection_type == "sqlite3" or database_uri.startswith("sqlite"):
+        try:
+            import sqlite3
+
+            def patched_connect(*a, **kw) -> ProfilingConnection:  # noqa
+                return ProfilingConnection(database_uri)
+
+            sqlite3.connect = patched_connect
+        except ImportError:
+            pass

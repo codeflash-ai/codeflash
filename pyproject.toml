@@ -302,6 +302,10 @@ filterwarnings = [
 markers = [
     "ci_skip: mark test to skip in CI environment",
 ]
+addopts = "-ra -q"
+python_files = ["tests/*.py"]
+plugins = ["codeflash.verification.pytest_plugin"]
+
 
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning"]
