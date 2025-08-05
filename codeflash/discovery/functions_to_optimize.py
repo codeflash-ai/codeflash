@@ -404,11 +404,24 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
                 )
             )
 
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        if self.class_name is None and node.name == self.function_name:
+            self.is_top_level = True
+            self.function_has_args = any(
+                (
+                    bool(node.args.args),
+                    bool(node.args.kwonlyargs),
+                    bool(node.args.kwarg),
+                    bool(node.args.posonlyargs),
+                    bool(node.args.vararg),
+                )
+            )
+
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         # iterate over the class methods
         if node.name == self.class_name:
             for body_node in node.body:
-                if isinstance(body_node, ast.FunctionDef) and body_node.name == self.function_name:
+                if isinstance(body_node, (ast.FunctionDef, ast.AsyncFunctionDef)) and body_node.name == self.function_name:
                     self.is_top_level = True
                     if any(
                         isinstance(decorator, ast.Name) and decorator.id == "classmethod"
@@ -426,7 +439,7 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
             # This way, if we don't have the class name, we can still find the static method
             for body_node in node.body:
                 if (
-                    isinstance(body_node, ast.FunctionDef)
+                    isinstance(body_node, (ast.FunctionDef, ast.AsyncFunctionDef))
                     and body_node.name == self.function_name
                     and body_node.lineno in {self.line_no, self.line_no + 1}
                     and any(
