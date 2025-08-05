@@ -74,6 +74,7 @@ from codeflash.models.models import (
     TestingMode,
     TestResults,
     TestType,
+    OptimizedCandidate
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
 from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
@@ -380,6 +381,7 @@ class FunctionOptimizer:
         candidates = deque(candidates)
         refinement_done = False
         future_all_refinements: list[concurrent.futures.Future] = []
+        ast_code_to_id = dict()
         # Start a new thread for AI service request, start loop in main thread
         # check if aiservice request is complete, when it is complete, append result to the candidates list
         ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
@@ -413,6 +415,8 @@ class FunctionOptimizer:
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
                 logger.info(f"Optimization candidate {candidate_index}/{original_len}:")
                 code_print(candidate.source_code)
+                # map ast normalized code to diff len, unnormalized code
+                # map opt id to the shortest unnormalized code
                 try:
                     did_update = self.replace_function_and_helpers_with_optimized_code(
                         code_context=code_context,
@@ -431,7 +435,15 @@ class FunctionOptimizer:
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
                     continue
-
+                normalized_code = ast.unparse(ast.parse(candidate.source_code.strip()))
+                if normalized_code in ast_code_to_id:
+                    new_diff_len = diff_length(candidate.source_code, code_context.read_writable_code)
+                    if new_diff_len < ast_code_to_id[normalized_code]["diff_len"]:
+                        ast_code_to_id[normalized_code]["shorter_source_code"] = candidate.source_code
+                        ast_code_to_id[normalized_code]["diff_len"] = new_diff_len
+                    continue
+                else:
+                    ast_code_to_id[normalized_code] = {'optimization_id':candidate.optimization_id, 'shorter_source_code':candidate.source_code, 'diff_len':diff_length(candidate.source_code, code_context.read_writable_code)}
                 run_results = self.run_optimized_candidate(
                     optimization_candidate_index=candidate_index,
                     baseline_results=original_code_baseline,
@@ -569,19 +581,36 @@ class FunctionOptimizer:
         if not len(self.valid_optimizations):
             return None
         # need to figure out the best candidate here before we return best_optimization
+        #reassign the shorter code here
+        valid_candidates_with_shorter_code = []
         diff_lens_list = []  # character level diff
         runtimes_list = []
         for valid_opt in self.valid_optimizations:
+            valid_opt_normalized_code = ast.unparse(ast.parse(valid_opt.candidate.source_code.strip()))
+            new_candidate_with_shorter_code = OptimizedCandidate(source_code=ast_code_to_id[valid_opt_normalized_code]["shorter_source_code"], optimization_id=valid_opt.candidate.optimization_id, explanation=valid_opt.candidate.explanation)
+            new_best_opt = BestOptimization(
+                candidate=new_candidate_with_shorter_code,
+                helper_functions=valid_opt.helper_functions,
+                code_context=valid_opt.code_context,
+                runtime=valid_opt.runtime,
+                line_profiler_test_results=valid_opt.line_profiler_test_results,
+                winning_behavior_test_results=valid_opt.winning_behavior_test_results,
+                replay_performance_gain=valid_opt.replay_performance_gain,
+                winning_benchmarking_test_results=valid_opt.winning_benchmarking_test_results,
+                winning_replay_benchmarking_test_results=valid_opt.winning_replay_benchmarking_test_results,
+            )
+            valid_candidates_with_shorter_code.append(new_best_opt)
             diff_lens_list.append(
-                diff_length(valid_opt.candidate.source_code, code_context.read_writable_code)
+                diff_length(new_best_opt.candidate.source_code, code_context.read_writable_code)
             )  # char level diff
-            runtimes_list.append(valid_opt.runtime)
+            runtimes_list.append(new_best_opt.runtime)
         diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
         runtimes_ranking = create_rank_dictionary_compact(runtimes_list)
         # TODO: better way to resolve conflicts with same min ranking
         overall_ranking = {key: diff_lens_ranking[key] + runtimes_ranking[key] for key in diff_lens_ranking.keys()}  # noqa: SIM118
         min_key = min(overall_ranking, key=overall_ranking.get)
-        best_optimization = self.valid_optimizations[min_key]
+        best_optimization = valid_candidates_with_shorter_code[min_key]
+        #reassign code string which is the shortest
         ai_service_client.log_results(
             function_trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
             speedup_ratio=speedup_ratios,
