@@ -46,6 +46,36 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
     return return_value
 """
 
+async_codeflash_wrap_string = """async def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
+    if not hasattr(codeflash_wrap, 'index'):
+        codeflash_wrap.index = {{}}
+    if test_id in codeflash_wrap.index:
+        codeflash_wrap.index[test_id] += 1
+    else:
+        codeflash_wrap.index[test_id] = 0
+    codeflash_test_index = codeflash_wrap.index[test_id]
+    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    test_stdout_tag = f"{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}"
+    print(f"!$######{{test_stdout_tag}}######$!")
+    exception = None
+    gc.disable()
+    try:
+        counter = time.perf_counter_ns()
+        return_value = await wrapped(*args, **kwargs)
+        codeflash_duration = time.perf_counter_ns() - counter
+    except Exception as e:
+        codeflash_duration = time.perf_counter_ns() - counter
+        exception = e
+    gc.enable()
+    print(f"!######{{test_stdout_tag}}######!")
+    pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
+    codeflash_con.commit()
+    if exception:
+        raise exception
+    return return_value
+"""
 
 def test_bubble_sort_behavior_results() -> None:
     code = """from code_to_optimize.bubble_sort import sorter
