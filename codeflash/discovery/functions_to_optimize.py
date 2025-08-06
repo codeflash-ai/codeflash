@@ -106,7 +106,9 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
         # Check if the async function has a return statement and add it to the list
         if function_has_return_statement(node) and not function_is_a_property(node):
             self.functions.append(
-                FunctionToOptimize(function_name=node.name, file_path=self.file_path, parents=self.ast_path[:])
+                FunctionToOptimize(
+                    function_name=node.name, file_path=self.file_path, parents=self.ast_path[:], is_async=True
+                )
             )
 
     def generic_visit(self, node: ast.AST) -> None:
@@ -128,6 +130,7 @@ class FunctionToOptimize:
         parents: A list of parent scopes, which could be classes or functions.
         starting_line: The starting line number of the function in the file.
         ending_line: The ending line number of the function in the file.
+        is_async: Whether this function is defined as async.
 
     The qualified_name property provides the full name of the function, including
     any parent class or function names. The qualified_name_with_modules_from_root
@@ -140,6 +143,7 @@ class FunctionToOptimize:
     parents: list[FunctionParent]  # list[ClassDef | FunctionDef | AsyncFunctionDef]
     starting_line: Optional[int] = None
     ending_line: Optional[int] = None
+    is_async: bool = False
 
     @property
     def top_level_parent_name(self) -> str:

@@ -56,6 +56,7 @@ class InjectPerfOnly(ast.NodeTransformer):
         test_framework: str,
         call_positions: list[CodePosition],
         mode: TestingMode = TestingMode.BEHAVIOR,
+        is_async: bool = False,
     ) -> None:
         self.mode: TestingMode = mode
         self.function_object = function
@@ -64,6 +65,7 @@ class InjectPerfOnly(ast.NodeTransformer):
         self.module_path = module_path
         self.test_framework = test_framework
         self.call_positions = call_positions
+        self.is_async = is_async
         if len(function.parents) == 1 and function.parents[0].type == "ClassDef":
             self.class_name = function.top_level_parent_name
 
@@ -328,6 +330,7 @@ def inject_profiling_into_existing_test(
     tests_project_root: Path,
     test_framework: str,
     mode: TestingMode = TestingMode.BEHAVIOR,
+    is_async: bool = False,
 ) -> tuple[bool, str | None]:
     with test_path.open(encoding="utf8") as f:
         test_code = f.read()
@@ -342,7 +345,9 @@ def inject_profiling_into_existing_test(
     import_visitor.visit(tree)
     func = import_visitor.imported_as
 
-    tree = InjectPerfOnly(func, test_module_path, test_framework, call_positions, mode=mode).visit(tree)
+    tree = InjectPerfOnly(func, test_module_path, test_framework, call_positions, mode=mode, is_async=is_async).visit(
+        tree
+    )
     new_imports = [
         ast.Import(names=[ast.alias(name="time")]),
         ast.Import(names=[ast.alias(name="gc")]),
@@ -354,11 +359,11 @@ def inject_profiling_into_existing_test(
         )
     if test_framework == "unittest":
         new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
-    tree.body = [*new_imports, create_wrapper_function(mode), *tree.body]
+    tree.body = [*new_imports, create_wrapper_function(mode, is_async), *tree.body]
     return True, isort.code(ast.unparse(tree), float_to_top=True)
 
 
-def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.FunctionDef:
+def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR, is_async: bool = False) -> ast.FunctionDef:
     lineno = 1
     wrapper_body: list[ast.stmt] = [
         ast.Assign(
@@ -536,7 +541,15 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                 ),
                 ast.Assign(
                     targets=[ast.Name(id="return_value", ctx=ast.Store())],
-                    value=ast.Call(
+                    value=ast.Await(
+                        value=ast.Call(
+                            func=ast.Name(id="wrapped", ctx=ast.Load()),
+                            args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
+                            keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+                        )
+                    )
+                    if is_async
+                    else ast.Call(
                         func=ast.Name(id="wrapped", ctx=ast.Load()),
                         args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
                         keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
@@ -703,7 +716,7 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
         ),
         ast.Return(value=ast.Name(id="return_value", ctx=ast.Load()), lineno=lineno + 19),
     ]
-    return ast.FunctionDef(
+    func_def = ast.FunctionDef(
         name="codeflash_wrap",
         args=ast.arguments(
             args=[
@@ -729,3 +742,13 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
         decorator_list=[],
         returns=None,
     )
+    if is_async:
+        return ast.AsyncFunctionDef(
+            name="codeflash_wrap",
+            args=func_def.args,
+            body=func_def.body,
+            lineno=func_def.lineno,
+            decorator_list=func_def.decorator_list,
+            returns=func_def.returns,
+        )
+    return func_def
