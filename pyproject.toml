@@ -1,7 +1,7 @@
 [project]
-name = "codeflash"
-dynamic = ["version"]
-description = "Client for codeflash.ai - automatic code performance optimization, powered by AI"
+name = "codeflash-ali-dev"
+version = "1.1.3"
+description = "made for prompt experiment testing"
 authors = [{ name = "CodeFlash Inc.", email = "contact@codeflash.ai" }]
 requires-python = ">=3.9"
 readme = "README.md"
@@ -68,6 +68,7 @@ dev = [
     "types-openpyxl>=3.1.5.20241020",
     "types-regex>=2024.9.11.20240912",
     "types-python-dateutil>=2.9.0.20241003",
+    "pytest-benchmark>=5.1.0",
     "types-gevent>=24.11.0.20241230,<25",
     "types-greenlet>=3.1.0.20241221,<4",
     "types-pexpect>=4.9.0.20241208,<5",
@@ -127,6 +128,7 @@ exclude = [
 ]
 
 [tool.hatch.build.targets.wheel]
+packages = ["codeflash"]
 exclude = [
     "docs/*",
     "experiments/*",
@@ -270,7 +272,7 @@ workspace = { members = ["codeflash-benchmark"] }
 codeflash-benchmark = { workspace = true }
 
 [tool.uv-dynamic-versioning]
-enable = true
+enable = false
 style = "pep440"
 vcs = "git"
 
@@ -304,6 +306,16 @@ markers = [
 ]
 
 [build-system]
-requires = ["hatchling", "uv-dynamic-versioning"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[[tool.uv.index]]
+explicit = true
+name = "testpypi"
+publish-url = "https://test.pypi.org/legacy"
+url = "https://test.pypi.org/simple/"
+
+[[tool.poetry.source]]
+name = "testpypi"
+url = "https://test.pypi.org/legacy/"
+priority = "explicit"
