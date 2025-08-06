@@ -199,8 +199,6 @@ class InjectPerfOnly(ast.NodeTransformer):
     def visit_AsyncFunctionDef(
         self, node: ast.AsyncFunctionDef, test_class_name: str | None = None
     ) -> ast.AsyncFunctionDef:
-        """Handle async function definitions by converting to sync and back."""
-        # Convert to sync FunctionDef, process it, then convert back
         sync_node = ast.FunctionDef(
             name=node.name,
             args=node.args,
@@ -211,7 +209,6 @@ class InjectPerfOnly(ast.NodeTransformer):
             col_offset=node.col_offset if hasattr(node, "col_offset") else 0,
         )
         processed_sync = self.visit_FunctionDef(sync_node, test_class_name)
-        # Convert back to AsyncFunctionDef
         return ast.AsyncFunctionDef(
             name=processed_sync.name,
             args=processed_sync.args,
