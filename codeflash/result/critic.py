@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
@@ -9,7 +10,7 @@ from codeflash.code_utils.config_consts import (
     MIN_IMPROVEMENT_THRESHOLD,
     MIN_TESTCASE_PASSED_THRESHOLD,
 )
-from codeflash.models.models import TestType
+from codeflash.models.models import OptimizedCandidateResult, TestType
 
 if TYPE_CHECKING:
     from codeflash.models.models import CoverageData, OptimizedCandidateResult, OriginalCodeBaseline
@@ -41,8 +42,7 @@ def speedup_critic(
     """
     noise_floor = 3 * MIN_IMPROVEMENT_THRESHOLD if original_code_runtime < 10000 else MIN_IMPROVEMENT_THRESHOLD
     if not disable_gh_action_noise:
-        in_github_actions_mode = bool(env_utils.get_pr_number())
-        if in_github_actions_mode:
+        if _in_github_actions_mode():
             noise_floor = noise_floor * 2  # Increase the noise floor in GitHub Actions mode
 
     perf_gain = performance_gain(
@@ -76,3 +76,8 @@ def coverage_critic(original_code_coverage: CoverageData | None, test_framework:
     if original_code_coverage:
         return original_code_coverage.coverage >= COVERAGE_THRESHOLD
     return False
+
+
+@lru_cache(maxsize=1)
+def _in_github_actions_mode() -> bool:
+    return bool(env_utils.get_pr_number())

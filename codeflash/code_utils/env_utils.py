@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
@@ -129,3 +130,8 @@ def is_pr_draft() -> bool:
     """Check if the PR is draft. in the github action context."""
     event = get_cached_gh_event_data()
     return bool(event.get("pull_request", {}).get("draft", False))
+
+
+@lru_cache(maxsize=1)
+def _in_github_actions_mode() -> bool:
+    return bool(env_utils.get_pr_number())
