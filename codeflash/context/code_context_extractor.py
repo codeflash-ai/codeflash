@@ -63,7 +63,7 @@ def get_code_optimization_context(
     # Extract code context for optimization
     final_read_writable_code = extract_code_markdown_context_from_files(
         helpers_of_fto_dict,
-        helpers_of_helpers_dict,
+        {},
         project_root_path,
         remove_docstrings=False,
         code_context_type=CodeContextType.READ_WRITABLE,
