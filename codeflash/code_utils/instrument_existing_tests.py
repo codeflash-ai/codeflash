@@ -361,400 +361,443 @@ def inject_profiling_into_existing_test(
 
 def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.FunctionDef:
     lineno = 1
+
+    # Preconstruct all ast.Name and ast.Attribute nodes used more than once.
+    # Since ctx=ast.Load()/Store() is required to be correct, produce both if needed.
+    # ast.Store/Load objects are singletons, so this doesn't waste memory.
+    def name(id, ctx):
+        return ast.Name(id=id, ctx=ctx)
+
+    def attribute(obj, attr, ctx):
+        return ast.Attribute(value=obj, attr=attr, ctx=ctx)
+
+    LOAD = ast.Load()
+    STORE = ast.Store()
+
+    n_test_module_name_L = name("test_module_name", LOAD)
+    n_test_class_name_L = name("test_class_name", LOAD)
+    n_test_name_L = name("test_name", LOAD)
+    n_function_name_L = name("function_name", LOAD)
+    n_line_id_L = name("line_id", LOAD)
+    n_loop_index_L = name("loop_index", LOAD)
+    n_codeflash_wrap_L = name("codeflash_wrap", LOAD)
+    n_codeflash_wrap_S = name("codeflash_wrap", STORE)
+    n_test_id_L = name("test_id", LOAD)
+    n_test_id_S = name("test_id", STORE)
+    n_codeflash_test_index_L = name("codeflash_test_index", LOAD)
+    n_codeflash_test_index_S = name("codeflash_test_index", STORE)
+    n_invocation_id_L = name("invocation_id", LOAD)
+    n_invocation_id_S = name("invocation_id", STORE)
+    n_test_stdout_tag_L = name("test_stdout_tag", LOAD)
+    n_test_stdout_tag_S = name("test_stdout_tag", STORE)
+    n_args_L = name("args", LOAD)
+    n_kwargs_L = name("kwargs", LOAD)
+    n_exception_L = name("exception", LOAD)
+    n_exception_S = name("exception", STORE)
+    n_return_value_L = name("return_value", LOAD)
+    n_return_value_S = name("return_value", STORE)
+    n_counter_S = name("counter", STORE)
+    n_counter_L = name("counter", LOAD)
+    n_codeflash_duration_L = name("codeflash_duration", LOAD)
+    n_codeflash_duration_S = name("codeflash_duration", STORE)
+    n_pickled_return_value_S = name("pickled_return_value", STORE)
+    n_pickled_return_value_L = name("pickled_return_value", LOAD)
+    n_e_L = name("e", LOAD)
+    n_wrapped_L = name("wrapped", LOAD)
+    n_codeflash_cur_L = name("codeflash_cur", LOAD)
+    n_codeflash_con_L = name("codeflash_con", LOAD)
+    n_pickle_L = name("pickle", LOAD)
+    n_gc_L = name("gc", LOAD)
+    n_inspect_L = name("inspect", LOAD)
+    n_codeflash_async_wrap_inner_L = name("codeflash_async_wrap_inner", LOAD)
+
+    attr_index_L = attribute(n_codeflash_wrap_L, 'index', LOAD)
+    attr_index_S = attribute(n_codeflash_wrap_L, 'index', STORE)
+    attr_index_codeflash_wrap_L = attribute(n_codeflash_wrap_L, 'index', LOAD)
+
+    attr_perf_counter_ns = attribute(name("time", LOAD), "perf_counter_ns", LOAD)
+    attr_disable_gc = attribute(n_gc_L, "disable", LOAD)
+    attr_enable_gc = attribute(n_gc_L, "enable", LOAD)
+    attr_execute_cur = attribute(n_codeflash_cur_L, "execute", LOAD)
+    attr_commit_con = attribute(n_codeflash_con_L, "commit", LOAD)
+    attr_dumps = attribute(n_pickle_L, "dumps", LOAD)
+    attr_iscoroutinefunction = attribute(n_inspect_L, "iscoroutinefunction", LOAD)
+
+    # Build reusable AST constant nodes
+    c_colon = ast.Constant(value=":")
+    c_emptystr = ast.Constant(value="")
+    c_dot = ast.Constant(value=".")
+    c_one = ast.Constant(value=1)
+    c_zero = ast.Constant(value=0)
+    c_none = ast.Constant(value=None)
+    c_exception = ast.Constant(value="Exception")
+    c_invocation_sep = ast.Constant(value="_")
+    c_insert_stmt = ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    c_veriftype = ast.Constant(value=VerificationType.FUNCTION_CALL.value)
+    c_performance_marker_start = ast.Constant(value="!$######")
+    c_performance_marker_end = ast.Constant(value="######$!")
+    c_performance_result_start = ast.Constant(value="!######")
+    c_performance_result_end = ast.Constant(value="######!")
+    
+    # Compose joinedstr nodes only ONCE where possible
+    def joinedstr_test_id():
+        return ast.JoinedStr(values=[
+            ast.FormattedValue(n_test_module_name_L, conversion=-1),
+            c_colon,
+            ast.FormattedValue(n_test_class_name_L, conversion=-1),
+            c_colon,
+            ast.FormattedValue(n_test_name_L, conversion=-1),
+            c_colon,
+            ast.FormattedValue(n_line_id_L, conversion=-1),
+            c_colon,
+            ast.FormattedValue(n_loop_index_L, conversion=-1),
+        ])
+
+    def joinedstr_invocation_id():
+        return ast.JoinedStr(values=[
+            ast.FormattedValue(n_line_id_L, conversion=-1),
+            c_invocation_sep,
+            ast.FormattedValue(n_codeflash_test_index_L, conversion=-1),
+        ])
+
+    def joinedstr_test_stdout_tag():
+        return ast.JoinedStr(values=[
+            ast.FormattedValue(n_test_module_name_L, conversion=-1),
+            c_colon,
+            ast.FormattedValue(
+                ast.IfExp(
+                    test=n_test_class_name_L,
+                    body=ast.BinOp(left=n_test_class_name_L, op=ast.Add(), right=c_dot),
+                    orelse=c_emptystr,
+                ),
+                conversion=-1
+            ),
+            ast.FormattedValue(n_test_name_L, conversion=-1),
+            c_colon,
+            ast.FormattedValue(n_function_name_L, conversion=-1),
+            c_colon,
+            ast.FormattedValue(n_loop_index_L, conversion=-1),
+            c_colon,
+            ast.FormattedValue(n_invocation_id_L, conversion=-1),
+        ])
+
+    def joinedstr_print_performance(mode):
+        values = [
+            c_performance_result_start,
+            ast.FormattedValue(n_test_stdout_tag_L, conversion=-1)
+        ]
+        if mode == TestingMode.PERFORMANCE:
+            values.extend([
+                c_colon,
+                ast.FormattedValue(n_codeflash_duration_L, conversion=-1)
+            ])
+        values.append(c_performance_result_end)
+        return ast.JoinedStr(values=values)
+
     wrapper_body: list[ast.stmt] = [
         ast.Assign(
-            targets=[ast.Name(id="test_id", ctx=ast.Store())],
-            value=ast.JoinedStr(
-                values=[
-                    ast.FormattedValue(value=ast.Name(id="test_module_name", ctx=ast.Load()), conversion=-1),
-                    ast.Constant(value=":"),
-                    ast.FormattedValue(value=ast.Name(id="test_class_name", ctx=ast.Load()), conversion=-1),
-                    ast.Constant(value=":"),
-                    ast.FormattedValue(value=ast.Name(id="test_name", ctx=ast.Load()), conversion=-1),
-                    ast.Constant(value=":"),
-                    ast.FormattedValue(value=ast.Name(id="line_id", ctx=ast.Load()), conversion=-1),
-                    ast.Constant(value=":"),
-                    ast.FormattedValue(value=ast.Name(id="loop_index", ctx=ast.Load()), conversion=-1),
-                ]
-            ),
-            lineno=lineno + 1,
+            targets=[n_test_id_S],
+            value=joinedstr_test_id(),
+            lineno=lineno + 1
         ),
         ast.If(
             test=ast.UnaryOp(
                 op=ast.Not(),
                 operand=ast.Call(
-                    func=ast.Name(id="hasattr", ctx=ast.Load()),
-                    args=[ast.Name(id="codeflash_wrap", ctx=ast.Load()), ast.Constant(value="index")],
-                    keywords=[],
-                ),
+                    func=name("hasattr", LOAD),
+                    args=[n_codeflash_wrap_L, ast.Constant(value="index")],
+                    keywords=[]
+                )
             ),
             body=[
                 ast.Assign(
-                    targets=[
-                        ast.Attribute(
-                            value=ast.Name(id="codeflash_wrap", ctx=ast.Load()), attr="index", ctx=ast.Store()
-                        )
-                    ],
+                    targets=[attr_index_S],
                     value=ast.Dict(keys=[], values=[]),
-                    lineno=lineno + 3,
+                    lineno=lineno + 3
                 )
             ],
             orelse=[],
-            lineno=lineno + 2,
+            lineno=lineno + 2
         ),
         ast.If(
             test=ast.Compare(
-                left=ast.Name(id="test_id", ctx=ast.Load()),
+                left=n_test_id_L,
                 ops=[ast.In()],
-                comparators=[
-                    ast.Attribute(value=ast.Name(id="codeflash_wrap", ctx=ast.Load()), attr="index", ctx=ast.Load())
-                ],
+                comparators=[attr_index_codeflash_wrap_L]
             ),
             body=[
                 ast.AugAssign(
                     target=ast.Subscript(
-                        value=ast.Attribute(
-                            value=ast.Name(id="codeflash_wrap", ctx=ast.Load()), attr="index", ctx=ast.Load()
-                        ),
-                        slice=ast.Name(id="test_id", ctx=ast.Load()),
-                        ctx=ast.Store(),
+                        value=attr_index_codeflash_wrap_L,
+                        slice=n_test_id_L,
+                        ctx=STORE
                     ),
                     op=ast.Add(),
-                    value=ast.Constant(value=1),
-                    lineno=lineno + 5,
+                    value=c_one,
+                    lineno=lineno + 5
                 )
             ],
             orelse=[
                 ast.Assign(
-                    targets=[
-                        ast.Subscript(
-                            value=ast.Attribute(
-                                value=ast.Name(id="codeflash_wrap", ctx=ast.Load()), attr="index", ctx=ast.Load()
-                            ),
-                            slice=ast.Name(id="test_id", ctx=ast.Load()),
-                            ctx=ast.Store(),
-                        )
-                    ],
-                    value=ast.Constant(value=0),
-                    lineno=lineno + 6,
+                    targets=[ast.Subscript(
+                        value=attr_index_codeflash_wrap_L,
+                        slice=n_test_id_L,
+                        ctx=STORE
+                    )],
+                    value=c_zero,
+                    lineno=lineno + 6
                 )
             ],
-            lineno=lineno + 4,
+            lineno=lineno + 4
         ),
         ast.Assign(
-            targets=[ast.Name(id="codeflash_test_index", ctx=ast.Store())],
+            targets=[n_codeflash_test_index_S],
             value=ast.Subscript(
-                value=ast.Attribute(value=ast.Name(id="codeflash_wrap", ctx=ast.Load()), attr="index", ctx=ast.Load()),
-                slice=ast.Name(id="test_id", ctx=ast.Load()),
-                ctx=ast.Load(),
+                value=attr_index_codeflash_wrap_L,
+                slice=n_test_id_L,
+                ctx=LOAD
             ),
-            lineno=lineno + 7,
+            lineno=lineno + 7
         ),
         ast.Assign(
-            targets=[ast.Name(id="invocation_id", ctx=ast.Store())],
-            value=ast.JoinedStr(
-                values=[
-                    ast.FormattedValue(value=ast.Name(id="line_id", ctx=ast.Load()), conversion=-1),
-                    ast.Constant(value="_"),
-                    ast.FormattedValue(value=ast.Name(id="codeflash_test_index", ctx=ast.Load()), conversion=-1),
-                ]
+            targets=[n_invocation_id_S],
+            value=joinedstr_invocation_id(),
+            lineno=lineno + 8
+        ),
+    ]
+    
+    # Only insert print markers and related assignments if needed
+    if True:
+        wrapper_body.extend([
+            ast.Assign(
+                targets=[n_test_stdout_tag_S],
+                value=joinedstr_test_stdout_tag(),
+                lineno=lineno + 9
             ),
-            lineno=lineno + 8,
-        ),
-        *(
-            [
-                ast.Assign(
-                    targets=[ast.Name(id="test_stdout_tag", ctx=ast.Store())],
-                    value=ast.JoinedStr(
-                        values=[
-                            ast.FormattedValue(value=ast.Name(id="test_module_name", ctx=ast.Load()), conversion=-1),
-                            ast.Constant(value=":"),
-                            ast.FormattedValue(
-                                value=ast.IfExp(
-                                    test=ast.Name(id="test_class_name", ctx=ast.Load()),
-                                    body=ast.BinOp(
-                                        left=ast.Name(id="test_class_name", ctx=ast.Load()),
-                                        op=ast.Add(),
-                                        right=ast.Constant(value="."),
-                                    ),
-                                    orelse=ast.Constant(value=""),
-                                ),
-                                conversion=-1,
-                            ),
-                            ast.FormattedValue(value=ast.Name(id="test_name", ctx=ast.Load()), conversion=-1),
-                            ast.Constant(value=":"),
-                            ast.FormattedValue(value=ast.Name(id="function_name", ctx=ast.Load()), conversion=-1),
-                            ast.Constant(value=":"),
-                            ast.FormattedValue(value=ast.Name(id="loop_index", ctx=ast.Load()), conversion=-1),
-                            ast.Constant(value=":"),
-                            ast.FormattedValue(value=ast.Name(id="invocation_id", ctx=ast.Load()), conversion=-1),
-                        ]
-                    ),
-                    lineno=lineno + 9,
-                ),
-                ast.Expr(
-                    value=ast.Call(
-                        func=ast.Name(id="print", ctx=ast.Load()),
-                        args=[
-                            ast.JoinedStr(
-                                values=[
-                                    ast.Constant(value="!$######"),
-                                    ast.FormattedValue(
-                                        value=ast.Name(id="test_stdout_tag", ctx=ast.Load()), conversion=-1
-                                    ),
-                                    ast.Constant(value="######$!"),
-                                ]
-                            )
-                        ],
-                        keywords=[],
-                    )
-                ),
-            ]
-        ),
+            ast.Expr(
+                value=ast.Call(
+                    func=name("print", LOAD),
+                    args=[
+                        ast.JoinedStr(values=[
+                            c_performance_marker_start,
+                            ast.FormattedValue(n_test_stdout_tag_L, conversion=-1),
+                            c_performance_marker_end
+                        ])
+                    ],
+                    keywords=[]
+                )
+            ),
+        ])
+    wrapper_body.extend([
         ast.Assign(
-            targets=[ast.Name(id="exception", ctx=ast.Store())], value=ast.Constant(value=None), lineno=lineno + 10
+            targets=[n_exception_S],
+            value=c_none,
+            lineno=lineno + 10
         ),
         ast.Expr(
             value=ast.Call(
-                func=ast.Attribute(value=ast.Name(id="gc", ctx=ast.Load()), attr="disable", ctx=ast.Load()),
+                func=attr_disable_gc,
                 args=[],
-                keywords=[],
+                keywords=[]
             ),
-            lineno=lineno + 9,
+            lineno=lineno + 9
         ),
         ast.Try(
             body=[
                 ast.Assign(
-                    targets=[ast.Name(id="counter", ctx=ast.Store())],
+                    targets=[n_counter_S],
                     value=ast.Call(
-                        func=ast.Attribute(
-                            value=ast.Name(id="time", ctx=ast.Load()), attr="perf_counter_ns", ctx=ast.Load()
-                        ),
+                        func=attr_perf_counter_ns,
                         args=[],
-                        keywords=[],
+                        keywords=[]
                     ),
-                    lineno=lineno + 11,
+                    lineno=lineno + 11
                 ),
                 ast.If(
                     test=ast.Call(
-                        func=ast.Attribute(
-                            value=ast.Name(id="inspect", ctx=ast.Load()), attr="iscoroutinefunction", ctx=ast.Load()
-                        ),
-                        args=[ast.Name(id="wrapped", ctx=ast.Load())],
-                        keywords=[],
+                        func=attr_iscoroutinefunction,
+                        args=[n_wrapped_L],
+                        keywords=[]
                     ),
                     body=[
                         ast.Assign(
-                            targets=[ast.Name(id="return_value", ctx=ast.Store())],
+                            targets=[n_return_value_S],
                             value=ast.Call(
-                                func=ast.Name(id="codeflash_async_wrap_inner", ctx=ast.Load()),
+                                func=n_codeflash_async_wrap_inner_L,
                                 args=[
-                                    ast.Name(id="wrapped", ctx=ast.Load()),
-                                    ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load()),
+                                    n_wrapped_L,
+                                    ast.Starred(n_args_L, LOAD)
                                 ],
-                                keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+                                keywords=[ast.keyword(arg=None, value=n_kwargs_L)]
                             ),
-                            lineno=lineno + 12,
+                            lineno=lineno + 12
                         )
                     ],
                     orelse=[
                         ast.Assign(
-                            targets=[ast.Name(id="return_value", ctx=ast.Store())],
+                            targets=[n_return_value_S],
                             value=ast.Call(
-                                func=ast.Name(id="wrapped", ctx=ast.Load()),
-                                args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
-                                keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+                                func=n_wrapped_L,
+                                args=[ast.Starred(n_args_L, LOAD)],
+                                keywords=[ast.keyword(arg=None, value=n_kwargs_L)]
                             ),
-                            lineno=lineno + 12,
+                            lineno=lineno + 12
                         )
                     ],
-                    lineno=lineno + 12,
+                    lineno=lineno + 12
                 ),
                 ast.Assign(
-                    targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],
+                    targets=[n_codeflash_duration_S],
                     value=ast.BinOp(
                         left=ast.Call(
-                            func=ast.Attribute(
-                                value=ast.Name(id="time", ctx=ast.Load()), attr="perf_counter_ns", ctx=ast.Load()
-                            ),
+                            func=attr_perf_counter_ns,
                             args=[],
-                            keywords=[],
+                            keywords=[]
                         ),
                         op=ast.Sub(),
-                        right=ast.Name(id="counter", ctx=ast.Load()),
+                        right=n_counter_L
                     ),
-                    lineno=lineno + 13,
-                ),
+                    lineno=lineno + 13
+                )
             ],
             handlers=[
                 ast.ExceptHandler(
-                    type=ast.Name(id="Exception", ctx=ast.Load()),
+                    type=name("Exception", LOAD),
                     name="e",
                     body=[
                         ast.Assign(
-                            targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],
+                            targets=[n_codeflash_duration_S],
                             value=ast.BinOp(
                                 left=ast.Call(
-                                    func=ast.Attribute(
-                                        value=ast.Name(id="time", ctx=ast.Load()),
-                                        attr="perf_counter_ns",
-                                        ctx=ast.Load(),
-                                    ),
+                                    func=attr_perf_counter_ns,
                                     args=[],
-                                    keywords=[],
+                                    keywords=[]
                                 ),
                                 op=ast.Sub(),
-                                right=ast.Name(id="counter", ctx=ast.Load()),
+                                right=n_counter_L
                             ),
-                            lineno=lineno + 15,
+                            lineno=lineno + 15
                         ),
                         ast.Assign(
-                            targets=[ast.Name(id="exception", ctx=ast.Store())],
-                            value=ast.Name(id="e", ctx=ast.Load()),
-                            lineno=lineno + 13,
-                        ),
+                            targets=[n_exception_S],
+                            value=n_e_L,
+                            lineno=lineno + 13
+                        )
                     ],
-                    lineno=lineno + 14,
+                    lineno=lineno + 14
                 )
             ],
             orelse=[],
             finalbody=[],
-            lineno=lineno + 11,
+            lineno=lineno + 11
         ),
         ast.Expr(
             value=ast.Call(
-                func=ast.Attribute(value=ast.Name(id="gc", ctx=ast.Load()), attr="enable", ctx=ast.Load()),
+                func=attr_enable_gc,
                 args=[],
-                keywords=[],
+                keywords=[]
             )
         ),
         ast.Expr(
             value=ast.Call(
-                func=ast.Name(id="print", ctx=ast.Load()),
-                args=[
-                    ast.JoinedStr(
-                        values=[
-                            ast.Constant(value="!######"),
-                            ast.FormattedValue(value=ast.Name(id="test_stdout_tag", ctx=ast.Load()), conversion=-1),
-                            *(
-                                [
-                                    ast.Constant(value=":"),
-                                    ast.FormattedValue(
-                                        value=ast.Name(id="codeflash_duration", ctx=ast.Load()), conversion=-1
-                                    ),
-                                ]
-                                if mode == TestingMode.PERFORMANCE
-                                else []
-                            ),
-                            ast.Constant(value="######!"),
-                        ]
-                    )
-                ],
-                keywords=[],
+                func=name("print", LOAD),
+                args=[joinedstr_print_performance(mode)],
+                keywords=[]
             )
-        ),
-        *(
-            [
-                ast.Assign(
-                    targets=[ast.Name(id="pickled_return_value", ctx=ast.Store())],
-                    value=ast.IfExp(
-                        test=ast.Name(id="exception", ctx=ast.Load()),
-                        body=ast.Call(
-                            func=ast.Attribute(
-                                value=ast.Name(id="pickle", ctx=ast.Load()), attr="dumps", ctx=ast.Load()
-                            ),
-                            args=[ast.Name(id="exception", ctx=ast.Load())],
-                            keywords=[],
-                        ),
-                        orelse=ast.Call(
-                            func=ast.Attribute(
-                                value=ast.Name(id="pickle", ctx=ast.Load()), attr="dumps", ctx=ast.Load()
-                            ),
-                            args=[ast.Name(id="return_value", ctx=ast.Load())],
-                            keywords=[],
-                        ),
+        )
+    ])
+    if mode == TestingMode.BEHAVIOR:
+        wrapper_body.extend([
+            ast.Assign(
+                targets=[n_pickled_return_value_S],
+                value=ast.IfExp(
+                    test=n_exception_L,
+                    body=ast.Call(
+                        func=attr_dumps,
+                        args=[n_exception_L],
+                        keywords=[]
                     ),
-                    lineno=lineno + 18,
-                )
-            ]
-            if mode == TestingMode.BEHAVIOR
-            else []
-        ),
-        *(
-            [
-                ast.Expr(
-                    value=ast.Call(
-                        func=ast.Attribute(
-                            value=ast.Name(id="codeflash_cur", ctx=ast.Load()), attr="execute", ctx=ast.Load()
-                        ),
-                        args=[
-                            ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"),
-                            ast.Tuple(
-                                elts=[
-                                    ast.Name(id="test_module_name", ctx=ast.Load()),
-                                    ast.Name(id="test_class_name", ctx=ast.Load()),
-                                    ast.Name(id="test_name", ctx=ast.Load()),
-                                    ast.Name(id="function_name", ctx=ast.Load()),
-                                    ast.Name(id="loop_index", ctx=ast.Load()),
-                                    ast.Name(id="invocation_id", ctx=ast.Load()),
-                                    ast.Name(id="codeflash_duration", ctx=ast.Load()),
-                                    ast.Name(id="pickled_return_value", ctx=ast.Load()),
-                                    ast.Constant(value=VerificationType.FUNCTION_CALL.value),
-                                ],
-                                ctx=ast.Load(),
-                            ),
-                        ],
-                        keywords=[],
+                    orelse=ast.Call(
+                        func=attr_dumps,
+                        args=[n_return_value_L],
+                        keywords=[]
                     ),
-                    lineno=lineno + 20,
                 ),
-                ast.Expr(
-                    value=ast.Call(
-                        func=ast.Attribute(
-                            value=ast.Name(id="codeflash_con", ctx=ast.Load()), attr="commit", ctx=ast.Load()
-                        ),
-                        args=[],
-                        keywords=[],
-                    ),
-                    lineno=lineno + 21,
+                lineno=lineno + 18
+            ),
+            ast.Expr(
+                value=ast.Call(
+                    func=attr_execute_cur,
+                    args=[
+                        c_insert_stmt,
+                        ast.Tuple(elts=[
+                            n_test_module_name_L,
+                            n_test_class_name_L,
+                            n_test_name_L,
+                            n_function_name_L,
+                            n_loop_index_L,
+                            n_invocation_id_L,
+                            n_codeflash_duration_L,
+                            n_pickled_return_value_L,
+                            c_veriftype
+                        ], ctx=LOAD)
+                    ],
+                    keywords=[]
                 ),
-            ]
-            if mode == TestingMode.BEHAVIOR
-            else []
-        ),
+                lineno=lineno + 20
+            ),
+            ast.Expr(
+                value=ast.Call(
+                    func=attr_commit_con,
+                    args=[],
+                    keywords=[]
+                ),
+                lineno=lineno + 21
+            )
+        ])
+    wrapper_body.extend([
         ast.If(
-            test=ast.Name(id="exception", ctx=ast.Load()),
-            body=[ast.Raise(exc=ast.Name(id="exception", ctx=ast.Load()), cause=None, lineno=lineno + 22)],
+            test=n_exception_L,
+            body=[ast.Raise(exc=n_exception_L, cause=None, lineno=lineno + 22)],
             orelse=[],
-            lineno=lineno + 22,
+            lineno=lineno + 22
         ),
-        ast.Return(value=ast.Name(id="return_value", ctx=ast.Load()), lineno=lineno + 19),
-    ]
+        ast.Return(
+            value=n_return_value_L,
+            lineno=lineno + 19
+        )
+    ])
+
+    # Preconstruct argument ASTs.
+    def build_args(mode):
+        args = [
+            ast.arg(arg="wrapped", annotation=None),
+            ast.arg(arg="test_module_name", annotation=None),
+            ast.arg(arg="test_class_name", annotation=None),
+            ast.arg(arg="test_name", annotation=None),
+            ast.arg(arg="function_name", annotation=None),
+            ast.arg(arg="line_id", annotation=None),
+            ast.arg(arg="loop_index", annotation=None),
+        ]
+        if mode == TestingMode.BEHAVIOR:
+            args += [ast.arg(arg="codeflash_cur", annotation=None), ast.arg(arg="codeflash_con", annotation=None)]
+        return args
+
     return ast.FunctionDef(
         name="codeflash_wrap",
         args=ast.arguments(
-            args=[
-                ast.arg(arg="wrapped", annotation=None),
-                ast.arg(arg="test_module_name", annotation=None),
-                ast.arg(arg="test_class_name", annotation=None),
-                ast.arg(arg="test_name", annotation=None),
-                ast.arg(arg="function_name", annotation=None),
-                ast.arg(arg="line_id", annotation=None),
-                ast.arg(arg="loop_index", annotation=None),
-                *([ast.arg(arg="codeflash_cur", annotation=None)] if mode == TestingMode.BEHAVIOR else []),
-                *([ast.arg(arg="codeflash_con", annotation=None)] if mode == TestingMode.BEHAVIOR else []),
-            ],
+            args=build_args(mode),
             vararg=ast.arg(arg="args"),
             kwarg=ast.arg(arg="kwargs"),
             posonlyargs=[],
             kwonlyargs=[],
             kw_defaults=[],
-            defaults=[],
+            defaults=[]
         ),
         body=wrapper_body,
         lineno=lineno,
         decorator_list=[],
-        returns=None,
+        returns=None
     )
 
 
