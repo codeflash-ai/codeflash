@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
@@ -29,7 +29,8 @@ def speedup_critic(
     candidate_result: OptimizedCandidateResult,
     original_code_runtime: int,
     best_runtime_until_now: int | None,
-    disable_gh_action_noise: Optional[bool] = None,
+    *,
+    disable_gh_action_noise: bool = False,
 ) -> bool:
     """Take in a correct optimized Test Result and decide if the optimization should actually be surfaced to the user.
 
