@@ -74,7 +74,7 @@ class InjectPerfOnly(ast.NodeTransformer):
     ) -> Iterable[ast.stmt] | None:
         call_node = None
         await_node = None
-        
+
         for node in ast.walk(test_node):
             if isinstance(node, ast.Call) and node_in_call_position(node, self.call_positions):
                 call_node = node
@@ -123,9 +123,13 @@ class InjectPerfOnly(ast.NodeTransformer):
                         ]
                         node.keywords = call_node.keywords
                         break
-            
+
             # Check for awaited function calls
-            elif isinstance(node, ast.Await) and isinstance(node.value, ast.Call) and node_in_call_position(node.value, self.call_positions):
+            elif (
+                isinstance(node, ast.Await)
+                and isinstance(node.value, ast.Call)
+                and node_in_call_position(node.value, self.call_positions)
+            ):
                 call_node = node.value
                 await_node = node
                 if isinstance(call_node.func, ast.Name):
@@ -192,7 +196,9 @@ class InjectPerfOnly(ast.NodeTransformer):
 
         return node
 
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef, test_class_name: str | None = None) -> ast.AsyncFunctionDef:
+    def visit_AsyncFunctionDef(
+        self, node: ast.AsyncFunctionDef, test_class_name: str | None = None
+    ) -> ast.AsyncFunctionDef:
         """Handle async function definitions by converting to sync and back."""
         # Convert to sync FunctionDef, process it, then convert back
         sync_node = ast.FunctionDef(
@@ -202,7 +208,7 @@ class InjectPerfOnly(ast.NodeTransformer):
             decorator_list=node.decorator_list,
             returns=node.returns,
             lineno=node.lineno,
-            col_offset=node.col_offset if hasattr(node, 'col_offset') else 0
+            col_offset=node.col_offset if hasattr(node, "col_offset") else 0,
         )
         processed_sync = self.visit_FunctionDef(sync_node, test_class_name)
         # Convert back to AsyncFunctionDef
@@ -213,9 +219,9 @@ class InjectPerfOnly(ast.NodeTransformer):
             decorator_list=processed_sync.decorator_list,
             returns=processed_sync.returns,
             lineno=processed_sync.lineno,
-            col_offset=processed_sync.col_offset if hasattr(processed_sync, 'col_offset') else 0
+            col_offset=processed_sync.col_offset if hasattr(processed_sync, "col_offset") else 0,
         )
-        
+
     def visit_FunctionDef(self, node: ast.FunctionDef, test_class_name: str | None = None) -> ast.FunctionDef:
         if node.name.startswith("test_"):
             did_update = False
