@@ -785,6 +785,7 @@ class FunctionOptimizer:
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
                     test_framework=self.args.test_framework,
+                    is_async=self.function_to_optimize.is_async,
                 )
                 if not success:
                     continue
@@ -795,6 +796,7 @@ class FunctionOptimizer:
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
                     test_framework=self.args.test_framework,
+                    is_async=self.function_to_optimize.is_async,
                 )
                 if not success:
                     continue
